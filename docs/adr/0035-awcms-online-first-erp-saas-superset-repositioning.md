@@ -1,54 +1,56 @@
-# ADR-0035 — awcms sebagai template online-first hybrid, siap ERP + SaaS terintegrasi, dan superset keluarga (menyerap awcms-micro)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0035-awcms-online-first-erp-saas-superset-repositioning.id.md)
+
+# ADR-0035 — awcms as an online-first hybrid template, ERP + integrated SaaS ready, and family superset (absorbing awcms-micro)
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-24
-- **Pengambil keputusan:** @ahliweb
-- **Menyempurnakan (partial supersede):** [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) — khusus bagian **positioning**: tabel scope §Keputusan.1 dan identitas "offline-first" untuk `awcms`. **Menegaskan kembali** (tidak diubah) ADR-0034 §Keputusan.2 & §3 (template dipakai-langsung, TIDAK ada repo turunan, modul domain hidup langsung di `src/modules/`) dan seluruh konvensi runtime.
-- **Menegaskan kembali:** ADR-0001 (Bun-only/RLS/RBAC-ABAC), ADR-0003 (RLS FORCE), ADR-0004 (default-deny, deny-overrides-allow), ADR-0006 (outbox/sync — kini menjadi _paruh offline_ dari mode hybrid), ADR-0007/0008 (kontrak), ADR-0011 (capability ports).
-- **Selaras dengan:** awcms-micro (tetap template website full-online yang ramping) dan awcms-mini (tetap template fondasi hybrid offline-first, siap SaaS).
+- **Date:** 2026-07-24
+- **Decision maker:** @ahliweb
+- **Refines (partial supersede):** [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) — specifically the **positioning** part: the scope table in §Decision.1 and the "offline-first" identity for `awcms`. **Reaffirms** (unchanged) ADR-0034 §Decision.2 & §3 (direct-use templates, NO derived repos, domain modules live directly in `src/modules/`) and every runtime convention.
+- **Reaffirms:** ADR-0001 (Bun-only/RLS/RBAC-ABAC), ADR-0003 (RLS FORCE), ADR-0004 (default-deny, deny-overrides-allow), ADR-0006 (outbox/sync — now the _offline half_ of the hybrid mode), ADR-0007/0008 (contracts), ADR-0011 (capability ports).
+- **Aligned with:** awcms-micro (remains the lean full-online website template) and awcms-mini (remains the hybrid offline-first foundation template, SaaS-ready).
 
-## Konteks
+## Context
 
-ADR-0034 memposisikan `awcms-mini` / `awcms` / `awcms-micro` sebagai **tiga template sejajar dipakai-langsung**, dibedakan oleh **scope**, dan mencatat `awcms` sebagai **offline-first / LAN-first** dengan scope "fondasi ERP + kontrak kesiapan ERP". Positioning itu menyisakan dua hal yang kini ingin diubah oleh maintainer:
+ADR-0034 positioned `awcms-mini` / `awcms` / `awcms-micro` as **three peer direct-use templates**, distinguished by **scope**, and recorded `awcms` as **offline-first / LAN-first** with the scope "ERP foundation + ERP readiness contracts". That positioning left two things the maintainer now wants changed:
 
-1. **Mode operasi.** `awcms` dipakai untuk solusi ERP/back-office dan SaaS yang **terhubung online sebagai keadaan normal** (multi-cabang tersinkron, portal pelanggan, integrasi provider). Memasarkannya sebagai "offline-first" salah menaruh prioritas: yang benar adalah **hybrid online + offline dengan prioritas online-first** — online adalah jalur utama, offline/LAN adalah mode ketahanan (bukan sebaliknya seperti `awcms-mini`).
-2. **Scope.** Batas scope ADR-0034 antara `awcms` (ERP/back-office) dan `awcms-micro` (website full-online → toko online) membuat kapabilitas website/e-commerce, UI/UX, dan pengerasan auth yang **sudah matang di `awcms-micro`** seolah "milik repo lain". Padahal produk ERP/SaaS nyata membutuhkannya (portal publik, katalog, toko online, SEO, komentar, newsletter, media library, self-registration). Maintainer memutuskan `awcms` menjadi **superset**: fondasi awcms-mini + skop ERP + **seluruh** klaster website/e-commerce awcms-micro.
+1. **Operating mode.** `awcms` is used for ERP/back-office and SaaS solutions that are **online-connected as the normal state** (synchronised multi-branch, customer portal, provider integrations). Marketing it as "offline-first" puts the priority in the wrong place: the correct statement is **hybrid online + offline with an online-first priority** — online is the primary path, offline/LAN is the resilience mode (not the other way round as in `awcms-mini`).
+2. **Scope.** The ADR-0034 scope boundary between `awcms` (ERP/back-office) and `awcms-micro` (full-online website → online shop) makes the website/e-commerce, UI/UX, and auth hardening capabilities that are **already mature in `awcms-micro`** look like they "belong to another repo". Yet a real ERP/SaaS product needs them (public portal, catalogue, online shop, SEO, comments, newsletter, media library, self-registration). The maintainer decides `awcms` becomes a **superset**: the awcms-mini foundation + the ERP scope + **the whole** awcms-micro website/e-commerce cluster.
 
-Perubahan ini **positioning & scope**, bukan arsitektur runtime, dan **tidak** menghidupkan kembali jalur repo-turunan yang dihapus ADR-0034.
+This change is **positioning & scope**, not runtime architecture, and it does **not** revive the derived-repo pathway removed by ADR-0034.
 
-## Keputusan
+## Decision
 
-### 1. `awcms` = template online-first hybrid, siap ERP + SaaS terintegrasi
+### 1. `awcms` = online-first hybrid template, ERP + integrated SaaS ready
 
-Mode operasi kanonik `awcms` adalah **hybrid online + offline dengan prioritas online-first**: konektivitas online adalah jalur utama dan default deployment; kapabilitas offline/LAN (outbox/sync HMAC, ADR-0006) tetap ada dan didukung sebagai **mode ketahanan**, bukan asumsi utama. `awcms` diposisikan **siap ERP** (mengonsumsi kontrak kesiapan ERP ADR-0020 dengan modul domain langsung di `src/modules/`) dan **dibangun untuk SaaS terintegrasi** (multi-tenant, portal publik, integrasi provider).
+The canonical operating mode of `awcms` is **hybrid online + offline with an online-first priority**: online connectivity is the primary path and the deployment default; the offline/LAN capabilities (outbox/HMAC sync, ADR-0006) remain present and supported as a **resilience mode**, not the main assumption. `awcms` is positioned as **ERP-ready** (consuming the ADR-0020 ERP readiness contracts with domain modules directly in `src/modules/`) and **built for integrated SaaS** (multi-tenant, public portal, provider integrations).
 
-`awcms` **dikembangkan dari basis teknis `awcms-mini`** (mengadopsi stack & standar modular-monolith-nya) dan mengambil kapabilitas matang dari `awcms-micro`. Ini adalah pernyataan **lineage/positioning**, bukan pengembalian model "base-wajib + turunan": ketiganya tetap template dipakai-langsung (ADR-0034 §Keputusan.1 poin governance tetap berlaku; hanya baris scope/mode `awcms` yang disempurnakan di sini).
+`awcms` is **developed from the technical base of `awcms-mini`** (adopting its modular-monolith stack & standards) and takes mature capabilities from `awcms-micro`. This is a statement of **lineage/positioning**, not a return to the "mandatory base + derivative" model: all three remain direct-use templates (the governance points of ADR-0034 §Decision.1 still apply; only the scope/mode row for `awcms` is refined here).
 
-### 2. `awcms` = superset keluarga (menyerap awcms-micro)
+### 2. `awcms` = family superset (absorbing awcms-micro)
 
-`awcms` **menyerap** klaster website/e-commerce, UI/UX, dan pengerasan auth `awcms-micro` **langsung ke `src/modules/`** template ini (bukan repo terpisah, konsisten ADR-0034 §2/§3). Cakupan penyerapan (delta terhadap yang sudah ada di `awcms`):
+`awcms` **absorbs** the awcms-micro website/e-commerce, UI/UX, and auth hardening cluster **directly into this template's `src/modules/`** (not a separate repo, consistent with ADR-0034 §2/§3). The scope of absorption (the delta against what already exists in `awcms`):
 
-- **Modul website/konten:** `media-library`, `tenant-domain` (routing host→tenant), `form-drafts`, `seo-distribution`, `site-search`, `comments`, `newsletter`, `social-publishing`, `visitor-analytics`, `data-lifecycle`. (`theming`, `blog-content`, `news-portal` sudah ada.)
-- **UI/UX:** pustaka komponen `src/components/ui/` + paritas design-token, diselaraskan dengan overhaul admin `awcms` yang sudah ada (PR #215), bukan menimpanya.
-- **Auth/admin:** self-registration, password reset, admin security policy UI, per-tenant sidebar menu, delta OIDC (mis. login Google spesifik) — **hanya yang belum ada** di `awcms` (yang sudah punya MFA, OIDC/SSO generik, ABAC DSL, business-scope, SoD, Turnstile, break-glass).
-- **Trajektori e-commerce/toko online** (katalog/storefront/keranjang/checkout online) adalah epik lanjutan ber-ADR sendiri (belum dibangun di micro juga).
+- **Website/content modules:** `media-library`, `tenant-domain` (host→tenant routing), `form-drafts`, `seo-distribution`, `site-search`, `comments`, `newsletter`, `social-publishing`, `visitor-analytics`, `data-lifecycle`. (`theming`, `blog-content`, `news-portal` already exist.)
+- **UI/UX:** the `src/components/ui/` component library + design-token parity, aligned with the existing `awcms` admin overhaul (PR #215), not overwriting it.
+- **Auth/admin:** self-registration, password reset, admin security policy UI, per-tenant sidebar menu, OIDC delta (e.g. a specific Google login) — **only what does not exist yet** in `awcms` (which already has MFA, generic OIDC/SSO, the ABAC DSL, business-scope, SoD, Turnstile, break-glass).
+- **The e-commerce/online shop trajectory** (catalogue/storefront/cart/online checkout) is a follow-on epic with its own ADR (it has not been built in micro either).
 
-Peta eksekusi bertahap (per-modul, satu PR atomic, lulus `bun run check`) ada di [`docs/awcms/absorb-awcms-micro-roadmap.md`](../awcms/absorb-awcms-micro-roadmap.md). Penyerapan mengikuti pola **adaptasi bukan salin** (rename prefix `awcms_micro_` → `awcms_`, penomoran migrasi lanjut dari `sql/045`).
+The staged execution map (per module, one atomic PR, passing `bun run check`) is in [`docs/awcms/absorb-awcms-micro-roadmap.md`](../awcms/absorb-awcms-micro-roadmap.md). Absorption follows the **adapt, don't copy** pattern (rename the `awcms_micro_` prefix → `awcms_`, migration numbering continuing from `sql/045`).
 
-### 3. Posisi ketiga template setelah ADR ini
+### 3. The position of the three templates after this ADR
 
-| Repositori    | Mode operasi                           | Scope                                                     |
-| ------------- | -------------------------------------- | --------------------------------------------------------- |
-| `awcms-mini`  | **hybrid offline-first**, siap SaaS    | Fondasi reusable generik (standar modular-monolith)       |
-| `awcms`       | **hybrid online-first**, siap ERP+SaaS | **Superset**: ERP/back-office + website + e-commerce      |
-| `awcms-micro` | full-online                            | Website full-online → toko online (ramping, website-only) |
+| Repository    | Operating mode                          | Scope                                                       |
+| ------------- | --------------------------------------- | ----------------------------------------------------------- |
+| `awcms-mini`  | **hybrid offline-first**, SaaS-ready    | Generic reusable foundation (the modular-monolith standard) |
+| `awcms`       | **hybrid online-first**, ERP+SaaS ready | **Superset**: ERP/back-office + website + e-commerce        |
+| `awcms-micro` | full-online                             | Full-online website → online shop (lean, website-only)      |
 
-`awcms` menjadi template "paling lengkap": fondasi mini + ERP + seluruh website/e-commerce micro, online-first, offline tetap didukung. `awcms-micro` tetap template full-online website-only yang ramping (tidak membawa skop ERP). `awcms-mini` tetap fondasi hybrid offline-first.
+`awcms` becomes the "most complete" template: the mini foundation + ERP + the whole micro website/e-commerce, online-first, with offline still supported. `awcms-micro` remains the lean full-online website-only template (it does not carry the ERP scope). `awcms-mini` remains the hybrid offline-first foundation.
 
-## Konsekuensi
+## Consequences
 
-- **Reposisi dokumen (langkah dokumen ini):** README/README.id, AGENTS, PROJECT_STATE, paket `docs/awcms/` (01/06/09/10/12/13/15, alur-pengembangan-mini-first, README index, api-contribution-guide) disetel ke positioning baru; dokumen lama yang menyebut `awcms` "offline-first" atau "ERP di repo turunan terpisah" diperlakukan usang/diperbarui.
-- **Manifest keluarga:** `awcms-family-compatibility.yaml` field `role` diperbarui (drop rujukan ADR-0022, nyatakan online-first hybrid superset); rasionalisasi divergence Turnstile diselaraskan ("jaminan offline-first" → "mode offline/LAN dari hybrid"). `reviewDate` divergence tidak diubah. Gate `family:conformance:check` tetap hijau.
-- **Kontrak:** tidak ada kenaikan. `MODULE_CONTRACT_VERSION` sudah `2.0.0` (dinaikkan oleh ADR-0034); penyerapan modul memakai kontrak yang sama.
-- **`sync-storage`/ADR-0006:** dipertahankan sebagai **paruh offline** dari mode hybrid — tetap load-bearing, hanya diprioritaskan di bawah jalur online.
-- **Tidak berubah:** seluruh konvensi runtime (Bun-only, RLS FORCE, RBAC/ABAC default-deny, kontrak OpenAPI/AsyncAPI, registry base, gate CI) dan model tata kelola ADR-0034 (dipakai-langsung, tanpa repo turunan). ADR ini mengubah **positioning & scope**, bukan mekanisme.
+- **Document repositioning (this document's step):** README/README.id, AGENTS, PROJECT_STATE, the `docs/awcms/` package (01/06/09/10/12/13/15, alur-pengembangan-mini-first, the README index, api-contribution-guide) are set to the new positioning; older documents calling `awcms` "offline-first" or placing "ERP in a separate derived repo" are treated as obsolete/updated.
+- **Family manifest:** the `role` field in `awcms-family-compatibility.yaml` is updated (drop the ADR-0022 reference, state online-first hybrid superset); the Turnstile divergence rationale is aligned ("offline-first guarantee" → "the offline/LAN mode of the hybrid"). Divergence `reviewDate` values are not changed. The `family:conformance:check` gate stays green.
+- **Contract:** no bump. `MODULE_CONTRACT_VERSION` is already `2.0.0` (raised by ADR-0034); module absorption uses the same contract.
+- **`sync-storage`/ADR-0006:** kept as the **offline half** of the hybrid mode — still load-bearing, merely prioritised below the online path.
+- **Unchanged:** every runtime convention (Bun-only, RLS FORCE, RBAC/ABAC default-deny, OpenAPI/AsyncAPI contracts, the base registry, CI gates) and the ADR-0034 governance model (direct use, no derived repos). This ADR changes **positioning & scope**, not the mechanism.

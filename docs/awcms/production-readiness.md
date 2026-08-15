@@ -1,30 +1,32 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](production-readiness.id.md)
+
 # Production Security Readiness
 
-> **Status dokumen (AWCMS, tahap foundation-rebuild).** Dokumen ini
-> mengadaptasi standar `security:readiness`/`production:preflight` yang
-> diwarisi dari base `awcms-mini`. Di AWCMS, tiga dari empat skrip inti
-> **SUDAH diimplementasikan dan nyata**: `config:validate`
-> (`scripts/validate-env.ts`, 255 baris — validasi env var terhadap
-> registry konfigurasi, `tests/validate-env.test.ts`), `db:pool:health`
-> (`scripts/db-pool-health.ts`, 104 baris — cek agregat pool/work-class/
-> circuit-breaker) dan `security:readiness` (`scripts/security-readiness.ts`,
-> 1560 baris — pemeriksaan RLS/RBAC-ABAC/secret/fail-closed sungguhan,
-> diverifikasi `tests/security-readiness-*.test.ts`). Yang **belum
-> diimplementasikan** adalah `production:preflight` — orkestrator yang
-> akan menjalankan ketiganya sebagai satu urutan gated go/no-go plus
-> tahap `database:capacity`/`db:connectivity`/`migration:plan` (lihat
+> **Document status (AWCMS, foundation-rebuild stage).** This document
+> adapts the `security:readiness`/`production:preflight` standard
+> inherited from the `awcms-mini` base. In AWCMS, three of the four core
+> scripts are **ALREADY implemented and real**: `config:validate`
+> (`scripts/validate-env.ts`, 255 lines — validates env vars against the
+> configuration registry, `tests/validate-env.test.ts`), `db:pool:health`
+> (`scripts/db-pool-health.ts`, 104 lines — aggregate pool/work-class/
+> circuit-breaker check) and `security:readiness` (`scripts/security-readiness.ts`,
+> 1560 lines — genuine RLS/RBAC-ABAC/secret/fail-closed inspection,
+> verified by `tests/security-readiness-*.test.ts`). What is **not yet
+> implemented** is `production:preflight` — the orchestrator that will
+> run all three as one gated go/no-go sequence plus the
+> `database:capacity`/`db:connectivity`/`migration:plan` stages (see
 > [`production-preflight-runbook.md`](production-preflight-runbook.md)
-> untuk detail status). Seluruh tabel "Status implementasi" di bawah
-> tetap perlu dibaca hati-hati: baris yang merujuk `production:preflight`
-> atau tahap-tahap yang khusus dimilikinya menjelaskan **target mekanisme
-> yang belum dibangun**, sedangkan baris yang merujuk ketiga skrip di
-> atas menjelaskan mekanisme yang sudah berjalan hari ini.
+> for status detail). The entire "Implementation status" table below
+> still needs to be read carefully: rows that refer to `production:preflight`
+> or to stages it alone owns describe **a target mechanism that has not
+> been built**, whereas rows that refer to the three scripts above
+> describe a mechanism that runs today.
 
-Dokumen ini mencatat standar readiness keamanan produksi untuk AWCMS
-(diwarisi dari base `awcms-mini`, selaras governance docs, ADR RLS/RBAC-
-ABAC/soft-delete AWCMS, dan threat model yang akan disusun).
+This document records the production security readiness standard for AWCMS
+(inherited from the `awcms-mini` base, aligned with the governance docs, the
+AWCMS RLS/RBAC-ABAC/soft-delete ADRs, and the threat model still to be written).
 
-## Ringkasan
+## Summary
 
 ```mermaid
 flowchart LR
@@ -34,53 +36,53 @@ flowchart LR
   Spec --> Test[bun test]
   Test --> Build[build]
   Build --> Probe{Server reachable?}
-  Probe -->|ya| Pool[db:pool:health]
-  Probe -->|tidak| Skip[skip - dicatat, bukan gagal]
+  Probe -->|yes| Pool[db:pool:health]
+  Probe -->|no| Skip[skip - recorded, not a failure]
   Pool --> Sec[security:readiness]
   Skip --> Sec
   Sec --> Gate{Critical finding?}
-  Gate -->|ya| Block[GO-LIVE DIBLOKIR]
-  Gate -->|tidak| Ready[GO-LIVE DIIZINKAN]
+  Gate -->|yes| Block[GO-LIVE BLOCKED]
+  Gate -->|no| Ready[GO-LIVE ALLOWED]
 ```
 
-`config:validate` dijalankan **paling pertama** dalam alur target di
-bawah — config harus valid sebelum tahap manapun mencoba konek database
-atau menjalankan migration. Urutan ini adalah kontrak yang
-`scripts/production-preflight.ts` (belum ada) akan tegakkan begitu
-orkestrator itu dibangun; hari ini `config:validate` sudah bisa
-dijalankan sendiri kapan saja.
+`config:validate` runs **first of all** in the target flow below — config
+must be valid before any stage tries to connect to the database or run a
+migration. This ordering is the contract that
+`scripts/production-preflight.ts` (does not exist yet) will enforce once that
+orchestrator is built; today `config:validate` can already be run on its own
+at any time.
 
-Empat skrip inti — tiga SUDAH nyata, satu (orkestrator) masih target:
+Four core scripts — three ALREADY real, one (the orchestrator) still a target:
 
-| Perintah                       | Skrip                             | Status                 | Fungsi                                                                        |
-| ------------------------------ | --------------------------------- | ---------------------- | ----------------------------------------------------------------------------- |
-| `bun run config:validate`      | `scripts/validate-env.ts`         | **Implementasi nyata** | Validasi env var terhadap registry konfigurasi                                |
-| `bun run db:pool:health`       | `scripts/db-pool-health.ts`       | **Implementasi nyata** | CLI wrapper `GET /api/v1/database/pool/health`                                |
-| `bun run security:readiness`   | `scripts/security-readiness.ts`   | **Implementasi nyata** | Menjalankan checklist keamanan otomatis, exit non-zero bila ada critical fail |
-| `bun run production:preflight` | `scripts/production-preflight.ts` | **Belum ada**          | Orkestrasi seluruh tahap preflight + verdict go/no-go akhir                   |
+| Command                        | Script                            | Status                  | Function                                                                   |
+| ------------------------------ | --------------------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| `bun run config:validate`      | `scripts/validate-env.ts`         | **Real implementation** | Validates env vars against the configuration registry                      |
+| `bun run db:pool:health`       | `scripts/db-pool-health.ts`       | **Real implementation** | CLI wrapper around `GET /api/v1/database/pool/health`                      |
+| `bun run security:readiness`   | `scripts/security-readiness.ts`   | **Real implementation** | Runs the automated security checklist, exits non-zero on any critical fail |
+| `bun run production:preflight` | `scripts/production-preflight.ts` | **Does not exist yet**  | Orchestrates every preflight stage + the final go/no-go verdict            |
 
-Ketiga skrip nyata di atas murni CLI/script — perubahan pada standar ini
-tidak dengan sendirinya membutuhkan perubahan OpenAPI/AsyncAPI (tidak ada
-endpoint atau event baru).
+The three real scripts above are pure CLI/script — a change to this standard
+does not by itself require an OpenAPI/AsyncAPI change (there is no new
+endpoint or event).
 
 ## 1. `db:pool:health`
 
-Memanggil endpoint `GET /api/v1/database/pool/health`
-(`src/pages/api/v1/database/pool/health.ts`, lihat
-[`database-pooling.md`](database-pooling.md)) dari base URL yang bisa
-dikonfigurasi lewat env `APP_URL` (default `http://localhost:4321`).
-Semantik exit code mengikuti 3-tier status endpoint tersebut:
+Calls the endpoint `GET /api/v1/database/pool/health`
+(`src/pages/api/v1/database/pool/health.ts`, see
+[`database-pooling.md`](database-pooling.md)) against a base URL configurable
+through the env var `APP_URL` (default `http://localhost:4321`).
+Exit code semantics follow that endpoint's 3-tier status:
 
-- `"healthy"` atau `"degraded"` → exit `0` (degraded tetap dianggap lulus —
-  hanya peringatan untuk diselidiki sebelum go-live).
-- `"unhealthy"` → exit non-zero (hard failure).
-- Fetch gagal total (server belum jalan, connection refused) → **juga** hard
-  failure dengan pesan error yang jelas — tidak pernah terlihat seperti lulus
-  diam-diam.
+- `"healthy"` or `"degraded"` → exit `0` (degraded still counts as a pass —
+  merely a warning to investigate before go-live).
+- `"unhealthy"` → non-zero exit (hard failure).
+- Fetch fails outright (server not running, connection refused) → **also** a
+  hard failure with a clear error message — never silently looking like a
+  pass.
 
 ## 2. `security:readiness`
 
-Menjalankan daftar tetap check bernama, masing-masing menghasilkan:
+Runs a fixed list of named checks, each producing:
 
 ```ts
 {
@@ -91,92 +93,92 @@ Menjalankan daftar tetap check bernama, masing-masing menghasilkan:
 }
 ```
 
-Exit non-zero bila **ada satu saja** check `critical` berstatus `fail`.
+Exits non-zero if **even a single** `critical` check has status `fail`.
 
-### Pemetaan checklist doc 07 → target implementasi
+### Mapping the doc 07 checklist → target implementation
 
-| Item checklist doc 07                              | Target implementasi                                                                                                                                                                                                                                                   |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No hardcoded secret                                | **Otomatis** (critical) — heuristik grep `src/`, `scripts/`, config file yang di-track git                                                                                                                                                                            |
-| `.env` tidak dikomit                               | **Otomatis** (critical) — `git ls-files` tidak boleh memuat `.env`                                                                                                                                                                                                    |
-| Password hash modern                               | **Otomatis** (critical) — memanggil `hashPassword()` sungguhan, memeriksa awalan `$argon2id$`                                                                                                                                                                         |
-| Login lockout                                      | **Otomatis** (critical) — memanggil `evaluateLoginAttempt()` dengan skenario 5x gagal                                                                                                                                                                                 |
-| RLS aktif                                          | **Otomatis** (critical) — query langsung `pg_class.relrowsecurity` per tabel `awcms_%`                                                                                                                                                                                |
-| ABAC aktif (default deny)                          | **Otomatis** (critical) — memanggil `evaluateAccess()` dengan permission kosong                                                                                                                                                                                       |
-| Audit log aktif                                    | **Otomatis** (critical) — `SELECT to_regclass('awcms_audit_events')`                                                                                                                                                                                                  |
-| Soft delete/restore/purge audit aktif              | **Otomatis** (warning) — cek seed permission + grep `recordAuditEvent` di endpoint profile                                                                                                                                                                            |
-| Sync HMAC bila hybrid                              | **Otomatis** (warning/info) — cek env secret bukan placeholder `.env.example`, skip bila sync off                                                                                                                                                                     |
-| Error tidak expose stack trace                     | **Best-effort otomatis** (warning/info) — butuh server hidup; `info` bila tidak bisa dicek                                                                                                                                                                            |
-| Restore/purge berizin dan diaudit                  | Tercakup di baris "soft delete/restore/purge audit aktif" di atas (satu check gabungan)                                                                                                                                                                               |
-| Tax data masking                                   | **Menjadi in-scope untuk AWCMS** — berbeda dari base generik `awcms-mini`, AWCMS memang punya modul tax/Coretax sebagai bagian skop produk (lihat ADR-0001); check ini perlu diimplementasikan begitu modul tax ada, bukan didokumentasikan sebagai "out of scope"    |
-| Payroll/HR data masking (NIK, rekening bank, gaji) | **Baru untuk AWCMS** — belum ada padanan di base generik; perlu ditambahkan sebagai check baru saat modul HR/payroll dibangun                                                                                                                                         |
-| AI read-only                                       | **Tergantung skop** — hanya relevan bila modul AI analyst diaktifkan di AWCMS; lihat §Item di luar cakupan                                                                                                                                                            |
-| PostgreSQL tidak public                            | **Manual** — lihat §Item di luar cakupan                                                                                                                                                                                                                              |
-| Least-privilege DB user                            | **Otomatis sebagian** (critical, cakupan connection role) + **manual** untuk provisioning grant/role menyeluruh                                                                                                                                                       |
-| Backup aktif / restore tested                      | **Manual** (SOP + skrip target: `deploy/backup/{backup,restore}-postgres.sh` dengan enkripsi + manifest bertanda tangan + checksum-before-restore + restore drill terjadwal — lihat `deploy/backup/README.md` begitu diporting)                                       |
-| PostgreSQL version sesuai target                   | **Manual** — versi di-pin di `docker-compose.yml`, tidak diverifikasi ulang dari kode aplikasi                                                                                                                                                                        |
-| Build pass / migration pass / API spec valid       | **Otomatis** — via `production:preflight`, tahap `build`/`db:migrate`/`api:spec:check`                                                                                                                                                                                |
-| Setup wizard locked                                | Target: singleton `awcms_setup_state`; belum ada implementasi                                                                                                                                                                                                         |
-| Role default tersedia                              | Target: seed role bawaan (owner/admin/operator ERP); belum ada implementasi                                                                                                                                                                                           |
-| Logging aktif                                      | Target: `src/lib/logging/logger.ts`, diperkuat lint gate `bun run logging:lint:check` (bagian `bun run check`) yang menggagalkan build kalau ada pola `console.error`/`console.warn` dengan raw error/`.message`/`.stack` tidak tersanitasi di path admin/API/scripts |
-| Index utama / partial index soft delete            | Diverifikasi lewat test migration per modul; belum ada modul untuk diverifikasi                                                                                                                                                                                       |
-| Pool sehat / slow query monitoring                 | **Otomatis** via `db:pool:health` (pool); slow query monitoring tetap di luar cakupan (butuh `pg_stat_statements`/APM eksternal)                                                                                                                                      |
-| Security response headers (CSP/HSTS/dst.)          | **Otomatis** (warning) — hit server nyata, cek `content-security-policy`/`x-content-type-options`/`x-frame-options`/`referrer-policy`/`permissions-policy` di respons `GET /login`                                                                                    |
-| Login rate limiting (sumber+tenant)                | **Otomatis** (warning) — `checkRateLimit()` murni, menegaskan percobaan ke-4 ditolak setelah `maxAttempts=3`                                                                                                                                                          |
-| Email provider config lengkap bila diaktifkan      | **Otomatis** (critical) — `checkEmailProviderConfigReady` menggunakan ulang `checkEmailConfig`; skip (pass) bila `EMAIL_ENABLED` bukan `"true"`                                                                                                                       |
+| Doc 07 checklist item                               | Target implementation                                                                                                                                                                                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No hardcoded secret                                 | **Automatic** (critical) — grep heuristic over `src/`, `scripts/`, git-tracked config files                                                                                                                                                                                          |
+| `.env` not committed                                | **Automatic** (critical) — `git ls-files` must not contain `.env`                                                                                                                                                                                                                    |
+| Modern password hash                                | **Automatic** (critical) — calls the real `hashPassword()`, checks for the `$argon2id$` prefix                                                                                                                                                                                       |
+| Login lockout                                       | **Automatic** (critical) — calls `evaluateLoginAttempt()` with a 5-failure scenario                                                                                                                                                                                                  |
+| RLS active                                          | **Automatic** (critical) — direct `pg_class.relrowsecurity` query per `awcms_%` table                                                                                                                                                                                                |
+| ABAC active (default deny)                          | **Automatic** (critical) — calls `evaluateAccess()` with an empty permission set                                                                                                                                                                                                     |
+| Audit log active                                    | **Automatic** (critical) — `SELECT to_regclass('awcms_audit_events')`                                                                                                                                                                                                                |
+| Soft delete/restore/purge audit active              | **Automatic** (warning) — checks the permission seed + greps `recordAuditEvent` in the profile endpoints                                                                                                                                                                             |
+| Sync HMAC when hybrid                               | **Automatic** (warning/info) — checks the env secret is not the `.env.example` placeholder, skipped when sync is off                                                                                                                                                                 |
+| Errors do not expose stack traces                   | **Best-effort automatic** (warning/info) — needs a live server; `info` when it cannot be checked                                                                                                                                                                                     |
+| Restore/purge authorized and audited                | Covered by the "soft delete/restore/purge audit active" row above (one combined check)                                                                                                                                                                                               |
+| Tax data masking                                    | **Becomes in-scope for AWCMS** — unlike the generic `awcms-mini` base, AWCMS does have a tax/Coretax module as part of the product scope (see ADR-0001); this check needs implementing as soon as the tax module exists, not documenting as "out of scope"                           |
+| Payroll/HR data masking (NIK, bank account, salary) | **New for AWCMS** — no counterpart in the generic base; must be added as a new check when the HR/payroll module is built                                                                                                                                                             |
+| AI read-only                                        | **Scope-dependent** — only relevant if the AI analyst module is enabled in AWCMS; see §Items out of scope                                                                                                                                                                            |
+| PostgreSQL not public                               | **Manual** — see §Items out of scope                                                                                                                                                                                                                                                 |
+| Least-privilege DB user                             | **Partly automatic** (critical, connection-role coverage) + **manual** for full grant/role provisioning                                                                                                                                                                              |
+| Backup active / restore tested                      | **Manual** (SOP + target scripts: `deploy/backup/{backup,restore}-postgres.sh` with encryption + signed manifest + checksum-before-restore + scheduled restore drill — see `deploy/backup/README.md` once ported)                                                                    |
+| PostgreSQL version matches target                   | **Manual** — the version is pinned in `docker-compose.yml`, not re-verified from application code                                                                                                                                                                                    |
+| Build pass / migration pass / API spec valid        | **Automatic** — via `production:preflight`, stages `build`/`db:migrate`/`api:spec:check`                                                                                                                                                                                             |
+| Setup wizard locked                                 | Target: `awcms_setup_state` singleton; no implementation yet                                                                                                                                                                                                                         |
+| Default roles available                             | Target: seeded built-in roles (owner/admin/ERP operator); no implementation yet                                                                                                                                                                                                      |
+| Logging active                                      | Target: `src/lib/logging/logger.ts`, reinforced by the lint gate `bun run logging:lint:check` (part of `bun run check`) which fails the build if there is a `console.error`/`console.warn` pattern carrying a raw error/`.message`/`.stack` unsanitized on an admin/API/scripts path |
+| Primary index / soft-delete partial index           | Verified through per-module migration tests; there is no module to verify yet                                                                                                                                                                                                        |
+| Pool healthy / slow query monitoring                | **Automatic** via `db:pool:health` (pool); slow query monitoring remains out of scope (needs `pg_stat_statements`/an external APM)                                                                                                                                                   |
+| Security response headers (CSP/HSTS/etc.)           | **Automatic** (warning) — hits the real server, checks `content-security-policy`/`x-content-type-options`/`x-frame-options`/`referrer-policy`/`permissions-policy` in the `GET /login` response                                                                                      |
+| Login rate limiting (source+tenant)                 | **Automatic** (warning) — pure `checkRateLimit()`, asserting the 4th attempt is rejected after `maxAttempts=3`                                                                                                                                                                       |
+| Email provider config complete when enabled         | **Automatic** (critical) — `checkEmailProviderConfigReady` reuses `checkEmailConfig`; skipped (pass) when `EMAIL_ENABLED` is not `"true"`                                                                                                                                            |
 
-### Item di luar cakupan atau perlu penyesuaian skop AWCMS
+### Items out of scope or needing AWCMS scope adjustment
 
-Dicetak eksplisit di laporan `security:readiness` sebagai bagian "Out of
-scope" — **tidak** disembunyikan atau dipaksakan jadi check palsu:
+Printed explicitly in the `security:readiness` report as an "Out of
+scope" section — **not** hidden, and not forced into a fake check:
 
-| Item                      | Alasan                                                                                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI read-only              | Hanya relevan bila modul AI analyst/tool-calling diaktifkan — belum ada modul ini di AWCMS pada tahap fondasi.                                                                |
-| PostgreSQL tidak public   | Concern deployment profile — eksposur jaringan nyata bergantung konfigurasi operator saat deploy, tidak bisa diverifikasi dari kode aplikasi saja. Manual.                    |
-| Least-privilege DB user   | Role/grant DB diprovisi saat deploy. Connection role aplikasi sendiri (bukan superuser/bypass-RLS) diverifikasi otomatis (lihat check di atas); grant/role lain tetap manual. |
-| Backup/restore tested     | Skrip backup/restore perlu diporting dan dijalankan sungguhan terhadap environment terprovisi untuk membuktikan hasil restore. Manual.                                        |
-| PostgreSQL version pinned | Version pin ada di `docker-compose.yml`, bukan diverifikasi dari kode aplikasi. Manual — konfirmasi versi server nyata (`SELECT version();`).                                 |
+| Item                      | Reason                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI read-only              | Only relevant if the AI analyst/tool-calling module is enabled — no such module exists in AWCMS at the foundation stage.                                                                          |
+| PostgreSQL not public     | A deployment-profile concern — the real network exposure depends on the operator's configuration at deploy time and cannot be verified from application code alone. Manual.                       |
+| Least-privilege DB user   | DB roles/grants are provisioned at deploy time. The application's own connection role (not superuser/bypass-RLS) is verified automatically (see the check above); other grants/roles stay manual. |
+| Backup/restore tested     | The backup/restore scripts need porting and running for real against a provisioned environment to prove the restore result. Manual.                                                               |
+| PostgreSQL version pinned | The version pin lives in `docker-compose.yml`, it is not verified from application code. Manual — confirm the real server version (`SELECT version();`).                                          |
 
-Berbeda dari base generik `awcms-mini` (di mana tax masking/CRM opt-out/AI
-read-only adalah concern domain aplikasi turunan yang eksplisit di luar
-cakupan base), untuk AWCMS **tax data masking dan payroll/HR data masking
-adalah in-scope produk** karena modul tax/Coretax dan HR/payroll adalah
-bagian skop AWCMS sendiri (ADR-0001) — keduanya perlu check
-`security:readiness` khusus begitu modulnya dibangun, bukan didokumentasikan
-sebagai "domain turunan yang tidak ditangani base."
+Unlike the generic `awcms-mini` base (where tax masking/CRM opt-out/AI
+read-only are derived-application domain concerns explicitly outside the
+base's scope), for AWCMS **tax data masking and payroll/HR data masking are
+in-scope product concerns** because the tax/Coretax and HR/payroll modules
+are part of AWCMS's own scope (ADR-0001) — both need dedicated
+`security:readiness` checks as soon as their module is built, not
+documentation saying "a derived domain the base does not handle."
 
 ## 3. `production:preflight`
 
-Mengorkestrasi tahap berikut sebagai child process (`Bun.spawn`), berurutan,
-mencatat pass/fail per tahap, lalu mencetak verdict akhir:
+Orchestrates the following stages as child processes (`Bun.spawn`), in order,
+recording pass/fail per stage, then printing the final verdict:
 
-1. `bun run config:validate` — **paling pertama**: config harus valid
-   sebelum tahap manapun mencoba konek database atau menjalankan migration.
+1. `bun run config:validate` — **first of all**: config must be valid
+   before any stage tries to connect to the database or run a migration.
 2. `bun run db:migrate`
 3. `bun run api:spec:check`
 4. `bun test`
 5. `bun run build`
-6. `bun run db:pool:health` — **hanya bila** probe `GET /api/v1/health`
-   menunjukkan ada server yang menjawab; bila tidak, tahap ini dicatat
-   `skipped` (bukan `failed`) dengan alasan eksplisit di laporan. Ini
-   keputusan desain yang disengaja: `production:preflight` bisa dijalankan
-   di CI/lingkungan tanpa server berjalan tanpa memblokir seluruh preflight
-   pada satu tahap yang memang butuh server hidup.
+6. `bun run db:pool:health` — **only if** the `GET /api/v1/health` probe
+   shows a server answering; if not, this stage is recorded as
+   `skipped` (not `failed`) with an explicit reason in the report. This is
+   a deliberate design decision: `production:preflight` can be run in
+   CI/an environment with no running server without blocking the whole
+   preflight on the one stage that genuinely needs a live server.
 7. `bun run security:readiness`
 
-`bun install` **sengaja tidak** dijalankan oleh skrip ini — itu langkah
-setup environment (mengambil dependency), bukan readiness check, dan di
-luar tanggung jawab skrip ini.
+`bun install` is **deliberately not** run by this script — it is an
+environment setup step (fetching dependencies), not a readiness check, and
+outside this script's responsibility.
 
-Semua tahap tetap dijalankan meskipun tahap sebelumnya gagal (bukan
-fail-fast) — laporan akhir mendaftar **seluruh** tahap yang gagal, bukan
-hanya yang pertama, supaya satu kegagalan tidak menyembunyikan masalah lain.
+Every stage still runs even when an earlier stage failed (not fail-fast) —
+the final report lists **every** failed stage, not just the first, so that
+one failure does not hide another problem.
 
-Verdict akhir: `GO-LIVE DIIZINKAN` (exit 0) jika tidak ada tahap `fail`,
-`GO-LIVE DIBLOKIR` (exit non-zero) jika ada.
+Final verdict: `GO-LIVE ALLOWED` (exit 0) if no stage `fail`s,
+`GO-LIVE BLOCKED` (non-zero exit) if any does.
 
-## Cara menjalankan sebelum go-live
+## How to run it before go-live
 
 ```bash
 bun install
@@ -185,51 +187,50 @@ bun run db:migrate
 bun run api:spec:check
 bun test
 bun run build
-bun run preview &            # atau `bun run dev` — perlu server hidup untuk db:pool:health
+bun run preview &            # or `bun run dev` — a live server is needed for db:pool:health
 bun run db:pool:health
 bun run security:readiness
 bun run production:preflight
 ```
 
-Atau cukup `bun run production:preflight` setelah server (opsional) sudah
-hidup — skrip ini menjalankan seluruh tahap di atas kecuali `bun install`.
+Or simply `bun run production:preflight` once the (optional) server is
+live — this script runs every stage above except `bun install`.
 
-## Test
+## Tests
 
-Target: `tests/security-readiness.test.ts` menutup logika murni yang tidak
-butuh koneksi DB/server sungguhan: heuristik `scanLineForHardcodedSecret`
-(termasuk kasus negatif — placeholder, member-expression, baca dari
-`process.env`), `checkAbacDefaultDeny`, `checkLoginLockoutImplemented`, dan
-`checkSyncHmacSecretNotDefault` (ketiga cabang: sync off, sync on dengan
-placeholder, sync on dengan secret asli).
+Target: `tests/security-readiness.test.ts` covers the pure logic that does not
+need a real DB/server connection: the `scanLineForHardcodedSecret` heuristic
+(including the negative cases — placeholder, member expression, reading from
+`process.env`), `checkAbacDefaultDeny`, `checkLoginLockoutImplemented`, and
+`checkSyncHmacSecretNotDefault` (all three branches: sync off, sync on with a
+placeholder, sync on with a real secret).
 
-Check yang butuh Postgres sungguhan (`checkRlsEnabled`,
-`checkAuditLogTableReachable`, sebagian `checkSoftDeletePermissionsSeededAndAudited`)
-**tidak** di-unit-test dengan DB palsu — itu akan menguji mock, bukan query
-sungguhan. Pembuktiannya perlu ada di verifikasi live begitu skrip ini
-diimplementasikan, termasuk skenario RLS sengaja dimatikan untuk membuktikan
-gate benar-benar memblokir, bukan sekadar skrip yang selalu mencetak "pass".
+Checks that need a real Postgres (`checkRlsEnabled`,
+`checkAuditLogTableReachable`, part of `checkSoftDeletePermissionsSeededAndAudited`)
+are **not** unit-tested against a fake DB — that would test the mock, not the
+real query. Their proof has to live in live verification once this script is
+implemented, including a scenario where RLS is deliberately turned off to
+prove the gate really blocks, rather than a script that always prints "pass".
 
-## Gap yang belum ditutup
+## Gaps not yet closed
 
-- Belum ada implementasi kode sama sekali untuk mekanisme di dokumen ini —
-  ini adalah gap utama pada tahap fondasi AWCMS saat ini, di luar gap
-  teknis yang diwarisi dari base (lihat poin-poin di bawah, yang berlaku
-  begitu porting selesai).
-- Slow query monitoring (`pg_stat_statements`/APM) tidak diverifikasi
-  otomatis — butuh tooling observability eksternal di luar cakupan base ini.
-- `checkErrorsDontLeakStackTraces` best-effort: hanya menguji satu bentuk
-  request terhadap satu daftar substring stack-trace yang umum; bukan
-  jaminan menyeluruh seluruh endpoint.
-- Item deployment (PostgreSQL tidak public, least-privilege user menyeluruh,
-  backup/restore, version pinned) tetap verifikasi **manual** terhadap
-  environment terprovisi.
-- Security headers hanya dicek **kehadirannya** (nama header ada di
-  respons), bukan validitas isi CSP secara mendalam.
-- Rate limiter login in-memory per-proses, tidak dibagi antar instance pada
-  deployment multi-instance.
-- Tax data masking dan payroll/HR data masking (checks baru untuk AWCMS,
-bukan warisan langsung dari base) belum punya implementasi rujukan sama
-sekali — perlu didesain dari nol saat modul tax/Coretax dan HR/payroll
-dibangun.
-</content>
+- There is no code implementation at all yet for the mechanism in this
+  document — this is the main gap at AWCMS's current foundation stage, on
+  top of the technical gaps inherited from the base (see the points below,
+  which apply once the porting is done).
+- Slow query monitoring (`pg_stat_statements`/APM) is not verified
+  automatically — it needs external observability tooling outside this base's scope.
+- `checkErrorsDontLeakStackTraces` is best-effort: it only exercises one
+  request shape against one list of common stack-trace substrings; it is no
+  blanket guarantee for every endpoint.
+- Deployment items (PostgreSQL not public, full least-privilege user,
+  backup/restore, version pinned) remain **manual** verification against a
+  provisioned environment.
+- Security headers are only checked for **presence** (the header name is in
+  the response), not for the CSP content being deeply valid.
+- The login rate limiter is in-memory per process, not shared between instances
+  on a multi-instance deployment.
+- Tax data masking and payroll/HR data masking (new checks for AWCMS,
+  not inherited directly from the base) have no reference implementation at
+  all — they need designing from scratch when the tax/Coretax and HR/payroll
+  modules are built.

@@ -1,69 +1,71 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](knowledge-graph.id.md)
+
 # Knowledge graph (`graphify-out/`)
 
-`graphify-out/` adalah artefak **ter-commit** hasil skill `graphify`: satu graf
-pengetahuan atas seluruh repo (kode via AST, dokumen/kontrak via ekstraksi
-semantik). Dokumen ini menjelaskan cara membacanya — dan lebih penting, **apa
-yang TIDAK boleh disimpulkan darinya**, karena dua kesalahan baca di bawah
-menghasilkan temuan yang terdengar meyakinkan dan salah.
+`graphify-out/` is a **committed** artifact produced by the `graphify` skill: one
+knowledge graph over the whole repo (code via AST, documents/contracts via
+semantic extraction). This document explains how to read it — and more
+importantly, **what must NOT be concluded from it**, because the two misreadings
+below produce findings that sound convincing and are wrong.
 
-| Berkas                                                                    | Isi                                                | Ter-track?                                              |
-| ------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------- |
-| `graph.json`                                                              | graf mentah (~12 MB) — sumber yang di-query        | ✅                                                      |
-| `GRAPH_REPORT.md`                                                         | laporan audit: god node, komunitas, hyperedge, gap | ✅                                                      |
-| `manifest.json`, `cost.json`                                              | state inkremental + akumulasi token                | ✅                                                      |
-| `.graphify_labels.json`                                                   | nama komunitas + signature-nya                     | ✅                                                      |
-| `graph.html`                                                              | visualisasi                                        | ❌ (lihat `.gitignore` — alasannya panjang dan sengaja) |
-| `cache/`, `.graphify_root`, `.graphify_python`, `.graphify_analysis.json` | cache/marker/intermediate                          | ❌                                                      |
+| File                                                                      | Contents                                               | Tracked?                                                  |
+| ------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `graph.json`                                                              | raw graph (~12 MB) — the source that gets queried      | ✅                                                        |
+| `GRAPH_REPORT.md`                                                         | audit report: god nodes, communities, hyperedges, gaps | ✅                                                        |
+| `manifest.json`, `cost.json`                                              | incremental state + accumulated tokens                 | ✅                                                        |
+| `.graphify_labels.json`                                                   | community names + their signatures                     | ✅                                                        |
+| `graph.html`                                                              | visualisation                                          | ❌ (see `.gitignore` — the reason is long and deliberate) |
+| `cache/`, `.graphify_root`, `.graphify_python`, `.graphify_analysis.json` | cache/marker/intermediate                              | ❌                                                        |
 
-Perbarui dengan `/graphify . --update` (inkremental; hanya berkas berubah yang
-diekstrak ulang). Angka per 2026-07-27: **8159 node, 21470 edge, 485 komunitas**.
+Update it with `/graphify . --update` (incremental; only changed files are
+re-extracted). Numbers as of 2026-07-27: **8159 nodes, 21470 edges, 485 communities**.
 
-## Yang bagus dijawab graf ini
+## What this graph is good at answering
 
-Menemukan **pola lintas-modul yang tidak punya import sama sekali** — di situlah
-nilainya, karena itu justru yang tak bisa ditemukan `grep` maupun
-`modules:dag:check`. Contoh nyata dari run terakhir: graf mengelompokkan sendiri
-disiplin _"permukaan anonim menjawab seragam, tak ada oracle"_ di `comments`,
-self-registration, dan password-reset — tiga modul tanpa satu pun edge struktural
-di antara mereka. Begitu juga seam `listModules()` (`searchSources`,
-`commentableResources`, `dataLifecycle`, `api.routes`) yang semuanya gerakan
-arsitektural yang sama.
+Finding **cross-module patterns that have no import at all** — that is where its
+value is, because that is precisely what neither `grep` nor `modules:dag:check`
+can find. A real example from the last run: the graph clustered on its own the
+discipline _"anonymous surfaces answer uniformly, no oracle"_ across `comments`,
+self-registration, and password-reset — three modules without a single structural
+edge between them. Same for the `listModules()` seam (`searchSources`,
+`commentableResources`, `dataLifecycle`, `api.routes`), which are all the same
+architectural move.
 
-## Dua cara salah baca (keduanya sudah terjadi)
+## Two ways to misread it (both have already happened)
 
-### 1. Graf mencampur "pernah benar" dengan "sekarang benar"
+### 1. The graph mixes "was once true" with "is true now"
 
-Node dan edge diekstrak dari **teks**, termasuk `CHANGELOG.md` dan changeset.
-Entri changelog yang mendeskripsikan bug yang **sudah diperbaiki** tetap menjadi
-node, dan bisa muncul di §Surprising Connections seolah temuan hidup. Pada audit
-2026-07-27, tiga dari lima "surprising connection" teratas seperti itu — mis.
-"ghost env var `AUTH_JWT_SECRET`/`APP_TIMEZONE` terdokumentasi tapi tak dibaca",
-yang sudah beres (nol kemunculan di `.env.example`).
+Nodes and edges are extracted from **text**, including `CHANGELOG.md` and
+changesets. A changelog entry describing a bug that has **already been fixed**
+still becomes a node, and can show up under §Surprising Connections as if it were
+a live finding. In the 2026-07-27 audit, three of the top five "surprising
+connections" were like that — e.g. "ghost env vars `AUTH_JWT_SECRET`/`APP_TIMEZONE`
+documented but never read", which is already settled (zero occurrences in
+`.env.example`).
 
-**Aturan:** jangan pernah pakai graf untuk menjawab _"apakah X masih benar"_.
-Setiap temuan wajib diverifikasi ke kode/`sql/`/`bun run check` dulu. Sumber
-kebenaran state tetap kode — graf adalah peta, bukan wilayahnya.
+**Rule:** never use the graph to answer _"is X still true"_. Every finding must
+be verified against the code/`sql/`/`bun run check` first. The source of truth
+for state remains the code — the graph is a map, not the territory.
 
-### 2. Cohesion rendah ≠ modul yang perlu dipecah
+### 2. Low cohesion ≠ a module that needs splitting
 
-`GRAPH_REPORT.md` menyarankan memecah komunitas ber-cohesion rendah. Komunitas
-terbesar (`Tenant Transaction & Authorization Core`, 264 node, cohesion
-**0.031**) tampak seperti kandidat utama. Ia bukan.
+`GRAPH_REPORT.md` suggests splitting low-cohesion communities. The largest
+community (`Tenant Transaction & Authorization Core`, 264 nodes, cohesion
+**0.031**) looks like the prime candidate. It is not.
 
-Isinya **242 route handler dari 83 berkas berbeda**, plus `withTenant` dan
-`authorizeInTransaction`. Itu bukan subsistem yang membengkak — itu bentuk
-fan-out dari sebuah **chokepoint yang memang disengaja** (ADR-0003/ADR-0004:
-setiap rute terproteksi WAJIB lewat keduanya). Topologi bintang memang
-menghasilkan cohesion mendekati nol; algoritma clustering tidak bisa membedakan
-"hub" dari "klaster longgar". Memecahnya berarti merusak properti keamanan yang
-paling ingin dipertahankan repo ini.
+Its contents are **242 route handlers from 83 different files**, plus `withTenant`
+and `authorizeInTransaction`. That is not a subsystem that has bloated — it is the
+fan-out shape of a **deliberate chokepoint** (ADR-0003/ADR-0004: every protected
+route MUST go through both). A star topology inevitably yields cohesion close to
+zero; clustering algorithms cannot tell a "hub" from a "loose cluster". Splitting
+it would break the very security property this repo most wants to keep.
 
-**Aturan:** sebelum menindaklanjuti cohesion rendah, lihat **komposisi**
-komunitasnya. Bila mayoritas anggotanya berasal dari puluhan berkas berbeda yang
-hanya berbagi satu hub, itu artefak — bukan utang desain.
+**Rule:** before acting on low cohesion, look at the **composition** of the
+community. If the majority of its members come from dozens of different files that
+only share one hub, it is an artifact — not design debt.
 
-## Gap yang memang noise
+## Gaps that really are noise
 
-§Knowledge Gaps melaporkan ~3400 node "terisolasi" (≤1 koneksi). Sebagian besar
-adalah kunci `package.json`, `$schema`, entri katalog, dan simbol daun — **bukan**
-komponen tak terdokumentasi. Jangan perlakukan angka itu sebagai backlog.
+§Knowledge Gaps reports ~3400 "isolated" nodes (≤1 connection). Most of them are
+`package.json` keys, `$schema`, catalogue entries, and leaf symbols — **not**
+undocumented components. Do not treat that number as a backlog.

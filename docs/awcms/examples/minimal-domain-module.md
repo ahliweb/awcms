@@ -1,59 +1,61 @@
-# Contoh Modul Domain Minimal
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](minimal-domain-module.id.md)
 
-> **Status (2026-07-14):** Repo `awcms` baru pada tahap fondasi ulang (lihat
-> [ADR-0001](../../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
-> **belum ada modul ERP yang diimplementasikan** dan `src/` belum eksis.
-> Setiap path/perintah di dokumen ini (`src/modules/...`, `bun run ...`,
-> skill, dsb.) adalah **pola target** yang akan berlaku begitu implementasi
-> fondasi dimulai — diadaptasi dari base
-> [awcms-mini](https://github.com/ahliweb/awcms-mini) yang sudah fully
-> implemented dan modul contohnya sudah teruji nyata di sana. Gunakan
-> dokumen ini sebagai referensi mekanisme (struktur folder, migration+RLS,
-> ABAC, endpoint, kontrak API/event, test), bukan sebagai bukti bahwa kode
-> ini sudah berjalan di repo `awcms`.
+# Minimal Domain Module Example
 
-Contoh konkret satu modul domain ERP minimal — dari struktur folder sampai
-test checklist — sebagai referensi praktis untuk modul domain ERP pertama
-yang akan dibangun di repo ini (finance, inventory, procurement,
-manufacturing, HR/payroll, dst.).
+> **Status (2026-07-14):** The `awcms` repo is only at the re-foundation stage
+> (see [ADR-0001](../../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
+> **no ERP module has been implemented yet** and `src/` does not exist.
+> Every path/command in this document (`src/modules/...`, `bun run ...`,
+> skills, etc.) is a **target pattern** that will apply once implementation of
+> the foundation begins — adapted from the base
+> [awcms-mini](https://github.com/ahliweb/awcms-mini), which is already fully
+> implemented and whose example module has been genuinely tested there. Use
+> this document as a reference for the mechanism (folder structure,
+> migration+RLS, ABAC, endpoint, API/event contract, tests), not as evidence
+> that this code already runs in the `awcms` repo.
 
-> **Ini adalah template, bukan modul yang sudah ada.** Domain contoh di sini
-> (`expense-category` — pencatatan kategori beban/expense sederhana untuk
-> modul finance) sengaja dipilih sebagai domain ERP paling minimal yang
-> masuk akal (satu entitas master data, tanpa alur transaksi/approval
-> berjenjang) — bukan modul finance/inventory penuh. Salin polanya, **ganti
-> nama domain, entitas, permission, dan field** sesuai modul ERP nyata yang
-> sedang dibangun — jangan salin `expense-category` apa adanya ke produksi.
-> Tidak satu pun kode di dokumen ini ada di `src/modules/` repo ini; repo ini
-> belum punya folder `src/` sama sekali pada tahap fondasi ulang ini.
+A concrete example of one minimal ERP domain module — from folder structure to
+test checklist — as a practical reference for the first ERP domain module that
+will be built in this repo (finance, inventory, procurement, manufacturing,
+HR/payroll, and so on).
 
-## Struktur folder
+> **This is a template, not a module that already exists.** The example domain
+> here (`expense-category` — simple expense category recording for the finance
+> module) was deliberately chosen as the most minimal ERP domain that still
+> makes sense (one master-data entity, without a transaction/tiered-approval
+> flow) — not a full finance/inventory module. Copy the pattern, **change the
+> domain name, entities, permissions, and fields** to match the real ERP module
+> you are building — do not copy `expense-category` as-is into production.
+> Not one line of code in this document exists in this repo's `src/modules/`;
+> this repo does not have a `src/` folder at all at this re-foundation stage.
 
-Direncanakan mengikuti pola modul aktif base (`domain/` untuk logika murni
-tanpa I/O, `application/` untuk orkestrasi transaksi/DB, `api/` untuk tipe
-request/response spesifik endpoint bila diperlukan, route Astro tetap di
-`src/pages/api/v1/...` — bukan di dalam folder modul):
+## Folder structure
+
+Planned to follow the pattern of the base's active modules (`domain/` for pure
+logic without I/O, `application/` for transaction/DB orchestration, `api/` for
+endpoint-specific request/response types when needed, Astro routes stay in
+`src/pages/api/v1/...` — not inside the module folder):
 
 ```
 src/modules/expense-category/
 ├── module.ts
 ├── README.md
 ├── domain/
-│   └── expense-category-validation.ts   # validasi murni, tanpa DB
+│   └── expense-category-validation.ts   # pure validation, no DB
 └── application/
-    └── expense-category-directory.ts    # fungsi yang menerima `tx`, menjalankan query
+    └── expense-category-directory.ts    # functions that take `tx` and run queries
 ```
 
-Route endpoint tetap ada di `src/pages/api/v1/finance/expense-categories/index.ts`
-(atau path sesuai domain Anda) — konsisten dengan seluruh modul aktif base,
-yang tidak menaruh route Astro di dalam folder modul.
+The endpoint route still lives at `src/pages/api/v1/finance/expense-categories/index.ts`
+(or the path matching your domain) — consistent with every active module in the
+base, none of which put Astro routes inside the module folder.
 
-## `module.ts` — descriptor awal
+## `module.ts` — initial descriptor
 
-Modul baru direncanakan **selalu** mulai `version: "0.1.0"`,
-`status: "experimental"` — naik ke `active`/`1.0.0` setelah memenuhi
-kriteria "matang" (test integrasi + security checklist lengkap, lihat
-§Checklist keamanan di bawah):
+A new module is planned to **always** start at `version: "0.1.0"`,
+`status: "experimental"` — moving up to `active`/`1.0.0` after meeting the
+"mature" criteria (integration tests + a complete security checklist, see
+§Security checklist below):
 
 ```typescript
 import { defineModule } from "../_shared/module-contract";
@@ -64,12 +66,12 @@ export const expenseCategoryModule = defineModule({
   version: "0.1.0",
   status: "experimental",
   description:
-    "Kategori beban/expense tenant-scoped untuk modul finance — contoh modul domain ERP minimal.",
+    "Tenant-scoped expense categories for the finance module — a minimal ERP domain module example.",
   dependencies: ["identity_access"],
   api: {
-    // Fragment MILIK modul ini, bukan bundel hasil generate — gate
-    // kepemilikan fragment di `api:spec:check` menolak yang kedua, dan
-    // menuntut berkas ini benar-benar ada.
+    // A fragment OWNED BY this module, not a generated bundle — the fragment
+    // ownership gate in `api:spec:check` rejects the latter, and demands that
+    // this file genuinely exists.
     openApiPath: "openapi/modules/expense-category.openapi.yaml",
     basePath: "/api/v1/finance/expense-categories"
   },
@@ -80,18 +82,18 @@ export const expenseCategoryModule = defineModule({
 });
 ```
 
-`dependencies: ["identity_access"]` karena modul ini memakai
-`evaluateAccess`/`resolveTenantContext` milik `identity-access` — pola yang
-sama seperti modul aktif lain, bukan menulis ulang RBAC/ABAC-nya sendiri.
+`dependencies: ["identity_access"]` because this module uses
+`evaluateAccess`/`resolveTenantContext` owned by `identity-access` — the same
+pattern as the other active modules, rather than rewriting its own RBAC/ABAC.
 
-## Migration PostgreSQL + RLS
+## PostgreSQL migration + RLS
 
-**Wajib**: `tenant_id`, `ENABLE`+`FORCE ROW LEVEL SECURITY` di migration yang
-sama, index berprefiks `(tenant_id, …)`. Setiap tabel domain baru **harus**
-menyertakan `FORCE` sendiri di migration yang membuatnya:
+**Mandatory**: `tenant_id`, `ENABLE`+`FORCE ROW LEVEL SECURITY` in the same
+migration, indexes prefixed with `(tenant_id, …)`. Every new domain table
+**must** carry its own `FORCE` in the migration that creates it:
 
 ```sql
--- NNN_awcms_expense_category_schema.sql — contoh modul domain ERP minimal.
+-- NNN_awcms_expense_category_schema.sql — minimal ERP domain module example.
 
 CREATE TABLE IF NOT EXISTS awcms_expense_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,9 +117,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS awcms_expense_categories_code_dedup
 CREATE INDEX IF NOT EXISTS awcms_expense_categories_tenant_idx
   ON awcms_expense_categories (tenant_id);
 
--- ENABLE dan FORCE wajib SATU migration yang sama — jangan pisah ke
--- migration terpisah, dan jangan lupakan FORCE (RLS tanpa FORCE tidak
--- berlaku untuk owner/migrasi role).
+-- ENABLE and FORCE must be in the SAME migration — do not split them into a
+-- separate migration, and do not forget FORCE (RLS without FORCE does not
+-- apply to the owner/migration role).
 ALTER TABLE awcms_expense_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE awcms_expense_categories FORCE ROW LEVEL SECURITY;
 
@@ -125,35 +127,37 @@ CREATE POLICY awcms_expense_categories_tenant_isolation
   ON awcms_expense_categories
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
 
--- Grant DML ke role least-privilege aplikasi (migration role-separation
--- awal membuat role ini; tabel baru tetap perlu grant eksplisit sendiri).
+-- Grant DML to the application's least-privilege role (the initial
+-- role-separation migration creates this role; a new table still needs its
+-- own explicit grant).
 GRANT SELECT, INSERT, UPDATE, DELETE ON awcms_expense_categories TO awcms_app;
 ```
 
-Konvensi penomoran migration dan checksum runner mengikuti pola
-`NNN_awcms_<area>_<desc>.sql` — jangan menulis migration di luar pola ini.
+The migration numbering convention and the runner checksum follow the
+`NNN_awcms_<area>_<desc>.sql` pattern — do not write a migration outside this
+pattern.
 
-## Seed permission/role/policy
+## Permission/role/policy seed
 
-Domain baru menambah permission-nya sendiri, mengikuti pola penamaan
-`<module>.<resource>.<action>` yang sudah dipakai modul aktif lain (bukan
-menyalin isi ilustratif, hanya polanya):
+A new domain adds its own permissions, following the
+`<module>.<resource>.<action>` naming pattern already used by the other active
+modules (do not copy the illustrative contents, only the pattern):
 
 ```sql
 INSERT INTO awcms_permissions (key, module_key, description) VALUES
-  ('expense_category.expense_category.read', 'expense_category', 'Lihat daftar kategori beban tenant'),
-  ('expense_category.expense_category.write', 'expense_category', 'Buat/ubah kategori beban tenant')
+  ('expense_category.expense_category.read', 'expense_category', 'View the tenant expense category list'),
+  ('expense_category.expense_category.write', 'expense_category', 'Create/change tenant expense categories')
 ON CONFLICT (key) DO NOTHING;
 ```
 
-Assign permission ke role lewat `awcms_role_permissions` seperti pola modul
-lain — **tidak ada grant implisit**: tanpa baris di tabel ini, ABAC
-default-deny menolak semua akses ke permission baru.
+Assign permissions to roles through `awcms_role_permissions` like the other
+modules do — **there is no implicit grant**: without a row in this table, ABAC
+default-deny rejects all access to the new permission.
 
 ## Service/application function
 
-`application/expense-category-directory.ts` — menerima transaksi (`tx`) dari
-`withTenant`, tidak membuka koneksi sendiri:
+`application/expense-category-directory.ts` — takes the transaction (`tx`) from
+`withTenant`, it does not open a connection of its own:
 
 ```typescript
 export type RegisterExpenseCategoryInput = {
@@ -176,15 +180,15 @@ export async function registerExpenseCategory(
 }
 ```
 
-Validasi murni (format `categoryCode`, panjang `name`, dst.) tetap di
-`domain/expense-category-validation.ts` tanpa import DB apa pun — dipanggil
-dari route sebelum `application/` dijalankan, konsisten dengan pemisahan
-domain/application modul aktif lain.
+Pure validation (`categoryCode` format, `name` length, and so on) stays in
+`domain/expense-category-validation.ts` without any DB import — called from the
+route before `application/` runs, consistent with the domain/application split
+of the other active modules.
 
-## Endpoint REST — route tipis
+## REST endpoint — thin route
 
-Pola standar (auth → tenant context → ABAC guard → validasi → idempotency
-bila high-risk → service+transaksi → response helper):
+The standard pattern (auth → tenant context → ABAC guard → validation →
+idempotency when high-risk → service+transaction → response helper):
 
 ```typescript
 // src/pages/api/v1/finance/expense-categories/index.ts
@@ -268,7 +272,7 @@ export const POST: APIRoute = async ({ request }) => {
         name: body.name
       });
 
-      // High-risk domain action (mempengaruhi klasifikasi beban finance) ->
+      // High-risk domain action (it affects finance expense classification) ->
       // audit trail.
       await recordAuditEvent(tx, {
         tenantId,
@@ -287,21 +291,21 @@ export const POST: APIRoute = async ({ request }) => {
 };
 ```
 
-Bila endpoint ini dianggap mutation high-risk yang perlu aman diulang (retry
-client), tambahkan parameter `Idempotency-Key` dan bungkus dengan
+If this endpoint is considered a high-risk mutation that must be safe to repeat
+(client retry), add an `Idempotency-Key` parameter and wrap it with
 `findIdempotencyRecord`/`saveIdempotencyRecord` (`src/modules/_shared/idempotency.ts`)
-— pola idempotency yang sama dipakai endpoint keputusan workflow approval
-(mis. persetujuan pengeluaran/expense).
+— the same idempotency pattern used by the workflow approval decision endpoints
+(e.g. expense approval).
 
-## Snippet OpenAPI
+## OpenAPI snippet
 
-Kontrak API direncanakan sebagai artefak GENERATED — jangan edit langsung.
-Tambahkan path baru ke fragment sumber modul ini,
-`openapi/modules/<module-key>.openapi.yaml` (bikin baru bila modul ini belum
-punya satu — satu file per modul/tag, jangan campur dengan modul lain), lalu
-jalankan `bun run openapi:bundle` untuk regenerate file bundle publikasi.
-Kontrak yang DIPUBLIKASIKAN tetap tunggal — hanya representasi sumber yang
-dipecah per modul:
+The API contract is planned as a GENERATED artifact — do not edit it directly.
+Add the new path to this module's source fragment,
+`openapi/modules/<module-key>.openapi.yaml` (create a new one if this module
+does not have one yet — one file per module/tag, do not mix it with another
+module), then run `bun run openapi:bundle` to regenerate the published bundle
+file. The PUBLISHED contract remains a single file — only the source
+representation is split per module:
 
 ```yaml
 /api/v1/finance/expense-categories:
@@ -345,20 +349,21 @@ dipecah per modul:
         $ref: "#/components/responses/InternalError"
 ```
 
-`ExpenseCategoryRegisterRequest`/`ExpenseCategoryResponse` didefinisikan
-sekali di `components.schemas` fragment modul ini (atau di file sumber
-bersama bila genuinely dipakai 2+ modul), sama seperti skema modul aktif
-lain. Jalankan `bun run openapi:bundle` lalu `bun run api:spec:check` setelah
-menambah path — pemeriksaan ini gagal bila `info.version` bukan SemVer,
-path/schema tidak konsisten, bundle basi relatif terhadap fragment sumber,
-`operationId` duplikat, path parameter tidak cocok, response error bukan
-`ApiError`, atau security metadata tidak eksplisit.
+`ExpenseCategoryRegisterRequest`/`ExpenseCategoryResponse` are defined once in
+the `components.schemas` of this module's fragment (or in a shared source file
+if they are genuinely used by 2+ modules), just like the schemas of the other
+active modules. Run `bun run openapi:bundle` and then `bun run api:spec:check`
+after adding a path — this check fails when `info.version` is not SemVer, when
+paths/schemas are inconsistent, when the bundle is stale relative to the source
+fragments, when an `operationId` is duplicated, when a path parameter does not
+match, when an error response is not `ApiError`, or when security metadata is
+not explicit.
 
-## Snippet AsyncAPI (bila mutation menghasilkan event domain)
+## AsyncAPI snippet (when the mutation produces a domain event)
 
-Tambahkan channel baru ke `asyncapi/awcms-domain-events.asyncapi.yaml` hanya
-bila mutation ini perlu disinkronkan lintas node (outbox) atau dikonsumsi
-async oleh sistem lain — bukan wajib untuk setiap endpoint:
+Add a new channel to `asyncapi/awcms-domain-events.asyncapi.yaml` only when this
+mutation needs to be synchronised across nodes (outbox) or consumed
+asynchronously by another system — it is not mandatory for every endpoint:
 
 ```yaml
 channels:
@@ -377,64 +382,64 @@ operations:
       - $ref: "#/channels/awcms.expense-category.expense-category.registered/messages/DomainEvent"
 ```
 
-Konsisten dengan pola base: dokumentasi kontrak ini tidak mensyaratkan
-dispatcher pub/sub konkret — payload event yang sama bisa dikirim lewat sync
-outbox (`awcms_sync_outbox`) bila deployment butuh sinkronisasi
-offline-first (mis. gudang/cabang yang sesekali offline).
+Consistent with the base pattern: this contract documentation does not require
+a concrete pub/sub dispatcher — the same event payload can be shipped through
+the sync outbox (`awcms_sync_outbox`) when the deployment needs offline-first
+synchronisation (e.g. a warehouse/branch that goes offline occasionally).
 
-## Checklist layar UI/admin
+## UI/admin screen checklist
 
-- [ ] Token desain base dipakai (bukan warna/spacing hardcode).
+- [ ] Base design tokens are used (not hardcoded colours/spacing).
 - [ ] 4-state pattern: loading, empty, error, ready.
-- [ ] Aksesibilitas WCAG 2.1 AA (label, fokus, kontras).
-- [ ] Semua string lewat katalog `.po`, bukan hardcode Bahasa
-      Indonesia/Inggris langsung di komponen.
-- [ ] Aksi high-risk (mis. retire kategori beban yang masih dipakai transaksi
-      aktif) menampilkan konfirmasi eksplisit sebelum submit.
+- [ ] WCAG 2.1 AA accessibility (labels, focus, contrast).
+- [ ] All strings go through the `.po` catalogue, not hardcoded
+      Indonesian/English directly in the component.
+- [ ] High-risk actions (e.g. retiring an expense category still used by active
+      transactions) show an explicit confirmation before submit.
 
-## Checklist test
+## Test checklist
 
-- [ ] **Unit** — `domain/expense-category-validation.ts` diuji tanpa DB
-      (kasus valid/invalid, boundary format `categoryCode`).
-- [ ] **Integration** — endpoint `POST /api/v1/finance/expense-categories`
-      diuji terhadap PostgreSQL nyata (bukan mock): tenant isolation, ABAC
+- [ ] **Unit** — `domain/expense-category-validation.ts` tested without a DB
+      (valid/invalid cases, `categoryCode` format boundaries).
+- [ ] **Integration** — the `POST /api/v1/finance/expense-categories` endpoint
+      tested against a real PostgreSQL (not a mock): tenant isolation, ABAC
       allow/deny, response shape.
-- [ ] **Keamanan** — uji RLS benar-benar `FORCE` (query lintas tenant harus 0
-      baris, bukan hanya "terlihat benar" di path bahagia); uji ABAC
-      default-deny (permission belum diseed → akses ditolak).
-- [ ] **Kontrak** — `bun run api:spec:check` hijau setelah path/schema baru
-      ditambahkan.
+- [ ] **Security** — test that RLS genuinely is `FORCE` (a cross-tenant query
+      must return 0 rows, not merely "look right" on the happy path); test ABAC
+      default-deny (permission not seeded yet → access denied).
+- [ ] **Contract** — `bun run api:spec:check` green after the new path/schema
+      has been added.
 
-## Checklist keamanan sebelum dianggap siap produksi
+## Security checklist before it counts as production-ready
 
-Diterapkan ke domain contoh ini, sekaligus jadi baseline untuk modul ERP
-nyata pertama:
+Applied to this example domain, and at the same time a baseline for the first
+real ERP module:
 
-- [ ] Tenant context lewat `withTenant()`/`resolveTenantContext` — tidak ada
-      `WHERE tenant_id` manual dari input klien.
-- [ ] ABAC default-deny — permission
-      `expense_category.expense_category.write`/`.read` diseed eksplisit,
-      tidak ada grant implisit.
-- [ ] RLS `ENABLE`+`FORCE` di migration yang sama, policy isolasi tenant,
-      index berprefiks `(tenant_id, …)`.
-- [ ] Audit — `expense_category.registered` (dan aksi high-risk domain lain,
-      mis. retire) menghasilkan baris `awcms_audit_events` via
+- [ ] Tenant context via `withTenant()`/`resolveTenantContext` — no manual
+      `WHERE tenant_id` from client input.
+- [ ] ABAC default-deny — the
+      `expense_category.expense_category.write`/`.read` permissions are seeded
+      explicitly, there is no implicit grant.
+- [ ] RLS `ENABLE`+`FORCE` in the same migration, a tenant isolation policy,
+      indexes prefixed with `(tenant_id, …)`.
+- [ ] Audit — `expense_category.registered` (and other high-risk domain
+      actions, e.g. retire) produce an `awcms_audit_events` row via
       `recordAuditEvent`.
-- [ ] Idempotency — bila endpoint dianggap high-risk/retry-sensitive, terima
-      `Idempotency-Key`.
-- [ ] Redaksi — bila entitas domain Anda punya identifier sensitif (NIK,
-      NPWP, nomor rekening, dst. — umum di modul finance/HR-payroll),
-      terapkan redaksi/masking yang sama seperti pola NPWP/NIK/email di base
-      sebelum simpan/tampil/log.
-- [ ] `bun run api:spec:check` hijau.
-- [ ] `bun run production:preflight` hijau sebelum go-live.
+- [ ] Idempotency — if the endpoint is considered high-risk/retry-sensitive,
+      accept an `Idempotency-Key`.
+- [ ] Redaction — if your domain entity has sensitive identifiers (NIK, NPWP,
+      account numbers, and so on — common in finance/HR-payroll modules), apply
+      the same redaction/masking as the NPWP/NIK/email pattern in the base
+      before storing/displaying/logging it.
+- [ ] `bun run api:spec:check` green.
+- [ ] `bun run production:preflight` green before go-live.
 
-## Lihat juga
+## See also
 
 - [`../18_configuration_env_reference.md`](../18_configuration_env_reference.md)
-  — referensi environment variable fondasi.
+  — foundation environment variable reference.
 - [`../templates/module-proposal-template.md`](../templates/module-proposal-template.md),
   [`../templates/module-admission-decision-checklist.md`](../templates/module-admission-decision-checklist.md)
-  — proses admission modul baru.
-- `AGENTS.md` (root repo) — alur kerja wajib setiap task, termasuk disiplin
-  ADR.
+  — the new-module admission process.
+- `AGENTS.md` (repo root) — the mandatory workflow for every task, including
+  ADR discipline.

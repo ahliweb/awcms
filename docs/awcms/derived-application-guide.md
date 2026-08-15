@@ -1,180 +1,182 @@
-# Panduan Implementasi Aplikasi Turunan
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](derived-application-guide.id.md)
 
-> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Model aplikasi-turunan di repo terpisah DICABUT — keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif (kembangkan modul langsung di template). Dokumen ini dipertahankan sebagai catatan historis.
+# Derived Application Implementation Guide
 
-> **Dokumen base (bukan contoh domain).** Dokumen ini menjelaskan cara membangun aplikasi turunan **di atas** AWCMS setelah base generik selesai (v0.23.5, seluruh 18 issue backlog doc06 + peningkatan pasca-backlog M9 tuntas — lihat [`README.md`](README.md) §Langkah berikutnya dan [`AGENTS.md`](../../AGENTS.md) §Mulai dari sini). Lima contoh aplikasi di §Contoh aplikasi turunan adalah **ilustrasi**, bukan modul yang ditambahkan ke base ini.
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** The derived-application-in-a-separate-repo model is REVOKED — the AWCMS family (`awcms-mini`/`awcms`/`awcms-micro`) is now a set of **used-directly** templates, with no derivative repo (develop modules directly in the template). This document is kept as a historical record.
+
+> **A base document (not a domain example).** This document explains how to build a derived application **on top of** AWCMS once the generic base is finished (v0.23.5, all 18 doc06 backlog issues + the post-backlog M9 improvements complete — see [`README.md`](README.md) §Next steps and [`AGENTS.md`](../../AGENTS.md) §Start here). The five example applications in §Derived application examples are **illustrations**, not modules added to this base.
 >
-> **Lapisan ekstensi (epic #738).** Semua aplikasi turunan di dokumen ini hidup di lapisan **Derived Application** — satu dari tiga lapisan "di luar base" (Derived Application generik, SaaS Control Plane, ERP Extension) yang didefinisikan `docs/adr/0013-extension-layers-and-boundary-model.md`. ADR itu juga mendefinisikan batas tenant vs legal entity vs organization unit, dan aturan "no shared-table write" untuk kolaborasi lintas-repo — baca sebelum aplikasi turunan Anda perlu berbagi data dengan repo turunan lain (mis. sebuah SaaS billing control-plane yang menagih tenant yang sama).
+> **Extension layers (epic #738).** Every derived application in this document lives in the **Derived Application** layer — one of the three "outside the base" layers (generic Derived Application, SaaS Control Plane, ERP Extension) defined by `docs/adr/0013-extension-layers-and-boundary-model.md`. That ADR also defines the tenant vs legal entity vs organization unit boundaries, and the "no shared-table write" rule for cross-repo collaboration — read it before your derived application needs to share data with another derived repo (e.g. a SaaS billing control-plane that bills the same tenants).
 >
-> **Komposisi modul build-time (Issue #178, ADR-0025 — mengimplementasikan ADR-0014).** Sejak Issue #178, aplikasi turunan **tidak lagi perlu mengedit `src/modules/index.ts`** untuk mendaftarkan modul domainnya. Ganti nilai `undefined` di `src/modules/application-registry.ts` milik repo turunan Anda dengan `ApplicationModuleRegistry` sendiri (`{ id, modules, migrationNamespace? }`, tipe di `_shared/module-contract.ts`) — satu-satunya file yang perlu diedit; `src/modules/index.ts` base tidak pernah disentuh. `composeModuleRegistry()` (`module-management/domain/module-composition.ts`) menggabungkan registry base + registry Anda dan memvalidasi key ganda/override key base/dependency DAG/capability binding/migration-namespace/deployment-profile/navigation/job sebelum build dianggap sah. Tiga gate menegakkannya di `bun run check` dan CI: `bun run modules:compose:check` (validasi komposisi), `bun run modules:composition:inventory:check` (inventory `docs/awcms/module-composition-inventory.json` deterministik, regenerate lewat `bun run modules:composition:inventory:generate`), dan `bun run extension:check` (kesehatan extension seam). Lihat `docs/adr/0025-implement-deterministic-build-time-module-composition.md` (mengimplementasikan `docs/adr/0014-deterministic-build-time-module-composition.md`) untuk keputusan lengkap dan `tests/fixtures/derived-application-example/` untuk contoh nyata yang bisa langsung dijalankan (`bun test tests/module-composition-fixture.test.ts`).
+> **Build-time module composition (Issue #178, ADR-0025 — implementing ADR-0014).** Since Issue #178, a derived application **no longer needs to edit `src/modules/index.ts`** to register its domain modules. Replace the `undefined` value in your derived repo's `src/modules/application-registry.ts` with your own `ApplicationModuleRegistry` (`{ id, modules, migrationNamespace? }`, the type lives in `_shared/module-contract.ts`) — the only file you need to edit; the base `src/modules/index.ts` is never touched. `composeModuleRegistry()` (`module-management/domain/module-composition.ts`) merges the base registry + yours and validates duplicate keys/base-key overrides/the dependency DAG/capability bindings/migration namespaces/deployment profiles/navigation/jobs before a build is considered legitimate. Three gates enforce it in `bun run check` and CI: `bun run modules:compose:check` (composition validation), `bun run modules:composition:inventory:check` (a deterministic `docs/awcms/module-composition-inventory.json` inventory, regenerate via `bun run modules:composition:inventory:generate`), and `bun run extension:check` (extension seam health). See `docs/adr/0025-implement-deterministic-build-time-module-composition.md` (implementing `docs/adr/0014-deterministic-build-time-module-composition.md`) for the full decision, and `tests/fixtures/derived-application-example/` for a real example you can run immediately (`bun test tests/module-composition-fixture.test.ts`).
 >
-> **Manifest kompatibilitas (Issue #183, ADR-0015 — RENCANA, belum diimplementasikan).** Komposisi modul (di atas) membuktikan registry Anda VALID hari ini — bukan bahwa dia TETAP kompatibel begitu base ini merilis versi baru. Untuk itu direncanakan sebuah `extension.manifest.json` (range SemVer base yang kompatibel, versi module-contract/capability, namespace+checksum historis migration, profil deployment, dan versi kontrak OpenAPI/AsyncAPI) yang divalidasi oleh gate `extension:check` — didesain di `docs/adr/0015-derived-application-compatibility-manifest.md` dan dijadwalkan pada **Issue #183** (epic #177 Wave 1), belum ada di repo ini. **Status saat ini (Issue #178):** `bun run extension:check` (`scripts/extension-check.ts`) memvalidasi **extension seam** saja — bahwa registry efektif (base + `application-registry.ts`) tersusun valid dan, dalam mode base, identik dengan registry base. Ketika #183 mendarat, gate/perintah yang sama diperluas menambahkan validasi manifest tanpa mengubah seam yang ditetapkan #178.
+> **Compatibility manifest (Issue #183, ADR-0015 — PLANNED, not yet implemented).** Module composition (above) proves your registry is VALID today — not that it STAYS compatible once this base ships a new version. For that, an `extension.manifest.json` is planned (the compatible base SemVer range, module-contract/capability versions, historical migration namespaces+checksums, deployment profiles, and OpenAPI/AsyncAPI contract versions) validated by the `extension:check` gate — designed in `docs/adr/0015-derived-application-compatibility-manifest.md` and scheduled as **Issue #183** (epic #177 Wave 1); it does not exist in this repo yet. **Current status (Issue #178):** `bun run extension:check` (`scripts/extension-check.ts`) validates the **extension seam** only — that the effective registry (base + `application-registry.ts`) composes validly and, in base mode, is identical to the base registry. When #183 lands, the same gate/command is extended with manifest validation without changing the seam #178 established.
 
-## Base reusable vs domain-specific extension
+## Reusable base vs domain-specific extension
 
-Sebelum menulis kode apa pun, pahami batasnya: base menyediakan infrastruktur dan kontrak yang **dipakai ulang tanpa diubah**; aplikasi turunan hanya menambah **modul domain baru** di atasnya.
+Before writing any code, understand the boundary: the base provides infrastructure and contracts that are **reused unchanged**; a derived application only adds **new domain modules** on top of it.
 
-| Reusable (base — jangan diubah)                                                                                            | Domain-specific (aplikasi turunan — Anda tambahkan)                                |
-| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Modular monolith + module contract (`src/modules/_shared/module-contract.ts`, doc 10/11)                                   | Modul domain baru di `src/modules/<domain>/`                                       |
-| RBAC + ABAC default-deny + RLS (ADR-0003/0004, `src/modules/identity-access/`)                                             | Permission/role/policy spesifik domain (doc 17 pola, bukan isinya)                 |
-| Migration runner checksum-based, konvensi `NNN_awcms_<area>_<desc>.sql`                                                    | Skema tabel domain (skill `awcms-new-migration`)                                   |
-| Kontrak OpenAPI/AsyncAPI wajib + `api:spec:check` (ADR-0007/0008)                                                          | Endpoint/event domain (skill `awcms-new-endpoint`/`awcms-new-event`)               |
-| Soft delete + immutability posted (ADR-0005)                                                                               | Kebijakan resource domain mana yang boleh restore/purge                            |
-| Audit trail generik (`awcms_audit_events`) + retensi/purge + correlation ID (Issue 10.1/#447, skill `awcms-observability`) | Aksi high-risk spesifik domain yang wajib diaudit (skill `awcms-audit-log`)        |
-| Idempotency ledger generik (`awcms_idempotency_keys`)                                                                      | Mutation high-risk domain mana yang wajib `Idempotency-Key`                        |
-| Server-side form draft persistence generik (`awcms_form_drafts`, `/api/v1/form-drafts`, Issue #484)                        | Apa isi `payload` draft dan `moduleKey`/`wizardKey`/`resourceType` spesifik domain |
-| Structured logger + extension point (`setLogSink`/`setAuditExportHook`)                                                    | Consumer log/audit nyata (SIEM, alerting) — base hanya sediakan titik pasang       |
-| Design system, token, state pattern, i18n (doc 14, skill `awcms-i18n`)                                                     | Layar admin/operator/portal domain (skill `awcms-ui-screen`)                       |
-| Offline-first sync (outbox/inbox, HMAC, conflict tracking, object queue dispatcher — Issue 6.1-6.3/#436)                   | Payload event domain yang disinkronkan lewat outbox yang sama                      |
-| Connection pooling + work-class backpressure + circuit breaker (Issue 10.2, per-provider sejak #436)                       | Provider eksternal domain (WA/email/AI/pajak) di belakang flag + outbox            |
-| Production readiness tooling (`db:pool:health`, `security:readiness`, `production:preflight`)                              | Item checklist domain tambahan (mis. tax data masking untuk aplikasi pajak)        |
-| Skill proyek `.claude/skills/`                                                                                             | —                                                                                  |
+| Reusable (base — do not change)                                                                                              | Domain-specific (derived application — you add it)                                               |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Modular monolith + module contract (`src/modules/_shared/module-contract.ts`, doc 10/11)                                     | New domain modules in `src/modules/<domain>/`                                                    |
+| RBAC + ABAC default-deny + RLS (ADR-0003/0004, `src/modules/identity-access/`)                                               | Domain-specific permissions/roles/policies (doc 17 gives the pattern, not the content)           |
+| Checksum-based migration runner, the `NNN_awcms_<area>_<desc>.sql` convention                                                | Domain table schemas (skill `awcms-new-migration`)                                               |
+| Mandatory OpenAPI/AsyncAPI contracts + `api:spec:check` (ADR-0007/0008)                                                      | Domain endpoints/events (skill `awcms-new-endpoint`/`awcms-new-event`)                           |
+| Soft delete + posted immutability (ADR-0005)                                                                                 | The policy for which domain resources may be restored/purged                                     |
+| Generic audit trail (`awcms_audit_events`) + retention/purge + correlation ID (Issue 10.1/#447, skill `awcms-observability`) | Domain-specific high-risk actions that must be audited (skill `awcms-audit-log`)                 |
+| Generic idempotency ledger (`awcms_idempotency_keys`)                                                                        | Which domain high-risk mutations must carry an `Idempotency-Key`                                 |
+| Generic server-side form draft persistence (`awcms_form_drafts`, `/api/v1/form-drafts`, Issue #484)                          | What the draft `payload` contains and the domain-specific `moduleKey`/`wizardKey`/`resourceType` |
+| Structured logger + extension points (`setLogSink`/`setAuditExportHook`)                                                     | The real log/audit consumer (SIEM, alerting) — the base only provides the mounting point         |
+| Design system, tokens, state pattern, i18n (doc 14, skill `awcms-i18n`)                                                      | Domain admin/operator/portal screens (skill `awcms-ui-screen`)                                   |
+| Offline-first sync (outbox/inbox, HMAC, conflict tracking, object queue dispatcher — Issue 6.1-6.3/#436)                     | Domain event payloads synchronised through the same outbox                                       |
+| Connection pooling + work-class backpressure + circuit breaker (Issue 10.2, per-provider since #436)                         | Domain external providers (WA/email/AI/tax) behind a flag + outbox                               |
+| Production readiness tooling (`db:pool:health`, `security:readiness`, `production:preflight`)                                | Additional domain checklist items (e.g. tax data masking for a tax application)                  |
+| The project skills in `.claude/skills/`                                                                                      | —                                                                                                |
 
-Prinsip: **pertahankan** kolom kiri apa adanya; **tambahkan** kolom kanan mengikuti pola yang sudah mapan. Jangan menulis ulang RLS/ABAC/audit/idempotency Anda sendiri — base sudah menyediakannya, cukup dipakai.
+The principle: **keep** the left column as it is; **add** the right column following the patterns already established. Do not rewrite your own RLS/ABAC/audit/idempotency — the base already provides them, just use them.
 
-## Alur membangun aplikasi turunan (9 langkah)
+## The flow for building a derived application (9 steps)
 
-Setiap langkah dipetakan ke skill nyata (`.claude/skills/`) — panggil skill itu, jangan menebak polanya sendiri.
+Each step maps to a real skill (`.claude/skills/`) — call that skill, do not guess the pattern yourself.
 
-1. **Definisikan PRD/SRS domain** — pola doc 02/03 (isi generik-nya sudah base; entitas retail/POS di dalamnya adalah contoh AWPOS, ganti dengan domain Anda). Tentukan entitas, aktor, dan alur bisnis inti.
-2. **Scaffold modul domain** — `src/modules/<domain-key>/` dengan struktur `domain/application/infrastructure/api` + `module.ts` + `README.md`. Skill: `awcms-new-module`. Modul baru mulai `version: "0.1.0"`, `status: "experimental"` (ADR-0008) — naik ke `active`/`1.0.0` setelah matang (lihat §Definisi "matang" di bawah). **Daftarkan modul di `src/modules/application-registry.ts` milik repo turunan Anda sendiri** (Issue #740, ADR-0014) — bukan `src/modules/index.ts` base, yang tetap tidak pernah diedit oleh repo turunan.
-3. **Migration PostgreSQL + RLS** — tabel tenant-scoped **wajib** `tenant_id`, `ENABLE`+`FORCE ROW LEVEL SECURITY`, policy `app.current_tenant_id`, index berprefiks `(tenant_id, …)`. Skill: `awcms-new-migration`.
-4. **Seed RBAC/ABAC domain** — permission/role/policy baru mengikuti pola doc 17 (bukan menyalin isi ilustratifnya); evaluator ABAC yang sudah ada (`evaluateAccess`, default-deny) dipakai ulang, bukan ditulis ulang. Skill: `awcms-abac-guard`.
-5. **Endpoint REST + OpenAPI, domain event + AsyncAPI** — route tipis (auth → tenant context → ABAC guard → validasi → idempotency bila high-risk → service+transaction → response helper standar). Skill: `awcms-new-endpoint` (REST), `awcms-new-event` (event domain). Mutation high-risk wajib `Idempotency-Key` — skill `awcms-idempotency`. **Kontrak OpenAPI dipecah per modul** (Issue #182, ADR-0026): modul domain Anda MEMILIKI fragmentnya sendiri `openapi/modules/<domain>.openapi.yaml` dan menunjuknya lewat `ModuleDescriptor.api.openApiPath` — jangan menambah path/schema ke fragment modul base, jangan mengedit `openapi/awcms-public-api.openapi.yaml` (GENERATED). Fragment turunan tergabung lewat seam `buildBundledDocument({ extraFragmentFiles })` dan ditolak bila menimpa path/schema base. Panduan penuh: [`api-contribution-guide.md`](api-contribution-guide.md).
-6. **UI/admin screen** — token desain, 4-state pattern (loading/empty/error/ready), a11y WCAG 2.1 AA, string via katalog `.po` (bukan hardcode). Skill: `awcms-ui-screen` (layar baru), `awcms-i18n` (katalog terjemahan), `awcms-ux-review` (audit layar yang sudah jadi). Untuk input panjang/bertahap (identitas → detail → lampiran → review) — skill `awcms-wizard-form` (reusable wizard pattern, Issue #479).
-7. **Audit & observability** — aksi high-risk domain (approve, price change, transaksi posted/cancel, dst.) wajib `recordAuditEvent`. Skill: `awcms-audit-log` (apa yang diaudit), `awcms-observability` (correlation ID otomatis, retensi/purge, extension point bila aplikasi turunan butuh forward ke SIEM eksternal).
-8. **Test berlapis + security review** — unit (domain logic murni), integration (endpoint terhadap Postgres nyata), kontrak (`api:spec:check`), keamanan (ABAC default-deny, RLS FORCE, redaksi). Skill: `awcms-testing`, `awcms-security-review` (checklist DoD per modul), `awcms-security-hardening` (audit OWASP/ASVS/ISO bila menjelang audit eksternal/go-live besar).
-9. **Deployment & go-live** — `bun run production:preflight` (orkestrasi migrate → api:spec:check → modules:compose:check → extension:check → test → build → db:pool:health → security:readiness; `extension:check` memvalidasi extension seam/komposisi Anda, Issue #178/ADR-0025; validasi manifest kompatibilitas penuh direncanakan Issue #183/ADR-0015). Skill: `awcms-production-preflight`. Pilih & jalankan profil deployment (doc `deployment-profiles.md`): LAN-first (`docker-compose.yml`) atau registry-based (`Dockerfile.production`, Issue #454; panduan Coolify di [`deploy-coolify.md`](deploy-coolify.md), Issue #462) — skill `awcms-deploy`.
+1. **Define the domain PRD/SRS** — the doc 02/03 pattern (their generic content is already the base; the retail/POS entities inside them are AWPOS examples, replace them with your domain). Decide the entities, actors, and core business flows.
+2. **Scaffold the domain module** — `src/modules/<domain-key>/` with the `domain/application/infrastructure/api` structure + `module.ts` + `README.md`. Skill: `awcms-new-module`. A new module starts at `version: "0.1.0"`, `status: "experimental"` (ADR-0008) — it moves to `active`/`1.0.0` once mature (see §Definition of "mature" below). **Register the module in your own derived repo's `src/modules/application-registry.ts`** (Issue #740, ADR-0014) — not the base `src/modules/index.ts`, which a derived repo still never edits.
+3. **PostgreSQL migration + RLS** — a tenant-scoped table **must** have `tenant_id`, `ENABLE`+`FORCE ROW LEVEL SECURITY`, an `app.current_tenant_id` policy, and indexes prefixed with `(tenant_id, …)`. Skill: `awcms-new-migration`.
+4. **Seed the domain RBAC/ABAC** — new permissions/roles/policies follow the doc 17 pattern (not a copy of its illustrative content); the existing ABAC evaluator (`evaluateAccess`, default-deny) is reused, not rewritten. Skill: `awcms-abac-guard`.
+5. **REST endpoints + OpenAPI, domain events + AsyncAPI** — thin routes (auth → tenant context → ABAC guard → validation → idempotency when high-risk → service+transaction → the standard response helper). Skill: `awcms-new-endpoint` (REST), `awcms-new-event` (domain events). High-risk mutations must take an `Idempotency-Key` — skill `awcms-idempotency`. **The OpenAPI contract is split per module** (Issue #182, ADR-0026): your domain module OWNS its own fragment `openapi/modules/<domain>.openapi.yaml` and points at it via `ModuleDescriptor.api.openApiPath` — do not add paths/schemas to a base module's fragment, and do not edit `openapi/awcms-public-api.openapi.yaml` (GENERATED). Derived fragments are merged through the `buildBundledDocument({ extraFragmentFiles })` seam and are rejected if they overwrite a base path/schema. Full guide: [`api-contribution-guide.md`](api-contribution-guide.md).
+6. **UI/admin screens** — design tokens, the 4-state pattern (loading/empty/error/ready), WCAG 2.1 AA a11y, strings from the `.po` catalogue (not hardcoded). Skill: `awcms-ui-screen` (new screens), `awcms-i18n` (translation catalogue), `awcms-ux-review` (auditing a finished screen). For long/staged input (identity → detail → attachments → review) — skill `awcms-wizard-form` (the reusable wizard pattern, Issue #479).
+7. **Audit & observability** — domain high-risk actions (approve, price change, transaction posted/cancel, etc.) must call `recordAuditEvent`. Skill: `awcms-audit-log` (what is audited), `awcms-observability` (automatic correlation ID, retention/purge, extension points when a derived application needs to forward to an external SIEM).
+8. **Layered tests + security review** — unit (pure domain logic), integration (endpoints against a real Postgres), contract (`api:spec:check`), security (ABAC default-deny, RLS FORCE, redaction). Skill: `awcms-testing`, `awcms-security-review` (the per-module DoD checklist), `awcms-security-hardening` (an OWASP/ASVS/ISO audit ahead of an external audit/major go-live).
+9. **Deployment & go-live** — `bun run production:preflight` (orchestrating migrate → api:spec:check → modules:compose:check → extension:check → test → build → db:pool:health → security:readiness; `extension:check` validates your extension seam/composition, Issue #178/ADR-0025; full compatibility manifest validation is planned as Issue #183/ADR-0015). Skill: `awcms-production-preflight`. Choose & run a deployment profile (doc `deployment-profiles.md`): LAN-first (`docker-compose.yml`) or registry-based (`Dockerfile.production`, Issue #454; the Coolify guide is in [`deploy-coolify.md`](deploy-coolify.md), Issue #462) — skill `awcms-deploy`.
 
-Orkestrasi satu unit kerja penuh (baca docs → implementasi → migration/OpenAPI/AsyncAPI/test/docs → laporan): skill `awcms-implement-issue`.
+Orchestrating one full unit of work (read docs → implement → migration/OpenAPI/AsyncAPI/tests/docs → report): skill `awcms-implement-issue`.
 
-### Kapan modul dianggap "matang" (`active`, ADR-0008)
+### When a module counts as "mature" (`active`, ADR-0008)
 
-Modul naik dari `experimental` ke `active` ketika: endpoint/domain logic-nya nyata dipakai (bukan scaffold kosong), RLS+ABAC terpasang dan diuji, test berlapis lulus, dan sudah melalui `awcms-security-review`. Jangan tandai `active` sebelum itu — status ini metadata deskriptif yang dibaca kontributor lain untuk menilai kematangan modul, bukan gerbang runtime.
+A module moves from `experimental` to `active` when: its endpoints/domain logic are genuinely used (not an empty scaffold), RLS+ABAC are in place and tested, the layered tests pass, and it has been through `awcms-security-review`. Do not mark it `active` before that — this status is descriptive metadata that other contributors read to judge a module's maturity, not a runtime gate.
 
-## Contoh aplikasi turunan (ilustratif — bukan bagian base)
+## Derived application examples (illustrative — not part of the base)
 
-Lima contoh berikut menunjukkan bagaimana base yang sama melayani domain yang sangat berbeda. **Tidak satu pun** dari modul/entitas di bawah ada di `src/modules/` base ini — ini murni ilustrasi untuk membantu Anda memetakan domain Anda sendiri ke pola di atas.
+The five examples below show how the same base serves very different domains. **Not one** of the modules/entities below exists in this base's `src/modules/` — they are purely illustrative, to help you map your own domain onto the patterns above.
 
-| Aplikasi                                  | Domain                                                 | Modul domain ilustratif (bukan bagian base)             | Contoh entitas tenant-scoped                          |
-| ----------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------- |
-| **AWPOS** (retail/POS)                    | Penjualan ritel, gudang, pajak, CRM                    | `sales`, `inventory`, `tax-coretax`, `crm`              | Produk, transaksi, stok, pelanggan                    |
-| **Satu Sehat Kobar** (internal kesehatan) | Integrasi data kesehatan internal per fasilitas        | `health-records`, `satu-sehat-sync`                     | Rekam kunjungan, faskes, petugas                      |
-| **Sistem Manajemen Mutu Faskes**          | Audit mutu, insiden, akreditasi                        | `quality-audit`, `incident-report`, `accreditation`     | Temuan audit, insiden keselamatan, dokumen akreditasi |
-| **Smart School Portal**                   | Akademik, kehadiran, nilai, komunikasi ortu            | `academic`, `attendance`, `grading`, `parent-portal`    | Siswa, kelas, jadwal, nilai                           |
-| **Sistem Pengaduan Publik**               | Pengaduan warga, disposisi, tindak lanjut lintas dinas | `complaint-intake`, `disposition`, `follow-up-tracking` | Pengaduan, unit penerima, status tindak lanjut        |
+| Application                                   | Domain                                                  | Illustrative domain modules (not part of the base)      | Example tenant-scoped entities                            |
+| --------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| **AWPOS** (retail/POS)                        | Retail sales, warehousing, tax, CRM                     | `sales`, `inventory`, `tax-coretax`, `crm`              | Products, transactions, stock, customers                  |
+| **Satu Sehat Kobar** (internal health)        | Internal health data integration per facility           | `health-records`, `satu-sehat-sync`                     | Visit records, health facilities, staff                   |
+| **Health Facility Quality Management System** | Quality audits, incidents, accreditation                | `quality-audit`, `incident-report`, `accreditation`     | Audit findings, safety incidents, accreditation documents |
+| **Smart School Portal**                       | Academics, attendance, grades, parent communication     | `academic`, `attendance`, `grading`, `parent-portal`    | Students, classes, timetables, grades                     |
+| **Public Complaints System**                  | Citizen complaints, disposition, cross-agency follow-up | `complaint-intake`, `disposition`, `follow-up-tracking` | Complaints, receiving units, follow-up status             |
 
-Setiap aplikasi di atas **tetap** memakai identity/login, RBAC/ABAC, RLS, audit trail, i18n, dan admin shell base yang sama — modul domain di atas hanya menambah entitas + endpoint + layar yang spesifik pada domainnya, mengikuti 9 langkah di atas.
+Every application above **still** uses the same base identity/login, RBAC/ABAC, RLS, audit trail, i18n, and admin shell — the domain modules above only add the entities + endpoints + screens specific to their domain, following the 9 steps above.
 
-## Ekstensi ERP (lapisan terpisah dari Derived Application biasa — Issue #755, ADR-0020)
+## ERP extension (a separate layer from an ordinary Derived Application — Issue #755, ADR-0020)
 
-Bila aplikasi turunan Anda adalah/menggunakan ERP (akuntansi, inventori,
-sales/purchase order, payroll, pajak) — bukan hanya "aplikasi domain
-biasa" seperti lima contoh di atas — baca dulu
-[`erp-extension-contracts.md`](erp-extension-contracts.md) dan
-`docs/adr/0020-erp-extension-readiness-contracts.md` sebelum menulis
-kode apa pun. Base ini **tidak pernah** menyediakan chart of accounts/
-jurnal/ledger/valuasi inventori/AR-AP/payroll/pajak — base hanya
-menyediakan **kontrak netral** (referensi transaksi bisnis, envelope
-posting request/result, period-lock, item/currency/UoM, inventory
-movement, reconciliation) yang ekstensi ERP Anda implementasikan/
-konsumsi di repository ANDA sendiri, mengikuti pola build-time
-composition yang sama (§Alur di atas): base tetap tidak diedit
-registrynya, ekstensi ERP Anda hanya mengisi
-`src/modules/application-registry.ts` miliknya sendiri.
+If your derived application is/uses an ERP (accounting, inventory,
+sales/purchase orders, payroll, tax) — not just an "ordinary domain
+application" like the five examples above — first read
+[`erp-extension-contracts.md`](erp-extension-contracts.md) and
+`docs/adr/0020-erp-extension-readiness-contracts.md` before writing
+any code. This base **never** provides a chart of accounts/
+journals/ledgers/inventory valuation/AR-AP/payroll/tax — the base only
+provides **neutral contracts** (business transaction references, the
+posting request/result envelope, period locks, item/currency/UoM,
+inventory movement, reconciliation) that your ERP extension implements/
+consumes in YOUR own repository, following the same build-time
+composition pattern (§Flow above): the base registry is still not
+edited, your ERP extension only fills in its own
+`src/modules/application-registry.ts`.
 
 `tests/fixtures/derived-application-example/modules/
-example-erp-extension/` adalah contoh nyata yang bisa dijalankan
-(`bun test tests/unit/erp-extension-contracts.test.ts`) — module
-descriptor yang mengonsumsi capability `party_directory`/
-`organization_hierarchy_resolution` secara opsional, mesin posting
-idempotent+fail-closed-period-lock, dan satu kontribusi `reporting`
-projection — semua tanpa satu baris pun logika akuntansi nyata.
+example-erp-extension/` is a real example you can run
+(`bun test tests/unit/erp-extension-contracts.test.ts`) — a module
+descriptor that optionally consumes the `party_directory`/
+`organization_hierarchy_resolution` capabilities, an
+idempotent+fail-closed-period-lock posting engine, and one `reporting`
+projection contribution — all without a single line of real accounting logic.
 
-## Menyediakan resolver business-scope hierarchy (Issue #180, ADR-0030)
+## Providing a business-scope hierarchy resolver (Issue #180, ADR-0030)
 
-Base menyediakan lapis authorization **business-scope generik** (`identity_access`) tetapi **tidak** memiliki hierarki organisasi nyata. `scope_type`/`scope_id` adalah referensi generik; validitas dan ancestry-nya di-resolve lewat capability port `BusinessScopeHierarchyPort` (`src/modules/_shared/ports/business-scope-hierarchy-port.ts`). Base mengirim resolver **no-op** yang mengembalikan `resolved: false` untuk setiap scope type — jadi **selama aplikasi turunan Anda belum menyediakan resolver, business-scope assignment selalu ditolak `scope_unresolved` dan aksi high-risk bergerbang-scope selalu ditolak** (fail-closed by design).
+The base provides a **generic business-scope** authorization layer (`identity_access`) but does **not** own a real organizational hierarchy. `scope_type`/`scope_id` are generic references; their validity and ancestry are resolved through the `BusinessScopeHierarchyPort` capability port (`src/modules/_shared/ports/business-scope-hierarchy-port.ts`). The base ships a **no-op** resolver that returns `resolved: false` for every scope type — so **until your derived application provides a resolver, business-scope assignment is always rejected with `scope_unresolved` and scope-gated high-risk actions are always denied** (fail-closed by design).
 
-Aplikasi turunan yang punya hierarki organisasi nyata (legal entity, branch, cost center, project, dsb.) menyediakannya begini:
+A derived application that has a real organizational hierarchy (legal entity, branch, cost center, project, etc.) provides it like this:
 
-1. **Deklarasikan capability** di module descriptor modul organisasi Anda: `capabilities: { provides: ["business_scope_hierarchy"] }`. `identity_access` sudah mengonsumsinya (`optional: true`) — komposisi build-time (`bun run modules:compose:check`) memvalidasinya tanpa Anda mengedit registry base.
-2. **Implementasikan `BusinessScopeHierarchyPort`** — sebuah adapter yang, di dalam `tx` yang sudah tenant-scoped (`withTenant`), membaca tabel hierarki milik modul Anda dan mengembalikan `{ resolved, ancestorScopes, descendantScopes }`. Kewajiban keras kontrak:
-   - **Tenant isolation** — scope milik tenant lain WAJIB `resolved: false` (jangan pernah membocorkan ancestry lintas-tenant).
-   - **Batas node/depth + deteksi cycle** — resolver WAJIB bounded; graph siklik/sangat dalam mengembalikan hasil bounded, tidak menggantung. Lihat resolver dummy `tests/fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter.ts` untuk pola `visited`-set + `DUMMY_HIERARCHY_MAX_DEPTH`.
-   - **`resolved: false` ≠ "tanpa ancestor"** — kembalikan `resolved: false` untuk scope type tak dikenal / id tak ada / lintas-tenant; jangan menyamakannya dengan scope valid yang kebetulan tak punya ancestor.
-   - **Ancestry heterogen** — entri ancestor/descendant adalah `{ scopeType, scopeId }`, boleh lintas-tipe (mis. `unit(branch) → unit(region) → legal_entity`).
-3. **Inject di composition root** — hanya route handler / job script (composition root, ADR-0011) yang mengimpor adapter Anda; jangan pernah mengimpornya dari `application`/`domain` `identity_access`. Route base membangun port default no-op; aplikasi turunan menyuntikkan adapternya sendiri (mis. mem-fork route business-scope, atau memanggil `createBusinessScopeAssignment(tx, …, { hierarchyPort })` dari route domainnya sendiri).
+1. **Declare the capability** in your organization module's descriptor: `capabilities: { provides: ["business_scope_hierarchy"] }`. `identity_access` already consumes it (`optional: true`) — build-time composition (`bun run modules:compose:check`) validates it without you editing the base registry.
+2. **Implement `BusinessScopeHierarchyPort`** — an adapter that, inside an already tenant-scoped `tx` (`withTenant`), reads your module's hierarchy table and returns `{ resolved, ancestorScopes, descendantScopes }`. The contract's hard obligations:
+   - **Tenant isolation** — a scope belonging to another tenant MUST be `resolved: false` (never leak cross-tenant ancestry).
+   - **Node/depth bounds + cycle detection** — the resolver MUST be bounded; a cyclic/very deep graph returns a bounded result, it does not hang. See the dummy resolver `tests/fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter.ts` for the `visited`-set + `DUMMY_HIERARCHY_MAX_DEPTH` pattern.
+   - **`resolved: false` ≠ "no ancestors"** — return `resolved: false` for an unknown scope type / missing id / cross-tenant scope; do not conflate it with a valid scope that simply has no ancestors.
+   - **Heterogeneous ancestry** — ancestor/descendant entries are `{ scopeType, scopeId }`, and may cross types (e.g. `unit(branch) → unit(region) → legal_entity`).
+3. **Inject at the composition root** — only route handlers / job scripts (the composition root, ADR-0011) import your adapter; never import it from `identity_access`'s `application`/`domain`. The base route builds the default no-op port; a derived application injects its own adapter (e.g. by forking the business-scope route, or by calling `createBusinessScopeAssignment(tx, …, { hierarchyPort })` from its own domain route).
 
-Relasi coverage yang di-enforce `evaluateAccess`: **exact** (subjek meng-hold persis scope itu), **descendant** (subjek meng-hold ancestor-nya), **ancestor** (subjek meng-hold descendant-nya), **tenant-wide** (`scopeType === "tenant"`). Aksi high-risk pada scope `resolved: false` selalu ditolak. Lihat `tests/fixtures/derived-application-example/` untuk contoh yang bisa dijalankan.
+The coverage relations `evaluateAccess` enforces: **exact** (the subject holds exactly that scope), **descendant** (the subject holds its ancestor), **ancestor** (the subject holds its descendant), **tenant-wide** (`scopeType === "tenant"`). High-risk actions on a `resolved: false` scope are always denied. See `tests/fixtures/derived-application-example/` for a runnable example.
 
-## Checklist keamanan & kepatuhan praktis
+## Practical security & compliance checklist
 
-Wajib dipenuhi modul domain baru sebelum dianggap siap produksi (turunan dari doc 10/12/13, skill `awcms-security-review`):
+A new domain module must satisfy these before it counts as production-ready (derived from doc 10/12/13, skill `awcms-security-review`):
 
-- [ ] **Tenant context** — setiap query tenant-scoped lewat `withTenant()`/`SET LOCAL app.current_tenant_id`; tidak ada `WHERE tenant_id` yang dilewati manual dari input.
-- [ ] **ABAC default-deny** — endpoint non-public dicek `evaluateAccess()`; permission baru diseed eksplisit, tidak ada grant implisit.
-- [ ] **RLS** — tabel tenant-scoped baru `ENABLE`+`FORCE ROW LEVEL SECURITY` + policy isolasi; index berprefiks `(tenant_id, …)`.
-- [ ] **Audit** — aksi high-risk domain (soft delete/restore/purge, approval, perubahan harga/status kritis, dst.) menghasilkan `awcms_audit_events` row via `recordAuditEvent`.
-- [ ] **Idempotency** — mutation high-risk domain menerima `Idempotency-Key`, aman diulang.
-- [ ] **Redaksi/masking** — identifier sensitif domain (NIK, nomor rekam medis, dst. — pola sama seperti NPWP/NIK/email di base) di-hash+mask sebelum disimpan/ditampilkan/di-log.
-- [ ] **Kontrak sinkron** — `bun run api:spec:check` hijau untuk setiap endpoint/event domain baru.
-- [ ] **Test berlapis** — unit (domain logic), integration (Postgres nyata), keamanan (RLS/ABAC dipaksa gagal untuk membuktikan gate benar-benar memblokir, bukan hanya "pass" diam-diam).
-- [ ] **`bun run production:preflight`** hijau sebelum go-live.
+- [ ] **Tenant context** — every tenant-scoped query goes through `withTenant()`/`SET LOCAL app.current_tenant_id`; no hand-written `WHERE tenant_id` taken from input.
+- [ ] **ABAC default-deny** — non-public endpoints are checked with `evaluateAccess()`; new permissions are seeded explicitly, with no implicit grants.
+- [ ] **RLS** — new tenant-scoped tables have `ENABLE`+`FORCE ROW LEVEL SECURITY` + an isolation policy; indexes prefixed with `(tenant_id, …)`.
+- [ ] **Audit** — domain high-risk actions (soft delete/restore/purge, approval, price/critical status changes, etc.) produce an `awcms_audit_events` row via `recordAuditEvent`.
+- [ ] **Idempotency** — domain high-risk mutations accept an `Idempotency-Key` and are safe to retry.
+- [ ] **Redaction/masking** — sensitive domain identifiers (NIK, medical record number, etc. — the same pattern as NPWP/NIK/email in the base) are hashed+masked before being stored/displayed/logged.
+- [ ] **Contracts in sync** — `bun run api:spec:check` green for every new domain endpoint/event.
+- [ ] **Layered tests** — unit (domain logic), integration (a real Postgres), security (RLS/ABAC forced to fail to prove the gate really blocks, not just silently "passes").
+- [ ] **`bun run production:preflight`** green before go-live.
 
-### Tanggung jawab CI aplikasi turunan (composition & kontrak API)
+### Derived application CI responsibilities (composition & API contracts)
 
-Composition dan kontrak API divalidasi saat **build/CI**, bukan runtime — aplikasi turunan wajib menjalankannya sendiri:
+Composition and API contracts are validated at **build/CI** time, not at runtime — a derived application must run them itself:
 
-- [ ] **`bun run modules:compose:check` (dan `bun run check` penuh)** hijau di CI turunan. `listModules()` sengaja tetap data murni (tidak memvalidasi saat load, sama seperti base); melewati gate ini bisa membuat app boot dengan registry ber-duplicate-key yang meracuni seeding permission/navigasi. Jangan mengandalkan base untuk menangkap ini.
-- [ ] **Deklarasikan `migrationNamespace`** pada `ApplicationModuleRegistry` (mulai ≥ 900, tidak overlap `1..899` base). Bila dihilangkan, cek `migration_namespace_overlap` **dilewati** dan penomoran migrasi turunan bisa bentrok dengan base tanpa peringatan.
-- [ ] **Kebijakan operasi publik fragment turunan** (`security: []`) ditegakkan oleh **`api:spec:check` milik repo turunan dengan allow-list-nya sendiri** — base membundel tanpa fragment turunan, jadi tidak bisa melihatnya. Setiap operasi publik baru harus masuk allow-list turunan yang direview.
+- [ ] **`bun run modules:compose:check` (and the full `bun run check`)** green in the derived CI. `listModules()` is deliberately pure data (it does not validate at load time, same as the base); skipping this gate can let the app boot with a duplicate-key registry that poisons permission/navigation seeding. Do not rely on the base to catch this.
+- [ ] **Declare `migrationNamespace`** on your `ApplicationModuleRegistry` (start at ≥ 900, no overlap with the base's `1..899`). If it is omitted, the `migration_namespace_overlap` check is **skipped** and the derived migration numbering can collide with the base without warning.
+- [ ] **The public-operation policy for derived fragments** (`security: []`) is enforced by **the derived repo's own `api:spec:check` with its own allow-list** — the base bundles without derived fragments, so it cannot see them. Every new public operation must go into a reviewed derived allow-list.
 
-## Referensi
+## References
 
 - [`examples/minimal-domain-module.md`](examples/minimal-domain-module.md)
-  — contoh konkret satu modul domain minimal (struktur folder, descriptor,
-  migration+RLS, seed permission, endpoint, OpenAPI/AsyncAPI snippet, dan
-  checklist test/keamanan) — Issue #463.
-- [`derived-app-pilot-plan.md`](derived-app-pilot-plan.md) — rencana
-  pilot aplikasi turunan pertama (matriks kandidat, rekomendasi AWPOS,
-  boundary modul, initial issue breakdown) — Issue #465.
-- [`AGENTS.md`](../../AGENTS.md) §Mulai dari sini — entry point kontributor.
-- [`README.md`](README.md) §Langkah berikutnya — ringkasan alur yang sama, versi singkat.
+  — a concrete example of one minimal domain module (folder structure, descriptor,
+  migration+RLS, permission seed, endpoint, OpenAPI/AsyncAPI snippet, and
+  the test/security checklist) — Issue #463.
+- [`derived-app-pilot-plan.md`](derived-app-pilot-plan.md) — the plan for the
+  first derived application pilot (candidate matrix, the AWPOS recommendation,
+  module boundaries, initial issue breakdown) — Issue #465.
+- [`AGENTS.md`](../../AGENTS.md) §Start here — the contributor entry point.
+- [`README.md`](README.md) §Next steps — a summary of the same flow, short version.
 - [`docs/adr/0013-extension-layers-and-boundary-model.md`](../adr/0013-extension-layers-and-boundary-model.md)
-  — lapisan ekstensi (Derived Application/SaaS Control Plane/ERP
-  Extension), batas tenant vs legal entity vs organization unit,
-  data-ownership matrix, dan kriteria evidence-based ekstraksi layanan
-  yang berlaku untuk seluruh aplikasi turunan.
+  — the extension layers (Derived Application/SaaS Control Plane/ERP
+  Extension), the tenant vs legal entity vs organization unit boundaries,
+  the data-ownership matrix, and the evidence-based criteria for service
+  extraction that apply to every derived application.
 - [`docs/adr/0014-deterministic-build-time-module-composition.md`](../adr/0014-deterministic-build-time-module-composition.md)
-  dan [`docs/adr/0025-implement-deterministic-build-time-module-composition.md`](../adr/0025-implement-deterministic-build-time-module-composition.md)
-  — cara aplikasi turunan mendaftarkan modulnya lewat
-  `src/modules/application-registry.ts` tanpa mengedit `src/modules/
-index.ts` base, taksonomi kegagalan komposisi, dan konvensi namespace
-  migration. ADR-0014 adalah desain (rujukan awcms-mini #740); ADR-0025
-  adalah adendum implementasi nyata di awcms (Issue #178) — placement engine
-  di `module-management/domain/` dan status extension seam.
+  and [`docs/adr/0025-implement-deterministic-build-time-module-composition.md`](../adr/0025-implement-deterministic-build-time-module-composition.md)
+  — how a derived application registers its modules through
+  `src/modules/application-registry.ts` without editing the base `src/modules/
+index.ts`, the taxonomy of composition failures, and the migration namespace
+  convention. ADR-0014 is the design (referencing awcms-mini #740); ADR-0025
+  is the addendum for the real implementation in awcms (Issue #178) — the placement engine
+  in `module-management/domain/` and the status of the extension seam.
 - [`docs/adr/0015-derived-application-compatibility-manifest.md`](../adr/0015-derived-application-compatibility-manifest.md)
-  — skema `extension.manifest.json`, kebijakan versioning module-contract/
-  capability/manifest-schema, immutabilitas checksum migration historis,
-  dan di mana `bun run extension:check` benar-benar memblokir CI/preflight.
-  **RENCANA — Issue #183** (belum diimplementasikan; `extension:check` di
-  Issue #178 baru memvalidasi extension seam/komposisi).
-- [`erp-extension-contracts.md`](erp-extension-contracts.md) dan
+  — the `extension.manifest.json` schema, the versioning policy for module-contract/
+  capability/manifest-schema, the immutability of historical migration checksums,
+  and where `bun run extension:check` actually blocks CI/preflight.
+  **PLANNED — Issue #183** (not yet implemented; `extension:check` in
+  Issue #178 only validates the extension seam/composition).
+- [`erp-extension-contracts.md`](erp-extension-contracts.md) and
   [`docs/adr/0020-erp-extension-readiness-contracts.md`](../adr/0020-erp-extension-readiness-contracts.md)
-  — kontrak business transaction/posting/period-lock/item/currency/UoM/
-  inventory-movement/reconciliation/report-projection untuk ekstensi ERP
+  — the business transaction/posting/period-lock/item/currency/UoM/
+  inventory-movement/reconciliation/report-projection contracts for ERP extensions
   (Issue #755).
 - [`extension-compatibility-policy.md`](extension-compatibility-policy.md)
-  — kebijakan compatibility/deprecation/support-window lengkap untuk
-  keenam skema versioning independen (package, REST, event, module
-  contract, capability, manifest schema), termasuk cara breaking capability
-  change dikomunikasikan dan panduan memilih `compatibleAwcmsRange`.
+  — the complete compatibility/deprecation/support-window policy for
+  all six independent versioning schemes (package, REST, event, module
+  contract, capability, manifest schema), including how a breaking capability
+  change is communicated and guidance for choosing `compatibleAwcmsRange`.
 - [`21_module_admission_governance.md`](21_module_admission_governance.md)
-  — pohon keputusan admission yang menentukan kategori sebuah kemampuan
-  baru (Core/System/Official Optional Module/Derived Application/External
-  Integration) sebelum kode ditulis.
-- [`docs/adr/`](../adr/README.md) — keputusan arsitektural base (ADR-0001 s.d. 0008).
-- `docs/awcms/01` s.d. `20` — paket dokumen master (§Peta dokumen di README ini).
-- [`deployment-profiles.md`](deployment-profiles.md) — profil deployment (development/production/offline-LAN — tiga sejak `staging` dihapus, ADR-0083; LAN-first compose vs registry image).
-- `.claude/skills/README.md` — katalog skill lengkap + peta pemakaian.
+  — the admission decision tree that determines the category of a new
+  capability (Core/System/Official Optional Module/Derived Application/External
+  Integration) before any code is written.
+- [`docs/adr/`](../adr/README.md) — the base architectural decisions (ADR-0001 through 0008).
+- `docs/awcms/01` through `20` — the master document set (§Document map in this README).
+- [`deployment-profiles.md`](deployment-profiles.md) — the deployment profiles (development/production/offline-LAN — three since `staging` was removed, ADR-0083; LAN-first compose vs registry image).
+- `.claude/skills/README.md` — the full skill catalogue + usage map.

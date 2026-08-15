@@ -93,7 +93,7 @@ describe("render/parse round trip", () => {
   test("an escaped \\| inside a cell stays ONE cell — the changeset command survives parsing", () => {
     const rows = parseInventoryRows(renderInventoryBlock(SAMPLE));
     const changesetRow = rows.find((cells) =>
-      cells[0]!.startsWith("Changeset")
+      cells[0]!.startsWith("Pending changesets")
     );
 
     expect(changesetRow).toHaveLength(3);
@@ -129,13 +129,13 @@ describe("the verdict, mutation-proven", () => {
     const problems = diffAgainstFresh(docWith(mutated), fresh);
 
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain("Migrasi");
-    expect(problems[0]).toContain("basi");
+    expect(problems[0]).toContain("Migrations");
+    expect(problems[0]).toContain("is stale");
   });
 
   test("a fast row edited back INTO a number fails too — deletion is enforced, not suggested", () => {
     const mutated = fresh.replace(
-      "Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_",
+      "Pending changesets (by bump type) | _run the command in the right-hand column_",
       "Changeset menunggu (per tipe bump) | **101 menunggu**"
     );
     expect(mutated).not.toBe(fresh);

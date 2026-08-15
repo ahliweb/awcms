@@ -260,15 +260,15 @@ function renderSummary(data: InventoryData): string {
   const routeFiles = data.routes.reduce((sum, row) => sum + row.count, 0);
 
   return [
-    "| Aspek | Nilai |",
+    "| Aspect | Value |",
     "| ----- | ----- |",
-    `| Modul terdaftar | ${data.modules.length} |`,
-    `| Migrasi | ${data.migrations.length} |`,
-    `| Tabel \`awcms_*\` | ${data.tables.length} |`,
-    `| Tabel dengan \`FORCE\` RLS | ${forced} |`,
-    `| Tabel RLS-free (global, by design) | ${rlsFree} |`,
-    `| Berkas test | ${testFiles} |`,
-    `| Berkas route | ${routeFiles} |`,
+    `| Registered modules | ${data.modules.length} |`,
+    `| Migrations | ${data.migrations.length} |`,
+    `| \`awcms_*\` tables | ${data.tables.length} |`,
+    `| Tables with \`FORCE\` RLS | ${forced} |`,
+    `| RLS-free tables (global, by design) | ${rlsFree} |`,
+    `| Test files | ${testFiles} |`,
+    `| Route files | ${routeFiles} |`,
     `| ADR | ${data.adrCount} |`
   ].join("\n");
 }
@@ -276,16 +276,16 @@ function renderSummary(data: InventoryData): string {
 export function renderInventoryBlock(data: InventoryData): string {
   const sections: string[] = [];
 
-  sections.push("### Ringkasan\n\n" + renderSummary(data));
+  sections.push("### Summary\n\n" + renderSummary(data));
 
   sections.push(
-    "### Modul\n\n" +
+    "### Modules\n\n" +
       [
         "| Key | Version | Status | Type | Core | Dependencies |",
         "| --- | ------- | ------ | ---- | ---- | ------------ |",
         ...data.modules.map(
           (module) =>
-            `| \`${module.key}\` | ${module.version} | ${module.status} | ${module.type ?? "—"} | ${module.core ? "ya" : "tidak"} | ${
+            `| \`${module.key}\` | ${module.version} | ${module.status} | ${module.type ?? "—"} | ${module.core ? "yes" : "no"} | ${
               module.dependencies.length > 0
                 ? module.dependencies.map((dep) => `\`${dep}\``).join(", ")
                 : "—"
@@ -295,7 +295,7 @@ export function renderInventoryBlock(data: InventoryData): string {
   );
 
   sections.push(
-    "### Migrasi\n\n" +
+    "### Migrations\n\n" +
       [
         "| # | File |",
         "| - | ---- |",
@@ -306,15 +306,15 @@ export function renderInventoryBlock(data: InventoryData): string {
   );
 
   sections.push(
-    "### Tabel & Row-Level Security\n\n" +
+    "### Tables & Row-Level Security\n\n" +
       [
-        "| Tabel | Dibuat di | RLS | FORCE |",
-        "| ----- | --------- | --- | ----- |",
+        "| Table | Created in | RLS | FORCE |",
+        "| ----- | ---------- | --- | ----- |",
         ...data.tables.map(
           (table) =>
             `| \`${table.table}\` | \`sql/${table.createdIn}\` | ${
-              table.rowLevelSecurity ? "ya" : "tidak"
-            } | ${table.force ? "ya" : "tidak"} |`
+              table.rowLevelSecurity ? "yes" : "no"
+            } | ${table.force ? "yes" : "no"} |`
         )
       ].join("\n")
   );
@@ -322,7 +322,7 @@ export function renderInventoryBlock(data: InventoryData): string {
   sections.push(
     "### Tests\n\n" +
       [
-        "| Direktori | Test files |",
+        "| Directory | Test files |",
         "| --------- | ---------- |",
         ...data.tests.map((row) => `| \`${row.label}\` | ${row.count} |`)
       ].join("\n")
@@ -331,8 +331,8 @@ export function renderInventoryBlock(data: InventoryData): string {
   sections.push(
     "### Routes\n\n" +
       [
-        "| Permukaan | Berkas |",
-        "| --------- | ------ |",
+        "| Surface | Files |",
+        "| ------- | ----- |",
         ...data.routes.map((row) => `| ${row.label} | ${row.count} |`)
       ].join("\n")
   );
@@ -422,7 +422,7 @@ async function main(): Promise<void> {
   if (!check) {
     writeFileSync(DOC_PATH, replaceBlock(markdown, fresh), "utf8");
     console.log(
-      `Diperbarui: ${DOC_PATH}. Jalankan \`bun run repo:inventory:check\` untuk verifikasi.`
+      `Updated: ${DOC_PATH}. Run \`bun run repo:inventory:check\` to verify.`
     );
     return;
   }
@@ -431,7 +431,7 @@ async function main(): Promise<void> {
 
   if (current === null) {
     console.error(
-      `repo:inventory:check GAGAL — ${DOC_PATH} tidak memuat penanda blok ter-generate.`
+      `repo:inventory:check FAILED — ${DOC_PATH} has no generated-block marker.`
     );
     process.exitCode = 1;
     return;
@@ -442,14 +442,14 @@ async function main(): Promise<void> {
 
   if (currentRows === freshRows) {
     console.log(
-      "repo:inventory:check OK — inventaris modul/migrasi/tabel-RLS/test/route sinkron dengan repo."
+      "repo:inventory:check OK — the module/migration/RLS-table/test/route inventory matches the repo."
     );
     return;
   }
 
   console.error(
-    `repo:inventory:check GAGAL — ${DOC_PATH} basi terhadap repo. ` +
-      "Jalankan `bun run repo:inventory:generate` lalu `bun run format`."
+    `repo:inventory:check FAILED — ${DOC_PATH} is stale against the repo. ` +
+      "Run `bun run repo:inventory:generate`, then `bun run format`."
   );
   process.exitCode = 1;
 }

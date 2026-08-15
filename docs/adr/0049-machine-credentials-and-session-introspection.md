@@ -1,199 +1,198 @@
-# ADR-0049 — Kredensial mesin baca-saja (service account bearer) + introspeksi sesi lintas-origin
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0049-machine-credentials-and-session-introspection.id.md)
+
+# ADR-0049 — Read-only machine credentials (service account bearer) + cross-origin session introspection
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-01
-- **Pengambil keputusan:** @ahliweb
-- **Menutup:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) §Konsekuensi — dua kontrak yang menahan `awcms-astro`, yang ADR itu sebut "satu percakapan desain, bukan dua"
-- **Melaksanakan:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (endpoint introspeksi sesi milik `identity_access`; desain permukaannya di [`../awcms/jualanku/05-kontrak-sesi-dan-bff.md`](../awcms/jualanku/05-kontrak-sesi-dan-bff.md) §3)
-- **Terikat pada:** [ADR-0048](0048-frontend-role-split-awcms-astro-internal-admin.md) §1 — memindahkan layar tidak memindahkan izinnya; permukaan otorisasi tetap SATU
-- **Fitur fondasi pertama yang dirintis langsung di sini** di bawah rezim ADR-0047 §2, karena itu wajib memenuhi §3 (ADR, review keamanan `auth`/`access`, `bun run check` penuh, RLS `FORCE`, ABAC default-deny) dan §4 (dicatat sebagai divergence di [`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml) **saat mendarat**)
+- **Date:** 2026-08-01
+- **Decision makers:** @ahliweb
+- **Closes:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) §Consequences — the two contracts holding `awcms-astro` back, which that ADR called "one design conversation, not two"
+- **Implements:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (the session introspection endpoint belongs to `identity_access`; its surface design is in [`../awcms/jualanku/05-kontrak-sesi-dan-bff.md`](../awcms/jualanku/05-kontrak-sesi-dan-bff.md) §3)
+- **Bound to:** [ADR-0048](0048-frontend-role-split-awcms-astro-internal-admin.md) §1 — moving a screen does not move its permissions; the authorization surface stays ONE
+- **The first foundation feature built directly here** under the ADR-0047 §2 regime, and therefore must satisfy §3 (ADR, security review for `auth`/`access`, full `bun run check`, RLS `FORCE`, ABAC default-deny) and §4 (recorded as a divergence in [`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml) **when it lands**)
 
-## Konteks
+## Context
 
-Satu-satunya bearer yang diterima repo ini adalah **token sesi** ber-hash
-(`awcms_sessions`, `sql/004`). Sebuah proses build tidak bisa memegangnya, dan
-bukan karena kebetulan konfigurasi:
+The only bearer this repo accepts is a hashed **session token**
+(`awcms_sessions`, `sql/004`). A build process cannot hold one, and not because
+of a configuration accident:
 
-- sesi **kedaluwarsa** dan tidak diperpanjang oleh pemakaian;
-- reset password **mencabut seluruh sesi** identitas itu (`sql/073`) — build
-  akan mati diam-diam setiap kali seorang manusia mengganti passwordnya;
-- step-up MFA **merotasi** token sesi (`sql/024`, anti-fixation);
-- sesi terikat pada satu identitas manusia, sehingga "siapa yang menarik konten
-  ini" selamanya terjawab dengan nama seseorang.
+- sessions **expire** and are not extended by use;
+- a password reset **revokes every session** of that identity (`sql/073`) — the
+  build would die silently every time a human changes their password;
+- MFA step-up **rotates** the session token (`sql/024`, anti-fixation);
+- a session is bound to one human identity, so "who pulled this content" is
+  forever answered with a person's name.
 
-`.env.example` milik `awcms-astro` menyuruh operator mengisi "a BUILD-TIME,
-READ-ONLY token" — instruksi untuk menerbitkan sesuatu yang **tidak bisa
-diterbitkan siapa pun**, di repo mana pun di keluarga ini. ADR-0047
-memverifikasinya terhadap staging, bukan menyimpulkannya dari dokumen.
+`awcms-astro`'s `.env.example` tells the operator to fill in "a BUILD-TIME,
+READ-ONLY token" — an instruction to issue something **nobody can issue**, in any
+repo in this family. ADR-0047 verified this against staging rather than inferring
+it from a document.
 
-Kebutuhan kedua datang dari arah berlawanan. BFF `awcms-astro` memegang token
-sesi milik pengguna dan perlu menanyakan "sesi ini masih hidup? milik siapa?
-perannya apa?" tanpa menyentuh basis data `awcms` dan tanpa menaruh token di
-browser. ADR-0045 sudah memutuskan endpointnya; kodenya tidak pernah ditulis.
+The second need comes from the opposite direction. The `awcms-astro` BFF holds a
+user's session token and needs to ask "is this session still alive? whose is it?
+what are its roles?" without touching the `awcms` database and without putting
+the token in the browser. ADR-0045 already decided the endpoint; the code was
+never written.
 
-Keduanya bertemu di titik yang sama: **apa yang berhak dilakukan sebuah
-pemanggil yang bukan manusia**. Karena itu satu ADR, bukan dua.
+Both meet at the same point: **what a non-human caller is entitled to do.** Hence
+one ADR, not two.
 
-## Keputusan
+## Decision
 
-### 1. Kredensial mesin MENGAUTENTIKASI; ia tidak pernah MENGOTORISASI
+### 1. A machine credential AUTHENTICATES; it never AUTHORIZES
 
-Tabel baru `awcms_machine_credentials` (tenant-scoped, `FORCE` RLS) menyimpan
-hash token, dan setiap baris **terikat pada satu `awcms_tenant_users` yang sudah
-ada** — sebuah service account. Setelah prinsipal itu di-resolve, seluruh rantai
-di bawahnya **tidak berubah sama sekali**: `resolveModuleEnabled` →
+The new table `awcms_machine_credentials` (tenant-scoped, `FORCE` RLS) stores a
+token hash, and every row is **bound to an existing `awcms_tenant_users`** — a
+service account. Once that principal is resolved, the entire chain below it is
+**completely unchanged**: `resolveModuleEnabled` →
 `fetchGrantedPermissionKeys` → `evaluateAccess` (RBAC + ABAC DSL, default-deny,
-deny-overrides-allow) → decision log → chokepoint SoD.
+deny-overrides-allow) → decision log → the SoD chokepoint.
 
-Alternatif "kredensial membawa daftar izinnya sendiri" **ditolak**: itu
-permukaan otorisasi KEDUA, persis yang ADR-0048 §1 larang. Yang boleh
-dilakukan sebuah kredensial harus dijawab oleh mesin izin yang sama dengan yang
-menjawab pertanyaan itu untuk manusia.
+The alternative "the credential carries its own permission list" is **rejected**:
+that is a SECOND authorization surface, exactly what ADR-0048 §1 forbids. What a
+credential may do must be answered by the same permission engine that answers
+that question for humans.
 
-### 2. Cakupannya hanya bisa MENYEMPITKAN, tidak pernah melebarkan
+### 2. Scope can only NARROW, never widen
 
-`allowed_permission_keys text[]` wajib ada dan wajib tidak kosong. Izin efektif
-sebuah kredensial adalah **irisan**:
+`allowed_permission_keys text[]` is mandatory and must be non-empty. A
+credential's effective permissions are the **intersection**:
 
 ```
-efektif = izin_service_account  ∩  allowed_permission_keys
+effective = service_account_permissions  ∩  allowed_permission_keys
 ```
 
-Menambahkan role ke service account **tidak** melebarkan kredensial yang sudah
-terbit. Daftar kosong berarti tidak bisa apa-apa (fail-closed), bukan
-"tanpa batas" — arah default yang berlawanan adalah cara sebuah allow-list
-berubah menjadi hiasan.
+Adding a role to the service account does **not** widen an already-issued
+credential. An empty list means it can do nothing (fail-closed), not
+"unbounded" — the opposite default direction is how an allow-list turns into
+decoration.
 
-### 3. BACA-SAJA, ditegakkan sebelum izin dilihat sama sekali
+### 3. READ-ONLY, enforced before permissions are looked at at all
 
-Permintaan yang diautentikasi kredensial mesin **ditolak** kecuali
-`guard.action` ada di allow-list baca-saja, yang hari ini berisi tepat satu
-nilai: `read`. Penolakan terjadi di chokepoint yang sama
-(`authorizeInTransaction`), **sebelum** pencarian izin, dan **tidak bergantung**
-pada apa pun yang dipegang service account.
+A request authenticated by a machine credential is **rejected** unless
+`guard.action` is in the read-only allow-list, which today holds exactly one
+value: `read`. The rejection happens at the same chokepoint
+(`authorizeInTransaction`), **before** the permission lookup, and does **not
+depend** on anything the service account holds.
 
-Konsekuensinya yang disengaja: token build yang bocor tidak bisa mengubah apa
-pun — bahkan bila operator salah mengarahkannya ke akun `owner`. Melebarkan
-allow-list ini butuh ADR-nya sendiri; ia bukan konstanta yang boleh ditambah
-sambil lalu.
+The deliberate consequence: a leaked build token cannot change anything — not
+even if the operator mistakenly pointed it at an `owner` account. Widening this
+allow-list needs its own ADR; it is not a constant that may be extended in
+passing.
 
-### 4. Token membawa tenant-nya sendiri
+### 4. The token carries its own tenant
 
-Format: `awcmsm_<tenantIdHex32>_<rahasia base64url 32 byte>`. Prefix `awcmsm_`
-**tidak rahasia** dan berfungsi sebagai diskriminator: sebuah token dikenali
-sebagai token mesin **sebelum** query apa pun, jadi tetap satu pencarian per
-permintaan dan sebuah token mesin tak pernah bisa dicari di ruang nama tabel
-sesi (atau sebaliknya). Yang disimpan tetap hanya SHA-256-nya.
+Format: `awcmsm_<tenantIdHex32>_<32-byte base64url secret>`. The `awcmsm_` prefix
+is **not secret** and acts as a discriminator: a token is recognised as a machine
+token **before** any query, so it remains one lookup per request and a machine
+token can never be looked up in the session table's namespace (or vice versa).
+Only its SHA-256 is stored.
 
-Ini juga yang menutup cacat kontrak PERTAMA di ADR-0047 untuk klien build:
-tenant diturunkan **dari token**, sehingga build hanya butuh satu variabel
-lingkungan dan header tenant tidak lagi relevan untuknya. Bila header tenant
-tetap dikirim dan berbeda, **token yang menang** dan headernya diabaikan — ia
-input tak-terautentikasi, dan kredensial itu memang hanya berlaku untuk
-tenant-nya sendiri, jadi mengabaikannya tidak bisa menaikkan hak apa pun.
+This is also what closes the FIRST contract defect in ADR-0047 for build clients:
+the tenant is derived **from the token**, so a build needs only one environment
+variable and the tenant header is no longer relevant to it. If a tenant header is
+still sent and differs, **the token wins** and the header is ignored — it is
+unauthenticated input, and that credential is only valid for its own tenant
+anyway, so ignoring it cannot escalate anything.
 
-**Header kanonis untuk sesi manusia tetap `x-awcms-tenant-id` — tidak ada alias
-baru.** Menambahkan `X-Tenant-Code`/`X-Tenant-Id` berarti setiap rute di masa
-depan wajib menghormati tiga ejaan, dan sebuah alias yang terlewat di satu rute
-adalah 400 yang membingungkan, bukan kegagalan yang jelas. Pemanggil manusia
-lintas-origin adalah BFF, yang menurunkan tenant dari host — bukan dari
-tebakan klien.
+**The canonical header for human sessions remains `x-awcms-tenant-id` — no new
+aliases.** Adding `X-Tenant-Code`/`X-Tenant-Id` would mean every future route
+must honour three spellings, and an alias missed on one route is a confusing 400,
+not a clear failure. The cross-origin human caller is the BFF, which derives the
+tenant from the host — not from a client guess.
 
-### 5. Kedaluwarsa wajib, pencabutan langsung, pemakaian terlihat
+### 5. Mandatory expiry, immediate revocation, visible use
 
-`expires_at` `NOT NULL` (batas atas 365 hari, ditegakkan domain): tidak ada
-kredensial abadi. Pencabutan berlaku pada permintaan berikutnya karena
-pencarian membaca baris yang sama — inilah alasan token buram ber-hash dipilih
-alih-alih JWT bertanda tangan, yang tidak punya jawaban untuk "cabut sekarang"
-tanpa daftar yang harus dibaca juga.
+`expires_at` is `NOT NULL` (upper bound 365 days, enforced in the domain): there
+are no eternal credentials. Revocation takes effect on the next request because
+the lookup reads that same row — this is why an opaque hashed token was chosen
+over a signed JWT, which has no answer for "revoke now" without a list that must
+be read as well.
 
-Deaktivasi service account berlaku **seketika**: jalur mesin mensyaratkan
-`awcms_tenant_users.status` dan `awcms_identities.status` aktif — sengaja lebih
-ketat dari jalur sesi, yang tidak memeriksa keduanya tetapi dibatasi masa
-berlaku sesi. Tidak ada apa pun yang mencabut kredensial saat sebuah akun
-dinonaktifkan, jadi mewarisi kelonggaran itu berarti meninggalkan kunci yang
-masih bekerja selama berbulan-bulan. Lebih ketat hanya bisa menolak; ia tak
-pernah bisa memberi apa yang jalur sesi tolak.
+Service account deactivation takes effect **immediately**: the machine path
+requires `awcms_tenant_users.status` and `awcms_identities.status` to be active —
+deliberately stricter than the session path, which checks neither but is bounded
+by the session lifetime. Nothing revokes credentials when an account is
+deactivated, so inheriting that leniency would mean leaving keys that keep
+working for months. Stricter can only deny; it can never grant what the session
+path denies.
 
-`last_used_at` diperbarui **paling sering sekali per jam** (satu `UPDATE`
-bersyarat), supaya kredensial yang menganggur atau bocor bisa terlihat tanpa
-menambahkan satu tulisan ke setiap permintaan baca.
+`last_used_at` is updated **at most once per hour** (one conditional `UPDATE`),
+so an idle or leaked credential can be spotted without adding a write to every
+read request.
 
-Plaintext hanya ditampilkan **sekali** saat penerbitan dan tidak pernah bisa
-diambil lagi. Tidak ada "petunjuk" potongan token yang disimpan: ia tidak
-menambah kemampuan identifikasi apa pun di atas `id`+`name`, dan ia adalah
-bahan rahasia.
+The plaintext is shown **once** at issuance and can never be retrieved again. No
+token-fragment "hint" is stored: it adds no identification capability over
+`id`+`name`, and it is secret material.
 
-### 6. Decision log mencatat kredensialnya, bukan hanya akunnya
+### 6. The decision log records the credential, not just the account
 
-`awcms_abac_decision_logs` mendapat kolom nullable `machine_credential_id`.
-Tanpa itu, pertanyaan forensik yang sebenarnya — "**token yang mana** yang
-membaca ini" — tak punya jawaban, karena beberapa kredensial boleh menunjuk
-service account yang sama.
+`awcms_abac_decision_logs` gets a nullable `machine_credential_id` column.
+Without it the actual forensic question — "**which token** read this" — has no
+answer, because several credentials may point at the same service account.
 
-### 7. `GET /api/v1/auth/session` — introspeksi, khusus sesi
+### 7. `GET /api/v1/auth/session` — introspection, sessions only
 
-Milik `identity_access`. Menerima **hanya token sesi**; kredensial mesin
-mendapat 401 generik yang sama seperti token tak dikenal (kredensial mesin tak
-punya sesi untuk diintrospeksi, dan membedakannya akan menjadikan endpoint ini
-oracle jenis-token).
+Owned by `identity_access`. Accepts **session tokens only**; a machine credential
+gets the same generic 401 as an unknown token (a machine credential has no
+session to introspect, and distinguishing it would make this endpoint a
+token-type oracle).
 
-Mengembalikan **klaim aman saja**: `identityId`, `tenantId`, `displayName`,
-`roles[]`, `assuranceLevel`, `expiresAt`, `scopes[]`. Tidak pernah
-mengembalikan token, hash token, status password, secret/recovery MFA, atau
-identifier mentah (email/telepon). Sesi tidak ada, kedaluwarsa, dan dicabut
-menghasilkan **satu bentuk respons yang sama**. `Cache-Control: private,
-no-store`, dan dibatasi laju lewat `src/lib/security/rate-limit.ts`.
+Returns **safe claims only**: `identityId`, `tenantId`, `displayName`,
+`roles[]`, `assuranceLevel`, `expiresAt`, `scopes[]`. It never returns the token,
+the token hash, password status, MFA secret/recovery material, or raw identifiers
+(email/phone). Nonexistent, expired, and revoked sessions all produce **one and
+the same response shape**. `Cache-Control: private, no-store`, and rate-limited
+via `src/lib/security/rate-limit.ts`.
 
-Ia **bukan** duplikat `GET /api/v1/auth/me`: `me` mengembalikan
-`loginIdentifier` mentah (email) dan tidak menyebut peran/assurance/kedaluwarsa
-— tepat kebalikan dari yang boleh dilihat header portal publik.
+It is **not** a duplicate of `GET /api/v1/auth/me`: `me` returns the raw
+`loginIdentifier` (email) and says nothing about roles/assurance/expiry —
+exactly the inverse of what a public portal header is allowed to see.
 
-### 8. Penerbitan & pencabutan adalah aksi admin ter-audit
+### 8. Issuance & revocation are audited admin actions
 
-Aktivitas permission baru `machine_credentials` dengan `read`/`create`/`revoke`
-— bukan pelebaran `access_control`. Alasannya sama dengan yang dicatat
-`sql/075` untuk `registration_requests`: menerbitkan kredensial yang bisa
-membaca data tenant tanpa manusia adalah otoritas tersendiri, dan menggabungkannya
-ke `access_control.configure` akan menjadikan setiap penyunting role sebagai
-penerbit kredensial sebagai efek samping. `create` dan `revoke` terpisah karena
-hanya satu di antaranya yang menciptakan kemampuan baru.
+A new permission activity `machine_credentials` with `read`/`create`/`revoke` —
+not a widening of `access_control`. The reason is the same one `sql/075` records
+for `registration_requests`: issuing a credential that can read tenant data with
+no human behind it is an authority of its own, and folding it into
+`access_control.configure` would make every role editor a credential issuer as a
+side effect. `create` and `revoke` are separate because only one of them creates
+a new capability.
 
-## Konsekuensi
+## Consequences
 
-**Yang terbuka.** `awcms-astro` bisa menarik konten terbit saat build dengan
-satu env var, dan BFF-nya bisa memvalidasi sesi portal tanpa menyentuh basis
-data `awcms`. Keduanya adalah "korban" yang ADR-0047 sebut namanya.
+**What is unblocked.** `awcms-astro` can pull published content at build time
+with a single env var, and its BFF can validate portal sessions without touching
+the `awcms` database. Both are the "victims" ADR-0047 named.
 
-**Rute lama ikut aman tanpa disentuh.** Penegakan ada di
-`authorizeInTransaction` dan penurunan tenant ada di `resolveAuthInputs` — dua
-fungsi yang SEMUA rute lewati, baik yang memakai `defineTenantRoute` maupun 200-an
-rute yang masih menulis rantainya sendiri. Rute yang membaca header tenant
-langsung tanpa `resolveAuthInputs` (mis. `/api/v1/auth/me`) tidak mengenal token
-mesin sama sekali dan menolaknya — arah kegagalan yang benar.
+**Old routes are safe too, untouched.** Enforcement lives in
+`authorizeInTransaction` and tenant derivation lives in `resolveAuthInputs` — two
+functions EVERY route passes through, both those using `defineTenantRoute` and
+the ~200 routes that still write their own chain. Routes that read the tenant
+header directly without `resolveAuthInputs` (e.g. `/api/v1/auth/me`) do not know
+machine tokens at all and reject them — the correct failure direction.
 
-**Biaya yang diterima — divergence keluarga.** `awcms-mini`/`awcms-micro` tidak
-punya konsep ini. Dicatat di `awcms-family-compatibility.yaml` saat mendarat,
-sesuai ADR-0047 §4; repatriasinya dibahas ADR pemulangan nanti.
+**An accepted cost — family divergence.** `awcms-mini`/`awcms-micro` have no such
+concept. Recorded in `awcms-family-compatibility.yaml` when it lands, per
+ADR-0047 §4; its repatriation is handled by a later repatriation ADR.
 
-**Risiko yang dinamai supaya bisa ditolak.** "Baca-saja" mudah dibaca sebagai
-"tidak berbahaya". Ia tetap kredensial yang membaca data tenant tanpa manusia
-di belakangnya: kebocoran = kebocoran data, bukan sekadar gangguan. Karena itu
-kedaluwarsanya wajib, cakupannya wajib disempitkan, pemakaiannya terlihat, dan
-penerbitannya ter-audit.
+**A risk named so it can be refused.** "Read-only" is easily read as "harmless".
+It remains a credential that reads tenant data with no human behind it: a leak =
+a data leak, not merely a nuisance. That is why its expiry is mandatory, its
+scope must be narrowed, its use is visible, and its issuance is audited.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-**JWT/kunci asimetris.** Ditolak: tanpa daftar pencabutan ia tidak bisa dicabut,
-dan begitu daftar itu ada, keunggulan "tanpa lookup"-nya hilang — sementara
-token buram ber-hash sudah menjadi pola sesi repo ini.
+**JWT/asymmetric keys.** Rejected: without a revocation list it cannot be
+revoked, and once that list exists its "no lookup" advantage is gone — while an
+opaque hashed token is already this repo's session pattern.
 
-**Menumpang `awcms_sessions` dengan kolom `kind`.** Ditolak: setiap invarian
-tabel itu mengandaikan manusia. "Cabut semua sesi saat reset password" akan
-mematikan build; rotasi step-up mengandaikan ada yang bisa melakukan step-up.
+**Riding on `awcms_sessions` with a `kind` column.** Rejected: every invariant of
+that table assumes a human. "Revoke all sessions on password reset" would kill
+the build; step-up rotation assumes someone can perform a step-up.
 
-**Membangunnya di `awcms-astro`.** Ditolak ulang (ADR-0047 §Alternatif):
-`awcms-astro` tidak punya basis data dan bukan penerbit identitas. ADR-0048
-memberinya layar internal, bukan identity store.
+**Building it in `awcms-astro`.** Rejected again (ADR-0047 §Alternatives):
+`awcms-astro` has no database and is not an identity issuer. ADR-0048 gives it
+internal screens, not an identity store.
 
-**Menerima `X-Tenant-Code` sebagai alias.** Ditolak — lihat §4.
+**Accepting `X-Tenant-Code` as an alias.** Rejected — see §4.

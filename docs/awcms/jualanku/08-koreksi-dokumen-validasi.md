@@ -1,134 +1,139 @@
-# 08 — Koreksi terhadap dokumen validasi v1.0
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](08-koreksi-dokumen-validasi.id.md)
 
-> Dokumen validasi PT TIM SIX v1.0 (29 Juli 2026) sebagian bernalar dari
-> dokumentasi repo, dan dokumentasi bisa basi. Setiap baris di bawah dicek ke
-> **kode** repo ini pada tanggal yang sama. Yang terkonfirmasi tidak diulang di
-> sini; yang berbeda dicatat lengkap dengan buktinya.
+# 08 — Corrections to validation document v1.0
 
-## 1. Inventaris modul — temuannya benar, sebabnya berbeda
+> The PT TIM SIX validation document v1.0 (29 July 2026) partly reasons from the
+> repo's documentation, and documentation can be stale. Every line below was
+> checked against this repo's **code** on the same date. What is confirmed is not
+> repeated here; what differs is recorded in full together with its evidence.
 
-Dokumen menyimpulkan `news-portal` "belum tersedia" dan meminta jangan
-menganggapnya ada. Kesimpulan praktisnya tepat, tetapi sebabnya bukan "modul
-belum dibuat", melainkan **modul dilebur**:
+## 1. Module inventory — the finding is right, the cause is different
 
-- `news_portal` **dilebur ke `blog_content`** oleh
-  [ADR-0044](../../adr/0044-merge-news-portal-into-blog-content.md); fitur-nya
-  (homepage section composer, ad placement ber-media terverifikasi) tetap ada,
-  hanya berpindah pemilik.
-- `src/modules/index.ts` berisi **20 modul** dan tidak memuat `news_portal`.
-- Yang basi adalah prosa: `README.md` masih menyebutkannya dalam daftar
-  "foundation modules"; `docs/ARCHITECTURE.md` menyebut "20 modul" tetapi
-  **memerinci 21 butir**; `docs/PROJECT_STATE.md` menyebut 21 modul, 43 ADR, dan
-  `MODULE_CONTRACT_VERSION` 2.3.0 — ketiganya tertinggal.
+The document concludes that `news-portal` is "not yet available" and asks that we
+not assume it exists. The practical conclusion is correct, but the cause is not
+"the module has not been built" — the module was **merged**:
 
-**Koreksi:** ketiga dokumen itu direkonsiliasi bersama perubahan yang membawa
-ADR-0045. Aturan yang dipakai seterusnya sama dengan rekomendasi dokumen
-validasi: `src/modules/index.ts` adalah bukti terkuat, prosa mengikuti.
+- `news_portal` was **merged into `blog_content`** by
+  [ADR-0044](../../adr/0044-merge-news-portal-into-blog-content.md); its features
+  (homepage section composer, ad placement with verified media) still exist, they
+  only changed owner.
+- `src/modules/index.ts` contains **20 modules** and does not include
+  `news_portal`.
+- What is stale is the prose: `README.md` still lists it among the "foundation
+  modules"; `docs/ARCHITECTURE.md` says "20 modules" but **enumerates 21 items**;
+  `docs/PROJECT_STATE.md` says 21 modules, 43 ADRs, and
+  `MODULE_CONTRACT_VERSION` 2.3.0 — all three lag behind.
 
-## 2. "Portal memeriksa sesi lewat SSR — `auth/me` bearer-only"
+**Correction:** those three documents are reconciled together with the change
+that brings ADR-0045. The rule used from here on is the same as the validation
+document's recommendation: `src/modules/index.ts` is the strongest evidence, the
+prose follows.
 
-Setengah benar, dan setengah yang salah mengubah rancangan.
+## 2. "The portal checks the session via SSR — `auth/me` is bearer-only"
 
-- **Benar:** `GET /api/v1/auth/me` memang hanya menerima bearer token
+Half true, and the half that is wrong changes the design.
+
+- **True:** `GET /api/v1/auth/me` does only accept a bearer token
   (`src/pages/api/v1/auth/me.ts`).
-- **Tidak benar:** "`awcms` belum mendukung sesi berbasis cookie". Login sudah
-  menyetel cookie httpOnly `awcms_session` + `awcms_tenant_id`, dan
-  `resolveAuthInputs()` (`identity-access/application/access-guard.ts`) menerima
-  **header ATAU cookie** — itulah cara admin SSR yang sudah jalan hari ini
-  mengautentikasi dirinya.
+- **Not true:** "`awcms` does not support cookie-based sessions yet". Login
+  already sets the httpOnly cookies `awcms_session` + `awcms_tenant_id`, and
+  `resolveAuthInputs()` (`identity-access/application/access-guard.ts`) accepts
+  **either the header OR the cookie** — that is how the SSR admin that already
+  runs today authenticates itself.
 
-**Koreksi:** gapnya lebih sempit dan lebih spesifik — tidak ada **kontrak
-introspeksi sesi untuk origin yang berbeda**. Cookie `awcms` milik origin
-`awcms`; browser di `jualanku.info` tidak akan mengirimkannya. Yang ditambahkan
-adalah endpoint introspeksi yang dipanggil **BFF** (lihat
-[05](05-kontrak-sesi-dan-bff.md)), bukan "dukungan cookie".
+**Correction:** the gap is narrower and more specific — there is no **session
+introspection contract for a different origin**. The `awcms` cookie belongs to
+the `awcms` origin; a browser on `jualanku.info` will not send it. What is being
+added is an introspection endpoint called by the **BFF** (see
+[05](05-kontrak-sesi-dan-bff.md)), not "cookie support".
 
-## 3. "Merchant isolation lewat ABAC `subject.merchantIds` / `resource.merchantId`"
+## 3. "Merchant isolation via ABAC `subject.merchantIds` / `resource.merchantId`"
 
-Arahnya benar (ABAC + ownership + atribut dari server), tetapi bentuk konkretnya
-tidak bisa diimplementasikan apa adanya:
+The direction is right (ABAC + ownership + server-supplied attributes), but the
+concrete shape cannot be implemented as written:
 
-- `ABAC_ATTRIBUTES` (`identity-access/domain/abac-policy.ts`) adalah **allow-list
-  tertutup**. Atribut di luar daftar itu **invalid saat authoring** dan **deny
-  saat evaluasi**. `subject.merchantIds` dan `resource.merchantId` tidak ada di
-  sana.
-- Menambah pasangan atribut per-produk akan mengubah allow-list terbatas menjadi
-  daftar yang tumbuh mengikuti permintaan — properti yang justru membuatnya
-  bernilai akan hilang.
+- `ABAC_ATTRIBUTES` (`identity-access/domain/abac-policy.ts`) is a **closed
+  allow-list**. An attribute outside that list is **invalid at authoring time**
+  and **denied at evaluation time**. `subject.merchantIds` and
+  `resource.merchantId` are not in it.
+- Adding a per-product attribute pair would turn a bounded allow-list into a list
+  that grows on request — the very property that makes it valuable would be lost.
 
-**Koreksi:** merchant dimodelkan sebagai **business scope** (ADR-0030). Repo
-sudah punya `resource.businessScopeId` di allow-list dan port hierarki scope yang
-base-nya mengembalikan `resolved: false` sehingga aksi high-risk **fail closed**.
-`jualanku_directory` mengisi port itu untuk tipe scope `merchant`. Rinciannya di
-[02](02-model-tenant-merchant-otorisasi.md) §3.
+**Correction:** a merchant is modelled as a **business scope** (ADR-0030). The
+repo already has `resource.businessScopeId` in the allow-list and a scope
+hierarchy port whose base returns `resolved: false` so high-risk actions **fail
+closed**. `jualanku_directory` fills that port for the `merchant` scope type.
+Details in [02](02-model-tenant-merchant-otorisasi.md) §3.
 
-## 4. "RLS memisahkan tenant" — benar, dengan satu jebakan operasional
+## 4. "RLS separates tenants" — true, with one operational trap
 
-Dokumen benar bahwa RLS tidak memisahkan merchant. Yang perlu ditambahkan: RLS
-juga bisa **diam-diam tidak memisahkan tenant** pada platform tertentu.
+The document is right that RLS does not separate merchants. What must be added:
+RLS can also **silently fail to separate tenants** on certain platforms.
 
-`FORCE` RLS tidak berlaku untuk role superuser. Sejumlah PaaS membuat user
-Postgres default menjadi superuser; bila `DATABASE_URL` runtime menunjuk ke sana,
-isolasi tenant hilang total **sementara migrasi tetap hijau dan health check
-tetap 200**.
+`FORCE` RLS does not apply to a superuser role. A number of PaaS providers make
+the default Postgres user a superuser; if the runtime `DATABASE_URL` points
+there, tenant isolation is lost entirely **while migrations stay green and the
+health check still returns 200**.
 
-**Koreksi:** verifikasi isolasi wajib dijalankan **sebagai role aplikasi**
-(`awcms_app`) dan menjadi bagian test, bukan asumsi. Ini masuk gate P1
-([07](07-roadmap-gates-kepatuhan.md) §2).
+**Correction:** isolation verification must be run **as the application role**
+(`awcms_app`) and must be part of the tests, not an assumption. This goes into
+the P1 gate ([07](07-roadmap-gates-kepatuhan.md) §2).
 
-## 5. "Tujuh modul domain" → lima
+## 5. "Seven domain modules" → five
 
-Disetujui apa adanya oleh dokumen validasi sendiri (Alternatif C). Dicatat di
-sini karena keputusannya mengikat: lima bounded context, dan pemecahan
-selanjutnya hanya berdasarkan coupling terukur.
+Accepted as-is by the validation document itself (Alternative C). Recorded here
+because the decision is binding: five bounded contexts, and any further split
+only on the basis of measured coupling.
 
-## 6. `awcms-astro`: fakta terkonfirmasi
+## 6. `awcms-astro`: confirmed facts
 
-Semua terverifikasi pada repo `ahliweb/awcms-astro`:
+All verified against the `ahliweb/awcms-astro` repo:
 
-- `output: "static"`, tanpa adapter server.
-- Nginx melayani berkas statis (`try_files` ke `index.html`).
-- Konten ditarik saat build; CMS tidak menghadap pembaca.
-- `AGENTS.md` repo itu sudah menyatakan bahwa perpindahan ke `output: 'server'`
-  **harus** lewat ADR lebih dulu.
+- `output: "static"`, no server adapter.
+- Nginx serves static files (`try_files` to `index.html`).
+- Content is pulled at build time; the CMS does not face readers.
+- That repo's `AGENTS.md` already states that moving to `output: 'server'`
+  **must** go through an ADR first.
 
-**Satu fakta sudah berubah sejak dokumen validasi ditulis.** Dokumen itu benar
-bahwa `awcms-astro` memakai Node/npm (`engines`: Node ≥ 22.12, npm ≥ 10.9) dan
-karena itu menolak klaim "runtime mengikuti Bun". Klaim itu kini **benar**:
-repo tersebut sudah dipindahkan ke Bun (ADR-0015 di sana — `packageManager`
-`bun@1.3.14`, `bun.lock`, `bun test`, image `oven/bun`, `setup-bun` di CI).
-Koreksi dokumen validasi tetap sah untuk tanggalnya; yang tidak lagi berlaku
-adalah kesimpulan turunannya ("pertahankan Node/npm sampai ada ADR migrasi") —
-ADR itu sudah ada dan sudah dieksekusi.
+**One fact has already changed since the validation document was written.** That
+document was right that `awcms-astro` used Node/npm (`engines`: Node ≥ 22.12, npm
+≥ 10.9) and therefore rejected the claim "the runtime follows Bun". That claim is
+now **true**: that repo has been moved to Bun (ADR-0015 over there —
+`packageManager` `bun@1.3.14`, `bun.lock`, `bun test`, the `oven/bun` image,
+`setup-bun` in CI). The validation document's correction remains valid for its
+date; what no longer holds is the derived conclusion ("keep Node/npm until there
+is a migration ADR") — that ADR now exists and has been executed.
 
-Karena itu perubahan rendering/runtime dirancang dan diputuskan **di repo itu**,
-bukan di sini. Seluruh keluarga AWCMS kini Bun-only tanpa pengecualian.
+Because of that, rendering/runtime changes are designed and decided **in that
+repo**, not here. The whole AWCMS family is now Bun-only without exception.
 
-## 7. Terminologi rendering
+## 7. Rendering terminology
 
-"Hybrid application" bukan istilah yang tepat pada Astro modern: `output` hanya
-`static` atau `server`, dan kemampuan campuran datang dari
-`export const prerender = false` per rute setelah adapter terpasang.
+"Hybrid application" is not the right term for modern Astro: `output` is only
+`static` or `server`, and mixed capability comes from
+`export const prerender = false` per route once an adapter is installed.
 
-**Koreksi:** istilah yang dipakai di seluruh dokumen keluarga ini adalah
-**static-by-default dengan rute on-demand** (mixed prerender/on-demand).
+**Correction:** the term used across this family's documents is
+**static-by-default with on-demand routes** (mixed prerender/on-demand).
 
-## 8. Versi standar
+## 8. Standard versions
 
-Koreksi versi pada dokumen validasi (WCAG 2.2 / ISO/IEC 40500:2025, ISO/IEC
-27701:2025, ISO/IEC 27018:2025, ISO/IEC 15408 Parts 1–5:2026, transisi ISO/IEC 27017) **diterima apa adanya** dan menjadi baseline di
+The version corrections in the validation document (WCAG 2.2 / ISO/IEC
+40500:2025, ISO/IEC 27701:2025, ISO/IEC 27018:2025, ISO/IEC 15408 Parts 1–5:2026, the ISO/IEC 27017 transition) are **accepted as-is** and become the baseline in
 [07](07-roadmap-gates-kepatuhan.md) §6.
 
-Satu tambahan: baseline aksesibilitas keluarga ini sebelumnya tertulis WCAG 2.1
-AA di template `awcms-astro`. Menaikkannya ke 2.2 AA adalah perubahan yang harus
-dicatat di repo tersebut, bukan diasumsikan otomatis berlaku.
+One addition: this family's accessibility baseline was previously written as WCAG
+2.1 AA in the `awcms-astro` template. Raising it to 2.2 AA is a change that must
+be recorded in that repo, not assumed to apply automatically.
 
-## 9. Hal yang dokumen validasi benar dan sering dilupakan implementator
+## 9. Things the validation document gets right and implementers often forget
 
-Dicatat ulang di sini karena tiga hal ini paling sering hilang saat eksekusi:
+Recorded again here because these three are the ones most often lost during
+execution:
 
-1. **Visibility UI bukan kontrol keamanan.** Menyembunyikan menu tidak menutup
+1. **UI visibility is not a security control.** Hiding a menu does not close an
    endpoint.
-2. **Namespace berbeda tidak boleh melahirkan tiga implementasi aturan bisnis.**
-3. **Provider eksternal tidak dipanggil di dalam transaksi basis data** —
-   outbox + idempotency key.
+2. **Different namespaces must not give birth to three implementations of a
+   business rule.**
+3. **External providers are not called inside a database transaction** — outbox
+   - idempotency key.

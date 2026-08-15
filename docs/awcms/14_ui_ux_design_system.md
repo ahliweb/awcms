@@ -1,131 +1,133 @@
-# Bagian 14 — UI/UX Design System dan Spesifikasi Layar
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](14_ui_ux_design_system.id.md)
 
-> **Status dokumen (2026-07-14):** Repo `awcms` masih pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **belum ada kode modul ERP yang diimplementasikan**. Dokumen ini mengadaptasi standar/pola design system yang sudah terbukti di base [awcms-mini](https://github.com/ahliweb/awcms-mini) menjadi **arsitektur target** untuk platform ERP AWCMS. Bagian yang di awcms-mini sudah live (token, komponen konkret seperti `DataTable.astro`/`ConfirmDialog.astro`, i18n) di sini direframe sebagai **rencana yang mengikat** saat modul terkait mulai dibangun, bukan sesuatu yang sudah berjalan di repo ini. Contoh layar/komponen diganti ke domain ERP (ledger, purchase order, stock adjustment, payroll run) menggantikan contoh retail/POS di sumber.
+# Part 14 — UI/UX Design System and Screen Specifications
 
-## Tujuan
+> **Document status (2026-07-14):** The `awcms` repo is still at the re-foundation stage ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **no ERP module code has been implemented yet**. This document adapts the design system standards/patterns already proven in the [awcms-mini](https://github.com/ahliweb/awcms-mini) base into the **target architecture** for the AWCMS ERP platform. The parts that are already live in awcms-mini (tokens, concrete components such as `DataTable.astro`/`ConfirmDialog.astro`, i18n) are reframed here as a **binding plan** for when the relevant module starts being built, not as something already running in this repo. The screen/component examples are switched to the ERP domain (ledger, purchase order, stock adjustment, payroll run), replacing the retail/POS examples in the source.
 
-Dokumen ini menetapkan kebutuhan **desain UI/UX** AWCMS yang akan melengkapi SOP operasional dan blueprint modul saat ditulis. Berisi design principle, design token, component library, information architecture, spesifikasi layar (wireframe), state pattern, aksesibilitas, i18n, dan theming — agar frontend ERP dapat diimplementasikan konsisten sejak modul pertama dibangun.
+## Purpose
 
-Terkait: `15_frontend_architecture_integration.md` (arsitektur & wiring), dokumen SOP operasional (menyusul). Skill penegak yang direncanakan: **`awcms-ui-screen`** (`.claude/skills/`, mengikuti pola `awcms-mini-ui-screen`).
+This document defines the AWCMS **UI/UX design** requirements that will complement the operational SOP and the module blueprint when they are written. It covers design principles, design tokens, the component library, information architecture, screen specifications (wireframes), state patterns, accessibility, i18n, and theming — so that the ERP frontend can be implemented consistently from the first module onwards.
 
-## Prinsip desain UI/UX
+Related: `15_frontend_architecture_integration.md` (architecture & wiring), the operational SOP document (to follow). The planned enforcing skill: **`awcms-ui-screen`** (`.claude/skills/`, following the `awcms-mini-ui-screen` pattern).
 
-1. **Offline-first terlihat** — status koneksi & sync selalu jelas; aksi tetap bisa saat offline (mis. input stok gudang tanpa koneksi LAN).
-2. **Keyboard-first untuk operator entri tinggi-volume** — semua aksi entri jurnal/kasir gudang/hitung stok dapat tanpa mouse.
-3. **Role-aware** — navigasi & aksi menyesuaikan permission (bukan kontrol utama; backend tetap validasi RBAC/ABAC).
-4. **State eksplisit** — setiap layar punya loading, empty, error, dan success state.
-5. **Aman** — tidak menampilkan data sensitif penuh (gaji, rekening, NPWP); mengikuti aturan masking data.
-6. **Aksesibel** — target WCAG 2.1 AA, kontras cukup, fokus terlihat, navigasi keyboard.
-7. **Responsif** — admin/back-office desktop-first, entri lapangan (gudang/produksi) fullscreen-tablet, portal vendor/karyawan mobile-first.
-8. **Konsisten** — semua layar memakai token & komponen yang sama lintas modul ERP (finance, inventory, procurement, manufacturing, HR/payroll).
+## UI/UX design principles
+
+1. **Offline-first is visible** — connection & sync status is always clear; actions still work while offline (e.g. warehouse stock entry with no LAN connection).
+2. **Keyboard-first for high-volume entry operators** — every journal entry/warehouse cashier/stock count action can be done without a mouse.
+3. **Role-aware** — navigation & actions follow permissions (not the primary control; the backend still validates RBAC/ABAC).
+4. **Explicit state** — every screen has a loading, empty, error, and success state.
+5. **Safe** — never shows sensitive data in full (salary, bank account, NPWP); follows the data masking rules.
+6. **Accessible** — targets WCAG 2.1 AA, sufficient contrast, visible focus, keyboard navigation.
+7. **Responsive** — admin/back-office desktop-first, field entry (warehouse/production) fullscreen-tablet, vendor/employee portal mobile-first.
+8. **Consistent** — every screen uses the same tokens & components across all ERP modules (finance, inventory, procurement, manufacturing, HR/payroll).
 
 ## Design tokens
 
-Token diimplementasikan sebagai CSS custom properties, di-scope ke `:root` dan override via `:root[data-theme="dark"]`. Nilai berikut adalah **placeholder brand-neutral** yang boleh diganti brand tenant.
+Tokens are implemented as CSS custom properties, scoped to `:root` and overridden via `:root[data-theme="dark"]`. The values below are **brand-neutral placeholders** that a tenant's brand may replace.
 
-### Warna semantik
+### Semantic colours
 
-| Token                      | Light     | Dark      | Fungsi                           |
-| -------------------------- | --------- | --------- | -------------------------------- |
-| `--color-bg`               | `#f7f8fa` | `#0e1116` | Latar aplikasi                   |
-| `--color-surface`          | `#ffffff` | `#161b22` | Kartu/panel                      |
-| `--color-surface-2`        | `#eef1f5` | `#1f262e` | Panel sekunder                   |
-| `--color-border`           | `#d8dee6` | `#2b333c` | Garis/pembatas                   |
-| `--color-text`             | `#1a1f26` | `#e6edf3` | Teks utama                       |
-| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Teks sekunder                    |
-| `--color-primary`          | `#2563eb` | `#3b82f6` | Aksi utama                       |
-| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Teks di atas primary             |
-| `--color-success`          | `#16a34a` | `#22c55e` | Sukses/posted                    |
-| `--color-warning`          | `#d97706` | `#f59e0b` | Peringatan/held/pending approval |
-| `--color-danger`           | `#dc2626` | `#ef4444` | Error/saldo tidak cukup          |
-| `--color-info`             | `#0891b2` | `#06b6d4` | Info/sync                        |
-| `--color-focus`            | `#2563eb` | `#60a5fa` | Cincin fokus                     |
-| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Fill solid + teks putih          |
-| `--color-success-strong`   | `#12873d` | `#178841` | Fill solid + teks putih          |
-| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Fill solid + teks putih          |
+| Token                      | Light     | Dark      | Function                      |
+| -------------------------- | --------- | --------- | ----------------------------- |
+| `--color-bg`               | `#f7f8fa` | `#0e1116` | Application background        |
+| `--color-surface`          | `#ffffff` | `#161b22` | Card/panel                    |
+| `--color-surface-2`        | `#eef1f5` | `#1f262e` | Secondary panel               |
+| `--color-border`           | `#d8dee6` | `#2b333c` | Line/divider                  |
+| `--color-text`             | `#1a1f26` | `#e6edf3` | Primary text                  |
+| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Secondary text                |
+| `--color-primary`          | `#2563eb` | `#3b82f6` | Primary action                |
+| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Text on top of primary        |
+| `--color-success`          | `#16a34a` | `#22c55e` | Success/posted                |
+| `--color-warning`          | `#d97706` | `#f59e0b` | Warning/held/pending approval |
+| `--color-danger`           | `#dc2626` | `#ef4444` | Error/insufficient balance    |
+| `--color-info`             | `#0891b2` | `#06b6d4` | Info/sync                     |
+| `--color-focus`            | `#2563eb` | `#60a5fa` | Focus ring                    |
+| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Solid fill + white text       |
+| `--color-success-strong`   | `#12873d` | `#178841` | Solid fill + white text       |
+| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Solid fill + white text       |
 
-> **`-strong` vs token polos.** `--color-primary`/`--color-success`/`--color-danger` polos ditujukan untuk dipakai sebagai _teks/ikon/border_ di atas `--color-surface`/`--color-surface-2` — kontras yang diperlukan berbeda dari kasus _fill solid_ + `--color-primary-contrast` (putih) di atasnya (tombol CTA, banner error, status pill solid seperti "Posted"/"Rejected"). Diukur (formula WCAG relative-luminance): token polos dengan teks putih hanya 3.19–3.76:1 di beberapa kombinasi (di bawah AA 4.5:1). Token `-strong` adalah varian yang di-gelapkan secukupnya (khusus tema gelap; tema terang sebagian sudah lulus tanpa perlu digelapkan) agar teks putih di atasnya selalu ≥4.5:1 — pakai token ini, bukan yang polos, setiap kali `--color-primary-contrast` dirender langsung di atas fill warna semantik. **Rencana**: audit kontrasnya sendiri harus diulang saat token ini diimplementasikan di repo ini, bukan diasumsikan otomatis identik.
+> **`-strong` vs the plain token.** The plain `--color-primary`/`--color-success`/`--color-danger` are meant to be used as _text/icon/border_ on top of `--color-surface`/`--color-surface-2` — the contrast required there is different from the _solid fill_ case with `--color-primary-contrast` (white) on top of it (CTA buttons, error banners, solid status pills such as "Posted"/"Rejected"). Measured (WCAG relative-luminance formula): the plain tokens with white text reach only 3.19–3.76:1 in some combinations (below the AA 4.5:1). The `-strong` tokens are variants darkened just enough (dark theme specifically; the light theme partly passes already without darkening) so that white text on top of them is always ≥4.5:1 — use these tokens, not the plain ones, every time `--color-primary-contrast` is rendered directly on top of a semantic colour fill. **Planned**: the contrast audit itself must be redone when these tokens are implemented in this repo, not assumed to be automatically identical.
 
-### Skala lain
+### Other scales
 
-| Kategori    | Token                                  | Nilai                                         |
-| ----------- | -------------------------------------- | --------------------------------------------- |
-| Font family | `--font-sans`                          | system-ui, Inter, sans-serif                  |
-| Font mono   | `--font-mono`                          | ui-monospace, monospace (angka/kode akun/SKU) |
-| Font size   | `--fs-xs..2xl`                         | 12 · 14 · 16 · 18 · 20 · 24 · 32 px           |
-| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px        |
-| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                          |
-| Shadow      | `--shadow-sm/md/lg`                    | elevasi kartu/dialog                          |
-| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                   |
-| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                    |
+| Category    | Token                                  | Value                                              |
+| ----------- | -------------------------------------- | -------------------------------------------------- |
+| Font family | `--font-sans`                          | system-ui, Inter, sans-serif                       |
+| Font mono   | `--font-mono`                          | ui-monospace, monospace (numbers/account code/SKU) |
+| Font size   | `--fs-xs..2xl`                         | 12 · 14 · 16 · 18 · 20 · 24 · 32 px                |
+| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px             |
+| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                               |
+| Shadow      | `--shadow-sm/md/lg`                    | card/dialog elevation                              |
+| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                        |
+| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                         |
 
 ### Theming
 
 ```mermaid
 flowchart LR
-  Sys[Preferensi OS<br/>prefers-color-scheme] --> Resolve
-  Pref[Pilihan user<br/>light/dark/system] --> Resolve[Resolver theme]
-  Resolve --> Attr[data-theme di html]
-  Attr --> Tokens[CSS variables aktif]
-  Tokens --> UI[Semua komponen]
+  Sys[OS preference<br/>prefers-color-scheme] --> Resolve
+  Pref[User choice<br/>light/dark/system] --> Resolve[Theme resolver]
+  Resolve --> Attr[data-theme on html]
+  Attr --> Tokens[Active CSS variables]
+  Tokens --> UI[All components]
 ```
 
-Aturan yang direncanakan: default `system`; pilihan personal per-browser disimpan di localStorage (selalu menang bila ada) dengan fallback ke preferensi tenant `awcms_tenants.default_theme` (dapat diubah admin di `/admin/settings`) untuk browser yang belum pernah memilih; `data-theme` di-set pada `<html>` sebelum paint untuk mencegah flash.
+The planned rules: default `system`; the personal per-browser choice is stored in localStorage (it always wins when present) with a fallback to the tenant preference `awcms_tenants.default_theme` (changeable by an admin at `/admin/settings`) for browsers that have never chosen; `data-theme` is set on `<html>` before paint to prevent a flash.
 
-### Motion & animasi
+### Motion & animation
 
-Sistem motion ada di `src/styles/motion.css` (di-import global): token durasi `--motion-instant/fast/base/slow` (80/140/240/400ms) + easing `--ease-standard/out/in/spring`, keyframe berprefiks `awcms-` (`awcms-fade-in`, `awcms-fade-in-up`, `awcms-scale-in`, `awcms-slide-in-left`, dst.), dan utility class pasangannya (`.fade-in-up`, `.scale-in`, `.hover-lift`, `.transition-base`, `.skeleton`). Animasi = micro-interaction: halus, cepat, memperjelas perubahan state — bukan pertunjukan.
+The motion system lives in `src/styles/motion.css` (imported globally): the duration tokens `--motion-instant/fast/base/slow` (80/140/240/400ms) + the easings `--ease-standard/out/in/spring`, keyframes prefixed with `awcms-` (`awcms-fade-in`, `awcms-fade-in-up`, `awcms-scale-in`, `awcms-slide-in-left`, etc.), and their matching utility classes (`.fade-in-up`, `.scale-in`, `.hover-lift`, `.transition-base`, `.skeleton`). Animation = micro-interaction: subtle, fast, clarifying a state change — not a performance.
 
-Aturan:
+Rules:
 
-- **`prefers-reduced-motion: reduce` WAJIB dihormati** — `motion.css` sudah menetralkan utility motion-nya di blok reduced-motion. Blok itu menyasar utility class-nya (bukan `*`), jadi animasi baru yang **scoped** ke satu halaman/komponen harus menyertakan guard reduced-motion lokal sendiri.
-- **Tanpa layout shift** — animasikan hanya `opacity`/`transform`/warna/`box-shadow`, bukan `width`/`height`/`top`/`left`.
-- **Entrance konten utama yang sudah tampil saat SSR sebaiknya `transform`-saja (mis. `translateY`), bukan dari `opacity: 0`.** Scan axe-core dapat membaca teks setengah-transparan di tengah animasi sebagai pelanggaran kontras bila kebetulan men-scan sebelum animasi selesai. Kartu login (`login.astro`) memakai `@keyframes auth-card-rise` (translateY-only) sebagai contoh kanonis. Fade `opacity:0` (mis. utility `.fade-in-up`) tetap pas untuk elemen yang di-reveal **setelah** load (banner/dialog pasca-aksi) atau elemen sekunder — hindari hanya untuk konten teks utama layar auth/entry.
+- **`prefers-reduced-motion: reduce` MUST be honoured** — `motion.css` already neutralises its motion utilities in the reduced-motion block. That block targets the utility classes (not `*`), so a new animation that is **scoped** to a single page/component must carry its own local reduced-motion guard.
+- **No layout shift** — animate only `opacity`/`transform`/colour/`box-shadow`, never `width`/`height`/`top`/`left`.
+- **The entrance of main content that is already visible at SSR should be `transform`-only (e.g. `translateY`), not from `opacity: 0`.** An axe-core scan can read half-transparent text mid-animation as a contrast violation if it happens to scan before the animation finishes. The login card (`login.astro`) uses `@keyframes auth-card-rise` (translateY-only) as the canonical example. An `opacity:0` fade (e.g. the `.fade-in-up` utility) is still fine for elements revealed **after** load (post-action banners/dialogs) or for secondary elements — avoid it only for the main text content of auth/entry screens.
 
 ## Component library
 
-Komponen dasar direncanakan di `src/components/ui`, dipakai lintas persona dan lintas modul ERP.
+The base components are planned to live in `src/components/ui`, used across personas and across ERP modules.
 
-| Komponen                                  | Catatan penting                                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Button                                    | varian primary/secondary/ghost/danger; state loading & disabled                                                                                                                                                                                                                                                                                                                                |
-| Input / NumberInput                       | label, hint, error; NumberInput untuk qty/harga/nominal jurnal (mono)                                                                                                                                                                                                                                                                                                                          |
-| Select / Combobox                         | Combobox mendukung search akun/produk/vendor/karyawan                                                                                                                                                                                                                                                                                                                                          |
-| Checkbox / Radio / Switch                 | switch untuk consent & feature toggle                                                                                                                                                                                                                                                                                                                                                          |
-| Dialog / Drawer                           | fokus terperangkap, `Esc` menutup — direncanakan sebagai `<dialog>` native (`showModal()` menyediakan focus trap + Esc-to-close bawaan browser) untuk konfirmasi aksi destruktif (mis. void jurnal, batalkan PO), menggantikan pola `window.confirm`/`window.prompt`. Sidebar admin sendiri (drawer mobile) BUKAN `<dialog>` — tetap `<nav>` statis di desktop, focus trap-nya ditulis manual. |
-| Toast                                     | sukses/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                |
-| Table / DataGrid                          | sort, pagination keyset, kolom sticky, row density — dipakai untuk daftar entri jurnal, purchase order, stock adjustment, payroll run; shell scroll-container + `<caption>` aksesibel + empty-row standar; row rendering (badge, form, tombol per baris) tetap tanggung jawab pemanggil                                                                                                        |
-| Badge / StatusPill                        | status lifecycle (draft/pending approval/posted/rejected/void/quarantine) berkode warna — varian `success/warning/danger/info/neutral`, memakai token `-strong` untuk fill+teks putih kecuali `warning` yang memakai teks gelap tetap agar AA di kedua tema                                                                                                                                    |
-| ArchiveFilter                             | toggle/filter `aktif`, `arsip`, `semua` untuk role berizin                                                                                                                                                                                                                                                                                                                                     |
-| Card / Panel                              | kontainer konten                                                                                                                                                                                                                                                                                                                                                                               |
-| FormField                                 | membungkus label+input+error konsisten — wrapper label/hint/error dengan slot default untuk kontrol asli (caller tetap mengatur `type`/`name`/`required`)                                                                                                                                                                                                                                      |
-| Tabs                                      | detail entity (akun, purchase order, produk, karyawan)                                                                                                                                                                                                                                                                                                                                         |
-| Pagination                                | keyset (next/prev), bukan offset besar — dua tombol prev/next yang men-dispatch `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                |
-| `FilterBar`                               | toolbar kontainer untuk kontrol filter list (`role="search"` + label wajib); tidak menangani logic filter itu sendiri — tetap tanggung jawab halaman, sama seperti `DataTable`                                                                                                                                                                                                                 |
-| `ActionBanner`                            | banner feedback sukses/error pasca-mutation (`role="alert"`); dipakai konsisten oleh `showBanner()` di helper klien admin (lihat doc 15) tanpa duplikasi manual per layar                                                                                                                                                                                                                      |
-| SearchBar                                 | debounce, hasil cepat (target <300ms)                                                                                                                                                                                                                                                                                                                                                          |
-| EmptyState / ErrorState / LoadingSkeleton | wajib untuk tiap list/detail                                                                                                                                                                                                                                                                                                                                                                   |
-| KeyboardHint                              | menampilkan shortcut aktif di layar entri tinggi-volume (jurnal, penerimaan barang, stock opname)                                                                                                                                                                                                                                                                                              |
-| SyncIndicator / OfflineBanner             | status koneksi & antrean sync                                                                                                                                                                                                                                                                                                                                                                  |
-| MoneyText / MaskedText                    | format IDR & masking data sensitif (gaji, rekening bank, NPWP)                                                                                                                                                                                                                                                                                                                                 |
-| `StateNotice`                             | denied/error banner bersama; `kind="error"` menutup cabang Error state pattern di layar SSR (lihat §State pattern wajib)                                                                                                                                                                                                                                                                       |
+| Component                                 | Key notes                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button                                    | primary/secondary/ghost/danger variants; loading & disabled states                                                                                                                                                                                                                                                                                                                                                |
+| Input / NumberInput                       | label, hint, error; NumberInput for qty/price/journal amounts (mono)                                                                                                                                                                                                                                                                                                                                              |
+| Select / Combobox                         | Combobox supports account/product/vendor/employee search                                                                                                                                                                                                                                                                                                                                                          |
+| Checkbox / Radio / Switch                 | switch for consent & feature toggles                                                                                                                                                                                                                                                                                                                                                                              |
+| Dialog / Drawer                           | focus trapped, `Esc` closes — planned as a native `<dialog>` (`showModal()` provides the browser's built-in focus trap + Esc-to-close) for confirming destructive actions (e.g. voiding a journal, cancelling a PO), replacing the `window.confirm`/`window.prompt` pattern. The admin sidebar itself (mobile drawer) is NOT a `<dialog>` — it stays a static `<nav>` on desktop, its focus trap written by hand. |
+| Toast                                     | success/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                  |
+| Table / DataGrid                          | sorting, keyset pagination, sticky columns, row density — used for the journal entry, purchase order, stock adjustment and payroll run lists; scroll-container shell + accessible `<caption>` + standard empty row; row rendering (badges, forms, per-row buttons) remains the caller's responsibility                                                                                                            |
+| Badge / StatusPill                        | colour-coded lifecycle status (draft/pending approval/posted/rejected/void/quarantine) — `success/warning/danger/info/neutral` variants, using the `-strong` tokens for fill+white text except `warning`, which keeps dark text so it stays AA in both themes                                                                                                                                                     |
+| ArchiveFilter                             | `active`, `archived`, `all` toggle/filter for permitted roles                                                                                                                                                                                                                                                                                                                                                     |
+| Card / Panel                              | content container                                                                                                                                                                                                                                                                                                                                                                                                 |
+| FormField                                 | wraps label+input+error consistently — a label/hint/error wrapper with a default slot for the native control (the caller still sets `type`/`name`/`required`)                                                                                                                                                                                                                                                     |
+| Tabs                                      | entity detail (account, purchase order, product, employee)                                                                                                                                                                                                                                                                                                                                                        |
+| Pagination                                | keyset (next/prev), not large offsets — two prev/next buttons dispatching `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                                         |
+| `FilterBar`                               | container toolbar for list filter controls (`role="search"` + a mandatory label); it does not handle the filter logic itself — that remains the page's responsibility, same as `DataTable`                                                                                                                                                                                                                        |
+| `ActionBanner`                            | post-mutation success/error feedback banner (`role="alert"`); used consistently by `showBanner()` in the admin client helper (see doc 15) without manual duplication per screen                                                                                                                                                                                                                                   |
+| SearchBar                                 | debounced, fast results (target <300ms)                                                                                                                                                                                                                                                                                                                                                                           |
+| EmptyState / ErrorState / LoadingSkeleton | mandatory for every list/detail                                                                                                                                                                                                                                                                                                                                                                                   |
+| KeyboardHint                              | shows the active shortcuts on high-volume entry screens (journal, goods receipt, stock count)                                                                                                                                                                                                                                                                                                                     |
+| SyncIndicator / OfflineBanner             | connection status & sync queue                                                                                                                                                                                                                                                                                                                                                                                    |
+| MoneyText / MaskedText                    | IDR formatting & masking of sensitive data (salary, bank account, NPWP)                                                                                                                                                                                                                                                                                                                                           |
+| `StateNotice`                             | shared denied/error banner; `kind="error"` closes the Error branch of the state pattern on SSR screens (see §Mandatory state pattern)                                                                                                                                                                                                                                                                             |
 
-Helper klien non-visual yang direncanakan (`src/lib/ui/admin-form-client.ts`, mengikuti pola awcms-mini) — `submitJson`/`showBanner`/`lockElement` dipakai bersama oleh `<script>` tiap layar admin untuk fetch+banner+anti-double-submit; bukan komponen Astro, tapi sumber kebenaran yang sama untuk pola "kunci tombol pemicu selama mutation in-flight" di §Form UX. Pasangan non-visual untuk `ConfirmDialog.astro` (mis. `confirm-dialog-client.ts`) mengikuti pola yang sama.
+The planned non-visual client helper (`src/lib/ui/admin-form-client.ts`, following the awcms-mini pattern) — `submitJson`/`showBanner`/`lockElement` are shared by the `<script>` of every admin screen for fetch+banner+anti-double-submit; not an Astro component, but the same source of truth for the "lock the triggering button while a mutation is in flight" pattern in §Form UX. The non-visual counterpart for `ConfirmDialog.astro` (e.g. `confirm-dialog-client.ts`) follows the same pattern.
 
-### Migrasi bertahap layar besar (pola, bukan status)
+### Incremental migration of large screens (a pattern, not a status)
 
-Saat layar admin ERP besar (mis. entri jurnal, form purchase order multi-baris) diimplementasikan, ikuti pola atomic-per-issue yang terbukti di awcms-mini: bangun langsung dengan primitive di atas (`DataTable`, `StatusBadge`, `ActionBanner`, `FormField`, `ConfirmDialog`) alih-alih markup ad-hoc, dan migrasikan layar lama satu per satu bila ada — jangan redesign penuh sekaligus. Pola SSR-read-langsung/mutation-lewat-API (doc 15) tidak berubah oleh migrasi markup/CSS/script client.
+When a large ERP admin screen (e.g. journal entry, a multi-line purchase order form) is implemented, follow the atomic-per-issue pattern proven in awcms-mini: build it directly out of the primitives above (`DataTable`, `StatusBadge`, `ActionBanner`, `FormField`, `ConfirmDialog`) instead of ad-hoc markup, and migrate old screens one at a time if any exist — do not do a full redesign all at once. The SSR-read-directly/mutation-through-the-API pattern (doc 15) is not changed by a markup/CSS/client-script migration.
 
-## Information architecture (navigasi role-aware)
+## Information architecture (role-aware navigation)
 
 ```mermaid
 flowchart TD
   Root[AWCMS] --> Auth[Login]
-  Auth --> Setup[Setup Wizard - sebelum locked]
+  Auth --> Setup[Setup Wizard - before locked]
   Auth --> Shell{Persona}
   Shell -->|Admin/Owner| Admin[Admin Shell]
-  Shell -->|Staf Operasional| Ops[Entri Operasional Fullscreen]
-  Shell -->|Vendor/Karyawan| Portal[Portal Eksternal]
+  Shell -->|Operational Staff| Ops[Fullscreen Operational Entry]
+  Shell -->|Vendor/Employee| Portal[External Portal]
 
   Admin --> Dash[Dashboard]
   Admin --> Fin[Finance & Accounting]
@@ -133,48 +135,48 @@ flowchart TD
   Admin --> Proc[Procurement]
   Admin --> Mfg[Manufacturing]
   Admin --> Hr[HR & Payroll]
-  Admin --> Tax[Pajak/Coretax]
-  Admin --> Rep[Laporan]
-  Admin --> Usr[User & Akses]
+  Admin --> Tax[Tax/Coretax]
+  Admin --> Rep[Reports]
+  Admin --> Usr[Users & Access]
   Admin --> Logs[Logs & Security]
-  Admin --> Setg[Pengaturan]
+  Admin --> Setg[Settings]
 ```
 
-Item menu difilter oleh permission efektif user (RBAC/ABAC). Menu tanpa akses disembunyikan, tetapi endpoint tetap dilindungi ABAC.
+Menu items are filtered by the user's effective permissions (RBAC/ABAC). Menus without access are hidden, but the endpoints stay protected by ABAC.
 
 ## Layout shell
 
 ### Auth screen (login) — modern, mobile-first
 
-`src/pages/login.astro` adalah pola layar auth publik **kanonis** (UI/UX overhaul, Issue #166/#215): kartu `.auth-card` terpusat di atas background radial-gradient halus (`--color-primary-soft` + `--color-surface-2` + `--color-bg`), elevasi `--shadow-lg`, radius `--radius-xl`. Layar auth publik lain (forgot/reset password bila ditambah kelak) mengikuti pola ini.
+`src/pages/login.astro` is the **canonical** public auth screen pattern (UI/UX overhaul, Issue #166/#215): an `.auth-card` centred on top of a subtle radial-gradient background (`--color-primary-soft` + `--color-surface-2` + `--color-bg`), elevation `--shadow-lg`, radius `--radius-xl`. Other public auth screens (forgot/reset password, if added later) follow this pattern.
 
 ```text
 ┌───────────────────────────┐
-│  [A]  AWCMS                │  ← brand: .auth-mark (badge gradient) + .auth-wordmark
+│  [A]  AWCMS                │  ← brand: .auth-mark (gradient badge) + .auth-wordmark
 │  Sign in                   │  ← .auth-title (h1)
 │  Welcome back. Sign in…    │  ← .auth-subtitle
 │  ┌───────────────────────┐ │
-│  │ SIGNING IN TO         │ │  ← .auth-tenant-context (mode single-tenant)
+│  │ SIGNING IN TO         │ │  ← .auth-tenant-context (single-tenant mode)
 │  │ <Tenant name>         │ │
 │  └───────────────────────┘ │
 │  Login identifier  [_____] │
-│  Password     [____] [Show]│  ← .auth-password + toggle show/hide
+│  Password     [____] [Show]│  ← .auth-password + show/hide toggle
 │  [      Sign in         ]  │  ← .auth-submit (primary)
 │  Secured workspace access  │  ← .auth-foot
 └───────────────────────────┘
 ```
 
-Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
+Pattern rules (already implemented — follow them, do not regress):
 
-- **Kontrak DOM stabil** (jangan rename — script client + spec E2E `tests/e2e/login.e2e.ts` bergantung padanya): `#login-form`, `#tenant-id`, `#login-identifier`, `#password`, `#login-submit`, `#login-error`. Field tenant SELALU `id="tenant-id"` + `name="tenantId"` di ketiga bentuknya sehingga submit (`FormData`) tetap jalan dan header `X-AWCMS-Tenant-ID` tetap terkirim.
-- **Field tenant adaptif** (`awcms_tenants` = tabel root RLS-free, dibaca SSR read-only tanpa konteks tenant, dibatasi `TENANT_PICKER_LIMIT`): 0 baris / error DB / > limit → input teks manual (kompatibel-mundur + hindari enumerasi tenant massal); tepat 1 → readout read-only "Signing in to <name>" (`.auth-tenant-context`) + `#tenant-id` hidden; 2..limit → `<select>` nama tenant (value = UUID). Merender nama tenant ke pengunjung tak terautentikasi saat count > 1 adalah keputusan produk yang diterima untuk base repo (query dibatasi + read-only).
-- **Toggle show/hide password** di-wire di script MODUL yang di-bundle (bukan `onclick` inline — CSP `default-src 'self'` tanpa `'unsafe-inline'`), `aria-pressed` + `aria-label` yang berubah saat state berubah.
-- **Select kustom**: caret digambar via CSS (`.auth-select::after`, trik border), bukan `data:` URI SVG — tetap CSP-safe; native `<select>` tetap dipakai.
-- **Entrance kartu** `@keyframes auth-card-rise` = `transform`-saja (translateY), BUKAN utility `.fade-in-up` yang dari `opacity:0` (lihat §Motion — hindari flag kontras axe pada teks utama). Sertakan guard reduced-motion lokal.
-- **CSP ketat (single-owner)**: `tokens.css`/`motion.css` + `<style>` scoped semua di-emit sebagai `<link>` eksternal same-origin (`build.inlineStylesheets: "never"`, `astro.config.mjs`); script login = modul yang di-bundle (bukan `is:inline`); satu-satunya `is:inline` `<script src>` adalah loader Cloudflare Turnstile, dan hanya saat `isTurnstileRequired()` (`src/lib/security/turnstile.ts`).
-- **i18n**: string layar ini masih hardcode EN — mengikuti pipeline ekstraksi `.po`/`.pot` (§Internationalization, "rencana pipeline"); saat pipeline itu diaktifkan, ganti ke `t("auth.login.*")` sekaligus (jangan sebagian).
+- **Stable DOM contract** (do not rename — the client script + the E2E spec `tests/e2e/login.e2e.ts` depend on it): `#login-form`, `#tenant-id`, `#login-identifier`, `#password`, `#login-submit`, `#login-error`. The tenant field is ALWAYS `id="tenant-id"` + `name="tenantId"` in all three of its shapes so that the submit (`FormData`) keeps working and the `X-AWCMS-Tenant-ID` header is still sent.
+- **Adaptive tenant field** (`awcms_tenants` = the RLS-free root table, read SSR read-only without a tenant context, bounded by `TENANT_PICKER_LIMIT`): 0 rows / DB error / > limit → a manual text input (backwards-compatible + avoids mass tenant enumeration); exactly 1 → a read-only "Signing in to <name>" readout (`.auth-tenant-context`) + a hidden `#tenant-id`; 2..limit → a `<select>` of tenant names (value = UUID). Rendering tenant names to an unauthenticated visitor when count > 1 is an accepted product decision for the base repo (the query is bounded + read-only).
+- **The show/hide password toggle** is wired in the bundled MODULE script (not an inline `onclick` — the CSP is `default-src 'self'` without `'unsafe-inline'`), with `aria-pressed` + `aria-label` that change when the state changes.
+- **Custom select**: the caret is drawn via CSS (`.auth-select::after`, a border trick), not a `data:` URI SVG — staying CSP-safe; the native `<select>` is still used.
+- **Card entrance** `@keyframes auth-card-rise` = `transform`-only (translateY), NOT the `.fade-in-up` utility which starts from `opacity:0` (see §Motion — avoid axe contrast flags on main text). Include a local reduced-motion guard.
+- **Strict CSP (single-owner)**: `tokens.css`/`motion.css` + the scoped `<style>` are all emitted as external same-origin `<link>`s (`build.inlineStylesheets: "never"`, `astro.config.mjs`); the login script is a bundled module (not `is:inline`); the only `is:inline` `<script src>` is the Cloudflare Turnstile loader, and only when `isTurnstileRequired()` (`src/lib/security/turnstile.ts`).
+- **i18n**: the strings on this screen are still hardcoded EN — following the `.po`/`.pot` extraction pipeline (§Internationalization, "planned pipeline"); when that pipeline is switched on, move them to `t("auth.login.*")` all at once (not partially).
 
-### Admin shell (desktop-first, responsive drawer di bawah `--bp-md`)
+### Admin shell (desktop-first, responsive drawer below `--bp-md`)
 
 ```text
 ┌───────────────────────────────────────────────────────────┐
@@ -182,44 +184,44 @@ Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
 ├───────────┬───────────────────────────────────────────────┤
 │ Sidebar   │  Breadcrumb                                    │
 │  Dashboard│  ┌─────────────────────────────────────────┐  │
-│  Finance  │  │  Konten (list/detail/form)              │  │
+│  Finance  │  │  Content (list/detail/form)             │  │
 │  Inventory│  │  - LoadingSkeleton / EmptyState / Error │  │
 │  Procure  │  │                                         │  │
 │  HR       │  └─────────────────────────────────────────┘  │
-│  Laporan  │                                               │
+│  Reports  │                                               │
 └───────────┴───────────────────────────────────────────────┘
 ```
 
-**Responsif (direncanakan)**: di bawah `--bp-md` (768px), sidebar di atas berubah jadi off-canvas drawer — disembunyikan (`transform: translateX(-100%)`) sampai tombol hamburger topbar (`#admin-nav-toggle`, `aria-expanded`/`aria-controls`) ditekan. Saat terbuka: scrim (`#admin-sidebar-scrim`) menutup drawer bila diklik, `Esc` menutup dan mengembalikan fokus ke tombol toggle, fokus berpindah ke item nav pertama saat dibuka, dan sisa halaman (topbar/main) diberi `inert` selama drawer terbuka (focus trap manual). Skip-link (`.skip-link`) dan `aria-current="page"` pada link aktif konsisten di kedua breakpoint. Di `--bp-md` ke atas, sidebar tetap statis-selalu-tampil, tombol toggle disembunyikan (`display: none`, otomatis keluar dari urutan tab).
+**Responsive (planned)**: below `--bp-md` (768px), the sidebar above turns into an off-canvas drawer — hidden (`transform: translateX(-100%)`) until the topbar hamburger button (`#admin-nav-toggle`, `aria-expanded`/`aria-controls`) is pressed. While open: a scrim (`#admin-sidebar-scrim`) closes the drawer when clicked, `Esc` closes it and returns focus to the toggle button, focus moves to the first nav item when it opens, and the rest of the page (topbar/main) is marked `inert` while the drawer is open (a hand-written focus trap). The skip link (`.skip-link`) and `aria-current="page"` on the active link are consistent at both breakpoints. At `--bp-md` and above, the sidebar stays static-always-visible and the toggle button is hidden (`display: none`, which automatically removes it from the tab order).
 
-**Tenant badge, bukan tenant switcher**: topbar menampilkan `TenantBadge.astro` — badge non-interaktif (`<div role="status">`) pada deployment single-tenant, BUKAN kontrol dropdown yang seolah aktif tapi `disabled`. Alasan: kontrol switcher SUNGGUHAN hanya boleh dirender bila `availableTenants` (prop komponen) berisi daftar yang dihitung SERVER-side dari data otorisasi nyata — menampilkan kontrol interaktif (walau disabled) tanpa kapabilitas switch tenant yang sungguhan akan menyiratkan kapabilitas keamanan yang tidak ada dan tidak diperiksa di manapun, melanggar acceptance criterion "No authorization decision relies on hidden/disabled UI alone".
+**Tenant badge, not a tenant switcher**: the topbar shows `TenantBadge.astro` — a non-interactive badge (`<div role="status">`) on a single-tenant deployment, NOT a dropdown control that looks active but is `disabled`. The reason: a REAL switcher control may only be rendered when `availableTenants` (a component prop) holds a list computed SERVER-side from real authorization data — showing an interactive control (even a disabled one) without a genuine tenant-switch capability would imply a security capability that does not exist and is not checked anywhere, violating the acceptance criterion "No authorization decision relies on hidden/disabled UI alone".
 
-### Entri operasional fullscreen (keyboard-first) — contoh: penerimaan barang gudang
+### Fullscreen operational entry (keyboard-first) — example: warehouse goods receipt
 
 ```text
 ┌───────────────────────────────────────────────────────────┐
-│ Petugas: <nama> · Gudang: <lokasi> · Sync● · [F1 Bantuan]  │
+│ Staff: <name> · Warehouse: <location> · Sync● · [F1 Help]  │
 ├──────────────────────────────┬────────────────────────────┤
-│ [F2] Cari/scan SKU/PO....... │  Baris penerimaan           │
-│ ┌──────────────────────────┐ │  1. SKU-A     x20   diterima│
-│ │ Hasil pencarian          │ │  2. SKU-B     x5    diterima│
+│ [F2] Search/scan SKU/PO..... │  Receipt lines              │
+│ ┌──────────────────────────┐ │  1. SKU-A     x20   received│
+│ │ Search results           │ │  2. SKU-B     x5    received│
 │ └──────────────────────────┘ │  ------------------------- │
-│                              │  Total baris        25     │
-│                              │  Selisih vs PO        0    │
+│                              │  Total lines        25     │
+│                              │  Variance vs PO       0    │
 ├──────────────────────────────┴────────────────────────────┤
-│ [F4] Qty  [F6] Catatan  [F8] Simpan draft  [F10] Posting   │
+│ [F4] Qty  [F6] Notes  [F8] Save draft  [F10] Post          │
 └───────────────────────────────────────────────────────────┘
 ```
 
-### Portal vendor/karyawan (mobile-first)
+### Vendor/employee portal (mobile-first)
 
 ```text
 ┌─────────────────────┐
-│  Slip Gaji #PR-000123│
-│  Periode · Juli 2026 │
+│  Payslip #PR-000123  │
+│  Period · July 2026  │
 ├─────────────────────┤
-│  Komponen ........   │
-│  Total netto  8.850  │
+│  Components ......   │
+│  Net total   8.850   │
 │  [⬇ Download PDF]    │
 │  Consent WA  [switch]│
 │  Consent Email[switch]│
@@ -228,148 +230,148 @@ Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
 
 ## Screen inventory
 
-> **Rencana**, bukan implementasi. Route, komponen, dan endpoint di bawah adalah target arsitektur untuk modul ERP yang belum dibangun — akan diperbarui/diperinci saat modul terkait masuk sprint implementasi (lihat doc `06_github_issues_detail.md`, saat ditulis).
+> **A plan**, not an implementation. The routes, components, and endpoints below are the target architecture for ERP modules that have not been built — they will be updated/refined when the relevant module enters an implementation sprint (see doc `06_github_issues_detail.md`, once written).
 
-| Route                           | Persona         | Tujuan                                            | Komponen utama                  | API utama (rencana)                                           |
+| Route                           | Persona         | Purpose                                           | Main components                 | Main API (planned)                                            |
 | ------------------------------- | --------------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------------------- |
-| `/login`                        | Semua           | Autentikasi                                       | FormField, Button               | `POST /auth/login`                                            |
-| `/setup`                        | Owner awal      | Setup wizard                                      | Stepper, FormField              | `GET/POST /setup/*`                                           |
+| `/login`                        | Everyone        | Authentication                                    | FormField, Button               | `POST /auth/login`                                            |
+| `/setup`                        | Initial owner   | Setup wizard                                      | Stepper, FormField              | `GET/POST /setup/*`                                           |
 | `/admin`                        | Admin/Owner     | Dashboard                                         | Card, Chart, Table              | `GET /reports/*`                                              |
-| `/admin/finance/ledger`         | Finance staff   | Data table entri jurnal (buku besar)              | DataGrid, SearchBar, Dialog     | `/finance/journal-entries`                                    |
+| `/admin/finance/ledger`         | Finance staff   | Journal entry data table (general ledger)         | DataGrid, SearchBar, Dialog     | `/finance/journal-entries`                                    |
 | `/admin/finance/coa`            | Finance staff   | Chart of accounts                                 | Tabs, DataGrid                  | `/finance/accounts`                                           |
-| `/admin/inventory/products`     | Admin/Inventory | List/CRUD produk & bahan baku                     | DataGrid, SearchBar, Dialog     | `/inventory/products`                                         |
+| `/admin/inventory/products`     | Admin/Inventory | Product & raw material list/CRUD                  | DataGrid, SearchBar, Dialog     | `/inventory/products`                                         |
 | `/admin/inventory/stock`        | Admin/Inventory | Stock adjustment & opening balance                | DataGrid, NumberInput           | `/inventory/stock-adjustment-requests`                        |
-| `/admin/warehouse`              | Gudang          | Transfer, bin, cycle count                        | Tabs, StatusPill                | `/warehouses`, `/warehouse-transfers`                         |
-| `/admin/procurement/po`         | Purchasing      | Purchase order form (multi-baris) & approval      | FormField, DataGrid, StatusPill | `/procurement/purchase-orders`                                |
-| `/admin/manufacturing`          | Produksi        | Work order, BOM, konsumsi bahan                   | Tabs, DataGrid                  | `/manufacturing/work-orders`                                  |
+| `/admin/warehouse`              | Warehouse       | Transfer, bin, cycle count                        | Tabs, StatusPill                | `/warehouses`, `/warehouse-transfers`                         |
+| `/admin/procurement/po`         | Purchasing      | Purchase order form (multi-line) & approval       | FormField, DataGrid, StatusPill | `/procurement/purchase-orders`                                |
+| `/admin/manufacturing`          | Production      | Work order, BOM, material consumption             | Tabs, DataGrid                  | `/manufacturing/work-orders`                                  |
 | `/admin/hr/payroll`             | HR/Payroll      | Payroll run wizard                                | Stepper, DataGrid, StatusPill   | `/hr/payroll-runs`                                            |
-| `/admin/tax`                    | Tax Officer     | Faktur pajak, Coretax                             | DataGrid, MaskedText            | `/tax/*`                                                      |
-| `/admin/reports`                | Analyst/Owner   | Laporan keuangan & operasional                    | Chart, Table                    | `/reports/*`                                                  |
-| `/admin/users` + `/admin/roles` | Admin/Owner     | User & akses (dua layar terpisah, bukan digabung) | Table, FormField                | `/users/*`, `/roles/*`, `/permissions`, `/access/assignments` |
-| `/admin/sync`                   | Admin/Owner     | Node, konflik, antrean sync                       | Table, StatusPill, FormField    | `/sync/nodes`, `/sync/conflicts/*`, `/sync/object-queue/*`    |
+| `/admin/tax`                    | Tax Officer     | Tax invoice, Coretax                              | DataGrid, MaskedText            | `/tax/*`                                                      |
+| `/admin/reports`                | Analyst/Owner   | Financial & operational reports                   | Chart, Table                    | `/reports/*`                                                  |
+| `/admin/users` + `/admin/roles` | Admin/Owner     | Users & access (two separate screens, not merged) | Table, FormField                | `/users/*`, `/roles/*`, `/permissions`, `/access/assignments` |
+| `/admin/sync`                   | Admin/Owner     | Nodes, conflicts, sync queue                      | Table, StatusPill, FormField    | `/sync/nodes`, `/sync/conflicts/*`, `/sync/object-queue/*`    |
 | `/admin/logs`                   | Auditor/Admin   | Logs & security                                   | DataGrid, Badge                 | `/logs/*`, `/security/*`                                      |
-| `/admin/modules`                | Admin/Owner     | List, filter modul + health                       | DataGrid, StatusPill            | `/modules`, `/modules/{moduleKey}/health`                     |
-| `/portal/vendor/{token}`        | Vendor          | Status PO & pembayaran                            | Card, Table                     | `/procurement/vendor-portal/*`                                |
-| `/portal/employee/{token}`      | Karyawan        | Slip gaji & consent                               | Card, Switch                    | `/hr/payslips/*`                                              |
+| `/admin/modules`                | Admin/Owner     | Module list, filter + health                      | DataGrid, StatusPill            | `/modules`, `/modules/{moduleKey}/health`                     |
+| `/portal/vendor/{token}`        | Vendor          | PO & payment status                               | Card, Table                     | `/procurement/vendor-portal/*`                                |
+| `/portal/employee/{token}`      | Employee        | Payslip & consent                                 | Card, Switch                    | `/hr/payslips/*`                                              |
 
-## State pattern wajib
+## Mandatory state pattern
 
 ```mermaid
 stateDiagram-v2
   [*] --> Loading
-  Loading --> Empty: data kosong
-  Loading --> Ready: data ada
-  Loading --> Error: gagal
-  Ready --> Submitting: aksi mutation
-  Submitting --> Ready: sukses (toast)
-  Submitting --> Error: gagal (pesan aman)
+  Loading --> Empty: no data
+  Loading --> Ready: data present
+  Loading --> Error: failed
+  Ready --> Submitting: mutation action
+  Submitting --> Ready: success (toast)
+  Submitting --> Error: failed (safe message)
   Error --> Loading: retry
 ```
 
-- **Loading**: skeleton, bukan spinner kosong untuk list.
-- **Empty**: pesan + call-to-action (mis. "Belum ada purchase order. Buat PO baru").
-- **Error**: pesan user-friendly (petakan error code standar), tanpa detail teknis.
-- **Optimistic**: baris entri operasional (mis. penerimaan barang) update instan; rollback bila server menolak.
-- **Offline**: banner + antrean; aksi tetap tersimpan lokal (doc 15).
-- **Archived/deleted**: list default menyembunyikan item; role berizin dapat membuka filter arsip, melihat badge `Diarsipkan`, dan menjalankan restore.
+- **Loading**: a skeleton, not an empty spinner, for lists.
+- **Empty**: a message + call-to-action (e.g. "No purchase orders yet. Create a new PO").
+- **Error**: a user-friendly message (map the standard error codes), without technical details.
+- **Optimistic**: operational entry rows (e.g. goods receipt) update instantly; roll back if the server rejects.
+- **Offline**: banner + queue; the action is still stored locally (doc 15).
+- **Archived/deleted**: the list hides the items by default; a permitted role can open the archive filter, see the `Archived` badge, and run a restore.
 
-## Aksesibilitas (WCAG 2.1 AA)
+## Accessibility (WCAG 2.1 AA)
 
-- Kontras teks minimal 4.5:1 (cek token).
-- Semua kontrol dapat difokus & dioperasikan keyboard; urutan tab logis.
-- Cincin fokus terlihat (`--color-focus`), jangan `outline:none` tanpa pengganti.
-- Label eksplisit untuk setiap input; error diumumkan (`aria-live`).
-- Dialog memerangkap fokus; `Esc` menutup; fokus kembali ke pemicu.
-- Target sentuh ≥ 44px untuk portal mobile.
-- Jangan mengandalkan warna saja untuk status (tambah ikon/teks).
-- Toggle show/hide password: `aria-pressed` + `aria-label` yang mengikuti state, di-wire via `addEventListener` (bukan `onclick` inline — CSP `default-src 'self'`). Contoh: `login.astro` `#password-toggle`.
-- Kontrol kustom yang menyembunyikan native (mis. `<select>` bergaya): gambar afordansi (caret) via CSS `::after`, bukan `data:` URI; native `<select>` tetap dipakai agar keyboard + a11y bawaan tetap ada.
+- Text contrast at least 4.5:1 (check the tokens).
+- Every control is focusable & keyboard-operable; the tab order is logical.
+- The focus ring is visible (`--color-focus`); never `outline:none` without a replacement.
+- Explicit labels for every input; errors are announced (`aria-live`).
+- Dialogs trap focus; `Esc` closes; focus returns to the trigger.
+- Touch targets ≥ 44px for the mobile portal.
+- Do not rely on colour alone for status (add an icon/text).
+- Show/hide password toggle: `aria-pressed` + `aria-label` that follow the state, wired via `addEventListener` (not an inline `onclick` — the CSP is `default-src 'self'`). Example: `login.astro` `#password-toggle`.
+- Custom controls that hide the native one (e.g. a styled `<select>`): draw the affordance (caret) via CSS `::after`, not a `data:` URI; the native `<select>` is still used so the built-in keyboard + a11y behaviour remains.
 
 ## Internationalization (i18n)
 
-> **Status:** direncanakan mengikuti pola i18n awcms-mini yang sudah terbukti (parser `.po` murni tanpa dependency, katalog loader, `t()`, resolusi locale, formatter) — **belum diimplementasikan di repo ini**. Saat dibangun, ikuti desain berikut sebagai baseline yang mengikat, bukan draf terbuka.
+> **Status:** planned to follow the proven awcms-mini i18n pattern (a pure `.po` parser with no dependencies, a catalogue loader, `t()`, locale resolution, formatters) — **not yet implemented in this repo**. When it is built, follow the design below as a binding baseline, not an open draft.
 
-i18n memakai **dua lapisan terpisah** sesuai sumber teksnya:
+i18n uses **two separate layers** according to the source of the text:
 
-**1. String UI statis** (chrome aplikasi: label, tombol, judul, pesan error, navigasi) → **file katalog `.po`/`.pot` standar gettext**, di-**bundle bersama aplikasi**, bukan di database. Satu template `messages.pot` + satu berkas per locale (`en.po`, `id.po`). Kunci pesan `namespace.key` (mis. `auth.login.submit`, `error.access_denied`). Semua string UI dirender lewat helper `t(key, params)`; **tidak ada teks hardcode**.
+**1. Static UI strings** (application chrome: labels, buttons, titles, error messages, navigation) → **standard gettext `.po`/`.pot` catalogue files**, **bundled with the application**, not in the database. One `messages.pot` template + one file per locale (`en.po`, `id.po`). Message keys are `namespace.key` (e.g. `auth.login.submit`, `error.access_denied`). Every UI string is rendered through the `t(key, params)` helper; **there is no hardcoded text**.
 
-**2. Data input pengguna** (konten yang diketik user dan perlu tampil multi-bahasa, mis. deskripsi produk/catatan approval) → disimpan **di database untuk setiap locale aktif** (satu nilai per bahasa aktif), **bukan** di `.po`. Pola penyimpanan per-bahasa akan didokumentasikan di `docs/awcms/04_erd_data_dictionary.md` §Konten multi-bahasa (saat ditulis). `.po` hanya untuk teks statis pengembang, DB untuk konten dinamis pengguna.
+**2. User-entered data** (content typed by users that must appear in multiple languages, e.g. product descriptions/approval notes) → stored **in the database for every active locale** (one value per active language), **not** in `.po`. The per-language storage pattern will be documented in `docs/awcms/04_erd_data_dictionary.md` §Multi-language content (once written). `.po` is only for the developers' static text, the DB is for dynamic user content.
 
-- **Locale minimal (rencana)**: **en** dan **id** (arsitektur siap ms/ar — kolom `default_locale` tetap `text` bebas, bukan `enum`/`CHECK`, agar ms/ar bisa ditambah tanpa migration schema; UI hanya menampilkan locale yang benar-benar punya katalog). **Default = `en`** (`awcms_tenants.default_locale`).
-- **Resolusi locale**: cookie `awcms_locale` (diset language switcher) → `default_locale` tenant → fallback `en`. Direncanakan diresolusi di `src/middleware.ts` **sebelum** halaman `/admin/*` mana pun dirender — bukan di dalam layout, karena frontmatter halaman berjalan lebih dulu daripada frontmatter layout yang membungkusnya.
-- **Cookie, bukan localStorage**: berbeda dari toggle tema (CSS murni, bisa "diperbaiki" di klien sebelum paint), locale mengubah teks yang sudah di-render SSR — server harus tahu locale **sebelum** merender, dan hanya cookie yang ikut terkirim bersama request.
-- **Language switcher** (`LanguageSwitcher.astro`) menampilkan **ikon bendera** per bahasa + nama asli bahasa itu sendiri, bukan diterjemahkan ke locale aktif (mis. 🇬🇧 English, 🇮🇩 Bahasa Indonesia); memilih men-set cookie lalu reload penuh (bukan swap instan seperti tema).
-- **Pesan error ter-i18n**: kode error dipetakan ke key `error.*` (`src/lib/i18n/error-messages.ts`); untuk banner aksi client-side, peta `{code: pesan}` di-inject sebagai `<script type="application/json">` di halaman (katalog `.po` hanya bisa dibaca server-side via `Bun.file`).
-- **Format lokal**: angka/mata uang (IDR + pemisah ribuan sesuai locale) dan tanggal (`Asia/Jakarta`, `Intl.DateTimeFormat`/`NumberFormat`) sadar-locale — `src/lib/i18n/format.ts`.
+- **Minimum locales (planned)**: **en** and **id** (the architecture is ready for ms/ar — the `default_locale` column stays free `text`, not an `enum`/`CHECK`, so ms/ar can be added without a schema migration; the UI only shows locales that actually have a catalogue). **Default = `en`** (`awcms_tenants.default_locale`).
+- **Locale resolution**: the `awcms_locale` cookie (set by the language switcher) → the tenant's `default_locale` → fallback `en`. Planned to be resolved in `src/middleware.ts` **before** any `/admin/*` page renders — not inside the layout, because a page's frontmatter runs before the frontmatter of the layout that wraps it.
+- **Cookie, not localStorage**: unlike the theme toggle (pure CSS, which can be "fixed up" on the client before paint), the locale changes text that has already been SSR-rendered — the server must know the locale **before** rendering, and only a cookie is sent along with the request.
+- **The language switcher** (`LanguageSwitcher.astro`) shows a **flag icon** per language + that language's own native name, not translated into the active locale (e.g. 🇬🇧 English, 🇮🇩 Bahasa Indonesia); choosing one sets the cookie and then does a full reload (not an instant swap like the theme).
+- **i18n'd error messages**: error codes are mapped to `error.*` keys (`src/lib/i18n/error-messages.ts`); for client-side action banners, the `{code: message}` map is injected as a `<script type="application/json">` in the page (the `.po` catalogue can only be read server-side via `Bun.file`).
+- **Local formatting**: numbers/currency (IDR + locale-appropriate thousands separators) and dates (`Asia/Jakarta`, `Intl.DateTimeFormat`/`NumberFormat`) are locale-aware — `src/lib/i18n/format.ts`.
 
-### Extraction, parity, dan obsolete key (rencana pipeline)
+### Extraction, parity, and obsolete keys (planned pipeline)
 
-> **Belum diimplementasikan.** Seluruh subbagian ini adalah rencana
-> pipeline, bukan tooling yang bisa dipanggil hari ini: tidak ada
-> direktori `i18n/` di repo ini, dan tidak ada key `i18n:extract`,
-> `i18n:pot:check`, atau `i18n:parity:check` di `package.json` — juga
-> tidak ada `scripts/i18n-extract.ts`. Baca setiap `bun run i18n:*` di
-> bawah sebagai spesifikasi target, bukan panduan langkah-demi-langkah
-> yang sudah bisa dijalankan.
+> **Not implemented yet.** This whole subsection is a pipeline
+> plan, not tooling you can call today: there is no
+> `i18n/` directory in this repo, and there is no `i18n:extract`,
+> `i18n:pot:check`, or `i18n:parity:check` key in `package.json` — nor
+> is there a `scripts/i18n-extract.ts`. Read every `bun run i18n:*` below
+> as a target specification, not as a step-by-step guide
+> that can already be run.
 
-`i18n/messages.pot` **tidak ditulis tangan** — pipeline `scripts/i18n-extract.ts` (`bun run i18n:extract`) akan men-scan seluruh `.astro`/`.ts`/`.tsx` di `src/` untuk setiap pemanggilan `t("key")`, lalu menulis ulang `messages.pot` (terurut alfabetis, satu komentar `#: file:line` per key, deterministik).
+`i18n/messages.pot` is **not hand-written** — the `scripts/i18n-extract.ts` pipeline (`bun run i18n:extract`) will scan every `.astro`/`.ts`/`.tsx` under `src/` for each `t("key")` call, then rewrite `messages.pot` (alphabetically sorted, one `#: file:line` comment per key, deterministic).
 
-**Menambah string UI baru** (alur yang direncanakan):
+**Adding a new UI string** (the planned flow):
 
-1. Pakai `t("namespace.key", params?)` di source seperti biasa.
-2. Jalankan `bun run i18n:extract` — key baru otomatis masuk `i18n/messages.pot`.
-3. Isi `msgstr` untuk key baru itu di `i18n/en.po` **dan** `i18n/id.po` (langkah manual — extraction hanya mengurus inventaris key, bukan menerjemahkan).
-4. Commit ketiga berkas (`messages.pot`, `en.po`, `id.po`) bersamaan.
-5. `bun run i18n:pot:check` (bagian dari `bun run check`) akan memverifikasi `messages.pot` yang di-commit identik dengan hasil regenerasi dari source. `bun run i18n:parity:check` akan memverifikasi: (a) key set `en.po`/`id.po`/`messages.pot` identik, (b) setiap key yang punya placeholder `{name}`-style di `en.po` punya placeholder yang sama persis di `id.po` (dan sebaliknya).
+1. Use `t("namespace.key", params?)` in the source as usual.
+2. Run `bun run i18n:extract` — the new key is added to `i18n/messages.pot` automatically.
+3. Fill in the `msgstr` for that new key in `i18n/en.po` **and** `i18n/id.po` (a manual step — extraction only manages the key inventory, it does not translate).
+4. Commit all three files (`messages.pot`, `en.po`, `id.po`) together.
+5. `bun run i18n:pot:check` (part of `bun run check`) will verify that the committed `messages.pot` is identical to the result of regenerating it from source. `bun run i18n:parity:check` will verify: (a) the key sets of `en.po`/`id.po`/`messages.pot` are identical, (b) every key that has a `{name}`-style placeholder in `en.po` has exactly the same placeholder in `id.po` (and vice versa).
 
-**Pola dynamic key** (`t(\`namespace.${variable}\`)`, `t(entry.labelKey)`, `t(key)`dari map seperti`ERROR_CODE_KEYS`) tidak bisa ditemukan lewat scan string literal biasa — akan ditangani lewat `DYNAMIC_KEY_FAMILIES`table dan scan`labelKey:`/`ERROR_CODE_KEYS` eksplisit, mengikuti pola awcms-mini.
+**Dynamic key patterns** (`t(\`namespace.${variable}\`)`, `t(entry.labelKey)`, `t(key)`from a map such as`ERROR_CODE_KEYS`) cannot be found by a plain string-literal scan — they will be handled through a `DYNAMIC_KEY_FAMILIES`table and an explicit`labelKey:`/`ERROR_CODE_KEYS` scan, following the awcms-mini pattern.
 
-**Key obsolete** (ada di `en.po`/`id.po` tapi sudah tidak ditemukan `bun run i18n:extract` di source manapun) akan dilaporkan sebagai peringatan, bukan dihapus otomatis; ditandai prefix `#~ ` (konvensi gettext) alih-alih dihapus langsung.
+**Obsolete keys** (present in `en.po`/`id.po` but no longer found by `bun run i18n:extract` anywhere in the source) will be reported as a warning, not deleted automatically; they are marked with the `#~ ` prefix (the gettext convention) instead of being removed outright.
 
-**Plural forms**: mengikuti keputusan awcms-mini, katalog ini direncanakan **tidak** memakai `msgid_plural`/`msgstr[n]` gettext pada tahap awal — keputusan desain eksplisit, dengan tripwire di `i18n:parity:check` yang gagal kalau `msgid_plural` pernah muncul tanpa implementasi parser yang lengkap.
+**Plural forms**: following the awcms-mini decision, this catalogue is planned **not** to use gettext `msgid_plural`/`msgstr[n]` in the early stage — an explicit design decision, with a tripwire in `i18n:parity:check` that fails if `msgid_plural` ever appears without a complete parser implementation.
 
 ```mermaid
 flowchart LR
-  subgraph Statis
+  subgraph Static
     POT[messages.pot] --> PO[en.po / id.po]
     PO --> T["t(key, params)"]
   end
-  subgraph Konten
-    DB[(DB per locale aktif)] --> Pick[Pilih nilai locale aktif]
+  subgraph Content
+    DB[(DB per active locale)] --> Pick[Pick the active locale value]
   end
   Cookie[Cookie awcms_locale] --> Mid[middleware.ts]
-  Tenant[default_locale tenant] --> Mid
-  Mid --> Loc[Locale efektif]
+  Tenant[tenant default_locale] --> Mid
+  Mid --> Loc[Effective locale]
   Loc --> T
   Loc --> Pick
-  T --> Render[Render komponen]
+  T --> Render[Render component]
   Pick --> Render
-  Render --> Fmt[Formatter angka/tanggal/mata uang]
+  Render --> Fmt[Number/date/currency formatter]
 ```
 
-## Peta keyboard entri operasional (contoh: penerimaan barang gudang)
+## Operational entry keyboard map (example: warehouse goods receipt)
 
-| Shortcut | Fungsi                        |
-| -------- | ----------------------------- |
-| F1       | Bantuan/shortcut              |
-| F2       | Fokus search/scan SKU/PO      |
-| F4       | Ubah quantity baris terpilih  |
-| F6       | Catatan/selisih (sesuai izin) |
-| F8       | Simpan draft                  |
-| F10      | Posting                       |
-| Enter    | Tambah baris terpilih         |
-| ↑/↓      | Navigasi hasil/daftar baris   |
-| Esc      | Tutup dialog                  |
+| Shortcut | Function                           |
+| -------- | ---------------------------------- |
+| F1       | Help/shortcuts                     |
+| F2       | Focus SKU/PO search/scan           |
+| F4       | Change the selected row's quantity |
+| F6       | Notes/variance (per permission)    |
+| F8       | Save draft                         |
+| F10      | Post                               |
+| Enter    | Add the selected row               |
+| ↑/↓      | Navigate results/row list          |
+| Esc      | Close dialog                       |
 
-## Acceptance criteria UI/UX
+## UI/UX acceptance criteria
 
-- Design token terpasang & theming light/dark/system tanpa flash.
-- Komponen dasar tersedia dengan state loading/disabled/error.
-- Admin shell, layar entri operasional fullscreen, dan portal eksternal render sesuai layout.
-- Setiap list/detail memiliki loading/empty/error state.
-- Navigasi difilter permission; endpoint tetap dilindungi ABAC.
-- Layar entri operasional dapat dioperasikan penuh via keyboard.
-- Kontras & fokus memenuhi AA.
-- Semua string melalui i18n; angka/mata uang/tanggal terformat lokal.
-- Data sensitif tampil ter-mask sesuai role.
-- Soft-deleted resource tidak muncul di list/search default; archive filter dan restore hanya muncul bila permission efektif mengizinkan.
+- Design tokens installed & light/dark/system theming with no flash.
+- Base components available with loading/disabled/error states.
+- The admin shell, the fullscreen operational entry screen, and the external portal render according to the layouts.
+- Every list/detail has a loading/empty/error state.
+- Navigation is permission-filtered; the endpoints stay protected by ABAC.
+- The operational entry screen can be fully operated via keyboard.
+- Contrast & focus meet AA.
+- All strings go through i18n; numbers/currency/dates are locally formatted.
+- Sensitive data is displayed masked according to role.
+- Soft-deleted resources do not appear in the default list/search; the archive filter and restore only appear when the effective permissions allow it.

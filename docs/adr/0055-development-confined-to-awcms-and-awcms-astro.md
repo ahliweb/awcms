@@ -1,61 +1,63 @@
-# ADR-0055 — Pengembangan AWCMS hanya di `ahliweb/awcms` dan `ahliweb/awcms-astro`
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0055-development-confined-to-awcms-and-awcms-astro.id.md)
+
+# ADR-0055 — AWCMS development happens only in `ahliweb/awcms` and `ahliweb/awcms-astro`
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-02
-- **Pengambil keputusan:** @ahliweb
-- **Men-supersede:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) — yang membekukan `awcms-mini`/`awcms-micro` sebagai **referensi yang boleh di-port keluar**. ADR ini menutup jalur itu juga.
-- **Menyempurnakan:** [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md) (awcms dibangun di atas standar awcms-mini) dan [ADR-0032](0032-family-compatibility-manifest-and-ci-conformance.md) (manifest kompatibilitas keluarga) — keduanya berporos pada `awcms-mini` sebagai STANDAR; poros itu dicabut.
-- **Terkait:** [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md), [ADR-0051](0051-admin-screens-consolidated-in-awcms.md)
+- **Date:** 2026-08-02
+- **Decision maker:** @ahliweb
+- **Supersedes:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) — which froze `awcms-mini`/`awcms-micro` as **references that may be ported out of**. This ADR closes that path too.
+- **Refines:** [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md) (awcms built on top of the awcms-mini standard) and [ADR-0032](0032-family-compatibility-manifest-and-ci-conformance.md) (the family compatibility manifest) — both pivot on `awcms-mini` as THE STANDARD; that pivot is revoked.
+- **Related:** [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md), [ADR-0051](0051-admin-screens-consolidated-in-awcms.md)
 
-> **Kolom `awcms-astro` di tabel §Keputusan disempurnakan
+> **The `awcms-astro` row in the §Decision table is refined by
 > [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
-> (8 Agustus 2026).** Repo itu memikul **halaman publik sebagai fungsi utama**
-> dan **permukaan admin USER bila situsnya menyatakannya** — bukan hanya "situs
-> publik dan proksi sesi". Sejalan dengan itu, "seluruh layar admin (ADR-0051)"
-> di baris `awcms` dibaca "seluruh layar admin **SISTEM**". Butir 1–5
-> §Keputusan di bawah — termasuk status ARSIP `awcms-mini`/`awcms-micro` —
-> **tidak berubah**, dan kalimatnya sengaja tidak ditulis ulang (Aturan 2
-> indeks ADR).
+> (8 August 2026).** That repo carries **public pages as its primary function**
+> and **the USER admin surface when the site declares it** — not just "public
+> site and session proxy". Accordingly, "every admin screen (ADR-0051)" in the
+> `awcms` row reads "every **SYSTEM** admin screen". Points 1–5 of
+> §Decision below — including the ARCHIVE status of `awcms-mini`/`awcms-micro` —
+> are **unchanged**, and their wording is deliberately not rewritten (Rule 2 of
+> the ADR index).
 
-## Konteks
+## Context
 
-ADR-0047 membekukan `awcms-mini` dan `awcms-micro` sebagai **referensi**: tidak menerima perubahan, tetapi masih boleh dibaca dan **di-port keluar**. Empat bulan berjalan, posisi setengah itu punya biaya yang nyata:
+ADR-0047 froze `awcms-mini` and `awcms-micro` as **references**: they accept no changes, but may still be read and **ported out of**. Four months in, that half-position has a real cost:
 
-1. **Dokumen dan gerbang masih memperlakukan `awcms-mini` sebagai STANDAR.** `awcms-family-compatibility.yaml` menyatakan `standard: awcms-mini`, dan sembilan entri `intentionalDivergences` harus **di-review ulang secara berkala** — masing-masing dengan `reviewDate` yang, bila lewat, memerahkan CI. Artinya repo ini dijadwalkan untuk terus-menerus membenarkan perbedaannya terhadap repo yang tak seorang pun kembangkan lagi.
-2. **Backlog berporos pada port yang tak akan terjadi.** `docs/PROJECT_STATE.md` masih mendaftar "serap tulang punggung awcms-mini" dan "klaster SaaS control plane (7 modul mini) belum di-admit". Itu membingkai pekerjaan sebagai **memindahkan** kode yang sudah ada, padahal keputusannya sebenarnya adalah **membangun** kemampuan di sini, dengan ADR admission-nya sendiri.
-3. **Aturan yang benar sudah dijalankan dalam praktik.** `idn_admin_regions` (ADR-0046), kredensial mesin (ADR-0049), permission ber-scope platform (ADR-0053), dan provisioning tenant (ADR-0054) semuanya **dirintis langsung di sini**. Tidak satu pun berasal dari mini. Aturan tertulisnya tertinggal dari cara kerja sebenarnya.
+1. **Documents and gates still treat `awcms-mini` as THE STANDARD.** `awcms-family-compatibility.yaml` declares `standard: awcms-mini`, and nine `intentionalDivergences` entries must be **re-reviewed periodically** — each with a `reviewDate` that reddens CI once it passes. That means this repo is scheduled to keep justifying its differences against a repo nobody develops any more.
+2. **The backlog pivots on a port that will never happen.** `docs/PROJECT_STATE.md` still lists "absorb the awcms-mini backbone" and "the SaaS control plane cluster (7 mini modules) is not yet admitted". That frames the work as **moving** code that already exists, when the actual decision is to **build** the capability here, with its own admission ADR.
+3. **The correct rule is already being followed in practice.** `idn_admin_regions` (ADR-0046), machine credentials (ADR-0049), platform-scoped permissions (ADR-0053), and tenant provisioning (ADR-0054) were all **started directly here**. Not one came from mini. The written rule lags behind how work actually happens.
 
-## Keputusan
+## Decision
 
-**Pengembangan AWCMS berlangsung di dua repositori, dan hanya dua:**
+**AWCMS development happens in two repositories, and only two:**
 
-| Repo                                                            | Peran                                                                                                         |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | **System of record** — modular monolith, seluruh permukaan otorisasi, API, dan seluruh layar admin (ADR-0051) |
-| [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | **Experience layer + BFF** (ADR-0045) — situs publik dan proksi sesi; tak pernah menjadi sumber kebenaran     |
+| Repo                                                            | Role                                                                                                             |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | **System of record** — modular monolith, every authorization surface, the API, and every admin screen (ADR-0051) |
+| [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | **Experience layer + BFF** (ADR-0045) — the public site and the session proxy; never a source of truth           |
 
-Konsekuensinya, dinyatakan eksplisit:
+The consequences, stated explicitly:
 
-1. **`awcms-mini` dan `awcms-micro` adalah ARSIP.** Bukan standar, bukan sumber port, bukan template keluarga. Ia boleh dibaca sebagai referensi sejarah — sama seperti membaca commit lama — tetapi tidak ada pekerjaan yang dijadwalkan "di-port dari" sana. Kemampuan yang diinginkan **dibangun di sini**, dengan ADR admission-nya sendiri, dinilai dari kebutuhan hari ini alih-alih dari apa yang kebetulan sudah ada di repo lain.
-2. **Tidak ada standar keluarga eksternal.** `awcms` mendefinisikan kontraknya sendiri. `awcms-family-compatibility.yaml` **tetap ada dan tetap ter-gate** — bagian yang bergigi (23 pemeriksaan versi kontrak diadu dengan konstanta sumber nyata) justru yang paling berguna — tetapi ia kini menyatakan kontrak **antara `awcms` dan `awcms-astro`**, bukan konformansi kepada repo pihak ketiga.
-3. **Daftar `intentionalDivergences` (sembilan entri) dikosongkan, isinya dipindah menjadi catatan sejarah** di [`family-compatibility.md`](../awcms/family-compatibility.md). Alasannya bukan bahwa keputusannya tidak penting — justru sebaliknya, karena itu ia dipertahankan sebagai prosa dengan tautan ADR yang `check:docs` verifikasi keberadaannya. Yang dicabut adalah **kewajiban me-review ulang** perbedaan terhadap arsip: itu pekerjaan berulang yang jawabannya tidak akan pernah berubah.
-4. **Kewajiban "catat sebagai divergence saat mendarat" (ADR-0047 §4) dicabut**, digantikan yang sudah berlaku: **fitur fondasi wajib punya ADR**. ADR adalah catatannya; divergence-nya dulu hanya duplikat yang harus dijaga sinkron.
-5. **Penjagaan ADR-0047 §3 yang lain TETAP** dan tidak dilonggarkan sedikit pun: security review tambahan untuk `auth`/`access`/`sync`, `bun run check` penuh sebelum PR, OpenAPI/AsyncAPI sinkron, RLS `FORCE`, ABAC default-deny, migrasi terapan immutable.
+1. **`awcms-mini` and `awcms-micro` are ARCHIVES.** Not a standard, not a source to port from, not a family template. They may be read as a historical reference — the same way you read old commits — but no work is scheduled as "ported from" there. A desired capability is **built here**, with its own admission ADR, judged on today's needs rather than on what happens to already exist in another repo.
+2. **There is no external family standard.** `awcms` defines its own contracts. `awcms-family-compatibility.yaml` **stays and stays gated** — the part with teeth (23 contract-version checks pitted against real source constants) is precisely the most useful part — but it now states the contract **between `awcms` and `awcms-astro`**, not conformance to a third-party repo.
+3. **The `intentionalDivergences` list (nine entries) is emptied, its content moved into a historical note** in [`family-compatibility.md`](../awcms/family-compatibility.md). The reason is not that the decisions do not matter — quite the opposite, which is why they are kept as prose with ADR links whose existence `check:docs` verifies. What is revoked is the **obligation to re-review** differences against an archive: that is repeated work whose answer will never change.
+4. **The "record it as a divergence on landing" obligation (ADR-0047 §4) is revoked**, replaced by what already applies: **a foundational feature must have an ADR**. The ADR is the record; the divergence was only a duplicate that had to be kept in sync.
+5. **The other ADR-0047 §3 guardrails STAY** and are not loosened one bit: an extra security review for `auth`/`access`/`sync`, a full `bun run check` before the PR, OpenAPI/AsyncAPI in sync, RLS `FORCE`, ABAC default-deny, applied migrations immutable.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:**
-  - Aturan tertulis akhirnya cocok dengan cara kerja nyata. Empat fitur terakhir dirintis di sini; sekarang itu jalur yang benar, bukan pengecualian.
-  - Backlog berhenti berbohong. "Port 7 modul SaaS dari mini" menjadi "putuskan control plane apa yang dibutuhkan, lalu bangun" — pertanyaan berbeda, dengan jawaban yang mungkin berbeda.
-  - Tidak ada lagi CI merah terjadwal untuk membenarkan perbedaan terhadap arsip.
-- **Negatif / trade-off yang diterima:**
-  - **Kode matang di `awcms-mini` tidak lagi otomatis "gratis".** Modul seperti `document_infrastructure` atau `integration_hub` harus dinilai ulang dan ditulis, bukan disalin. Itu memang lebih mahal — dan itu harganya untuk berhenti mewarisi keputusan yang dibuat untuk produk lain.
-  - Lima ADR di repo ini (`0016`–`0019`, `0021`) sudah `Accepted` untuk modul yang tak pernah punya kode di sini dan berporos pada port dari mini. ADR ini **tidak** mencabutnya satu per satu — masing-masing butuh keputusannya sendiri — tetapi mencatat bahwa dasar "port dari mini" mereka sudah gugur.
-- **Netral:**
-  - Nol perubahan kode berjalan. Ini keputusan tata kelola; gerbang teknis yang bergigi tetap utuh.
+- **Positive:**
+  - The written rule finally matches how work really happens. The last four features were started here; now that is the correct path, not an exception.
+  - The backlog stops lying. "Port 7 SaaS modules from mini" becomes "decide what control plane is needed, then build it" — a different question, with a possibly different answer.
+  - No more scheduled red CI to justify differences against an archive.
+- **Negative / accepted trade-offs:**
+  - **Mature code in `awcms-mini` is no longer automatically "free".** Modules like `document_infrastructure` or `integration_hub` must be reassessed and written, not copied. That is genuinely more expensive — and that is the price of no longer inheriting decisions made for another product.
+  - Five ADRs in this repo (`0016`–`0019`, `0021`) are already `Accepted` for modules that never had code here and pivot on a port from mini. This ADR does **not** revoke them one by one — each needs its own decision — but records that their "port from mini" basis has collapsed.
+- **Neutral:**
+  - Zero changes to running code. This is a governance decision; the technical gates with teeth stay intact.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Pertahankan ADR-0047 apa adanya (beku tapi boleh di-port keluar)** — ditolak: itu posisi yang sekarang, dan biayanya persis §Konteks butir 1–2. "Boleh di-port" membuat setiap dokumen dan gerbang harus terus memelihara hubungan dengan repo yang tidak bergerak.
-- **Hapus manifest kompatibilitas sepenuhnya** — ditolak: 23 pemeriksaan versi kontraknya diadu dengan konstanta sumber NYATA dan sudah beberapa kali menangkap drift. Yang bermasalah adalah porosnya, bukan mekanismenya.
-- **Arsipkan `awcms-mini`/`awcms-micro` di GitHub (repo read-only)** — tidak diputuskan di sini; itu tindakan operasional yang boleh menyusul. ADR ini mengatur ke mana pekerjaan pergi, bukan setelan repo.
+- **Keep ADR-0047 as is (frozen but portable out of)** — rejected: that is the current position, and its cost is exactly §Context points 1–2. "May be ported" forces every document and gate to keep maintaining a relationship with a repo that does not move.
+- **Delete the compatibility manifest entirely** — rejected: its 23 contract-version checks are pitted against REAL source constants and have caught drift several times. The problem is its pivot, not its mechanism.
+- **Archive `awcms-mini`/`awcms-micro` on GitHub (read-only repos)** — not decided here; that is an operational action that may follow. This ADR governs where the work goes, not repo settings.

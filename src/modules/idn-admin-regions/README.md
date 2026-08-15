@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # `idn_admin_regions` — Indonesia administrative regions
 
 Versioned master data for Indonesia's administrative hierarchy — **province /

@@ -1,60 +1,60 @@
-# Definition of Ready (langkah 9 alur pengembangan)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](definition-of-ready.id.md)
 
-> **Dijawab SEBELUM ada yang menulis kode**, dan itulah seluruh gunanya.
-> [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md) memuat Definition of **Done**,
-> yang diperiksa di ujung. Daftar ini diperiksa di pangkal.
+# Definition of Ready (step 9 of the development flow)
 
-- **Langkah alur:** 9 ([`../alur-pengembangan.md`](../alur-pengembangan.md)).
-- **Untuk modul BARU**, daftar ini tidak menggantikan
+> **Answered BEFORE anyone writes code**, and that is the whole point of it.
+> [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md) holds the Definition of **Done**,
+> which is checked at the end. This list is checked at the start.
+
+- **Flow step:** 9 ([`../alur-pengembangan.md`](../alur-pengembangan.md)).
+- **For a NEW module**, this list does not replace
   [`module-admission-decision-checklist.md`](module-admission-decision-checklist.md)
-  — ia mendahuluinya.
+  — it comes before it.
 
-## Kenapa daftar ini ada, dengan bukti dari repo ini sendiri
+## Why this list exists, with evidence from this very repo
 
-**Dua gelombang berturut-turut menulis rencana yang mengasumsikan pembacaan
-lintas-tenant yang FORCE RLS larang.** ADR-0087 memintanya sebagai "baris audit
-di setiap tenant terjangkau"; ADR-0088 memintanya sebagai daftar keanggotaan di
-respons 409. Keduanya masuk akal di atas kertas, keduanya lolos perencanaan, dan
-keduanya baru ketahuan **saat implementasi** — setelah kode ditulis di atas
-premis yang salah.
+**Two consecutive waves wrote plans that assumed cross-tenant reads which FORCE
+RLS forbids.** ADR-0087 asked for it as "an audit row in every reachable
+tenant"; ADR-0088 asked for it as a membership list in a 409 response. Both were
+plausible on paper, both got through planning, and both were only caught **at
+implementation time** — after code had been written on top of a false premise.
 
-Satu pertanyaan akan menemukan keduanya di langkah 9, dan ia yang pertama di
-bawah.
+One question would have found both at step 9, and it is the first one below.
 
-## Pertanyaan yang berlaku untuk SETIAP perubahan
+## Questions that apply to EVERY change
 
-1. **Apakah policy mengizinkan setiap pembacaan dan penulisan yang rencana ini
-   butuhkan?** Bukan "apakah ada permission-nya" — apakah **RLS** mengizinkannya.
-   Sebuah rencana yang membaca lintas tenant, atau menulis ke tenant lain,
-   hampir selalu salah, dan yang tidak salah menuntut ADR.
-   **Cara memverifikasi**: jalankan query-nya sebagai `awcms_app` di konteks
-   tenant yang relevan terhadap basis data berisi data yang mirip. Nol baris
-   adalah jawaban, bukan kegagalan setup.
-2. **Kelas perubahannya apa?** (tabel di dokumen alur). Ia yang menentukan
-   langkah 1–8 mana yang wajib, dan menebaknya di tengah jalan adalah bagaimana
-   sebuah PR menjadi dua PR.
-3. **Apa kriteria diterimanya, dalam kalimat yang bisa gagal?** "Bekerja dengan
-   baik" tidak bisa gagal. "Pencabutan grant mematikan sesi hidup di transaksi
-   yang sama" bisa.
-4. **Apa yang akan MEMBUKTIKANNYA, dan mutasi apa yang memerahkannya?** Sebuah
-   cek yang hijau tidak membuktikan apa pun sampai ia dibuktikan gagal pada
-   kondisi yang seharusnya. Bila jawabannya belum terpikir di langkah 9, biasanya
-   berarti kriteria di nomor 3 belum cukup tajam.
+1. **Does policy permit every read and every write this plan needs?** Not "is
+   there a permission for it" — does **RLS** allow it. A plan that reads across
+   tenants, or writes into another tenant, is almost always wrong, and the ones
+   that are not wrong demand an ADR.
+   **How to verify**: run the query as `awcms_app` in the relevant tenant context
+   against a database holding similar data. Zero rows is an answer, not a setup
+   failure.
+2. **Which change class is it?** (the table in the flow document). It determines
+   which of steps 1–8 are mandatory, and guessing it halfway through is how one
+   PR becomes two PRs.
+3. **What are its acceptance criteria, in a sentence that can fail?** "Works
+   well" cannot fail. "Revoking a grant kills a live session in the same
+   transaction" can.
+4. **What will PROVE it, and which mutation turns it red?** A check that is green
+   proves nothing until it has been proven to fail on the condition it is
+   supposed to catch. If the answer has not occurred to you at step 9, that
+   usually means the criteria in number 3 are not sharp enough.
 
-## Pertanyaan bersyarat
+## Conditional questions
 
-| Bila perubahan menyentuh…       | Yang harus sudah dijawab                                                                     |
-| ------------------------------- | -------------------------------------------------------------------------------------------- |
-| skema                           | tabel/kolomnya, RLS-nya, index FK-nya, **dan jawaban retensinya** (gerbangnya akan menuntut) |
-| akses (RBAC/ABAC/RLS)           | permission mana, deny-only atau tidak, dan di mana urutannya dalam rantai chokepoint         |
-| kontrak API/event               | fragmen OpenAPI/AsyncAPI-nya, dan apakah perubahannya aditif                                 |
-| data pribadi                    | tiga pertanyaan di [`../privacy-analysis.md`](../privacy-analysis.md) §3                     |
-| sesuatu yang mendarat **inert** | apa yang membuatnya inert, dan PR mana yang menghidupkannya                                  |
-| lapisan fondasi                 | **ADR-nya**, bukan niat menulis ADR                                                          |
+| If the change touches…      | What must already be answered                                                                      |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| the schema                  | its table/columns, its RLS, its FK indexes, **and its retention answer** (the gate will demand it) |
+| access (RBAC/ABAC/RLS)      | which permission, deny-only or not, and where it sits in the chokepoint chain                      |
+| an API/event contract       | its OpenAPI/AsyncAPI fragment, and whether the change is additive                                  |
+| personal data               | the three questions in [`../privacy-analysis.md`](../privacy-analysis.md) §3                       |
+| something landing **inert** | what makes it inert, and which PR turns it on                                                      |
+| a foundation layer          | **its ADR**, not the intention to write one                                                        |
 
-## Dua hal yang BUKAN bagian dari daftar ini
+## Two things that are NOT part of this list
 
-- **Estimasi.** Tidak ada di alur ini dan tidak ditambahkan di sini.
-- **Desain lengkap.** Langkah 9 menanyakan apakah rencananya bisa dikerjakan dan
-  apakah spesifikasinya saling setuju — bukan menuntut jawaban akhir untuk
-  pertanyaan yang justru paling murah dijawab dengan menulis kode.
+- **Estimates.** They are not in this flow and they are not added here.
+- **A complete design.** Step 9 asks whether the plan can be carried out and
+  whether its specifications agree with each other — it does not demand final
+  answers to the questions that are cheapest to answer precisely by writing code.

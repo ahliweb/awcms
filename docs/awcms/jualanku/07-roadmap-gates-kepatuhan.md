@@ -1,179 +1,181 @@
-# 07 — Roadmap, quality gate, KPI, dan kepatuhan
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](07-roadmap-gates-kepatuhan.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status.
+# 07 — Roadmap, quality gates, KPIs, and compliance
 
-## 1. Fase dan exit criteria
+> Plan. See the [README](README.md) for status.
 
-| Fase                           | Output utama                                                                                                                                    | Exit criteria                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **P0 — Architecture baseline** | ADR-0045 + ADR rendering/BFF di `awcms-astro`; rekonsiliasi inventaris; kontrak sesi; model merchant/scope; lima descriptor + kepemilikan tabel | Setiap gap kritis punya keputusan, owner, test, dan rencana rollback           |
-| **P1 — Domain foundation**     | Migrasi, descriptor, seed permission, RLS, ABAC, service, API, layar admin minimum                                                              | Matriks negative-authorization lulus; seluruh gate modul hijau                 |
-| **P2 — Experience publik**     | Design token, homepage, kategori, pencarian, halaman usaha/produk, konten & legal                                                               | Acceptance visual, baseline WCAG 2.2 AA, nol placeholder & tautan kritis rusak |
-| **P3 — Portal penjual**        | Auth/sesi, onboarding, profil, katalog, promosi, lead, analitik, paket                                                                          | Aktivasi merchant end-to-end; nol kebocoran lintas merchant (dibuktikan test)  |
-| **P4 — Portal affiliate**      | Tautan, atribusi, konversi, ledger komisi, alur payout                                                                                          | Kontrol self-referral & fraud; maker-checker; adjustment reversible            |
-| **P5 — Pilot & hardening**     | UAT, performa, verifikasi keamanan, DPIA, kontinuitas, runbook                                                                                  | Kriteria GO tercapai untuk pilot terbatas                                      |
-| **P6 — Repeatability**         | Kohort, renewal, effort support, repeatability kanal                                                                                            | Scale hanya setelah retensi, mutu, keamanan, dan unit economics stabil         |
+## 1. Phases and exit criteria
 
-Setiap fase dipecah menjadi unit kerja atomic: satu bounded context (atau satu
-irisan permukaan) per PR, membawa migrasi + seed + fragmen OpenAPI + test +
-dokumen + changeset.
+| Phase                          | Main output                                                                                                                                             | Exit criteria                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **P0 — Architecture baseline** | ADR-0045 + the rendering/BFF ADR in `awcms-astro`; inventory reconciliation; session contract; merchant/scope model; five descriptors + table ownership | Every critical gap has a decision, an owner, a test, and a rollback plan           |
+| **P1 — Domain foundation**     | Migrations, descriptors, permission seeds, RLS, ABAC, services, API, minimum admin screens                                                              | The negative-authorization matrix passes; every module gate green                  |
+| **P2 — Public experience**     | Design tokens, homepage, categories, search, business/product pages, content & legal                                                                    | Visual acceptance, WCAG 2.2 AA baseline, zero placeholders & broken critical links |
+| **P3 — Seller portal**         | Auth/session, onboarding, profile, catalogue, promotion, leads, analytics, plans                                                                        | End-to-end merchant activation; zero cross-merchant leaks (proven by test)         |
+| **P4 — Affiliate portal**      | Links, attribution, conversions, commission ledger, payout flow                                                                                         | Self-referral & fraud controls; maker-checker; reversible adjustments              |
+| **P5 — Pilot & hardening**     | UAT, performance, security verification, DPIA, continuity, runbooks                                                                                     | GO criteria met for a limited pilot                                                |
+| **P6 — Repeatability**         | Cohorts, renewals, support effort, channel repeatability                                                                                                | Scale only after retention, quality, security, and unit economics are stable       |
 
-## 2. Quality gate (blocking)
+Every phase is broken down into atomic units of work: one bounded context (or one
+slice of a surface) per PR, carrying migration + seed + OpenAPI fragment + tests +
+docs + changeset.
 
-Gate repo yang **sudah ada** dan wajib hijau:
+## 2. Quality gates (blocking)
 
-- `bun run check` penuh (lint, docs, kontrak API, DAG modul, kepemilikan tabel &
-  rute, job registry, komposisi, logging lint, tenant route factory, tenant
+Repo gates that **already exist** and must be green:
+
+- The full `bun run check` (lint, docs, API contract, module DAG, table & route
+  ownership, job registry, composition, logging lint, tenant route factory, tenant
   context usage, typecheck, test, build).
 - `bun run security:readiness`, `bun run family:conformance:check`.
-- Isolasi RLS diverifikasi sebagai role aplikasi (`awcms_app`), bukan superuser.
+- RLS isolation verified as the application role (`awcms_app`), not as a superuser.
 
-Gate tambahan khusus Jualanku:
+Extra Jualanku-specific gates:
 
-- 100% endpoint tercakup OpenAPI + security scheme.
-- 100% tabel tenant-scoped ber-`FORCE` RLS + test isolasi tenant.
-- 100% mutasi portal melewati BFF, CSRF, otorisasi, validasi, audit, correlation ID.
-- 0 token bearer di `localStorage`/`sessionStorage`.
-- 0 rute privat di sitemap atau cache publik.
-- 0 placeholder, catatan internal, data demo, atau PII demo di produksi.
-- Profil kontrol OWASP ASVS 5.0 ditetapkan; minimal **L2** untuk portal dan admin,
-  tailoring terdokumentasi.
-- WCAG 2.2 AA: otomatis + verifikasi manual pada alur kritis.
-- Latihan backup-restore, runbook insiden, dan revokasi sesi lulus.
-- Memo legal PMSE/PSE, privacy notice, terms, kebijakan affiliate, dan merchant
-  agreement disetujui.
+- 100% of endpoints covered by OpenAPI + a security scheme.
+- 100% of tenant-scoped tables with `FORCE` RLS + a tenant isolation test.
+- 100% of portal mutations pass through the BFF, CSRF, authorization, validation, audit, correlation ID.
+- 0 bearer tokens in `localStorage`/`sessionStorage`.
+- 0 private routes in the sitemap or in a public cache.
+- 0 placeholders, internal notes, demo data, or demo PII in production.
+- An OWASP ASVS 5.0 control profile is set; at least **L2** for the portal and
+  admin, with documented tailoring.
+- WCAG 2.2 AA: automated + manual verification on critical flows.
+- Backup-restore drills, incident runbooks, and session revocation pass.
+- The PMSE/PSE legal memo, privacy notice, terms, affiliate policy, and merchant
+  agreement are approved.
 
-## 3. KPI
+## 3. KPIs
 
-| Dimensi    | KPI utama                                                                             |
-| ---------- | ------------------------------------------------------------------------------------- |
-| North Star | Merchant aktif bulanan dengan halaman terbit **dan** minimal satu interaksi bermakna  |
-| Akuisisi   | Sign-up merchant terkualifikasi, affiliate disetujui, sumber/kanal                    |
-| Aktivasi   | Penyelesaian onboarding, waktu ke halaman terbit pertama, kelengkapan profil          |
-| Engagement | Klik WhatsApp, inquiry, lead terverifikasi, pemakaian promosi                         |
-| Revenue    | MRR, ARPA, konversi berbayar, margin, refund                                          |
-| Retensi    | Aktif D30, churn, renewal, engagement kohort                                          |
-| Affiliate  | Konversi ter-atribusi, approval rate, pelepasan hold, SLA payout, fraud rate          |
-| Operasi    | Menit support per merchant, SLA verifikasi, backlog moderasi, CSAT                    |
-| Teknologi  | Availability, p95 latency, error rate, MTTR, deploy failure, biaya per merchant aktif |
-| Risiko     | Anomali penolakan otorisasi, insiden PII, fraud, komplain, kelengkapan audit          |
+| Dimension   | Main KPI                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| North Star  | Monthly active merchants with a published page **and** at least one meaningful interaction |
+| Acquisition | Qualified merchant sign-ups, approved affiliates, source/channel                           |
+| Activation  | Onboarding completion, time to first published page, profile completeness                  |
+| Engagement  | WhatsApp clicks, inquiries, verified leads, promotion usage                                |
+| Revenue     | MRR, ARPA, paid conversion, margin, refunds                                                |
+| Retention   | D30 active, churn, renewal, cohort engagement                                              |
+| Affiliate   | Attributed conversions, approval rate, hold releases, payout SLA, fraud rate               |
+| Operations  | Support minutes per merchant, verification SLA, moderation backlog, CSAT                   |
+| Technology  | Availability, p95 latency, error rate, MTTR, deploy failure, cost per active merchant      |
+| Risk        | Authorization-denial anomalies, PII incidents, fraud, complaints, audit completeness       |
 
 ## 4. RACI
 
-| Aktivitas                        | Product/Arch | Engineering | Growth | Operations | Finance/Risk |
-| -------------------------------- | ------------ | ----------- | ------ | ---------- | ------------ |
-| ADR & arsitektur target          | A/R          | R           | C      | C          | C            |
-| Model domain & kontrak API       | A            | R           | C      | C          | C            |
-| Design system & acceptance layar | A/R          | R           | C      | C          | I            |
-| Auth, keamanan, deployment       | C            | A/R         | I      | I          | C            |
-| Onboarding merchant              | C            | R           | C      | A/R        | C            |
-| Aturan affiliate                 | C            | R           | A/R    | C          | A            |
-| Pricing & langganan              | C            | C           | R      | C          | A            |
-| Payout/refund/fraud              | I            | R           | C      | C          | A/R          |
-| Privasi/legal/kepatuhan          | C            | R           | C      | C          | A/R          |
-| Acceptance produk                | A            | C           | C      | C          | C            |
-| Persetujuan rilis teknis         | C            | A           | I      | I          | C            |
+| Activity                          | Product/Arch | Engineering | Growth | Operations | Finance/Risk |
+| --------------------------------- | ------------ | ----------- | ------ | ---------- | ------------ |
+| ADRs & target architecture        | A/R          | R           | C      | C          | C            |
+| Domain model & API contracts      | A            | R           | C      | C          | C            |
+| Design system & screen acceptance | A/R          | R           | C      | C          | I            |
+| Auth, security, deployment        | C            | A/R         | I      | I          | C            |
+| Merchant onboarding               | C            | R           | C      | A/R        | C            |
+| Affiliate rules                   | C            | R           | A/R    | C          | A            |
+| Pricing & subscriptions           | C            | C           | R      | C          | A            |
+| Payout/refund/fraud               | I            | R           | C      | C          | A/R          |
+| Privacy/legal/compliance          | C            | R           | C      | C          | A/R          |
+| Product acceptance                | A            | C           | C      | C          | C            |
+| Technical release approval        | C            | A           | I      | I          | C            |
 
-## 5. Kriteria GO / PIVOT / PAUSE / STOP
+## 5. GO / PIVOT / PAUSE / STOP criteria
 
 **GO**
 
-- P0 tertutup dan inventaris repo konsisten.
-- Permukaan publik, merchant, affiliate, dan internal terpisah secara rute,
-  audience sesi, cache, dan otorisasi.
-- Matriks negative-authorization lulus.
-- Merchant pilot bisa menyelesaikan alur publish dan menerima interaksi bermakna.
-- Dokumen privasi/legal + kanal pengaduan tersedia.
-- Observability, backup/restore, insiden, dan runbook support teruji.
+- P0 is closed and the repo inventory is consistent.
+- The public, merchant, affiliate, and internal surfaces are separated by route,
+  session audience, cache, and authorization.
+- The negative-authorization matrix passes.
+- A pilot merchant can complete the publish flow and receive meaningful interactions.
+- Privacy/legal documents + a complaints channel are available.
+- Observability, backup/restore, incident, and support runbooks are tested.
 
 **PIVOT**
 
-- Onboarding mandiri gagal tapi assisted onboarding berhasil → sederhanakan
-  wizard, perkuat pendampingan.
-- Trafik pencarian ada tapi interaksi kontak rendah → perbaiki relevansi, isi
-  kartu, dan CTA sebelum menambah fitur.
-- Klik affiliate tinggi tapi konversi disetujui rendah → perbaiki atribusi,
-  penawaran, dan kebijakan fraud sebelum menaikkan komisi.
+- Self-service onboarding fails but assisted onboarding succeeds → simplify the
+  wizard, strengthen the assistance.
+- There is search traffic but contact interactions are low → fix relevance, card
+  content, and CTA before adding features.
+- Affiliate clicks are high but approved conversions are low → fix attribution,
+  the offer, and the fraud policy before raising commissions.
 
 **PAUSE**
 
-- Sesi/tenant context masih bisa dimanipulasi browser.
-- Otorisasi lintas merchant belum dibuktikan test.
-- Respons privat masih bisa masuk cache/sitemap.
-- Komisi/payout belum punya ledger, hold, refund, pajak, dan maker-checker.
-- Klasifikasi regulasi dan terms belum disetujui.
-- UAT kritis atau alur aksesibilitas gagal.
+- The session/tenant context can still be manipulated by the browser.
+- Cross-merchant authorization has not been proven by test.
+- Private responses can still end up in a cache/sitemap.
+- Commissions/payouts do not yet have a ledger, holds, refunds, tax, and maker-checker.
+- The regulatory classification and terms have not been approved.
+- A critical UAT or accessibility flow fails.
 
 **STOP / NOT YET**
 
-- Checkout marketplace, escrow, logistik, wallet, atau transaksi multi-merchant
-  sebelum PMF dan kesiapan operasional.
-- Microservices, multi-region, aplikasi native, atau AI kompleks tanpa kebutuhan
-  terkuantifikasi.
-- Fitur tanpa owner, kontrak API, lifecycle, permission, audit, KPI, dan exit
-  criteria.
+- Marketplace checkout, escrow, logistics, wallet, or multi-merchant transactions
+  before PMF and operational readiness.
+- Microservices, multi-region, native apps, or complex AI without a quantified
+  need.
+- Features without an owner, API contract, lifecycle, permissions, audit, KPIs, and
+  exit criteria.
 
-## 6. Standar
+## 6. Standards
 
-| Area                 | Baseline (per 29 Juli 2026)                                                           |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| Application security | ISO/IEC 27034-1:2011 + OWASP ASVS 5.0                                                 |
-| API security         | OWASP API Security Top 10:2023 + suite test otorisasi                                 |
-| ISMS                 | ISO/IEC 27001:2022 (Amd 1:2024), panduan kontrol ISO/IEC 27002:2022                   |
-| Risiko               | ISO/IEC 27005:2022                                                                    |
-| Privasi              | ISO/IEC 27701:2025                                                                    |
-| PII cloud            | ISO/IEC 27018:2025                                                                    |
-| Keamanan cloud       | ISO/IEC 27017 — **transition watch** (edisi 2026 dalam proses saat validasi)          |
-| Evaluasi keamanan    | ISO/IEC 15408 Parts 1–5:2026, **hanya** untuk komponen kritis (session/authorization) |
-| Aksesibilitas        | WCAG 2.2 AA / ISO/IEC 40500:2025                                                      |
-| Kualitas produk      | ISO/IEC 25010:2023; requirement & traceability ISO/IEC/IEEE 29148:2018                |
-| AI                   | ISO/IEC 42001:2023 — hanya bila AI menjadi komponen material bagi keputusan/risiko    |
+| Area                 | Baseline (as of 29 July 2026)                                                          |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| Application security | ISO/IEC 27034-1:2011 + OWASP ASVS 5.0                                                  |
+| API security         | OWASP API Security Top 10:2023 + an authorization test suite                           |
+| ISMS                 | ISO/IEC 27001:2022 (Amd 1:2024), control guidance ISO/IEC 27002:2022                   |
+| Risk                 | ISO/IEC 27005:2022                                                                     |
+| Privacy              | ISO/IEC 27701:2025                                                                     |
+| Cloud PII            | ISO/IEC 27018:2025                                                                     |
+| Cloud security       | ISO/IEC 27017 — **transition watch** (the 2026 edition was in progress at validation)  |
+| Security evaluation  | ISO/IEC 15408 Parts 1–5:2026, **only** for critical components (session/authorization) |
+| Accessibility        | WCAG 2.2 AA / ISO/IEC 40500:2025                                                       |
+| Product quality      | ISO/IEC 25010:2023; requirements & traceability ISO/IEC/IEEE 29148:2018                |
+| AI                   | ISO/IEC 42001:2023 — only if AI becomes a material component for decisions/risk        |
 
-**Batas pemakaian Common Criteria.** ISO/IEC 15408 bukan checklist UI dan bukan
-pengganti 27001/ASVS. Dipakai sebagai konsep (Target of Evaluation, Security
-Target, assurance evidence) pada komponen sesi/otorisasi. **Tidak ada klaim EAL
-atau "Common Criteria certified"**, dan tidak ada klaim sertifikasi ISO apa pun
-di produk maupun dokumen pemasaran.
+**Limits on using Common Criteria.** ISO/IEC 15408 is not a UI checklist and not a
+replacement for 27001/ASVS. It is used as a concept (Target of Evaluation, Security
+Target, assurance evidence) on the session/authorization components. **There is no
+EAL claim or "Common Criteria certified" claim**, and no ISO certification claim of
+any kind in the product or in marketing documents.
 
-## 7. Regulasi Indonesia
+## 7. Indonesian regulation
 
-| Regulasi                           | Relevansi                                                  | Tindakan                                                                                         |
-| ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| UU 27/2022 (PDP)                   | Hak subjek, dasar pemrosesan, controller/processor, breach | ROPA, privacy notice, consent, alur DSR, retensi, klausul processor, proses insiden              |
-| UU 1/2024 (perubahan kedua UU ITE) | Informasi & transaksi elektronik                           | Review legal terms, alat bukti, konten dilarang, kontrak elektronik                              |
-| PP 71/2019 (PSTE)                  | Keandalan & keamanan sistem elektronik                     | Asesmen PSE, kontrol keamanan, auditability, kontinuitas                                         |
-| Permenkominfo 5/2020 jo. 10/2021   | PSE lingkup privat                                         | Validasi kewajiban pendaftaran & operasi sebelum launch                                          |
-| PP 80/2019 (PMSE)                  | Perdagangan melalui sistem elektronik                      | Pemetaan model bisnis, informasi merchant, kontrak, komplain, rekaman                            |
-| Permendag 19/2026                  | Model bisnis PPMSE, iklan, produk domestik, AI, pengawasan | Klasifikasi hukum berdasar fitur produksi; update terms, merchant agreement, kebijakan affiliate |
-| UU 8/1999 (Perlindungan Konsumen)  | Informasi, keadilan, komplain, klausul dilarang            | Harga jelas, bukti klaim, proses komplain/refund, tanpa dark pattern                             |
+| Regulation                                   | Relevance                                                              | Action                                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Law 27/2022 (PDP)                            | Subject rights, processing basis, controller/processor, breach         | ROPA, privacy notice, consent, DSR flow, retention, processor clauses, incident process               |
+| Law 1/2024 (second amendment to the ITE Law) | Electronic information & transactions                                  | Legal terms review, evidence, prohibited content, electronic contracts                                |
+| GR 71/2019 (PSTE)                            | Reliability & security of electronic systems                           | PSE assessment, security controls, auditability, continuity                                           |
+| Permenkominfo 5/2020 jo. 10/2021             | Private-scope PSE                                                      | Validate registration & operating obligations before launch                                           |
+| GR 80/2019 (PMSE)                            | Trade through electronic systems                                       | Business model mapping, merchant information, contracts, complaints, records                          |
+| Permendag 19/2026                            | PPMSE business models, advertising, domestic products, AI, supervision | Legal classification based on production features; update terms, merchant agreement, affiliate policy |
+| Law 8/1999 (Consumer Protection)             | Information, fairness, complaints, prohibited clauses                  | Clear pricing, evidence for claims, complaint/refund process, no dark patterns                        |
 
-**Klasifikasi PMSE tidak boleh diasumsikan dari branding.** Karena fase awal
-bukan marketplace penuh dan transaksi bisa diarahkan ke kanal merchant,
-Finance/Risk/Compliance membuat memo legal berdasarkan **fitur produksi nyata**:
-alur transaksi, iklan, affiliate, pembayaran, dan peran platform terhadap
-merchant/konsumen.
+**The PMSE classification must not be assumed from branding.** Because the early
+phase is not a full marketplace and transactions can be directed to merchant
+channels, Finance/Risk/Compliance writes a legal memo based on the **real
+production features**: transaction flow, advertising, affiliate, payments, and the
+platform's role towards merchants/consumers.
 
-## 8. Checklist acceptance
+## 8. Acceptance checklist
 
-**Arsitektur** — ADR disetujui · `awcms` origin privat · adapter SSR terpasang ·
-rollback ke static terdokumentasi · matriks rendering diuji.
+**Architecture** — ADRs approved · `awcms` origin private · SSR adapter installed ·
+rollback to static documented · rendering matrix tested.
 
-**Identity & access** — tanpa token di storage browser · cookie HttpOnly/Secure ·
-proteksi CSRF · tenant server-derived · rotasi/revokasi sesi · negative auth test.
+**Identity & access** — no tokens in browser storage · HttpOnly/Secure cookies ·
+CSRF protection · server-derived tenant · session rotation/revocation · negative auth tests.
 
-**Data** — RLS FORCE pada tabel tenant · ABAC kepemilikan merchant · masking
-field · retensi & legal hold · correlation ID di audit · idempotency pada mutasi
-kritis.
+**Data** — RLS FORCE on tenant tables · merchant ownership ABAC · field masking ·
+retention & legal hold · correlation ID in audit · idempotency on critical
+mutations.
 
-**UI/UX** — design token · seluruh state (empty/error/loading) · alur keyboard ·
-WCAG 2.2 AA · mobile 360 px · tanpa placeholder · copy/klaim disetujui.
+**UI/UX** — design tokens · every state (empty/error/loading) · keyboard flow ·
+WCAG 2.2 AA · mobile 360 px · no placeholders · copy/claims approved.
 
-**Operasi** — monitoring · alerting · runbook · backup restore · latihan insiden ·
-SLA support · alur komplain.
+**Operations** — monitoring · alerting · runbooks · backup restore · incident drills ·
+support SLA · complaint flow.
 
-**Komersial/affiliate** — entitlement paket · invoice sebagai sumber kebenaran ·
-ledger komisi · holding period · refund/dispute · larangan self-referral ·
-maker-checker payout.
+**Commercial/affiliate** — plan entitlements · invoice as source of truth ·
+commission ledger · holding period · refund/dispute · self-referral prohibition ·
+payout maker-checker.
 
-**Legal/privasi** — asesmen PSE · klasifikasi PMSE · privacy notice · versioning
-terms · merchant agreement · kebijakan affiliate · alur permintaan subjek data.
+**Legal/privacy** — PSE assessment · PMSE classification · privacy notice · terms
+versioning · merchant agreement · affiliate policy · data subject request flow.

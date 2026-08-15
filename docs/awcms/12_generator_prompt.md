@@ -1,95 +1,97 @@
-# Bagian 12 — Generator Prompt dan Instruksi Eksekusi Repository AWCMS
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](12_generator_prompt.id.md)
 
-> **Status implementasi (2026-07-14).** Diadaptasi dari `docs/awcms-mini/12_generator_prompt.md`. Belum ada skill/subagent Claude Code (`.claude/skills/`, `.claude/agents/`) yang dibuat di repo `awcms` ini — tabel skill/subagent di bawah adalah **rencana penamaan** yang akan dibuat mengikuti pola awcms-mini begitu modul terkait mulai dikerjakan. Sampai saat itu, gunakan **prompt manual** di dokumen ini secara langsung. Sprint yang direferensikan mengikuti urutan ERP di [doc 11](11_implementation_blueprint.md), bukan sprint retail/POS di dokumen asal.
+# Part 12 — Generator Prompt and Execution Instructions for the AWCMS Repository
 
-## Tujuan
+> **Implementation status (2026-07-14).** Adapted from `docs/awcms-mini/12_generator_prompt.md`. No Claude Code skill/subagent (`.claude/skills/`, `.claude/agents/`) has been created in this `awcms` repo yet — the skill/subagent tables below are a **naming plan** that will be built following the awcms-mini pattern once the related module is started. Until then, use the **manual prompts** in this document directly. The sprints referenced follow the ERP ordering in [doc 11](11_implementation_blueprint.md), not the retail/POS sprints of the source document.
 
-Dokumen ini berisi prompt untuk coding agent/developer agar implementasi AWCMS berjalan konsisten, aman, atomic, dan audit-ready.
+## Purpose
 
-## Skill proyek sebagai pengganti prompt manual (rencana)
+This document holds the prompts for the coding agent/developer so that the AWCMS implementation stays consistent, secure, atomic, and audit-ready.
 
-Begitu dibuat, prompt di dokumen ini akan tersedia sebagai **skill proyek** di `.claude/skills/`. Tabel berikut memetakan kebutuhan ke nama skill yang **akan** dibuat.
+## Project skills as a replacement for manual prompts (planned)
 
-| Prompt / kebutuhan                     | Skill (rencana)                                                                                                 |
+Once created, the prompts in this document will be available as **project skills** in `.claude/skills/`. The following table maps each need to the skill name that **will** be created.
+
+| Prompt / need                          | Skill (planned)                                                                                                 |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Prompt Induk / Per Issue               | `awcms-implement-issue`                                                                                         |
-| Prompt Skeleton / Sprint               | `awcms-implement-issue` + `awcms-new-module` / `awcms-new-migration` / `awcms-new-endpoint` / `awcms-new-event` |
+| Master Prompt / Per Issue              | `awcms-implement-issue`                                                                                         |
+| Skeleton Prompt / Sprint               | `awcms-implement-issue` + `awcms-new-module` / `awcms-new-migration` / `awcms-new-endpoint` / `awcms-new-event` |
 | Idempotent posting (finance/inventory) | `awcms-idempotency`                                                                                             |
 | RBAC/ABAC                              | `awcms-abac-guard`                                                                                              |
 | Sync HMAC                              | `awcms-sync-hmac`                                                                                               |
 | Logging/masking                        | `awcms-audit-log` + `awcms-sensitive-data`                                                                      |
-| Prompt Review PR                       | `awcms-pr-review`                                                                                               |
-| Prompt Security Review                 | `awcms-security-review`                                                                                         |
-| Prompt Production Preflight            | `awcms-production-preflight`                                                                                    |
+| PR Review Prompt                       | `awcms-pr-review`                                                                                               |
+| Security Review Prompt                 | `awcms-security-review`                                                                                         |
+| Production Preflight Prompt            | `awcms-production-preflight`                                                                                    |
 | Testing                                | `awcms-testing`                                                                                                 |
 | UI/UX                                  | `awcms-ui-screen`                                                                                               |
 | Release/versioning                     | `awcms-release`                                                                                                 |
 
-Selain skill, prompt utama juga direncanakan tersedia sebagai **subagent** siap-delegasi di `.claude/agents/` begitu dibuat:
+Beyond skills, the main prompts are also planned to be available as ready-to-delegate **subagents** in `.claude/agents/` once created:
 
-| Prompt                   | Subagent (rencana)       | Mode                       |
-| ------------------------ | ------------------------ | -------------------------- |
-| Prompt Induk / Per Issue | `awcms-coder`            | Implementasi penuh         |
-| Prompt Review PR         | `awcms-reviewer`         | Read-only                  |
-| Prompt Security Review   | `awcms-security-auditor` | Read-only, verdict go-live |
+| Prompt                    | Subagent (planned)       | Mode                       |
+| ------------------------- | ------------------------ | -------------------------- |
+| Master Prompt / Per Issue | `awcms-coder`            | Full implementation        |
+| PR Review Prompt          | `awcms-reviewer`         | Read-only                  |
+| Security Review Prompt    | `awcms-security-auditor` | Read-only, go-live verdict |
 
-Alur otomasi target: issue → `awcms-coder` → `awcms-reviewer` → (modul sensitif finance/tax/payroll) `awcms-security-auditor` → merge.
+Target automation flow: issue → `awcms-coder` → `awcms-reviewer` → (sensitive finance/tax/payroll modules) `awcms-security-auditor` → merge.
 
-## Loop eksekusi agent
+## Agent execution loop
 
 ```mermaid
 flowchart TD
-  A[Baca AGENTS.md + README + docs] --> B[Baca kode/sql/openapi/asyncapi terkait]
-  B --> C[Implementasi atomic sesuai issue]
-  C --> D{Schema/API/Event berubah?}
-  D -- Ya --> E[Update migration/OpenAPI/AsyncAPI]
-  D -- Tidak --> F[Tulis test]
+  A[Read AGENTS.md + README + docs] --> B[Read related code/sql/openapi/asyncapi]
+  B --> C[Atomic implementation per the issue]
+  C --> D{Schema/API/Event changed?}
+  D -- Yes --> E[Update migration/OpenAPI/AsyncAPI]
+  D -- No --> F[Write tests]
   E --> F
-  F --> G[Validasi: db:migrate · api:spec:check · test · build]
+  F --> G[Validate: db:migrate · api:spec:check · test · build]
   G --> H{Pass?}
-  H -- Tidak --> C
-  H -- Ya --> I[Update docs + laporan implementasi]
-  I --> J{Command gagal?}
-  J -- Ya --> K[Laporkan: command · error · cause · status · next]
-  J -- Tidak --> L[Commit atomic + PR]
+  H -- No --> C
+  H -- Yes --> I[Update docs + implementation report]
+  I --> J{Command failed?}
+  J -- Yes --> K[Report: command · error · cause · status · next]
+  J -- No --> L[Atomic commit + PR]
 ```
 
-## Prompt Induk Coding Agent
+## Master Coding Agent Prompt
 
 ```text
-Anda adalah AWCMS Engineering Agent untuk proyek AWCMS — platform ERP modular
-monolith (finance/accounting, inventory/warehouse, procurement, manufacturing,
-HR/payroll) dengan integrasi bisnis eksternal (payment gateway, marketplace,
-tax/Coretax, logistik).
+You are the AWCMS Engineering Agent for the AWCMS project — a modular monolith
+ERP platform (finance/accounting, inventory/warehouse, procurement, manufacturing,
+HR/payroll) with external business integrations (payment gateway, marketplace,
+tax/Coretax, logistics).
 
-Stack final:
+Final stack:
 - Runtime: Bun.
-- Backend platform: Bun-only. Node.js dilarang kecuali ada izin maintainer dan catatan docs karena Bun belum mendukung kebutuhan teknis terkait.
+- Backend platform: Bun-only. Node.js is forbidden unless a maintainer grants permission and a docs note records that Bun does not yet support the relevant technical need.
 - Web framework: Astro 7.
 - Database: PostgreSQL.
-- Arsitektur: modular monolith, microservice-ready.
-- Mode operasi: hybrid online-first (online jalur utama; offline/LAN mode ketahanan), optional online sync/R2.
+- Architecture: modular monolith, microservice-ready.
+- Operating mode: hybrid online-first (online is the main path; offline/LAN is the resilience mode), optional online sync/R2.
 - Security baseline: RBAC + ABAC + PostgreSQL RLS + audit log.
 - API docs: OpenAPI.
 - Event docs: AsyncAPI.
 
-Aturan wajib:
-1. Baca README, docs, package.json, sql, src/modules, openapi, asyncapi sebelum edit.
-2. Jangan mengubah file unrelated.
-3. Kerjakan atomic sesuai issue/sprint.
-4. Jika mengubah database, tambahkan migration SQL berurutan.
-5. Jangan menambah Node.js/npm/npx/pnpm/yarn atau adapter server Node.js. Jika benar-benar terpaksa karena Bun belum support, hentikan implementasi, minta izin maintainer, lalu catat pengecualian di docs/audit sebelum merge.
-6. Jika menambah/mengubah API, update OpenAPI.
-7. Jika menambah/mengubah event, update AsyncAPI.
-8. Mutation high-risk (posting ledger, invoice, purchase order, payroll run, payment callback) wajib Idempotency-Key.
-9. Data tenant wajib tenant context, ABAC, dan RLS.
-10. Data sensitif (finansial, NPWP/NIK, gaji, nomor rekening) harus dimasking/diredaksi.
-11. High-risk action harus audit log.
-12. Resource deletable memakai soft delete; posted/append-only entity (ledger entry, sales/purchase document, payroll run) tidak boleh dihapus.
-13. Jalankan test/validasi relevan.
-14. Update dokumentasi sesuai perubahan.
+Mandatory rules:
+1. Read README, docs, package.json, sql, src/modules, openapi, asyncapi before editing.
+2. Do not change unrelated files.
+3. Work atomically according to the issue/sprint.
+4. If you change the database, add a sequential SQL migration.
+5. Do not add Node.js/npm/npx/pnpm/yarn or a Node.js server adapter. If it is genuinely unavoidable because Bun does not support it yet, stop the implementation, request maintainer permission, then record the exception in docs/audit before merging.
+6. If you add/change an API, update OpenAPI.
+7. If you add/change an event, update AsyncAPI.
+8. High-risk mutations (ledger posting, invoice, purchase order, payroll run, payment callback) must carry an Idempotency-Key.
+9. Tenant data must use tenant context, ABAC, and RLS.
+10. Sensitive data (financial, NPWP/NIK, salary, bank account number) must be masked/redacted.
+11. High-risk actions must be audit logged.
+12. Deletable resources use soft delete; posted/append-only entities (ledger entry, sales/purchase document, payroll run) must never be deleted.
+13. Run the relevant tests/validation.
+14. Update the documentation to match the change.
 
-Format laporan akhir:
+Final report format:
 - Summary
 - Files changed
 - Commands run
@@ -100,48 +102,48 @@ Format laporan akhir:
 - Next recommended step
 ```
 
-## Prompt Skeleton Repository
+## Repository Skeleton Prompt
 
 ```text
 Objective:
-Buat skeleton repository AWCMS berbasis Bun + Astro 7 + PostgreSQL dengan arsitektur modular monolith, untuk platform ERP.
+Create the AWCMS repository skeleton on Bun + Astro 7 + PostgreSQL with a modular monolith architecture, for an ERP platform.
 
 Scope:
-1. Buat root folders: src, sql, scripts, openapi, asyncapi, docs, deploy, tests, fixtures, public.
-2. Buat package.json, astro.config.mjs, tsconfig.json, .gitignore, .env.example, docker-compose.yml, README.md.
-3. Buat shared foundation: module-contract, api-response, tenant-context, domain-event, audit, idempotency.
-4. Buat shared soft-delete convention: tipe/list option/filter default `deleted_at IS NULL`.
-5. Buat health endpoint.
-6. Buat migration awal.
-7. Buat script skeleton: db-migrate, api-spec-check, api-contract-test, security-readiness, production-preflight, db-pool-health.
-8. Buat OpenAPI/AsyncAPI baseline.
-9. Buat docs awal.
+1. Create root folders: src, sql, scripts, openapi, asyncapi, docs, deploy, tests, fixtures, public.
+2. Create package.json, astro.config.mjs, tsconfig.json, .gitignore, .env.example, docker-compose.yml, README.md.
+3. Create the shared foundation: module-contract, api-response, tenant-context, domain-event, audit, idempotency.
+4. Create the shared soft-delete convention: type/list option/default filter `deleted_at IS NULL`.
+5. Create the health endpoint.
+6. Create the initial migration.
+7. Create the script skeleton: db-migrate, api-spec-check, api-contract-test, security-readiness, production-preflight, db-pool-health.
+8. Create the OpenAPI/AsyncAPI baseline.
+9. Create the initial docs.
 
 Out of scope:
-- Business logic modul domain ERP (finance/inventory/procurement/dst.).
-- Login penuh.
-- Provider eksternal (payment gateway/marketplace/Coretax/logistik).
-- Data dummy customer/keuangan asli.
+- Business logic of the ERP domain modules (finance/inventory/procurement/etc.).
+- Full login.
+- External providers (payment gateway/marketplace/Coretax/logistics).
+- Real customer/financial dummy data.
 
 Security:
 - .env ignored.
-- .env.example placeholder.
-- No secret.
-- Error tidak expose stack trace.
-- Logger punya redaction helper.
+- .env.example placeholders.
+- No secrets.
+- Errors must not expose stack traces.
+- The logger has a redaction helper.
 
 Commands:
 - bun install
 - bun run build
 - bun run api:spec:check
-- bun run db:migrate jika PostgreSQL tersedia.
+- bun run db:migrate if PostgreSQL is available.
 ```
 
-## Prompt Sprint 1 — Repository Foundation
+## Sprint 1 Prompt — Repository Foundation
 
 ```text
 Objective:
-Implementasikan Sprint 1 AWCMS: repository foundation, migration runner, OpenAPI/AsyncAPI baseline, Docker Compose PostgreSQL, dan health endpoint.
+Implement AWCMS Sprint 1: repository foundation, migration runner, OpenAPI/AsyncAPI baseline, Docker Compose PostgreSQL, and the health endpoint.
 
 Files to inspect:
 - README.md
@@ -155,112 +157,112 @@ Files to inspect:
 - docs
 
 Acceptance:
-- bun install berhasil.
-- bun run build berhasil.
-- db:migrate tersedia.
-- api:spec:check tersedia.
+- bun install succeeds.
+- bun run build succeeds.
+- db:migrate available.
+- api:spec:check available.
 - /api/v1/health ok.
-- No secret.
+- No secrets.
 ```
 
-## Prompt Sprint 2 — Tenant, Identity, Profile
+## Sprint 2 Prompt — Tenant, Identity, Profile
 
 ```text
 Objective:
-Implementasikan tenant, office, physical location, central profile, identity login, tenant user membership, dan setup wizard awal.
+Implement tenant, office, physical location, central profile, identity login, tenant user membership, and the initial setup wizard.
 
 Scope:
-- Migration tenant/profile/identity/setup.
-- Module tenant-admin, profile-identity, identity-access.
-- API setup/status, setup/initialize, auth/login, auth/me, profiles/resolve, profiles/{id}/links, offices.
-- Basic tests profile resolver dan login.
+- Tenant/profile/identity/setup migrations.
+- Modules tenant-admin, profile-identity, identity-access.
+- APIs setup/status, setup/initialize, auth/login, auth/me, profiles/resolve, profiles/{id}/links, offices.
+- Basic tests for the profile resolver and login.
 
 Security:
-- Password hash.
-- Identifier masked.
-- Tenant inactive ditolak.
-- Setup initialize hanya sebelum setup locked.
-- RLS siap.
-- Soft delete/restore untuk office/profile master diaudit dan tidak membuka identifier mentah.
+- Password hashing.
+- Identifiers masked.
+- Inactive tenants rejected.
+- Setup initialize only before setup is locked.
+- RLS ready.
+- Soft delete/restore for office/profile master is audited and does not expose raw identifiers.
 ```
 
-## Prompt Sprint 3 — RBAC/ABAC
+## Sprint 3 Prompt — RBAC/ABAC
 
 ```text
 Objective:
-Implementasikan RBAC, ABAC, access assignment, activity registry, evaluator, dan decision log.
+Implement RBAC, ABAC, access assignment, activity registry, evaluator, and decision log.
 
 Rules:
 - Default deny.
 - Deny overrides allow.
-- Access denied high-risk masuk decision log.
-- Assignment access wajib audit.
-- RLS tetap wajib.
+- High-risk access denials go into the decision log.
+- Access assignment must be audited.
+- RLS remains mandatory.
 
 Tests:
 - default deny.
 - deny overrides allow.
-- role terbatas (mis. staff gudang tanpa akses posting finance).
+- restricted roles (e.g. warehouse staff without finance posting access).
 - cross-tenant blocked.
 ```
 
-## Prompt Sprint 4 — Finance & Accounting (General Ledger)
+## Sprint 4 Prompt — Finance & Accounting (General Ledger)
 
 ```text
 Objective:
-Implementasikan chart of accounts, journal, ledger entry (posting), dan fiscal period.
+Implement chart of accounts, journal, ledger entry (posting), and fiscal period.
 
-Posting jurnal harus:
+Journal posting must:
 1. Validate access (ABAC).
 2. Validate idempotency.
-3. Validate debit = kredit.
-4. Validate fiscal period masih open.
+3. Validate debit = credit.
+4. Validate that the fiscal period is still open.
 5. Create ledger entries (append-only).
-6. Create audit event.
+6. Create an audit event.
 7. Publish finance.ledger_entry.posted.
 
 Out of scope:
 - Multi-currency revaluation.
-- Consolidation lintas legal entity.
+- Cross-legal-entity consolidation.
 
 Security:
-- Idempotency-Key wajib untuk posting.
-- ABAC guard untuk create/approve/post.
-- Ledger entry immutable setelah posted; koreksi lewat reversal.
+- Idempotency-Key mandatory for posting.
+- ABAC guard for create/approve/post.
+- Ledger entries are immutable once posted; corrections go through reversal.
 ```
 
-## Prompt Sprint 5 — Inventory & Warehouse
+## Sprint 5 Prompt — Inventory & Warehouse
 
 ```text
 Objective:
-Implementasikan item catalog, category, unit, stock balance, stock movement, warehouse/zone/bin, transfer, dan cycle count.
+Implement item catalog, category, unit, stock balance, stock movement, warehouse/zone/bin, transfer, and cycle count.
 
 Scope:
 - Item CRUD/search.
 - Stock balance per warehouse/bin.
-- Stock movement append-only.
+- Append-only stock movement.
 - Opening balance.
 - Warehouse transfer approve/ship/receive.
 - Cycle count variance.
 
 Security:
-- Item create/update membutuhkan ABAC.
-- Stock adjustment reason wajib.
+- Item create/update requires ABAC.
+- Stock adjustment reason is mandatory.
 - Tenant filter + RLS.
-- Item/category soft delete/restore membutuhkan ABAC, audit, dan default list menyembunyikan arsip.
-- Stock lock (`FOR UPDATE`) untuk balance yang berubah.
+- Item/category soft delete/restore requires ABAC, audit, and the default list hides archived rows.
+- Stock lock (`FOR UPDATE`) for balances that change.
 ```
 
-## Prompt Sprint 6 — Logging dan Pooling
+## Sprint 6 Prompt — Logging and Pooling
 
 ```text
 Objective:
-Implementasikan structured logging, audit trail, redaction, database pooling, backpressure, health endpoint, dan PgBouncer profile.
+Implement structured logging, audit trail, redaction, database pooling, backpressure, health endpoint, and the PgBouncer profile.
 
 Redact:
-- password, token, API key, secret, authorization, NPWP, NIK, phone, WhatsApp, email, nomor rekening bank, nilai gaji individual.
+- password, token, API key, secret, authorization, NPWP, NIK, phone, WhatsApp, email, bank account number, individual salary figures.
 
-Pool work class:
+Pool work classes:
 - critical_transaction.
 - interactive.
 - reporting.
@@ -268,129 +270,129 @@ Pool work class:
 - maintenance.
 ```
 
-## Prompt Sprint 7 — Procurement
+## Sprint 7 Prompt — Procurement
 
 ```text
 Objective:
-Implementasikan supplier master, purchase request, purchase order, approval, dan goods receipt.
+Implement supplier master, purchase request, purchase order, approval, and goods receipt.
 
 Rules:
-- Purchase order butuh approval sebelum dikirim ke supplier.
-- Goods receipt tidak melebihi PO outstanding, memicu stock movement.
-- Three-way match (PO – goods receipt – invoice) sebelum pembayaran disetujui.
-- Idempotency-Key untuk approve/receive.
+- A purchase order needs approval before being sent to the supplier.
+- Goods receipt must not exceed the PO outstanding, and triggers a stock movement.
+- Three-way match (PO – goods receipt – invoice) before a payment is approved.
+- Idempotency-Key for approve/receive.
 ```
 
-## Prompt Sprint 8 — Sync dan Object Storage
+## Sprint 8 Prompt — Sync and Object Storage
 
 ```text
 Objective:
-Implementasikan sync node, outbox, inbox, push, pull, checkpoint, conflict, HMAC, dan R2 object queue.
+Implement sync node, outbox, inbox, push, pull, checkpoint, conflict, HMAC, and the R2 object queue.
 
 Rules:
-- Push/pull signed HMAC.
-- Timestamp anti replay.
-- Node inactive ditolak.
-- Posted transaction (ledger, sales/purchase document, payroll run) immutable.
-- Tombstone soft delete disinkronkan; physical delete menunggu retention/legal.
-- Conflict high-risk manual review.
-- R2 secret dari env.
+- Push/pull signed with HMAC.
+- Timestamp anti-replay.
+- Inactive nodes rejected.
+- Posted transactions (ledger, sales/purchase document, payroll run) are immutable.
+- Soft-delete tombstones are synchronised; physical delete waits for retention/legal.
+- High-risk conflicts get manual review.
+- R2 secrets come from env.
 ```
 
-## Prompt Sprint 9 — Manufacturing
+## Sprint 9 Prompt — Manufacturing
 
 ```text
 Objective:
-Implementasikan bill of materials (BOM), work order, material consumption, dan finished goods output.
+Implement bill of materials (BOM), work order, material consumption, and finished goods output.
 
 Rules:
-- BOM component tersedia stoknya sebelum work order start.
-- Material consumption memicu stock movement (bahan baku keluar, barang jadi masuk).
-- Work order tidak bisa complete dua kali (idempotent).
-- Movement append-only.
-- Balance yang berubah dikunci (`FOR UPDATE`).
+- BOM components must be in stock before a work order starts.
+- Material consumption triggers stock movement (raw materials out, finished goods in).
+- A work order cannot complete twice (idempotent).
+- Movements are append-only.
+- Balances that change are locked (`FOR UPDATE`).
 ```
 
-## Prompt Sprint 10 — HR & Payroll
+## Sprint 10 Prompt — HR & Payroll
 
 ```text
 Objective:
-Implementasikan employee master, attendance, payroll run, posting payroll, dan payslip.
+Implement employee master, attendance, payroll run, payroll posting, and payslip.
 
 Rules:
-- Data pribadi karyawan (NIK, rekening bank, gaji) dimasking di log dan response non-authorized.
-- Payroll run post idempotent dan append-only setelah posted.
-- Payslip hanya bisa diakses karyawan bersangkutan atau role HR/finance berwenang.
-- Payroll run posted memicu ledger entry finance (beban gaji).
+- Employee personal data (NIK, bank account, salary) is masked in logs and in non-authorized responses.
+- Payroll run posting is idempotent and append-only once posted.
+- A payslip is only accessible to the employee it belongs to or to an authorized HR/finance role.
+- A posted payroll run triggers a finance ledger entry (salary expense).
 ```
 
-## Prompt Sprint 11 — Tax/Coretax
+## Sprint 11 Prompt — Tax/Coretax
 
 ```text
 Objective:
-Implementasikan tax profile, NITKU, party/product tax profile, VAT invoice staging, validation, dan Coretax XML batch.
+Implement tax profile, NITKU, party/product tax profile, VAT invoice staging, validation, and the Coretax XML batch.
 
 Rules:
-- Coretax readiness bersifat XML-ready/staging-ready.
-- Jangan mengasumsikan API upload resmi.
-- NPWP/NIK/NITKU dimasking.
-- Export audit.
-- XML file akses terbatas.
-- Approval jika policy aktif.
+- Coretax readiness is XML-ready/staging-ready.
+- Do not assume an official upload API.
+- NPWP/NIK/NITKU are masked.
+- Exports are audited.
+- XML file access is restricted.
+- Approval if the policy is active.
 ```
 
-## Prompt Sprint 12 — Integrasi Bisnis Eksternal
+## Sprint 12 Prompt — External Business Integrations
 
 ```text
 Objective:
-Implementasikan adapter payment gateway, marketplace, dan logistik sebagai sub-komponen modul integrasi bisnis (bukan modul top-level terpisah, kecuali diputuskan lain lewat proses admission doc 21).
+Implement payment gateway, marketplace, and logistics adapters as sub-components of the business integration module (not separate top-level modules, unless decided otherwise through the doc 21 admission process).
 
 Rules:
-- Kredensial provider dari env, tidak hardcode.
-- Webhook signature diverifikasi sebelum diproses.
-- Payment callback idempotent (Idempotency-Key atau equivalent provider).
-- Marketplace order sync tidak menduplikasi sales/finance record — cek existing record dulu.
-- Provider eksternal tidak dipanggil di dalam DB transaction.
-- Offline-first: kegagalan provider masuk retry queue, tidak memblokir alur inti.
+- Provider credentials come from env, never hardcoded.
+- Webhook signatures are verified before processing.
+- Payment callbacks are idempotent (Idempotency-Key or the provider equivalent).
+- Marketplace order sync must not duplicate sales/finance records — check for an existing record first.
+- External providers are never called inside a DB transaction.
+- Offline-first: provider failures go into the retry queue and do not block the core flow.
 ```
 
-## Prompt Sprint 13 — UI/UX, Reporting, AI
+## Sprint 13 Prompt — UI/UX, Reporting, AI
 
 ```text
 Objective:
-Implementasikan admin UI, reporting views/API, dan AI business analyst read-only.
+Implement the admin UI, reporting views/API, and the read-only AI business analyst.
 
 AI rules:
 - Read-only.
 - No raw SQL.
 - No mutation.
 - Safe aggregate views only.
-- No raw PII/tax identity/nilai gaji individual.
-- Tool call audit.
+- No raw PII/tax identity/individual salary figures.
+- Tool calls are audited.
 ```
 
-## Prompt Sprint 14 — Workflow, Security, Deployment, Handover
+## Sprint 14 Prompt — Workflow, Security, Deployment, Handover
 
 ```text
 Objective:
-Implementasikan workflow approval, production security readiness, deployment profile, backup/restore script, production preflight, dan handover docs.
+Implement workflow approval, production security readiness, deployment profile, backup/restore scripts, production preflight, and handover docs.
 
 Rules:
-- Critical control fail blocks go-live.
-- Workflow decision wajib reason.
-- Self-approval denied jika policy melarang (mis. pembuat PO tidak boleh approve PO sendiri).
-- Backup not public.
-- Restore test documented.
+- A failing critical control blocks go-live.
+- Workflow decisions must carry a reason.
+- Self-approval is denied when policy forbids it (e.g. the PO creator must not approve their own PO).
+- Backups are not public.
+- Restore tests are documented.
 ```
 
-## Template Prompt Per Issue
+## Per-Issue Prompt Template
 
 ```text
 Objective:
-Kerjakan issue: <ISSUE_TITLE>.
+Work the issue: <ISSUE_TITLE>.
 
 Context:
-AWCMS menggunakan Bun + Astro 7 + PostgreSQL, modular monolith, hybrid online-first (online jalur utama; offline/LAN mode ketahanan), RBAC+ABAC+RLS, audit log, OpenAPI, AsyncAPI. Skop platform: ERP (finance, inventory, procurement, manufacturing, HR/payroll) + website/e-commerce + integrasi bisnis eksternal.
+AWCMS uses Bun + Astro 7 + PostgreSQL, modular monolith, hybrid online-first (online is the main path; offline/LAN is the resilience mode), RBAC+ABAC+RLS, audit log, OpenAPI, AsyncAPI. Platform scope: ERP (finance, inventory, procurement, manufacturing, HR/payroll) + website/e-commerce + external business integrations.
 
 Issue details:
 - Problem:
@@ -424,7 +426,7 @@ Implementation rules:
 - High-risk mutation idempotent.
 - Tenant data uses context + RLS.
 - High-risk action audit log.
-- Soft delete/restore/purge mengikuti doc 10/11; posted/append-only entity tidak dihapus.
+- Soft delete/restore/purge follows doc 10/11; posted/append-only entities are never deleted.
 
 Validation:
 - bun run db:migrate
@@ -443,22 +445,22 @@ Final report:
 - Next recommended step
 ```
 
-## Prompt Review PR
+## PR Review Prompt
 
 ```text
 Review focus:
-1. Scope sesuai issue.
-2. Tidak ada unrelated change.
-3. No secret/data sensitif (finansial/PII).
-4. Migration aman.
-5. API sesuai OpenAPI.
-6. Event sesuai AsyncAPI.
+1. Scope matches the issue.
+2. No unrelated changes.
+3. No secrets/sensitive data (financial/PII).
+4. Migration is safe.
+5. API matches OpenAPI.
+6. Event matches AsyncAPI.
 7. Tenant context.
 8. ABAC.
 9. RLS.
 10. Idempotency.
 11. Audit.
-12. Soft delete policy (posted entity tidak dihapus).
+12. Soft delete policy (posted entities are never deleted).
 13. Input validation.
 14. Error response.
 15. Sensitive masking.
@@ -477,7 +479,7 @@ Output:
 - Suggested patch
 ```
 
-## Prompt Security Review
+## Security Review Prompt
 
 ```text
 Review module <MODULE_NAME> for:
@@ -486,16 +488,16 @@ Review module <MODULE_NAME> for:
 - Tenant context.
 - ABAC default deny.
 - RLS.
-- Audit high-risk (posting/approval finansial).
-- Idempotency high-risk (posting/payment callback).
-- Sensitive masking (finansial, NPWP/NIK, gaji).
+- Audit for high-risk actions (financial posting/approval).
+- Idempotency for high-risk actions (posting/payment callback).
+- Sensitive masking (financial, NPWP/NIK, salary).
 - Safe errors.
 - Provider credentials from env.
 - Sync HMAC.
 - AI read-only.
 ```
 
-## Prompt Production Preflight
+## Production Preflight Prompt
 
 ```text
 Checklist:
@@ -520,33 +522,33 @@ Checklist:
 - No critical findings.
 ```
 
-## Instruksi jika command gagal
+## Instructions when a command fails
 
-Wajib laporkan:
+You must report:
 
-- Command yang gagal.
+- The command that failed.
 - Error summary.
 - Likely cause.
 - Manual/file-level validation.
-- Status partial/blocked.
+- Partial/blocked status.
 - Next step.
 
-## Instruksi offline-first
+## Offline-first instructions
 
-- Alur transaksi inti (posting stok/ledger) tidak bergantung internet.
-- Provider eksternal (payment gateway, marketplace, Coretax, logistik) masuk queue.
-- File lokal disimpan dulu.
-- R2 optional.
-- Retry aman.
-- Conflict policy jelas.
-- Tidak overwrite posted transaction.
+- The core transaction flow (stock/ledger posting) does not depend on the internet.
+- External providers (payment gateway, marketplace, Coretax, logistics) go into a queue.
+- Local files are stored first.
+- R2 is optional.
+- Retries are safe.
+- The conflict policy is explicit.
+- Posted transactions are never overwritten.
 
-## Instruksi bootstrap repository (belum dikerjakan)
+## Repository bootstrap instructions (not done yet)
 
-> **Catatan status.** Repo `awcms` ini belum memiliki `package.json`, `src/`, atau folder implementasi apa pun. Prompt di bawah adalah instruksi bootstrap awal (setara Issue 0.1 di awcms-mini) — **belum dikerjakan**, ini pekerjaan pertama yang perlu dilakukan begitu tim siap memulai implementasi. Lihat [`../../AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib sebelum memulai.
+> **Status note.** This `awcms` repo does not yet have a `package.json`, `src/`, or any implementation folder. The prompt below is the initial bootstrap instruction (the equivalent of Issue 0.1 in awcms-mini) — **not done yet**; it is the first piece of work that needs to happen once the team is ready to start the implementation. See [`../../AGENTS.md`](../../AGENTS.md) for the mandatory workflow before starting.
 
 ```text
-Kerjakan Issue 0.1 — Initialize AWCMS Modular Monolith Repository Structure.
+Work Issue 0.1 — Initialize AWCMS Modular Monolith Repository Structure.
 
 Scope:
 1. package.json
@@ -565,9 +567,9 @@ Scope:
 Out of scope:
 - Database migration runner
 - Login
-- Modul domain ERP (finance/inventory/procurement/dst.)
-- Provider eksternal
-- UI lengkap
+- ERP domain modules (finance/inventory/procurement/etc.)
+- External providers
+- Full UI
 
 Validation:
 - bun install

@@ -1,66 +1,68 @@
-# Bagian 10 — Template Implementasi Kode dan Coding Standard
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](10_template_kode_coding_standard.id.md)
 
-> **Status implementasi (2026-07-14).** Dokumen ini diadaptasi dari standar dasar `docs/awcms-mini/10_template_kode_coding_standard.md`. Repo `awcms` adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)): base sudah menyertakan **modul fondasi + modul website/konten** dan sedang **menyerap** klaster website/e-commerce awcms-micro langsung ke `src/modules/` (status kode aktual: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). Standar di bawah **mengikat** baik untuk modul base maupun modul domain (ERP, website/e-commerce, konten) yang ditambahkan langsung ke `src/modules/` template ini. Skill proyek yang dirujuk (`.claude/skills/awcms-*`) menandai pola implementasi yang mengikat untuk modul terkait.
+# Part 10 — Code Implementation Template and Coding Standard
+
+> **Implementation status (2026-07-14).** This document is adapted from the base standard `docs/awcms-mini/10_template_kode_coding_standard.md`. The `awcms` repo is the **used-directly ERP/back-office template of the AWCMS family** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)): the base already ships **foundation modules + website/content modules** and is **absorbing** the awcms-micro website/e-commerce cluster directly into `src/modules/` (actual code status: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). The standards below are **binding** both for base modules and for domain modules (ERP, website/e-commerce, content) added directly to this template's `src/modules/`. The project skills referenced (`.claude/skills/awcms-*`) mark the implementation patterns that are binding for the related module.
 >
-> **Standar base + contoh domain.** Dokumen ini adalah **standar/pola reusable**. Contoh yang dipakai memakai domain **ERP (finance/accounting, inventory/warehouse)** sebagai ilustrasi — ganti detail domainnya sesuai kebutuhan modul yang sedang dibangun. Lihat [README paket dokumen](README.md).
+> **Base standard + domain examples.** This document is a **reusable standard/pattern**. The examples used take the **ERP (finance/accounting, inventory/warehouse)** domain as an illustration — swap the domain details for whatever the module being built needs. See the [document package README](README.md).
 
-## Tujuan
+## Purpose
 
-Dokumen ini menetapkan standar coding AWCMS untuk TypeScript/Bun/Astro/PostgreSQL agar implementasi konsisten, aman, testable, dan maintainable.
+This document sets the AWCMS coding standard for TypeScript/Bun/Astro/PostgreSQL so that implementation is consistent, secure, testable, and maintainable.
 
-## Prinsip coding
+## Coding principles
 
 1. TypeScript strict.
-2. API route tipis; business logic di service.
-3. Query database di repository/infrastructure.
-4. Semua input user divalidasi.
-5. Semua mutation high-risk idempotent.
-6. Semua operasi multi-table memakai transaction.
-7. Semua akses tenant-scoped memakai tenant context, ABAC, dan RLS.
-8. Semua high-risk action audit log.
-9. Semua sensitive data dimasking/redacted.
-10. Resource deletable memakai soft delete; query default menyaring `deleted_at IS NULL`.
-11. Error response standard dan tidak expose stack trace.
-12. Backend dan semua tooling repository berjalan dengan **Bun**. Jangan menambah Node.js runtime/tooling (`node`, `npm`, `npx`, `pnpm`, `yarn`, adapter server Node.js) kecuali Bun belum mendukung kebutuhan teknis tersebut dan pengecualian sudah disetujui serta dicatat di docs.
+2. Thin API routes; business logic in the service.
+3. Database queries in the repository/infrastructure.
+4. All user input is validated.
+5. All high-risk mutations are idempotent.
+6. All multi-table operations use a transaction.
+7. All tenant-scoped access uses tenant context, ABAC, and RLS.
+8. All high-risk actions are audit logged.
+9. All sensitive data is masked/redacted.
+10. Deletable resources use soft delete; queries filter `deleted_at IS NULL` by default.
+11. Error responses are standard and do not expose a stack trace.
+12. The backend and all repository tooling run on **Bun**. Do not add Node.js runtime/tooling (`node`, `npm`, `npx`, `pnpm`, `yarn`, Node.js server adapters) unless Bun does not yet support that technical need and the exception has been approved and recorded in the docs.
 
-## Standar platform backend
+## Backend platform standard
 
-- Runtime backend wajib **Bun**.
-- Package manager wajib **Bun** (`packageManager` di `package.json` mengunci versi Bun).
-- Script repository wajib dipanggil melalui `bun` atau `bun run`.
-- Prefer API/runtime Bun (`Bun.serve`, `Bun.sql` bila dipakai, `bun test`) selama sesuai kebutuhan.
-- Jangan menambahkan Node.js sebagai runtime server utama, npm-family package manager, atau adapter yang mengharuskan proses backend berjalan di Node.js.
-- Jika Bun belum mendukung kebutuhan teknis tertentu, buka pengecualian kecil dan sementara: minta izin maintainer, catat alasan dan alternatif Bun yang sudah dicoba, cantumkan file/package terdampak, tentukan rencana migrasi kembali ke Bun, dan update audit/docs sebelum merge.
+- The backend runtime must be **Bun**.
+- The package manager must be **Bun** (`packageManager` in `package.json` pins the Bun version).
+- Repository scripts must be invoked through `bun` or `bun run`.
+- Prefer Bun APIs/runtime (`Bun.serve`, `Bun.sql` where used, `bun test`) as long as they fit the need.
+- Do not add Node.js as the primary server runtime, an npm-family package manager, or an adapter that requires the backend process to run on Node.js.
+- If Bun does not yet support a particular technical need, open a small and temporary exception: ask the maintainer for permission, record the reason and the Bun alternatives already tried, list the affected files/packages, define a plan to migrate back to Bun, and update the audit/docs before merging.
 
-### Yang DIIZINKAN (bukan pelanggaran Bun-only)
+### What is ALLOWED (not a Bun-only violation)
 
-- **Import `node:*`** (`node:crypto`, `node:fs/promises`, `node:path`, `node:os`, dst.) adalah **API bawaan Bun** — Bun mengimplementasikan permukaan API Node, jadi ini **tidak** menarik runtime Node.js. Gunakan bebas; jangan dilarang. (Hindari mengandalkan modul Node yang belum diimplementasikan Bun.)
-- **`@types/*` (mis. `@types/bun`)** hanya tipe di `devDependencies`; tidak menarik runtime Node.js. Prefer `@types/bun` (sudah mencakup global mirip Node) daripada `@types/node`.
-- Package **pure-JS** yang berjalan di atas Bun tanpa memaksa proses Node.
+- **`node:*` imports** (`node:crypto`, `node:fs/promises`, `node:path`, `node:os`, etc.) are **built-in Bun APIs** — Bun implements the Node API surface, so this does **not** pull in the Node.js runtime. Use them freely; do not ban them. (Avoid relying on Node modules Bun has not implemented yet.)
+- **`@types/*` (e.g. `@types/bun`)** are types only, in `devDependencies`; they do not pull in the Node.js runtime. Prefer `@types/bun` (which already covers the Node-like globals) over `@types/node`.
+- **Pure-JS** packages that run on top of Bun without forcing a Node process.
 
-### Yang DILARANG (tanpa pengecualian tertulis)
+### What is FORBIDDEN (without a written exception)
 
-- Binary/tooling `node`, `npm`, `npx`, `pnpm`, `yarn` di script `package.json`, CI, atau `deploy/`.
-- Adapter/server yang **mengharuskan** proses backend berjalan di runtime Node.js.
-- Menjalankan test dengan runner Node (`node --test`); test runner wajib `bun test`.
+- The `node`, `npm`, `npx`, `pnpm`, `yarn` binaries/tooling in `package.json` scripts, CI, or `deploy/`.
+- Adapters/servers that **require** the backend process to run on the Node.js runtime.
+- Running tests with the Node runner (`node --test`); the test runner must be `bun test`.
 
-### Aturan konkret
+### Concrete rules
 
-- **Server HTTP**: `Bun.serve` native. Framework di atasnya (mis. Hono) harus dijalankan lewat `Bun.serve`, bukan adapter Node.
-- **Database**: `Bun.sql` (klien Postgres native Bun) atau `postgres` (postgres.js, pure-JS). Hindari `pg` yang lebih berat/berorientasi Node.
-- **Bin dengan shebang `#!/usr/bin/env node`** (mis. `astro`, `vite`): panggil lewat **`bun --bun`** (mis. `bun --bun astro build`, `bun --bun astro dev`) agar Bun yang mengeksekusi, bukan binary `node` yang mungkin terpasang di mesin. Tanpa `--bun`, `bun run` mengikuti shebang dan bisa jatuh ke Node.
-- **SSR Astro**: Astro belum punya adapter Bun first-party. Dua opsi tersanksi:
-  1. **Rekomendasi** — pisahkan seam: API/backend di `Bun.serve` (+Hono) native; Astro hanya untuk frontend/SSR.
-  2. Pakai `@astrojs/node` (standalone) **dijalankan di atas Bun** (`bun ./dist/standalone-entry.mjs`) dan build via `bun --bun astro build`. Ini satu-satunya pemakaian paket ber-nama "node" yang diizinkan (runtime tetap Bun); catat sebagai pengecualian di dokumen audit standar pengembangan bila dipakai.
+- **HTTP server**: native `Bun.serve`. A framework on top of it (e.g. Hono) must be run through `Bun.serve`, not a Node adapter.
+- **Database**: `Bun.sql` (Bun's native Postgres client) or `postgres` (postgres.js, pure-JS). Avoid `pg`, which is heavier and Node-oriented.
+- **Bins with the shebang `#!/usr/bin/env node`** (e.g. `astro`, `vite`): call them through **`bun --bun`** (e.g. `bun --bun astro build`, `bun --bun astro dev`) so that Bun is what executes them, not the `node` binary that may happen to be installed on the machine. Without `--bun`, `bun run` follows the shebang and can fall through to Node.
+- **Astro SSR**: Astro has no first-party Bun adapter yet. Two sanctioned options:
+  1. **Recommended** — split the seam: API/backend on native `Bun.serve` (+Hono); Astro only for frontend/SSR.
+  2. Use `@astrojs/node` (standalone) **run on top of Bun** (`bun ./dist/standalone-entry.mjs`) and build via `bun --bun astro build`. This is the only allowed use of a package with "node" in its name (the runtime is still Bun); record it as an exception in the development standards audit document if used.
 
-     Entry yang dijalankan adalah **`dist/standalone-entry.mjs`** (dibangun dari `src/lib/server/standalone-entry.ts`), bukan `dist/server/entry.mjs` bawaan adapter — Issue #464. Adapter menyusun handler-nya sebagai `staticHandler(req, res, () => appHandler(req, res))`, sehingga berkas yang ada di `dist/client/` dijawab **sebelum** `src/middleware.ts` pernah jalan dan keluar tanpa satu pun header keamanan. Wrapper itu memasang `buildSecurityHeaders()` yang sama sebagai **lantai** (`setHeader` sebelum delegasi; `writeHead` milik handler tetap menang pada nama yang bentrok) lalu menyerahkan request ke handler adapter apa adanya — penyajian statisnya tidak ditulis ulang.
+     The entry that is run is **`dist/standalone-entry.mjs`** (built from `src/lib/server/standalone-entry.ts`), not the adapter's own `dist/server/entry.mjs` — Issue #464. The adapter composes its handler as `staticHandler(req, res, () => appHandler(req, res))`, so files present in `dist/client/` are answered **before** `src/middleware.ts` ever runs, and go out without a single security header. That wrapper installs the same `buildSecurityHeaders()` as a **floor** (`setHeader` before delegating; the handler's own `writeHead` still wins on clashing names) and then hands the request to the adapter handler as-is — its static serving is not rewritten.
 
-## Aliran request antar layer
+## Request flow across layers
 
 ```mermaid
 flowchart LR
-  R[API route - tipis] --> G[ABAC guard]
-  G --> V[Validasi input]
+  R[API route - thin] --> G[ABAC guard]
+  G --> V[Input validation]
   V --> S[Service - business logic]
   S --> Repo[Repository - query]
   Repo --> DB[(PostgreSQL + RLS)]
@@ -69,28 +71,28 @@ flowchart LR
   S -. high-risk .-> Aud[Audit]
 ```
 
-Route tipis → guard → validasi → service → repository → DB. Data sensitif lewat mapper sebelum keluar.
+Thin route → guard → validation → service → repository → DB. Sensitive data passes through a mapper before it leaves.
 
-## Skill pendukung (target — belum dibuat)
+## Supporting skills (target — not built yet)
 
-Standar di dokumen ini **akan** ditegakkan oleh skill proyek di `.claude/skills/` begitu modul pertama mulai dikerjakan, mengikuti pola yang sama dengan repo `awcms-mini`. Tabel berikut adalah **rencana penamaan**, bukan skill yang sudah ada hari ini.
+The standards in this document **will** be enforced by project skills in `.claude/skills/` once the first module starts being worked on, following the same pattern as the `awcms-mini` repo. The table below is a **naming plan**, not skills that exist today.
 
-| Bagian standar                      | Skill (rencana)        |
+| Standard section                    | Skill (planned)        |
 | ----------------------------------- | ---------------------- |
-| Struktur modul & descriptor         | `awcms-new-module`     |
+| Module structure & descriptor       | `awcms-new-module`     |
 | SQL migration standard              | `awcms-new-migration`  |
 | API handler rules & response helper | `awcms-new-endpoint`   |
 | Domain event envelope               | `awcms-new-event`      |
 | Idempotency wrapper rules           | `awcms-idempotency`    |
 | ABAC guard                          | `awcms-abac-guard`     |
 | Audit helper & redaction            | `awcms-audit-log`      |
-| Masking/redaction data sensitif     | `awcms-sensitive-data` |
+| Sensitive data masking/redaction    | `awcms-sensitive-data` |
 | Sync HMAC standard                  | `awcms-sync-hmac`      |
 | Pull request checklist              | `awcms-pr-review`      |
-| UI/komponen                         | `awcms-ui-screen`      |
-| Rilis & CHANGELOG                   | `awcms-release`        |
+| UI/components                       | `awcms-ui-screen`      |
+| Release & CHANGELOG                 | `awcms-release`        |
 
-## Struktur modul
+## Module structure
 
 ```text
 src/modules/<module>/
@@ -113,9 +115,9 @@ src/modules/<module>/
 └── README.md
 ```
 
-## Template Module Descriptor
+## Module Descriptor template
 
-Contoh ilustratif memakai domain **inventory/warehouse** (bukan retail/POS):
+An illustrative example using the **inventory/warehouse** domain (not retail/POS):
 
 ```ts
 import type { ModuleDescriptor } from "../_shared/module-contract";
@@ -156,12 +158,12 @@ export const warehouseManagementModule: ModuleDescriptor = {
 
 ## Module contract
 
-Sumber kebenaran kontrak `ModuleDescriptor` akan berada di `src/modules/_shared/module-contract.ts` begitu fondasi modul mulai diimplementasikan. Bentuk awal (target minimal, akan diperluas seiring kebutuhan ERP nyata — mis. capability port lintas modul finance/inventory/procurement):
+The source of truth for the `ModuleDescriptor` contract will live in `src/modules/_shared/module-contract.ts` once the module foundation starts being implemented. The initial shape (minimal target, to be extended as real ERP needs arrive — e.g. capability ports across the finance/inventory/procurement modules):
 
 ```ts
 export type ModuleType = "base" | "system" | "domain" | "integration";
 
-// `disabled` = dimatikan global oleh code/deployment — BUKAN toggle per-tenant.
+// `disabled` = switched off globally by code/deployment — NOT a per-tenant toggle.
 export type ModuleLifecycleStatus =
   "active" | "experimental" | "deprecated" | "maintenance" | "disabled";
 
@@ -180,7 +182,7 @@ export type ModuleNavigationEntry = {
   requiredPermission?: string;
 };
 
-// Non-secret defaults saja — jangan pernah taruh default berbentuk secret di sini.
+// Non-secret defaults only — never put a secret-shaped default here.
 export type ModuleSettingsContract = {
   schemaVersion?: number;
   defaults?: Record<string, unknown>;
@@ -231,7 +233,7 @@ export type ModuleDescriptor = {
 };
 ```
 
-Aturan authoring: deklarasikan sebuah field (`navigation`/`jobs`/`health`/`api`/`events`) hanya setelah fitur sungguhan yang bersangkutan ada — descriptor tidak boleh mengklaim kapabilitas yang belum diimplementasi. Tambahkan field baru secara **aditif** (SemVer kontrak `ModuleDescriptor`, catat versi kontrak di ADR terpisah begitu modul pertama berjalan) — jangan menghapus/mengganti nama field tanpa bump MAJOR.
+Authoring rule: declare a field (`navigation`/`jobs`/`health`/`api`/`events`) only after the real feature it refers to exists — a descriptor must not claim a capability that has not been implemented. Add new fields **additively** (SemVer on the `ModuleDescriptor` contract; record the contract version in a separate ADR once the first module is running) — do not remove/rename a field without a MAJOR bump.
 
 ## API response helper
 
@@ -332,7 +334,7 @@ export type TenantContext = {
 };
 ```
 
-Catatan: pada production, `tenantUserId` dan `identityId` tidak boleh dipercaya langsung dari public header. Nilai harus berasal dari auth middleware yang memvalidasi token.
+Note: in production, `tenantUserId` and `identityId` must not be trusted directly from a public header. The values must come from auth middleware that validates the token.
 
 ## ABAC guard
 
@@ -382,18 +384,18 @@ export type AccessDecision = {
 };
 ```
 
-Aturan:
+Rules:
 
-- Semua endpoint non-public wajib guard.
+- Every non-public endpoint must have a guard.
 - Default deny.
 - Deny overrides allow.
-- RLS tetap wajib.
-- Access denied high-risk masuk decision log.
-- Untuk resource soft-deletable, action `delete` berarti soft delete. Tambahkan action `restore` dan `purge` pada kontrak modul yang membutuhkan pemulihan atau purge retention; keduanya default deny sampai permission/ABAC eksplisit tersedia.
-- `retry` — retry manual entri antrian (sync/object queue, mis. retry pengiriman batch pajak/Coretax yang gagal), bukan aksi destruktif; tidak masuk `HIGH_RISK_ACTIONS`.
-- `sync` — sinkronisasi descriptor code → registry database, idempoten/non-destruktif; tidak masuk `HIGH_RISK_ACTIONS`.
-- `enable`/`disable` — toggle ketersediaan modul per-tenant, reversibel dan tidak menghapus data; tidak masuk `HIGH_RISK_ACTIONS`. Guard bersama (`authorizeInTransaction`) juga wajib menolak `403 MODULE_DISABLED` untuk permintaan apa pun ke modul yang dinonaktifkan tenant tsb, terlepas dari action-nya.
-- `check` — memicu health check eksplisit (read-mostly, bounded); tidak masuk `HIGH_RISK_ACTIONS`.
+- RLS is still mandatory.
+- A high-risk access denial goes into the decision log.
+- For soft-deletable resources, the `delete` action means soft delete. Add the `restore` and `purge` actions to the contract of modules that need recovery or retention purge; both default to deny until an explicit permission/ABAC entry exists.
+- `retry` — manual retry of a queue entry (sync/object queue, e.g. retrying a failed tax/Coretax batch submission), not a destructive action; not in `HIGH_RISK_ACTIONS`.
+- `sync` — synchronising the code descriptor → database registry, idempotent/non-destructive; not in `HIGH_RISK_ACTIONS`.
+- `enable`/`disable` — toggling per-tenant module availability, reversible and does not delete data; not in `HIGH_RISK_ACTIONS`. The shared guard (`authorizeInTransaction`) must also reject with `403 MODULE_DISABLED` for any request to a module that tenant has disabled, whatever the action is.
+- `check` — triggers an explicit health check (read-mostly, bounded); not in `HIGH_RISK_ACTIONS`.
 
 ## Audit helper
 
@@ -412,13 +414,13 @@ export type AuditEventInput = {
 };
 ```
 
-Aturan audit:
+Audit rules:
 
-- Jangan memasukkan password/token/API key/NPWP/NIK penuh/phone/email penuh/nomor rekening bank penuh.
-- Gunakan redaction sebelum audit attributes.
-- Audit tenant-scoped.
-- Soft delete, restore, dan purge high-risk wajib audit dengan reason dan resource identity yang sudah aman.
-- Posting/approval finansial (jurnal, invoice, payroll run, purchase order) wajib audit dengan actor dan reason.
+- Do not include passwords/tokens/API keys/NPWP/full NIK/phone/full email/full bank account numbers.
+- Apply redaction before the audit attributes.
+- Audit is tenant-scoped.
+- High-risk soft delete, restore, and purge must be audited with a reason and an already-safe resource identity.
+- Financial posting/approval (journal, invoice, payroll run, purchase order) must be audited with actor and reason.
 
 ## Soft delete helper
 
@@ -437,15 +439,15 @@ export type ListOptions = {
 };
 ```
 
-Aturan repository:
+Repository rules:
 
-- `list` dan `getById` default menambahkan `deleted_at IS NULL`.
-- `includeDeleted`/`onlyDeleted` hanya boleh dipakai setelah ABAC archive permission.
-- Soft delete mengisi `deleted_at`, `deleted_by`, `delete_reason`, dan menaikkan `sync_version`.
-- Restore mengosongkan `deleted_at`, `deleted_by`, `delete_reason`, mengisi `restored_at`/`restored_by`, lalu validasi ulang unique business key.
-- Purge memakai jalur terpisah dengan retention/legal check; jangan memutus FK transaksi/audit.
-- DTO publik memakai status `deleted`/`archived` seperlunya tanpa membuka PII mentah.
-- Entity yang sudah **posted** (jurnal, invoice, payroll run yang sudah dibayar) **tidak boleh** dihapus meski soft delete — koreksi lewat reversal/adjustment, bukan delete.
+- `list` and `getById` add `deleted_at IS NULL` by default.
+- `includeDeleted`/`onlyDeleted` may only be used after the ABAC archive permission.
+- Soft delete fills `deleted_at`, `deleted_by`, `delete_reason`, and increments `sync_version`.
+- Restore clears `deleted_at`, `deleted_by`, `delete_reason`, fills `restored_at`/`restored_by`, then re-validates the unique business key.
+- Purge uses a separate path with a retention/legal check; do not break transaction/audit FKs.
+- Public DTOs use a `deleted`/`archived` status as needed without exposing raw PII.
+- An entity that has been **posted** (a journal, an invoice, a payroll run that has been paid) **must not** be deleted, not even soft-deleted — correct it through a reversal/adjustment, not a delete.
 
 ## Domain event envelope
 
@@ -474,24 +476,24 @@ export type DomainEventEnvelope<TPayload> = {
 
 ```mermaid
 flowchart TD
-  A[Terima Idempotency-Key] --> B{Key sudah ada?}
-  B -- Tidak --> C[Hitung request hash] --> D[Jalankan mutation] --> E[Simpan key + hash + response] --> F[Return response]
-  B -- Ya --> G{Hash sama?}
-  G -- Ya --> H[Return response tersimpan]
-  G -- Tidak --> I[409 IDEMPOTENCY_CONFLICT]
+  A[Receive Idempotency-Key] --> B{Key already exists?}
+  B -- No --> C[Compute request hash] --> D[Run mutation] --> E[Store key + hash + response] --> F[Return response]
+  B -- Yes --> G{Same hash?}
+  G -- Yes --> H[Return stored response]
+  G -- No --> I[409 IDEMPOTENCY_CONFLICT]
 ```
 
-Mutation high-risk harus:
+A high-risk mutation must:
 
-1. Membaca header `Idempotency-Key`.
-2. Menghitung request hash stabil.
-3. Jika key sama dan hash sama, return response tersimpan.
-4. Jika key sama dan hash berbeda, return `IDEMPOTENCY_CONFLICT`.
-5. Menyimpan status/resource hasil mutation.
+1. Read the `Idempotency-Key` header.
+2. Compute a stable request hash.
+3. If the key is the same and the hash is the same, return the stored response.
+4. If the key is the same and the hash differs, return `IDEMPOTENCY_CONFLICT`.
+5. Store the status/resource resulting from the mutation.
 
-Contoh endpoint yang wajib idempotency di platform ERP (target, akan konkret begitu modul terkait dibangun):
+Examples of endpoints that must be idempotent on the ERP platform (target; these become concrete once the related modules are built):
 
-- Ledger posting (general ledger, jurnal).
+- Ledger posting (general ledger, journal).
 - Invoice generate/post/cancel.
 - Payment gateway callback/settlement.
 - Purchase order approve/receive.
@@ -506,75 +508,75 @@ Contoh endpoint yang wajib idempotency di platform ERP (target, akan konkret beg
 
 ## Transaction wrapper rules
 
-1. Gunakan transaction untuk mutation multi-table.
-2. Set RLS context pada awal transaction.
-3. Jangan buka transaction terlalu lama.
-4. Jangan call provider eksternal di dalam transaction.
-5. Gunakan `SELECT ... FOR UPDATE` untuk stok/saldo yang berubah.
-6. Gunakan timeout.
+1. Use a transaction for multi-table mutations.
+2. Set the RLS context at the start of the transaction.
+3. Do not hold a transaction open too long.
+4. Do not call an external provider inside a transaction.
+5. Use `SELECT ... FOR UPDATE` for stock/balances that change.
+6. Use a timeout.
 
 ## Repository rules
 
-1. Repository hanya query database.
-2. Tidak ada business logic kompleks.
-3. Gunakan parameterized query.
-4. Jangan string interpolation input user.
-5. Query tenant-scoped wajib filter `tenant_id`.
-6. Jangan return row mentah yang mengandung data sensitif langsung ke API.
+1. A repository only queries the database.
+2. No complex business logic.
+3. Use parameterized queries.
+4. Do not string-interpolate user input.
+5. Tenant-scoped queries must filter on `tenant_id`.
+6. Do not return raw rows containing sensitive data straight to the API.
 
 ## Service rules
 
-1. Business validation di service.
-2. Service menerima `TenantContext`.
-3. Service tidak membaca `Request` langsung.
-4. Service mengembalikan DTO aman.
-5. Service menulis audit untuk high-risk.
-6. Service mudah diuji unit test.
+1. Business validation lives in the service.
+2. The service receives a `TenantContext`.
+3. The service does not read the `Request` directly.
+4. The service returns a safe DTO.
+5. The service writes the audit entry for high-risk actions.
+6. The service is easy to unit test.
 
 ## API handler rules
 
-1. Route tipis.
-2. Ambil tenant/auth context.
-3. Cek ABAC.
-4. Validasi body/query.
-5. Gunakan transaction jika mutation.
-6. Gunakan response helper.
-7. Gunakan error handler standar.
+1. Thin route.
+2. Take the tenant/auth context.
+3. Check ABAC.
+4. Validate body/query.
+5. Use a transaction if it is a mutation.
+6. Use the response helper.
+7. Use the standard error handler.
 
 ## Validation standard
 
-- Semua input divalidasi.
-- UUID divalidasi.
-- Enum divalidasi.
-- String length dibatasi.
-- Numeric finite dan range checked (termasuk nilai moneter — jangan `float` untuk uang).
-- Unknown field ditangani.
+- All input is validated.
+- UUIDs are validated.
+- Enums are validated.
+- String length is bounded.
+- Numerics are finite and range checked (including monetary values — do not use `float` for money).
+- Unknown fields are handled.
 
 ## Stock/balance locking standard
 
-- Lock row balance (stok, saldo kas/kas kecil, saldo akun) dengan `FOR UPDATE`.
-- Urutkan lock berdasarkan ID entity (produk/akun) untuk mengurangi deadlock.
-- Jangan call provider saat lock aktif.
-- Deadlock retry harus aman dengan idempotency.
+- Lock the balance row (stock, cash/petty cash balance, account balance) with `FOR UPDATE`.
+- Order locks by entity ID (product/account) to reduce deadlocks.
+- Do not call a provider while a lock is held.
+- Deadlock retry must be safe thanks to idempotency.
 
 ## Sync HMAC standard
 
-Signature berdasarkan:
+The signature is based on:
 
 ```text
 <timestamp>.<body>
 ```
 
-Validasi:
+Validation:
 
-- Signature wajib ada.
-- Timestamp valid.
-- Max skew default 300 detik.
+- The signature must be present.
+- The timestamp is valid.
+- Max skew defaults to 300 seconds.
 - Timing-safe compare.
 
 ## Logger redaction
 
-Redact key yang mengandung:
+Redact keys containing:
 
 - password
 - passwordHash
@@ -590,27 +592,27 @@ Redact key yang mengandung:
 - whatsapp
 - email
 - bankAccountNumber
-- payrollAmount (nilai gaji individual di log non-audit)
+- payrollAmount (individual salary values in non-audit logs)
 
 ## SQL migration standard
 
-Format nama:
+Name format:
 
 ```text
 NNN_awcms_<area>_<description>.sql
 ```
 
-Aturan:
+Rules:
 
-- `CREATE TABLE IF NOT EXISTS` jika aman.
+- `CREATE TABLE IF NOT EXISTS` where it is safe.
 - `CREATE INDEX IF NOT EXISTS`.
-- Tenant-scoped table wajib `tenant_id`.
-- RLS wajib.
-- FK child index wajib.
-- CHECK constraint untuk status enum-like.
-- `timestamptz`, bukan timestamp polos.
-- `numeric` untuk uang/quantity — jangan `float`/`double precision`.
-- Tidak menyimpan password/API key plaintext.
+- Tenant-scoped tables must have `tenant_id`.
+- RLS is mandatory.
+- An index on the FK child is mandatory.
+- CHECK constraints for enum-like statuses.
+- `timestamptz`, not bare timestamp.
+- `numeric` for money/quantity — do not use `float`/`double precision`.
+- Do not store plaintext passwords/API keys.
 
 ## TypeScript standard
 
@@ -623,27 +625,27 @@ Aturan:
 | Module key        | snake_case       |
 | DB table/column   | snake_case       |
 
-Aturan:
+Rules:
 
-- Hindari `any`.
-- Gunakan `unknown` untuk input belum valid.
-- Gunakan type eksplisit untuk command/result.
-- Jangan expose DB row mentah.
-- Gunakan mapper untuk data sensitif.
+- Avoid `any`.
+- Use `unknown` for input that is not yet validated.
+- Use explicit types for commands/results.
+- Do not expose raw DB rows.
+- Use a mapper for sensitive data.
 
 ## Pull request checklist
 
-- Scope sesuai issue.
-- Tidak ada unrelated change.
-- No secret/data customer/data finansial.
-- Migration jika schema berubah.
-- OpenAPI jika API berubah.
-- AsyncAPI jika event berubah.
+- Scope matches the issue.
+- No unrelated changes.
+- No secrets/customer data/financial data.
+- A migration if the schema changed.
+- OpenAPI if the API changed.
+- AsyncAPI if an event changed.
 - Input validation.
 - Auth/ABAC/RLS.
-- Audit high-risk.
+- Audit for high-risk actions.
 - Sensitive data masked.
-- Test pass.
+- Tests pass.
 - Docs updated.
 
 ## Implementation report template

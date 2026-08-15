@@ -1,78 +1,80 @@
-# Bagian 16 — Backend Data Access dan Integrasi Database
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](16_backend_data_access_integration.id.md)
 
-> **Status dokumen (2026-07-14):** Repo `awcms` masih pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **belum ada kode modul ERP, repository, atau migration yang diimplementasikan**. Dokumen ini mengadaptasi pola data access base [awcms-mini](https://github.com/ahliweb/awcms-mini) (repository per modul, RLS via `SET LOCAL`, transactional outbox, idempotency store) menjadi **arsitektur target** yang mengikat untuk platform ERP AWCMS. Contoh Issue/PR konkret di sumber (mis. Issue #494, #599) adalah riwayat implementasi awcms-mini dan dipertahankan sebagai referensi pola, bukan klaim bahwa hal yang sama sudah terjadi di repo ini. Contoh tabel/entitas domain diganti ke ERP (jurnal, purchase order, stock adjustment, payroll) menggantikan contoh retail/POS di sumber.
+# Part 16 — Backend Data Access and Database Integration
 
-## Tujuan
+> **Document status (2026-07-14):** The `awcms` repo is still at the re-foundation stage ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **no ERP module code, repository, or migration has been implemented yet**. This document adapts the data access patterns of the base [awcms-mini](https://github.com/ahliweb/awcms-mini) (repository per module, RLS via `SET LOCAL`, transactional outbox, idempotency store) into a binding **target architecture** for the AWCMS ERP platform. Concrete Issue/PR examples from the source (e.g. Issue #494, #599) are awcms-mini implementation history and are kept as pattern references, not as a claim that the same thing has already happened in this repo. Sample domain tables/entities have been changed to ERP ones (journal, purchase order, stock adjustment, payroll), replacing the retail/POS examples from the source.
 
-Dokumen ini menetapkan **integrasi backend ↔ database** AWCMS: driver & lapisan query konkret, connection pooling & backpressure, mekanisme RLS context (`SET LOCAL`), transaction wrapper & locking, transactional outbox, migration runner, dan idempotency store — sebagai baseline yang mengikat sebelum modul ERP pertama mulai dibangun.
+## Purpose
 
-Terkait: dokumen coding standard (mengikuti pola `10_template_kode_coding_standard.md`, akan ditulis di `docs/awcms/`), dokumen ERD/data dictionary (mengikuti pola `04_erd_data_dictionary.md`, akan ditulis), `15_frontend_architecture_integration.md` (sisi frontend).
+This document sets the AWCMS **backend ↔ database integration**: the concrete driver & query layer, connection pooling & backpressure, the RLS context mechanism (`SET LOCAL`), the transaction wrapper & locking, the transactional outbox, the migration runner, and the idempotency store — as a binding baseline before the first ERP module is built.
 
-## Keputusan teknis
+Related: the coding standard document (following the `10_template_kode_coding_standard.md` pattern, to be written in `docs/awcms/`), the ERD/data dictionary document (following the `04_erd_data_dictionary.md` pattern, to be written), `15_frontend_architecture_integration.md` (the frontend side).
 
-| Aspek            | Keputusan                                                               |
-| ---------------- | ----------------------------------------------------------------------- |
-| Backend platform | **Bun runtime**; semua script backend dijalankan dengan `bun`           |
-| Driver           | `postgres` (postgres.js) atau `Bun.sql` — parameterized, mendukung pool |
-| Pola akses       | Repository per modul (`infrastructure/repository.ts`)                   |
-| RLS context      | `SET LOCAL app.current_tenant_id` di dalam transaction                  |
-| Transaction      | Wrapper eksplisit; `FOR UPDATE` untuk stok/saldo; timeout               |
-| Event/provider   | **Transactional outbox** (event, pesan CRM/notifikasi, sync)            |
-| Soft delete      | Repository default filter `deleted_at IS NULL`; restore/purge berizin   |
-| Migration        | Runner berurutan + checksum (`awcms_schema_migrations`)                 |
-| Pool             | Work-class + antrean + circuit breaker; PgBouncer opsional              |
+## Technical decisions
 
-## Lapisan akses data
+| Aspect           | Decision                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| Backend platform | **Bun runtime**; every backend script is run with `bun`                            |
+| Driver           | `postgres` (postgres.js) or `Bun.sql` — parameterized, supports pooling            |
+| Access pattern   | Repository per module (`infrastructure/repository.ts`)                             |
+| RLS context      | `SET LOCAL app.current_tenant_id` inside the transaction                           |
+| Transaction      | Explicit wrapper; `FOR UPDATE` for stock/balances; timeout                         |
+| Event/provider   | **Transactional outbox** (events, CRM/notification messages, sync)                 |
+| Soft delete      | Repository filters `deleted_at IS NULL` by default; restore/purge are permissioned |
+| Migration        | Sequential runner + checksum (`awcms_schema_migrations`)                           |
+| Pool             | Work class + queue + circuit breaker; PgBouncer optional                           |
+
+## Data access layers
 
 ```mermaid
 flowchart LR
   Svc[Service] --> Repo[Repository]
   Repo --> Pool[Pool gate - work class]
-  Pool --> Conn[(Koneksi PostgreSQL)]
+  Pool --> Conn[(PostgreSQL connection)]
   Repo --> Map[Mapper - safe DTO]
   Svc --> Tx[Transaction wrapper]
   Tx --> Rls[SET LOCAL tenant]
   Tx --> Outbox[Transactional outbox]
 ```
 
-Aturan: service memanggil repository; repository hanya query terparametrisasi + mapper; tidak ada business logic di repository. Proses backend wajib berjalan di runtime Bun; Node.js bukan platform server utama.
+The rule: the service calls the repository; the repository does nothing but parameterized queries + the mapper; there is no business logic in the repository. Backend processes must run on the Bun runtime; Node.js is not the primary server platform.
 
-## Kebijakan Bun-only dan pengecualian Node.js
+## Bun-only policy and Node.js exceptions
 
-Backend AWCMS menggunakan **Bun-only**:
+The AWCMS backend is **Bun-only**:
 
-- Jalankan backend, migration, test, build, preflight, dan script operasional melalui `bun` atau `bun run`.
-- Gunakan `bun.lock` sebagai lockfile dan `packageManager: "bun@..."` sebagai deklarasi package manager.
-- Dilarang menambah `node`, `npm`, `npx`, `pnpm`, `yarn`, adapter server Node.js, atau dependency yang memaksa proses backend berjalan di Node.js.
-- Library yang kompatibel dengan Bun boleh dipakai, walaupun berasal dari ekosistem npm, selama tidak membutuhkan runtime Node.js sebagai platform server.
-- **HTTP server** = `Bun.serve` native; **database driver** = `Bun.sql` atau `postgres` (postgres.js), bukan `pg`. Import `node:*` (mis. `node:crypto`) adalah API bawaan Bun dan **diizinkan**. Detail lengkap direncanakan di dokumen coding standard §Standar platform backend (saat ditulis); SSR Astro di atas Bun: doc 15 §Astro SSR di atas runtime Bun.
+- Run the backend, migrations, tests, build, preflight, and operational scripts through `bun` or `bun run`.
+- Use `bun.lock` as the lockfile and `packageManager: "bun@..."` as the package manager declaration.
+- It is forbidden to add `node`, `npm`, `npx`, `pnpm`, `yarn`, a Node.js server adapter, or any dependency that forces the backend process to run on Node.js.
+- Bun-compatible libraries may be used even when they come from the npm ecosystem, as long as they do not require the Node.js runtime as their server platform.
+- **HTTP server** = native `Bun.serve`; **database driver** = `Bun.sql` or `postgres` (postgres.js), not `pg`. Importing `node:*` (e.g. `node:crypto`) is a Bun built-in API and is **allowed**. Full details are planned for the coding standard document §Backend platform standard (once written); Astro SSR on Bun: doc 15 §Astro SSR on the Bun runtime.
 
-Pengecualian Node.js hanya boleh bila semua kondisi berikut terpenuhi:
+A Node.js exception is only permitted when all of the following conditions are met:
 
-1. Bun belum mendukung capability yang diperlukan, atau library Bun-compatible belum tersedia.
-2. Maintainer memberi izin eksplisit sebelum dependency/tooling ditambahkan.
-3. Dokumen terkait mencatat alasan, alternatif Bun yang sudah dicoba, scope file/package, batas waktu atau kondisi pencabutan pengecualian, dan rencana migrasi kembali ke Bun.
-4. Audit standar pengembangan diperbarui dengan entry pengecualian.
-5. CI/preflight menandai pengecualian tersebut agar tidak menjadi pola default.
+1. Bun does not yet support the required capability, or no Bun-compatible library exists yet.
+2. A maintainer gives explicit permission before the dependency/tooling is added.
+3. The relevant document records the reason, the Bun alternatives already tried, the file/package scope, the deadline or conditions for revoking the exception, and the plan for migrating back to Bun.
+4. The development standards audit is updated with an exception entry.
+5. CI/preflight flags that exception so it does not become the default pattern.
 
-Tanpa lima syarat tersebut, perubahan yang menambahkan Node.js runtime/tooling dianggap tidak memenuhi Definition of Done.
+Without those five conditions, a change that adds a Node.js runtime/tooling is considered not to meet the Definition of Done.
 
-## RLS context (kritis untuk multi-tenant/multi-entitas)
+## RLS context (critical for multi-tenant/multi-entity)
 
-Setiap transaksi tenant-scoped **wajib** menetapkan tenant di awal, lalu semua query mengikuti policy RLS (dokumen ERD, saat ditulis).
+Every tenant-scoped transaction **must** set the tenant at the start, after which all queries follow the RLS policy (the ERD document, once written).
 
 ```sql
 BEGIN;
-SET LOCAL app.current_tenant_id = $1;   -- $1 = tenant aktif dari auth
--- ... query dijalankan dengan RLS aktif ...
+SET LOCAL app.current_tenant_id = $1;   -- $1 = active tenant from auth
+-- ... queries run with RLS active ...
 COMMIT;
 ```
 
-Catatan penting:
+Important notes:
 
-- Gunakan **`SET LOCAL`** (bukan `SET` sesi) agar aman dengan **PgBouncer transaction pooling** — konteks tidak bocor antar transaksi/koneksi.
-- Nilai berasal dari auth middleware, **bukan** header publik mentah. Untuk rute publik tanpa sesi (lihat doc 15 §Rute publik tenant-scoped), nilai tetap harus lewat lookup terverifikasi (`tenantCode → tenant_id` dari `awcms_tenants`) — bukan menerima `tenant_id` mentah dari path/query sebagai kebenaran, prinsip yang sama persis.
-- RLS adalah pertahanan lapis kedua; query tetap memfilter `tenant_id` secara eksplisit.
+- Use **`SET LOCAL`** (not a session `SET`) so it is safe with **PgBouncer transaction pooling** — the context does not leak between transactions/connections.
+- The value comes from the auth middleware, **not** from a raw public header. For public routes without a session (see doc 15 §Tenant-scoped public routes), the value must still pass through a verified lookup (`tenantCode → tenant_id` from `awcms_tenants`) — not accept a raw `tenant_id` from the path/query as truth, exactly the same principle.
+- RLS is the second line of defence; queries still filter `tenant_id` explicitly.
 
 ```ts
 async function withTenant<T>(
@@ -88,35 +90,35 @@ async function withTenant<T>(
 }
 ```
 
-Sketsa di atas sengaja minimal (tanpa work class/circuit breaker). Yang **tidak**
-boleh disederhanakan dari implementasi nyata (`src/lib/database/tenant-context.ts`):
-gate pool bisa **menolak sebelum `fn` jalan sama sekali**, dan penolakan itu
-bukan nilai yang boleh menyamar sebagai hasil. Karena itu ada dua bentuk:
+The sketch above is deliberately minimal (no work class/circuit breaker). What may
+**not** be simplified away from the real implementation (`src/lib/database/tenant-context.ts`):
+the pool gate can **reject before `fn` runs at all**, and that rejection is not a
+value that may masquerade as a result. Hence there are two forms:
 
-- **`withTenant(...)` → `Promise<T | Response>`** untuk jalur request. Penolakan
-  datang sebagai `503 DATABASE_BUSY` + `Retry-After` yang tinggal diteruskan
-  (`if (result instanceof Response) return result;`).
-- **`withTenantOrThrow<T>(...)` → `Promise<T>`** untuk semua yang bukan handler
-  HTTP — worker, job terjadwal, frontmatter SSR, resolver tenant, fixture test.
-  Melempar `DatabaseBusyError` (membawa response `503` yang identik), yang
-  diklasifikasi `retryable` oleh job runner.
+- **`withTenant(...)` → `Promise<T | Response>`** for the request path. The
+  rejection arrives as a `503 DATABASE_BUSY` + `Retry-After` that you simply pass
+  through (`if (result instanceof Response) return result;`).
+- **`withTenantOrThrow<T>(...)` → `Promise<T>`** for everything that is not an
+  HTTP handler — workers, scheduled jobs, SSR frontmatter, tenant resolvers, test
+  fixtures. It throws `DatabaseBusyError` (carrying an identical `503` response),
+  which the job runner classifies as `retryable`.
 
-Aturannya bukan gaya: sebuah worker yang menerima `Response` sebagai "hasil"
-membacanya sebagai nol baris dan melaporkan sukses. `db:tenant-context:check`
-menegakkan dua sisa yang tak terlihat compiler — hasil `withTenant` yang dibuang,
-dan pemanggilan dari `.astro` (tak pernah dibaca `tsc --noEmit`).
+The rule is not style: a worker that accepts a `Response` as its "result" reads it
+as zero rows and reports success. `db:tenant-context:check` enforces the two
+leftovers the compiler cannot see — a discarded `withTenant` result, and calls
+from `.astro` (never read by `tsc --noEmit`).
 
-## Transaction wrapper dan locking
+## Transaction wrapper and locking
 
-1. Transaction untuk semua mutation multi-table.
-2. Set RLS context di awal transaction.
-3. `SELECT ... FOR UPDATE` untuk baris stok/saldo akun/bin balance yang berubah.
-4. **Urutkan lock berdasarkan `product_id`/`account_id`** untuk mengurangi deadlock.
-5. **Jangan** memanggil provider eksternal di dalam transaction (WA/email/R2/AI/payment gateway).
-6. Statement timeout untuk mencegah transaksi menggantung.
-7. Deadlock retry aman karena idempotency.
+1. A transaction for every multi-table mutation.
+2. Set the RLS context at the start of the transaction.
+3. `SELECT ... FOR UPDATE` for the stock/account balance/bin balance rows being changed.
+4. **Order locks by `product_id`/`account_id`** to reduce deadlocks.
+5. **Do not** call an external provider inside the transaction (WA/email/R2/AI/payment gateway).
+6. A statement timeout to prevent hanging transactions.
+7. Deadlock retry is safe because of idempotency.
 
-### Posting jurnal keuangan (integrasi end-to-end)
+### Posting a financial journal (end-to-end integration)
 
 ```mermaid
 sequenceDiagram
@@ -125,164 +127,160 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant OB as Outbox
   API->>Svc: post journalEntryId + Idempotency-Key
-  Svc->>DB: BEGIN dan SET LOCAL tenant
-  Svc->>DB: cek idempotency key
-  Svc->>DB: SELECT saldo akun FOR UPDATE urut account_id
-  Svc->>DB: validasi saldo & balance debit=kredit
+  Svc->>DB: BEGIN and SET LOCAL tenant
+  Svc->>DB: check idempotency key
+  Svc->>DB: SELECT account balances FOR UPDATE ordered by account_id
+  Svc->>DB: validate balances and debit=credit balance
   Svc->>DB: INSERT journal_entry + lines
-  Svc->>DB: INSERT ledger_movements (append-only) + update saldo akun
+  Svc->>DB: INSERT ledger_movements (append-only) + update account balances
   Svc->>DB: INSERT audit_event
-  Svc->>OB: INSERT outbox: finance.journal_entry.posted (+sync, +notifikasi)
-  Svc->>DB: simpan idempotency response
+  Svc->>OB: INSERT outbox: finance.journal_entry.posted (+sync, +notification)
+  Svc->>DB: store idempotency response
   Svc->>DB: COMMIT
-  Note over Svc,OB: Setelah commit, dispatcher kirim outbox (provider di luar tx)
+  Note over Svc,OB: After commit, the dispatcher sends the outbox (provider outside the tx)
 ```
 
 ## Transactional outbox
 
-Event domain, pesan notifikasi, dan sync **ditulis dalam transaction yang sama** dengan perubahan data, lalu dikirim oleh worker terpisah. Ini menjamin konsistensi tanpa memanggil provider di dalam transaction.
+Domain events, notification messages, and sync are **written in the same transaction** as the data change, then sent by a separate worker. This guarantees consistency without calling a provider inside the transaction.
 
 ```mermaid
 flowchart LR
-  Tx[Transaction bisnis] --> OB[(awcms_*_outbox)]
+  Tx[Business transaction] --> OB[(awcms_*_outbox)]
   OB --> Disp[Dispatcher worker]
-  Disp -->|event| Bus[Konsumer internal]
-  Disp -->|notifikasi| Prov[Provider WA/Email]
+  Disp -->|event| Bus[Internal consumer]
+  Disp -->|notification| Prov[WA/Email provider]
   Disp -->|sync| Node[Sync push]
-  Disp -->|gagal| Retry[Backoff + retry]
+  Disp -->|failure| Retry[Backoff + retry]
 ```
 
-Tabel terkait (rencana penamaan, mengikuti pola prefiks `awcms_`): `awcms_sync_outbox`, `awcms_message_outbox`, `awcms_object_sync_queue`, `awcms_email_messages`. Status: `pending → sent/failed`, dengan `next_retry_at`.
+Related tables (planned naming, following the `awcms_` prefix pattern): `awcms_sync_outbox`, `awcms_message_outbox`, `awcms_object_sync_queue`, `awcms_email_messages`. Status: `pending → sent/failed`, with `next_retry_at`.
 
-### Dispatcher claim-lease (email, sync object queue)
+### Claim-lease dispatcher (email, sync object queue)
 
-Pola konkret di balik "worker terpisah" pada diagram di atas — mengikuti pola yang terbukti di awcms-mini untuk `email/application/email-dispatch.ts` (`bun run email:dispatch`) dan `sync-storage/application/object-dispatch.ts` (`bun run sync:objects:dispatch`), yang akan diadaptasi untuk kebutuhan ERP (mis. dispatcher notifikasi approval PO, dispatcher slip gaji):
+The concrete pattern behind the "separate worker" in the diagram above — following the pattern proven in awcms-mini for `email/application/email-dispatch.ts` (`bun run email:dispatch`) and `sync-storage/application/object-dispatch.ts` (`bun run sync:objects:dispatch`), which will be adapted for ERP needs (e.g. a PO approval notification dispatcher, a payslip dispatcher):
 
-1. **CLAIM** — satu transaksi pendek memindahkan baris yang eligible
-   (`queued`/`retry_wait` untuk email; `pending` untuk object queue) ke
-   status transient `sending`, dengan `UPDATE ... WHERE ... FOR UPDATE
-SKIP LOCKED` sehingga pemanggilan bersamaan (dua cron tick tumpang
-   tindih) aman tanpa duplikasi. `next_attempt_at`/`next_retry_at` dipakai
-   ulang sebagai lease expiry selama status `sending` — tidak ada kolom
-   lease terpisah.
-2. **SEND** — provider (mis. penyedia email/R2/payment gateway) dipanggil
-   **di luar** transaksi apa pun untuk setiap baris yang di-claim.
-3. **FINALIZE** — satu transaksi pendek per baris memindahkan `sending`
-   ke status akhir: `sent` (sukses), `retry_wait` dengan backoff
-   eksponensial (gagal, masih ada sisa retry), atau `failed` (retry habis
-   atau kegagalan non-retryable). Setiap percobaan — sukses maupun gagal —
-   dicatat di tabel riwayat percobaan (mis. `awcms_email_delivery_attempts`
-   atau analognya per domain).
+1. **CLAIM** — one short transaction moves the eligible rows
+   (`queued`/`retry_wait` for email; `pending` for the object queue) to the
+   transient status `sending`, with `UPDATE ... WHERE ... FOR UPDATE SKIP LOCKED`
+   so that concurrent invocations (two overlapping cron ticks) are safe without
+   duplication. `next_attempt_at`/`next_retry_at` are reused as the lease expiry
+   while the status is `sending` — there is no separate lease column.
+2. **SEND** — the provider (e.g. the email provider/R2/payment gateway) is called
+   **outside** any transaction, once per claimed row.
+3. **FINALIZE** — one short transaction per row moves `sending` to a final
+   status: `sent` (success), `retry_wait` with exponential backoff (failed, retries
+   remaining), or `failed` (retries exhausted or a non-retryable failure). Every
+   attempt — success or failure — is recorded in an attempt history table (e.g.
+   `awcms_email_delivery_attempts` or its per-domain analogue).
 
-Circuit breaker per-provider (`src/lib/database/circuit-breaker.ts`)
-direncanakan membungkus fase SEND: setelah sejumlah kegagalan beruntun, breaker
-`open` menghentikan panggilan provider berikutnya untuk sementara waktu
-(mencegah retry-loop menghantam provider yang sedang outage) — dispatcher
-notifikasi bahkan berhenti meng-claim baris sama sekali selagi breaker
-`open`, sementara dispatcher lain yang tak butuh provider tersebut tetap
-bisa meng-claim baris yang tidak terdampak selagi breaker terbuka.
+A per-provider circuit breaker (`src/lib/database/circuit-breaker.ts`) is planned
+to wrap the SEND phase: after a number of consecutive failures, an `open` breaker
+temporarily stops further provider calls (preventing a retry loop from hammering a
+provider that is in an outage) — the notification dispatcher even stops claiming
+rows at all while the breaker is `open`, while other dispatchers that do not need
+that provider can still claim unaffected rows while the breaker is open.
 
 ### Generic multi-consumer outbox — `domain_event_runtime`
 
-Pola di atas (`sync_storage`/`email`/dispatcher lain) masing-masing
-adalah antrean single-purpose dengan satu consumer implisit (dispatcher-nya
-sendiri, memanggil satu provider eksternal). `domain_event_runtime`
-(mengikuti pola epic `platform-evolution` di awcms-mini) adalah pelengkap
-generik, provider-neutral, MULTI-consumer yang direncanakan: satu event
-bisa fan-out ke banyak consumer terdaftar sekaligus, dengan ordering
-eksplisit per aggregate/order-key (bukan total order global antar
-aggregate yang tidak berkaitan) — relevan untuk ERP karena satu event
-domain (mis. `procurement.purchase_order.approved`) sering perlu
-di-consume oleh lebih dari satu modul sekaligus (finance untuk accrual,
-inventory untuk expected receipt, notifikasi untuk vendor). Lihat
-`src/modules/domain-event-runtime/README.md` (saat ditulis) untuk desain
-lengkap. Produsen memanggil `appendDomainEvent(tx, tenantId, ...)` di
-DALAM transaksi bisnisnya sendiri (sama seperti pola outbox di atas);
-static consumer registry (`infrastructure/consumer-registry.ts`)
-memutuskan fan-out saat publish, bukan saat dispatch.
+The pattern above (`sync_storage`/`email`/other dispatchers) is in each case a
+single-purpose queue with one implicit consumer (its own dispatcher, calling one
+external provider). `domain_event_runtime` (following the `platform-evolution`
+epic pattern in awcms-mini) is the planned generic, provider-neutral,
+MULTI-consumer complement: one event can fan out to many registered consumers at
+once, with explicit ordering per aggregate/order-key (not a global total order
+across unrelated aggregates) — relevant for ERP because one domain event (e.g.
+`procurement.purchase_order.approved`) often needs to be consumed by more than one
+module at once (finance for the accrual, inventory for the expected receipt,
+notification for the vendor). See
+`src/modules/domain-event-runtime/README.md` (once written) for the full design.
+Producers call `appendDomainEvent(tx, tenantId, ...)` INSIDE their own business
+transaction (the same as the outbox pattern above); the static consumer registry
+(`infrastructure/consumer-registry.ts`) decides the fan-out at publish time, not at
+dispatch time.
 
-**Beda penting dari CLAIM/SEND/FINALIZE 3-fase di atas**: reference
-consumer modul ini yang same-process, DB-only, TANPA panggilan
-eksternal — sehingga claim-check + eksekusi handler + finalize-sukses
-berjalan dalam SATU transaksi (bukan tiga fase terpisah), yang justru
-membuat crash/restart recovery benar secara konstruksi (transaksi yang
-crash mid-handler otomatis rollback seluruhnya, tanpa status "claimed"
-transien yang bisa macet) — pola lease 3-fase tetap dibutuhkan untuk
-consumer out-of-transaction/broker-backed di masa depan
-(`infrastructure/broker-adapter-port.ts`, belum diimplementasikan).
+**The important difference from the 3-phase CLAIM/SEND/FINALIZE above**: this
+module's reference consumer is same-process, DB-only, with NO external calls — so
+the claim check + handler execution + success finalize run in ONE transaction (not
+three separate phases), which is precisely what makes crash/restart recovery
+correct by construction (a transaction that crashes mid-handler rolls back
+entirely and automatically, with no transient "claimed" status that can get stuck)
+— the 3-phase lease pattern is still needed for future
+out-of-transaction/broker-backed consumers
+(`infrastructure/broker-adapter-port.ts`, not implemented yet).
 
-## Connection pooling dan backpressure
+## Connection pooling and backpressure
 
-Work class membatasi konkurensi per jenis beban agar transaksi operasional tetap prioritas.
+Work classes cap concurrency per kind of load so that operational transactions keep priority.
 
-| Work class             | Contoh                                        | Prioritas |
-| ---------------------- | --------------------------------------------- | --------- |
-| `critical_transaction` | Posting jurnal, approval PO, transfer receive | Tertinggi |
-| `interactive`          | CRUD admin, search                            | Tinggi    |
-| `reporting`            | Laporan keuangan, dashboard                   | Sedang    |
-| `background_sync`      | Sync push/pull, outbox, payroll batch         | Rendah    |
-| `maintenance`          | Migration, backup                             | Terjadwal |
+| Work class             | Example                                        | Priority  |
+| ---------------------- | ---------------------------------------------- | --------- |
+| `critical_transaction` | Journal posting, PO approval, transfer receive | Highest   |
+| `interactive`          | Admin CRUD, search                             | High      |
+| `reporting`            | Financial reports, dashboard                   | Medium    |
+| `background_sync`      | Sync push/pull, outbox, payroll batch          | Low       |
+| `maintenance`          | Migration, backup                              | Scheduled |
 
 ```mermaid
 flowchart LR
   Req[Request] --> Gate{Pool gate per work class}
-  Gate -->|slot ada| Conn[(Koneksi)]
-  Gate -->|penuh| Queue[Antrean + timeout]
+  Gate -->|slot available| Conn[(Connection)]
+  Gate -->|full| Queue[Queue + timeout]
   Queue -->|timeout| Busy[503 DATABASE_BUSY]
   Conn --> CB{Circuit breaker}
   CB -->|open| Busy
 ```
 
-- Health endpoint `GET /database/pool/health` melaporkan saturasi (dokumen kontrak API, saat ditulis).
-- Saturasi memicu event `database.pool.saturated` dan `503 DATABASE_BUSY`.
-- PgBouncer opsional (transaction mode): hindari prepared statement bermasalah; gunakan `SET LOCAL`.
+- The health endpoint `GET /database/pool/health` reports saturation (the API contract document, once written).
+- Saturation triggers the `database.pool.saturated` event and `503 DATABASE_BUSY`.
+- PgBouncer is optional (transaction mode): avoid problematic prepared statements; use `SET LOCAL`.
 
 ## Migration runner
 
-Ikuti standar penamaan `NNN_awcms_<area>_<desc>.sql` (mengikuti pola awcms-mini) — skill penegak direncanakan: **`awcms-new-migration`**.
+Follow the naming standard `NNN_awcms_<area>_<desc>.sql` (following the awcms-mini pattern) — the enforcing skill is planned: **`awcms-new-migration`**.
 
 ```mermaid
 flowchart TD
-  A[Baca file sql/ terurut] --> B{Sudah di awcms_schema_migrations?}
-  B -- Ya --> C[Skip]
-  B -- Tidak --> D[Jalankan dalam transaction]
-  D --> E{Sukses?}
-  E -- Ya --> F[Catat name + checksum + executed_at]
-  E -- Tidak --> G[Rollback + stop + exit non-zero]
-  C --> H[Lanjut file berikutnya]
+  A[Read sql/ files in order] --> B{Already in awcms_schema_migrations?}
+  B -- Yes --> C[Skip]
+  B -- No --> D[Run inside a transaction]
+  D --> E{Success?}
+  E -- Yes --> F[Record name + checksum + executed_at]
+  E -- No --> G[Rollback + stop + exit non-zero]
+  C --> H[Continue to the next file]
   F --> H
 ```
 
-- Checksum mendeteksi file yang berubah setelah applied (peringatkan/tolak).
-- Tidak double-run; error menghentikan proses.
+- The checksum detects a file changed after it was applied (warn/reject).
+- No double-run; an error halts the process.
 
 ## Idempotency store
 
-- Tabel `awcms_idempotency_keys` menyimpan `key`, request hash, status, response/resource.
-- Alur direncanakan mengikuti skill `awcms-idempotency` (dokumen coding standard, saat ditulis). Retention 7–30 hari (dokumen ERD, saat ditulis).
-- Race concurrent-request dengan `Idempotency-Key` yang SAMA (dua request paralel lolos cek awal bareng di bawah READ COMMITTED) ditangani di satu titik: `saveIdempotencyRecord` (`src/modules/_shared/idempotency.ts`) memakai `INSERT ... ON CONFLICT (tenant_id, request_scope, idempotency_key) DO NOTHING RETURNING id`. Kalau kalah race, ia `SELECT` ulang row pemenang (dijamin sudah committed) dan membandingkan `request_hash`-nya — hash sama (payload identik) → melempar `IdempotencyRaceLostError` membawa response pemenang untuk di-replay; hash beda (genuine conflict) → tanpa payload replay. `withTenant` (`src/lib/database/tenant-context.ts`) menangkapnya di satu titik: rollback transaksi loser (mutation-nya tidak pernah persist), skip circuit breaker (bukan infra failure), log `idempotency.race_lost` (key di-hash SHA-256, bukan raw), lalu **replay response pemenang** kalau hash sama — menegakkan aturan "hash sama → replay" bahkan saat kalah race — atau `409 IDEMPOTENCY_CONFLICT` bersih kalau hash beda, bukan raw constraint error. Berlaku otomatis untuk semua endpoint idempotent tanpa perlu ubah routenya masing-masing.
-- Prinsip generalisasi yang harus dipertahankan sejak awal (dipelajari dari pengalaman awcms-mini): `withTenant` skip `circuitBreaker.recordFailure()` untuk **semua** `Bun.SQL.PostgresError` SQLSTATE kelas `23` (integrity constraint violation — FK/unique/check violation), bukan cuma kasus idempotency race. `INSERT`/`UPDATE` apa pun yang gagal karena FK/unique constraint (mis. `tenantId` caller-supplied yang tak valid) tidak boleh ikut menghitung sebagai kegagalan infra dan membuka circuit breaker aplikasi-lebar dari beberapa request ber-input invalid saja. Pengecualian yang sama berlaku untuk SQLSTATE kelas `22` (data exception, mis. `22P02` string bukan-UUID yang dibandingkan ke kolom `uuid`) — kelas bug struktural yang sama, harus ditutup sejak desain awal, bukan menyusul setelah insiden produksi.
+- The `awcms_idempotency_keys` table stores the `key`, request hash, status, response/resource.
+- The flow is planned to follow the `awcms-idempotency` skill (the coding standard document, once written). Retention 7–30 days (the ERD document, once written).
+- The concurrent-request race with the SAME `Idempotency-Key` (two parallel requests passing the initial check together under READ COMMITTED) is handled at a single point: `saveIdempotencyRecord` (`src/modules/_shared/idempotency.ts`) uses `INSERT ... ON CONFLICT (tenant_id, request_scope, idempotency_key) DO NOTHING RETURNING id`. If it loses the race, it re-`SELECT`s the winner's row (guaranteed already committed) and compares its `request_hash` — same hash (identical payload) → it throws `IdempotencyRaceLostError` carrying the winner's response to be replayed; different hash (a genuine conflict) → without a replay payload. `withTenant` (`src/lib/database/tenant-context.ts`) catches it at a single point: it rolls back the loser's transaction (its mutation never persists), skips the circuit breaker (this is not an infra failure), logs `idempotency.race_lost` (the key hashed SHA-256, not raw), then **replays the winner's response** if the hash matches — enforcing the "same hash → replay" rule even when losing the race — or a clean `409 IDEMPOTENCY_CONFLICT` if the hash differs, not a raw constraint error. This applies automatically to every idempotent endpoint without having to change each route.
+- The generalisation principle that must be preserved from the start (learned from the awcms-mini experience): `withTenant` skips `circuitBreaker.recordFailure()` for **all** `Bun.SQL.PostgresError` SQLSTATE class `23` (integrity constraint violation — FK/unique/check violation), not only the idempotency race case. Any `INSERT`/`UPDATE` that fails because of an FK/unique constraint (e.g. an invalid caller-supplied `tenantId`) must not count as an infra failure and open an application-wide circuit breaker from a handful of requests with invalid input alone. The same exception applies to SQLSTATE class `22` (data exception, e.g. `22P02`, a non-UUID string compared against a `uuid` column) — the same class of structural bug, which must be closed at design time, not retrofitted after a production incident.
 
-## Repository dan mapper
+## Repository and mapper
 
-1. Query terparametrisasi; **tidak** ada string interpolation input user.
-2. Query tenant-scoped memfilter `tenant_id` eksplisit.
-3. Mapper mengubah row → DTO aman (masking, buang kolom sensitif seperti gaji/rekening) sebelum ke service/API.
-4. Pagination **keyset** (`WHERE (tenant_id, created_at, id) < ...`) untuk data besar, bukan offset besar.
-5. Hindari N+1: gunakan join/batch.
-6. Untuk tabel soft-deletable, repository list/detail default menambahkan `deleted_at IS NULL`; `includeDeleted`/`onlyDeleted` hanya setelah ABAC.
+1. Parameterized queries; **no** string interpolation of user input.
+2. Tenant-scoped queries filter `tenant_id` explicitly.
+3. The mapper turns a row → a safe DTO (masking, dropping sensitive columns such as salary/bank account) before it reaches the service/API.
+4. **Keyset** pagination (`WHERE (tenant_id, created_at, id) < ...`) for large data sets, not a large offset.
+5. Avoid N+1: use joins/batching.
+6. For soft-deletable tables, repository list/detail adds `deleted_at IS NULL` by default; `includeDeleted`/`onlyDeleted` only after ABAC.
 
-## Contoh multi-tabel: module registry (pola dari awcms-mini, direncanakan diadaptasi)
+## Multi-table example: the module registry (a pattern from awcms-mini, planned to be adapted)
 
-Registry modul (`src/modules/module-management/`) akan memakai dua kelas akses data yang kontras, ilustrasi konkret dari aturan RLS di atas:
+The module registry (`src/modules/module-management/`) will use two contrasting classes of data access, a concrete illustration of the RLS rules above:
 
-- **Registry global, RLS-free** — `awcms_modules`/`_dependencies`/`_navigation`/`_jobs`/`_health_checks`. Metadata code-derived, sama untuk semua tenant (sinkron dari `listModules()` lewat `syncModuleDescriptors`, sama alasan `awcms_permissions` RLS-free) — jalan di koneksi app biasa, **tidak** butuh `withTenant`/`SET LOCAL app.current_tenant_id`.
-- **State tenant-writable, RLS FORCE** — `awcms_tenant_modules` (enable/disable modul ERP per tenant/entitas) dan `awcms_module_settings` (pengaturan non-secret per tenant). Setiap akses **wajib** lewat `withTenant`, sama seperti tabel tenant-scoped lainnya.
-- **"Sync first" sebelum tulis tenant-scoped**: `enableTenantModule`/`disableTenantModule`/`updateModuleSettings`/`runModuleHealthCheck` semua memanggil `syncModuleDescriptors(tx)` di awal — dua tabel di atas punya FK ke `awcms_modules.module_key`, jadi baris registry harus ada dulu sebelum insert baris tenant-scoped. Pola ini generik: kapan pun tabel tenant-scoped punya FK ke tabel registry code-derived (mis. modul finance/inventory/procurement/manufacturing/hr-payroll saat didaftarkan), pastikan registry di-sync dalam transaction yang sama sebelum menulis, jangan mengasumsikan operator sudah menjalankan sync manual lebih dulu.
+- **Global registry, RLS-free** — `awcms_modules`/`_dependencies`/`_navigation`/`_jobs`/`_health_checks`. Code-derived metadata, identical for every tenant (synchronised from `listModules()` through `syncModuleDescriptors`, the same reason `awcms_permissions` is RLS-free) — it runs on the ordinary app connection and does **not** need `withTenant`/`SET LOCAL app.current_tenant_id`.
+- **Tenant-writable state, RLS FORCE** — `awcms_tenant_modules` (enabling/disabling an ERP module per tenant/entity) and `awcms_module_settings` (non-secret per-tenant settings). Every access **must** go through `withTenant`, exactly like every other tenant-scoped table.
+- **"Sync first" before a tenant-scoped write**: `enableTenantModule`/`disableTenantModule`/`updateModuleSettings`/`runModuleHealthCheck` all call `syncModuleDescriptors(tx)` first — the two tables above have an FK to `awcms_modules.module_key`, so the registry row must exist before a tenant-scoped row is inserted. The pattern is generic: whenever a tenant-scoped table has an FK to a code-derived registry table (e.g. the finance/inventory/procurement/manufacturing/hr-payroll modules when they are registered), make sure the registry is synced inside the same transaction before writing; do not assume the operator has already run a manual sync.
 
 ## Soft delete data access
 
-Soft delete adalah update status data, bukan `DELETE` SQL pada jalur operasional.
+Soft delete is a data status update, not an SQL `DELETE` on the operational path.
 
 ```sql
 UPDATE awcms_products
@@ -296,34 +294,34 @@ WHERE tenant_id = $tenant_id
   AND deleted_at IS NULL;
 ```
 
-Aturan:
+Rules:
 
-- Jalankan di transaction dengan `SET LOCAL app.current_tenant_id`.
-- Validasi ABAC action `delete`, lalu audit `*.soft_deleted`.
-- Restore mengosongkan kolom delete, mengisi `restored_at/restored_by`, memvalidasi partial unique index, lalu audit `*.restored`.
-- Purge/anonymize memakai workflow terpisah untuk retention/legal (mis. retensi dokumen pajak/keuangan sesuai regulasi) dan tidak boleh memutus FK transaksi, audit, atau tax records.
-- Untuk sync, tulis tombstone ke outbox dalam transaction yang sama.
+- Run it in a transaction with `SET LOCAL app.current_tenant_id`.
+- Validate the ABAC action `delete`, then audit `*.soft_deleted`.
+- Restore clears the delete columns, fills `restored_at/restored_by`, validates the partial unique index, then audits `*.restored`.
+- Purge/anonymize uses a separate workflow for retention/legal (e.g. tax/finance document retention per regulation) and must not break the FKs of transactions, audit, or tax records.
+- For sync, write a tombstone to the outbox in the same transaction.
 
-## Tipe data & konvensi
+## Data types & conventions
 
-| Domain                | Tipe PostgreSQL                             |
+| Domain                | PostgreSQL type                             |
 | --------------------- | ------------------------------------------- |
 | ID                    | `uuid` (default `gen_random_uuid()`)        |
-| Waktu                 | `timestamptz`                               |
-| Uang/quantity         | `numeric`                                   |
-| Payload fleksibel     | `jsonb`                                     |
+| Time                  | `timestamptz`                               |
+| Money/quantity        | `numeric`                                   |
+| Flexible payload      | `jsonb`                                     |
 | Enum-like             | `text` + `CHECK`                            |
 | Soft delete timestamp | `timestamptz` (`deleted_at`, `restored_at`) |
 
-Nama tabel/kolom `snake_case`, prefiks `awcms_` (dokumen ERD/coding standard, saat ditulis).
+Table/column names are `snake_case`, prefixed `awcms_` (the ERD/coding standard document, once written).
 
 ## Acceptance criteria
 
-- Semua akses tenant-scoped memakai `withTenant`/`SET LOCAL` + filter `tenant_id`; RLS aktif.
-- Posting jurnal/PO/payroll atomic, mengunci saldo/stok, dan menulis outbox dalam satu transaction.
-- Provider eksternal tidak dipanggil di dalam transaction.
-- Pool work-class + backpressure aktif; health endpoint melaporkan saturasi; `503` saat penuh.
-- Migration berjalan berurutan, tidak double-run, checksum tercatat, error menghentikan proses.
-- Idempotency store mencegah duplikasi mutation high-risk.
-- Repository terparametrisasi; mapper mengeluarkan DTO aman; pagination keyset untuk data besar.
-- Soft delete default filter aktif; restore/purge memakai ABAC, audit, dan tombstone outbox bila sync aktif.
+- All tenant-scoped access uses `withTenant`/`SET LOCAL` + a `tenant_id` filter; RLS is active.
+- Journal/PO/payroll posting is atomic, locks balances/stock, and writes the outbox in one transaction.
+- External providers are not called inside the transaction.
+- The work-class pool + backpressure are active; the health endpoint reports saturation; `503` when full.
+- Migrations run in order, do not double-run, checksums are recorded, an error halts the process.
+- The idempotency store prevents duplicated high-risk mutations.
+- Repositories are parameterized; the mapper emits a safe DTO; keyset pagination for large data sets.
+- The soft delete default filter is active; restore/purge use ABAC, audit, and an outbox tombstone when sync is active.

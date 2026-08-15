@@ -179,8 +179,8 @@ describe("rule 4 — cited `bun run` targets are real or declared deferred", () 
     expect(isKnownRunTarget("check", scripts)).toBe(true);
   });
 
-  test("a target declared deferred in scripts/README §Ditunda passes", () => {
-    // `scripts/README.md` §Ditunda EXPLICITLY permits skills to name these, so
+  test("a target declared deferred in scripts/README §Deferred passes", () => {
+    // `scripts/README.md` §Deferred EXPLICITLY permits skills to name these, so
     // the rule must not re-litigate that policy.
     expect(isKnownRunTarget("production:preflight", scripts)).toBe(true);
     expect(isKnownRunTarget("performance:suite", scripts)).toBe(true);
@@ -198,7 +198,7 @@ describe("rule 4 — cited `bun run` targets are real or declared deferred", () 
     );
 
     expect(problems).toHaveLength(1);
-    expect(problems[0]!.message).toContain("Ditunda");
+    expect(problems[0]!.message).toContain("Deferred");
   });
 
   test("an aspirational skill may name its future tooling", () => {
@@ -212,11 +212,11 @@ describe("rule 4 — cited `bun run` targets are real or declared deferred", () 
     ).toEqual([]);
   });
 
-  test("every deferred prefix is actually documented in scripts/README §Ditunda", async () => {
+  test("every deferred prefix is actually documented in scripts/README §Deferred", async () => {
     // Binds the gate's explicit list back to the doc it claims to mirror. Without
     // this, the list could quietly grow into a way to silence the rule.
     const readme = await Bun.file("scripts/README.md").text();
-    const deferredSection = readme.slice(readme.indexOf("## Ditunda"));
+    const deferredSection = readme.slice(readme.indexOf("## Deferred"));
 
     for (const prefix of [
       "config:docs:check",

@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0045-jualanku-porting-awcms-system-of-record-astro-bff.id.md)
+
 # ADR-0045 — Jualanku.info porting: `awcms` is the system of record, `awcms-astro` is the BFF experience layer
 
 - Status: Accepted
@@ -10,8 +12,8 @@
   (SoD), [ADR-0026](0026-modular-openapi-ownership-and-composition.md) (modular
   OpenAPI ownership), [ADR-0009](0009-public-tenant-scoped-routes.md)
   (path-scoped public routes), [ADR-0044](0044-merge-news-portal-into-blog-content.md)
-  (one content module). Source of the request: _"Validasi Arsitektur dan Standar —
-  Porting UI/UX Jualanku.info ke AWCMS dan AWCMS-Astro"_ v1.0, PT TIM SIX,
+  (one content module). Source of the request: _"Architecture and Standards
+  Validation — Porting the Jualanku.info UI/UX to AWCMS and AWCMS-Astro"_ v1.0, PT TIM SIX,
   29 July 2026 (`APPROVE WITH CORRECTIONS`).
 
 ## Context

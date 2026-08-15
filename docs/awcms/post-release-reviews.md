@@ -1,34 +1,37 @@
-# Post-release review (langkah 18 alur pengembangan)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](post-release-reviews.id.md)
 
-> Satu entri per RILIS, ditulis setelah validasi produksi (langkah 17) selesai.
+# Post-release review (step 18 of the development flow)
+
+> One entry per RELEASE, written after production validation (step 17) is done.
 >
-> Register ini berbeda dari §4 `PROJECT_STATE.md`, dan pembedaannya disengaja:
-> §4 terikat **putaran kerja** dan mencatat keputusan; halaman ini terikat
-> **rilis** dan mencatat apa yang terjadi ketika rilis itu bertemu produksi.
-> Sebelum halaman ini ada, yang kedua tidak punya tempat dan diam-diam ditulis
-> sebagai yang pertama, atau tidak ditulis sama sekali.
+> This register is different from §4 of `PROJECT_STATE.md`, and the distinction
+> is deliberate: §4 is bound to **work rounds** and records decisions; this page
+> is bound to **releases** and records what happened when that release met
+> production. Before this page existed, the second had nowhere to go and was
+> silently written as the first, or not written at all.
 
-- **Langkah alur:** 18 ([`alur-pengembangan.md`](alur-pengembangan.md)).
-- **Kapan ditulis:** dalam satu minggu kerja setelah tag rilis di-deploy —
-  cukup lama untuk melihat sesuatu, cukup pendek untuk masih ingat.
+- **Flow step:** 18 ([`alur-pengembangan.md`](alur-pengembangan.md)).
+- **When it is written:** within one working week after the release tag is
+  deployed — long enough to see something, short enough to still remember.
 - **Template:** [`templates/post-release-review-template.md`](templates/post-release-review-template.md).
 
-## Aturan yang membuat register ini berguna
+## The rules that make this register useful
 
-**Rilis yang berjalan mulus TETAP mendapat entri.** Register yang hanya memuat
-insiden mengajarkan pembacanya bahwa rilis biasanya bermasalah, dan menghapus
-satu-satunya garis dasar yang membuat sebuah rilis buruk terlihat buruk. Entri
-untuk rilis yang mulus boleh empat baris.
+**A release that went smoothly STILL gets an entry.** A register that only holds
+incidents teaches its reader that releases are usually troubled, and it removes
+the only baseline that makes a bad release look bad. The entry for a smooth
+release may be four lines.
 
-**Ia tidak menggantikan catatan insiden.** Insiden punya urgensi, pembaca, dan
-tenggat yang berbeda. Bila sebuah rilis menyebabkan insiden, entri di sini
-menunjuk ke catatan insidennya alih-alih menyalinnya.
+**It does not replace incident notes.** Incidents have different urgency, a
+different audience, and different deadlines. If a release causes an incident,
+the entry here points to its incident note instead of copying it.
 
-**Yang dicatat adalah apa yang TERJADI, bukan apa yang direncanakan.** Rencana
-sudah ada di changeset dan di PR-nya.
+**What gets recorded is what HAPPENED, not what was planned.** The plan is
+already in the changeset and in its PR.
 
 ## Register
 
-_Belum ada entri._ Halaman ini dibuat 13 Agustus 2026 bersama dokumen alur, dan
-entri pertama akan ditulis setelah rilis pertama sesudahnya. Kosong dan
-mengatakannya lebih jujur daripada diisi mundur dari ingatan.
+_No entries yet._ This page was created on 13 August 2026 together with the flow
+document, and the first entry will be written after the first release following
+it. Being empty and saying so is more honest than being filled in backwards from
+memory.

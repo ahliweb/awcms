@@ -1,127 +1,130 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](database-pooling.id.md)
+
 # Database Connection Pooling and Backpressure
 
-> **Status dokumen (AWCMS).** Tiga lapisan pooling/backpressure di bawah
-> (`Bun.SQL` pool, work-class concurrency gate, circuit breaker) diwarisi
-> dari base teknis `awcms-mini` (Issue 10.2 di repo asal) sebagai mekanisme
-> generik yang sudah terverifikasi di sana. Di AWCMS, mekanismenya berlaku
-> sejak fondasi, tetapi **contoh endpoint/klasifikasi work-class ERP di
-> bawah (posting jurnal, payroll run, dsb.) adalah target rencana** — belum
-> ada endpoint domain ERP yang benar-benar memanggil `withTenant` dengan
-> klasifikasi tersebut, karena modulnya belum diimplementasikan.
+> **Document status (AWCMS).** The three pooling/backpressure layers below
+> (`Bun.SQL` pool, work-class concurrency gate, circuit breaker) are inherited
+> from the `awcms-mini` technical base (Issue 10.2 in the origin repo) as
+> generic mechanisms already verified there. In AWCMS the mechanisms apply
+> from the foundation onwards, but the **ERP endpoint/work-class
+> classification examples below (journal posting, payroll run, etc.) are
+> planned targets** — no ERP domain endpoint actually calls `withTenant` with
+> those classifications yet, because the modules are not implemented.
 
-Dokumen ini mencatat standar implementasi pooling/backpressure untuk AWCMS
-(diwarisi dari base `awcms-mini`, doc governance/ADR terkait untuk
-RLS/RBAC-ABAC dan threat model).
+This document records the pooling/backpressure implementation standard for
+AWCMS (inherited from the `awcms-mini` base, with the related governance/ADR
+docs for RLS/RBAC-ABAC and the threat model).
 
-## Ringkasan
+## Summary
 
 ```mermaid
 flowchart LR
   Req[Request] --> Gate{Pool gate per work class}
-  Gate -->|slot ada| Conn[(Koneksi)]
-  Gate -->|penuh| Queue[Antrean + timeout]
+  Gate -->|slot available| Conn[(Connection)]
+  Gate -->|full| Queue[Queue + timeout]
   Queue -->|timeout| Busy[503 DATABASE_BUSY]
   Conn --> CB{Circuit breaker}
   CB -->|open| Busy
 ```
 
-Tiga lapisan independen bekerja bersama:
+Three independent layers work together:
 
-1. **`Bun.SQL` pool config** (`src/lib/database/client.ts`) — pool koneksi
-   fisik ke PostgreSQL.
-2. **Work-class concurrency gate** (`src/lib/database/work-class.ts`) —
-   semaphore aplikasi murni di depan pool, membatasi konkurensi per jenis
-   beban.
+1. **`Bun.SQL` pool config** (`src/lib/database/client.ts`) — the physical
+   connection pool to PostgreSQL.
+2. **Work-class concurrency gate** (`src/lib/database/work-class.ts`) — a
+   pure application semaphore in front of the pool, limiting concurrency per
+   kind of load.
 3. **Circuit breaker** (`src/lib/database/circuit-breaker.ts`) — fail-fast
-   saat transaksi database berturut-turut gagal.
+   when database transactions fail consecutively.
 
-Keduanya (gate + breaker) diintegrasikan lewat satu titik: `withTenant`
-(`src/lib/database/tenant-context.ts`) — setiap endpoint yang sudah ada
-memanggil `withTenant`, sehingga perlindungan ini otomatis berlaku tanpa
-mengubah setiap route.
+Both of them (gate + breaker) are integrated through a single point:
+`withTenant` (`src/lib/database/tenant-context.ts`) — every existing endpoint
+calls `withTenant`, so this protection applies automatically without changing
+every route.
 
 ## 1. Bun.SQL pool config
 
-`getDatabaseClient()` mengonfigurasi `Bun.SQL` dengan:
+`getDatabaseClient()` configures `Bun.SQL` with:
 
-| Opsi                           | Sumber                          | Default |
+| Option                         | Source                          | Default |
 | ------------------------------ | ------------------------------- | ------- |
 | `max`                          | `DATABASE_POOL_MAX`             | `20`    |
 | `prepare`                      | `DATABASE_PGBOUNCER !== "true"` | `true`  |
 | `connection.statement_timeout` | `DATABASE_STATEMENT_TIMEOUT_MS` | `15000` |
 
-Catatan implementasi: `onconnect` pada `Bun.SQL.Options` (lihat
-`node_modules/bun-types/sql.d.ts`) bertipe `(err: Error | null) => void` — ia
-hanya melaporkan sukses/gagalnya percobaan koneksi, **bukan** memberi akses ke
-client untuk menjalankan SQL (contoh JSDoc `onconnect: (client) => ...` di
-file tipe yang sama tidak konsisten dengan signature aktualnya). Cara yang
-type-correct dan didokumentasikan untuk menerapkan GUC sesi seperti
-`statement_timeout` pada setiap koneksi pooled adalah opsi `connection`
-("Postgres client runtime configuration options", lihat
-postgresql.org/docs/current/runtime-config-client.html). `onconnect` tetap
-dipakai, hanya untuk mencatat kegagalan koneksi ke logger terstruktur.
+Implementation note: `onconnect` on `Bun.SQL.Options` (see
+`node_modules/bun-types/sql.d.ts`) is typed `(err: Error | null) => void` — it
+only reports whether a connection attempt succeeded or failed, it does **not**
+give access to a client for running SQL (the JSDoc example
+`onconnect: (client) => ...` in that same type file is inconsistent with its
+actual signature). The type-correct and documented way to apply session GUCs
+such as `statement_timeout` on every pooled connection is the `connection`
+option ("Postgres client runtime configuration options", see
+postgresql.org/docs/current/runtime-config-client.html). `onconnect` is still
+used, only to record connection failures to the structured logger.
 
 ## 2. Work-class concurrency gate
 
-`src/lib/database/work-class.ts` adalah semaphore in-memory per proses (bukan
-lintas-instance). Lima work class dan batas konkurensinya:
+`src/lib/database/work-class.ts` is an in-memory per-process semaphore (not
+cross-instance). Five work classes and their concurrency limits:
 
-| Work class             | Contoh (target ERP)                                | Prioritas | Max |
-| ---------------------- | -------------------------------------------------- | --------- | --: |
-| `critical_transaction` | Posting jurnal/ledger, payroll run, stock movement | Tertinggi |  10 |
-| `interactive`          | CRUD admin, search master data                     | Tinggi    |   8 |
-| `reporting`            | Laporan keuangan/inventori, dashboard              | Sedang    |   4 |
-| `background_sync`      | Sync push/pull, outbox, integrasi eksternal        | Rendah    |   4 |
-| `maintenance`          | Migration, backup                                  | Terjadwal |   1 |
+| Work class             | Example (ERP target)                                | Priority  | Max |
+| ---------------------- | --------------------------------------------------- | --------- | --: |
+| `critical_transaction` | Journal/ledger posting, payroll run, stock movement | Highest   |  10 |
+| `interactive`          | Admin CRUD, master data search                      | High      |   8 |
+| `reporting`            | Financial/inventory reports, dashboard              | Medium    |   4 |
+| `background_sync`      | Sync push/pull, outbox, external integration        | Low       |   4 |
+| `maintenance`          | Migration, backup                                   | Scheduled |   1 |
 
-Angka ini kecil dan tetap (tidak env-tunable) secara sengaja — jumlahnya jauh
-di bawah `DATABASE_POOL_MAX` (default 20) sehingga masih ada headroom di pool
-`Bun.SQL` itu sendiri, dan urutannya mengikuti prioritas: `critical_transaction`
-mendapat alokasi terbesar karena prioritas tertinggi; `maintenance`
-diserialkan (`max: 1`) karena bukan concern HTTP interaktif.
+These numbers are small and fixed (not env-tunable) on purpose — they are far
+below `DATABASE_POOL_MAX` (default 20) so there is still headroom in the
+`Bun.SQL` pool itself, and their ordering follows priority:
+`critical_transaction` gets the largest allocation because it has the highest
+priority; `maintenance` is serialised (`max: 1`) because it is not an
+interactive HTTP concern.
 
-Ketika sebuah class penuh, pemanggil berikutnya masuk antrean FIFO sampai
-slot bebas atau `timeoutMs` habis. Timeout menolak dengan
-`WorkClassTimeoutError` (bukan string-matching pesan error), sehingga
-pemanggil bisa memetakannya ke `503 DATABASE_BUSY` secara type-safe.
+When a class is full, the next caller enters a FIFO queue until a slot frees
+up or `timeoutMs` runs out. The timeout rejects with `WorkClassTimeoutError`
+(not string-matching an error message), so callers can map it to
+`503 DATABASE_BUSY` type-safely.
 
-**Antrean dibatasi** (diwarisi dari base, `awcms-mini` Issue #743): antrean
-per work class TIDAK unbounded — begitu antrean mencapai `max konkurensi x
-DATABASE_WORK_CLASS_QUEUE_MULTIPLIER` (default `4`, di-clamp `[1, 20]`),
-pemanggil berikutnya ditolak SEKETIKA dengan `WorkClassQueueFullError` (beda
-dari `WorkClassTimeoutError` — tidak pernah menunggu sama sekali), dipetakan
-ke `503 DATABASE_BUSY` + header `Retry-After`. Ini menutup risiko "cascading
-timeout chain" (antrean tumbuh tak terbatas, setiap pemanggil menunggu
-`timeoutMs` penuh sebelum akhirnya gagal) — lihat
+**The queue is bounded** (inherited from the base, `awcms-mini` Issue #743):
+the per-work-class queue is NOT unbounded — as soon as the queue reaches
+`max concurrency x DATABASE_WORK_CLASS_QUEUE_MULTIPLIER` (default `4`, clamped
+to `[1, 20]`), the next caller is rejected IMMEDIATELY with
+`WorkClassQueueFullError` (different from `WorkClassTimeoutError` — it never
+waits at all), mapped to `503 DATABASE_BUSY` + a `Retry-After` header. This
+closes the "cascading timeout chain" risk (the queue grows without bound and
+every caller waits the full `timeoutMs` before finally failing) — see
 [`database-capacity-runbook.md`](database-capacity-runbook.md) §Graceful
 saturation behavior.
 
-`critical_transaction` dan `maintenance` sudah ada di tipe/konfigurasi untuk
-kebutuhan modul ERP (mis. endpoint posting jurnal/payroll) tetapi **belum
-dipakai oleh endpoint manapun** karena belum ada modul ERP yang
-diimplementasikan — begitu modul finance/HR-payroll pertama ada, endpoint
-posting-nya diharapkan mengklasifikasikan diri ke `critical_transaction`.
+`critical_transaction` and `maintenance` already exist in the
+types/configuration for the needs of ERP modules (e.g. journal/payroll posting
+endpoints) but are **not used by any endpoint yet** because no ERP module is
+implemented — once the first finance/HR-payroll module exists, its posting
+endpoint is expected to classify itself as `critical_transaction`.
 
 ## 3. Circuit breaker
 
-`src/lib/database/circuit-breaker.ts` adalah breaker 3-state standar
-(`closed → open → half_open → closed`), murni fungsi dari `now: Date` yang
-di-inject oleh pemanggil (tidak ada `Date.now()` tersembunyi), sehingga
-sepenuhnya unit-testable tanpa menunggu waktu nyata.
+`src/lib/database/circuit-breaker.ts` is a standard 3-state breaker
+(`closed → open → half_open → closed`), a pure function of the `now: Date`
+injected by the caller (there is no hidden `Date.now()`), so it is fully
+unit-testable without waiting on real time.
 
-- **Closed → Open**: setelah `failureThreshold` (5) kegagalan berturut-turut.
-- **Open → Half-open**: setelah `openDurationMs` (30 detik) berlalu sejak
-  breaker terbuka, tepat satu percobaan diizinkan lewat.
-- **Half-open → Closed**: percobaan sukses.
-- **Half-open → Open**: percobaan gagal; jendela `openDurationMs` dimulai
-  ulang dari waktu kegagalan tersebut.
+- **Closed → Open**: after `failureThreshold` (5) consecutive failures.
+- **Open → Half-open**: after `openDurationMs` (30 seconds) has elapsed since
+  the breaker opened, exactly one attempt is allowed through.
+- **Half-open → Closed**: the attempt succeeds.
+- **Half-open → Open**: the attempt fails; the `openDurationMs` window
+  restarts from the time of that failure.
 
-Satu instance breaker dipakai bersama di seluruh aplikasi (module-level
-singleton `getDatabaseCircuitBreaker()`), bukan per-request — sehingga
-kegagalan yang terakumulasi lintas request/tenant memicu satu keputusan
-fail-fast untuk semua trafik.
+One breaker instance is shared across the whole application (module-level
+singleton `getDatabaseCircuitBreaker()`), not per-request — so failures
+accumulated across requests/tenants trigger a single fail-fast decision for
+all traffic.
 
-## 4. Integrasi ke `withTenant`
+## 4. Integration into `withTenant`
 
 ```ts
 withTenant(sql, tenantId, fn, {
@@ -130,73 +133,73 @@ withTenant(sql, tenantId, fn, {
 });
 ```
 
-Alur:
+The flow:
 
-1. Cek `circuitBreaker.canAttempt(now)` — jika `false`, langsung
-   `503 DATABASE_BUSY` + `Retry-After: 30` (skip antrean sepenuhnya,
+1. Check `circuitBreaker.canAttempt(now)` — if `false`, go straight to
+   `503 DATABASE_BUSY` + `Retry-After: 30` (skipping the queue entirely,
    fail-fast).
 2. `acquireWorkClassSlot(workClass, queueTimeoutMs)`:
-   - Antrean sudah penuh (lihat §2 di atas) → tolak seketika
-     dengan `WorkClassQueueFullError`; catat `database.pool.rejected`
-     lewat logger terstruktur (`src/lib/logging/logger.ts`),
-     lalu `503 DATABASE_BUSY` + `Retry-After: 2`.
-   - Menunggu lalu timeout → `WorkClassTimeoutError`; catat
-     `database.pool.saturated`, lalu `503 DATABASE_BUSY` +
+   - The queue is already full (see §2 above) → reject immediately
+     with `WorkClassQueueFullError`; record `database.pool.rejected`
+     through the structured logger (`src/lib/logging/logger.ts`),
+     then `503 DATABASE_BUSY` + `Retry-After: 2`.
+   - Waited and then timed out → `WorkClassTimeoutError`; record
+     `database.pool.saturated`, then `503 DATABASE_BUSY` +
      `Retry-After: 2`.
-3. Jalankan transaction seperti biasa (`SET LOCAL app.current_tenant_id`,
-   lalu `fn(tx)`).
-4. `finally`: lepas slot work-class.
-5. Sukses → `circuitBreaker.recordSuccess()`; transaction/`fn` melempar
-   exception → `circuitBreaker.recordFailure()` lalu exception dilempar
-   ulang (bukan `fail()` yang mengembalikan Response — response error
-   ABAC/validasi dari `fn` yang tidak melempar tetap dihitung sebagai
-   "sukses" pada level breaker, karena breaker mengukur kegagalan
-   transaksi/koneksi database, bukan logika bisnis).
+3. Run the transaction as usual (`SET LOCAL app.current_tenant_id`, then
+   `fn(tx)`).
+4. `finally`: release the work-class slot.
+5. Success → `circuitBreaker.recordSuccess()`; the transaction/`fn` throwing
+   an exception → `circuitBreaker.recordFailure()` and then the exception is
+   rethrown (not `fail()` which returns a Response — an ABAC/validation error
+   response from an `fn` that does not throw still counts as a "success" at
+   the breaker level, because the breaker measures database
+   transaction/connection failures, not business logic).
 
-   Dua pengecualian di catch block yang **tidak** memanggil
-   `recordFailure()` meski melempar exception, karena keduanya adalah
-   outcome logika bisnis/concurrency yang wajar, bukan kegagalan
-   infra database (diwarisi dari base):
-   - `IdempotencyRaceLostError` — race benign pada
+   Two exceptions in the catch block that do **not** call
+   `recordFailure()` even though they throw an exception, because both are
+   reasonable business-logic/concurrency outcomes, not database infra
+   failures (inherited from the base):
+   - `IdempotencyRaceLostError` — a benign race in
      `saveIdempotencyRecord`.
-   - `Bun.SQL.PostgresError` dengan SQLSTATE kelas `23` (integrity
+   - `Bun.SQL.PostgresError` with a SQLSTATE of class `23` (integrity
      constraint violation — `23503` foreign_key_violation, `23505`
-     unique_violation, `23514` check_violation, dst.). Sebuah
-     `INSERT`/`UPDATE` yang gagal karena FK/unique constraint (mis.
-     caller mengirim `tenantId` yang tidak ada) tidak dihitung sebagai
-     kegagalan infra — mencegah beberapa request dengan input invalid
-     membuka breaker aplikasi-lebar.
-   - `Bun.SQL.PostgresError` dengan SQLSTATE kelas `22` (data exception —
+     unique_violation, `23514` check_violation, etc.). An
+     `INSERT`/`UPDATE` that fails because of an FK/unique constraint (e.g.
+     the caller sent a `tenantId` that does not exist) does not count as an
+     infra failure — preventing a handful of requests with invalid input
+     from opening an application-wide breaker.
+   - `Bun.SQL.PostgresError` with a SQLSTATE of class `22` (data exception —
      `22P02` invalid_text_representation, `22003` numeric_value_out_of_range,
-     dst.) — generalisasi dari kelas `23` di atas, sama-sama "input caller
-     yang salah bentuk", bukan kegagalan infra (mis. string bukan-UUID yang
-     dibandingkan ke kolom `uuid`). Setiap identifier caller-supplied wajib
-     divalidasi `assertUuid()` sebelum menyentuh SQL; pengecualian ini
-     menutup celah struktural, bukan menunggu endpoint tertentu
-     mereproduksinya.
+     etc.) — a generalisation of class `23` above, equally "caller input of
+     the wrong shape", not an infra failure (e.g. a non-UUID string compared
+     against a `uuid` column). Every caller-supplied identifier must be
+     validated with `assertUuid()` before touching SQL; this exception closes
+     the structural hole rather than waiting for a particular endpoint to
+     reproduce it.
 
-     Error class lain (koneksi terputus, timeout, syntax error, izin
-     ditolak, dst.) tetap dihitung sebagai kegagalan seperti biasa.
+     Other error classes (dropped connection, timeout, syntax error,
+     permission denied, etc.) still count as failures as usual.
 
-Endpoint yang direklasifikasi dari default `"interactive"` (target rencana,
-belum ada implementasinya di AWCMS):
+Endpoints reclassified away from the default `"interactive"` (a planned
+target, not implemented in AWCMS yet):
 
-- `background_sync`: endpoint sync push/pull/status, object dispatch,
-  conflict resolution (pola sama seperti base `awcms-mini`).
-- `reporting`: endpoint laporan keuangan/inventori dan audit log.
+- `background_sync`: sync push/pull/status endpoints, object dispatch,
+  conflict resolution (the same pattern as the `awcms-mini` base).
+- `reporting`: financial/inventory report and audit log endpoints.
 
-Semua endpoint lain diharapkan tetap default `"interactive"`.
+All other endpoints are expected to stay on the default `"interactive"`.
 
-Catatan tipe: signature `withTenant<T>` generik, tetapi pada praktiknya
-setiap call site nyata memakai `T = Response` (setiap endpoint yang ada
-langsung mengembalikan hasil `withTenant` dari handler-nya). Karena itu
-`fail(...)` di dalam `withTenant` di-cast ke `T` — aman secara praktik
-meskipun signature generik tidak menegakkannya secara statis.
+Type note: the `withTenant<T>` signature is generic, but in practice every
+real call site uses `T = Response` (every existing endpoint returns the
+`withTenant` result straight from its handler). That is why `fail(...)` inside
+`withTenant` is cast to `T` — safe in practice even though the generic
+signature does not enforce it statically.
 
 ## 5. Health endpoint
 
-`GET /api/v1/database/pool/health` (tanpa auth, mengikuti presedan
-`/api/v1/health` yang juga publik) melaporkan:
+`GET /api/v1/database/pool/health` (no auth, following the precedent of
+`/api/v1/health` which is also public) reports:
 
 ```json
 {
@@ -254,95 +257,95 @@ meskipun signature generik tidak menegakkannya secara statis.
 }
 ```
 
-`status` dihitung: `unhealthy` jika DB tidak terjangkau atau breaker `open`;
-`degraded` jika breaker `half_open` atau ada work class yang penuh
-(`active >= max`) dengan antrean tidak kosong; selain itu `healthy`. Endpoint
-ini hanya melaporkan agregat (jumlah/boolean), **tidak pernah** data tenant
-atau isi query — cek DB dilakukan lewat satu `SELECT 1` langsung memakai
-`getDatabaseClient()` (bukan `withTenant`, karena endpoint ini bukan
-tenant-scoped), dibungkus try/catch agar outage DB tidak membuat health
-check-nya sendiri crash.
+`status` is computed: `unhealthy` if the DB is unreachable or the breaker is
+`open`; `degraded` if the breaker is `half_open` or some work class is full
+(`active >= max`) with a non-empty queue; otherwise `healthy`. This endpoint
+only reports aggregates (counts/booleans), **never** tenant data or query
+contents — the DB check is done with a single `SELECT 1` directly using
+`getDatabaseClient()` (not `withTenant`, because this endpoint is not
+tenant-scoped), wrapped in try/catch so that a DB outage does not make the
+health check itself crash.
 
-`maxQueueDepth` dan blok `capacity` hanya melaporkan angka KONFIGURASI
-proses ini sendiri (bukan agregat lintas-instance — satu proses tidak
-mengetahui instance lain) — untuk validasi lintas-instance sebelum
-scale-out, lihat
-[`database-capacity-runbook.md`](database-capacity-runbook.md) (library
-`capacity-config.ts` sudah nyata; CLI `bun run database:capacity:check`
-masih target — lihat status dokumen runbook tersebut).
+`maxQueueDepth` and the `capacity` block only report the CONFIGURATION numbers
+of this process itself (not a cross-instance aggregate — one process does not
+know about other instances) — for cross-instance validation before scale-out,
+see
+[`database-capacity-runbook.md`](database-capacity-runbook.md) (the
+`capacity-config.ts` library is real; the CLI `bun run database:capacity:check`
+is still a target — see that runbook's document status).
 
 ## 6. Domain event `database.pool.saturated`
 
-Didokumentasikan di berkas AsyncAPI kategori "DB Connectivity". **Belum ada
-dispatcher pub/sub nyata** untuk domain event apa pun di repo ini —
-produsen konkret event ini adalah baris log terstruktur
-`database.pool.saturated` yang ditulis oleh `withTenant` lewat
-`src/lib/logging/logger.ts`, sama seperti seluruh event AsyncAPI lain yang
-baru berupa kontrak terdokumentasi pada tahap fondasi ini.
+Documented in the AsyncAPI file under the "DB Connectivity" category. **There
+is no real pub/sub dispatcher yet** for any domain event in this repo — the
+concrete producer of this event is the structured log line
+`database.pool.saturated` written by `withTenant` through
+`src/lib/logging/logger.ts`, the same as every other AsyncAPI event, which at
+this foundation stage is only a documented contract.
 
-## 7. PgBouncer (transaction mode) — contoh konfigurasi
+## 7. PgBouncer (transaction mode) — example configuration
 
-Contoh konfigurasi PgBouncer tersimpan satu tempat (canonical) di
+The example PgBouncer configuration lives in one canonical place,
 [`../../deploy/pgbouncer/pgbouncer.ini.example`](../../deploy/pgbouncer/pgbouncer.ini.example)
-— bagian ini hanya kutipan singkat, jangan duplikasi isi lengkapnya di sini
-agar tidak ada dua salinan yang bisa berbeda seiring waktu:
+— this section is only a short excerpt; do not duplicate its full contents
+here so that there are not two copies that can drift apart over time:
 
 ```ini
-; pgbouncer.ini.example (kutipan — lihat berkas lengkap di link di atas)
+; pgbouncer.ini.example (excerpt — see the full file at the link above)
 [databases]
 awcms = host=127.0.0.1 port=5432 dbname=awcms
 
 [pgbouncer]
 pool_mode = transaction
-default_pool_size = 20 ; selaras dengan DATABASE_POOL_MAX aplikasi ini
+default_pool_size = 20 ; aligned with this application's DATABASE_POOL_MAX
 ```
 
-PgBouncer bersifat **opsional** — topologi LAN-first default (satu server
-app + PostgreSQL, lihat `docker-compose.yml` root dan
-[`deployment-profiles.md`](deployment-profiles.md)) tidak membutuhkannya;
-service `pgbouncer` di compose digerbangi lewat Docker Compose `profiles`
-sehingga hanya aktif bila diminta eksplisit.
+PgBouncer is **optional** — the default LAN-first topology (one app server +
+PostgreSQL, see the root `docker-compose.yml` and
+[`deployment-profiles.md`](deployment-profiles.md)) does not need it; the
+`pgbouncer` service in compose is gated behind Docker Compose `profiles` so it
+is only active when explicitly requested.
 
-Implikasi saat `DATABASE_PGBOUNCER=true`:
+Implications when `DATABASE_PGBOUNCER=true`:
 
-- `prepare: false` diset otomatis pada `Bun.SQL` (lihat §1) — prepared
-  statement otomatis bermasalah di PgBouncer transaction mode karena setiap
-  statement bisa dieksekusi di koneksi backend berbeda antar transaction.
-- Kode aplikasi sudah aman: `withTenant` selalu memakai
-  `SET LOCAL app.current_tenant_id` (bukan `SET` sesi biasa), yang scope-nya
-  otomatis terbatas pada satu transaction — kompatibel dengan PgBouncer
+- `prepare: false` is set automatically on `Bun.SQL` (see §1) — prepared
+  statements are inherently problematic in PgBouncer transaction mode because
+  each statement can be executed on a different backend connection between
+  transactions.
+- The application code is already safe: `withTenant` always uses
+  `SET LOCAL app.current_tenant_id` (not a plain session `SET`), whose scope
+  is automatically limited to one transaction — compatible with PgBouncer
   transaction mode.
 
-## 8. Kapasitas deployment-aware
+## 8. Deployment-aware capacity
 
-Bagian 1-7 di atas melindungi SATU proses. Kapasitas PostgreSQL/PgBouncer
-yang disetujui berlaku untuk SELURUH armada instance — `src/lib/database/
-capacity-config.ts` **sudah ada dan aktif di runtime** (instance count per
-process class, pool budget, kapasitas PgBouncer, budget koneksi disetujui,
-headroom admin dipakai oleh `GET /api/v1/database/pool/health`'s field
-`capacity`, dan `recordGauge` mencatat `db_pool_capacity_*` lewat
-`src/lib/observability/metrics-port.ts`). Yang **belum ada** adalah CLI
-wrapper-nya: `bun run database:capacity:check` dan
-`production:preflight`'s stage `database:capacity` bukan script nyata —
-tidak ada key ini di `package.json` (lihat `scripts/README.md` §Ditunda).
-Validasi kapasitas hari ini hanya bisa dilakukan dengan memanggil
-fungsi `capacity-config.ts` langsung (mis. dari test atau REPL), bukan
-lewat perintah `bun run` berdiri sendiri. Detail lengkap:
-[`database-capacity-runbook.md`](database-capacity-runbook.md) (rumus,
-contoh perhitungan, SOP incident saturasi/connection-storm, dan status
-implementasi CLI yang lebih rinci).
+Sections 1-7 above protect ONE process. The approved PostgreSQL/PgBouncer
+capacity applies to the ENTIRE fleet of instances — `src/lib/database/
+capacity-config.ts` **already exists and is active at runtime** (instance
+count per process class, pool budget, PgBouncer capacity, approved connection
+budget, admin headroom used by `GET /api/v1/database/pool/health`'s `capacity`
+field, and `recordGauge` recording `db_pool_capacity_*` through
+`src/lib/observability/metrics-port.ts`). What does **not** exist yet is the
+CLI wrapper: `bun run database:capacity:check` and `production:preflight`'s
+`database:capacity` stage are not real scripts — those keys are not in
+`package.json` (see `scripts/README.md` §Deferred). Capacity validation today
+can only be done by calling the `capacity-config.ts` functions directly (e.g.
+from a test or a REPL), not through a standalone `bun run` command. Full
+detail:
+[`database-capacity-runbook.md`](database-capacity-runbook.md) (formulas,
+worked examples, the saturation/connection-storm incident SOP, and a more
+detailed CLI implementation status).
 
-## Gap yang belum ditutup
+## Gaps not yet closed
 
-- Circuit breaker sulit dipicu secara live tanpa cara memaksa kegagalan
-  koneksi database yang representatif; verifikasi utamanya adalah unit test
-  (`tests/database-pooling.test.ts`), bukan skenario live.
-- Saturasi work-class di level HTTP sulit diamati secara deterministik
-  karena request cenderung selesai lebih cepat daripada observasi manual.
-- Job worker (`scripts/*.ts`) belum runtime-gated lewat `work-class.ts`'s
-  concurrency gate — lihat `database-capacity-runbook.md` §Known
-  limitation untuk alasan dan status follow-up.
-- Belum ada endpoint domain ERP nyata yang memanfaatkan klasifikasi
-work-class di atas — validasi ulang klasifikasi begitu modul finance/
-inventory/payroll pertama diimplementasikan.
-</content>
+- The circuit breaker is hard to trigger live without a representative way to
+  force database connection failures; its primary verification is the unit
+  test (`tests/database-pooling.test.ts`), not a live scenario.
+- Work-class saturation at the HTTP level is hard to observe deterministically
+  because requests tend to finish faster than manual observation.
+- Job workers (`scripts/*.ts`) are not yet runtime-gated through
+  `work-class.ts`'s concurrency gate — see `database-capacity-runbook.md`
+  §Known limitation for the reason and follow-up status.
+- There is no real ERP domain endpoint exploiting the work-class
+  classification above yet — revalidate the classification once the first
+  finance/inventory/payroll module is implemented.

@@ -1,67 +1,69 @@
-# ADR-0076 — Tabel milik infrastruktur boleh memegang deskriptor retensi, dan klasifikator kepemilikan-tulis yang memutuskan siapa boleh
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0076-infrastructure-tables-may-hold-lifecycle-descriptors.id.md)
+
+# ADR-0076 — Infrastructure-owned tables may hold retention descriptors, and a write-ownership classifier decides which ones may
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-10
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** Issue #479 (pemblokir #468), [ADR-0037](0037-data-lifecycle-module-admission.md) (registry retensi), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (antrean invalidasi yang menjadi kasus pertamanya), [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (kerangka retensi yang dipakai ulang di sini), [ADR-0013](0013-extension-layers-and-boundary-model.md) §6 (no shared-table write)
+- **Date:** 2026-08-10
+- **Decision maker:** @ahliweb
+- **Related:** Issue #479 (blocker for #468), [ADR-0037](0037-data-lifecycle-module-admission.md) (retention registry), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (the invalidation queue that became its first case), [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (the retention framework reused here), [ADR-0013](0013-extension-layers-and-boundary-model.md) §6 (no shared-table write)
 
-## Konteks
+## Context
 
-`HighVolumeTableDescriptor` dideklarasikan oleh **modul pemilik tabel**, dan `lifecycle-registry.ts` menegakkan bahwa `ownerModuleKey` sama dengan key modul yang mendeklarasikannya. Aturan itu benar dan tidak dilonggarkan ADR ini: tanpanya sebuah modul bisa menuliskan kebijakan retensi untuk tabel milik modul lain, dan pemilik sebenarnya tidak akan pernah tahu.
+`HighVolumeTableDescriptor` is declared by the **module that owns the table**, and `lifecycle-registry.ts` enforces that `ownerModuleKey` equals the module key that declares it. That rule is correct and this ADR does not loosen it: without it a module could write a retention policy for another module's table, and the real owner would never find out.
 
-Yang tidak diantisipasi aturan itu adalah tabel yang **tidak punya modul pemilik sama sekali**.
+What the rule did not anticipate is a table that has **no owning module at all**.
 
-`awcms_edge_cache_purges` adalah contohnya, dan bukan kecelakaan: ia hidup di `src/lib/edge-cache/`, yang **sengaja** bukan modul — sama seperti subsistem database, rate limit, dan SSRF guard. Ia ditulis oleh tiga modul (`blog_content`, `theming`, `seo_distribution`) lewat satu fungsi infrastruktur, dan `scripts/table-write-ownership-check.ts` sudah mengklasifikasikannya sebagai `"(src/lib infrastructure)"` sejak lama. Kepemilikan-nol di sana adalah keputusan yang tercatat, bukan celah.
+`awcms_edge_cache_purges` is the example, and it is not an accident: it lives in `src/lib/edge-cache/`, which is **deliberately** not a module — the same as the database subsystem, rate limit, and SSRF guard. It is written by three modules (`blog_content`, `theming`, `seo_distribution`) through a single infrastructure function, and `scripts/table-write-ownership-check.ts` has classified it as `"(src/lib infrastructure)"` for a long time. Zero ownership there is a recorded decision, not a gap.
 
-Akibatnya tabel itu duduk di `TABLES_PREDATING_THE_RULE` bukan karena belum sempat, melainkan karena kontraknya tidak bisa menyatakannya. Dan **perbedaan itu tidak terlihat dari ledger**: sebuah tabel yang tak mungkin dideskripsikan terlihat persis seperti tabel yang belum dideskripsikan. Itu masalah sebenarnya — bukan satu tabel yang lolos, melainkan sebuah ledger yang berhenti bisa dibaca sebagai hitungan utang.
+The consequence is that the table sat in `TABLES_PREDATING_THE_RULE` not because nobody had got round to it, but because the contract could not express it. And **that difference is invisible from the ledger**: a table that cannot possibly be described looks exactly like a table that has not been described yet. That is the real problem — not one table slipping through, but a ledger that stopped being readable as a count of debt.
 
-### Satu koreksi terhadap premis Issue #479
+### One correction to Issue #479's premise
 
-Issue-nya menulis bahwa "tak ada satu pun yang menghapusnya hari ini". Itu **tidak benar**, dan kesalahannya mengubah bentuk keputusan ini. `bun run edge-cache:purge` sudah memanggil `pruneCompletedEdgeCachePurges`, yang menghapus baris `done` yang lebih tua dari tujuh hari — mekanisme retensi tangan yang sudah bekerja sejak ADR-0042.
+The issue states that "nothing deletes them today". That is **not true**, and the error changes the shape of this decision. `bun run edge-cache:purge` already calls `pruneCompletedEdgeCachePurges`, which deletes `done` rows older than seven days — a hand-rolled retention mechanism that has been working since ADR-0042.
 
-Artinya yang dibutuhkan tabel ini **bukan** purge baru. Yang dibutuhkannya adalah cara untuk **menyatakan purge yang sudah ada** dalam kontrak yang bisa dibaca gerbang — persis definisi `executionMode: "delegated"`, yang sudah ada di kontrak dan berbunyi: _"the owning module already has its own hand-rolled purge/retention function"_. Satu-satunya kata yang menghalanginya adalah **module**.
+That means what this table needs is **not** a new purge. What it needs is a way to **state the purge that already exists** in a contract a gate can read — precisely the definition of `executionMode: "delegated"`, which already exists in the contract and reads: _"the owning module already has its own hand-rolled purge/retention function"_. The only word standing in its way is **module**.
 
-Yang memang tidak dibatasi apa pun: baris `failed`. Docblock-nya menulis bahwa mereka disimpan selamanya dengan sengaja, dan alasannya benar — baris itu satu-satunya jejak bahwa sebuah invalidasi tidak pernah mendarat. "Selamanya" tetap tak berbatas, dan sebuah deskriptor yang menyebut jendela retensi sambil membiarkan satu kelas status kekal akan menjadi klaim palsu jenis yang persis dilarang ledger ini.
+What genuinely was unbounded: `failed` rows. Their docblock states that they are kept forever on purpose, and the reason is sound — those rows are the only trace that an invalidation never landed. "Forever" is still unbounded, and a descriptor that names a retention window while leaving one status class eternal would be exactly the kind of false claim this ledger forbids.
 
-## Keputusan
+## Decision
 
-**Tabel yang dimiliki infrastruktur boleh memegang deskriptor retensi, lewat registry keduanya sendiri — dan yang menentukan sebuah tabel boleh ada di sana adalah klasifikator kepemilikan-tulis yang sudah dipakai `modules:table-writes:check`, bukan penilaian penulis deskriptor.**
+**Infrastructure-owned tables may hold retention descriptors, through their own second registry — and what decides whether a table may be there is the write-ownership classifier that `modules:table-writes:check` already uses, not the descriptor author's judgement.**
 
-Tiga bagian, dan bagian ketiga yang menanggung beban.
+Three parts, and the third one carries the weight.
 
-### 1. Registry kedua, bukan `ownerModuleKey` yang dilonggarkan
+### 1. A second registry, not a loosened `ownerModuleKey`
 
-`INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS` tinggal di `data-lifecycle/domain/infrastructure-lifecycle-registry.ts`. Bentuknya `HighVolumeTableDescriptor` **tanpa** `ownerModuleKey`, **plus** `ownerPath` (direktori `src/lib/` yang memiliki skemanya).
+`INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS` lives in `data-lifecycle/domain/infrastructure-lifecycle-registry.ts`. Its shape is `HighVolumeTableDescriptor` **without** `ownerModuleKey`, **plus** `ownerPath` (the `src/lib/` directory that owns its schema).
 
-Alternatif yang ditolak: membuat `ownerModuleKey` opsional. Ia menghemat satu berkas dan membayarnya dengan setiap deskriptor modul kehilangan penjagaan wajib-nya — sebuah deskriptor yang lupa menyebut pemilik akan berhenti menjadi kesalahan dan mulai berarti "infrastruktur". Kesalahan ketik menjadi klaim kepemilikan, diam-diam. Dua registry membuat pilihan itu eksplisit di tempat ia diambil.
+The alternative that was rejected: making `ownerModuleKey` optional. It saves one file and pays for it with every module descriptor losing its mandatory guard — a descriptor that forgets to name an owner would stop being an error and start meaning "infrastructure". A typo becomes an ownership claim, silently. Two registries make that choice explicit at the point where it is taken.
 
-### 2. `delegated` saja — infrastruktur tidak bisa memakai engine generik
+### 2. `delegated` only — infrastructure cannot use the generic engine
 
-Engine generik `data_lifecycle` menghapus **atas nama modul pemilik**. Tanpa modul, tidak ada atas-nama siapa. Deskriptor infrastruktur karena itu wajib `executionMode: "delegated"` dan wajib membawa `existingAdopter` yang menyebut fungsi dan perintah job-nya. Ini bukan pembatasan sementara: sebuah tabel infrastruktur yang belum punya purge tidak boleh menyelesaikan kewajibannya dengan menunjuk engine — ia harus menulis purge-nya, seperti setiap modul.
+The generic `data_lifecycle` engine deletes **on behalf of the owning module**. Without a module there is no one to act on behalf of. An infrastructure descriptor must therefore be `executionMode: "delegated"` and must carry an `existingAdopter` naming its function and its job command. This is not a temporary restriction: an infrastructure table that does not yet have a purge must not discharge its obligation by pointing at the engine — it has to write its purge, like every module.
 
-### 3. Klasifikator yang memutuskan, bukan penulisnya
+### 3. The classifier decides, not the author
 
-Bahaya sebenarnya dari registry kedua adalah ia menjadi tempat parkir: sebuah tabel milik modul dipindahkan ke sana karena menulis deskriptornya di modul itu merepotkan. Yang mencegahnya bukan aturan tertulis, melainkan `ownerOfFile()` — fungsi yang sudah dipakai `modules:table-writes:check` untuk menjawab "siapa menulis tabel ini".
+The real danger of a second registry is that it becomes a parking space: a module-owned table gets moved there because writing its descriptor in that module is inconvenient. What prevents that is not a written rule but `ownerOfFile()` — the function `modules:table-writes:check` already uses to answer "who writes this table".
 
-`data-lifecycle:registry:check` kini memindai `src/` dengan scanner yang sama dan menolak:
+`data-lifecycle:registry:check` now scans `src/` with the same scanner and rejects:
 
-- deskriptor infrastruktur untuk tabel yang penulisnya sebuah **modul** → tabelnya milik modul itu, deklarasikan di sana;
-- deskriptor infrastruktur untuk tabel yang **tidak ditulis siapa pun** di `src/` → tidak ada bukti ia infrastruktur, dan tabel tanpa penulis punya pertanyaan yang lebih mendesak;
-- tabel yang muncul di **kedua** registry.
+- an infrastructure descriptor for a table whose writer is a **module** → the table belongs to that module, declare it there;
+- an infrastructure descriptor for a table that **nobody writes** in `src/` → there is no evidence it is infrastructure, and a table without a writer has more urgent questions;
+- a table that appears in **both** registries.
 
-Konsekuensinya: kepemilikan yang salah tidak bisa dinyatakan, di kedua arah, dan tidak ada satu pun kalimat sopan yang bisa menghindarinya. Ini menutup kekhawatiran eksplisit Issue #479 — _"deskriptor yang menyebut pemilik yang salah adalah klaim palsu yang terbaca sebagai keputusan"_ — dengan sebuah gerbang alih-alih sebuah paragraf.
+The consequence: wrong ownership cannot be stated, in either direction, and no polite sentence can get around it. This closes Issue #479's explicit worry — _"a descriptor naming the wrong owner is a false claim that reads as a decision"_ — with a gate instead of a paragraph.
 
-Gerbangnya karena itu berhenti murni: ia membaca `src/`. Itu harga yang dibayar sadar, dan ia dibayar sekali — `data-lifecycle:table-coverage:check` di sebelahnya sudah membaca `sql/`.
+The gate therefore stops being pure: it reads `src/`. That is a price paid knowingly, and it is paid once — `data-lifecycle:table-coverage:check` next to it already reads `sql/`.
 
-### Baris `failed` mendapat batas, dan legal hold masuk
+### `failed` rows get a bound, and legal hold arrives
 
-Dua perubahan perilaku mendarat bersama deskriptornya, karena tanpa keduanya deskriptor itu tidak benar:
+Two behavioural changes land together with the descriptor, because without both the descriptor would not be true:
 
-- **`failed` dihapus setelah 180 hari.** Umur berguna sebuah catatan invalidasi-gagal dibatasi TTL objek yang gagal diinvalidasi; setelah enam bulan konten itu sudah kedaluwarsa ribuan kali dan barisnya menjadi arkeologi. Visibilitas operator yang menjadi alasan aslinya tetap utuh — enam bulan jauh melampaui setiap jendela di mana seseorang akan bertindak.
-- **Purge-nya kini menghormati legal hold**, lewat `LegalHoldGuardPort` yang sama persis dengan ketujuh purge terdelegasi lain. Tanpa ini `legalHold.applicable: true` akan menjadi deklarasi tanpa penegak — dan `applicable: false` akan menjadi cara sebuah tabel mengecualikan diri dari legal hold dengan menyatakannya, yang dilarang ADR-0037.
+- **`failed` is deleted after 180 days.** The useful life of a failed-invalidation record is bounded by the TTL of the object that failed to be invalidated; after six months that content has expired thousands of times and the row is archaeology. The operator visibility that was the original reason stays intact — six months is far beyond any window in which someone would act.
+- **Its purge now honours legal hold**, through the very same `LegalHoldGuardPort` as the other seven delegated purges. Without this, `legalHold.applicable: true` would be a declaration without an enforcer — and `applicable: false` would become the way a table exempts itself from legal hold by declaring so, which ADR-0037 forbids.
 
-## Konsekuensi
+## Consequences
 
-`TABLES_PREDATING_THE_RULE` menyusut satu, dan kali ini karena utangnya dibayar, bukan karena entrinya dipindahkan. Tabel infrastruktur berikutnya yang lahir punya jalur untuk menjawab pertanyaan retensi tanpa berpura-pura menjadi modul, dan tidak punya jalur untuk mengaku infrastruktur kalau ia bukan.
+`TABLES_PREDATING_THE_RULE` shrinks by one, and this time because the debt was paid, not because the entry was moved. The next infrastructure table that is born has a path to answer the retention question without pretending to be a module, and has no path to claim to be infrastructure when it is not.
 
-Yang **tidak** diputuskan di sini: apakah `src/lib/edge-cache/` sebaiknya menjadi modul. Issue #479 menawarkannya sebagai opsi kedua, dan ia tetap terbuka — ADR ini hanya menghilangkan alasan paling lemah untuk melakukannya, yaitu "supaya gerbangnya hijau". Kalau edge cache kelak menjadi modul karena alasan arsitektural yang sebenarnya, deskriptornya pindah ke `module.ts`-nya dan registry infrastruktur menyusut; gerbangnya akan menuntut perpindahan itu sendiri, karena penulisnya berubah dari `src/lib` menjadi modul.
+What is **not** decided here: whether `src/lib/edge-cache/` should become a module. Issue #479 offered that as a second option, and it stays open — this ADR only removes the weakest reason to do it, namely "so the gate goes green". If the edge cache eventually becomes a module for a genuine architectural reason, its descriptor moves into its `module.ts` and the infrastructure registry shrinks; the gate will demand that move itself, because its writer changes from `src/lib` to a module.

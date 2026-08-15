@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Data Lifecycle
 
 Ported from awcms-micro Issue #745 (ADR-0037). `type: "system"` — a System

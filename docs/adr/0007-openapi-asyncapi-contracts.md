@@ -1,24 +1,26 @@
-# ADR-0007 — OpenAPI & AsyncAPI sebagai kontrak wajib
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0007-openapi-asyncapi-contracts.id.md)
+
+# ADR-0007 — OpenAPI & AsyncAPI as mandatory contracts
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-05
-- **Terkait:** `docs/awcms/05_openapi_asyncapi_detail.md`, `docs/awcms/10_template_kode_coding_standard.md`
+- **Date:** 2026-07-05
+- **Related:** `docs/awcms/05_openapi_asyncapi_detail.md`, `docs/awcms/10_template_kode_coding_standard.md`
 
-## Konteks
+## Context
 
-Tanpa kontrak eksplisit, API dan event mudah menyimpang antar modul/aplikasi turunan, dan sulit diuji atau diverifikasi konsistensinya. Base perlu satu sumber kebenaran untuk permukaan REST dan event domain.
+Without an explicit contract, APIs and events easily drift between modules/derived applications, and are hard to test or verify for consistency. The base needs one source of truth for the REST surface and domain events.
 
-## Keputusan
+## Decision
 
-Kami memutuskan menjadikan **OpenAPI** kontrak wajib untuk REST (`openapi/`) dan **AsyncAPI** kontrak wajib untuk domain event (`asyncapi/`). Setiap API baru/berubah wajib memperbarui OpenAPI; setiap event baru/berubah wajib memperbarui AsyncAPI. Konsistensi kontrak ↔ registry modul divalidasi otomatis (`api:spec:check`): setiap event yang dideklarasikan `publishes` harus terdaftar sebagai channel AsyncAPI. Envelope response dan katalog error code distandarkan.
+We decided to make **OpenAPI** the mandatory contract for REST (`openapi/`) and **AsyncAPI** the mandatory contract for domain events (`asyncapi/`). Every new/changed API must update OpenAPI; every new/changed event must update AsyncAPI. Consistency between contract ↔ module registry is validated automatically (`api:spec:check`): every event declared in `publishes` must be registered as an AsyncAPI channel. The response envelope and the error code catalogue are standardised.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** kontrak menjadi sumber kebenaran; drift terdeteksi di CI; contract test dan dokumentasi API konsisten.
-- **Trade-off:** kedisiplinan tambahan — perubahan API/event tidak boleh tanpa update kontrak.
-- **Netral:** aplikasi turunan menambah path/event domainnya di `openapi/modules/` dan AsyncAPI-nya sendiri.
+- **Positive:** the contract becomes the source of truth; drift is detected in CI; contract tests and API documentation stay consistent.
+- **Trade-off:** extra discipline — an API/event change must not happen without a contract update.
+- **Neutral:** a derived application adds its own domain paths/events in `openapi/modules/` and its own AsyncAPI.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Kontrak digenerate dari kode saja** — ditolak untuk tahap desain: kontrak dipakai sebelum kode ada (design-first).
-- **Tanpa kontrak event** — ditolak: event antar modul tanpa kontrak rapuh dan sulit diuji.
+- **Contracts generated from the code only** — rejected for the design stage: the contract is used before the code exists (design-first).
+- **No event contract** — rejected: cross-module events without a contract are fragile and hard to test.

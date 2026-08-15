@@ -1,9 +1,11 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # comments
 
 Tenant-scoped, **moderation-first** commenting over **published, public**
 resources. Admitted by
 [ADR-0041](../../../docs/adr/0041-comments-module-admission.md), ported from
-awcms-micro Issue #271 as a Gelombang-1 row of
+awcms-micro Issue #271 as a Wave-1 row of
 [`docs/awcms/absorb-awcms-micro-roadmap.md`](../../../docs/awcms/absorb-awcms-micro-roadmap.md).
 
 ## The one thing to understand first
@@ -111,7 +113,7 @@ see `.env.example` for the full text.
   email consumer that resolves the encrypted recipient and sends is not written
   yet. Comments work fully without it.
 - **Public comment form component.** The API is complete; this base has no
-  `src/components/ui/` library yet (an open Gelombang-0 roadmap row), and a
+  `src/components/ui/` library yet (an open Wave-0 roadmap row), and a
   theme supplies its own form.
 - **Turnstile on the comment form.** `turnstileEnabled` exists in settings and
   is honoured by the schema, but the verification call is not yet wired into the

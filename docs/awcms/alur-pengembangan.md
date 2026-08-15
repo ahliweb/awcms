@@ -1,20 +1,23 @@
-# Alur pengembangan AWCMS
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](alur-pengembangan.id.md)
 
-> **Dokumen kanonik proses.** Ia menjawab satu pertanyaan: _dari niat sampai
-> produksi, apa yang harus ada, dalam urutan apa, dan apa yang menegakkannya._
+# AWCMS development flow
+
+> **Canonical process document.** It answers one question: _from intent to
+> production, what must exist, in what order, and what enforces it._
 >
-> Ia **tidak** mengulang isi dokumen lain. Setiap langkah menunjuk artefak
-> nyata di repo ini, dan bila artefaknya **belum ada**, langkah itu mengatakannya
-> — celah yang ditulis lebih berguna daripada celah yang disamarkan.
+> It does **not** repeat the content of other documents. Every step points at a
+> real artifact in this repo, and when the artifact **does not exist yet**, the
+> step says so — a gap that is written down is more useful than a gap that is
+> disguised.
 
-- **Menggantikan** [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md),
-  yang dicabut [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)
-  dan kini hanya catatan sejarah.
-- **Melengkapi, bukan menggantikan:** [`../../AGENTS.md`](../../AGENTS.md)
-  (kontrak kerja teknis) dan [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md)
-  (mekanik langkah 10–12).
+- **Replaces** [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md),
+  which was revoked by [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)
+  and is now only a historical record.
+- **Complements, does not replace:** [`../../AGENTS.md`](../../AGENTS.md)
+  (technical working contract) and [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md)
+  (mechanics of steps 10–12).
 
-## Alurnya
+## The flow
 
 ```mermaid
 flowchart TD
@@ -22,344 +25,346 @@ flowchart TD
   S2 --> S3[3 Threat Model + Privacy]
   S3 --> S4[4 ERD + Data Dictionary]
   S4 --> S5[5 RBAC + ABAC + RLS Matrix]
-  S5 --> S6[6 Spesifikasi Algoritma Domain]
+  S5 --> S6[6 Domain Algorithm Specification]
   S6 --> S7[7 OpenAPI + AsyncAPI]
   S7 --> S8[8 UX/UI]
   S8 --> S9[9 Cross-Spec Review / Definition of Ready]
-  S9 --> S10[10 Issue GitHub Atomic]
-  S10 --> S11[11 Implementasi + Test Otomatis]
+  S9 --> S10[10 Atomic GitHub Issue]
+  S10 --> S11[11 Implementation + Automated Tests]
   S11 --> S12[12 PR + Review + CI]
-  S12 --> S13[13 Deploy Staging - TIDAK BERLAKU ADR-0083]
-  S13 --> S14[14 UAT Internal - TIDAK BERLAKU]
+  S12 --> S13[13 Deploy Staging - NOT APPLICABLE ADR-0083]
+  S13 --> S14[14 Internal UAT - NOT APPLICABLE]
   S14 --> S15[15 Release Readiness / Go-No-Go]
-  S15 --> S16[16 Deploy Produksi]
-  S16 --> S17[17 Validasi Produksi]
+  S15 --> S16[16 Deploy Production]
+  S16 --> S17[17 Production Validation]
   S17 --> S18[18 Monitoring + Post-Release Review]
-  S18 -->|perbaikan berkelanjutan| S1
+  S18 -->|continuous improvement| S1
 ```
 
-## Dua hal yang harus dibaca sebelum memakai diagram ini
+## Two things that must be read before using this diagram
 
-**Pertama: tidak setiap perubahan menempuh 18 langkah.** Yang menentukan bukan
-selera, melainkan KELAS perubahannya:
+**First: not every change walks all 18 steps.** What decides is not taste, but
+the CLASS of the change:
 
-| Kelas perubahan                                         | Langkah wajib                                                                                               |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Dokumen saja, chore, dependency bump                    | 10 → 12, lalu 16–18 saat rilis                                                                              |
-| Perbaikan bug tanpa perubahan kontrak/skema             | 10 → 12                                                                                                     |
-| Perubahan perilaku pada modul yang sudah ada            | 3, 5 (bila menyentuh akses), 7 (bila menyentuh API), 10 → 12                                                |
-| Skema baru / kolom baru                                 | 4, 5, 10 → 12                                                                                               |
-| **Modul baru**                                          | 1 → 12 penuh, plus admission ADR ([`21_module_admission_governance.md`](21_module_admission_governance.md)) |
-| Perubahan lapisan fondasi (auth, access, sync, tenancy) | 1 → 12 penuh, **ADR wajib**                                                                                 |
+| Class of change                                       | Mandatory steps                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Docs only, chore, dependency bump                     | 10 → 12, then 16–18 at release time                                                                           |
+| Bug fix without a contract/schema change              | 10 → 12                                                                                                       |
+| Behaviour change in an existing module                | 3, 5 (if it touches access), 7 (if it touches the API), 10 → 12                                               |
+| New schema / new column                               | 4, 5, 10 → 12                                                                                                 |
+| **New module**                                        | full 1 → 12, plus an admission ADR ([`21_module_admission_governance.md`](21_module_admission_governance.md)) |
+| Foundation-layer change (auth, access, sync, tenancy) | full 1 → 12, **ADR mandatory**                                                                                |
 
-**Kedua: langkah 1–9 menghasilkan DOKUMEN, dan dokumen di repo ini menua.**
-Aturan yang sudah berlaku tetap berlaku: sebuah dokumen yang salah lebih
-berbahaya daripada dokumen yang tidak ada, karena ia dipercaya. Kalau sebuah
-langkah menghasilkan klaim yang bisa basi (angka, daftar berkas, status), taruh
-klaim itu di tempat yang **di-generate atau digerbangi**, bukan di prosa.
+**Second: steps 1–9 produce DOCUMENTS, and documents in this repo go stale.**
+The rule already in force stays in force: a document that is wrong is more
+dangerous than a document that does not exist, because it is trusted. If a step
+produces a claim that can go stale (a number, a file list, a status), put that
+claim somewhere **generated or gated**, not in prose.
 
 ---
 
 ## 1. Master Blueprint
 
-**Menjawab:** produk ini apa, batasnya di mana, dan apa yang secara sengaja
-BUKAN bagiannya.
+**Answers:** what this product is, where its boundary lies, and what is
+deliberately NOT part of it.
 
-| Artefak                                                            | Peran                                 |
-| ------------------------------------------------------------------ | ------------------------------------- |
-| [`01_canvas_induk.md`](01_canvas_induk.md)                         | ringkasan produk & prinsip            |
-| [`11_implementation_blueprint.md`](11_implementation_blueprint.md) | blueprint implementasi per sprint     |
-| [`../ARCHITECTURE.md`](../ARCHITECTURE.md)                         | arsitektur current-state (digerbangi) |
-| [`../adr/`](../adr/README.md)                                      | keputusan yang mengunci ruang lingkup |
+| Artifact                                                           | Role                                |
+| ------------------------------------------------------------------ | ----------------------------------- |
+| [`01_canvas_induk.md`](01_canvas_induk.md)                         | product summary & principles        |
+| [`11_implementation_blueprint.md`](11_implementation_blueprint.md) | per-sprint implementation blueprint |
+| [`../ARCHITECTURE.md`](../ARCHITECTURE.md)                         | current-state architecture (gated)  |
+| [`../adr/`](../adr/README.md)                                      | decisions that lock the scope       |
 
-Perubahan ruang lingkup di tingkat ini **selalu** sebuah ADR. Blueprint tidak
-mengubah arah; ADR yang mengubah, dan blueprint mengikutinya.
+A scope change at this level is **always** an ADR. The blueprint does not change
+direction; the ADR changes it, and the blueprint follows.
 
 ## 2. PRD
 
-**Menjawab:** siapa penggunanya, pekerjaan apa yang diselesaikan, dan apa
-kriteria diterimanya.
+**Answers:** who the users are, what job gets done, and what the acceptance
+criteria are.
 
 [`02_prd_detail_per_modul.md`](02_prd_detail_per_modul.md).
 
 ## 3. Threat Model + Privacy Analysis
 
-**Menjawab:** siapa penyerangnya, apa yang ia incar, dan data pribadi apa yang
-tersentuh.
+**Answers:** who the attacker is, what they are after, and what personal data is
+touched.
 
-| Bagian                      | Artefak                                                                                | Status          |
-| --------------------------- | -------------------------------------------------------------------------------------- | --------------- |
-| Threat model                | [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md) | ada             |
-| Peta kontrol                | [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md)                 | ada, **hidup**  |
-| Retensi data                | [`data-lifecycle.md`](data-lifecycle.md) + gerbang `data-lifecycle:*`                  | ada, digerbangi |
-| **Privacy analysis / DPIA** | [`privacy-analysis.md`](privacy-analysis.md)                                           | ada             |
-| Per fitur                   | [`templates/privacy-analysis-template.md`](templates/privacy-analysis-template.md)     | ada             |
+| Part                        | Artifact                                                                               | Status             |
+| --------------------------- | -------------------------------------------------------------------------------------- | ------------------ |
+| Threat model                | [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md) | exists             |
+| Control map                 | [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md)                 | exists, **living** |
+| Data retention              | [`data-lifecycle.md`](data-lifecycle.md) + the `data-lifecycle:*` gates                | exists, gated      |
+| **Privacy analysis / DPIA** | [`privacy-analysis.md`](privacy-analysis.md)                                           | exists             |
+| Per feature                 | [`templates/privacy-analysis-template.md`](templates/privacy-analysis-template.md)     | exists             |
 
-Keduanya wajib dan menjawab hal berbeda: threat model menjawab "siapa
-penyerangnya", analisis privasi menjawab "data siapa yang ada di sini".
+Both are mandatory and they answer different things: the threat model answers
+"who is the attacker", the privacy analysis answers "whose data is in here".
 
-Analisis privasi sengaja **tidak** menyalin angka retensi per tabel — salinan
-itu basi pada hari pertama seseorang mengubah deskriptornya, dan angka basi di
-dokumen privasi lebih berbahaya daripada tidak ada angka. Ia menunjuk ke tempat
-yang digerbangi. Ia juga menyatakan apa yang **hanya bisa dijawab operator**
-(dasar hukum, DPO, transfer lintas-yurisdiksi) alih-alih berpura-pura
-menjawabnya.
+The privacy analysis deliberately does **not** copy per-table retention numbers —
+that copy is stale on the first day someone changes the descriptor, and a stale
+number in a privacy document is more dangerous than no number at all. It points
+at the gated place instead. It also states what **only the operator can answer**
+(legal basis, DPO, cross-jurisdiction transfers) rather than pretending to answer
+it.
 
 ## 4. ERD + Data Dictionary
 
-**Menjawab:** entitas apa, relasinya bagaimana, dan kolomnya berarti apa.
+**Answers:** which entities, how they relate, and what the columns mean.
 
-[`04_erd_data_dictionary.md`](04_erd_data_dictionary.md), dengan skema nyata di
-[`../../sql/`](../../sql/) dan konvensinya di
+[`04_erd_data_dictionary.md`](04_erd_data_dictionary.md), with the real schema in
+[`../../sql/`](../../sql/) and its conventions in
 [`database-migrations.md`](database-migrations.md).
 
-**Yang menegakkan, bukan sekadar menyarankan:**
+**What enforces this, rather than merely suggesting it:**
 
-- migrasi terapan **immutable** — mengeditnya memblokir `db:migrate` di
-  deployment yang sudah jalan;
-- setiap tabel `awcms_%` wajib `ENABLE` **dan** `FORCE ROW LEVEL SECURITY`
-  kecuali terdaftar sebagai global ber-alasan (`security:readiness`);
-- setiap kolom foreign key wajib terjangkau index (`db:fk-index:check`);
-- setiap tabel wajib menjawab pertanyaan retensi
+- an applied migration is **immutable** — editing it blocks `db:migrate` on a
+  deployment that is already running;
+- every `awcms_%` table must `ENABLE` **and** `FORCE ROW LEVEL SECURITY` unless
+  it is registered as global with a reason (`security:readiness`);
+- every foreign key column must be reachable by an index (`db:fk-index:check`);
+- every table must answer the retention question
   (`data-lifecycle:table-coverage:check`).
 
 ## 5. RBAC + ABAC + RLS Matrix
 
-**Menjawab:** siapa boleh melakukan apa, terhadap objek mana.
+**Answers:** who may do what, against which object.
 
-| Artefak                                                        | Peran                                |
-| -------------------------------------------------------------- | ------------------------------------ |
-| [`17_default_seed_rbac_abac.md`](17_default_seed_rbac_abac.md) | seed role & policy default           |
-| Deskriptor `permissions` di `src/modules/*/module.ts`          | katalog permission yang sesungguhnya |
-| Policy RLS di `sql/`                                           | batas tenant yang sesungguhnya       |
+| Artifact                                                       | Role                            |
+| -------------------------------------------------------------- | ------------------------------- |
+| [`17_default_seed_rbac_abac.md`](17_default_seed_rbac_abac.md) | default role & policy seed      |
+| The `permissions` descriptor in `src/modules/*/module.ts`      | the actual permission catalogue |
+| RLS policies in `sql/`                                         | the actual tenant boundary      |
 
-**Yang menegakkan:** `access:chokepoint:check` (setiap handler lewat gerbang),
-`access:permissions:enforcement:check`, `access:decision-log:coverage:check`,
-`access:grant-readers:check`, `identity-access:sod-registry:check`, dan
-`security:readiness` untuk RLS terhadap basis data nyata.
+**What enforces this:** `access:chokepoint:check` (every handler goes through the
+gate), `access:permissions:enforcement:check`, `access:decision-log:coverage:check`,
+`access:grant-readers:check`, `identity-access:sod-registry:check`, and
+`security:readiness` for RLS against the real database.
 
-Aturan yang tidak bisa ditawar: **default-deny**, gerbang struktural di ATAS
-pengambilan permission, dan setiap gerbang baru **deny-only** — tidak satu pun
-boleh menghasilkan `allowed: true`.
+The non-negotiable rules: **default-deny**, the structural gate ABOVE permission
+retrieval, and every new gate is **deny-only** — not one of them may produce
+`allowed: true`.
 
-## 6. Spesifikasi Algoritma Domain / Verifikasi
+## 6. Domain Algorithm / Verification Specification
 
-**Menjawab:** aturan bisnisnya persisnya apa, termasuk kasus tepinya.
+**Answers:** what the business rule is exactly, including its edge cases.
 
 [`03_srs_detail_per_modul.md`](03_srs_detail_per_modul.md).
 
-Aturan yang berlaku sejak awal repo ini: **logika murni dipisahkan dari I/O**.
-Yang bisa ditulis sebagai fungsi murni ditulis begitu, karena itu yang membuat
-kasus tepi bisa diuji tanpa basis data — dan karena itu yang membuat mutasi
-bisa membuktikan sebuah gerbang benar-benar menjaga sesuatu.
+A rule that has applied since this repo began: **pure logic is separated from
+I/O**. Whatever can be written as a pure function is written that way, because
+that is what makes edge cases testable without a database — and because that is
+what lets a mutation prove a gate actually guards something.
 
 ## 7. OpenAPI + AsyncAPI
 
-**Menjawab:** kontrak yang dijanjikan ke pemanggil.
+**Answers:** the contract promised to callers.
 
-Fragmen per modul di [`../../openapi/modules/`](../../openapi/modules/), pola
-dan alasannya di [`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md)
-dan [`api-contribution-guide.md`](api-contribution-guide.md).
+Per-module fragments in [`../../openapi/modules/`](../../openapi/modules/), the
+patterns and their rationale in [`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md)
+and [`api-contribution-guide.md`](api-contribution-guide.md).
 
-**Yang menegakkan:** `api:spec:check`, `api:docs:check`,
-`api:consumer-contract:check`, dan gerbang kesegaran bundle — spesifikasi yang
-tidak cocok dengan rutenya memerahkan CI, bukan menunggu ditemukan konsumen.
+**What enforces this:** `api:spec:check`, `api:docs:check`,
+`api:consumer-contract:check`, and the bundle-freshness gate — a spec that does
+not match its route reddens CI rather than waiting to be discovered by a
+consumer.
 
 ## 8. UX/UI
 
-**Menjawab:** bentuknya di layar, dan bagaimana ia gagal di depan pengguna.
+**Answers:** its shape on screen, and how it fails in front of the user.
 
-[`14_ui_ux_design_system.md`](14_ui_ux_design_system.md) dan
+[`14_ui_ux_design_system.md`](14_ui_ux_design_system.md) and
 [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md).
 
-Dua batasan yang sering baru ditemukan belakangan: **CSP single-owner** (script
-harus di-import lalu di-bundle, bukan inline) dan setiap layar admin wajib lewat
-`loadAdminScreen` (`access:chokepoint:check` menghitungnya).
+Two constraints that are often only discovered late: **CSP single-owner** (a
+script must be imported and then bundled, not inlined) and every admin screen
+must go through `loadAdminScreen` (`access:chokepoint:check` counts it).
 
 ## 9. Cross-Spec Review / Definition of Ready
 
-**Menjawab:** apakah langkah 1–8 saling setuju, sebelum ada yang menulis kode.
+**Answers:** whether steps 1–8 agree with each other, before anyone writes code.
 
-| Artefak                                                                                                | Peran                              |
+| Artifact                                                                                               | Role                               |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| [`templates/definition-of-ready.md`](templates/definition-of-ready.md)                                 | **Definition of Ready umum**       |
-| [`13_final_master_index_traceability.md`](13_final_master_index_traceability.md)                       | matriks traceability antar-dokumen |
-| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | checklist — modul baru             |
+| [`templates/definition-of-ready.md`](templates/definition-of-ready.md)                                 | **general Definition of Ready**    |
+| [`13_final_master_index_traceability.md`](13_final_master_index_traceability.md)                       | cross-document traceability matrix |
+| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | checklist — new module             |
 
-Definition of **Done** di `CONTRIBUTING.md` diperiksa di ujung; daftar di atas
-diperiksa di pangkal, dan itu seluruh perbedaannya.
+The Definition of **Done** in `CONTRIBUTING.md` is checked at the end; the list
+above is checked at the start, and that is the whole difference.
 
-Pengalaman repo ini menunjukkan biayanya, dan pertanyaan PERTAMA di Definition
-of Ready ada karena itu: **dua gelombang berturut-turut** (ADR-0087 dan
-ADR-0088) menulis rencana yang mengasumsikan pembacaan lintas-tenant yang FORCE
-RLS larang, dan keduanya baru ketahuan saat implementasi.
+This repo's experience shows the cost, and the FIRST question in the Definition
+of Ready exists because of it: **two consecutive waves** (ADR-0087 and ADR-0088)
+wrote plans that assumed cross-tenant reads that FORCE RLS forbids, and both were
+only caught during implementation.
 
-## 10. Issue GitHub Atomic
+## 10. Atomic GitHub Issue
 
-**Menjawab:** unit kerja terkecil yang bisa di-review sendirian.
+**Answers:** the smallest unit of work that can be reviewed on its own.
 
-Pola di [`06_github_issues_detail.md`](06_github_issues_detail.md), konvensi
-penamaan/roadmap di [`09_roadmap_repository_commit.md`](09_roadmap_repository_commit.md).
+The pattern is in [`06_github_issues_detail.md`](06_github_issues_detail.md),
+naming/roadmap conventions in [`09_roadmap_repository_commit.md`](09_roadmap_repository_commit.md).
 
-Satu issue = satu branch = satu PR. Bila sebuah issue tidak bisa mendarat tanpa
-meninggalkan pohon dalam keadaan lebih lemah, ia dipecah sampai bisa.
+One issue = one branch = one PR. If an issue cannot land without leaving the tree
+in a weaker state, it is split until it can.
 
-## 11. Implementasi + Test Otomatis
+## 11. Implementation + Automated Tests
 
-**Menjawab:** kodenya, dan bukti bahwa kodenya benar.
+**Answers:** the code, and the proof that the code is correct.
 
-Standar di [`10_template_kode_coding_standard.md`](10_template_kode_coding_standard.md)
-dan [`../../AGENTS.md`](../../AGENTS.md).
+Standards in [`10_template_kode_coding_standard.md`](10_template_kode_coding_standard.md)
+and [`../../AGENTS.md`](../../AGENTS.md).
 
-Tiga aturan yang khas repo ini dan tidak ada di panduan umum mana pun:
+Three rules that are peculiar to this repo and appear in no general guide:
 
-1. **Jalankan, jangan dibaca.** Migrasi diverifikasi dengan di-apply dari nol
-   pada Postgres nyata, dan constraint dibuktikan **MENOLAK** — bukan sekadar
-   ada.
-2. **Gerbang wajib dibuktikan GAGAL.** Sebuah cek yang hijau tidak membuktikan
-   apa pun sampai sebuah mutasi memerahkannya. Kembalikan cacat aslinya, lihat
-   test yang benar memerah, lalu pulihkan.
-3. **Klaim berbentuk "X berjalan sebelum Y" diuji di level SOURCE**, karena test
-   perilaku bisa dipuaskan oleh susunan yang benar _dan_ oleh susunan yang
-   termutasi — dan asersi source wajib rename-proof, atau ia lolos secara hampa.
+1. **Run it, do not read it.** A migration is verified by applying it from
+   scratch against a real Postgres, and a constraint is proven to **REJECT** —
+   not merely to exist.
+2. **A gate must be proven to FAIL.** A check that is green proves nothing until
+   a mutation reddens it. Put the original defect back, watch the correct test
+   go red, then restore.
+3. **Claims of the form "X runs before Y" are tested at SOURCE level**, because a
+   behavioural test can be satisfied by the correct arrangement _and_ by the
+   mutated one — and a source assertion must be rename-proof, or it passes
+   vacuously.
 
 ## 12. PR + Review + CI
 
-**Menjawab:** apakah ini boleh masuk `main`.
+**Answers:** whether this may enter `main`.
 
-Mekaniknya di [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), template di
+The mechanics are in [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), the
+template in
 [`../../.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md),
-proteksi branch di [`branch-protection.md`](branch-protection.md).
+branch protection in [`branch-protection.md`](branch-protection.md).
 
-Gerbangnya: rantai `bun run check` penuh, suite DB-gated, E2E Playwright,
-CodeQL, GitGuardian, dan changeset wajib untuk perubahan perilaku.
+The gates: the full `bun run check` chain, the DB-gated suite, Playwright E2E,
+CodeQL, GitGuardian, and a mandatory changeset for behaviour changes.
 
-**Jebakan yang sudah pernah menggigit:** PR bertumpuk (base bukan `main`)
-menjalankan **NOL** gerbang, sementara `gh pr checks` tetap tampak hijau karena
-GitGuardian lulus sendirian.
+**A trap that has already bitten:** a stacked PR (base is not `main`) runs **ZERO**
+gates, while `gh pr checks` still looks green because GitGuardian passes on its
+own.
 
-## 13. Deploy Staging — **TIDAK BERLAKU untuk repo ini**
+## 13. Deploy Staging — **NOT APPLICABLE to this repo**
 
-> **Keputusan, bukan celah** (13 Agustus 2026).
-> [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) tetap
-> berlaku: template ini men-deploy ke **SATU** environment, produksi.
+> **A decision, not a gap** (13 August 2026).
+> [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) remains in
+> force: this template deploys to **ONE** environment, production.
 
-Langkah ini ada di alur generik dan **sengaja dilewati di sini**. Pemilik repo
-diminta memilih antara menghidupkan staging (men-supersede ADR-0083) dan
-mempertahankan satu environment, dan memilih yang kedua.
+This step exists in the generic flow and is **deliberately skipped here**. The
+repo owner was asked to choose between turning staging on (superseding ADR-0083)
+and keeping a single environment, and chose the latter.
 
-**Yang menggantikannya, dinyatakan supaya tidak perlu diterka:**
+**What replaces it, stated so it does not have to be guessed:**
 
-| Peran staging                        | Yang mengisinya di sini                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------- |
-| skema diterapkan dari nol            | basis data ephemeral CI (langkah 12)                                              |
-| jalur request diuji ujung ke ujung   | E2E Playwright + suite DB-gated (langkah 12)                                      |
-| verifikasi terhadap basis data nyata | `bun run security:readiness` (langkah 15)                                         |
-| kesiapan sebelum rilis               | [`production-preflight-runbook.md`](production-preflight-runbook.md) (langkah 15) |
+| Staging's role                       | What fills it here                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| schema applied from scratch          | the ephemeral CI database (step 12)                                            |
+| the request path tested end to end   | Playwright E2E + the DB-gated suite (step 12)                                  |
+| verification against a real database | `bun run security:readiness` (step 15)                                         |
+| readiness before release             | [`production-preflight-runbook.md`](production-preflight-runbook.md) (step 15) |
 
-**Dan yang TIDAK tergantikan olehnya, dicatat apa adanya:** pengujian manusia
-terhadap data yang mirip produksi, dan verifikasi perilaku pihak ketiga
-(Cloudflare, Varnish, Traefik) di luar jalur produksi. Keduanya adalah harga
-dari keputusan ini, bukan sesuatu yang hilang tanpa disadari — dan keduanya
-alasan sah untuk meninjau ulang ADR-0083 kelak.
+**And what it does NOT replace, recorded plainly:** human testing against
+production-like data, and verification of third-party behaviour (Cloudflare,
+Varnish, Traefik) outside the production path. Both are the price of this
+decision, not something lost without anyone noticing — and both are legitimate
+reasons to revisit ADR-0083 later.
 
-Menghidupkannya kembali tetap keputusan tingkat ADR, bukan sesuatu yang bisa
-dibalik dokumen proses.
+Turning it back on remains an ADR-level decision, not something a process
+document can reverse.
 
-## 14. UAT Internal / Pengujian Manusia — **TIDAK BERLAKU untuk repo ini**
+## 14. Internal UAT / Human Testing — **NOT APPLICABLE to this repo**
 
-**Menjawab:** apakah yang dibangun benar-benar menyelesaikan pekerjaan
-penggunanya.
+**Answers:** whether what was built actually gets the user's job done.
 
-Ia bergantung pada langkah 13, dan langkah 13 adalah keputusan untuk tidak ada.
-Jadi ini bukan celah yang menunggu diisi; ia konsekuensi yang sudah diputuskan.
+It depends on step 13, and step 13 is a decision that it does not exist. So this
+is not a gap waiting to be filled; it is a consequence that has already been
+decided.
 
-Yang paling mendekati perannya adalah verifikasi produksi (langkah 17), dengan
-perbedaan yang harus dibaca jujur: **ia berjalan SESUDAH rilis, bukan
-sebelumnya.** Untuk perubahan yang mempengaruhi jalur yang dilihat pelanggan,
-itu berarti biaya kesalahan dibayar di produksi — dan bila ongkos itu terasa
-terlalu mahal untuk sebuah perubahan tertentu, jawabannya adalah meninjau
-ADR-0083 untuk perubahan itu, bukan melewatkan langkah 17.
+The closest thing to its role is production validation (step 17), with a
+difference that must be read honestly: **it runs AFTER release, not before.** For
+a change that affects a customer-facing path, that means the cost of a mistake is
+paid in production — and if that cost feels too expensive for a particular
+change, the answer is to revisit ADR-0083 for that change, not to skip step 17.
 
 ## 15. Release Readiness / Go–No-Go
 
-**Menjawab:** apakah ini aman dirilis, dan siapa yang mengatakan ya.
+**Answers:** whether this is safe to release, and who says yes.
 
-| Artefak                                                              | Peran                                |
-| -------------------------------------------------------------------- | ------------------------------------ |
-| [`production-readiness.md`](production-readiness.md)                 | gate kesiapan produksi               |
-| [`production-preflight-runbook.md`](production-preflight-runbook.md) | checklist preflight                  |
-| `bun run security:readiness`                                         | verifikasi terhadap basis data NYATA |
-| [`resilience-dr-verification.md`](resilience-dr-verification.md)     | verifikasi disaster recovery         |
+| Artifact                                                             | Role                                   |
+| -------------------------------------------------------------------- | -------------------------------------- |
+| [`production-readiness.md`](production-readiness.md)                 | production readiness gate              |
+| [`production-preflight-runbook.md`](production-preflight-runbook.md) | preflight checklist                    |
+| `bun run security:readiness`                                         | verification against the REAL database |
+| [`resilience-dr-verification.md`](resilience-dr-verification.md)     | disaster recovery verification         |
 
-`security:readiness` adalah satu-satunya pemeriksaan di daftar ini yang
-menjalankan query terhadap basis data sungguhan — dan ia yang menangkap kelas
-kegagalan yang tak terlihat gerbang murni, mis. **role Postgres yang ternyata
-superuser sehingga FORCE RLS menjadi inert**.
+`security:readiness` is the only check on this list that runs queries against a
+real database — and it is the one that catches the class of failure invisible to
+pure gates, e.g. **a Postgres role that turns out to be a superuser, making FORCE
+RLS inert**.
 
-## 16. Deploy Produksi
+## 16. Deploy Production
 
-**Menjawab:** bagaimana bit-nya sampai ke server.
+**Answers:** how the bits reach the server.
 
 [`release-process.md`](release-process.md) (SemVer + Changesets),
-[`deploy-coolify.md`](deploy-coolify.md), dan `.github/workflows/release.yml`.
+[`deploy-coolify.md`](deploy-coolify.md), and `.github/workflows/release.yml`.
 
-## 17. Validasi Produksi
+## 17. Production Validation
 
-**Menjawab:** apakah yang berjalan di sana benar-benar versi yang dimaksud, dan
-benar-benar sehat.
+**Answers:** whether what is running there really is the intended version, and
+really is healthy.
 
-[`production-preflight-runbook.md`](production-preflight-runbook.md) memuat
-langkah pasca-deploy-nya.
+[`production-preflight-runbook.md`](production-preflight-runbook.md) holds the
+post-deploy steps.
 
-**Aturan yang lahir dari pengalaman:** _200 di domain ≠ produksi hidup._
-Verifikasi versi, migrasi terapan, dan jalur data — bukan hanya kode status
-halaman depan.
+**A rule born of experience:** _a 200 on the domain ≠ production is alive._
+Verify the version, the applied migrations, and the data path — not just the
+status code of the front page.
 
 ## 18. Monitoring + Post-Release Review
 
-**Menjawab:** apa yang terjadi setelahnya, dan apa yang dipelajari.
+**Answers:** what happened afterwards, and what was learned.
 
-| Bagian                  | Artefak                                                           | Status |
-| ----------------------- | ----------------------------------------------------------------- | ------ |
-| Konvensi observability  | [`observability-metrics.md`](observability-metrics.md)            | ada    |
-| Kapasitas basis data    | [`database-capacity-runbook.md`](database-capacity-runbook.md)    | ada    |
-| **Post-release review** | [`post-release-reviews.md`](post-release-reviews.md) + templatnya | ada    |
-| Putaran rekomendasi     | [`../PROJECT_STATE.md`](../PROJECT_STATE.md) §4                   | ada    |
+| Part                      | Artifact                                                            | Status |
+| ------------------------- | ------------------------------------------------------------------- | ------ |
+| Observability conventions | [`observability-metrics.md`](observability-metrics.md)              | exists |
+| Database capacity         | [`database-capacity-runbook.md`](database-capacity-runbook.md)      | exists |
+| **Post-release review**   | [`post-release-reviews.md`](post-release-reviews.md) + its template | exists |
+| Recommendation rounds     | [`../PROJECT_STATE.md`](../PROJECT_STATE.md) §4                     | exists |
 
-Dua register, dan pembedaannya disengaja: §4 terikat **putaran kerja** dan
-mencatat keputusan; register rilis terikat **rilis** dan mencatat apa yang
-terjadi ketika rilis itu bertemu produksi. Sebelum yang kedua ada, ia diam-diam
-ditulis sebagai yang pertama atau tidak ditulis sama sekali.
+Two registers, and the distinction is deliberate: §4 is tied to **work rounds**
+and records decisions; the release register is tied to **releases** and records
+what happened when that release met production. Before the second one existed, it
+was silently written as the first or not written at all.
 
-**Rilis yang mulus tetap mendapat entri** — register yang hanya memuat insiden
-menghapus garis dasar yang membuat rilis buruk terlihat buruk. Dan satu baris di
-templatnya menanggung beban khusus di repo ini: _"yang pertama kali terlihat di
-produksi dan tidak terlihat di CI"_ adalah tempat harga keputusan ADR-0083
-(langkah 13) dibayar, dan mengumpulkannya rilis demi rilis adalah satu-satunya
-cara mengetahui apakah harganya masih pantas.
+**A smooth release still gets an entry** — a register that only holds incidents
+erases the baseline that makes a bad release look bad. And one line in its
+template carries a special load in this repo: _"what was first seen in production
+and was not seen in CI"_ is where the price of the ADR-0083 decision (step 13) is
+paid, and collecting it release after release is the only way to know whether the
+price is still worth it.
 
-**Aturan yang sudah berlaku:** rekomendasi wajib ditulis ke §4, termasuk yang
-DITOLAK beserta alasannya. Menurunkan ulang sebuah daftar rekomendasi memakan
-satu audit penuh; menuliskannya memakan satu paragraf.
+**A rule already in force:** recommendations must be written into §4, including
+the ones that were REJECTED along with the reason. Re-deriving a recommendation
+list costs a full audit; writing it down costs one paragraph.
 
 ---
 
-## Status tiap langkah yang pernah kosong
+## Status of each step that was once empty
 
-Daftar ini ada di sini supaya tidak perlu diturunkan ulang. Perhatikan kolom
-terakhir: **celah dan keputusan bukan hal yang sama**, dan mencampurnya adalah
-bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
+This list is here so it does not have to be re-derived. Note the last column:
+**a gap and a decision are not the same thing**, and mixing them is how work that
+has not been done acquires the appearance of a judgement.
 
-| Langkah | Hal                           | Sifat                                      |
-| ------- | ----------------------------- | ------------------------------------------ |
-| 3       | Privacy analysis / DPIA       | **ditutup** 13 Agu 2026                    |
-| 9       | Definition of Ready umum      | **ditutup** 13 Agu 2026                    |
-| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment |
-| 14      | UAT internal                  | **keputusan** — konsekuensi langkah 13     |
-| 18      | Post-release review per rilis | **ditutup** 13 Agu 2026                    |
+| Step | Item                            | Nature                                   |
+| ---- | ------------------------------- | ---------------------------------------- |
+| 3    | Privacy analysis / DPIA         | **closed** 13 Aug 2026                   |
+| 9    | General Definition of Ready     | **closed** 13 Aug 2026                   |
+| 13   | Deploy staging                  | **decision** — ADR-0083, one environment |
+| 14   | Internal UAT                    | **decision** — a consequence of step 13  |
+| 18   | Per-release post-release review | **closed** 13 Aug 2026                   |
 
-Celah yang tersisa setelah itu **ada di dalam** dokumen yang menutupnya, bukan
-di tabel ini — terutama ketiadaan alur ekspor/penghapusan per subjek data
-([`privacy-analysis.md`](privacy-analysis.md) §4). Ia dicatat di sana karena di
-sanalah orang yang membutuhkannya akan mencari.
+The gaps that remain after that are **inside** the documents that closed them,
+not in this table — above all the absence of a per-data-subject export/erasure
+flow ([`privacy-analysis.md`](privacy-analysis.md) §4). It is recorded there
+because that is where the person who needs it will look.

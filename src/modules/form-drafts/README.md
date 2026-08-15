@@ -1,7 +1,9 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # form_drafts
 
 Generic, domain-agnostic **server-side draft store** for multi-step forms.
-Ported from awcms-micro (Issue #484) as row 1 of Gelombang 1 in
+Ported from awcms-micro (Issue #484) as row 1 of Wave 1 in
 [`docs/awcms/absorb-awcms-micro-roadmap.md`](../../../docs/awcms/absorb-awcms-micro-roadmap.md).
 
 ## What it is, and what it deliberately is not
@@ -98,6 +100,6 @@ import.
 ## Not included in this port
 
 awcms-micro's wizard **component** library (`WizardStepper`, `WizardPanel`,
-`WizardActions`, `wizard-client.ts`) is a separate, still-open Gelombang-0 row
+`WizardActions`, `wizard-client.ts`) is a separate, still-open Wave-0 row
 (`src/components/ui/`). This store is usable without it — a wizard talks to this
 API, not the other way round.

@@ -1,439 +1,441 @@
-# Arsitektur AWCMS
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](ARCHITECTURE.id.md)
 
-Status per [ADR-0001](adr/0001-rebuild-on-awcms-foundation-erp-scope.md), direposisi
-oleh [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
-(men-supersede ADR-0013/0014/0015/0022/0025): AWCMS adalah **template keluarga AWCMS yang
-dipakai LANGSUNG** (lini ERP/back-office).
+# AWCMS Architecture
 
-**Keluarga hari ini dua repo, dan hanya dua** ([ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)):
-repo ini sebagai **system of record** — seluruh permukaan otorisasi, API, dan layar admin
-**SISTEM** — dan [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) yang
-memikul **halaman publik sebagai fungsi utama** serta **permukaan admin USER bila sebuah
-situs menyatakannya** ([ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)).
-Keduanya bersama adalah pengganti multiguna ketiga template lama; `awcms-mini` dan
-`awcms-micro` **ARSIP, tidak dilanjutkan**.
+Status per [ADR-0001](adr/0001-rebuild-on-awcms-foundation-erp-scope.md), repositioned
+by [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+(superseding ADR-0013/0014/0015/0022/0025): AWCMS is a **template of the AWCMS family that
+is used DIRECTLY** (the ERP/back-office line).
 
-Sebagai template yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** —
-modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
-**ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
-ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **22 modul terdaftar**, migration `sql/001`-`sql/129`, RLS
-`FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
-(Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
-per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
+**The family today is two repos, and only two** ([ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)):
+this repo as the **system of record** — the whole authorization surface, the API, and the
+**SYSTEM** admin screens — and [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro),
+which carries **public pages as its primary function** plus the **USER admin surface when a
+site declares one** ([ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)).
+Together they replace all three of the old templates; `awcms-mini` and
+`awcms-micro` are **ARCHIVES, not continued**.
+
+As a shipped template, the base provides **reusable foundation modules + neutral ERP-readiness contracts** —
+ERP domain modules (finance, inventory, procurement, manufacturing, hr-payroll, etc.)
+are **added directly in this template's `src/modules/`** when it is used, not in a separate
+extension/derived repo (the derived-application pathway was REMOVED — see §Module composition
+below). This repo has **22 registered modules**, migrations `sql/001`-`sql/129`, RLS
+`FORCE` on every tenant-scoped table, database role separation, and a read+write admin UI
+(Issue #166, #171). This document describes what is **in the code today**. For per-module
+detail, see each `README.md` under `src/modules/<module>/`.
 
 ## Stack
 
-- Runtime: Bun (Bun-only). Bin Astro/Vite dijalankan lewat `bun --bun`.
-- Web: Astro 7, SSR via `@astrojs/node` (adapter, bukan runtime — lihat komentar di `astro.config.mjs`).
-- Database: PostgreSQL, RLS wajib untuk setiap tabel tenant-scoped.
-- Driver: `Bun.SQL` bawaan Bun.
+- Runtime: Bun (Bun-only). Astro/Vite binaries are run through `bun --bun`.
+- Web: Astro 7, SSR via `@astrojs/node` (an adapter, not a runtime — see the comment in `astro.config.mjs`).
+- Database: PostgreSQL, RLS mandatory for every tenant-scoped table.
+- Driver: Bun's built-in `Bun.SQL`.
 
 ## Modular monolith
 
 ```
 src/modules/<module>/
-  module.ts            # ModuleDescriptor (lihat _shared/module-contract.ts)
-  domain/               # tipe & validasi murni, tanpa I/O
-  application/          # service/orchestrasi, menerima Bun.SQL tx
-  api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
+  module.ts            # ModuleDescriptor (see _shared/module-contract.ts)
+  domain/               # pure types & validation, no I/O
+  application/          # service/orchestration, takes a Bun.SQL tx
+  api/                  # (optional) shared schemas/handlers; route files stay in src/pages
 ```
 
-21 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+21 modules registered in `src/modules/index.ts` (order = registration order):
 
-- **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
-- **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
-- **`profile_identity`** — profil person/organization kanonik, identifier bertipe (masking/hash), entity link lintas modul.
-- **`identity_access`** — login (sesi opaque token), password reset lewat email
-  (enumeration-safe, single-use, mencabut semua sesi), self-registration
-  ber-persetujuan admin (default MATI), tenant user membership, RBAC/ABAC dasar.
-- **`module_management`** (`isCore`) — registry modul berbasis DB: sync descriptor, enable/disable per tenant, settings non-secret, sinkron permission, navigation, job registry, health/readiness.
-- **`domain_event_runtime`** — outbox/dispatcher domain event transaksional, versi, multi-consumer, dead-letter + replay ter-audit.
-- **`sync_storage`** — node sync offline-first, outbox/inbox HMAC-signed anti-replay, conflict tracking, antrian upload objek.
-- **`workflow_approval`** — engine workflow definisi ber-versi (draft/publish/retire), node graph (approval/condition/parallel/join/notify), quorum, delegasi, eskalasi.
-- **`email`** — layanan email provider-neutral (Mailketing + `log` adapter), template management, dispatcher outbox, pengumuman massal.
-- **`reporting`** — lima view manajemen (aktivitas tenant, akses/audit, sync health, module usage, email health) plus mekanisme projection read-model (incremental cursor/event-driven, rebuild, freshness, reconciliation, export terjadwal).
-- **`theming`** (`type: "domain"`) — modul **website** pertama yang hidup langsung di base (ADR-0034 Fase 3): konfigurasi tema per tenant (design token), lifecycle draft/preview/publish/retire/rollback ber-immutability, route `/api/v1/theming/*` + stylesheet publik `/theming/{tenantCode}/tokens.css` (eksternal, `style-src 'self'`). Validasi nilai CSS by-rejection, preview beku ber-SHA-256.
-- **`blog-content`** (`type: "domain"`) — modul konten publik pertama, di-port dari mini (PR #214, `sql/035`-`sql/040`, 15 tabel `awcms_blog_*`): CRUD+lifecycle post/page (draft→review→scheduled/published→archived, soft-delete/restore/purge), kategori/tag hierarkis, full-text search, revisi append-only, presentasi/monetisasi (template/menu/widget/ads/theme), auto internal-tag-linking, per-tenant settings. Rute publik **path-based** `/blog/{tenantCode}/*` (ADR-0009): index, detail, arsip kategori/tag, search, RSS feed, sitemap. Rute `/news/**` host-resolved yang [ADR-0059](adr/0059-host-resolved-public-content-routes.md) tambahkan **sudah DIHAPUS** — [ADR-0071](adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md) men-supersede-nya dan membelah kosakata URL: `/blog/**` permanen di sini, `/news/**` milik `ahliweb/awcms-astro`. Yang ikut hilang: keempat berkas rute, gerbang `withHostResolvedBlogTenant`, dan saklar `publicRouteMode`; yang tersisa hanya 301 `seo_distribution` ke `/blog/{tenantCode}/**` untuk keluarga yang pensiun itu. **Sejak [ADR-0044](adr/0044-merge-news-portal-into-blog-content.md) (#300) modul ini juga MEMILIKI seluruh bekas `news_portal`**: homepage-section composer + ad placement ber-`media_object_id` terverifikasi (menggantikan jalur `image_url` bebas), dengan penargetan iklan yang dilebarkan (#301) dan jalur tulis iklan free-URL ditutup (#303). `news_portal` **tidak lagi terdaftar** di `src/modules/index.ts`; registry objek media tetap milik `media_library` sejak [ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md).
-- **`tenant-domain`** (`type: "domain"`) — di-port dari micro (#219, `sql/046`-`sql/048`): pendaftaran + verifikasi domain kustom per tenant, primary-host, fungsi lookup host→tenant. Fondasi host-resolved untuk SEO (host kanonik) & rute publik host-based.
-- **`visitor-analytics`** (`type: "domain"`) — di-port dari micro (#220, `sql/049`-`sql/051`): telemetri kunjungan privacy-minimized (`awcms_visit_events`/`awcms_visitor_sessions`), rollup harian, job rollup + purge terjadwal (kini mengonsultasi legal-hold `data_lifecycle`).
-- **`media-library`** (`type: "domain"`) — **inversi kepemilikan** ([ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md), #221, `sql/052`-`sql/054`): satu modul memiliki SELURUH objek media per-tenant (registry R2 + presign/finalize/cancel + magic-byte MIME sniff + SHA-256), menyediakan capability `media_library` (dikonsumsi `blog-content`, `seo-distribution`). Enforcement managed-media per-tenant (`POST /api/v1/media/enforcement`, idempotent). `news_media` dipensiunkan.
-- **`data-lifecycle`** (`type: "domain"`) — di-port dari micro ([ADR-0037](adr/0037-data-lifecycle-module-admission.md), #222, `sql/055`-`sql/056`): retensi/arsip/purge generik lintas modul via descriptor `dataLifecycle` pada `ModuleDescriptor` + **legal-hold non-bypassable** (guard `LegalHoldGuardPort` dikonsultasi setiap purge). Sejak [ADR-0094](adr/0094-a-data-subject-is-answered-per-tenant.md) (#542 fondasi, #557 permukaan; `sql/125`-`sql/126`) modul ini memiliki permukaan KEDUA yang terpisah dari retensi: **hak subjek data**, dijawab **per tenant** (tidak pernah lewat `awcms_principals` yang global). Registry `subjectData` mencakup **setiap** tabel `awcms_*` — bukan hanya yang bervolume tinggi — dan dua gerbang menjaganya: `subject-data:coverage:check` (apakah setiap tabel menjawab; ledger utang **0 dari 147** tabel) dan `subject-data:registry:check` (apakah jawabannya BENAR terhadap `sql/`, termasuk apakah mode `erasure` berada dalam privilege `awcms_app`). Ekspor menyatakan cakupannya sendiri (tabel yang sengaja tak dijawab ikut disebut, bukan dihilangkan); penghapusan adalah maker/checker yang ditegakkan **empat lapis** — dua permission, aturan SoD, CHECK constraint, dan satu UPDATE kondisional. Base kini ship **2 aturan SoD**: `data_lifecycle.legal_hold_maker_checker` dan `data_lifecycle.subject_erasure_maker_checker`.
-- **`seo-distribution`** (`type: "domain"`) — di-port dari micro ([ADR-0038](adr/0038-seo-distribution-module-admission-discovery-scope.md) discovery + [ADR-0039](adr/0039-seo-distribution-redirect-governance.md) redirect governance, #223/#224, `sql/057`-`sql/061`): renderer metadata SEO terpusat (canonical/hreflang/robots/OG/JSON-LD terkontrol, host diturunkan **server** dari `tenant_domain`) + rute discovery publik tak-terautentikasi (`/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`) + config admin `/api/v1/seo/config` + **tata kelola redirect** (aturan exact-path `awcms_seo_redirects`, telemetri 404, hook `src/middleware.ts` fail-open, guard open-redirect beku). **Konsumen/agregator** capability `seo_facts` (disediakan `blog_content`) — tidak mengimpor modul konten mana pun.
+- **`logging`** — cross-module audit trail (`awcms_audit_events`) + scheduled purge.
+- **`tenant_admin`** — tenant root, office hierarchy, tenant settings, one-shot setup wizard.
+- **`profile_identity`** — canonical person/organization profiles, typed identifiers (masking/hash), cross-module entity links.
+- **`identity_access`** — login (opaque token sessions), password reset over email
+  (enumeration-safe, single-use, revokes every session), self-registration
+  with admin approval (OFF by default), tenant user membership, base RBAC/ABAC.
+- **`module_management`** (`isCore`) — DB-backed module registry: descriptor sync, per-tenant enable/disable, non-secret settings, permission sync, navigation, job registry, health/readiness.
+- **`domain_event_runtime`** — transactional domain-event outbox/dispatcher, versioning, multi-consumer, dead-letter + audited replay.
+- **`sync_storage`** — offline-first sync nodes, HMAC-signed anti-replay outbox/inbox, conflict tracking, object upload queue.
+- **`workflow_approval`** — versioned workflow-definition engine (draft/publish/retire), node graph (approval/condition/parallel/join/notify), quorum, delegation, escalation.
+- **`email`** — provider-neutral email service (Mailketing + `log` adapter), template management, outbox dispatcher, mass announcements.
+- **`reporting`** — five management views (tenant activity, access/audit, sync health, module usage, email health) plus the read-model projection mechanism (incremental cursor/event-driven, rebuild, freshness, reconciliation, scheduled export).
+- **`theming`** (`type: "domain"`) — the first **website** module living directly in the base (ADR-0034 Phase 3): per-tenant theme configuration (design tokens), draft/preview/publish/retire/rollback lifecycle with immutability, routes `/api/v1/theming/*` + the public stylesheet `/theming/{tenantCode}/tokens.css` (external, `style-src 'self'`). CSS values are validated by-rejection, previews frozen with SHA-256.
+- **`blog-content`** (`type: "domain"`) — the first public-content module, ported from mini (PR #214, `sql/035`-`sql/040`, 15 `awcms_blog_*` tables): post/page CRUD+lifecycle (draft→review→scheduled/published→archived, soft-delete/restore/purge), hierarchical categories/tags, full-text search, append-only revisions, presentation/monetisation (template/menu/widget/ads/theme), automatic internal tag-linking, per-tenant settings. Public routes are **path-based** `/blog/{tenantCode}/*` (ADR-0009): index, detail, category/tag archives, search, RSS feed, sitemap. The host-resolved `/news/**` routes that [ADR-0059](adr/0059-host-resolved-public-content-routes.md) added have **already been REMOVED** — [ADR-0071](adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md) supersedes it and splits the URL vocabulary: `/blog/**` permanently here, `/news/**` belongs to `ahliweb/awcms-astro`. What went with it: all four route files, the `withHostResolvedBlogTenant` gate, and the `publicRouteMode` switch; what remains is only the `seo_distribution` 301 to `/blog/{tenantCode}/**` for that retired family. **Since [ADR-0044](adr/0044-merge-news-portal-into-blog-content.md) (#300) this module also OWNS everything that used to be `news_portal`**: the homepage-section composer + ad placement with a verified `media_object_id` (replacing the free-form `image_url` path), with widened ad targeting (#301) and the free-URL ad write path closed (#303). `news_portal` is **no longer registered** in `src/modules/index.ts`; the media object registry has belonged to `media_library` since [ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md).
+- **`tenant-domain`** (`type: "domain"`) — ported from micro (#219, `sql/046`-`sql/048`): per-tenant custom domain registration + verification, primary-host, host→tenant lookup function. The host-resolved foundation for SEO (canonical host) & host-based public routes.
+- **`visitor-analytics`** (`type: "domain"`) — ported from micro (#220, `sql/049`-`sql/051`): privacy-minimized visit telemetry (`awcms_visit_events`/`awcms_visitor_sessions`), daily rollups, scheduled rollup + purge jobs (which now consult the `data_lifecycle` legal hold).
+- **`media-library`** (`type: "domain"`) — an **ownership inversion** ([ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md), #221, `sql/052`-`sql/054`): one module owns ALL per-tenant media objects (R2 registry + presign/finalize/cancel + magic-byte MIME sniff + SHA-256), providing the `media_library` capability (consumed by `blog-content`, `seo-distribution`). Per-tenant managed-media enforcement (`POST /api/v1/media/enforcement`, idempotent). `news_media` is retired.
+- **`data-lifecycle`** (`type: "domain"`) — ported from micro ([ADR-0037](adr/0037-data-lifecycle-module-admission.md), #222, `sql/055`-`sql/056`): generic cross-module retention/archive/purge via the `dataLifecycle` descriptor on `ModuleDescriptor` + a **non-bypassable legal hold** (the `LegalHoldGuardPort` guard is consulted on every purge). Since [ADR-0094](adr/0094-a-data-subject-is-answered-per-tenant.md) (#542 foundation, #557 surface; `sql/125`-`sql/126`) this module has a SECOND surface, separate from retention: **data subject rights**, answered **per tenant** (never through the global `awcms_principals`). The `subjectData` registry covers **every** `awcms_*` table — not only the high-volume ones — and two gates guard it: `subject-data:coverage:check` (does every table answer; debt ledger **0 of 147** tables) and `subject-data:registry:check` (is the answer CORRECT against `sql/`, including whether the `erasure` mode sits within `awcms_app`'s privileges). An export states its own coverage (tables deliberately not answered are named, not omitted); erasure is maker/checker enforced in **four layers** — two permissions, an SoD rule, a CHECK constraint, and one conditional UPDATE. The base now ships **2 SoD rules**: `data_lifecycle.legal_hold_maker_checker` and `data_lifecycle.subject_erasure_maker_checker`.
+- **`seo-distribution`** (`type: "domain"`) — ported from micro ([ADR-0038](adr/0038-seo-distribution-module-admission-discovery-scope.md) discovery + [ADR-0039](adr/0039-seo-distribution-redirect-governance.md) redirect governance, #223/#224, `sql/057`-`sql/061`): a centralized SEO metadata renderer (canonical/hreflang/robots/OG/controlled JSON-LD, host derived **server**-side from `tenant_domain`) + unauthenticated public discovery routes (`/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`) + the admin config `/api/v1/seo/config` + **redirect governance** (exact-path `awcms_seo_redirects` rules, 404 telemetry, a fail-open `src/middleware.ts` hook, a frozen open-redirect guard). A **consumer/aggregator** of the `seo_facts` capability (provided by `blog_content`) — it imports no content module at all.
 
-- **`form-drafts`** (`type: "system"`) — di-port dari micro (#230, `sql/062`-`sql/063`): penyimpan draft form multi-langkah yang generik & bebas-domain (create/read/update/submit/delete payload JSONB tenant-scoped), dibatasi ukuran dan divalidasi denylist terhadap nama field berbentuk-rahasia, dengan job retensi dua-fase expire-lalu-purge (descriptor `dataLifecycle` bertipe `delegated` — purge nyata + cek legal-hold tetap di modul ini). Tanpa logika domain: modul yang membuat draft yang memiliki arti payload-nya. Pustaka KOMPONEN wizard awcms-micro **tidak** ikut mendarat, dan sejak ADR-0055 §1 ia kandidat BANGUN lewat ADR admission sendiri, bukan sisa antrean port.
-- **`site-search`** (`type: "domain"`) — di-port dari micro ([ADR-0040](adr/0040-site-search-module-admission.md), #231, `sql/064`-`sql/065`): full-text search PostgreSQL lintas-konten per tenant atas konten website **yang sudah terbit**. Memiliki indeks terpadu `awcms_site_search_documents` (`tsvector`/GIN + indeks judul `pg_trgm` untuk suggest), config per-tenant, ledger index run, diagnostik item gagal, dan query log terminimalisasi yang opt-in. **Konsumen/agregator** descriptor `searchSources` — pemetaan tabel/kolom + filter publikasi murni-data yang dideklarasikan modul konten (bukan capability `provides`, karena penyedia jamak justru diharapkan), dibaca generik lewat `listModules()`. Reconcile/rebuild deterministik & idempoten (`site-search:reconcile`) menjaga indeks tetap proyeksi setia: archive/delete/unpublish hilang dari hasil publik tanpa sisa. Halaman publik `/search` + endpoint JSON `/api/v1/site-search/query` & `/suggest` ter-scope tenant+locale; teks query **selalu** parameter terikat ke `websearch_to_tsquery`, snippet `ts_headline` di-escape sebelum HTML apa pun dipancarkan. URL publik dibangun dari `urlTemplate` tiap descriptor dengan `:tenantCode` yang diresolusi server (rute konten publik base ini path-tenant-scoped, ADR-0009 — bukan host-resolved seperti micro). **DI-DROP saat port** (terdokumentasi): script typeahead inline micro — CSP base ini melarang script inline dan halaman publiknya APIRoute polos tanpa langkah bundling, jadi `/search` ship pencarian inti no-JS dan `/suggest` tetap tersedia untuk klien ter-bundle milik tema. Indeks pencarian adalah proyeksi konten publik saja dan **tidak pernah** menjadi sumber otorisasi.
+- **`form-drafts`** (`type: "system"`) — ported from micro (#230, `sql/062`-`sql/063`): a generic, domain-free store for multi-step form drafts (create/read/update/submit/delete of tenant-scoped JSONB payloads), size-bounded and denylist-validated against secret-shaped field names, with a two-phase expire-then-purge retention job (a `dataLifecycle` descriptor of type `delegated` — the real purge + legal-hold check stay in this module). No domain logic: the module that created a draft owns the meaning of its payload. The awcms-micro wizard COMPONENT library did **not** land with it, and since ADR-0055 §1 it is a BUILD candidate through its own admission ADR, not a leftover in a port queue.
+- **`site-search`** (`type: "domain"`) — ported from micro ([ADR-0040](adr/0040-site-search-module-admission.md), #231, `sql/064`-`sql/065`): per-tenant cross-content PostgreSQL full-text search over **already published** website content. It owns the unified index `awcms_site_search_documents` (`tsvector`/GIN + a `pg_trgm` title index for suggest), per-tenant config, an index-run ledger, failed-item diagnostics, and an opt-in minimized query log. A **consumer/aggregator** of the `searchSources` descriptor — a purely-data table/column mapping + publication filter declared by content modules (not a `provides` capability, because multiple providers are exactly what is expected), read generically via `listModules()`. A deterministic & idempotent reconcile/rebuild (`site-search:reconcile`) keeps the index a faithful projection: archive/delete/unpublish disappear from public results with nothing left behind. The public `/search` page + the JSON endpoints `/api/v1/site-search/query` & `/suggest` are tenant+locale scoped; the query text is **always** a bound parameter to `websearch_to_tsquery`, and the `ts_headline` snippet is escaped before any HTML is emitted. Public URLs are built from each descriptor's `urlTemplate` with a server-resolved `:tenantCode` (this base's public content routes are path-tenant-scoped, ADR-0009 — not host-resolved like micro). **DROPPED during the port** (documented): micro's inline typeahead script — this base's CSP forbids inline scripts and its public page is a plain APIRoute with no bundling step, so `/search` ships core no-JS search and `/suggest` stays available to a theme's bundled client. The search index is a projection of public content only and is **never** a source of authorization.
 
-- **`comments`** (`type: "domain"`) — di-port dari micro ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`-`sql/067`): komentar **moderation-first** di atas resource yang **sudah terbit & publik**. Memiliki thread, komentar ber-kedalaman-terbatas (hard cap 4), riwayat moderasi append-only, laporan penyalahgunaan, setting per-tenant, telemetri anti-abuse terminimalisasi, dan langganan notifikasi-balasan terenkripsi. **Konsumen/agregator** descriptor `commentableResources` (`MODULE_CONTRACT_VERSION` 2.3.0) — modul konten MENDEKLARASIKAN resource mana yang boleh dikomentari; `comments` menemukannya lewat `listModules()`. Tulang punggung keamanannya: batas publikasi ditegakkan di perbatasan resource→thread (draft/privat/terhapus tak pernah menerima maupun mengekspos komentar); body disimpan **teks polos** dan di-escape saat render (tak ada HTML tersimpan → tak ada XSS tersimpan), hanya autolink http(s) `rel="nofollow ugc noopener noreferrer"`; respons submit publik **seragam** sehingga endpoint tak bisa dipakai sebagai oracle blocked-term atau konten belum-terbit; PII penulis diminimalkan (sha256 + mask, tak pernah mentah). Notifikasi balasan lewat outbox event (payload tanpa alamat), retensi meng-**anonimkan** di tempat (bukan menghapus) dan menghormati legal hold. Admin `/admin/comments` + API `/api/v1/comments/*`.
+- **`comments`** (`type: "domain"`) — ported from micro ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`-`sql/067`): **moderation-first** comments on top of **already published & public** resources. It owns threads, depth-limited comments (hard cap 4), append-only moderation history, abuse reports, per-tenant settings, minimized anti-abuse telemetry, and encrypted reply-notification subscriptions. A **consumer/aggregator** of the `commentableResources` descriptor (`MODULE_CONTRACT_VERSION` 2.3.0) — content modules DECLARE which resources may be commented on; `comments` finds them via `listModules()`. Its security backbone: the publication boundary is enforced at the resource→thread border (draft/private/deleted never accept nor expose comments); bodies are stored as **plain text** and escaped at render (no stored HTML → no stored XSS), only http(s) autolinks with `rel="nofollow ugc noopener noreferrer"`; the public submit response is **uniform** so the endpoint cannot be used as a blocked-term or unpublished-content oracle; author PII is minimized (sha256 + mask, never raw). Reply notifications go through the event outbox (payload without addresses), retention **anonymizes** in place (rather than deleting) and honours legal holds. Admin `/admin/comments` + API `/api/v1/comments/*`.
 
-- **`idn-admin-regions`** (`type: "system"`) — dirintis langsung di sini ([ADR-0046](adr/0046-idn-admin-regions-module-admission.md), #312, `sql/080` skema + `sql/081` permission): master data wilayah administratif Indonesia (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) **ber-versi & ter-provenance**, disumber dari dataset komunitas `cahyadsn/wilayah` (MIT) yang di-**vendor** di `data/idn-admin-regions/`. Dua tabelnya (`awcms_idn_region_datasets`, `awcms_idn_admin_regions`) **GLOBAL** — tanpa `tenant_id`, tanpa RLS, seperti `awcms_permissions`/`awcms_modules` — karena provinsi "Aceh" adalah baris yang sama untuk setiap tenant; keduanya terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` (`scripts/security-readiness.ts`) sehingga privilese per-role wajib dideklarasikan eksplisit, bukan diwarisi DML massal. Yang global adalah **barisnya**, bukan izinnya: setiap endpoint tetap melewati sesi + konteks tenant + ABAC default-deny. Impor 91.599 baris adalah **job deployment** (`bun run idn-regions:import`, dry-run secara default, berjalan sebagai `awcms_worker`) — bukan panggilan HTTP; **aktivasi/rollback** versi dataset kini juga **job operator** (`bun run idn-regions:activate`/`:rollback`, [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) — endpoint HTTP-nya dihapus dan permission-nya dicabut dari katalog, `sql/084`). Lookup baca-saja di `/api/v1/idn-regions/*`. Kini **punya `navigation`** dan layar admin `/admin/idn-regions` (PR #332): ADR-0048 di-supersede [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md), seluruh layar admin **SISTEM** dibangun di repo ini (dipersempit [ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md); `idn_admin_regions` adalah contoh murninya — dataset yang dilayani ke banyak tenant tidak akan pernah menjadi pekerjaan USER).
+- **`idn-admin-regions`** (`type: "system"`) — started directly here ([ADR-0046](adr/0046-idn-admin-regions-module-admission.md), #312, `sql/080` schema + `sql/081` permissions): **versioned & provenance-tracked** master data for Indonesian administrative regions (province/regency-city/district/village-urban-village), sourced from the community dataset `cahyadsn/wilayah` (MIT), **vendored** under `data/idn-admin-regions/`. Its two tables (`awcms_idn_region_datasets`, `awcms_idn_admin_regions`) are **GLOBAL** — no `tenant_id`, no RLS, like `awcms_permissions`/`awcms_modules` — because the province "Aceh" is the same row for every tenant; both are registered in `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` (`scripts/security-readiness.ts`) so per-role privileges must be declared explicitly rather than inherited from blanket DML. What is global is the **rows**, not the permissions: every endpoint still passes through session + tenant context + default-deny ABAC. Importing 91,599 rows is a **deployment job** (`bun run idn-regions:import`, dry-run by default, running as `awcms_worker`) — not an HTTP call; dataset version **activation/rollback** is now also an **operator job** (`bun run idn-regions:activate`/`:rollback`, [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) — its HTTP endpoints were removed and its permissions revoked from the catalogue, `sql/084`). Read-only lookups at `/api/v1/idn-regions/*`. It now **has `navigation`** and an admin screen `/admin/idn-regions` (PR #332): ADR-0048 is superseded by [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md), all **SYSTEM** admin screens are built in this repo (narrowed by [ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md); `idn_admin_regions` is the pure example — a dataset served to many tenants will never be USER work).
 
-Kapabilitas lain di ekosistem keluarga (mis. `newsletter`,
-`social-publishing`, `document-infrastructure`, `integration-hub`) **belum ada**
-di repo ini. Sejak [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)
-kata "**port**" tidak lagi berlaku untuk apa pun di daftar ini: `awcms-mini` dan
-`awcms-micro` adalah **ARSIP**, boleh dibaca sebagai spesifikasi tetapi bukan
-sumber port, dan kapabilitas baru **DIBANGUN di sini** lewat ADR admission-nya
-sendiri. Skill masing-masing (ditandai "BACAAN SAJA") dan
+Other capabilities in the family ecosystem (e.g. `newsletter`,
+`social-publishing`, `document-infrastructure`, `integration-hub`) **do not exist yet**
+in this repo. Since [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)
+the word "**port**" no longer applies to anything on that list: `awcms-mini` and
+`awcms-micro` are **ARCHIVES**, readable as a specification but not a
+port source, and new capabilities are **BUILT here** through their own
+admission ADR. Their respective skills (marked "READ-ONLY") and
 [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
-karena itu dibaca sebagai **daftar kebutuhan + spesifikasi target**, bukan
-antrean porting.
+are therefore read as a **list of needs + target specification**, not a
+porting queue.
 
-### Komposisi & validasi registry modul (ADR-0034)
+### Module registry composition & validation (ADR-0034)
 
-Registry modul adalah **registry base tunggal** (`src/modules/index.ts`),
-disusun 100% saat build/compile (tanpa runtime discovery/`eval`/file scanning).
-ADR-0034 **menghapus** jalur aplikasi-turunan: tidak ada lagi
-`src/modules/application-registry.ts`, `mergeModuleRegistries`, namespace
-migration turunan `900+`, manifest kompatibilitas, maupun command
-`extension:check` (men-supersede ADR-0014/0015/0025). Yang **dipertahankan**
-adalah mekanisme validasi registry base — kini memvalidasi registry base itu
-sendiri, bukan hasil merge dengan registry aplikasi:
+The module registry is a **single base registry** (`src/modules/index.ts`),
+composed 100% at build/compile time (no runtime discovery/`eval`/file scanning).
+ADR-0034 **removed** the derived-application pathway: there is no longer a
+`src/modules/application-registry.ts`, `mergeModuleRegistries`, a derived
+`900+` migration namespace, a compatibility manifest, or the
+`extension:check` command (superseding ADR-0014/0015/0025). What was **kept**
+is the base registry validation mechanism — which now validates the base registry
+itself, rather than the result of merging it with an application registry:
 
-- `src/modules/index.ts` mengekspor `listBaseModules()`/`listModules()` (21
-  modul, urutan tetap = urutan registrasi). Tetap **data murni** — hanya daftar,
-  tidak pernah memvalidasi/melempar saat load.
+- `src/modules/index.ts` exports `listBaseModules()`/`listModules()` (21
+  modules, fixed order = registration order). It stays **pure data** — only a list,
+  never validating/throwing at load.
 - `src/modules/module-management/domain/module-composition.ts`
-  (`composeModuleRegistry`) adalah mesin validasi yang dipakai gate, bukan jalur
-  load modul. Menolak: key ganda, dependency hilang/siklik (memakai ulang
-  validator DAG `_shared/module-dependency-graph.ts`), capability provider
-  conflict/missing, navigation path conflict, dan job descriptor invalid
-  (memakai ulang `job-registry.ts`).
-- Gate yang menegakkannya di `bun run check` dan CI: `modules:dag:check`,
-  `modules:compose:check`, dan `modules:composition:inventory:generate`/`:check`
-  (inventory deterministik `docs/awcms/module-composition-inventory.json`).
-- **`tests/module-boundary.test.ts` menutup celah yang tak bisa dilihat ketiganya.**
-  Gate di atas memvalidasi graf yang **DIDEKLARASIKAN** — dari `listModules()`
-  saja, tanpa I/O. Tak satu pun membaca satu baris `import`, jadi sebuah modul
-  bisa meng-import apa pun asal tidak menuliskannya. Tujuh edge seperti itu ada
-  saat gate ini mendarat (#251). Sekarang tiap import lintas-modul wajib
-  dideklarasikan sebagai `dependencies`, sebagai `capabilities.consumes`, atau
-  dikecualikan eksplisit dengan alasan yang bisa dibantah reviewer.
-- **`modules:table-writes:check` menutup celah KEDUA: kopling lewat SQL, bukan
-  lewat `import`.** Dua modul bisa sepenuhnya bebas dari import satu sama lain
-  dan tetap menulis TABEL yang sama — coupling yang tak terlihat gate mana pun
-  di atas. `_shared/module-contract.ts` menyebut aturan "ADR-0013 §6 no
-  shared-table write" **empat kali** sebagai alasan tiap seam
+  (`composeModuleRegistry`) is the validation engine used by the gate, not the module
+  load path. It rejects: duplicate keys, missing/cyclic dependencies (reusing the
+  DAG validator `_shared/module-dependency-graph.ts`), capability provider
+  conflict/missing, navigation path conflicts, and invalid job descriptors
+  (reusing `job-registry.ts`).
+- The gates that enforce it in `bun run check` and CI: `modules:dag:check`,
+  `modules:compose:check`, and `modules:composition:inventory:generate`/`:check`
+  (the deterministic inventory `docs/awcms/module-composition-inventory.json`).
+- **`tests/module-boundary.test.ts` closes the gap none of those three can see.**
+  The gates above validate the **DECLARED** graph — from `listModules()`
+  alone, with no I/O. Not one of them reads a single `import` line, so a module
+  could import anything as long as it did not write it down. Seven such edges existed
+  when this gate landed (#251). Now every cross-module import must be
+  declared as `dependencies`, as `capabilities.consumes`, or be
+  excluded explicitly with a reason a reviewer can argue against.
+- **`modules:table-writes:check` closes a SECOND gap: coupling through SQL, not
+  through `import`.** Two modules can be entirely free of imports of each other
+  and still write the same TABLE — coupling invisible to every gate
+  above. `_shared/module-contract.ts` cites the "ADR-0013 §6 no
+  shared-table write" rule **four times** as the reason each seam
   (`dataLifecycle`/`searchSources`/`commentableResources`/`reportingProjections`)
-  mengoper METADATA ke engine pusat alih-alih menjangkau skema modul lain —
-  tapi SQL tulis-tangan di luar seam itu tak pernah diperiksa, dan enam tabel
-  ditulis lebih dari satu modul saat gate ini mendarat. Kepemilikan **diturunkan,
-  bukan dideklarasikan** (aturannya "paling banyak satu penulis", jadi
-  penulisnya sendiri adalah buktinya; tabel baru tak perlu didaftarkan untuk
-  ikut tercakup). Rute di `src/pages` diatribusikan lewat `api.routes`, jadi
-  `INSERT` di rute milik sebuah modul bukan penulis kedua. Tulis DINAMIS
-  (`${tableName}` milik engine `data_lifecycle`/`reporting`) sengaja di luar
-  cakupan — itu justru mekanisme yang diresepkan §6, dan sudah digerbangi
-  registry-check masing-masing.
+  passes METADATA to a central engine instead of reaching into another module's
+  schema — but hand-written SQL outside those seams was never checked, and six tables
+  were written by more than one module when this gate landed. Ownership is **derived,
+  not declared** (the rule is "at most one writer", so the writer itself is the
+  proof; a new table need not be registered to be covered). Routes in `src/pages` are
+  attributed via `api.routes`, so an `INSERT` in a route owned by a module is not a
+  second writer. DYNAMIC writes
+  (the `${tableName}` of the `data_lifecycle`/`reporting` engines) are deliberately out of
+  scope — that is precisely the mechanism §6 prescribes, and it is already gated by
+  their respective registry checks.
 
-Komposisi build-time (modul apa yang ada di kode) dan tenant lifecycle
-enable/disable (`module_management`, state DB per tenant) adalah **dua lapis
-berbeda** — komposisi tidak pernah bergantung pada input tenant.
+Build-time composition (which modules exist in the code) and tenant lifecycle
+enable/disable (`module_management`, per-tenant DB state) are **two different
+layers** — composition never depends on tenant input.
 
 ## Tenant context & RLS
 
-Setiap request tenant-scoped berjalan lewat `withTenant()`
-(`src/lib/database/tenant-context.ts`): melewati gate work-class + circuit
-breaker (`src/lib/database/`) di depan pool — mengembalikan `503
-DATABASE_BUSY` + `Retry-After` saat breaker open atau work-class saturasi,
-alih-alih cascading timeout — lalu membuka transaksi, menjalankan
-`SET LOCAL app.current_tenant_id = '<tenantId>'`, dan memanggil fungsi
-handler (mencatat sukses/gagal ke breaker; error input Postgres kelas 22/23
-dikecualikan agar tidak men-trip breaker; race idempotency yang kalah juga
-dikecualikan). Setiap tabel tenant-scoped punya RLS policy yang
-membandingkan `tenant_id` dengan `current_setting('app.current_tenant_id')`.
-RLS adalah lapis kedua — query tetap wajib memfilter `tenant_id` secara
-eksplisit. State pool/breaker diekspos di `GET /api/v1/database/pool/health`.
+Every tenant-scoped request runs through `withTenant()`
+(`src/lib/database/tenant-context.ts`): it passes the work-class gate + circuit
+breaker (`src/lib/database/`) in front of the pool — returning `503
+DATABASE_BUSY` + `Retry-After` when the breaker is open or the work class is saturated,
+instead of a cascading timeout — then opens a transaction, runs
+`SET LOCAL app.current_tenant_id = '<tenantId>'`, and calls the handler
+function (recording success/failure to the breaker; Postgres class 22/23 input
+errors are excluded so they do not trip the breaker; the loser of an idempotency
+race is excluded too). Every tenant-scoped table has an RLS policy
+comparing `tenant_id` with `current_setting('app.current_tenant_id')`.
+RLS is the second layer — queries must still filter `tenant_id`
+explicitly. Pool/breaker state is exposed at `GET /api/v1/database/pool/health`.
 
-**Penolakan pool BUKAN sebuah nilai — dua bentuk, dipilih compiler.**
-`withTenant()` mengembalikan `T | Response`: pemanggil di jalur request
-meneruskan `503`-nya apa adanya (`if (result instanceof Response) return
-result;`), dan ~390 handler yang callback-nya memang mengembalikan `Response`
-tak berubah sama sekali. Segala sesuatu yang BUKAN handler HTTP — worker, job
-terjadwal, frontmatter SSR, resolver tenant, fixture test — memakai
-`withTenantOrThrow()`, yang melempar `DatabaseBusyError` (membawa `response`
-`503` yang identik, jadi kedua bentuk tak bisa menyimpang) dan diklasifikasi
-`retryable` oleh job runner. Sebelumnya satu fungsi generik meng-`as T`
-penolakan itu menjadi tipe apa pun yang diminta pemanggil: `purgeExpiredAuditEvents`
-berjanji `Promise<number>` tapi mengembalikan `Response`, `runBoundedBatches`
-berhenti pada `count === 0` yang tak pernah cocok, dan job yang seluruh tujuannya
-mengalah justru menjalankan 50 pass per tenant ke database yang baru saja
-menolak — lalu melaporkan sukses dengan total berupa string
-`"0[object Response]…"` (karena `number + Response` itu konkatenasi).
-`db:tenant-context:check` menutup dua sisa yang tak terlihat compiler: hasil
-`withTenant` yang **dibuang** (`await withTenant(...)` sebagai statement —
-`503`-nya hilang tanpa jejak) dan pemanggilan dari `.astro`, yang tak pernah
-dibaca `tsc --noEmit`.
+**A pool rejection is NOT a value — two forms, chosen by the compiler.**
+`withTenant()` returns `T | Response`: callers on the request path
+pass its `503` through as-is (`if (result instanceof Response) return
+result;`), and the ~390 handlers whose callback already returns a `Response`
+did not change at all. Everything that is NOT an HTTP handler — workers, scheduled
+jobs, SSR frontmatter, tenant resolvers, test fixtures — uses
+`withTenantOrThrow()`, which throws a `DatabaseBusyError` (carrying an identical
+`503` `response`, so the two forms cannot diverge) and is classified
+`retryable` by the job runner. Previously a single generic function `as T`-cast that
+rejection into whatever type the caller asked for: `purgeExpiredAuditEvents`
+promised `Promise<number>` but returned a `Response`, `runBoundedBatches`
+stopped on a `count === 0` that never matched, and a job whose entire purpose was
+to back off instead ran 50 passes per tenant against a database that had just
+rejected it — then reported success with a total that was the string
+`"0[object Response]…"` (because `number + Response` is concatenation).
+`db:tenant-context:check` closes the two leftovers the compiler cannot see: a
+`withTenant` result that is **discarded** (`await withTenant(...)` as a statement —
+its `503` vanishes without a trace) and calls from `.astro`, which
+`tsc --noEmit` never reads.
 
-**Pengecualian RLS yang disengaja (allow-list eksplisit).** Dua tabel global
-sengaja tanpa RLS: `awcms_tenants` (root multi-tenant — endpoint wajib
-`WHERE id = <tenantId>` eksplisit) dan `awcms_setup_state` (singleton
-first-run, dijamin satu baris oleh CHECK, dibaca/ditulis sebelum tenant mana
-pun ada). Semua tabel tenant-scoped lain memakai RLS `FORCE`.
+**Deliberate RLS exceptions (an explicit allow-list).** Two global tables
+are deliberately without RLS: `awcms_tenants` (the multi-tenant root — endpoints must
+use an explicit `WHERE id = <tenantId>`) and `awcms_setup_state` (a first-run
+singleton, guaranteed a single row by a CHECK, read/written before any tenant
+exists). Every other tenant-scoped table uses RLS `FORCE`.
 
-**RLS FORCE + pemisahan role database (bukan lagi sekadar rencana).**
-`sql/017_awcms_enforce_rls_force.sql` menutup celah "PostgreSQL bypass RLS
-untuk table owner" dengan `ALTER TABLE ... FORCE ROW LEVEL SECURITY` di
-seluruh tabel tenant-scoped. Itu saja tidak cukup — superuser/`BYPASSRLS`
-tetap bypass RLS terlepas dari `FORCE`. `sql/019_awcms_db_role_separation.sql`
-membuat role runtime `awcms_app` (non-superuser, non-owner, `NOLOGIN` sampai
-diaktifkan deployment) dengan default GUC fail-closed
-(`app.current_tenant_id` default all-zero UUID, bukan crash) sehingga RLS
-baru benar-benar aktif. `sql/021_awcms_db_role_grants_narrow.sql` menyempitkan
-grant blanket `awcms_app` di tabel global RLS-free (DELETE dicabut dari
-`awcms_permissions`/`awcms_schema_migrations`/`awcms_tenants`, dsb — hanya
-verb yang benar-benar dipakai jalur kode nyata). `sql/022_awcms_db_worker_setup_roles.sql`
-menambah role terpisah `awcms_worker` (job background) dan `awcms_setup`
-(bootstrap sekali-jalan) dengan grant per-jalur-tulis, opsional/opt-in lewat
-`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` (fallback ke `DATABASE_URL` bila
-tak di-set — deployment lama tetap jalan). Lihat doc 18 §Model role database
-untuk cara mengaktifkan role ini di deployment nyata (`DATABASE_URL` masih
-boleh memakai role migration-owner untuk `bun run db:migrate`).
+**RLS FORCE + database role separation (no longer just a plan).**
+`sql/017_awcms_enforce_rls_force.sql` closes the "PostgreSQL bypasses RLS
+for the table owner" gap with `ALTER TABLE ... FORCE ROW LEVEL SECURITY` on
+every tenant-scoped table. That alone is not enough — a superuser/`BYPASSRLS`
+still bypasses RLS regardless of `FORCE`. `sql/019_awcms_db_role_separation.sql`
+creates the runtime role `awcms_app` (non-superuser, non-owner, `NOLOGIN` until
+the deployment activates it) with fail-closed default GUCs
+(`app.current_tenant_id` defaults to the all-zero UUID, not a crash) so that RLS
+is finally genuinely active. `sql/021_awcms_db_role_grants_narrow.sql` narrows
+`awcms_app`'s blanket grants on the RLS-free global tables (DELETE revoked from
+`awcms_permissions`/`awcms_schema_migrations`/`awcms_tenants`, etc — only the
+verbs actually used by real code paths). `sql/022_awcms_db_worker_setup_roles.sql`
+adds the separate roles `awcms_worker` (background jobs) and `awcms_setup`
+(one-shot bootstrap) with per-write-path grants, optional/opt-in through
+`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` (falling back to `DATABASE_URL` when
+unset — old deployments keep working). See doc 18 §Database role model
+for how to activate these roles in a real deployment (`DATABASE_URL` may still
+use the migration-owner role for `bun run db:migrate`).
 
 ## Auth
 
-Sesi berbasis token buram (bukan JWT): `POST /api/v1/auth/login` membuat
-token acak, menyimpan hash SHA-256-nya di `awcms_sessions`, dan mengembalikan
-token mentah sekali saja. Klien mengirim token lewat header
-`Authorization: Bearer <token>` (API) atau cookie httpOnly
-(`awcms_session`/`awcms_tenant_id`, untuk SSR admin shell). Tenant aktif wajib
-dikirim lewat header `X-AWCMS-Tenant-ID` untuk endpoint non-cookie. Login
-punya pengerasan (rate limit, lockout, dummy-hash anti-enumerasi, redaksi IP)
-— lihat `src/modules/identity-access/README.md` §Audit & pengerasan login.
+Sessions are opaque-token based (not JWT): `POST /api/v1/auth/login` creates
+a random token, stores its SHA-256 hash in `awcms_sessions`, and returns the
+raw token exactly once. Clients send the token through the
+`Authorization: Bearer <token>` header (API) or an httpOnly cookie
+(`awcms_session`/`awcms_tenant_id`, for the SSR admin shell). The active tenant must
+be sent through the `X-AWCMS-Tenant-ID` header for non-cookie endpoints. Login
+is hardened (rate limit, lockout, anti-enumeration dummy hash, IP redaction)
+— see `src/modules/identity-access/README.md` §Audit & login hardening.
 
-**Kredensial dan lockout duduk di `awcms_principals`, bukan di identitas
-per-tenant.** Tabel itu (`sql/112`,
-[ADR-0085](adr/0085-one-human-one-credential-many-tenants.md)) GLOBAL dan tanpa
-RLS: satu baris per manusia, ber-kunci email ter-normalisasi, dan `awcms_identities`
-hanya mendapat `principal_id` nullable — nol foreign key yang bergerak, dan
-`resolveTenantContext`/`authorizeInTransaction` tidak pernah tahu principal ada.
-Ketiadaan RLS ditopang empat kontrol yang ditegakkan, salah satunya gerbang
-`bun run identity:principal-access:check` yang membatasi **call site** mana yang
-boleh menyebut tabel itu dan menuntut setiap query berkunci `id =` atau
-`email_normalized =`. Sejak `sql/113`
-([ADR-0086](adr/0086-the-lockout-counter-is-global.md), menutup #430) penghitung
-lockout ikut pindah ke sana; `awcms_identities.failed_login_count`/`locked_until`
-tinggal sejarah. Kelima jalur reset — login sukses, reset password, ganti
-password, callback SSO, verifikasi enrolment MFA — menyentuh penghitung
-principal, karena lockout global dengan pemulihan per-tenant lebih buruk daripada
-yang digantikannya. Sejak `sql/114`
-([ADR-0087](adr/0087-mfa-moves-to-the-principal.md)) **faktor MFA dan recovery
-code ikut menjadi milik manusia** (`awcms_principal_mfa_factors`,
-`awcms_principal_mfa_recovery_codes` — GLOBAL, tanpa RLS, memakai keempat kontrol
-yang sama; gerbangnya kini menjaga tiga tabel dengan allow-list terpisah per
-tabel). Enkripsi `sql/024` tidak berubah. Yang **tidak** ikut pindah:
-`awcms_mfa_challenges` (satu percobaan login di satu tenant) dan
-`awcms_tenant_mfa_policies` (keputusan produk sebuah tenant) — faktornya milik
-manusia, kewajibannya milik tenant. Konsekuensinya dinyatakan: **reset MFA
-administratif kini menjangkau keluar tenant yang bertindak**, dicatat sebagai
-`crossTenantReach` pada baris audit `critical` dan `disabled_by_tenant_id` pada
-baris faktornya — bukan sebagai daftar tenant, yang akan menjadi oracle
-keanggotaan lintas-tenant.
+**Credentials and lockout live in `awcms_principals`, not in the per-tenant
+identity.** That table (`sql/112`,
+[ADR-0085](adr/0085-one-human-one-credential-many-tenants.md)) is GLOBAL and without
+RLS: one row per human, keyed by normalized email, and `awcms_identities`
+only gained a nullable `principal_id` — zero moving foreign keys, and
+`resolveTenantContext`/`authorizeInTransaction` never learn that principals exist.
+The absence of RLS is backed by four enforced controls, one of them the
+`bun run identity:principal-access:check` gate, which limits which **call sites**
+may name that table and demands that every query be keyed by `id =` or
+`email_normalized =`. Since `sql/113`
+([ADR-0086](adr/0086-the-lockout-counter-is-global.md), closing #430) the lockout
+counter moved there too; `awcms_identities.failed_login_count`/`locked_until`
+are history. All five reset paths — successful login, password reset, password
+change, SSO callback, MFA enrolment verification — touch the principal counter,
+because a global lockout with per-tenant recovery is worse than
+what it replaced. Since `sql/114`
+([ADR-0087](adr/0087-mfa-moves-to-the-principal.md)) **MFA factors and recovery
+codes belong to the human too** (`awcms_principal_mfa_factors`,
+`awcms_principal_mfa_recovery_codes` — GLOBAL, without RLS, using the same four
+controls; the gate now guards three tables with a separate allow-list per
+table). The `sql/024` encryption is unchanged. What did **not** move:
+`awcms_mfa_challenges` (one login attempt in one tenant) and
+`awcms_tenant_mfa_policies` (a tenant's product decision) — the factor belongs to the
+human, the obligation belongs to the tenant. The consequence is stated: **an
+administrative MFA reset now reaches outside the acting tenant**, recorded as
+`crossTenantReach` on a `critical` audit row and `disabled_by_tenant_id` on
+the factor's row — not as a list of tenants, which would become a cross-tenant
+membership oracle.
 
-Di atas password, jalur auth kini punya: **MFA TOTP + recovery codes + session
-assurance (aal1/aal2) + step-up** (`sql/024`, route `/api/v1/auth/mfa/*`,
-enforcement digerakkan state enrollment DB — fail-closed), **OIDC/SSO
-tenant-aware dengan account linking fail-closed + SSRF guard + break-glass**
-(`sql/025`/`026`, route `/api/v1/auth/sso/*`), dan **Cloudflare Turnstile bot
-protection sadar profil deployment** (`src/lib/security/turnstile.ts`, LAN/offline
-exempt). JWT diverifikasi native (RS256+ES256) tanpa dependensi.
+On top of passwords, the auth path now has: **MFA TOTP + recovery codes + session
+assurance (aal1/aal2) + step-up** (`sql/024`, routes `/api/v1/auth/mfa/*`,
+enforcement driven by DB enrollment state — fail-closed), **tenant-aware
+OIDC/SSO with fail-closed account linking + an SSRF guard + break-glass**
+(`sql/025`/`026`, routes `/api/v1/auth/sso/*`), and **Cloudflare Turnstile bot
+protection that is deployment-profile aware** (`src/lib/security/turnstile.ts`, LAN/offline
+exempt). JWTs are verified natively (RS256+ES256) with no dependency.
 
-Gelombang 2 (delta auth/admin, `sql/073`–`075`) menambah tiga permukaan yang
-seluruhnya duduk di atas jalur di atas, tanpa mengubahnya: **password reset
-lewat email** (`/api/v1/auth/password/{forgot,reset}` + `/forgot-password`,
-`/reset-password`) — enumeration-safe secara konstruksi, single-use ditegakkan
-lewat row lock `FOR UPDATE` di DB (bukan read-modify-write JS), mencabut semua
-sesi, dan menolak identity SSO-only di jalur permintaan **dan** penebusan;
-**self-registration ber-persetujuan admin** (`/register`,
-`/api/v1/registration-requests/*`) — default MATI, jalur publiknya tak pernah
-menyimpan kredensial maupun membuat akun, approval yang membuat identity dengan
-password tak terpakai lalu mengirim link reset; dan layar **`/admin/security`**
-yang memberi policy tenant (SSO/MFA/break-glass) sebuah UI — endpoint-nya sudah
-ada sejak #184/#185, layarnya tidak, jadi sebelumnya policy hanya bisa diubah
-lewat `curl`. Pengiriman email keduanya lewat capability port
-`auth_notification` (adapter dimiliki `email`), bukan INSERT lintas-modul.
+Wave 2 (the auth/admin delta, `sql/073`–`075`) adds three surfaces that
+all sit on top of the paths above without changing them: **password reset
+over email** (`/api/v1/auth/password/{forgot,reset}` + `/forgot-password`,
+`/reset-password`) — enumeration-safe by construction, single-use enforced
+by a `FOR UPDATE` row lock in the DB (not a JS read-modify-write), revoking every
+session, and rejecting SSO-only identities on the request **and** redemption paths;
+**self-registration with admin approval** (`/register`,
+`/api/v1/registration-requests/*`) — OFF by default, its public path never
+storing credentials nor creating an account, with approval creating an identity with an
+unusable password and then sending a reset link; and the **`/admin/security`** screen
+that gives tenant policy (SSO/MFA/break-glass) a UI — its endpoints have existed
+since #184/#185, its screen had not, so previously policy could only be changed
+through `curl`. Both send email through the `auth_notification` capability port
+(the adapter owned by `email`), not a cross-module INSERT.
 
-**Admin shell (Issue #166, #171).** Halaman auth publik `login`,
-`forgot-password`, `reset-password`, `register` (tiga terakhir menyusul di
-Gelombang 2 — lihat §Auth) + 13 layar `src/pages/admin/*.astro` (dashboard,
+**Admin shell (Issue #166, #171).** The public auth pages `login`,
+`forgot-password`, `reset-password`, `register` (the last three arriving in
+Wave 2 — see §Auth) + 13 `src/pages/admin/*.astro` screens (dashboard,
 offices, profiles, users, roles, abac-policies, registrations, security,
-modules, sidebar-menu, email-templates, comments, analytics) memakai
-`AdminLayout` + design token doc 14. Layar-layar ini
-bukan lagi read-only: roles/abac-policies/users/modules/email-templates punya
-form tulis (create/update/enable-disable/assign) yang memanggil endpoint
-`authorizeInTransaction`-gated yang sama dengan API — gate UI hanya UX,
-endpoint tetap otoritas satu-satunya. `src/middleware.ts` menjaga `/admin/*`
-(resolve sesi via `resolveSsrContext`, redirect `/login` bila tak ada). CSP
-`default-src 'self'` dijaga satu sumber di middleware; halaman tak punya
-inline script/style (`build.inlineStylesheets: "never"` + script di-bundle
-eksternal, lewat `src/lib/ui/admin-form-client.ts` untuk PATCH/DELETE). E2E
-Playwright (`tests/e2e/`, job CI `e2e-smoke`, env-gated) memverifikasi alur
-browser sungguhan.
+modules, sidebar-menu, email-templates, comments, analytics) use
+`AdminLayout` + the doc 14 design tokens. These screens are
+no longer read-only: roles/abac-policies/users/modules/email-templates have
+write forms (create/update/enable-disable/assign) calling the same
+`authorizeInTransaction`-gated endpoints as the API — the UI gate is only UX,
+the endpoint remains the single authority. `src/middleware.ts` guards `/admin/*`
+(resolving the session via `resolveSsrContext`, redirecting to `/login` when absent). The CSP
+`default-src 'self'` is kept in a single source in the middleware; the pages have no
+inline script/style (`build.inlineStylesheets: "never"` + scripts bundled
+externally, through `src/lib/ui/admin-form-client.ts` for PATCH/DELETE). Playwright
+E2E (`tests/e2e/`, the CI job `e2e-smoke`, env-gated) verifies real
+browser flows.
 
 ## RBAC/ABAC
 
 `identity-access/domain/access-control.ts` — `evaluateAccess()`: default
-deny, deny overrides allow. Permission diidentifikasi
-`module_key.activity_code.action` terhadap katalog `awcms_permissions` yang
-diseed migration. Selain permission role, evaluator punya dua guard
-struktural built-in: **tenant-isolation check** (`resourceAttributes.tenantId`
-harus cocok tenant aktif) dan **self-approval guard** (aktor tidak bisa
-approve/force-decide permintaannya sendiri, dipakai `workflow_approval`).
-Setiap keputusan (allow/deny) dicatat ke `awcms_abac_decision_logs`
-(`application/decision-log.ts`), dan setiap action ditandai high-risk atau
-tidak (`isHighRiskAction`) untuk kebutuhan audit.
+deny, deny overrides allow. Permissions are identified as
+`module_key.activity_code.action` against the `awcms_permissions` catalogue seeded by
+migration. Beyond role permissions, the evaluator has two built-in structural
+guards: a **tenant-isolation check** (`resourceAttributes.tenantId`
+must match the active tenant) and a **self-approval guard** (an actor cannot
+approve/force-decide their own request, used by `workflow_approval`).
+Every decision (allow/deny) is recorded to `awcms_abac_decision_logs`
+(`application/decision-log.ts`), and every action is flagged high-risk or
+not (`isHighRiskAction`) for audit purposes.
 
-`authorizeInTransaction()` (`application/access-guard.ts`) adalah satu-satunya
-chokepoint yang dipanggil setiap route terproteksi: resolve sesi -> **cek
-status modul aktif/nonaktif untuk tenant** (`resolveModuleEnabled`, sebelum
-permission di-lookup — modul yang dinonaktifkan ditolak `403 MODULE_DISABLED`
-apa pun permission yang dipegang aktor, dan tetap tercatat di decision log)
--> fetch permission -> evaluate ABAC -> catat decision log -> kembalikan
-context atau `Response` gagal siap pakai. `module_management` sendiri
-`isCore` (tidak bisa dinonaktifkan), jadi tenant tak pernah terkunci dari
-mengaktifkannya kembali.
+`authorizeInTransaction()` (`application/access-guard.ts`) is the single
+chokepoint called by every protected route: resolve session -> **check the
+module's enabled/disabled status for the tenant** (`resolveModuleEnabled`, before
+permissions are looked up — a disabled module is rejected `403 MODULE_DISABLED`
+whatever permissions the actor holds, and it is still recorded in the decision log)
+-> fetch permissions -> evaluate ABAC -> record the decision log -> return the
+context or a ready-made failure `Response`. `module_management` itself is
+`isCore` (cannot be disabled), so a tenant is never locked out of
+turning it back on.
 
-Di atas guard built-in, evaluator kini mengonsumsi tiga lapis authorization
-tambahan yang sudah diport:
+On top of the built-in guards, the evaluator now consumes three additional
+authorization layers that have already been ported:
 
-- **ABAC dinamis berbasis DSL** (`sql/031`/`032`, `domain/abac-evaluator.ts`,
-  route `/api/v1/access/policies/*` DSL + `/api/v1/abac/policies` CRUD flat
-  lawas): policy kondisi terbatas (AST jsonb, allow-list atribut server-side,
-  op eq/ne/in/nin/lt/lte/gt/gte/exists), precedence deny-overrides fail-closed,
-  cache tenant-keyed invalidasi post-commit. Evaluator memuat HANYA policy
-  `is_active AND is_dsl_managed` (flat CRUD lawas inert by design).
+- **DSL-based dynamic ABAC** (`sql/031`/`032`, `domain/abac-evaluator.ts`,
+  routes `/api/v1/access/policies/*` DSL + the legacy flat CRUD `/api/v1/abac/policies`):
+  bounded-condition policies (jsonb AST, server-side attribute allow-list,
+  ops eq/ne/in/nin/lt/lte/gt/gte/exists), fail-closed deny-overrides precedence,
+  a tenant-keyed cache invalidated post-commit. The evaluator loads ONLY
+  `is_active AND is_dsl_managed` policies (the legacy flat CRUD is inert by design).
 - **Business-scope hierarchy** (`sql/027`/`028`, `domain/business-scope-assignment.ts`):
-  parameter fakta scope ke `evaluateAccess`; base resolver fail-closed NO-OP
-  sampai modul penyedia hierarki mengisinya.
+  a scope-facts parameter to `evaluateAccess`; the base resolver is a fail-closed NO-OP
+  until a hierarchy-providing module fills it in.
 - **Segregation of Duties (SoD)** (`sql/029`/`030`, `domain/sod-conflict-evaluation.ts`,
-  `application/high-risk-sod-guard.ts`): enforcement dua titik (assignment
-  `sod_conflict` 409 + deny-overrides action-time pada aksi high-risk); base
-  ship 0 rule (guard inert base-murni; rule ilustratif di fixture).
+  `application/high-risk-sod-guard.ts`): two-point enforcement (assignment
+  `sod_conflict` 409 + action-time deny-overrides on high-risk actions); the base
+  ships 0 rules (the guard is inert on a pure base; illustrative rules live in fixtures).
 
-Endpoint manajemen role/user (`/api/v1/roles`, `/api/v1/users`) sudah ada
+The role/user management endpoints (`/api/v1/roles`, `/api/v1/users`) exist
 (read Issue #166, write Issue #171).
 
 ## Audit trail
 
-`logging/application/audit-log.ts` — `recordAuditEvent()` menulis satu baris
-ke `awcms_audit_events` (redaksi otomatis lewat `_shared/redaction.ts`,
-retensi `AUDIT_LOG_RETENTION_DAYS` dengan job purge terjadwal
-`bun run logs:audit:purge`). Audit melengkapi, bukan menggantikan, log
-terstruktur (`src/lib/logging/logger.ts`) maupun domain event: `domain_event_runtime`
-kini benar-benar mempublikasikan event nyata (lihat §Kontrak API di bawah),
-dan salah satu consumer referensinya adalah projector audit lintas modul.
+`logging/application/audit-log.ts` — `recordAuditEvent()` writes one row
+to `awcms_audit_events` (automatic redaction via `_shared/redaction.ts`,
+retention `AUDIT_LOG_RETENTION_DAYS` with the scheduled purge job
+`bun run logs:audit:purge`). Audit complements, and does not replace, the
+structured log (`src/lib/logging/logger.ts`) or domain events: `domain_event_runtime`
+now genuinely publishes real events (see §API contract below),
+and one of its reference consumers is a cross-module audit projector.
 
-## Kontrak API (modular, Issue #182 / ADR-0026)
+## API contract (modular, Issue #182 / ADR-0026)
 
-Kontrak OpenAPI **dipecah per modul**. Sumbernya adalah fragment —
+The OpenAPI contract is **split per module**. Its source is a set of fragments —
 `openapi/awcms-public-api.src.yaml` (root: info/servers/tags/security +
-`components.securitySchemes`/`parameters`/`responses` + schema shared seperti
-`ApiError`/`ApiMeta`) dan `openapi/modules/<module>.openapi.yaml` (satu berkas
-per modul base, plus `foundation.openapi.yaml` untuk operasi tak-bermodul).
-Tiap modul menunjuk fragmentnya lewat `ModuleDescriptor.api.openApiPath`.
+`components.securitySchemes`/`parameters`/`responses` + shared schemas such as
+`ApiError`/`ApiMeta`) and `openapi/modules/<module>.openapi.yaml` (one file
+per base module, plus `foundation.openapi.yaml` for module-less operations).
+Each module points at its fragment through `ModuleDescriptor.api.openApiPath`.
 
-`openapi/awcms-public-api.openapi.yaml` kini **GENERATED** oleh
-`bun run openapi:bundle` (deterministik/idempoten — kunci ter-sort, tanpa
-timestamp) di path lama yang sama, jadi setiap consumer tak berubah. `bun run
-api:docs:generate` menghasilkan referensi Markdown `docs/awcms/api-reference.md`
-dari bundle + AsyncAPI (contoh sintetik).
+`openapi/awcms-public-api.openapi.yaml` is now **GENERATED** by
+`bun run openapi:bundle` (deterministic/idempotent — sorted keys, no
+timestamps) at the same old path, so no consumer changed. `bun run
+api:docs:generate` produces the Markdown reference `docs/awcms/api-reference.md`
+from the bundle + AsyncAPI (synthetic examples).
 
-`bun run api:spec:check` memvalidasi: **bundle freshness** (bundle commit ==
-hasil generate dari fragment), setiap operasi punya `operationId` unik, setiap
-operasi menyatakan security requirement (atau `security: []` plus entri
-allow-list publik yang benar-benar dipakai), **standard error schema** (semua
-response 4xx/5xx resolve ke `ApiError`), parameter path cocok dengan template,
-dan setiap route file di `src/pages/api/v1/**` punya pasangan path OpenAPI (dan
-sebaliknya). Ditambah dua gate yang lahir dari cacat nyata (PR #308): **katalog
-tag** — tiap operasi ber-tag, tiap tag operasi terdeklarasi di katalog root, dan
-tiap tag terdeklarasi benar-benar dipakai; serta **kepemilikan fragment** — tiap
-`api.openApiPath` menunjuk fragment yang ada di `openapi/modules/` (bukan
-bundel) dan tiap fragment diklaim tepat satu modul terdaftar
-(`foundation.openapi.yaml` pengecualian ter-review). Keduanya dua arah karena
-cacatnya dua arah: 55 operasi dari empat modul hilang dari referensi API karena
-tag-nya tak terdeklarasi, sementara katalog yang sama masih mengumumkan tag
-modul `news_portal` yang sudah dipensiunkan dan fragmennya masih ada tanpa
-pemilik. `bun run api:docs:check` menggagalkan build bila referensi Markdown
-basi. Bundler menyediakan seam `buildBundledDocument({ extraFragmentFiles })`
-untuk menggabungkan fragment tambahan tanpa mengedit fragment base; fragment yang
-menimpa path/schema base ditolak (`BundleConflictError`). Detail:
+`bun run api:spec:check` validates: **bundle freshness** (the committed bundle ==
+the result of generating from the fragments), every operation has a unique `operationId`, every
+operation declares a security requirement (or `security: []` plus a public
+allow-list entry that is actually used), the **standard error schema** (every
+4xx/5xx response resolves to `ApiError`), path parameters match the template,
+and every route file under `src/pages/api/v1/**` has a matching OpenAPI path (and
+vice versa). Plus two gates born from real defects (PR #308): the **tag
+catalogue** — every operation is tagged, every operation tag is declared in the root catalogue, and
+every declared tag is actually used; and **fragment ownership** — every
+`api.openApiPath` points at a fragment that exists in `openapi/modules/` (not the
+bundle) and every fragment is claimed by exactly one registered module
+(`foundation.openapi.yaml` a reviewed exception). Both are bidirectional because
+the defect was bidirectional: 55 operations from four modules were missing from the API
+reference because their tag was undeclared, while that same catalogue still announced the
+tag of the retired `news_portal` module and its fragment was still there without an
+owner. `bun run api:docs:check` fails the build when the Markdown reference is
+stale. The bundler provides a `buildBundledDocument({ extraFragmentFiles })` seam
+to merge additional fragments without editing base fragments; a fragment that
+overrides a base path/schema is rejected (`BundleConflictError`). Details:
 [`openapi/README.md`](../openapi/README.md),
 [`docs/awcms/api-contribution-guide.md`](awcms/api-contribution-guide.md).
 
-`asyncapi/awcms-domain-events.asyncapi.yaml` — **bukan lagi baseline kosong.**
-Berisi channel nyata untuk `domain_event_runtime` (`sample.recorded`,
-reference event), `workflow` (instance started/advanced/approved/rejected/
-cancelled, task escalated, delegation created/revoked), dan `email` (message
-queued/sent/failed/suppressed/cancelled) — dipublikasikan lewat
-`appendDomainEvent` di transaksi bisnis yang sama (ADR-0006, same-commit
-outbox write) dan dikirim `bun run domain-events:dispatch` dengan
-per-order-key ordering, backoff, dead-letter + replay ter-audit.
+`asyncapi/awcms-domain-events.asyncapi.yaml` — **no longer an empty baseline.**
+It contains real channels for `domain_event_runtime` (`sample.recorded`,
+the reference event), `workflow` (instance started/advanced/approved/rejected/
+cancelled, task escalated, delegation created/revoked), and `email` (message
+queued/sent/failed/suppressed/cancelled) — published through
+`appendDomainEvent` in the same business transaction (ADR-0006, same-commit
+outbox write) and delivered by `bun run domain-events:dispatch` with
+per-order-key ordering, backoff, dead-letter + audited replay.
 
 ## Migration
 
-`scripts/db-migrate.ts` membaca `sql/*.sql` terurut nama file
-(`NNN_awcms_<area>_<deskripsi>.sql`, saat ini `001`-`034`), menghitung
-checksum SHA-256 tiap file, menjalankan file yang belum tercatat di
-`awcms_schema_migrations` dalam satu transaksi per file (dengan advisory
-lock lintas proses), dan menolak start bila checksum file yang sudah ter-apply
-berubah — edit migration yang sudah jalan (bahkan komentar) harus lewat
-migration baru, bukan mengedit file lama; lihat catatan proyek
+`scripts/db-migrate.ts` reads `sql/*.sql` sorted by file name
+(`NNN_awcms_<area>_<description>.sql`, currently `001`-`034`), computes the
+SHA-256 checksum of each file, runs the files not yet recorded in
+`awcms_schema_migrations` in one transaction per file (with a cross-process advisory
+lock), and refuses to start when the checksum of an already-applied file
+changes — editing a migration that has already run (even a comment) must go through a
+new migration, not by editing the old file; see the project note
 `awcms-applied-migration-immutable`.
 
-## Status implementasi & gap yang tersisa
+## Implementation status & remaining gaps
 
-Sudah live dan diverifikasi terhadap kode (bukan rencana):
+Already live and verified against the code (not a plan):
 
-- Module Management enable/disable **ditegakkan** di `authorizeInTransaction`
-  (`403 MODULE_DISABLED` sebelum permission lookup), bukan cuma sinyal UI.
-- RLS `FORCE` di seluruh tabel tenant-scoped (`sql/017`) + pemisahan role
-  database tiga-peran `awcms_app`/`awcms_worker`/`awcms_setup` (`sql/019`,
+- Module Management enable/disable is **enforced** in `authorizeInTransaction`
+  (`403 MODULE_DISABLED` before the permission lookup), not merely a UI signal.
+- RLS `FORCE` on every tenant-scoped table (`sql/017`) + three-role database
+  role separation `awcms_app`/`awcms_worker`/`awcms_setup` (`sql/019`,
   `021`, `022`).
-- Domain event publishing nyata (`domain_event_runtime`) dengan AsyncAPI
-  yang mencerminkan channel sungguhan, bukan baseline kosong.
-- Sync/outbox HMAC-signed (`sync_storage`) dan workflow approval ber-versi
-  (`workflow_approval`) — keduanya modul aktif, bukan lagi "belum ada".
-- Reporting projection read-model (incremental, idempotent rebuild,
-  freshness/staleness, reconciliation) di atas lima view reporting dasar.
-- Admin UI read **dan tulis** untuk offices/profiles/users/roles/
+- Real domain event publishing (`domain_event_runtime`) with an AsyncAPI
+  that reflects real channels, not an empty baseline.
+- HMAC-signed sync/outbox (`sync_storage`) and versioned workflow approval
+  (`workflow_approval`) — both active modules, no longer "not there yet".
+- The reporting projection read-model (incremental, idempotent rebuild,
+  freshness/staleness, reconciliation) on top of the five base reporting views.
+- Admin UI read **and write** for offices/profiles/users/roles/
   abac-policies/modules/email-templates (Issue #166, #171).
-- **Authorization lanjutan**: MFA TOTP + session assurance/step-up,
-  OIDC/SSO tenant-aware, Turnstile bot protection (`sql/024`–`026`), ABAC
-  dinamis berbasis DSL, business-scope hierarchy, dan SoD conflict
-  enforcement (`sql/027`–`032`) — lihat §Auth & §RBAC/ABAC.
-- **Kontrak OpenAPI modular** per modul + bundler deterministik
-  (`openapi:bundle`, ADR-0026) — bukan lagi gap.
-- Modul website **`theming`** hidup langsung di base (`sql/033`–`034`),
-  modul website pertama pasca-ADR-0034.
-- **Klaster website/konten `awcms-micro` yang sudah terserap** (ADR-0035,
-  roadmap penyerapan): `blog-content` (`sql/035`–`045`, kini termasuk bekas
+- **Advanced authorization**: MFA TOTP + session assurance/step-up,
+  tenant-aware OIDC/SSO, Turnstile bot protection (`sql/024`–`026`), DSL-based
+  dynamic ABAC, business-scope hierarchy, and SoD conflict
+  enforcement (`sql/027`–`032`) — see §Auth & §RBAC/ABAC.
+- **A modular OpenAPI contract** per module + a deterministic bundler
+  (`openapi:bundle`, ADR-0026) — no longer a gap.
+- The website module **`theming`** lives directly in the base (`sql/033`–`034`),
+  the first website module after ADR-0034.
+- **The `awcms-micro` website/content cluster that has been absorbed** (ADR-0035,
+  the absorption roadmap): `blog-content` (`sql/035`–`045`, now including the former
   `news-portal` — ADR-0044),
   `tenant-domain` (`sql/046`–`048`), `visitor-analytics` (`sql/049`–`051`),
-  `media-library` (`sql/052`–`054`, inversi kepemilikan ADR-0036),
+  `media-library` (`sql/052`–`054`, the ADR-0036 ownership inversion),
   `data-lifecycle` (`sql/055`–`056`, ADR-0037), `seo-distribution`
-  (`sql/057`–`061`, ADR-0038/0039), `form-drafts` (`sql/062`–`063`), dan
-  `site-search` (`sql/064`–`065`, ADR-0040), dan `comments` (`sql/066`–`067`,
-  ADR-0041) — semuanya modul aktif.
-- **Delta auth/admin `awcms-micro` (Gelombang 2)** — penataan sidebar
-  per-tenant (`sql/071`–`072`), password reset lewat email (`sql/073`),
-  self-registration ber-persetujuan admin (`sql/074`–`075`), dan layar
-  `/admin/security`. Lihat §Auth.
+  (`sql/057`–`061`, ADR-0038/0039), `form-drafts` (`sql/062`–`063`), and
+  `site-search` (`sql/064`–`065`, ADR-0040), and `comments` (`sql/066`–`067`,
+  ADR-0041) — all active modules.
+- **The `awcms-micro` auth/admin delta (Wave 2)** — per-tenant sidebar
+  arrangement (`sql/071`–`072`), password reset over email (`sql/073`),
+  self-registration with admin approval (`sql/074`–`075`), and the
+  `/admin/security` screen. See §Auth.
 
-Gap yang genuinely masih ada (jangan diklaim selesai):
+Gaps that genuinely remain (do not claim them done):
 
-- Kapabilitas yang belum ada (`newsletter`, `social-publishing`,
-  `document-infrastructure`, `integration-hub`) — lihat skill masing-masing
-  (BACAAN SAJA) untuk spesifikasi target, dan
+- Capabilities that do not exist yet (`newsletter`, `social-publishing`,
+  `document-infrastructure`, `integration-hub`) — see their respective skills
+  (READ-ONLY) for the target specification, and
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
-  sebagai daftar kebutuhan. **Bukan antrean port:**
-  [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1 menutup
-  jalur port dari repo arsip — masing-masing masuk lewat **ADR admission-nya
-  sendiri dan DIBANGUN di sini**, dinilai dari kebutuhan hari ini. Pasca-[ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
-  modul domain/website ditambahkan **langsung di `src/modules/`** template ini,
-  bukan di repo turunan.
-- Pustaka komponen UI `src/components/ui/` + paritas design-token (baris
-  Gelombang-0 roadmap penyerapan, dibaca sebagai kebutuhan) belum ada; `form-drafts` ship **store**-nya
-  saja, tanpa komponen wizard.
-- Business-scope hierarchy resolver base masih **NO-OP fail-closed** (menunggu
-  modul penyedia hierarki organisasi); SoD base ship **0 rule** (rule nyata
-  ilustratif di fixture) — keduanya seam siap-pakai, bukan bug.
+  as a list of needs. **Not a port queue:**
+  [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1 closes
+  the port path from the archive repos — each enters through **its own
+  admission ADR and is BUILT here**, judged against today's needs. After [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+  domain/website modules are added **directly in this template's `src/modules/`**,
+  not in a derived repo.
+- The `src/components/ui/` UI component library + design-token parity (the
+  Wave-0 line of the absorption roadmap, read as a need) does not exist yet; `form-drafts` ships only
+  the **store**, without wizard components.
+- The base business-scope hierarchy resolver is still a **fail-closed NO-OP** (awaiting
+  an organization-hierarchy providing module); the base SoD ships **0 rules** (real rules
+  are illustrative, in fixtures) — both are ready-to-use seams, not bugs.

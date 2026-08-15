@@ -1,123 +1,125 @@
-# ADR-0050 — BFF `awcms-astro` memperoleh sesi manusia lewat KODE HANDOFF sekali-pakai, bukan dengan mem-proksi password
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0050-bff-session-handoff-code.id.md)
+
+# ADR-0050 — The BFF `awcms-astro` obtains a human session through a SINGLE-USE HANDOFF CODE, not by proxying passwords
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-01
-- **Pengambil keputusan:** @ahliweb
-- **Menutup pertanyaan yang sengaja ditinggalkan** [ADR-0048](0048-frontend-role-split-awcms-astro-internal-admin.md) §"Yang TIDAK diputuskan di sini" — "bentuk autentikasi internal di `awcms-astro`"
-- **Melanjutkan:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (BFF satu-satunya jalur data), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (`GET /api/v1/auth/session` sudah ada dan dipakai di sini)
-- **Terkait:** ADR-0027 (MFA/step-up), ADR-0028 (OIDC/SSO), ADR-0029 (Turnstile)
+- **Date:** 2026-08-01
+- **Decision maker:** @ahliweb
+- **Closes the question deliberately left open by** [ADR-0048](0048-frontend-role-split-awcms-astro-internal-admin.md) §"What is NOT decided here" — "the shape of internal authentication in `awcms-astro`"
+- **Continues:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (the BFF is the only data path), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (`GET /api/v1/auth/session` already exists and is used here)
+- **Related:** ADR-0027 (MFA/step-up), ADR-0028 (OIDC/SSO), ADR-0029 (Turnstile)
 
-## Konteks
+## Context
 
-ADR-0048 memberi `awcms-astro` layar admin owner/internal dan **sengaja tidak
-menjawab bagaimana penggunanya login**. ADR-0049 menyelesaikan setengahnya:
-sebuah BFF yang SUDAH memegang token sesi bisa menanyakan "sesi ini milik siapa
-dan masih hidup?" lewat `GET /api/v1/auth/session`. Yang belum dijawab adalah
-langkah sebelumnya — **dari mana token itu datang**.
+ADR-0048 gave `awcms-astro` owner/internal admin screens and **deliberately did
+not answer how their users log in**. ADR-0049 solved half of it: a BFF that
+ALREADY holds a session token can ask "whose session is this and is it still
+alive?" through `GET /api/v1/auth/session`. What remained unanswered is the step
+before it — **where that token comes from**.
 
-Yang sudah ada di kode dan mengikat jawabannya:
+What already exists in the code and constrains the answer:
 
-| Fakta                                                                                                                                                  | Berkas                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
-| `POST /api/v1/auth/login` mengembalikan `{token, expiresAt}` **dan** menyetel dua cookie httpOnly (`awcms_session`, `awcms_tenant_id`, `SameSite=Lax`) | `src/pages/api/v1/auth/login.ts` |
-| Login bisa TIDAK mengembalikan token: `401 MFA_REQUIRED` + `mfaChallengeToken` yang harus ditebus di endpoint terpisah                                 | idem, ADR-0027                   |
-| Login bisa dialihkan seluruhnya ke OIDC provider tenant (redirect + callback)                                                                          | ADR-0028                         |
-| Login bisa mensyaratkan token Turnstile pada profil full-online                                                                                        | ADR-0029                         |
-| Sesi dicabut massal saat password reset **dan** saat tenant user dinonaktifkan                                                                         | `session-revocation.ts`          |
+| Fact                                                                                                                                          | File                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `POST /api/v1/auth/login` returns `{token, expiresAt}` **and** sets two httpOnly cookies (`awcms_session`, `awcms_tenant_id`, `SameSite=Lax`) | `src/pages/api/v1/auth/login.ts` |
+| Login may return NO token: `401 MFA_REQUIRED` + an `mfaChallengeToken` to be redeemed at a separate endpoint                                  | ditto, ADR-0027                  |
+| Login may be diverted entirely to the tenant's OIDC provider (redirect + callback)                                                            | ADR-0028                         |
+| Login may require a Turnstile token on the full-online profile                                                                                | ADR-0029                         |
+| Sessions are revoked en masse on password reset **and** when a tenant user is deactivated                                                     | `session-revocation.ts`          |
 
-Cookie itu milik origin `awcms`. Browser di origin `awcms-astro` tidak akan
-pernah mengirimkannya, dan tidak boleh — itu bukan kekurangan yang perlu
-ditambal, itu batas origin yang bekerja.
+Those cookies belong to the `awcms` origin. A browser on the `awcms-astro` origin
+will never send them, and must not — that is not a shortcoming needing a patch,
+it is an origin boundary doing its job.
 
-## Keputusan
+## Decision
 
-**`awcms` tetap satu-satunya tempat kredensial diterima.** `awcms-astro`
-memperoleh sesi lewat **kode handoff sekali-pakai berumur pendek**:
+**`awcms` remains the only place credentials are accepted.** `awcms-astro`
+obtains a session through a **short-lived single-use handoff code**:
 
 ```
-browser ──► awcms-astro /internal/login  (tanpa form kredensial)
-        ──► redirect ke awcms /login?handoff=<id BFF>&redirect_uri=…
-            ── pengguna login DI awcms: password, MFA, OIDC, Turnstile —
-               semua alur yang sudah ada, tak satu pun diimplementasi ulang
-        ──► redirect balik ke awcms-astro dengan `code` sekali-pakai
-BFF     ──► POST /api/v1/auth/session-handoff/redeem  (server-ke-server)
-        ◄── { token, expiresAt }   → disimpan server-side, dipetakan ke cookie portal
+browser ──► awcms-astro /internal/login  (no credential form)
+        ──► redirect to awcms /login?handoff=<BFF id>&redirect_uri=…
+            ── the user logs in AT awcms: password, MFA, OIDC, Turnstile —
+               every flow that already exists, not one of them reimplemented
+        ──► redirect back to awcms-astro with a single-use `code`
+BFF     ──► POST /api/v1/auth/session-handoff/redeem  (server-to-server)
+        ◄── { token, expiresAt }   → stored server-side, mapped to a portal cookie
 ```
 
-Aturan yang mengikat bentuk itu:
+The rules that bind that shape:
 
-1. **Password tidak pernah melintasi `awcms-astro`.** Repo itu bukan penerbit
-   identitas (ADR-0047 §Alternatif, ADR-0048 §2); menerima password di sana
-   menjadikannya permukaan kredensial dengan seluruh kewajiban yang menyertainya.
-2. **Kode handoff bukan sesi.** Sekali pakai, umur pendek (≤60 detik), terikat
-   pada satu klien BFF terdaftar dan satu `redirect_uri`, dan ditukar
-   **server-ke-server** dengan kredensial klien BFF — bukan oleh browser.
-   Kode yang bocor lewat log/Referer tidak berguna tanpa kredensial itu.
-3. **Token sesi tidak pernah sampai ke browser.** BFF menyimpannya server-side
-   dan hanya memberi browser cookie portal-nya sendiri (`HttpOnly`, `Secure`,
+1. **A password never crosses `awcms-astro`.** That repo is not an identity
+   issuer (ADR-0047 §Alternatives, ADR-0048 §2); accepting passwords there makes
+   it a credential surface with every obligation that comes with one.
+2. **A handoff code is not a session.** Single use, short lived (≤60 seconds),
+   bound to one registered BFF client and one `redirect_uri`, and exchanged
+   **server-to-server** with the BFF client's credentials — not by the browser.
+   A code leaked through logs/Referer is useless without those credentials.
+3. **The session token never reaches the browser.** The BFF stores it server-side
+   and only gives the browser its own portal cookie (`HttpOnly`, `Secure`,
    `SameSite=Lax`).
-4. **Introspeksi adalah sumber kebenaran, bukan cache.** BFF memanggil
-   `GET /api/v1/auth/session`; `401` berarti sesi berakhir dan portal ikut
-   logout **saat itu juga**. Ini bukan formalitas: sejak PR #319 deaktivasi
-   tenant user mencabut sesi seketika, jadi "sudah dinonaktifkan tetapi masih
-   melihat layar internal" adalah keadaan yang harus mustahil.
-5. **Urutan logout terbalik itu bug.** Panggil logout `awcms` LEBIH DAHULU, baru
-   hapus cookie portal — urutan sebaliknya meninggalkan sesi hidup di sumber
-   kebenaran sementara pengguna yakin sudah keluar.
-6. **CSRF di BFF**: origin/Referer check **dan** token double-submit untuk setiap
-   mutasi. Salah satu saja tidak cukup (ADR-0045 §4).
-7. **Tidak ada cache bersama** antara permukaan internal dan permukaan publik
+4. **Introspection is the source of truth, not a cache.** The BFF calls
+   `GET /api/v1/auth/session`; a `401` means the session has ended and the portal
+   logs out **right then**. This is not a formality: since PR #319, deactivating
+   a tenant user revokes sessions immediately, so "already deactivated but still
+   looking at internal screens" is a state that must be impossible.
+5. **Reversing the logout order is a bug.** Call the `awcms` logout FIRST, then
+   clear the portal cookie — the other order leaves a live session at the source
+   of truth while the user believes they are out.
+6. **CSRF at the BFF**: origin/Referer check **and** a double-submit token for
+   every mutation. Either one alone is not enough (ADR-0045 §4).
+7. **No shared cache** between the internal surface and the public surface
    (ADR-0048 §3).
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-**BFF mem-proksi password** (form login di `awcms-astro`, BFF memanggil
-`POST /api/v1/auth/login` atas nama pengguna). Ditolak karena dua alasan
-terpisah, dan yang kedua yang menentukan:
+**The BFF proxies the password** (login form in `awcms-astro`, the BFF calls
+`POST /api/v1/auth/login` on the user's behalf). Rejected for two separate
+reasons, and it is the second that decides it:
 
-- Password akan melintasi dan (walau sekejap) berada di memori repo yang bukan
-  identity store.
-- **Login di sini bukan satu langkah.** Ia bisa berbalas `401 MFA_REQUIRED` +
-  `mfaChallengeToken`, bisa dialihkan ke OIDC provider tenant, dan bisa
-  mensyaratkan Turnstile. Mem-proksinya berarti mengimplementasi ulang
-  kelanjutan MFA, callback OIDC, dan widget Turnstile **di repo kedua** — tiga
-  alur keamanan yang sudah matang, teruji, dan ber-ADR di sini. Salinan kedua
-  dari alur MFA adalah tempat paling mahal untuk membuat kesalahan pertama.
+- The password would cross, and (however briefly) live in the memory of, a repo
+  that is not the identity store.
+- **Login here is not a single step.** It can answer `401 MFA_REQUIRED` +
+  `mfaChallengeToken`, it can be diverted to the tenant's OIDC provider, and it
+  can require Turnstile. Proxying it means reimplementing the MFA continuation,
+  the OIDC callback, and the Turnstile widget **in a second repo** — three
+  security flows that are already mature, tested, and ADR-backed here. A second
+  copy of the MFA flow is the most expensive place to make a first mistake.
 
-**Cookie lintas-site (`SameSite=None`) untuk `awcms_session`.** Ditolak: itu
-memindahkan pemilihan tenant, CSRF, dan CORS ke klien — persis yang ADR-0045 §3
-tolak — dan melonggarkan cookie yang juga dipakai admin `awcms` sendiri.
+**A cross-site cookie (`SameSite=None`) for `awcms_session`.** Rejected: it moves
+tenant selection, CSRF, and CORS to the client — exactly what ADR-0045 §3 rejects
+— and it loosens a cookie that the `awcms` admin itself also uses.
 
-**Menjadikan `awcms` OIDC provider.** Ditolak untuk saat ini: `awcms` adalah
-OIDC **consumer** (ADR-0028). Menjadi provider berarti membangun permukaan
-protokol penuh (discovery, JWKS, token/refresh/userinfo, consent) untuk satu
-klien tepercaya di jaringan yang sama. Kode handoff adalah bagian yang benar-benar
-dibutuhkan dari alur itu, tanpa sisanya. Bila kelak ada klien ketiga yang tidak
-tepercaya, keputusan ini ditinjau ulang — dan itu ADR-nya sendiri.
+**Making `awcms` an OIDC provider.** Rejected for now: `awcms` is an OIDC
+**consumer** (ADR-0028). Becoming a provider means building a full protocol
+surface (discovery, JWKS, token/refresh/userinfo, consent) for a single trusted
+client on the same network. The handoff code is the part of that flow that is
+genuinely needed, without the rest. If a third, untrusted client ever appears,
+this decision gets revisited — and that is its own ADR.
 
-**Kredensial mesin (ADR-0049) untuk layar internal.** Ditolak: baca-saja secara
-konstruksi, jadi tidak bisa melakukan aksi admin apa pun — dan yang lebih
-penting, ia menghapus atribusi per-pengguna. Layar internal justru permukaan yang
-paling butuh "siapa yang menekan tombol ini".
+**Machine credentials (ADR-0049) for the internal screens.** Rejected: they are
+read-only by construction, so they cannot perform any admin action — and more
+importantly, they erase per-user attribution. The internal screens are precisely
+the surface that most needs "who pressed this button".
 
-## Konsekuensi
+## Consequences
 
-**Yang harus dibangun di `awcms`** (belum ada saat ADR ini ditulis): tabel kode
-handoff + klien BFF terdaftar, parameter `handoff`/`redirect_uri` di `/login`
-dengan **allow-list `redirect_uri` yang ketat** (open-redirect di sini berarti
-menyerahkan kode ke penyerang), dan `POST /api/v1/auth/session-handoff/redeem`
-yang menukar kode sekali — di bawah kunci baris, bukan read-modify-write.
+**What must be built in `awcms`** (not present when this ADR was written): a
+handoff code table + registered BFF clients, `handoff`/`redirect_uri` parameters
+on `/login` with a **strict `redirect_uri` allow-list** (an open redirect here
+means handing the code to an attacker), and
+`POST /api/v1/auth/session-handoff/redeem` which redeems the code once — under a
+row lock, not read-modify-write.
 
-**Yang harus dibangun di `awcms-astro`**: rute `/internal/login`, penyimpanan
-sesi BFF server-side, cookie portal, CSRF, dan pemanggilan introspeksi per
-permintaan.
+**What must be built in `awcms-astro`**: the `/internal/login` route,
+server-side BFF session storage, the portal cookie, CSRF, and a per-request
+introspection call.
 
-**Biaya yang diterima.** Satu redirect tambahan pada login internal, dan
-kewajiban menjaga allow-list `redirect_uri` tetap sempit. Keduanya dibayar sekali;
-salinan kedua dari alur MFA akan dibayar setiap kali alur itu berubah.
+**Accepted cost.** One extra redirect on internal login, and the obligation to
+keep the `redirect_uri` allow-list narrow. Both are paid once; a second copy of
+the MFA flow would be paid every time that flow changes.
 
-**Risiko yang dinamai supaya bisa ditolak.** Kode handoff adalah bahan
-kredensial berumur pendek. Ia tidak boleh muncul di log akses, tidak boleh
-diteruskan lewat `Referer`, dan penukarannya harus atomik. Bila salah satu dari
-tiga itu tidak dipenuhi, bentuk ini tidak lebih aman dari yang ditolak di atas —
-ia hanya terlihat lebih aman.
+**Risks named so they can be refused.** A handoff code is short-lived credential
+material. It must not appear in access logs, must not be forwarded through
+`Referer`, and its redemption must be atomic. If any one of those three is not
+met, this shape is no safer than the one rejected above — it merely looks safer.

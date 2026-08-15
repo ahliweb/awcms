@@ -1,45 +1,47 @@
-# Analisis privasi — <nama fitur/modul>
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](privacy-analysis-template.id.md)
 
-- **Issue / PR:** `#<nnn>` · **Tanggal:** `<tanggal>` · **Penulis:** `<nama>`
-- **Kelas perubahan:** `<lihat tabel di alur-pengembangan.md>`
+# Privacy analysis — <feature/module name>
 
-> Isi ini adalah langkah 3 untuk satu perubahan. Bila ketiga jawaban di bawah
-> adalah "tidak ada data pribadi baru", satu paragraf sudah cukup dan itu hasil
-> yang normal — daftar ini ada supaya jawabannya **ditulis**, bukan supaya
-> panjang.
+- **Issue / PR:** `#<nnn>` · **Date:** `<date>` · **Author:** `<name>`
+- **Change class:** `<see the table in alur-pengembangan.md>`
 
-## 1. Data pribadi apa yang baru?
+> Filling this in is step 3 for one change. If all three answers below are "no
+> new personal data", one paragraph is enough and that is a normal outcome —
+> this list exists so that the answer gets **written down**, not so that it gets
+> long.
 
-Yang dikumpulkan, ditampilkan, atau diteruskan keluar oleh perubahan ini dan
-sebelumnya tidak ada di sistem.
+## 1. What personal data is new?
 
-| Data | Di kolom/tabel mana | Dari siapa | Dilihat siapa |
-| ---- | ------------------- | ---------- | ------------- |
+What this change collects, displays, or forwards outside, and that was not
+previously in the system.
 
-Bila kosong: tulis "tidak ada", dan lanjut ke §4.
+| Data | In which column/table | From whom | Seen by whom |
+| ---- | --------------------- | --------- | ------------ |
 
-## 2. Berapa lama, dan apa yang menghapusnya?
+If empty: write "none", and go on to §4.
 
-- Tabel baru → deskriptor `dataLifecycle`-nya (gerbang `data-lifecycle:table-coverage:check` menuntutnya).
-- Kolom baru pada tabel lama → retensinya mengikuti tabelnya; **periksa apakah itu masih benar** untuk data baru ini.
-- "Selamanya" → keputusan yang harus terlihat, dengan alasannya.
+## 2. For how long, and what deletes it?
 
-## 3. Siapa yang bisa melihatnya?
+- A new table → its `dataLifecycle` descriptor (the `data-lifecycle:table-coverage:check` gate demands it).
+- A new column on an existing table → its retention follows the table's; **check whether that is still correct** for this new data.
+- "Forever" → a decision that must be visible, with its reasoning.
 
-- Ber-tenant → RLS + chokepoint; sebutkan permission-nya.
-- **GLOBAL/tanpa RLS** → hampir selalu ADR. Sebutkan kontrol penggantinya.
-- Keluar dari sistem (email, webhook, provider) → sebutkan ke mana dan apa yang dibawa.
+## 3. Who can see it?
 
-## 4. Redaksi dan log
+- Tenant-scoped → RLS + chokepoint; name the permission.
+- **GLOBAL/no RLS** → almost always an ADR. Name the compensating control.
+- Leaving the system (email, webhook, provider) → say where to and what it carries.
 
-Apakah nilai barunya bisa mendarat di `awcms_audit_events`, decision log, atau
-log aplikasi? Bila ya, apakah kuncinya sudah tercakup `REDACTION_KEYS`
-(`src/modules/_shared/redaction.ts`)? Nama kunci baru yang tidak cocok pola
-apa pun **tidak** ter-redaksi.
+## 4. Redaction and logs
 
-## 5. Hak subjek data
+Can the new value land in `awcms_audit_events`, the decision log, or the
+application log? If so, is its key already covered by `REDACTION_KEYS`
+(`src/modules/_shared/redaction.ts`)? A new key name that matches no pattern is
+**not** redacted.
 
-Apakah perubahan ini membuat data yang harus bisa diekspor atau dihapus atas
-permintaan? Bila ya, catat bahwa basis ini **belum** punya alur per-subjek
-([`../privacy-analysis.md`](../privacy-analysis.md) §4) dan bagaimana operator
-menanganinya sementara ini.
+## 5. Data subject rights
+
+Does this change create data that must be exportable or deletable on request? If
+so, note that this base does **not** yet have a per-subject flow
+([`../privacy-analysis.md`](../privacy-analysis.md) §4) and how the operator
+handles it in the meantime.

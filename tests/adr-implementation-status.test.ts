@@ -8,7 +8,7 @@
  * never built here, and one contract family (ADR-0020) whose `_shared` files
  * were deleted along with the derived-application pathway (ADR-0034). The
  * assessment's demand was explicit: a gate binding ADR status to the existence
- * of the module/files, or a new status `Accepted (belum diimplementasikan)`.
+ * of the module/files, or a new status `Accepted (not yet implemented)`.
  * This delivers BOTH: the six ADRs now carry the qualified status, and this
  * test enforces the binding in both directions.
  *
@@ -21,7 +21,7 @@
  * PROMISED ARTIFACT PATHS themselves, so it covers file-contract ADRs too, and
  * it constrains the status line:
  *
- * - (a) artifacts absent  → status MUST be `Accepted (belum diimplementasikan)`;
+ * - (a) artifacts absent  → status MUST be `Accepted (not yet implemented)`;
  * - (b) artifacts present → status MUST be plain `Accepted` — landing the
  *   implementation forces the flip in the same PR;
  * - (c) a map entry naming an ADR file that does not exist fails — dead map
@@ -40,12 +40,12 @@ import path from "node:path";
 import { describe, expect, test } from "bun:test";
 
 /** The literal qualified status the six unimplemented ADRs carry today. */
-const QUALIFIED_STATUS = "Accepted (belum diimplementasikan)";
+const QUALIFIED_STATUS = "Accepted (not yet implemented)";
 
 /** The literal plain status an ADR must return to when its artifacts land. */
 const PLAIN_STATUS = "Accepted";
 
-const QUALIFIER = "(belum diimplementasikan)";
+const QUALIFIER = "(not yet implemented)";
 
 /** First `- **Status:** …` line of an ADR body. */
 const STATUS_LINE = /^- \*\*Status:\*\* (.+?)\s*$/m;
@@ -239,7 +239,7 @@ describe("ADR status agrees with the existence of its promised artifacts", () =>
   });
 
   test("live: the qualifier is never used outside the map", async () => {
-    // Direction (d): `Accepted (belum diimplementasikan)` is only meaningful
+    // Direction (d): `Accepted (not yet implemented)` is only meaningful
     // when this gate binds it to artifact paths. An ADR carrying it without a
     // map entry has a status nothing enforces — the exact drift C12 names.
     const mapped = new Set(ADR_ARTIFACT_MAP.map((entry) => entry.adrFile));

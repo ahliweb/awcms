@@ -1,131 +1,132 @@
-# ADR-0085 — Satu manusia, satu kredensial, banyak tenant
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0085-one-human-one-credential-many-tenants.id.md)
 
-- **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 7 PR 7.1, dan prasyarat penutupan
-  [#430](https://github.com/ahliweb/awcms/issues/430). Migrasi `sql/112`. Gerbang
-  baru `identity:principal-access:check` (rantai 40 → 41).
-- **Membangun di atas:**
-  [ADR-0003](0003-postgresql-rls-multi-tenant.md) (isolasi tenant lewat RLS — dan
-  batasnya, yang ADR ini justru berdiri di luarnya),
-  [ADR-0049](0049-machine-credentials-and-session-introspection.md) (jenis bearer
-  dibawa oleh namespace hash-nya), dan
-  [ADR-0053](0053-platform-scoped-permissions.md) (dua mekanisme independen,
-  supaya satu baris yang bocor tidak cukup).
+# ADR-0085 — One human, one credential, many tenants
 
-## Keputusan
+- **Status:** Accepted (2026-08-12).
+- **Context:** Issue #423 Wave 7 PR 7.1, and a prerequisite for closing
+  [#430](https://github.com/ahliweb/awcms/issues/430). Migration `sql/112`. New
+  gate `identity:principal-access:check` (chain 40 → 41).
+- **Builds on:**
+  [ADR-0003](0003-postgresql-rls-multi-tenant.md) (tenant isolation via RLS — and
+  its limits, which this ADR deliberately stands outside of),
+  [ADR-0049](0049-machine-credentials-and-session-introspection.md) (the bearer
+  kind is carried by its hash namespace), and
+  [ADR-0053](0053-platform-scoped-permissions.md) (two independent mechanisms, so
+  that one leaked row is not enough).
 
-`awcms_principals` — GLOBAL, tanpa RLS, satu baris per manusia, ber-kunci alamat
-email ter-normalisasi. `awcms_identities` mempertahankan setiap baris, setiap
-`id`, dan kedelapan foreign key masuknya **persis di tempatnya**; ia hanya
-mendapat satu kolom `principal_id` yang nullable.
+## Decision
 
-Ini **penurunan makna, bukan pemindahan data.** Tidak ada satu pun foreign key
-yang bergerak, dan `resolveTenantContext` maupun `authorizeInTransaction` tidak
-pernah tahu principal itu ada.
+`awcms_principals` — GLOBAL, no RLS, one row per human, keyed by the normalised
+email address. `awcms_identities` keeps every row, every `id`, and all eight
+incoming foreign keys **exactly where they are**; it only gains a single nullable
+`principal_id` column.
 
-Gelombang ini menaikkan otoritas **satu PR sekali**: PR 7.1 membuat barisnya, PR
-7.2 memindahkan login (dan **menutup #430**), PR 7.3 memindahkan MFA, PR 7.4
-menambahkan pemilihan dan perpindahan tenant.
+This is a **derivation of meaning, not a data move.** Not a single foreign key
+moves, and neither `resolveTenantContext` nor `authorizeInTransaction` ever knows
+principals exist.
 
-## Kalimat yang membuat ketiadaan RLS bisa dipertahankan
+This wave raises authority **one PR at a time**: PR 7.1 creates the rows, PR 7.2
+moves login (and **closes #430**), PR 7.3 moves MFA, PR 7.4 adds tenant selection
+and switching.
 
-> **Principal adalah fakta AUTENTIKASI, tidak pernah fakta OTORISASI.**
+## The sentence that makes the absence of RLS defensible
 
-Kalimat itu wajib verbatim di sini karena ia yang membedakan tabel ini dari
-setiap tabel lain yang RLS-nya bukan pilihan. Memegang principal **tidak memberi
-apa pun**: setiap permission tetap di-resolve lewat `awcms_tenant_users` di bawah
-FORCE RLS, lewat chokepoint yang sama seperti kemarin.
+> **A principal is an AUTHENTICATION fact, never an AUTHORIZATION fact.**
 
-`awcms_permissions` adalah preseden tabel global — tetapi ia katalog yang tidak
-memberi apa pun hanya karena ada. Tabel kredensial bukan itu. Karena itu **empat
-kontrol menggantikan RLS**, dan keempatnya ditegakkan, bukan dijanjikan:
+That sentence must appear verbatim here because it is what distinguishes this
+table from every other table whose RLS is not optional. Holding a principal
+**grants nothing**: every permission is still resolved through
+`awcms_tenant_users` under FORCE RLS, through the same chokepoint as yesterday.
 
-| #   | Kontrol                                                                                           | Ditegakkan oleh                                                  |
-| --- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | Hak basis data dipersempit — `REVOKE ALL`, lalu `SELECT, INSERT, UPDATE`, **tidak pernah DELETE** | `sql/112` + `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` + suite DB-gated |
-| 2   | Invarian bentuk-baca                                                                              | `bun run identity:principal-access:check`                        |
-| 3   | `password_hash` tidak pernah meninggalkan modul store                                             | tipe `PrincipalIdentity` + `tests/principal-store.test.ts`       |
-| 4   | Batas otorisasi tidak berubah                                                                     | test yang menolak setiap nama tabel otorisasi di dalam store     |
+`awcms_permissions` is the precedent for a global table — but it is a catalogue
+that grants nothing merely by existing. A credential table is not that. Which is
+why **four controls replace RLS**, and all four are enforced, not promised:
 
-### Kenapa DELETE ditahan permanen
+| #   | Control                                                                                      | Enforced by                                                         |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | Database privileges narrowed — `REVOKE ALL`, then `SELECT, INSERT, UPDATE`, **never DELETE** | `sql/112` + `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` + DB-gated suite    |
+| 2   | Read-shape invariants                                                                        | `bun run identity:principal-access:check`                           |
+| 3   | `password_hash` never leaves the store module                                                | the `PrincipalIdentity` type + `tests/principal-store.test.ts`      |
+| 4   | The authorization boundary does not change                                                   | a test that rejects every authorization table name inside the store |
 
-Bukan kerapian. Principal adalah objek yang menjadi sandaran login seorang
-manusia **di seluruh tenant sekaligus**. Runtime tidak punya operasi yang
-seharusnya menghapus satu, dan pemulihan dari baris yang salah terhapus adalah
-**restore**, bukan INSERT — setiap `awcms_identities.principal_id` yang
-menunjuknya harus diturunkan ulang. UPDATE dipertahankan karena PR 7.2
-mempromosikan kredensial ke dalamnya.
+### Why DELETE is permanently withheld
 
-### Kontrol 2 membatasi CALL SITE, bukan ROW
+Not tidiness. A principal is the object a human's login leans on **across every
+tenant at once**. The runtime has no operation that should delete one, and
+recovery from a wrongly deleted row is a **restore**, not an INSERT — every
+`awcms_identities.principal_id` pointing at it would have to be re-derived.
+UPDATE is kept because PR 7.2 promotes credentials into it.
 
-Ini rumusan yang perlu dipegang: **RLS membatasi BARIS yang boleh dilihat sebuah
-query; gerbang ini membatasi CALL SITE yang boleh mengeluarkan query sama
-sekali.** Hanya berkas dalam allow-list boleh menyebutnya, dan setiap query di
-sana wajib berkunci `id =` atau `email_normalized =` — tidak pernah scan
-tak-berbatas, tidak pernah `LIKE`, tidak pernah `LIMIT`/`OFFSET`. Tabel
-kredensial yang bisa dipindai adalah endpoint enumerasi yang tinggal satu
-refactor lagi, dan tidak ada policy RLS di sana untuk memotong hasilnya.
+### Control 2 constrains the CALL SITE, not the ROW
 
-## Kenapa backfill-nya aman: ia tidak memindahkan satu rahasia pun
+This is the formulation to hold on to: **RLS constrains which ROWS a query is
+allowed to see; this gate constrains which CALL SITES are allowed to issue the
+query at all.** Only files on the allow-list may name it, and every query there
+must be keyed on `id =` or `email_normalized =` — never an unbounded scan, never
+`LIKE`, never `LIMIT`/`OFFSET`. A credential table that can be scanned is an
+enumeration endpoint one refactor away, and there is no RLS policy there to trim
+the result.
 
-`password_hash` dibiarkan **NULL** pada setiap principal. Kredensial
-**DIPROMOSIKAN** saat login sukses pertama (PR 7.2): password diverifikasi
-terhadap hash IDENTITAS persis seperti hari ini, dan baru kemudian ditulis ke
+## Why the backfill is safe: it moves not one secret
+
+`password_hash` is left **NULL** on every principal. The credential is
+**PROMOTED** on the first successful login (PR 7.2): the password is verified
+against the IDENTITY hash exactly as it is today, and only then written to the
 principal.
 
-Sampai itu terjadi, principal adalah cangkang kosong yang tidak mengautentikasi
-apa pun — sehingga backfill yang salah **tidak bisa mengunci siapa pun**, karena
-baris identitas masih satu-satunya kredensial yang berlaku. Itulah yang
-membedakan migrasi ini dari setiap migrasi kredensial yang pernah menakutkan.
+Until that happens, a principal is an empty shell that authenticates nothing — so
+a wrong backfill **cannot lock anyone out**, because the identity row is still
+the only credential in force. That is what separates this migration from every
+credential migration that has ever been frightening.
 
-## Migrasi ini MENOLAK berjalan pada basis data yang bertabrakan
+## This migration REFUSES to run on a colliding database
 
-`awcms_identities` UNIQUE pada `(tenant_id, login_identifier)`, jadi `A@x.com`
-dan `a@x.com` adalah dua baris sah hari ini dan satu principal sesudahnya.
-Menggabungkannya tidak pernah berupa patch — ia percakapan dengan pelanggan
-tentang baris mana yang orangnya dan mana duplikat.
+`awcms_identities` is UNIQUE on `(tenant_id, login_identifier)`, so `A@x.com` and
+`a@x.com` are two legitimate rows today and one principal afterwards. Merging
+them is never a patch — it is a conversation with the customer about which row is
+the person and which is a duplicate.
 
-`sql/112` karena itu `RAISE EXCEPTION` alih-alih menebak.
-`bun run identity:principals:preflight` (#440) menjawab pertanyaan yang sama
-secara read-only dan berbulan-bulan lebih awal — itulah seluruh alasan ia
-dibangun sebelum berkas ini. **Menabrak exception itu di jendela deploy berarti
-sensusnya tidak dijalankan.**
+`sql/112` therefore does `RAISE EXCEPTION` instead of guessing.
+`bun run identity:principals:preflight` (#440) answers the same question
+read-only and months earlier — that is the entire reason it was built before this
+file. **Hitting that exception in the deploy window means the census was never
+run.**
 
-Satu detail urutan di dalamnya layak dicatat karena kegagalannya senyap: toggle
-`NO FORCE` harus mendahului cek tabrakan. `awcms_identities` FORCE RLS dan
-policy-nya membaca `current_setting('app.current_tenant_id')`; hitungan
-lintas-tenant yang dikeluarkan sebelum toggle akan melihat **nol baris** dan
-selalu lulus. Cek yang hanya bisa melihat nol adalah cek yang selalu lulus.
+One ordering detail inside it is worth recording because its failure is silent:
+the `NO FORCE` toggle must precede the collision check. `awcms_identities` is
+FORCE RLS and its policy reads `current_setting('app.current_tenant_id')`; a
+cross-tenant count issued before the toggle would see **zero rows** and always
+pass. A check that can only see zero is a check that always passes.
 
-## Yang DITOLAK
+## What was REJECTED
 
-1. **Memindahkan `password_hash` ke principal di dalam migrasi.** Backfill yang
-   memindahkan rahasia adalah backfill yang mode gagalnya "kredensial ada di dua
-   tempat". Promosi saat pakai pertama menghapus seluruh kelas itu.
-2. **`principal_id` NOT NULL.** Identitas yang dibuat penulis yang belum diajari
-   tentang principal harus **terlihat tak-tertaut**, bukan menjadi 500. Sebuah
-   pass berikutnya bisa menemukan dan memperbaikinya; sebuah 500 hanya bisa
-   dilaporkan pengguna.
-3. **Normalisasi yang lebih pintar** — pembuangan titik, penghapusan `+tag`,
-   Unicode folding. Masing-masing menggabungkan alamat yang di sebagian penyedia
-   adalah orang yang berbeda, dan penggabungan tidak bisa dibatalkan dengan cara
-   yang laporan tabrakan bisa.
-4. **DELETE untuk `awcms_app`** — §"Kenapa DELETE ditahan permanen".
-5. **Hak apa pun untuk `awcms_worker`.** Tidak ada job terjadwal yang membaca
-   atau menulis kredensial.
-6. **Menempatkan pembacaan principal di luar modul store "karena praktis".**
-   Itulah yang dilarang kontrol 2, dan gerbangnya menolak sebelum review sempat.
+1. **Moving `password_hash` into the principal inside the migration.** A backfill
+   that moves a secret is a backfill whose failure mode is "the credential exists
+   in two places". Promotion on first use erases that entire class.
+2. **`principal_id` NOT NULL.** An identity created by a writer who has not yet
+   been taught about principals must be **visibly unlinked**, not a 500. A later
+   pass can find and fix it; a 500 can only be reported by a user.
+3. **Smarter normalisation** — dot stripping, `+tag` removal, Unicode folding.
+   Each of those merges addresses that on some providers are different people,
+   and a merge cannot be undone the way a collision report can.
+4. **DELETE for `awcms_app`** — §"Why DELETE is permanently withheld".
+5. **Any privilege for `awcms_worker`.** No scheduled job reads or writes
+   credentials.
+6. **Putting a principal read outside the store module "because it's
+   convenient".** That is exactly what control 2 forbids, and the gate refuses
+   before review gets a chance.
 
-## Konsekuensi
+## Consequences
 
-- Rantai `bun run check` menjadi **41 segmen**.
-- `awcms_principals` wajib hadir DUA KALI — di
-  `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` dan di peta hak `security-readiness.ts` —
-  atau `tests/repo-inventory.test.ts` memerah dari dua sisi.
-- `BOUNDED_BY_DESIGN` naik 10 → 11, dengan argumen yang **berbeda jenis** dari
-  sepuluh sebelumnya: bukan "ditulis manusia" melainkan **diturunkan** —
-  populasinya proyeksi dari `awcms_identities`, jadi ia tak bisa tumbuh lebih
-  cepat dari tabel yang sudah ada di ledger warisan, dan selalu lebih kecil.
-- **#430 belum ditutup oleh PR ini.** Penghitung lockout masih per-`(tenant,
-email)`; PR 7.2 yang memindahkannya, dengan test regresi yang merotasi header
-  tenant dan menuntut penghitungnya TIDAK ter-reset.
+- The `bun run check` chain becomes **41 segments**.
+- `awcms_principals` must be present TWICE — in
+  `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` and in the privilege map of
+  `security-readiness.ts` — or `tests/repo-inventory.test.ts` goes red from both
+  sides.
+- `BOUNDED_BY_DESIGN` goes 10 → 11, with an argument of a **different kind** from
+  the previous ten: not "written by a human" but **derived** — its population is
+  a projection of `awcms_identities`, so it cannot grow faster than a table that
+  is already in the legacy ledger, and is always smaller.
+- **#430 is not closed by this PR.** The lockout counter is still per-`(tenant,
+email)`; PR 7.2 is the one that moves it, with a regression test that rotates the
+  tenant header and demands the counter is NOT reset.

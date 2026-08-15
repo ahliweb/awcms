@@ -1,183 +1,185 @@
-# MFA TOTP, recovery codes, dan step-up authentication
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](mfa-totp-step-up.id.md)
 
-Referensi implementasi Issue #184 (epic #177). Modul: `identity-access`. ADR: [ADR-0027](../adr/0027-mfa-totp-session-assurance-step-up.md) dan [ADR-0087](../adr/0087-mfa-moves-to-the-principal.md). Skema: `sql/024_awcms_mfa_totp_schema.sql` + `sql/114_awcms_principal_mfa.sql`.
+# MFA TOTP, recovery codes, and step-up authentication
 
-> **Sejak `sql/114` (ADR-0087) faktornya milik MANUSIA, bukan identitas per-tenant.**
-> `awcms_principal_mfa_factors` dan `awcms_principal_mfa_recovery_codes` ber-kunci
-> `principal_id`, GLOBAL dan tanpa RLS — satu enrolment mengautentikasi setiap tenant
-> yang orang itu ikuti. Enkripsi `sql/024` **tidak berubah**. Yang tetap tenant-scoped
-> di bawah FORCE RLS: `awcms_mfa_challenges` (satu percobaan login di satu tenant) dan
-> `awcms_tenant_mfa_policies` (keputusan produk sebuah tenant). **Faktornya milik
-> manusia; kewajibannya milik tenant.** Tabel `awcms_identity_mfa_*` lama dipertahankan
-> sebagai sejarah, hak `awcms_app` diturunkan ke `SELECT`. Seluruh alur di bawah tidak
-> berubah bentuknya — permukaan HTTP tetap `(tenant, identity)`; hanya penyimpanannya
-> yang global.
+Implementation reference for Issue #184 (epic #177). Module: `identity-access`. ADRs: [ADR-0027](../adr/0027-mfa-totp-session-assurance-step-up.md) and [ADR-0087](../adr/0087-mfa-moves-to-the-principal.md). Schema: `sql/024_awcms_mfa_totp_schema.sql` + `sql/114_awcms_principal_mfa.sql`.
 
-## 1. Ringkasan alur (auth flow)
+> **Since `sql/114` (ADR-0087) the factor belongs to the HUMAN, not to a per-tenant identity.**
+> `awcms_principal_mfa_factors` and `awcms_principal_mfa_recovery_codes` are keyed by
+> `principal_id`, GLOBAL and without RLS — one enrolment authenticates every tenant
+> that person belongs to. The `sql/024` encryption is **unchanged**. What stays tenant-scoped
+> under FORCE RLS: `awcms_mfa_challenges` (one login attempt in one tenant) and
+> `awcms_tenant_mfa_policies` (a tenant's product decision). **The factor belongs to the
+> human; the obligation belongs to the tenant.** The old `awcms_identity_mfa_*` tables are kept
+> as history, with the `awcms_app` privileges downgraded to `SELECT`. None of the flows below
+> change shape — the HTTP surface stays `(tenant, identity)`; only the storage
+> is global.
+
+## 1. Flow summary (auth flow)
 
 ### 1.1 Enrollment
 
 ```
-POST /api/v1/auth/mfa/totp/enroll/start   (sesi valid; AUTH_MFA_ENABLED=true)
-  -> generate secret 20 byte (CSPRNG), simpan factor `pending` (secret terenkripsi)
-  -> balas { secret (base32), otpauthUri }   # ditampilkan SEKALI
+POST /api/v1/auth/mfa/totp/enroll/start   (valid session; AUTH_MFA_ENABLED=true)
+  -> generate a 20-byte secret (CSPRNG), store a `pending` factor (encrypted secret)
+  -> respond { secret (base32), otpauthUri }   # shown ONCE
 POST /api/v1/auth/mfa/totp/enroll/verify  { code }
-  -> verifyTotpCode; bila valid -> factor `active`, last_used_step = matchedStep
-  -> generate 10 recovery code, simpan hash-only
-  -> balas { activated, recoveryCodes }       # ditampilkan SEKALI
+  -> verifyTotpCode; if valid -> factor `active`, last_used_step = matchedStep
+  -> generate 10 recovery codes, store hash-only
+  -> respond { activated, recoveryCodes }       # shown ONCE
 ```
 
-Memulai ulang `enroll/start` sebelum verify membuang secret pending sebelumnya — hanya QR terakhir yang valid dikonfirmasi. `enroll/start` menolak bila sudah ada factor `active` (`409 MFA_ALREADY_ACTIVE`).
+Restarting `enroll/start` before verify discards the previous pending secret — only the last QR is valid once confirmed. `enroll/start` refuses when an `active` factor already exists (`409 MFA_ALREADY_ACTIVE`).
 
-### 1.2 Login dua tahap
+### 1.2 Two-stage login
 
 ```
 POST /api/v1/auth/login  { loginIdentifier, password }
-  -> password valid + factor aktif:
-       reset failed_login_count, buat challenge (TTL AUTH_MFA_CHALLENGE_TTL_SEC),
-       audit mfa_challenge_issued, balas 401 MFA_REQUIRED + { mfaChallengeToken, expiresAt }
-  -> password valid + tanpa factor + policy REQUIRED (lihat 1.5):
-       balas 401 MFA_ENROLLMENT_REQUIRED + { mfaEnrollmentToken, expiresAt } — TANPA sesi
-  -> password valid + tanpa factor + policy optional: sesi aal1 seperti biasa
-POST /api/v1/auth/mfa/totp/verify  { mfaChallengeToken, code | recoveryCode }   # PUBLIK
-  -> verifyMfaChallenge (replay-safe), buat sesi aal2, audit mfa_challenge_verified
-  -> balas { token, expiresAt, assuranceLevel: "aal2" } + cookie
+  -> password valid + an active factor:
+       reset failed_login_count, create a challenge (TTL AUTH_MFA_CHALLENGE_TTL_SEC),
+       audit mfa_challenge_issued, respond 401 MFA_REQUIRED + { mfaChallengeToken, expiresAt }
+  -> password valid + no factor + policy REQUIRED (see 1.5):
+       respond 401 MFA_ENROLLMENT_REQUIRED + { mfaEnrollmentToken, expiresAt } — NO session
+  -> password valid + no factor + policy optional: an aal1 session as usual
+POST /api/v1/auth/mfa/totp/verify  { mfaChallengeToken, code | recoveryCode }   # PUBLIC
+  -> verifyMfaChallenge (replay-safe), create an aal2 session, audit mfa_challenge_verified
+  -> respond { token, expiresAt, assuranceLevel: "aal2" } + cookie
 ```
 
-Cabang MFA di `login.ts` hanya tercapai **setelah** password valid → tidak ada oracle enumerasi baru (identifier tak dikenal / locked / password salah sudah kolaps ke satu respons sebelum titik ini). Endpoint verify diautentikasi oleh kepemilikan `mfaChallengeToken` (belum ada sesi), sama seperti reset password. Semua jalur deny challenge kolaps ke `MFA_CHALLENGE_INVALID` (respons & waktu identik untuk challenge tak dikenal / kedaluwarsa / sudah dipakai / kode salah / factor terkunci / factor nonaktif).
+The MFA branch in `login.ts` is only reached **after** the password is valid → there is no new enumeration oracle (an unknown identifier / locked account / wrong password have already collapsed into a single response before this point). The verify endpoint is authenticated by possession of the `mfaChallengeToken` (there is no session yet), just like a password reset. Every challenge deny path collapses to `MFA_CHALLENGE_INVALID` (identical response & timing for an unknown / expired / already-used challenge, a wrong code, a locked factor, or a disabled factor).
 
-### 1.3 Step-up (aksi high-risk)
+### 1.3 Step-up (high-risk actions)
 
 ```
-POST /api/v1/auth/mfa/step-up  { code | recoveryCode }   (sesi valid)
+POST /api/v1/auth/mfa/step-up  { code | recoveryCode }   (valid session)
   -> verifyStepUpFactor (replay-safe)
-  -> sesi aal1: revoke lama + buat sesi aal2 baru (rotasi, anti-fixation), balas token baru
-  -> sesi aal2: refresh stepped_up_at di tempat
+  -> aal1 session: revoke the old one + create a new aal2 session (rotation, anti-fixation), respond with the new token
+  -> aal2 session: refresh stepped_up_at in place
 ```
 
-Endpoint high-risk memanggil `requireStepUp(tx, tenantId, tokenHash, now)` **setelah** `authorizeInTransaction`. Gate mengembalikan `403 STEP_UP_REQUIRED` bila sesi bukan aal2 atau step-up sudah basi (> `AUTH_MFA_STEPUP_TTL_SEC`). Contoh pemakaian:
+High-risk endpoints call `requireStepUp(tx, tenantId, tokenHash, now)` **after** `authorizeInTransaction`. The gate returns `403 STEP_UP_REQUIRED` when the session is not aal2 or the step-up is stale (> `AUTH_MFA_STEPUP_TTL_SEC`). Usage example:
 
 ```ts
 const auth = await authorizeInTransaction(tx, tenantId, tokenHash, now, GUARD);
 if (!auth.allowed) return auth.denied;
 const stepUp = await requireStepUp(tx, tenantId, tokenHash, now);
 if (!stepUp.ok) return stepUp.denied;
-// ... aksi high-risk ...
+// ... high-risk action ...
 ```
 
-Aksi high-risk milik modul MFA yang **sudah** dijaga `requireStepUp`: self-service `disable`, `recovery-codes/regenerate`, `admin/reset`, dan `PUT policy`. Untuk aplikasi ERP turunan, panggil `requireStepUp` pada aksi sensitif turunannya (posting, override, exception SoD) — pola integrasi #179/#181.
+The MFA module's own high-risk actions that are **already** guarded by `requireStepUp`: self-service `disable`, `recovery-codes/regenerate`, `admin/reset`, and `PUT policy`. For a derived ERP application, call `requireStepUp` on its own sensitive actions (posting, override, SoD exception) — the #179/#181 integration pattern.
 
 ### 1.4 Self-service & admin
 
-- `GET /api/v1/auth/mfa/status` — status enrollment identity sendiri.
-- `POST /api/v1/auth/mfa/totp/disable` — matikan MFA sendiri (audit `warning`; **butuh step-up segar** — re-autentikasi faktor).
-- `POST /api/v1/auth/mfa/recovery-codes/regenerate` — batalkan semua recovery code lama, terbitkan 10 baru sekali tampil (**butuh step-up segar**).
-- `POST /api/v1/auth/mfa/admin/reset` `{ identityId, reason }` — reset MFA user lain; guard `identity_access.mfa_admin.reset`, **butuh step-up segar**, audit `critical`, self-reset dilarang. **Sejak ADR-0087 aksi ini MENJANGKAU KELUAR tenant yang bertindak**: faktornya milik manusia, jadi mereset di tenant A juga mencabut authenticator yang orang itu pakai di tenant B. Ini satu-satunya tempat di repo tempat tindakan admin tenant mengubah state yang disandari tenant lain, dan ia dicatat sebagai `crossTenantReach: true` pada baris audit `critical` plus `disabled_by_tenant_id` pada baris faktornya — **menyatakan bahwa ia menjangkau keluar, tanpa menyebut ke mana**. Daftar tenant sengaja tidak dibuat: ia akan menjadi oracle keanggotaan lintas-tenant bagi pemegang permission reset, dan FORCE RLS juga membuat baris audit di tenant seberang mustahil ditulis.
-- `GET`/`PUT /api/v1/auth/mfa/policy` — baca/set enforcement level tenant (`PUT` guard `identity_access.mfa_admin.configure` + **step-up segar**).
+- `GET /api/v1/auth/mfa/status` — the enrollment status of your own identity.
+- `POST /api/v1/auth/mfa/totp/disable` — turn off your own MFA (audit `warning`; **requires a fresh step-up** — re-authenticate the factor).
+- `POST /api/v1/auth/mfa/recovery-codes/regenerate` — invalidate every old recovery code and issue 10 new ones shown once (**requires a fresh step-up**).
+- `POST /api/v1/auth/mfa/admin/reset` `{ identityId, reason }` — reset another user's MFA; guarded by `identity_access.mfa_admin.reset`, **requires a fresh step-up**, audit `critical`, self-reset forbidden. **Since ADR-0087 this action REACHES OUTSIDE the acting tenant**: the factor belongs to the human, so resetting it in tenant A also revokes the authenticator that person uses in tenant B. This is the only place in the repo where a tenant admin action changes state that another tenant relies on, and it is recorded as `crossTenantReach: true` on the `critical` audit row plus `disabled_by_tenant_id` on the factor row — **stating that it reaches outside, without saying where to**. A tenant list is deliberately not produced: it would become a cross-tenant membership oracle for anyone holding the reset permission, and FORCE RLS also makes writing an audit row in the other tenant impossible.
+- `GET`/`PUT /api/v1/auth/mfa/policy` — read/set the tenant's enforcement level (`PUT` guarded by `identity_access.mfa_admin.configure` + **a fresh step-up**).
 
-### 1.5 Enforcement policy tenant (F1)
+### 1.5 Tenant enforcement policy (F1)
 
-Policy tenant (`awcms_tenant_mfa_policies`, default `optional`) benar-benar ditegakkan di login:
+The tenant policy (`awcms_tenant_mfa_policies`, default `optional`) is genuinely enforced at login:
 
-- `optional` — MFA tersedia, tak pernah dipaksa.
-- `required_for_all` — setiap user tenant wajib MFA.
-- `required_for_privileged` — wajib bagi user yang memegang permission **non-read** apa pun (`isPrivilegedFromPermissionKeys`; klasifikasi luas = fail-closed).
+- `optional` — MFA is available, never forced.
+- `required_for_all` — every user of the tenant must use MFA.
+- `required_for_privileged` — mandatory for a user holding any **non-read** permission (`isPrivilegedFromPermissionKeys`; a broad classification = fail-closed).
 
-Bila policy mewajibkan MFA untuk seorang user yang password-nya valid tetapi **belum punya factor**, login **tidak** menerbitkan sesi penuh. Sebagai gantinya ia mengembalikan `401 MFA_ENROLLMENT_REQUIRED` + `mfaEnrollmentToken` (baris `awcms_mfa_challenges` `purpose='enrollment'`). Token itu **hanya** mengotorisasi `enroll/start`/`enroll/verify` (dikirim via header `X-AWCMS-MFA-Enrollment-Token`, bukan sesi umum); begitu enrollment selesai, grant dikonsumsi dan sesi `aal2` diterbitkan. Fail-closed tetapi **self-recoverable** — tak ada lockout admin. Enforcement digerbangi `isMfaFeatureEnabled()`: bila enrollment dimatikan, policy inert (mustahil membuat MFA yang diwajibkan).
+When the policy requires MFA for a user whose password is valid but who **has no factor yet**, login does **not** issue a full session. Instead it returns `401 MFA_ENROLLMENT_REQUIRED` + an `mfaEnrollmentToken` (an `awcms_mfa_challenges` row with `purpose='enrollment'`). That token authorises **only** `enroll/start`/`enroll/verify` (sent via the header `X-AWCMS-MFA-Enrollment-Token`, not as a general session); once enrollment finishes, the grant is consumed and an `aal2` session is issued. Fail-closed but **self-recoverable** — there is no admin lockout. Enforcement is gated by `isMfaFeatureEnabled()`: if enrollment is turned off, the policy is inert (it is impossible to create the MFA it demands).
 
-### 1.5b Masuk tenant lewat pemilihan atau perpindahan (ADR-0088)
+### 1.5b Entering a tenant by selection or switching (ADR-0088)
 
-Sejak `sql/115` ada dua jalan lain masuk ke sebuah tenant: menukar token seleksi
-(`POST /api/v1/auth/session/tenant`, setelah login tanpa header tenant) dan
-berpindah (`POST /api/v1/auth/session/switch`). **Keduanya menjalankan gerbang
-policy di §1.5 secara utuh** lewat `evaluateTenantEntry` — `MFA_REQUIRED` +
-challenge bila orangnya punya faktor, `MFA_ENROLLMENT_REQUIRED` + grant bila
-tenant tujuan mewajibkan MFA dan ia belum punya.
+Since `sql/115` there are two other ways into a tenant: exchanging a selection token
+(`POST /api/v1/auth/session/tenant`, after logging in without a tenant header) and
+switching (`POST /api/v1/auth/session/switch`). **Both run the §1.5 policy gate
+in full** via `evaluateTenantEntry` — `MFA_REQUIRED` +
+a challenge if the person has a factor, `MFA_ENROLLMENT_REQUIRED` + a grant if
+the destination tenant requires MFA and they do not have one yet.
 
-Itu bukan kehati-hatian berlebih: tanpa gerbang tersebut, seseorang yang login
-di tenant A yang longgar bisa berpindah ke tenant B yang mewajibkan MFA dan
-mendarat sebagai sesi `aal1` — perpindahan tenant menjadi **bypass MFA**, dan
-yang paling dirugikan justru tenant berpostur paling ketat. Sejak ADR-0087
-faktornya milik manusia, jadi authenticator yang sama memenuhi tuntutan tenant B
-tanpa enroll ulang.
+That is not excessive caution: without that gate, someone who logs in
+to a lax tenant A could switch into a tenant B that requires MFA and
+land as an `aal1` session — tenant switching becomes an **MFA bypass**, and
+the tenant with the strictest posture is the one harmed most. Since ADR-0087
+the factor belongs to the human, so the same authenticator satisfies tenant B's demand
+without re-enrolling.
 
-**Assurance tidak ikut berpindah**: sesi hasil pemilihan/perpindahan selalu lahir
-`aal1`, bahkan dari sesi `aal2`. Step-up adalah bukti segar untuk SATU tenant.
+**Assurance does not travel**: a session produced by selection/switching is always born
+`aal1`, even from an `aal2` session. Step-up is fresh proof for ONE tenant.
 
-### 1.6 Lockout per-factor (F4)
+### 1.6 Per-factor lockout (F4)
 
-Selain rate limit per-sumber dan cap `failed_attempts` per-challenge, tiap factor punya `failed_verify_count`/`locked_until` kumulatif (independen source IP dan rotasi challenge, meniru lockout password). Setelah `AUTH_MFA_MAX_VERIFY_ATTEMPTS` verify gagal, factor terkunci `AUTH_MFA_LOCKOUT_MINUTES` menit; verify sukses mereset. Pada login challenge, factor terkunci kolaps ke `MFA_CHALLENGE_INVALID`; pada step-up, mengembalikan `MFA_LOCKED` (429).
+Besides the per-source rate limit and the per-challenge `failed_attempts` cap, each factor has a cumulative `failed_verify_count`/`locked_until` (independent of the source IP and of challenge rotation, mirroring the password lockout). After `AUTH_MFA_MAX_VERIFY_ATTEMPTS` failed verifies, the factor is locked for `AUTH_MFA_LOCKOUT_MINUTES` minutes; a successful verify resets it. On a login challenge, a locked factor collapses to `MFA_CHALLENGE_INVALID`; on step-up, it returns `MFA_LOCKED` (429).
 
-**Sejak ADR-0087 lockout itu GLOBAL**, karena penghitungnya menempel pada faktor dan faktornya pindah — konsekuensi yang sama yang ADR-0086 ambil untuk password: penyerang yang tahu password seseorang bisa mengunci authenticator orang itu di semua tenant sekaligus. Aturan ADR-0086 berlaku penuh, jadi trade-off itu diambil bersama **ketiga** tuas pemulihannya yang kini juga global: recovery code, `disable` mandiri + enroll ulang, dan reset administratif. Sebelumnya lockout faktor di tenant A tidak bisa dibatalkan admin tenant B; sesudahnya siapa pun dari ketiga jalur itu memulihkan orangnya sepenuhnya — pemulihannya lebih baik dari sebelumnya, bukan lebih buruk.
+**Since ADR-0087 that lockout is GLOBAL**, because the counter is attached to the factor and the factor moved — the same consequence ADR-0086 took for passwords: an attacker who knows someone's password can lock that person's authenticator across every tenant at once. The ADR-0086 rule applies in full, so that trade-off is taken together with **all three** of its recovery levers, which are now global too: recovery codes, self-service `disable` + re-enrolment, and an administrative reset. Previously a factor lockout in tenant A could not be undone by an admin of tenant B; afterwards any of those three paths fully restores the person — recovery is better than before, not worse.
 
-## 2. Referensi konfigurasi / environment
+## 2. Configuration / environment reference
 
-| Variabel                         | Default                | Keterangan                                                                                               |
-| -------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| `AUTH_MFA_ENABLED`               | `false`                | Menggerbangi permukaan **enrollment** saja. Challenge/disable/step-up digerakkan state DB (fail-closed). |
-| `AUTH_MFA_SECRET_ENCRYPTION_KEY` | — (wajib bila enabled) | 32 byte base64 (`openssl rand -base64 32`). **Tidak ada default key.**                                   |
-| `AUTH_MFA_TOTP_ISSUER`           | `AWCMS`                | Label issuer pada `otpauth://`.                                                                          |
-| `AUTH_MFA_TOTP_PERIOD_SEC`       | `30`                   | Panjang timestep.                                                                                        |
-| `AUTH_MFA_TOTP_DIGITS`           | `6`                    | 6 atau 8.                                                                                                |
-| `AUTH_MFA_TOTP_WINDOW_STEPS`     | `1`                    | Toleransi drift ± timestep; dibatasi `[0, 10]`.                                                          |
-| `AUTH_MFA_CHALLENGE_TTL_SEC`     | `300`                  | Umur challenge login.                                                                                    |
-| `AUTH_MFA_STEPUP_TTL_SEC`        | `300`                  | Freshness step-up; pendek & server-controlled.                                                           |
-| `AUTH_MFA_MAX_VERIFY_ATTEMPTS`   | `5`                    | Lockout per-factor: kunci setelah N verify gagal (independen source IP & challenge).                     |
-| `AUTH_MFA_LOCKOUT_MINUTES`       | `15`                   | Durasi kunci factor setelah lockout tercapai.                                                            |
-| `AUTH_MFA_RATE_LIMIT_MAX`        | `5`                    | Batas verifikasi per sumber; juga cap `failed_attempts` per-challenge.                                   |
-| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC` | `300`                  | Window rate limit verifikasi.                                                                            |
+| Variable                         | Default                 | Description                                                                                            |
+| -------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `AUTH_MFA_ENABLED`               | `false`                 | Gates the **enrollment** surface only. Challenge/disable/step-up are driven by DB state (fail-closed). |
+| `AUTH_MFA_SECRET_ENCRYPTION_KEY` | — (required if enabled) | 32 bytes base64 (`openssl rand -base64 32`). **There is no default key.**                              |
+| `AUTH_MFA_TOTP_ISSUER`           | `AWCMS`                 | The issuer label in `otpauth://`.                                                                      |
+| `AUTH_MFA_TOTP_PERIOD_SEC`       | `30`                    | Timestep length.                                                                                       |
+| `AUTH_MFA_TOTP_DIGITS`           | `6`                     | 6 or 8.                                                                                                |
+| `AUTH_MFA_TOTP_WINDOW_STEPS`     | `1`                     | Drift tolerance ± timesteps; clamped to `[0, 10]`.                                                     |
+| `AUTH_MFA_CHALLENGE_TTL_SEC`     | `300`                   | Lifetime of a login challenge.                                                                         |
+| `AUTH_MFA_STEPUP_TTL_SEC`        | `300`                   | Step-up freshness; short & server-controlled.                                                          |
+| `AUTH_MFA_MAX_VERIFY_ATTEMPTS`   | `5`                     | Per-factor lockout: lock after N failed verifies (independent of source IP & challenge).               |
+| `AUTH_MFA_LOCKOUT_MINUTES`       | `15`                    | How long the factor stays locked once the lockout is reached.                                          |
+| `AUTH_MFA_RATE_LIMIT_MAX`        | `5`                     | Verification limit per source; also caps `failed_attempts` per challenge.                              |
+| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC` | `300`                   | Verification rate limit window.                                                                        |
 
-`config:validate` dan `security:readiness` menolak deployment dengan `AUTH_MFA_ENABLED=true` tetapi key kosong/placeholder/bukan 32 byte.
+`config:validate` and `security:readiness` reject a deployment with `AUTH_MFA_ENABLED=true` but an empty/placeholder/non-32-byte key.
 
-## 3. Runbook rotasi encryption key
+## 3. Encryption key rotation runbook
 
-Format ciphertext berversi (`v1:iv:tag:ct`). Skema rotasi zero-downtime butuh dukungan multi-key (belum ada); prosedur saat ini:
+The ciphertext format is versioned (`v1:iv:tag:ct`). A zero-downtime rotation scheme needs multi-key support (which does not exist yet); the current procedure:
 
-1. **Persiapan** — hasilkan key baru `openssl rand -base64 32`.
-2. **Rotasi terjadwal (window maintenance)** — karena hanya satu key aktif, mengganti key **meng-invalidasi** semua secret tersimpan (verifikasi TOTP akan gagal `MFA_MISCONFIGURED`). Prosedur aman: (a) umumkan window, (b) set key baru, (c) minta semua user MFA **enroll ulang** (factor lama otomatis tak bisa diverifikasi; admin dapat `admin/reset` massal bila perlu), atau (d) sebelum rotasi, jalankan disable massal terkontrol. Untuk deployment besar, tunggu dukungan multi-key (roadmap) sebelum rotasi rutin.
-3. **Verifikasi** — `bun run security:readiness` harus PASS untuk cek key; sampel satu login MFA end-to-end.
+1. **Preparation** — generate a new key with `openssl rand -base64 32`.
+2. **Scheduled rotation (maintenance window)** — because only one key is active, replacing the key **invalidates** every stored secret (TOTP verification will fail with `MFA_MISCONFIGURED`). The safe procedure: (a) announce the window, (b) set the new key, (c) ask every MFA user to **re-enroll** (old factors automatically cannot be verified; an admin can do a mass `admin/reset` if needed), or (d) run a controlled mass disable before rotating. For large deployments, wait for multi-key support (roadmap) before making rotation routine.
+3. **Verification** — `bun run security:readiness` must PASS the key check; sample one end-to-end MFA login.
 
-Jangan pernah men-commit key. Simpan di secrets manager / env deployment, bukan repo.
+Never commit a key. Store it in a secrets manager / the deployment env, not the repo.
 
-## 4. SOP recovery admin
+## 4. Admin recovery SOP
 
-**Kapan:** user kehilangan perangkat TOTP dan kehabisan recovery code.
+**When:** the user has lost their TOTP device and run out of recovery codes.
 
-1. **Verifikasi identitas out-of-band** (bukan lewat aplikasi) sesuai kebijakan organisasi — konfirmasi ini benar-benar user tersebut.
-2. Admin ber-permission `identity_access.mfa_admin.reset`, dengan sesi yang **sudah** ber-MFA sendiri (larangan self-reset menegakkan admin tak bisa mereset dirinya), memanggil `POST /api/v1/auth/mfa/admin/reset` `{ identityId, reason }`. `reason` **wajib** dan tercatat di audit `critical`.
-3. Factor user di-disable + recovery code dihapus. User kini bisa login dengan password (sesi aal1) dan **enroll ulang** MFA. **Efeknya global** (ADR-0087): karena faktornya milik manusia, reset ini juga mencabut MFA orang itu di setiap tenant lain tempat ia bekerja. Sampaikan itu saat verifikasi out-of-band — orangnya perlu enroll ulang satu kali, dan enrolment itu berlaku lagi untuk semua tenantnya.
-4. **Break-glass:** simpan minimal satu identitas admin ber-MFA aktif per tenant agar reset selalu bisa dilakukan; dokumentasikan pemegangnya. Jangan pernah menonaktifkan MFA seluruh admin sekaligus.
-5. Tinjau audit `mfa_admin_reset` secara berkala (severity `critical`) untuk mendeteksi penyalahgunaan reset.
+1. **Verify identity out of band** (not through the application) according to organisational policy — confirm this really is that user.
+2. An admin holding `identity_access.mfa_admin.reset`, with a session that **already** has MFA of its own (the self-reset prohibition enforces that an admin cannot reset themselves), calls `POST /api/v1/auth/mfa/admin/reset` `{ identityId, reason }`. `reason` is **mandatory** and is recorded in the `critical` audit.
+3. The user's factor is disabled + their recovery codes are deleted. The user can now log in with their password (an aal1 session) and **re-enroll** MFA. **The effect is global** (ADR-0087): because the factor belongs to the human, this reset also revokes that person's MFA in every other tenant they work in. Say so during the out-of-band verification — the person needs to re-enroll once, and that enrolment applies again to all of their tenants.
+4. **Break-glass:** keep at least one admin identity with active MFA per tenant so a reset can always be performed; document who holds it. Never disable MFA for all admins at once.
+5. Review the `mfa_admin_reset` audit periodically (severity `critical`) to detect reset abuse.
 
 ## 5. Threat model
 
-| Ancaman                       | Mitigasi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Password curian**           | Faktor kedua (TOTP) diwajibkan sebelum sesi penuh; login password valid + factor aktif hanya menerbitkan challenge, bukan sesi.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **Session fixation**          | Kenaikan aal1→aal2 (login challenge & step-up) merotasi sesi: token baru diterbitkan, sesi lama di-revoke.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Replay kode TOTP**          | `last_used_step` strictly-monotonic; advance via compare-and-swap sehingga dua request konkuren pada timestep sama hanya satu yang menang. Window drift dibatasi.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Replay recovery code**      | Konsumsi via UPDATE `... AND used_at IS NULL RETURNING` — dua request konkuren dengan kode sama hanya satu berhasil; hash-only, single-use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **Backup DB bocor**           | Secret TOTP terenkripsi AES-256-GCM dengan key di luar DB; tanpa key, backup tak menghasilkan secret. Recovery code hanya hash.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **Account enumeration**       | Cabang MFA tercapai hanya setelah password valid; semua deny challenge kolaps ke satu kode/pesan; jalur login mempertahankan dummy-hash anti-timing dan deny reason kolaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **Reset abuse**               | Admin reset butuh permission khusus (default-deny), reason wajib, audit `critical`, larangan self-reset, dan break-glass terdokumentasi.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Brute-force challenge**     | Tiga lapis: rate limit per sumber (`AUTH_MFA_RATE_LIMIT_*`), cap `failed_attempts` per-challenge, dan lockout kumulatif per-factor (`AUTH_MFA_MAX_VERIFY_ATTEMPTS`/`AUTH_MFA_LOCKOUT_MINUTES`) yang mengunci penyerang ber-password yang mencetak challenge baru + merotasi IP.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **Cross-tenant akses factor** | Tabel MFA yang **tenant-scoped** (`awcms_mfa_challenges`, `awcms_tenant_mfa_policies`, plus kedua tabel `awcms_identity_mfa_*` yang kini sejarah) RLS `ENABLE`+`FORCE` dengan policy `tenant_id = current_setting('app.current_tenant_id')`; app connect sebagai `awcms_app` (non-superuser). Kedua tabel **principal** sengaja tanpa RLS (ADR-0087) — tak ada `tenant_id` untuk dibandingkan, karena satu manusia memang satu faktor untuk semua tenantnya. Penggantinya: empat kontrol ADR-0085 (hak dipersempit, gerbang bentuk-baca per-call-site `bun run identity:principal-access:check`, `secret_ciphertext` tak pernah meninggalkan modul store, batas otorisasi tidak bergerak), plus hop identitas→principal ber-kunci `(tenant_id, id)` sehingga id identitas dari tenant lain tidak me-resolve apa pun. |
-| **MFA disabled diam-diam**    | `security:readiness` `critical` gagal bila `AUTH_MFA_ENABLED=true` tanpa key valid.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Threat                         | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Stolen password**            | A second factor (TOTP) is required before a full session; a valid password login with an active factor only issues a challenge, not a session.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Session fixation**           | The aal1→aal2 rise (login challenge & step-up) rotates the session: a new token is issued and the old session is revoked.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **TOTP code replay**           | `last_used_step` is strictly monotonic; it advances via compare-and-swap so that of two concurrent requests on the same timestep only one wins. The drift window is bounded.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Recovery code replay**       | Consumption via `UPDATE ... AND used_at IS NULL RETURNING` — of two concurrent requests with the same code only one succeeds; hash-only, single-use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Leaked DB backup**           | The TOTP secret is encrypted with AES-256-GCM using a key held outside the DB; without the key, a backup yields no secret. Recovery codes are hashes only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Account enumeration**        | The MFA branch is reached only after the password is valid; every challenge deny collapses to one code/message; the login path keeps its anti-timing dummy hash and its collapsed deny reasons.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Reset abuse**                | An admin reset needs a dedicated permission (default-deny), a mandatory reason, a `critical` audit, the self-reset prohibition, and documented break-glass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Challenge brute-force**      | Three layers: a per-source rate limit (`AUTH_MFA_RATE_LIMIT_*`), a per-challenge `failed_attempts` cap, and a cumulative per-factor lockout (`AUTH_MFA_MAX_VERIFY_ATTEMPTS`/`AUTH_MFA_LOCKOUT_MINUTES`) that locks out a password-holding attacker who mints new challenges + rotates IPs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Cross-tenant factor access** | The MFA tables that are **tenant-scoped** (`awcms_mfa_challenges`, `awcms_tenant_mfa_policies`, plus the two `awcms_identity_mfa_*` tables that are now history) have RLS `ENABLE`+`FORCE` with the policy `tenant_id = current_setting('app.current_tenant_id')`; the app connects as `awcms_app` (non-superuser). Both **principal** tables deliberately have no RLS (ADR-0087) — there is no `tenant_id` to compare against, because one human really is one factor for all of their tenants. The replacement: the four ADR-0085 controls (narrowed privileges, a per-call-site read-shape gate `bun run identity:principal-access:check`, `secret_ciphertext` never leaving the store module, and the authorization boundary not moving), plus an identity→principal hop keyed by `(tenant_id, id)` so that an identity id from another tenant resolves to nothing. |
+| **MFA silently disabled**      | `security:readiness` fails `critical` if `AUTH_MFA_ENABLED=true` without a valid key.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-## 6. Mapping standar
+## 6. Standards mapping
 
 **OWASP ASVS v4 (Authentication):**
 
-- V2.1 (password) — dipertahankan dari #147 (argon2id, lockout, anti-timing).
-- V2.2.1 (anti-enumeration) — respons/timing seragam; challenge kolaps.
-- V2.8 (OTP verifier) — RFC 6238 TOTP, HMAC-SHA1, single-use per timestep (anti-replay), window terbatas, constant-time compare.
-- V2.10 (service auth secrets) — key enkripsi dari env/secrets manager, tanpa default.
-- V3 (session) — opaque token, rotasi saat privilege rise (anti-fixation), assurance level.
-- V6.2 (kriptografi) — AES-256-GCM (authenticated), IV acak per operasi.
+- V2.1 (password) — carried over from #147 (argon2id, lockout, anti-timing).
+- V2.2.1 (anti-enumeration) — uniform response/timing; collapsed challenges.
+- V2.8 (OTP verifier) — RFC 6238 TOTP, HMAC-SHA1, single-use per timestep (anti-replay), bounded window, constant-time compare.
+- V2.10 (service auth secrets) — the encryption key comes from the env/a secrets manager, with no default.
+- V3 (session) — opaque token, rotation on privilege rise (anti-fixation), assurance level.
+- V6.2 (cryptography) — AES-256-GCM (authenticated), a random IV per operation.
 
-**ISO/IEC 27001/27002 (Annex A / kontrol):**
+**ISO/IEC 27001/27002 (Annex A / controls):**
 
-- A.5.17 / A.9.4 (authentication information & akses) — MFA untuk akun berprivilege, step-up aksi sensitif.
-- A.8.5 (secure authentication) — faktor kedua, assurance level.
-- A.8.24 (kriptografi) — enkripsi secret at-rest, manajemen key.
-- A.8.15 / A.5.28 (logging & bukti) — audit `mfa_*` termasuk `critical` untuk admin reset.
+- A.5.17 / A.9.4 (authentication information & access) — MFA for privileged accounts, step-up on sensitive actions.
+- A.8.5 (secure authentication) — a second factor, assurance levels.
+- A.8.24 (cryptography) — secret encryption at rest, key management.
+- A.8.15 / A.5.28 (logging & evidence) — `mfa_*` audits including `critical` for an admin reset.

@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0047-mini-micro-frozen-foundation-built-here.id.md)
+
 # ADR-0047 — `awcms-mini` and `awcms-micro` are frozen as reference; foundation features are built directly here
 
 - **Status:** Superseded by [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
@@ -7,7 +9,7 @@
   (online-first ERP/SaaS superset positioning), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md)
   (`awcms` is the system of record, `awcms-astro` is the experience layer).
   Amends the **mini-first** rule stated in [`AGENTS.md`](../../AGENTS.md)
-  §"Relasi dengan awcms-mini" and [`docs/awcms/alur-pengembangan-mini-first.md`](../awcms/alur-pengembangan-mini-first.md).
+  §"Relationship with awcms-mini" and [`docs/awcms/alur-pengembangan-mini-first.md`](../awcms/alur-pengembangan-mini-first.md).
 
 > **Read as history.** This ADR froze `awcms-mini`/`awcms-micro` as a reference
 > that could **still be ported OUT of**. [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
@@ -30,9 +32,9 @@
 `AGENTS.md` states the development pathway for this repository in two sentences
 that, together, forbid starting foundation work here:
 
-> "Fitur fondasi diuji lebih dulu di awcms-mini, baru di-port ke repo ini."
+> "Foundation features are proven first in awcms-mini, then ported into this repo."
 >
-> "Repo ini bukan tempat merintis fitur fondasi dari nol."
+> "This repo is not the place to pioneer foundation features from scratch."
 
 That rule was correct for the conditions that produced it: `awcms-mini` was the
 standard repo where foundation capability was proven cheaply, and this repo

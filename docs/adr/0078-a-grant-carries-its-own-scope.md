@@ -1,109 +1,109 @@
-# ADR-0078 — Sebuah grant membawa scope-nya sendiri
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0078-a-grant-carries-its-own-scope.id.md)
 
-- **Status:** Diterima (2026-08-10). Tabelnya sudah ada dan sudah dibaca jalur
-  otorisasi; penulis produksinya mendarat di PR berikutnya (Gelombang 3 PR 3.2).
-- **Konteks:** Issue #423 Gelombang 3 PR 3.1.
-- **Menggantikan/menyempurnakan:** tidak ada. Melebarkan bentuk grant yang
-  digerbangi [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
-  dan berdampingan dengan lapisan business-scope
+# ADR-0078 — A grant carries its own scope
+
+- **Status:** Accepted (2026-08-10). The table already exists and is already read
+  by the authorization path; its production writer lands in the next PR (Wave 3
+  PR 3.2).
+- **Context:** Issue #423 Wave 3 PR 3.1.
+- **Supersedes/refines:** none. It widens the grant shape gated by
+  [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
+  and sits alongside the business-scope layer of
   [ADR-0060](0060-business-scope-hierarchy-provided-by-tenant-admin.md).
 
-## Keputusan
+## Decision
 
-Sebuah grant peran boleh membawa **scope**-nya sendiri. Tabel baru
-`awcms_access_policies` (`sql/102`) menyimpan `subject → role → (scope_type,
-scope_id)` berikut penanggalan efektif, status, dan pencabutan.
-`fetchGrantedPermissionKeys` membaca **kedua** bentuk grant lewat `UNION ALL`.
+A role grant may carry its own **scope**. The new table
+`awcms_access_policies` (`sql/102`) stores `subject → role → (scope_type,
+scope_id)` along with effective dating, status, and revocation.
+`fetchGrantedPermissionKeys` reads **both** grant shapes via `UNION ALL`.
 
-Dengan tabel barunya kosong, hasil fungsi itu **identik** dengan sebelumnya.
-Itulah properti yang menyangga seluruh PR ini.
+With its new table empty, that function's result is **identical** to before.
+That is the property holding up this entire PR.
 
-## Kenapa tabel BARU, bukan kolom pada `awcms_access_assignments`
+## Why a NEW table, not a column on `awcms_access_assignments`
 
-Tiga alasan, dan yang pertama yang menyelesaikannya.
+Three reasons, and the first one settles it.
 
-**1. Indeks unik lamalah yang justru harus mati.**
+**1. It is the old unique index that has to die.**
 `awcms_access_assignments_key UNIQUE (tenant_id, tenant_user_id, role_id)`
-menyatakan "satu orang memegang satu peran paling banyak sekali". Satu peran di
-tiga scope adalah **tiga baris**, jadi indeks itu harus dicabut. Mencabut indeks
-unik dari tabel otorisasi yang hidup, di migrasi yang sama dengan yang melebarkan
-makna tabelnya, adalah perubahan dengan mode kegagalan terburuk yang tersedia di
-sini: kalau salah, ia salah dalam arah **membolehkan**, dan tak ada yang
-memerah.
+states "a person holds a role at most once". One role in three scopes is **three
+rows**, so that index has to be dropped. Dropping a unique index from a live
+authorization table, in the same migration that widens the table's meaning, is a
+change with the worst failure mode available here: if it is wrong, it is wrong in
+the **permitting** direction, and nothing turns red.
 
-**2. Memperluas `awcms_business_scope_assignments` di tempat menulis ulang dua
-pembaca SoD di PR yang sama.** `business-scope-facts.ts` membaca tabel itu dua
-kali untuk fakta SoD. Menggabungkan perubahan bentuk-scope dengan perubahan
-presisi-SoD berarti tak satu pun dari keduanya bisa dibalik sendirian.
+**2. Extending `awcms_business_scope_assignments` in place rewrites two SoD
+readers in the same PR.** `business-scope-facts.ts` reads that table twice for
+SoD facts. Merging a scope-shape change with an SoD-precision change means
+neither of them can be reverted on its own.
 
-**3. Tabel ketiga memungkinkan expand/migrate/contract TANPA dual-write.** Tabel
-ini mendarat kosong, readernya membaca keduanya, dan PR 3.3 memindahkan baris
-satu per satu. Tak pernah ada jendela di mana satu tulis harus mengenai dua
-tabel dan bisa gagal separuh.
+**3. A third table enables expand/migrate/contract WITHOUT dual-write.** This
+table lands empty, its reader reads both, and PR 3.3 moves rows one at a time.
+There is never a window in which a single write must hit two tables and can fail
+halfway.
 
-## Kenapa `subject_type` hanya menerima satu nilai
+## Why `subject_type` accepts only one value
 
-Rencana program menulis `CHECK (subject_type IN ('tenant_user', 'user_group'))`
-plus XOR dua kolom subjek. Grup pengguna **belum ada** (Gelombang 3 PR 3.5), jadi:
+The programme plan writes `CHECK (subject_type IN ('tenant_user', 'user_group'))`
+plus an XOR of two subject columns. User groups **do not exist yet** (Wave 3 PR
+3.5), so:
 
-- CHECK yang memuat `'user_group'` menyatakan kapabilitas yang tak bisa
-  diproduksi apa pun, dan
-- kolom `user_group_id` tanpa tabel tujuan adalah FK yang tak bisa ditulis.
+- a CHECK containing `'user_group'` states a capability nothing can produce, and
+- a `user_group_id` column without a target table is an unwritable FK.
 
-Disiplin yang sama dipakai `sql/100` untuk `origin_auth`: nilai keempat berjarak
-satu `DROP CONSTRAINT` / `ADD CONSTRAINT` dari migrasi yang membuatnya bisa
-diproduksi. Kolom **diskriminatornya** ada sejak sekarang justru supaya
-penambahan nilai nanti bukan backfill.
+`sql/100` applies the same discipline to `origin_auth`: its fourth value is one
+`DROP CONSTRAINT` / `ADD CONSTRAINT` away from the migration that makes it
+producible. The **discriminator** column exists from now precisely so that adding
+the value later is not a backfill.
 
-## Kenapa tipe kembalian `fetchGrantedPermissionKeys` BELUM berubah
+## Why the return type of `fetchGrantedPermissionKeys` has NOT changed yet
 
-Rencana menjadikannya `{ keys, scopes }`, karena evaluasi ber-scope (PR 3.4)
-butuh peta itu. Ia tetap `Set<string>` di sini.
+The plan makes it `{ keys, scopes }`, because scoped evaluation (PR 3.4) needs
+that map. It stays a `Set<string>` here.
 
-Mengirimkan field `scopes` yang tak dibaca apa pun adalah bau
-kapabilitas-tak-terpakai yang persis dihapus [ADR-0077](0077-one-outbox-sync-pull-reads-domain-events.md)
-dari `awcms_sync_outbox` — dan ia akan mengaduk **sebelas** call site di PR yang
-paling tak mampu menanggung diff tak berkaitan. Tipenya berubah di PR yang
-mengonsumsinya.
+Shipping a `scopes` field that nothing reads is exactly the unused-capability
+smell [ADR-0077](0077-one-outbox-sync-pull-reads-domain-events.md) removed from
+`awcms_sync_outbox` — and it would churn **eleven** call sites in the PR least
+able to carry an unrelated diff. The type changes in the PR that consumes it.
 
-**Namanya tidak boleh berubah.** `scripts/access-chokepoint-check.ts` mengunci
-sinyal "handler ini memutuskan permission" pada literal
-`fetchGrantedPermissionKeys(`; sebuah rename meninggalkan gerbang itu **hijau
-sambil melaporkan nol handler yang memutuskan**. Itulah sebabnya gerbang yang
-sama juga meng-assert hitungannya bukan nol.
+**Its name must not change.** `scripts/access-chokepoint-check.ts` anchors the
+"this handler decides permission" signal on the literal
+`fetchGrantedPermissionKeys(`; a rename leaves that gate **green while reporting
+zero deciding handlers**. That is why the same gate also asserts its count is not
+zero.
 
-## Apa yang disaring tiap cabang, dan kenapa keduanya berbeda
+## What each branch filters, and why they differ
 
-Keduanya membuang peran yang di-soft-delete. Hanya cabang policy yang menyaring
-`status` dan penanggalan efektif: baris assignment tak punya siklus hidup untuk
-disaring — ia ada atau tidak — sedangkan sebuah policy bisa dijadwalkan,
-kedaluwarsa, atau dicabut.
+Both drop soft-deleted roles. Only the policy branch filters `status` and
+effective dating: an assignment row has no lifecycle to filter — it exists or it
+does not — whereas a policy can be scheduled, expire, or be revoked.
 
-`effective_to > now()` dievaluasi **di basis data**, bukan terhadap jam yang
-dikirim pemanggil: grant yang kedaluwarsa menurut gagasan aplikasi tentang waktu
-adalah grant yang bisa diperpanjang oleh bug aplikasi. (Perhatikan `now()` di
-Postgres adalah instan **mulai transaksi**, yang justru yang diinginkan di sini —
-satu keputusan otorisasi tidak boleh melihat dua waktu berbeda.)
+`effective_to > now()` is evaluated **in the database**, not against a clock sent
+by the caller: a grant that has expired according to the application's notion of
+time is a grant an application bug can extend. (Note that `now()` in Postgres is
+the **transaction start** instant, which is exactly what is wanted here — a
+single authorization decision must not see two different times.)
 
-## Isolasi lintas-tenant
+## Cross-tenant isolation
 
-Setiap rujukan subjek/peran/aktor adalah FK **komposit** `(tenant_id, <col>)`,
-karena PostgreSQL menjalankan pemeriksaan integritas referensial sebagai
-**pemilik tabel** dan **melewati** row-level security saat melakukannya — jadi
-`REFERENCES awcms_tenant_users (id)` polos tetap bisa menunjuk baris tenant lain
-bahkan di bawah FORCE ROW LEVEL SECURITY. Pola dan alasannya tercatat penuh di
-header `sql/027`.
+Every subject/role/actor reference is a **composite** FK `(tenant_id, <col>)`,
+because PostgreSQL runs referential integrity checks as the **table owner** and
+**bypasses** row-level security while doing so — so a bare
+`REFERENCES awcms_tenant_users (id)` can still point at another tenant's row even
+under FORCE ROW LEVEL SECURITY. The pattern and its reasoning are recorded in
+full in the `sql/027` header.
 
-## Konsekuensi
+## Consequences
 
-- `awcms_access_policies` masuk `GRANT_TABLES` gerbang
-  `access:grant-readers:check` **di PR yang sama dengan yang menciptakannya**,
-  jadi tak pernah ada berkas yang merakit join atasnya tanpa tercatat.
-- Sampai PR 3.2, satu-satunya penulis tabel ini adalah test integrasi. Itu
-  **bukan** keadaan yang boleh dibiarkan menetap: tabel tanpa penulis adalah
-  cacat yang ADR-0077 hapus, dan `docs/PROJECT_STATE.md` §4 mencatat 3.1 dan 3.2
-  sebagai satu unit komitmen justru karena itu.
-- `scope_type = 'tenant'` adalah satu-satunya bentuk yang ditulis sampai PR 3.4
-  mengualifikasi scope saat evaluasi. Sebelum itu, sebuah Policy dan sebuah
-  assignment memberi jawaban yang sama persis — yang membuat PR 3.3 bisa
-  memindahkan baris tanpa mengubah satu pun keputusan.
+- `awcms_access_policies` enters the `GRANT_TABLES` of the
+  `access:grant-readers:check` gate **in the same PR that creates it**, so there
+  is never a file assembling a join over it without being recorded.
+- Until PR 3.2, the only writer of this table is the integration test. That is
+  **not** a state that may be allowed to settle: a table without a writer is the
+  defect ADR-0077 removed, and `docs/PROJECT_STATE.md` §4 records 3.1 and 3.2 as
+  a single commitment unit precisely because of that.
+- `scope_type = 'tenant'` is the only shape written until PR 3.4 qualifies scope
+  at evaluation time. Before then, a Policy and an assignment give exactly the
+  same answer — which is what lets PR 3.3 move rows without changing a single
+  decision.

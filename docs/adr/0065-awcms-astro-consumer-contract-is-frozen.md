@@ -1,88 +1,89 @@
-# ADR-0065 — Kontrak yang dipakai `awcms-astro` dibekukan dan digerbangi di sini
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0065-awcms-astro-consumer-contract-is-frozen.id.md)
+
+# ADR-0065 — The contract `awcms-astro` consumes is frozen and gated here
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + BFF), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (kredensial mesin + introspeksi sesi), [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §4 (temuannya), ADR-0027 di `awcms-astro` (penahanan ADR-0021 selesai)
+- **Date:** 2026-08-04
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + BFF), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (machine credentials + session introspection), [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §4 (the finding), ADR-0027 in `awcms-astro` (containment of ADR-0021 complete)
 
-## Konteks
+## Context
 
-### 1. Snapshot beku yang ada tidak mencakupnya
+### 1. The existing frozen snapshot does not cover it
 
-`tests/fixtures/openapi-pre-migration-snapshot.openapi.yaml` adalah monolit
-**PRA-migrasi #182**. Tugasnya membuktikan fragmentasi tidak pernah memutasi
-kontrak yang sudah ada SEBELUM pemecahan — dan ia mengerjakan tugas itu dengan
-baik.
+`tests/fixtures/openapi-pre-migration-snapshot.openapi.yaml` is the
+**PRE-#182-migration** monolith. Its job is to prove that fragmentation never
+mutated the contract that already existed BEFORE the split — and it does that
+job well.
 
-Tetapi **setiap permukaan yang `awcms-astro` benar-benar panggil mendarat
-SESUDAHNYA**: `/auth/session` dan `/access/machine-credentials` (ADR-0049),
-`/media/objects` (#318), `/media/public-origin` (#370), traversal cursor
-`/blog/posts` (#317). Diverifikasi: pencarian keempat path itu di berkas
-snapshot mengembalikan **nol**.
+But **every surface `awcms-astro` actually calls landed AFTERWARDS**:
+`/auth/session` and `/access/machine-credentials` (ADR-0049),
+`/media/objects` (#318), `/media/public-origin` (#370), the `/blog/posts`
+cursor traversal (#317). Verified: searching that snapshot file for those four
+paths returns **zero**.
 
-Akibatnya: **mengubah bentuk respons salah satunya HIJAU di CI repo ini dan
-merusak build repo sebelah** — kegagalan yang muncul di tempat orang yang
-menyebabkannya tidak melihat.
+The consequence: **changing the response shape of any one of them is GREEN in
+this repo's CI and breaks the neighbouring repo's build** — a failure that
+surfaces where the person who caused it cannot see it.
 
-### 2. Kenapa snapshot KEDUA, bukan memperluas yang pertama
+### 2. Why a SECOND snapshot, not extending the first
 
-Keduanya menjawab pertanyaan berbeda. Yang pra-migrasi harus tetap beku **pada
-momennya sendiri** untuk terus menjawab pertanyaannya ("apakah fragmentasi
-mengubah kontrak lama?"). Memperluasnya berarti membandingkan bundel dengan
-salinan dirinya sendiri untuk bagian baru — persis kesalahan yang header berkas
-itu peringatkan.
+The two answer different questions. The pre-migration one must stay frozen **at
+its own moment** to keep answering its own question ("did fragmentation change
+the old contract?"). Extending it means comparing the bundle against a copy of
+itself for the new parts — exactly the mistake that file's header warns about.
 
-### 3. Closure `$ref` adalah intinya
+### 3. The `$ref` closure is the whole point
 
-Membekukan enam objek path saja nyaris tak berguna. `GET /api/v1/blog/posts`
-hanya beberapa baris yang mem-`$ref` schema `BlogPost`, dan **kerusakan yang
-menarik terjadi di SCHEMA** — field diganti nama, tipe dipersempit, nullable
-dicabut. Jadi gerbang ini menelusuri setiap `$ref` yang terjangkau dari keenam
-path dan membekukan komponennya juga: **6 path, 16 komponen**.
+Freezing six path objects alone is nearly useless. `GET /api/v1/blog/posts` is
+just a few lines that `$ref` the `BlogPost` schema, and **the interesting
+breakage happens in the SCHEMA** — fields renamed, types narrowed, nullable
+revoked. So this gate walks every `$ref` reachable from those six paths and
+freezes their components too: **6 paths, 16 components**.
 
-Dibuktikan lewat mutasi: mengganti nama `publicUrl` di dalam
-`ResolvedMediaReference` — sebuah komponen, bukan objek path — **memerahkan**
-gerbang, sementara menambah field opsional di komponen yang sama **lolos**.
+Proven by mutation: renaming `publicUrl` inside `ResolvedMediaReference` — a
+component, not a path object — **turns the gate red**, while adding an optional
+field to that same component **passes**.
 
-## Keputusan
+## Decision
 
-`bun run api:consumer-contract:check` masuk rantai `bun run check`, dengan
-fixture `tests/fixtures/awcms-astro-consumer-contract.openapi.yaml` yang
-di-generate `:generate`.
+`bun run api:consumer-contract:check` enters the `bun run check` chain, with the
+fixture `tests/fixtures/awcms-astro-consumer-contract.openapi.yaml` generated by
+`:generate`.
 
-**Aturannya subset aditif, bukan kesetaraan.** Menambah field opsional tidak
-merusak konsumen; menghapus atau mengubah tipe merusak. Jadi kontrak beku wajib
-tetap TERKANDUNG di bundel saat ini — aturan yang sama dengan test pra-migrasi.
+**The rule is additive subset, not equality.** Adding an optional field does not
+break a consumer; removing one or changing a type does. So the frozen contract
+must remain CONTAINED in the current bundle — the same rule as the pre-migration
+test.
 
-**Daftar `CONSUMER_PATHS` diturunkan dengan mem-grep repo sebelah**, bukan dari
-ingatan dan bukan dari asumsi repo ini tentang apa yang "mungkin dibutuhkan"
-sebuah build situs statis. Tiap entri membawa alasan pemanggilannya.
+**The `CONSUMER_PATHS` list is derived by grepping the neighbouring repo**, not
+from memory and not from this repo's assumptions about what a static site build
+"might need". Each entry carries the reason it is called.
 
-**Regenerasi adalah tindakan sengaja.** Ia berarti "kontrak ini berubah dan
-konsumennya harus ikut berubah" — dan sisi `awcms-astro` wajib diperbarui dalam
-napas yang sama. Header fixture menyatakan itu, dan pesan kegagalan gerbang
-mengulanginya, karena orang yang membacanya sedang berada di repo yang salah
-untuk menyadarinya sendiri.
+**Regeneration is a deliberate act.** It means "this contract changed and its
+consumer must change with it" — and the `awcms-astro` side must be updated in
+the same breath. The fixture header says so, and the gate's failure message
+repeats it, because the person reading it is standing in the wrong repo to
+realise it on their own.
 
-**Path konsumen yang HILANG melempar, bukan menyusutkan kontrak diam-diam.**
-Membiarkannya lolos akan mengubah "endpoint yang dipakai `awcms-astro` dihapus"
-menjadi pemeriksaan yang lulus — persis kegagalan yang gerbang ini ada untuk
-mencegah.
+**A MISSING consumer path throws, it does not silently shrink the contract.**
+Letting it pass would turn "an endpoint `awcms-astro` uses was deleted" into a
+check that succeeds — exactly the failure this gate exists to prevent.
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Batas antar-repo punya penjaga di sisi yang mengubahnya. Enam
-permukaan plus enam belas komponen tidak bisa lagi berubah non-aditif tanpa CI
-di sini merah lebih dulu.
+**What we get.** The cross-repo boundary has a guard on the side that changes
+it. Six surfaces plus sixteen components can no longer change non-additively
+without CI here going red first.
 
-**Yang dibayar.** Satu fixture 1.000+ baris yang harus di-regenerate saat kontrak
-memang berubah. Diterima: alternatifnya adalah menemukannya lewat build repo lain
-yang gagal, berhari-hari kemudian.
+**What we pay.** One 1,000+ line fixture that must be regenerated when the
+contract genuinely changes. Accepted: the alternative is discovering it through
+another repo's failing build, days later.
 
-**Yang TIDAK dijamin.** Ini kontrak SKEMA, bukan kontrak perilaku. Ia tidak
-menangkap perubahan makna dengan bentuk sama (mis. `publicUrl` yang mulai
-mengembalikan URL relatif), dan tidak menggantikan test integrasi. Dinyatakan
-supaya tak dibaca sebagai jaminan yang lebih besar dari sebenarnya.
+**What is NOT guaranteed.** This is a SCHEMA contract, not a behaviour contract.
+It does not catch a change of meaning with the same shape (e.g. `publicUrl`
+starting to return a relative URL), and it does not replace integration tests.
+Stated so it is not read as a bigger guarantee than it is.
 
-**Nol migrasi, nol permission, nol perubahan runtime.** Bundel OpenAPI tidak
-berubah — hanya dibekukan sebagian.
+**Zero migrations, zero permissions, zero runtime changes.** The OpenAPI bundle
+does not change — it is only partly frozen.

@@ -1,40 +1,42 @@
-# ADR-0024 — Penomoran SemVer melanjutkan lini major legacy (lompat ke 5.0.0), bukan reset ke 1.0.0
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0024-semver-numbering-continues-legacy-major-line.id.md)
+
+# ADR-0024 — SemVer numbering continues the legacy major line (jump to 5.0.0), not a reset to 1.0.0
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-16
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** ADR-0001 (rebuild), ADR-0022 (basis untuk ERP, bukan ERP), `docs/awcms/release-process.md` §baris 3 (menandai keputusan ini sebagai terbuka sebelum ADR ini), `.changeset/config.json`, `CHANGELOG.md`
+- **Date:** 2026-07-16
+- **Decision maker:** @ahliweb
+- **Related:** ADR-0001 (rebuild), ADR-0022 (a foundation for ERP, not an ERP), `docs/awcms/release-process.md` §line 3 (which marked this decision as open before this ADR), `.changeset/config.json`, `CHANGELOG.md`
 
-## Konteks
+## Context
 
-`package.json` repo ini dimulai dari `0.1.0` saat fondasi ditulis ulang dari nol (ADR-0001). Namun GitHub Releases repo ini (`github.com/ahliweb/awcms/releases`) masih menyimpan riwayat tag dari kodebase **legacy** (sebelum `chore(foundation): remove legacy repository files`): `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.0.0`, `4.1.1`, `4.3.1`, `4.5.0`, hingga `4.6.0` (semua ditandai Pre-release, isinya murni bump dependency oleh dependabot di struktur multi-app lama — `awcms-public`, `awcms-mcp`, dst. — yang sudah tidak ada di `main` sekarang).
+This repo's `package.json` started at `0.1.0` when the foundation was rewritten from scratch (ADR-0001). But this repo's GitHub Releases (`github.com/ahliweb/awcms/releases`) still hold the tag history of the **legacy** codebase (before `chore(foundation): remove legacy repository files`): `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.0.0`, `4.1.1`, `4.3.1`, `4.5.0`, up to `4.6.0` (all marked Pre-release, their content purely dependabot dependency bumps in the old multi-app structure — `awcms-public`, `awcms-mcp`, etc. — which no longer exists on today's `main`).
 
-`docs/awcms/release-process.md` (ditulis sebelum ADR ini) secara eksplisit menandai ini sebagai keputusan yang belum diambil: _"rilis pertama `awcms` (`v0.1.0` atau `v1.0.0`, tergantung kebijakan versi awal yang disepakati)"_ — draft dokumen itu sendiri tidak mempertimbangkan opsi ketiga (melanjutkan nomor `v4.x` lama), karena ditulis sebelum realisasi bahwa tag legacy `v4.6.0` masih ada dan terlihat publik di halaman Releases.
+`docs/awcms/release-process.md` (written before this ADR) explicitly marked this as a decision not yet taken: _"the first `awcms` release (`v0.1.0` or `v1.0.0`, depending on the agreed initial version policy)"_ — that draft itself did not consider the third option (continuing the old `v4.x` numbers), because it was written before the realisation that the legacy tag `v4.6.0` still exists and is publicly visible on the Releases page.
 
-Masalah konkretnya: bila rilis pertama repo yang sudah ditulis ulang total ini diberi nomor `0.1.0` atau bahkan `1.0.0`, seseorang yang membandingkan dengan tag `v4.6.0` yang sudah ada (dan masih terlihat sebagai rilis "terbaru" secara historis) akan salah baca urutan versi sebagai kemunduran (downgrade), padahal ini justru penulisan ulang total yang lebih maju.
+The concrete problem: if the first release of this totally rewritten repo is numbered `0.1.0` or even `1.0.0`, anyone comparing it against the existing `v4.6.0` tag (still historically visible as the "latest" release) will misread the version order as a downgrade, when it is in fact a total rewrite that is further ahead.
 
-## Keputusan
+## Decision
 
-Kami memutuskan:
+We decided:
 
-1. **Nomor versi package.json dilompat manual dari `0.2.0` ke `5.0.0`** — bukan hasil komputasi `bun run changeset:version` (tool changesets hanya bisa menambah dari versi saat ini per level bump changeset, tidak bisa "lompat ke versi tertentu"). Ini melanjutkan lini major dari tag legacy terakhir (`v4.6.0`) ke major berikutnya (`5.0.0`), konsisten dengan makna SemVer: rebuild total adalah breaking change yang layak menaikkan major version, dan `5.0.0` adalah major berikutnya setelah `4.x`.
+1. **The package.json version number is jumped manually from `0.2.0` to `5.0.0`** — not computed by `bun run changeset:version` (the changesets tool can only increment from the current version by the changeset bump level; it cannot "jump to a specific version"). This continues the major line from the last legacy tag (`v4.6.0`) to the next major (`5.0.0`), consistent with the meaning of SemVer: a total rebuild is a breaking change that deserves a major bump, and `5.0.0` is the next major after `4.x`.
 
-2. **`5.0.0` TIDAK menyatakan kompatibilitas apa pun dengan rilis legacy `v2.x`–`v4.x`.** Ini bukan "AWCMS v4.6.0 plus fitur baru" — seluruh kodebase ditulis ulang dari nol di atas fondasi baru (Bun-only, Astro 7, PostgreSQL/RLS, modular monolith; ADR-0001) dengan skop yang juga berubah (basis untuk ERP, bukan ERP itu sendiri; ADR-0022). Kontinuitas nomor semata-mata untuk **identitas produk** (menghindari kesan mundur), bukan klaim kompatibilitas API/data/deployment.
+2. **`5.0.0` does NOT assert any compatibility with the legacy `v2.x`–`v4.x` releases.** This is not "AWCMS v4.6.0 plus new features" — the entire codebase was rewritten from scratch on a new foundation (Bun-only, Astro 7, PostgreSQL/RLS, modular monolith; ADR-0001) with a scope that also changed (a foundation for ERP, not the ERP itself; ADR-0022). Number continuity is purely about **product identity** (avoiding the impression of going backwards), not a claim of API/data/deployment compatibility.
 
-3. **Lompatan ini dicatat manual di `CHANGELOG.md`** (bukan lewat entry ter-generate `changeset version`) sebagai section `## 5.0.0` yang menjelaskan lompatan ini secara eksplisit, dengan tautan ke ADR ini. Changeset yang sudah pending sebelum lompatan ini (perbaikan CI, docs dwibahasa, bump dependency) dikonsumsi secara normal lebih dulu (`0.1.0` → `0.2.0`) sebelum lompatan manual dilakukan — supaya catatan perubahan nyata itu tidak hilang begitu saja ditimpa lompatan nomor.
+3. **The jump is recorded manually in `CHANGELOG.md`** (not via a `changeset version` generated entry) as a `## 5.0.0` section that explains the jump explicitly, with a link to this ADR. Changesets already pending before the jump (CI fixes, bilingual docs, dependency bumps) are consumed normally first (`0.1.0` → `0.2.0`) before the manual jump is made — so that the record of real changes is not simply swallowed by the number jump.
 
-4. **Belum ada git tag atau GitHub Release untuk `5.0.0`.** `.github/workflows/release.yml` (pipeline SBOM ganda, keyless signing, provenance, publish — didesain di `docs/awcms/release-process.md`) belum diimplementasikan. Membuat tag/release publik sekarang tanpa pipeline itu berarti melewati gate kualitas yang sudah didesain repo ini untuk dirinya sendiri (validate job, SBOM, signing, environment approval) — ditolak. `5.0.0` untuk saat ini murni angka di `package.json`/`CHANGELOG.md`, bukan rilis publik yang bisa ditarik (pull) siapa pun.
+4. **There is no git tag or GitHub Release for `5.0.0` yet.** `.github/workflows/release.yml` (dual SBOM pipeline, keyless signing, provenance, publish — designed in `docs/awcms/release-process.md`) has not been implemented. Creating a public tag/release now without that pipeline would mean skipping the quality gates this repo designed for itself (validate job, SBOM, signing, environment approval) — rejected. For now `5.0.0` is purely a number in `package.json`/`CHANGELOG.md`, not a public release anyone can pull.
 
-5. **`docs/awcms/release-process.md` baris 3 diperbarui** untuk mereferensikan ADR ini sebagai keputusan yang sudah diambil, menggantikan frasa "tergantung kebijakan versi awal yang disepakati".
+5. **`docs/awcms/release-process.md` line 3 is updated** to reference this ADR as a decision already taken, replacing the phrase "depending on the agreed initial version policy".
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** riwayat versi publik di GitHub Releases tidak pernah terlihat mundur; identitas produk "AWCMS" tetap satu garis lurus meski kodenya ditulis ulang total; keputusan yang sebelumnya ditandai terbuka di `release-process.md` sekarang terjawab dan tercatat.
-- **Trade-off:** ada "lubang" nomor versi (`0.2.0` → `5.0.0` langsung, tidak ada `1.x`–`4.x` yang benar-benar dirilis dari kodebase baru) yang harus dijelaskan ke pembaca changelog baru — sudah dimitigasi lewat catatan eksplisit di section `## 5.0.0` `CHANGELOG.md` dan ADR ini sendiri.
-- **Netral:** mulai `5.0.0`, seluruh bump versi berikutnya kembali memakai alur normal `bun run changeset:version` (increment dari `5.0.0` per level bump changeset) — lompatan manual ini adalah kejadian satu kali, bukan pola berulang.
+- **Positive:** the public version history on GitHub Releases never appears to go backwards; the "AWCMS" product identity stays a single straight line even though the code was rewritten completely; a decision previously marked open in `release-process.md` is now answered and recorded.
+- **Trade-off:** there is a "hole" in the version numbers (`0.2.0` → `5.0.0` directly, with no `1.x`–`4.x` ever actually released from the new codebase) that has to be explained to new changelog readers — already mitigated by the explicit note in the `## 5.0.0` section of `CHANGELOG.md` and by this ADR itself.
+- **Neutral:** from `5.0.0` onward, every subsequent version bump returns to the normal `bun run changeset:version` flow (incrementing from `5.0.0` per the changeset bump level) — this manual jump is a one-off event, not a recurring pattern.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Reset ke `1.0.0`** — ditolak (meski sempat jadi opsi yang dipertimbangkan): konsisten dengan framing "ditulis ulang dari nol", tapi berisiko dibaca sebagai downgrade dari `v4.6.0` yang sudah publik oleh siapa pun yang membandingkan nomor tanpa konteks penuh riwayat rebuild.
-- **Tetap di `0.1.0`/`0.2.0` (SemVer 0.x, "belum stabil")** — ditolak untuk saat ini: paling jujur soal status implementasi (baru fondasi Sprint 1–2, belum ada modul ERP), tapi tidak menjawab masalah konkret kesan-mundur terhadap `v4.6.0` yang mendorong keputusan ini. Catatan: keputusan ini TIDAK mengklaim fondasi sudah "stabil" pada `5.0.0` — kematangan modul tetap dinilai lewat mekanisme independen (`status: experimental|active` per modul, ADR-0008), bukan lewat angka major package.
-- **Buat tag/GitHub Release `v5.0.0` sekarang juga** — ditolak: `release.yml` belum ada; publish tanpa SBOM/signing/provenance/gate approval yang sudah didesain repo ini sendiri (`docs/awcms/release-process.md`) melanggar proses yang justru baru saja ditegaskan sebagai wajib.
+- **Reset to `1.0.0`** — rejected (though it was considered for a while): consistent with the "rewritten from scratch" framing, but it risks being read as a downgrade from the already-public `v4.6.0` by anyone comparing numbers without the full rebuild history.
+- **Stay at `0.1.0`/`0.2.0` (SemVer 0.x, "not yet stable")** — rejected for now: it is the most honest about implementation status (only the Sprint 1–2 foundation, no ERP module yet), but it does not answer the concrete impression-of-going-backwards problem against `v4.6.0` that drove this decision. Note: this decision does NOT claim the foundation is "stable" at `5.0.0` — module maturity is still judged by an independent mechanism (`status: experimental|active` per module, ADR-0008), not by the package major number.
+- **Create the `v5.0.0` tag/GitHub Release right now** — rejected: `release.yml` does not exist yet; publishing without the SBOM/signing/provenance/approval gate this repo itself designed (`docs/awcms/release-process.md`) violates the very process that was just reaffirmed as mandatory.

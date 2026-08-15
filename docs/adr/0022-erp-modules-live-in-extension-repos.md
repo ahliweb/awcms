@@ -1,45 +1,47 @@
-# ADR-0022 — Modul domain ERP hidup di repo ekstensi, bukan di dalam base (amandemen ADR-0001 poin 3)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0022-erp-modules-live-in-extension-repos.id.md)
 
-- **Status:** Superseded oleh [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (larangan modul domain/website di base dicabut — modul domain boleh & seharusnya hidup langsung di `src/modules/`)
-- **Tanggal:** 2026-07-16
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** ADR-0001 (di-amend oleh ADR ini pada poin 3 + satu alternatif), ADR-0013 (lapisan ekstensi & batas), ADR-0014 (komposisi modul build-time), ADR-0015 (manifest kompatibilitas), ADR-0020 (kontrak kesiapan ekstensi ERP), `docs/awcms/erp-extension-contracts.md`, `docs/awcms/derived-application-guide.md`, `docs/awcms/21_module_admission_governance.md`, epic #738 `platform-evolution`
+# ADR-0022 — ERP domain modules live in extension repos, not inside the base (amendment to ADR-0001 point 3)
 
-## Konteks
+- **Status:** Superseded by [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (the ban on domain/website modules in the base is revoked — domain modules may and should live directly in `src/modules/`)
+- **Date:** 2026-07-16
+- **Decision maker:** @ahliweb
+- **Related:** ADR-0001 (amended by this ADR on point 3 + one alternative), ADR-0013 (extension layers & boundaries), ADR-0014 (build-time module composition), ADR-0015 (compatibility manifest), ADR-0020 (ERP extension readiness contracts), `docs/awcms/erp-extension-contracts.md`, `docs/awcms/derived-application-guide.md`, `docs/awcms/21_module_admission_governance.md`, epic #738 `platform-evolution`
 
-ADR-0001 (2026-07-14) memutuskan membangun ulang `awcms` "sebagai platform ERP modular monolith". Poin 3-nya menyatakan modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll) dan modul integrasi bisnis "dikembangkan sebagai modul di `src/modules/`" repo ini; bagian Alternatif-nya secara eksplisit **menolak** opsi "mengembangkan ERP di repo/base terpisah".
+## Context
 
-Epic #738 `platform-evolution` (ADR-0013 s/d ADR-0021, semua Accepted, 2026-07-13 dan sesudahnya) menjawab pertanyaan yang belum tergarap saat ADR-0001 ditulis: **bagaimana banyak repo turunan independen menyusun kemampuan base ini tanpa mengedit registry base dan tanpa saling menimpa data.** Jawaban yang diambil epic itu memindahkan posisi modul ERP secara tegas ke luar base:
+ADR-0001 (2026-07-14) decided to rebuild `awcms` "as a modular monolith ERP platform". Its point 3 stated that ERP domain modules (finance, inventory, procurement, manufacturing, hr-payroll) and business integration modules were "developed as modules in `src/modules/`" of this repo; its Alternatives section explicitly **rejected** the option of "developing the ERP in a separate repo/base".
 
-- **ADR-0013 §1** mendefinisikan enam lapisan ekstensi. Lapisan **ERP Extension** (juga SaaS Control Plane dan Derived Application generik) ditandai _"Hidup di repo base ini? **Tidak pernah**"_. Item/product master, general ledger, AR/AP, valuasi inventory, payroll, dan pajak dicantumkan sebagai isi lapisan itu — di luar base.
-- **ADR-0020 / `docs/awcms/erp-extension-contracts.md`** menyatakan langsung: _"Base ini bukan ERP. Tidak ada chart of accounts, jurnal, general ledger, valuasi inventori, sales/purchase order, AR/AP, kas-bank, fixed asset, payroll, atau perhitungan pajak di repository ini — dan tidak akan pernah ada."_ Base hanya menyediakan **kontrak netral** (bentuk data pasif, capability port, skema payload event) yang diimplementasikan/dikonsumsi ekstensi ERP di repo terpisah.
-- **ADR-0014/0015** memberi mekanisme konkret agar repo turunan menyusun modulnya sendiri **tanpa** mengedit registry base: `application-registry.ts` milik repo turunan + `extension.manifest.json` + `bun run extension:check`.
-- **Bukti kode saat ADR ini ditulis:** `src/modules/` hanya berisi modul fondasi reusable (`identity-access`, `logging`, `profile-identity`, `tenant-admin`, `_shared`). ADR-0016–0021 meng-admit hanya modul _fondasi_ (organization_structure, document_infrastructure, data_exchange, integration_hub, reference_data) — bukan logika bisnis ERP. Tidak ada satu pun modul finance/inventory/procurement/manufacturing/payroll di base.
+Epic #738 `platform-evolution` (ADR-0013 through ADR-0021, all Accepted, 2026-07-13 onwards) answered the question that was still untouched when ADR-0001 was written: **how many independent derived repos compose this base's capabilities without editing the base registry and without overwriting each other's data.** The answer that epic took moves the position of ERP modules firmly outside the base:
 
-Dengan kata lain, keputusan de facto repo ini sudah bertentangan dengan huruf ADR-0001 poin 3. Aturan `docs/adr/README.md` §2 melarang menulis ulang ADR Accepted secara diam-diam — perubahan arah harus dicatat lewat ADR baru yang mereferensikan yang lama. ADR ini adalah pencatatan itu.
+- **ADR-0013 §1** defines six extension layers. The **ERP Extension** layer (as well as SaaS Control Plane and the generic Derived Application) is marked _"Lives in this base repo? **Never**"_. Item/product master, general ledger, AR/AP, inventory valuation, payroll, and tax are listed as the contents of that layer — outside the base.
+- **ADR-0020 / `docs/awcms/erp-extension-contracts.md`** says it directly: _"This base is not an ERP. There is no chart of accounts, journal, general ledger, inventory valuation, sales/purchase order, AR/AP, cash-bank, fixed asset, payroll, or tax computation in this repository — and there never will be."_ The base only provides **neutral contracts** (passive data shapes, capability ports, event payload schemas) that ERP extensions in separate repos implement/consume.
+- **ADR-0014/0015** give the concrete mechanism for a derived repo to compose its own modules **without** editing the base registry: the derived repo's own `application-registry.ts` + `extension.manifest.json` + `bun run extension:check`.
+- **Code evidence at the time this ADR was written:** `src/modules/` contains only reusable foundation modules (`identity-access`, `logging`, `profile-identity`, `tenant-admin`, `_shared`). ADR-0016–0021 admit only _foundation_ modules (organization_structure, document_infrastructure, data_exchange, integration_hub, reference_data) — not ERP business logic. There is not a single finance/inventory/procurement/manufacturing/payroll module in the base.
 
-## Keputusan
+In other words, this repo's de facto decision already contradicts the letter of ADR-0001 point 3. The rule in `docs/adr/README.md` §2 forbids silently rewriting an Accepted ADR — a change of direction must be recorded via a new ADR that references the old one. This ADR is that record.
 
-Kami memutuskan untuk **meng-amend ADR-0001**:
+## Decision
 
-1. **Poin 3 ADR-0001 diganti** menjadi: modul domain ERP (finance/GL, inventory/warehouse, procurement, manufacturing, hr-payroll) dan modul integrasi bisnis vertikal **tidak dibangun di dalam `src/modules/` base ini**. Mereka hidup di **repo ekstensi/turunan terpisah** pada lapisan **ERP Extension** / **Derived Application** (ADR-0013 §1), disusun lewat komposisi modul build-time (ADR-0014) dan diikat manifest kompatibilitas (ADR-0015). Base hanya menyediakan modul fondasi reusable + kontrak netral kesiapan ERP (ADR-0020).
+We decide to **amend ADR-0001**:
 
-2. **Alternatif "mengembangkan ERP di repo/base terpisah" pada ADR-0001 — yang dahulu ditolak — kini menjadi arah yang diadopsi**, dengan alasan yang tidak tersedia saat ADR-0001 ditulis: epic #738 menyediakan mekanisme lintas-repo (komposisi build-time, manifest, kontrak port/event berversi) yang menghilangkan "overhead sinkronisasi tanpa manfaat jelas" yang menjadi dasar penolakan awal.
+1. **ADR-0001 point 3 is replaced** with: ERP domain modules (finance/GL, inventory/warehouse, procurement, manufacturing, hr-payroll) and vertical business integration modules are **not built inside this base's `src/modules/`**. They live in **separate extension/derived repos** on the **ERP Extension** / **Derived Application** layer (ADR-0013 §1), composed via build-time module composition (ADR-0014) and bound by a compatibility manifest (ADR-0015). The base only provides reusable foundation modules + the neutral ERP readiness contracts (ADR-0020).
 
-3. **Framing "AWCMS adalah platform ERP" diganti menjadi "AWCMS adalah basis/fondasi platform tempat ERP & solusi bisnis dibangun di atasnya."** AWCMS bukan sebuah ERP; ia adalah base modular monolith reusable + kontrak ekstensi ERP.
+2. **The "develop the ERP in a separate repo/base" alternative in ADR-0001 — previously rejected — now becomes the adopted direction**, for a reason that was not available when ADR-0001 was written: epic #738 provides the cross-repo mechanism (build-time composition, manifest, versioned port/event contracts) that removes the "synchronisation overhead with no clear benefit" that grounded the original rejection.
 
-Yang **tidak** berubah dari ADR-0001: keputusan tidak mengarsipkan repo (poin 1), seluruh standar teknis fondasi (Bun-only, RLS wajib, ABAC default-deny, offline-first/outbox HMAC, kontrak OpenAPI/AsyncAPI, idempotency, audit — poin 1 & 2), dan disiplin ADR untuk penyimpangan standar (poin 4). ADR-0002…0021 tetap Accepted apa adanya.
+3. **The framing "AWCMS is an ERP platform" is replaced by "AWCMS is the base/foundation platform on top of which ERP & business solutions are built."** AWCMS is not an ERP; it is a reusable modular monolith base + ERP extension contracts.
 
-Status ADR-0001 ditandai `Accepted (poin 3 & satu alternatif di-amend oleh ADR-0022)`.
+What does **not** change from ADR-0001: the decision not to archive the repo (point 1), all the foundational technical standards (Bun-only, RLS mandatory, ABAC default-deny, offline-first/HMAC outbox, OpenAPI/AsyncAPI contracts, idempotency, audit — points 1 & 2), and the ADR discipline for deviations from the standards (point 4). ADR-0002…0021 remain Accepted as they are.
 
-## Konsekuensi
+ADR-0001's status is marked `Accepted (point 3 & one alternative amended by ADR-0022)`.
 
-- **Positif:** dokumen "pintu depan" (README, canvas induk, indeks ADR) selaras dengan keputusan yang sudah mengikat (ADR-0013/0020) dan dengan kondisi kode nyata; kontributor/aplikasi turunan tidak lagi menerima sinyal bertentangan soal "di mana modul ERP hidup"; batas base vs ekstensi menjadi tunggal dan konsisten.
-- **Trade-off:** ERP lintas-repo memikul overhead kontrak berversi (port, event, manifest) dan koordinasi rilis base↔ekstensi — biaya yang kini dinilai sepadan karena mekanismenya sudah ada (ADR-0014/0015), berbeda dari saat ADR-0001 menolaknya.
-- **Netral:** ADR-0001 tetap ada sebagai rekaman historis (tidak dihapus, sesuai `docs/adr/README.md` §2); poin 1/2/4-nya masih berlaku penuh.
+## Consequences
 
-## Alternatif yang dipertimbangkan
+- **Positive:** the "front door" documents (README, master canvas, ADR index) line up with the decisions that already bind (ADR-0013/0020) and with the real state of the code; contributors/derived applications no longer receive contradictory signals about "where ERP modules live"; the base vs extension boundary becomes single and consistent.
+- **Trade-off:** a cross-repo ERP carries the overhead of versioned contracts (ports, events, manifest) and base↔extension release coordination — a cost now judged worth it because the mechanism already exists (ADR-0014/0015), unlike when ADR-0001 rejected it.
+- **Neutral:** ADR-0001 remains as a historical record (not deleted, per `docs/adr/README.md` §2); its points 1/2/4 still apply in full.
 
-- **Membiarkan ADR-0001 apa adanya dan hanya memperbaiki README/canvas** — ditolak: menyisakan rekaman keputusan pendiri yang secara eksplisit bertentangan dengan ADR-0013/0020, persis jenis drift yang aturan supersede §2 dibuat untuk mencegah.
-- **Menulis ulang isi ADR-0001 langsung** — ditolak: melanggar `docs/adr/README.md` §2 (ADR Accepted tidak diedit diam-diam; perubahan dicatat lewat ADR baru).
-- **Menandai ADR-0001 `Superseded` seluruhnya** — ditolak: mayoritas ADR-0001 (tidak-diarsipkan, standar teknis fondasi, disiplin ADR) masih berlaku; hanya poin 3 + satu alternatif yang berubah, sehingga "amended" lebih akurat daripada "superseded".
+## Alternatives considered
+
+- **Leave ADR-0001 as it is and only fix the README/canvas** — rejected: it would leave a founding decision record that explicitly contradicts ADR-0013/0020, exactly the kind of drift the §2 supersede rule was made to prevent.
+- **Rewrite the body of ADR-0001 directly** — rejected: it violates `docs/adr/README.md` §2 (an Accepted ADR is not edited silently; changes are recorded via a new ADR).
+- **Mark ADR-0001 `Superseded` in its entirety** — rejected: the majority of ADR-0001 (not-archived, foundational technical standards, ADR discipline) still applies; only point 3 + one alternative changed, so "amended" is more accurate than "superseded".

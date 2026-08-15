@@ -1,330 +1,320 @@
-# Kontrak Kesiapan Ekstensi ERP
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](erp-extension-contracts.id.md)
 
-> **⚠️ HISTORIS/DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), dipertegas [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)).**
-> Jalur repo turunan yang dokumen ini asumsikan sudah DIHAPUS — ERP kini
-> dibangun sebagai **modul domain langsung di `src/modules/`** repo ini, dengan
-> ADR admission-nya sendiri. Berkas kontrak `_shared` yang dirujuk di bawah
+# ERP Extension Readiness Contracts
+
+> **⚠️ HISTORICAL/DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), reinforced by [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)).**
+> The derived-repository pathway this document assumes has been REMOVED — ERP is
+> now built as a **domain module directly in `src/modules/`** of this repo, with
+> its own admission ADR. The `_shared` contract files referenced below
 > (`business-transaction-contract.ts`, `erp-reference-data-contract.ts`,
-> `ports/period-lock-port.ts`) **sudah dihapus dari repo**. Dokumen ini
-> dipertahankan sebagai catatan historis desain kontraknya, bukan peta kode
-> hari ini.
+> `ports/period-lock-port.ts`) **have been deleted from the repo**. This document
+> is kept as a historical record of the contract design, not as a map of the code
+> today.
 
-Issue #755, epic #738 (`platform-evolution`), Wave 4 — issue TERAKHIR
-epic ini. `docs/adr/0020-erp-extension-readiness-contracts.md` adalah
-keputusan arsitektural yang mengikat; dokumen ini adalah referensi
-teknis lengkap untuk setiap kontrak yang keputusan itu definisikan —
-ownership, versioning, failure semantics, klasifikasi privasi, dan
-contoh, untuk siapa pun yang membangun **ekstensi ERP** (repository
-TERPISAH dari base ini) yang perlu berinteraksi dengan tenant/party/
-scope/dokumen/event/reporting milik AWCMS.
+Issue #755, epic #738 (`platform-evolution`), Wave 4 — the LAST issue of this
+epic. `docs/adr/0020-erp-extension-readiness-contracts.md` is the binding
+architectural decision; this document is the complete technical reference for
+every contract that decision defines — ownership, versioning, failure
+semantics, privacy classification, and examples, for anyone building an **ERP
+extension** (a repository SEPARATE from this base) that needs to interact with
+AWCMS's tenant/party/scope/document/event/reporting.
 
-**Base ini bukan ERP.** Tidak ada chart of accounts, jurnal, general
-ledger, valuasi inventori, sales/purchase order, AR/AP, kas-bank, fixed
-asset, payroll, atau perhitungan pajak di repository ini — dan tidak
-akan pernah ada (ADR-0013 §1, doc ini §Eksklusi eksplisit). Yang
-disediakan hanyalah **kontrak netral**: bentuk data, satu capability
-port, dan skema payload event yang sebuah ekstensi ERP eksternal
-implementasikan/konsumsi.
+**This base is not an ERP.** There is no chart of accounts, journal, general
+ledger, inventory valuation, sales/purchase order, AR/AP, cash-bank, fixed
+asset, payroll, or tax computation in this repository — and there never will be
+(ADR-0013 §1, this doc §Explicit exclusions). What is provided is only
+**neutral contracts**: data shapes, one capability port, and event payload
+schemas that an external ERP extension implements/consumes.
 
-## Untuk siapa dokumen ini
+## Who this document is for
 
-Anda membangun (atau berencana membangun) sebuah aplikasi turunan
-ERP/akuntansi/inventori di atas AWCMS, di repository Anda sendiri
-(lihat `docs/awcms/derived-application-guide.md` untuk pola umum
-aplikasi turunan, dan `docs/adr/0013-extension-layers-and-boundary-
-model.md` §"ERP Extension" untuk penempatan layernya). Dokumen ini
-menjelaskan kontrak yang tersedia untuk Anda pakai, TANPA mengharuskan
-Anda mengedit registry modul base (Issue #740/#741, ADR-0014/0015).
+You are building (or plan to build) a derived ERP/accounting/inventory
+application on top of AWCMS, in your own repository (see
+`docs/awcms/derived-application-guide.md` for the general derived-application
+pattern, and `docs/adr/0013-extension-layers-and-boundary-model.md` §"ERP
+Extension" for where its layer sits). This document explains the contracts
+available for you to use, WITHOUT requiring you to edit the base module
+registry (Issue #740/#741, ADR-0014/0015).
 
-## Ringkasan sebelas keluarga kontrak
+## Summary of the eleven contract families
 
-| #   | Kontrak                                          | Lokasi (base)                                                       | Jenis                                   | Sudah ada sejak                 |
-| --- | ------------------------------------------------ | ------------------------------------------------------------------- | --------------------------------------- | ------------------------------- |
-| 1   | Business transaction reference & lifecycle       | `src/modules/_shared/business-transaction-contract.ts`              | Tipe data pasif                         | Issue #755 (baru)               |
-| 2   | Document/reference/numbering integration         | `document_infrastructure`'s API publik + `DocumentReferenceLink`    | Tipe data pasif + layanan modul pemilik | Issue #751 (dipakai ulang)      |
-| 3   | Tenant/legal-entity/organization scope reference | `_shared/ports/business-scope-hierarchy-port.ts`                    | Port + tipe data                        | Issue #746/#749 (dipakai ulang) |
-| 4   | Party kanonik + peran kontekstual                | `_shared/ports/party-directory-port.ts`                             | Port                                    | Issue #748 (dipakai ulang)      |
-| 5   | Posting request/result event envelope            | `_shared/business-transaction-contract.ts`                          | Tipe payload event                      | Issue #755 (baru)               |
-| 6   | Period-lock query/check                          | `_shared/ports/period-lock-port.ts`                                 | Port berperilaku, fail-closed           | Issue #755 (baru)               |
-| 7   | Item/service reference                           | `_shared/erp-reference-data-contract.ts`                            | Tipe data pasif                         | Issue #755 (baru)               |
-| 8   | Currency & unit-of-measure reference             | `_shared/erp-reference-data-contract.ts`                            | Tipe data pasif                         | Issue #755 (baru)               |
-| 9   | Inventory movement reference                     | `_shared/erp-reference-data-contract.ts`                            | Tipe data pasif                         | Issue #755 (baru)               |
-| 10  | Reconciliation reference/control totals          | `_shared/erp-reference-data-contract.ts`                            | Tipe data pasif                         | Issue #755 (baru)               |
-| 11  | Reporting projection contribution                | `reporting`'s `ProjectionDescriptor` (`_shared/module-contract.ts`) | Descriptor                              | Issue #753 (dipakai ulang)      |
+| #   | Contract                                         | Location (base)                                                     | Kind                                      | Present since            |
+| --- | ------------------------------------------------ | ------------------------------------------------------------------- | ----------------------------------------- | ------------------------ |
+| 1   | Business transaction reference & lifecycle       | `src/modules/_shared/business-transaction-contract.ts`              | Passive data type                         | Issue #755 (new)         |
+| 2   | Document/reference/numbering integration         | `document_infrastructure`'s public API + `DocumentReferenceLink`    | Passive data type + owning module service | Issue #751 (reused)      |
+| 3   | Tenant/legal-entity/organization scope reference | `_shared/ports/business-scope-hierarchy-port.ts`                    | Port + data type                          | Issue #746/#749 (reused) |
+| 4   | Canonical party + contextual roles               | `_shared/ports/party-directory-port.ts`                             | Port                                      | Issue #748 (reused)      |
+| 5   | Posting request/result event envelope            | `_shared/business-transaction-contract.ts`                          | Event payload type                        | Issue #755 (new)         |
+| 6   | Period-lock query/check                          | `_shared/ports/period-lock-port.ts`                                 | Behavioural port, fail-closed             | Issue #755 (new)         |
+| 7   | Item/service reference                           | `_shared/erp-reference-data-contract.ts`                            | Passive data type                         | Issue #755 (new)         |
+| 8   | Currency & unit-of-measure reference             | `_shared/erp-reference-data-contract.ts`                            | Passive data type                         | Issue #755 (new)         |
+| 9   | Inventory movement reference                     | `_shared/erp-reference-data-contract.ts`                            | Passive data type                         | Issue #755 (new)         |
+| 10  | Reconciliation reference/control totals          | `_shared/erp-reference-data-contract.ts`                            | Passive data type                         | Issue #755 (new)         |
+| 11  | Reporting projection contribution                | `reporting`'s `ProjectionDescriptor` (`_shared/module-contract.ts`) | Descriptor                                | Issue #753 (reused)      |
 
 ## 1. Business transaction reference & lifecycle
 
-**Pemilik:** ekstensi ERP (base tidak menyimpan transaksi apa pun).
-**Bentuk:** `BusinessTransactionReference` (`_shared/business-transaction-
-contract.ts`) — `tenantId`, `legalEntityScope` (nullable, lihat #3),
-`transactionType` (string namespaced `<extension_key>.<domain>.<jenis>`),
-`externalTransactionId` (opaque milik ekstensi), `status`
-(`BusinessTransactionLifecycleStatus`: `draft`/`submitted`/`posted`/
-`reversed`/`rejected`), `documentReference?` (lihat #2).
-**Versioning:** bagian dari `MODULE_CONTRACT_VERSION` scheme TIDAK
-berlaku di sini (ini bukan `ModuleDescriptor`) — perubahan bentuk file
-ini sendiri diberi tahu lewat changelog rilis paket (scheme #1 doc
-`extension-compatibility-policy.md`), sama seperti file `_shared/*`
-lain yang bukan port/module-contract.
-**Failure semantics:** tidak ada — ini murni tipe data, tidak
-"gagal". Validasi keberadaan/kepemilikan `legalEntityScope` didelegasikan
-ke kontrak #3.
-**Klasifikasi privasi:** tidak ada PII langsung; `externalTransactionId`
-opaque bagi base.
-**Invariant mengikat:** lihat ADR-0020 §4 (posted immutable, koreksi via
-reversal, dst.) — SEMUA nomor invariant di situ berlaku untuk kontrak
-ini.
+**Owner:** the ERP extension (the base stores no transactions at all).
+**Shape:** `BusinessTransactionReference`
+(`_shared/business-transaction-contract.ts`) — `tenantId`,
+`legalEntityScope` (nullable, see #3), `transactionType` (a namespaced string
+`<extension_key>.<domain>.<kind>`), `externalTransactionId` (opaque, owned by
+the extension), `status` (`BusinessTransactionLifecycleStatus`:
+`draft`/`submitted`/`posted`/`reversed`/`rejected`), `documentReference?`
+(see #2).
+**Versioning:** being part of the `MODULE_CONTRACT_VERSION` scheme does NOT
+apply here (this is not a `ModuleDescriptor`) — changes to the shape of this
+file itself are announced through the package release changelog (scheme #1 of
+doc `extension-compatibility-policy.md`), same as any other `_shared/*` file
+that is not a port/module-contract.
+**Failure semantics:** none — this is purely a data type, it does not "fail".
+Validating the existence/ownership of `legalEntityScope` is delegated to
+contract #3.
+**Privacy classification:** no direct PII; `externalTransactionId` is opaque to
+the base.
+**Binding invariants:** see ADR-0020 §4 (posted is immutable, corrections via
+reversal, etc.) — ALL invariant numbers there apply to this contract.
 
 ## 2. Document/reference/numbering integration
 
-**Pemilik:** `document_infrastructure` (Issue #751, modul base yang
-sudah ada — bukan kontrak baru issue ini). Sebuah ekstensi ERP yang
-ingin nomor dokumen terformat (mis. nomor invoice/PO) memanggil
-`document_infrastructure`'s layanan alokasi numbering-nya SENDIRI
-(`domain/document-number-sequence.ts`, diakses lewat API publik modul
-itu) — bukan lewat sebuah `_shared/ports/*.ts` baru.
-**Bentuk referensi yang di-embed:** `DocumentReferenceLink`
-(`_shared/business-transaction-contract.ts`) — `sequenceKey`,
-`documentNumber`, `documentId?`. Bentuk ini SESUAI STRUKTUR dengan
-`document_infrastructure`'s alokasi nyata tapi TIDAK meng-import
-tipenya (setiap file `_shared/*-contract.ts` tetap nol-import, sesuai
-konvensi seluruh file `_shared` lain).
-**Failure semantics:** kegagalan alokasi nomor adalah tanggung jawab
-`document_infrastructure` sendiri (lihat modul itu untuk concurrency-
-safety-nya) — kontrak ini hanya mendefinisikan apa yang di-embed
-SETELAH alokasi berhasil.
-**Klasifikasi privasi:** nomor dokumen bukan data sensitif per se, tapi
-tunduk pada `confidentiality_level` `document_infrastructure` sendiri
-bila `documentId` menunjuk dokumen berklasifikasi.
+**Owner:** `document_infrastructure` (Issue #751, an existing base module — not
+a new contract from this issue). An ERP extension that wants formatted document
+numbers (e.g. an invoice/PO number) calls `document_infrastructure`'s OWN
+numbering allocation service (`domain/document-number-sequence.ts`, reached
+through that module's public API) — not through some new `_shared/ports/*.ts`.
+**Shape of the embedded reference:** `DocumentReferenceLink`
+(`_shared/business-transaction-contract.ts`) — `sequenceKey`, `documentNumber`,
+`documentId?`. This shape is STRUCTURALLY ALIGNED with
+`document_infrastructure`'s real allocation but does NOT import its type (every
+`_shared/*-contract.ts` file stays zero-import, per the convention of all other
+`_shared` files).
+**Failure semantics:** number-allocation failure is
+`document_infrastructure`'s own responsibility (see that module for its
+concurrency safety) — this contract only defines what gets embedded AFTER
+allocation succeeds.
+**Privacy classification:** a document number is not sensitive data per se, but
+it is subject to `document_infrastructure`'s own `confidentiality_level` when
+`documentId` points at a classified document.
 
 ## 3. Tenant/legal-entity/organization scope reference
 
-**Pemilik:** `_shared/ports/business-scope-hierarchy-port.ts` (Issue
-#746, diimplementasikan nyata oleh `organization_structure` — Issue
-#749 — untuk `scopeType: "legal_entity"`/`"organization_unit"`, dan oleh
-`identity_access`'s adapter default untuk `scopeType: "office"`).
-**Bentuk:** `BusinessScopeReference` (`{scopeType, scopeId}`, opaque,
-BUKAN foreign key) dan `BusinessScopeResolution` (`resolved`,
-`ancestorScopes`, `descendantScopes`).
-**Dipakai ulang, tidak diduplikasi** oleh kontrak baru issue ini —
-`BusinessTransactionReference.legalEntityScope` dan
-`ReconciliationReference.legalEntityScope` (§10) keduanya bertipe
-`BusinessScopeReference | null` langsung, tanpa membungkusnya lagi.
-**Failure semantics:** `resolved: false` (bukan array kosong) berarti
-scope TIDAK valid untuk tenant tersebut — pemanggil (di sini, mesin
-posting ekstensi ERP) WAJIB default-deny, tidak pernah menganggap
-"tidak ada hierarki" sebagai "diperbolehkan".
-**Klasifikasi privasi:** tidak ada PII; scope adalah identifier
-struktur organisasi, bukan data personal.
+**Owner:** `_shared/ports/business-scope-hierarchy-port.ts` (Issue #746, really
+implemented by `organization_structure` — Issue #749 — for `scopeType:
+"legal_entity"`/`"organization_unit"`, and by `identity_access`'s default
+adapter for `scopeType: "office"`).
+**Shape:** `BusinessScopeReference` (`{scopeType, scopeId}`, opaque, NOT a
+foreign key) and `BusinessScopeResolution` (`resolved`, `ancestorScopes`,
+`descendantScopes`).
+**Reused, not duplicated** by this issue's new contracts —
+`BusinessTransactionReference.legalEntityScope` and
+`ReconciliationReference.legalEntityScope` (§10) are both typed
+`BusinessScopeReference | null` directly, without wrapping it again.
+**Failure semantics:** `resolved: false` (not an empty array) means the scope is
+NOT valid for that tenant — the caller (here, the ERP extension's posting
+engine) MUST default-deny, never treating "no hierarchy" as "permitted".
+**Privacy classification:** no PII; a scope is an organisational-structure
+identifier, not personal data.
 
-## 4. Party kanonik + peran kontekstual
+## 4. Canonical party + contextual roles
 
-**Pemilik:** `_shared/ports/party-directory-port.ts` (Issue #748,
-diimplementasikan `profile_identity`).
-**Pola untuk ekstensi ERP:** tabel "customer"/"supplier"/"employee"
-milik ekstensi Anda menyimpan REFERENSI (`profileId`) ke party
-kanonik lewat port ini — TIDAK PERNAH menduplikasi nama/kontak/data
-identitas party ke tabel ekstensi Anda sendiri. Gunakan
-`resolveSummary`/`resolvePublicSafeSummary` untuk menampilkan
-nama/status tanpa menyalinnya secara permanen.
-**Failure semantics:** `null` berarti party tidak ada/soft-deleted/
-merged-away untuk tenant tersebut — ekstensi WAJIB memperlakukan
-sebagai "tidak ditemukan", tidak pernah menampilkan data basi.
-**Klasifikasi privasi:** `PartyDirectorySummaryDTO`/
-`PartyDirectoryPublicSafeDTO` adalah allow-list eksplisit — field apa
-pun DI LUAR daftar itu (email/telepon mentah, dst.) tidak pernah
-terekspos lewat port ini; ekstensi yang butuh data lebih detail
-memanggil endpoint `profile_identity` sendiri, yang menerapkan masking
-sesuai skill `awcms-sensitive-data`.
+**Owner:** `_shared/ports/party-directory-port.ts` (Issue #748, implemented by
+`profile_identity`).
+**Pattern for an ERP extension:** your extension's "customer"/"supplier"/
+"employee" tables store a REFERENCE (`profileId`) to the canonical party through
+this port — NEVER duplicating the party's name/contact/identity data into your
+own extension tables. Use `resolveSummary`/`resolvePublicSafeSummary` to display
+the name/status without copying it permanently.
+**Failure semantics:** `null` means the party does not exist/is soft-deleted/
+merged-away for that tenant — the extension MUST treat it as "not found", never
+display stale data.
+**Privacy classification:** `PartyDirectorySummaryDTO`/
+`PartyDirectoryPublicSafeDTO` are an explicit allow-list — any field OUTSIDE
+that list (raw email/phone, etc.) is never exposed through this port; an
+extension that needs more detailed data calls `profile_identity`'s own
+endpoints, which apply masking per the `awcms-sensitive-data` skill.
 
 ## 5. Posting request/result event envelope
 
-**Pemilik:** ekstensi ERP mendefinisikan tipe event-nya sendiri (mis.
-`"<extension_key>.posting.requested"`/`"...posting.result_recorded"`)
-yang payload-nya berbentuk `AccountingPostingRequestPayload`/
-`AccountingPostingResultPayload` (`_shared/business-transaction-
-contract.ts`). Event itu sendiri naik di atas `domain_event_runtime`
-(Issue #742) — ekstensi meregistrasi event type/consumer-nya sendiri
-di build turunannya sendiri (`domain-event-runtime/infrastructure/
-consumer-registry.ts` versi fork-nya), TIDAK di base.
-**Bentuk:**
+**Owner:** the ERP extension defines its own event types (e.g.
+`"<extension_key>.posting.requested"`/`"...posting.result_recorded"`) whose
+payloads take the shape `AccountingPostingRequestPayload`/
+`AccountingPostingResultPayload` (`_shared/business-transaction-contract.ts`).
+The events themselves ride on top of `domain_event_runtime` (Issue #742) — the
+extension registers its own event types/consumers in its own derived build (its
+forked version of `domain-event-runtime/infrastructure/consumer-registry.ts`),
+NOT in the base.
+**Shape:**
 
 - Request: `requestId` (idempotency key), `transaction`
   (`BusinessTransactionReference`), `periodKey`, `currencyCode`,
-  `totalDebit`/`totalCredit` (decimal-as-string, opaque bagi base),
+  `totalDebit`/`totalCredit` (decimal-as-string, opaque to the base),
   `requestedAt`, `reversalOfExternalTransactionId?`.
-- Result: `requestId` (WAJIB sama dengan request), `transaction`,
+- Result: `requestId` (MUST equal the request's), `transaction`,
   `status` (`accepted`/`posted`/`rejected`/`reversed`), `postedAt?`,
   `rejectionReason?`, `ledgerReference?` (opaque).
-  **Failure semantics:** lihat invariant #3 (uniqueness posted-state per
-  `(tenantId, transactionType, externalTransactionId)`, independen
-  `requestId`), #4 (idempotent per `requestId`), #5 (`"accepted"` BUKAN
-  bukti posting berhasil), dan #7 (`reversalOfExternalTransactionId`
-  me-resolve `externalTransactionId` — BUKAN PERNAH `requestId` — ter-scope
-  tenant/legal-entity request reversal) di ADR-0020 §4.
-  **Klasifikasi privasi:** `totalDebit`/`totalCredit`/`ledgerReference`
-  adalah data finansial sensitif tenant — payload event WAJIB lulus
-  `domain_event_runtime`'s `validateDomainEventPayload` (menolak nilai
-  berbentuk-credential/secret, membatasi ukuran payload) sebelum
-  dipublikasikan, sama seperti event modul manapun.
-  **Contoh:** lihat `tests/fixtures/derived-application-example/modules/
-example-erp-extension/posting-engine.ts` untuk implementasi referensi
-  lengkap (idempotent per `requestId`, penolakan duplikat per identitas
-  bisnis, fail-closed period lock, resolusi target reversal ter-scope
-  tenant/legal-entity, reversal-sebagai-transaksi-baru), diverifikasi
-  `tests/unit/erp-extension-contracts.test.ts` — termasuk dua test
-  adversarial khusus sisi target reversal (reversal tenant lain tidak
-  bisa me-resolve transaksi tenant yang benar; reversal tenant yang sama
-  dengan legal-entity scope berbeda tetap ditolak).
+  **Failure semantics:** see invariant #3 (uniqueness of posted-state per
+  `(tenantId, transactionType, externalTransactionId)`, independent of
+  `requestId`), #4 (idempotent per `requestId`), #5 (`"accepted"` is NOT
+  proof the posting succeeded), and #7 (`reversalOfExternalTransactionId`
+  resolves an `externalTransactionId` — NEVER a `requestId` — scoped to the
+  reversal request's tenant/legal-entity) in ADR-0020 §4.
+  **Privacy classification:** `totalDebit`/`totalCredit`/`ledgerReference`
+  are sensitive tenant financial data — the event payload MUST pass
+  `domain_event_runtime`'s `validateDomainEventPayload` (which rejects
+  credential/secret-shaped values and bounds the payload size) before being
+  published, just like any module's events.
+  **Example:** see `tests/fixtures/derived-application-example/modules/example-erp-extension/posting-engine.ts`
+  for the complete reference implementation (idempotent per `requestId`,
+  duplicate rejection per business identity, fail-closed period lock,
+  tenant/legal-entity-scoped resolution of the reversal target,
+  reversal-as-a-new-transaction), verified by
+  `tests/unit/erp-extension-contracts.test.ts` — including two adversarial
+  tests dedicated to the reversal-target side (a reversal from another tenant
+  cannot resolve the correct tenant's transaction; a reversal from the same
+  tenant with a different legal-entity scope is still rejected).
 
 ## 6. Period-lock query/check
 
-**Pemilik:** `_shared/ports/period-lock-port.ts` — **satu-satunya port
-BERPERILAKU baru** issue ini (sepuluh kontrak lain adalah tipe data
-pasif atau memakai ulang port yang sudah ada). Base TIDAK menyediakan
-adapter nyata (bukan sekadar "adapter default" seperti port lain) —
-konsep periode akuntansi murni milik domain ERP.
-**Bentuk:** `checkPeriodLock(tx, tenantId, legalEntityScope, periodKey,
-operation)` mengembalikan `PeriodLockCheckResult`:
+**Owner:** `_shared/ports/period-lock-port.ts` — **the only new BEHAVIOURAL
+port** in this issue (the other ten contracts are passive data types or reuse
+existing ports). The base does NOT provide a real adapter (not even a "default
+adapter" as the other ports have) — the accounting-period concept belongs purely
+to the ERP domain.
+**Shape:** `checkPeriodLock(tx, tenantId, legalEntityScope, periodKey,
+operation)` returns `PeriodLockCheckResult`:
 `{checked:true, locked:false}` | `{checked:true, locked:true, reason}` |
 `{checked:false, reason}`.
-**Failure semantics (WAJIB fail-closed):** `checked: false` HARUS
-diperlakukan identik dengan `locked: true` untuk operasi `"post"`.
-`noPeriodLockAdapterConfigured` (satu-satunya "adapter" yang base
-sediakan) SELALU mengembalikan `checked: false` — sebuah composition
-root yang belum meng-compose ekstensi ERP apa pun mendapat port yang
-selalu menolak posting, bukan yang diam-diam mengizinkannya.
-**Bukan batas identitas/RLS** — port ini menjawab pertanyaan bisnis
-"periode ini terbuka atau tidak", bukan pengganti RLS/ABAC tenant, yang
-tetap wajib diperiksa terpisah oleh setiap endpoint/job ekstensi ERP.
-**Klasifikasi privasi:** `periodKey` opaque, tidak ada PII.
+**Failure semantics (MUST fail-closed):** `checked: false` MUST be treated
+identically to `locked: true` for the `"post"` operation.
+`noPeriodLockAdapterConfigured` (the only "adapter" the base ships) ALWAYS
+returns `checked: false` — a composition root that has not composed any ERP
+extension gets a port that always refuses posting, not one that silently
+permits it.
+**Not an identity/RLS boundary** — this port answers the business question "is
+this period open or not", it is not a replacement for tenant RLS/ABAC, which
+every ERP extension endpoint/job must still check separately.
+**Privacy classification:** `periodKey` is opaque, no PII.
 
 ## 7. Item/service reference
 
-**Pemilik:** ekstensi ERP (base tidak punya katalog item). **Bentuk:**
+**Owner:** the ERP extension (the base has no item catalogue). **Shape:**
 `ItemReference` (`_shared/erp-reference-data-contract.ts`) —
 `itemId` (opaque), `itemKind` (`good`/`service`), `defaultUnit`
 (`UnitOfMeasureReference`, §8).
-**Sumber data yang sah:** tabel katalog milik ekstensi Anda sendiri,
-ATAU (opsional, begitu Issue #750 `reference_data` benar-benar merge
-dan stabil — lihat ADR-0020 §Status untuk peringatan pin saat ini)
-`reference_data`'s effective-dated value sets. Kontrak ini TIDAK
-mengasumsikan salah satu — keduanya valid selama bentuknya sesuai.
-**Failure semantics:** tidak ada — tipe data pasif.
-**Klasifikasi privasi:** tidak ada PII.
+**Legitimate data sources:** your own extension's catalogue tables, OR
+(optionally, once Issue #750 `reference_data` actually merges and stabilises —
+see ADR-0020 §Status for the current pinning warning)
+`reference_data`'s effective-dated value sets. This contract does NOT assume
+either one — both are valid as long as the shape matches.
+**Failure semantics:** none — passive data type.
+**Privacy classification:** no PII.
 
 ## 8. Currency & unit-of-measure reference
 
-**Pemilik:** ekstensi ERP. **Bentuk:** `CurrencyReference`
-(`currencyCode` ISO 4217, `minorUnitDigits`) dan
-`UnitOfMeasureReference` (`unitCode`, `description`) — keduanya di
-`_shared/erp-reference-data-contract.ts`. Base tidak memvalidasi kode
-mata uang/satuan terhadap tabel referensi mana pun — murni string
-opaque yang diteruskan.
-**Failure semantics:** tidak ada. **Klasifikasi privasi:** tidak ada
-PII.
+**Owner:** the ERP extension. **Shape:** `CurrencyReference`
+(`currencyCode` ISO 4217, `minorUnitDigits`) and
+`UnitOfMeasureReference` (`unitCode`, `description`) — both in
+`_shared/erp-reference-data-contract.ts`. The base does not validate the
+currency/unit codes against any reference table — they are purely opaque strings
+passed through.
+**Failure semantics:** none. **Privacy classification:** no PII.
 
 ## 9. Inventory movement reference
 
-**Pemilik:** ekstensi ERP (base tidak punya konsep valuasi/costing
-inventori — ADR-0020 eksklusi eksplisit). **Bentuk:**
+**Owner:** the ERP extension (the base has no inventory valuation/costing
+concept — an explicit ADR-0020 exclusion). **Shape:**
 `InventoryMovementReference` — `tenantId`, `movementId` (opaque),
 `direction` (`receipt`/`issue`/`transfer`/`adjustment`), `item`
 (`ItemReference`), `quantity` (decimal-as-string, opaque),
-`businessTransactionReference?` (link opsional ke §1).
-**Failure semantics:** tidak ada — murni referensi, validasi stok
-(negative-stock, dst.) sepenuhnya tanggung jawab ekstensi.
-**Klasifikasi privasi:** tidak ada PII.
+`businessTransactionReference?` (an optional link to §1).
+**Failure semantics:** none — purely a reference; stock validation
+(negative-stock, etc.) is entirely the extension's responsibility.
+**Privacy classification:** no PII.
 
 ## 10. Reconciliation reference/control totals
 
-**Pemilik:** ekstensi ERP (atau sebuah `reporting` projection yang
-ekstensi kontribusikan, §11). **Bentuk:** `ReconciliationReference` —
+**Owner:** the ERP extension (or a `reporting` projection the extension
+contributes, §11). **Shape:** `ReconciliationReference` —
 `tenantId`, `legalEntityScope?`, `periodKey`, `reconciledAt`,
-`controlTotals` (array `ReconciliationControlTotal`: `label`,
+`controlTotals` (an array of `ReconciliationControlTotal`: `label`,
 `expectedValue`, `actualValue`, `matched`), `fullyReconciled`.
-**Failure semantics:** `matched`/`fullyReconciled` adalah perbandingan
-STRING-EXACT yang disiapkan pemanggil — kontrak ini TIDAK melakukan
-parsing/normalisasi numerik apa pun; ekstensi bertanggung jawab
-menormalkan kedua sisi sebelum membandingkan.
-**Klasifikasi privasi:** total kontrol adalah data finansial agregat
-tenant — sama sensitifnya dengan §5, tunduk pada permission ekstensi
-sendiri saat diekspos lewat API/projection.
+**Failure semantics:** `matched`/`fullyReconciled` are STRING-EXACT comparisons
+prepared by the caller — this contract does NO numeric parsing/normalisation
+whatsoever; the extension is responsible for normalising both sides before
+comparing.
+**Privacy classification:** control totals are aggregate tenant financial data —
+as sensitive as §5, subject to the extension's own permissions when exposed
+through an API/projection.
 
 ## 11. Reporting projection contribution
 
-**Pemilik:** `reporting`'s `ProjectionDescriptor` (`_shared/module-
-contract.ts`, Issue #753 — modul base yang sudah ada, bukan kontrak
-baru issue ini). Sebuah ekstensi ERP mengontribusikan SATU descriptor
-per read-model yang ingin di-maintain inkremental (mis. ringkasan
-posting per tenant), didorong oleh event miliknya sendiri (§5) lewat
-strategy `"domain_event"` — engine `reporting` TIDAK PERNAH membaca
-tabel ledger ekstensi secara langsung (ADR-0013 §6).
-**Failure semantics:** `requiredPermission` pada descriptor WAJIB
-diperiksa oleh caller — lihat batasan ini sudah ditegakkan
-`reporting/domain/projection-permission-filter.ts` untuk descriptor
-BASE; sebuah ekstensi yang mendaftarkan descriptor-nya sendiri di
-build turunannya bertanggung jawab memastikan penegakan yang sama
-berlaku untuk descriptor-nya (lihat catatan Wave 3 tentang pola
-"descriptor field terdokumentasi tapi tidak ditegakkan" — jangan
-ulangi kesalahan itu di ekstensi Anda).
-**Bukti machine-verifiable:** `tests/fixtures/derived-application-
-example/modules/example-erp-extension/module.ts`'s
-`reportingProjections` entry lulus `reporting`'s `validateProjectionRegistry`
-nyata — lihat `tests/unit/erp-extension-contracts.test.ts`.
-**Klasifikasi privasi:** mengikuti klasifikasi data yang diagregasi
-(di sini, data finansial — lihat §5/§10).
+**Owner:** `reporting`'s `ProjectionDescriptor` (`_shared/module-contract.ts`,
+Issue #753 — an existing base module, not a new contract from this issue). An
+ERP extension contributes ONE descriptor per read-model it wants maintained
+incrementally (e.g. a posting summary per tenant), driven by its own events (§5)
+through the `"domain_event"` strategy — the `reporting` engine NEVER reads the
+extension's ledger tables directly (ADR-0013 §6).
+**Failure semantics:** the descriptor's `requiredPermission` MUST be checked by
+the caller — see that this constraint is already enforced by
+`reporting/domain/projection-permission-filter.ts` for BASE descriptors; an
+extension that registers its own descriptor in its derived build is responsible
+for making sure the same enforcement applies to its descriptor (see the Wave 3
+note about the "descriptor field documented but not enforced" pattern — do not
+repeat that mistake in your extension).
+**Machine-verifiable evidence:** the `reportingProjections` entry in
+`tests/fixtures/derived-application-example/modules/example-erp-extension/module.ts`
+passes `reporting`'s real `validateProjectionRegistry` — see
+`tests/unit/erp-extension-contracts.test.ts`.
+**Privacy classification:** follows the classification of the data being
+aggregated (here, financial data — see §5/§10).
 
-## Eksklusi eksplisit (tidak akan pernah ada di base ini)
+## Explicit exclusions (will never exist in this base)
 
-Chart of accounts & tabel jurnal; mesin posting double-entry; valuasi/
-costing inventori; sales order, purchase order, AR/AP, kas/bank,
-alokasi pembayaran; fixed asset, depresiasi, payroll, perhitungan/
-pelaporan pajak; manufacturing, project costing, budget control,
-konsolidasi; klaim apa pun bahwa AWCMS sendiri adalah ERP yang
-lengkap atau patuh regulasi. Lihat ADR-0020 §Konteks untuk daftar
-lengkap dan alasannya.
+Chart of accounts & journal tables; a double-entry posting engine; inventory
+valuation/costing; sales order, purchase order, AR/AP, cash/bank, payment
+allocation; fixed assets, depreciation, payroll, tax computation/reporting;
+manufacturing, project costing, budget control, consolidation; any claim that
+AWCMS itself is a complete or regulation-compliant ERP. See ADR-0020 §Context
+for the full list and the reasoning.
 
-## Pemetaan kepatuhan (praktik, bukan klaim sertifikasi)
+## Compliance mapping (practice, not a certification claim)
 
-Kontrak di dokumen ini adalah lapisan STRUKTURAL (bentuk data, arah
-dependensi, invariant idempotency/immutability) — kepatuhan
-akuntansi/pajak substantif (mis. PSAK, PPN/PPh, standar audit) tetap
-sepenuhnya tanggung jawab pemilik ekstensi ERP, tidak diklaim atau
-divalidasi oleh base ini. Kontrol teknis yang RELEVAN dan memang
-disediakan base: isolasi tenant (RLS, ADR-0003), default-deny ABAC
-(ADR-0004), audit log high-risk action (skill `awcms-audit-log`),
-masking data sensitif (skill `awcms-sensitive-data`), dan payload
-event yang bebas credential/secret (`domain_event_runtime`'s
-`validateDomainEventPayload`) — masing-masing memetakan ke kontrol umum
-UU PDP/ISO 27001 Annex A/OWASP ASVS yang sudah didokumentasikan
-`docs/awcms/20_threat_model_security_architecture.md`, tidak
-diulang di sini.
+The contracts in this document are a STRUCTURAL layer (data shapes, dependency
+direction, idempotency/immutability invariants) — substantive accounting/tax
+compliance (e.g. PSAK, VAT/income tax, audit standards) remains entirely the
+responsibility of the ERP extension's owner, and is neither claimed nor
+validated by this base. The technical controls that ARE relevant and are indeed
+provided by the base: tenant isolation (RLS, ADR-0003), default-deny ABAC
+(ADR-0004), audit logging of high-risk actions (skill `awcms-audit-log`),
+sensitive-data masking (skill `awcms-sensitive-data`), and event payloads free
+of credentials/secrets (`domain_event_runtime`'s
+`validateDomainEventPayload`) — each maps to the common controls of the
+Indonesian Personal Data Protection Law/ISO 27001 Annex A/OWASP ASVS already
+documented in `docs/awcms/20_threat_model_security_architecture.md`, and not
+repeated here.
 
-## Fixture referensi & test
+## Reference fixture & tests
 
-`tests/fixtures/derived-application-example/modules/
-example-erp-extension/` — module descriptor + mesin posting in-memory +
-adapter period-lock fixture, TIDAK PERNAH dikomposisi ke registry base
-nyata (`src/modules/index.ts` tidak berubah). Diverifikasi
-`tests/unit/erp-extension-contracts.test.ts` (idempotency per
-`requestId`, penolakan duplikat-posting per identitas bisnis
-`(tenantId, transactionType, externalTransactionId)` bahkan dengan
-`requestId` baru, fail-closed period lock, penolakan cross-tenant/
-legal-entity-mismatch pada request forward, DUA test adversarial khusus
-sisi target reversal — reversal ter-autentikasi sebagai tenant lain
-tidak bisa me-resolve transaksi tenant yang benar meski tahu persis
-`externalTransactionId`-nya, dan reversal tenant yang sama dengan
-legal-entity scope berbeda tetap ditolak — reversal-sebagai-transaksi-
-baru, kontribusi reporting projection) dan
-`tests/unit/module-composition-fixture.test.ts` (komposisi DAG/
-capability/migration-namespace). Lihat kedua file test itu untuk contoh
-pemakaian nyata setiap kontrak di atas.
+`tests/fixtures/derived-application-example/modules/example-erp-extension/` —
+module descriptor + in-memory posting engine + period-lock fixture adapter,
+NEVER composed into the real base registry (`src/modules/index.ts` is
+unchanged). Verified by `tests/unit/erp-extension-contracts.test.ts`
+(idempotency per `requestId`, duplicate-posting rejection per the business
+identity `(tenantId, transactionType, externalTransactionId)` even with a new
+`requestId`, fail-closed period lock, rejection of cross-tenant/
+legal-entity-mismatch on forward requests, TWO adversarial tests dedicated to
+the reversal-target side — a reversal authenticated as another tenant cannot
+resolve the correct tenant's transaction even knowing its exact
+`externalTransactionId`, and a reversal from the same tenant with a different
+legal-entity scope is still rejected — reversal-as-a-new-transaction, reporting
+projection contribution) and
+`tests/unit/module-composition-fixture.test.ts` (DAG/capability/
+migration-namespace composition). See both test files for real usage examples of
+every contract above.
 
-**Catatan revisi:** sebuah review keamanan independen pada PR ini
-menemukan revisi pertama fixture mengindeks target reversal lewat
-`requestId` (ruang ID yang salah — lihat `business-transaction-
-contract.ts`'s invariant #7) dan tidak memverifikasi ulang tenant/
-legal-entity transaksi asli yang ter-resolve — keduanya diperbaiki
-sebelum PR ini merge; lihat ADR-0020 §5 untuk detail lengkap. Jangan
-mengutip fixture ini sebagai "terbukti aman" tanpa membaca catatan itu.
+**Revision note:** an independent security review on this PR found that the
+first revision of the fixture indexed the reversal target by `requestId` (the
+wrong ID space — see invariant #7 in `business-transaction-contract.ts`) and did
+not re-verify the tenant/legal-entity of the resolved original transaction —
+both were fixed before this PR merged; see ADR-0020 §5 for the full detail. Do
+not cite this fixture as "proven safe" without reading that note.

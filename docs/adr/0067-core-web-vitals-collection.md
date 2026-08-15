@@ -1,241 +1,241 @@
-# ADR-0067 — Pengumpulan Core Web Vitals: keputusan, bukan cacat
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0067-core-web-vitals-collection.id.md)
 
-- **Status:** Accepted (belum diimplementasikan)
-- **Keputusan:** Opsi D (mendarat 5 Agustus 2026) + **Opsi B** (diputuskan 8 Agustus 2026, belum dibangun — §Adendum 2026-08-08)
-- **Tanggal:** 2026-08-04 (keputusan RUM: 2026-08-08)
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §5 (rekomendasi #7), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (cache tepi), [ADR-0064](0064-foreign-key-columns-must-be-index-reachable.md) (gerbang performa pertama)
+# ADR-0067 — Core Web Vitals collection: a decision, not a defect
 
-> **Kenapa ADR ini `Proposed` selama empat hari.** Enam rekomendasi lain dari
-> asesmen 4 Agustus 2026 sudah mendarat. Yang ini **tidak**, dengan sengaja: ia
-> satu-satunya yang bukan memperbaiki cacat, melainkan **menambah pengumpulan
-> data tentang pengunjung nyata** — dan itu bertabrakan dengan postur yang modul
-> tujuannya sudah nyatakan. Keputusannya milik pemilik produk, bukan milik orang
-> yang menulis asesmennya.
+- **Status:** Accepted (not yet implemented)
+- **Decision:** Option D (landed 5 August 2026) + **Option B** (decided 8 August 2026, not yet built — §Addendum 2026-08-08)
+- **Date:** 2026-08-04 (RUM decision: 2026-08-08)
+- **Decision maker:** @ahliweb
+- **Related:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §5 (recommendation #7), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (edge cache), [ADR-0064](0064-foreign-key-columns-must-be-index-reachable.md) (the first performance gate)
+
+> **Why this ADR was `Proposed` for four days.** The six other recommendations
+> from the 4 August 2026 assessment have landed. This one has **not**, on
+> purpose: it is the only one that does not fix a defect, but instead **adds
+> collection of data about real visitors** — and that collides with the posture
+> the target module has already declared. The decision belongs to the product
+> owner, not to the person who wrote the assessment.
 >
-> **Keputusan itu diambil pada 8 Agustus 2026 — lihat §Adendum 2026-08-08.**
+> **That decision was taken on 8 August 2026 — see §Addendum 2026-08-08.**
 
-## Konteks
+## Context
 
-### 1. Yang benar-benar hilang
+### 1. What is genuinely missing
 
-Repo ini melayani HTML nyata: `/news/**` (ADR-0059 — **sudah tidak berlaku**,
+This repo serves real HTML: `/news/**` (ADR-0059 — **no longer in force**,
 [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
-menghapus keluarga rute itu dari repo ini pada 8 Agustus 2026; kalimat aslinya
-dipertahankan karena ia benar saat ADR ini ditulis dan ruang lingkup keputusan
-di bawah menyusut karenanya), `/blog/{tenantCode}/**`
-(ADR-0009), dan 31 layar admin. **LCP / INP / CLS tidak pernah diukur di mana
-pun**, dan tidak ada anggaran ukuran aset.
+removed that route family from this repo on 8 August 2026; the original sentence
+is kept because it was true when this ADR was written and the scope of the
+decision below shrinks accordingly), `/blog/{tenantCode}/**`
+(ADR-0009), and 31 admin screens. **LCP / INP / CLS are never measured
+anywhere**, and there is no asset size budget.
 
-Akibatnya spesifik dan bisa dinyatakan: seluruh investasi cache tepi
+The consequence is specific and can be stated: the entire edge cache investment
 ([ADR-0042](0042-varnish-edge-cache-auto-activation.md),
-[ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md), 11 surface)
-**dibuktikan ke beban origin, tidak pernah ke pengalaman pengguna**. Kita tahu
-query database berkurang. Kita tidak tahu apakah halamannya terasa lebih cepat.
+[ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md), 11 surfaces)
+**is proven against origin load, never against user experience**. We know
+database queries went down. We do not know whether the page feels faster.
 
-Standar yang relevan: **Core Web Vitals** (Google) sebagai metrik lapangan, dan
-**ISO/IEC 25010 — Performance efficiency (time behaviour)** sebagai payungnya.
+The relevant standards: **Core Web Vitals** (Google) as the field metric, and
+**ISO/IEC 25010 — Performance efficiency (time behaviour)** as its umbrella.
 
-### 2. Kenapa ini BUKAN sekadar "tambah tabel di `visitor_analytics`"
+### 2. Why this is NOT merely "add a table to `visitor_analytics`"
 
-Modul itu mendeklarasikan dirinya **privacy-first**, dan bukan sebagai slogan:
-`purgeVisitorAnalyticsData` melakukan DELETE/UPDATE-to-null **tanpa langkah
-arsip**, dengan alasan tertulis bahwa detail pengunjung mentah/nyaris-mentah
-**sengaja tidak disimpan lebih lama dari perlu**, sehingga mengarsipkannya justru
-melawan postur modulnya sendiri.
+That module declares itself **privacy-first**, and not as a slogan:
+`purgeVisitorAnalyticsData` performs DELETE/UPDATE-to-null **with no archive
+step**, on the written grounds that raw/near-raw visitor detail is
+**deliberately not kept longer than necessary**, so that archiving it would
+actually work against its own module's posture.
 
-Sampel Core Web Vitals adalah **telemetri per-kunjungan**: URL, timing, dan —
-kalau ingin berguna — petunjuk perangkat/koneksi. Itu persis kelas data yang
-modul itu putuskan untuk diminimalkan. Menambahkannya diam-diam akan menjadi
-pembalikan keputusan desain yang tak seorang pun minta.
+Core Web Vitals samples are **per-visit telemetry**: URL, timings, and — if you
+want them to be useful — device/connection hints. That is exactly the class of
+data that module decided to minimise. Adding it silently would be a reversal of
+a design decision nobody asked for.
 
-## Pilihan, dan trade-off yang sebenarnya
+## The options, and the actual trade-offs
 
-### Opsi A — Tidak mengumpulkan (status quo)
+### Option A — Do not collect (status quo)
 
-Tidak ada data lapangan. Performa tetap dinilai lewat proxy: jumlah query
-(rekomendasi #6, sudah mendarat), hit-rate cache tepi, latensi origin.
+No field data. Performance keeps being judged through proxies: query counts
+(recommendation #6, already landed), edge cache hit rate, origin latency.
 
-**Untuk siapa ini cukup:** deployment yang halamannya sederhana dan yang
-pertanyaannya "apakah origin sanggup", bukan "apakah pengunjung menunggu".
+**Who this is enough for:** deployments whose pages are simple and whose
+question is "can the origin cope", not "are visitors waiting".
 
-### Opsi B — Agregat saja, tanpa baris per-kunjungan
+### Option B — Aggregates only, no per-visit rows
 
-Skrip klien mengirim satu sampel; server **langsung meng-agregasi** ke bucket
-per-(tenant, rute-ter-normalisasi, hari) — menyimpan hitungan + persentil
-p75, **tidak pernah baris mentahnya**. Tak ada URL penuh, tak ada identitas, tak
-ada join ke sesi.
+The client script sends one sample; the server **aggregates immediately** into
+buckets per (tenant, normalised route, day) — storing counts + the p75
+percentile, **never the raw row**. No full URLs, no identity, no join to the
+session.
 
-**Yang didapat:** p75 LCP/INP/CLS per rute — persis angka yang Core Web Vitals
-definisikan sebagai ambangnya, dan cukup untuk menjawab "apakah cache tepi
-memperbaiki pengalaman".
+**What you get:** p75 LCP/INP/CLS per route — exactly the numbers Core Web
+Vitals defines as its thresholds, and enough to answer "did the edge cache
+improve the experience".
 
-**Yang dibayar:** tak bisa men-drill ke satu kunjungan lambat. Diterima menurut
-pembacaan ini: mendiagnosa SATU kunjungan lambat adalah pekerjaan APM, bukan
-pekerjaan CMS, dan justru drill-down itulah yang menuntut menyimpan data mentah.
+**What you pay:** you cannot drill into a single slow visit. Accepted under this
+reading: diagnosing ONE slow visit is APM work, not CMS work, and it is
+precisely that drill-down that demands storing raw data.
 
-**Konsisten dengan postur modul?** Ya — agregasi di titik masuk berarti tak ada
-detail pengunjung mentah yang pernah tersimpan, jadi `purge` tidak punya apa-apa
-untuk dihapus dan janji privasi modulnya tidak berubah.
+**Consistent with the module's posture?** Yes — aggregating at the entry point
+means no raw visitor detail is ever stored, so `purge` has nothing to delete and
+the module's privacy promise does not change.
 
-### Opsi C — Baris mentah + retensi
+### Option C — Raw rows + retention
 
-Simpan sampel per-kunjungan, purge lewat `dataLifecycle`.
+Store per-visit samples, purge via `dataLifecycle`.
 
-**DITOLAK dalam draf ini.** Ia membalik keputusan eksplisit modul demi kemampuan
-(drill-down) yang tak ada satu pun kebutuhan tercatat menuntutnya. Kalau suatu
-saat dibutuhkan, ia layak ADR-nya sendiri dengan kebutuhan itu tertulis.
+**REJECTED in this draft.** It reverses the module's explicit decision for a
+capability (drill-down) that no recorded requirement demands. If it is ever
+needed, it deserves its own ADR with that requirement written down.
 
-### Opsi D — Pengukuran LAB, dan ia ortogonal terhadap A/B/C
+### Option D — LAB measurement, and it is orthogonal to A/B/C
 
-> **Ditambahkan 4 Agustus 2026 (asesmen putaran kedua §9.9).** Draf pertama ADR
-> ini menawarkan tiga opsi yang **semuanya RUM** — semuanya mengumpulkan data
-> dari pengunjung nyata. Itu membuat seluruh keputusan bertabrakan dengan postur
-> privasi `visitor_analytics`, dan karena itu menunggu. Ada jalan keempat yang
-> tidak pernah ditimbang, dan ia tidak menunggu apa pun.
+> **Added 4 August 2026 (second-round assessment §9.9).** The first draft of
+> this ADR offered three options that were **all RUM** — all of them collecting
+> data from real visitors. That made the whole decision collide with the privacy
+> posture of `visitor_analytics`, and that is why it waited. There is a fourth
+> path that was never weighed, and it waits for nothing.
 
-Jalankan Lighthouse/Playwright terhadap build sendiri di CI. **Nol** data
-pengunjung: tidak ada skrip klien, tidak ada endpoint publik, tidak ada tabel,
-tidak ada sentuhan pada `visitor_analytics`. Repo ini **sudah** memasang
-Playwright dan punya suite E2E ber-gerbang env, jadi biayanya konfigurasi, bukan
-kemampuan baru.
+Run Lighthouse/Playwright against our own build in CI. **Zero** visitor data: no
+client script, no public endpoint, no table, no touching `visitor_analytics`.
+This repo **already** has Playwright installed and an env-gated E2E suite, so the
+cost is configuration, not a new capability.
 
-**Yang membuatnya bukan pengganti A/B/C:** lab dan lapangan menjawab pertanyaan
-yang berbeda, dan menukar satu dengan yang lain adalah kesalahan yang jauh lebih
-umum daripada tidak mengukur sama sekali.
+**What makes it not a replacement for A/B/C:** lab and field answer different
+questions, and swapping one for the other is a mistake far more common than not
+measuring at all.
 
-| Pertanyaan                                           | Dijawab oleh |
-| ---------------------------------------------------- | ------------ |
-| "Apakah perubahan ini membuat halaman lebih lambat?" | **Lab**      |
-| "Apa yang benar-benar dialami pengunjung kami?"      | RUM (B)      |
+| Question                                    | Answered by |
+| ------------------------------------------- | ----------- |
+| "Does this change make the page slower?"    | **Lab**     |
+| "What do our visitors actually experience?" | RUM (B)     |
 
-Lab mengukur satu mesin, satu jaringan, satu jalankan — ia **tidak** bisa
-menjawab p75 kunjungan nyata, dan menuliskan angkanya seolah bisa akan menjadi
-kelas cacat yang dokumen ini ada untuk mencegah. Yang bisa ia lakukan, dan yang
-tak bisa dilakukan A: **memerahkan CI** saat sebuah perubahan meregresi LCP di
-halaman yang sama pada mesin yang sama.
+Lab measures one machine, one network, one run — it **cannot** answer the p75 of
+real visits, and writing its numbers down as if it could would be exactly the
+class of defect this document exists to prevent. What it can do, and what A
+cannot: **turn CI red** when a change regresses LCP on the same page on the same
+machine.
 
-Batasnya yang harus ikut ditulis kalau opsi ini diambil: sebuah gerbang lab yang
-melewati dirinya sendiri saat tidak ada sumber konten adalah gerbang yang
-membusuk (`awcms-astro` mencatat persis itu sebagai alasan celah 8-nya tetap
-terbuka di repo template). Di sini masalahnya lebih kecil — repo ini punya
-tenant dan konten nyata di staging — tetapi gerbangnya tetap harus **menyatakan**
-saat ia tidak berjalan.
+The limit that must be written down too if this option is taken: a lab gate that
+passes itself when there is no content source is a gate that rots (`awcms-astro`
+records exactly that as the reason its gap 8 stays open in the template repo).
+Here the problem is smaller — this repo has real tenants and real content in
+staging — but the gate must still **declare** when it is not running.
 
-## Rekomendasi
+## Recommendation
 
-**Opsi D sekarang, dan Opsi B hanya bila pemilik produk memang menginginkan
-angka lapangan.** Keduanya bisa hidup bersama; D tidak menunggu keputusan atas B,
-dan itulah alasan utama memisahkannya.
+**Option D now, and Option B only if the product owner genuinely wants field
+numbers.** They can live together; D does not wait on the decision about B, and
+that is the main reason for separating them.
 
-Kalau angka lapangan tidak diinginkan, **Opsi A tetap jawaban yang sah** untuk
-bagian RUM — dan dengan D diambil, "tidak mengukur sama sekali" berhenti menjadi
-konsekuensinya.
+If field numbers are not wanted, **Option A remains a legitimate answer** for the
+RUM part — and with D taken, "not measuring at all" stops being the consequence.
 
-Yang TIDAK direkomendasikan dalam keadaan apa pun: menambahkannya sebagai
-"cuma tabel lagi" tanpa keputusan eksplisit, karena postur privasi modul
-tujuannya sudah tertulis dan pembalikannya harus terlihat.
+What is NOT recommended under any circumstances: adding it as "just another
+table" without an explicit decision, because the target module's privacy posture
+is already written down and its reversal must be visible.
 
-## Bila Opsi B diambil, bentuknya
+## If Option B is taken, its shape
 
-1. Skrip klien kecil (tanpa dependensi) di halaman publik, memakai
-   `PerformanceObserver`; melapor sekali saat `visibilitychange`.
-2. `POST /api/v1/analytics/vitals` — publik, tak terautentikasi, **ber-rate-limit
-   lewat `checkSharedRateLimit`** ([ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md)),
-   badan dibatasi, rute dinormalisasi ke POLA (`/news/[slug]`) sebelum apa pun
-   ditulis.
-3. Satu tabel agregat ber-`tenant_id`, FORCE RLS, unik pada
-   `(tenant_id, route_pattern, day, metric)`; `UPSERT` yang meng-update hitungan
-   - sketsa persentil. **Tidak ada tabel baris mentah.**
-4. Ditampilkan di `/admin/analytics` bersama statistik yang sudah ada.
-5. Kolom FK-nya wajib lulus `db:fk-index:check` (ADR-0064) sejak migrasi
-   pertamanya.
+1. A small client script (no dependencies) on public pages, using
+   `PerformanceObserver`; reporting once on `visibilitychange`.
+2. `POST /api/v1/analytics/vitals` — public, unauthenticated, **rate-limited via
+   `checkSharedRateLimit`** ([ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md)),
+   body-capped, route normalised to a PATTERN (`/news/[slug]`) before anything
+   is written.
+3. One aggregate table with `tenant_id`, FORCE RLS, unique on
+   `(tenant_id, route_pattern, day, metric)`; an `UPSERT` that updates the count
+   - percentile sketch. **No raw-row table.**
+4. Displayed at `/admin/analytics` alongside the existing statistics.
+5. Its FK columns must pass `db:fk-index:check` (ADR-0064) from its first
+   migration onwards.
 
-Estimasi: satu migrasi, satu endpoint, satu skrip klien, satu bagian layar —
-sebanding dengan modul kecil, bukan dengan tambalan.
+Estimate: one migration, one endpoint, one client script, one screen section —
+comparable to a small module, not to a patch.
 
-## Adendum 2026-08-05 — Opsi D diambil dan mendarat
+## Addendum 2026-08-05 — Option D taken and landed
 
-**Opsi D diimplementasikan**, persis sebagaimana §Rekomendasi menyatakannya
-("Opsi D sekarang, tidak menunggu keputusan atas B"). Status ADR ini **tetap
-`Proposed`**: yang menunggu keputusan pemilik produk adalah bagian RUM
-(Opsi A/B/C), dan adendum ini tidak menyentuhnya.
+**Option D was implemented**, exactly as §Recommendation states it ("Option D
+now, not waiting on the decision about B"). This ADR's status **remains
+`Proposed`**: what waits on the product owner's decision is the RUM part
+(Option A/B/C), and this addendum does not touch it.
 
-Bentuknya — nol data pengunjung, nol permukaan baru:
+Its shape — zero visitor data, zero new surfaces:
 
-- **Berkas:** `tests/e2e/cwv-lab.e2e.ts` — spec Playwright di harness E2E yang
-  sudah ada (bukan harness kedua), mengukur **LCP** dan **CLS** halaman
-  `/login` (permukaan publik yang E2E smoke sudah sentuh) via
-  `PerformanceObserver` ber-`buffered: true`, dengan CLS dihitung per definisi
-  session-window CWV.
-- **Gerbang:** env `E2E_CWV_LAB=1`, dinyalakan job CI `e2e-smoke`
-  (`.github/workflows/ci.yml`) pada langkah yang sama dengan
-  `bun run test:e2e`. Ambang kelulusan = ambang "baik" CWV: LCP ≤ 2500 ms,
-  CLS ≤ 0,1.
-- **Script:** `bun run perf:cwv:lab` menjalankan spec-nya sendirian terhadap
-  server yang disediakan pemanggil (konvensi suite E2E).
+- **File:** `tests/e2e/cwv-lab.e2e.ts` — a Playwright spec in the existing E2E
+  harness (not a second harness), measuring **LCP** and **CLS** of the
+  `/login` page (a public surface the E2E smoke already touches) via
+  `PerformanceObserver` with `buffered: true`, with CLS computed per the CWV
+  session-window definition.
+- **Gate:** env `E2E_CWV_LAB=1`, turned on by the `e2e-smoke` CI job
+  (`.github/workflows/ci.yml`) in the same step as
+  `bun run test:e2e`. The pass thresholds are the CWV "good" thresholds:
+  LCP ≤ 2500 ms, CLS ≤ 0.1.
+- **Script:** `bun run perf:cwv:lab` runs the spec on its own against a server
+  provided by the caller (the E2E suite convention).
 
-Batas yang §Opsi D wajibkan, dan cara adendum ini memenuhinya:
+The limits §Option D requires, and how this addendum meets them:
 
-1. **Gerbang yang tidak berjalan menyatakannya.** Tanpa `E2E_CWV_LAB` spec
-   mencetak baris `[cwv-lab] SKIP: …` eksplisit dan menandai test skipped —
-   tidak pernah lolos senyap. Saat berjalan, LCP yang tidak terekam (observer
-   tanpa entry, atau browser tanpa dukungan entry type) adalah **kegagalan**,
-   bukan kelulusan.
-2. **Angka lab tidak ditulis seolah p75 lapangan.** Konstanta ambangnya
-   ber-komentar "angka LAB satu mesin — detektor regresi, bukan p75 lapangan",
-   dan log per-run mencetak kalimat yang sama. **INP tidak diukur dan tidak
-   diklaim** — tanpa interaksi pengguna nyata ia tidak bermakna di lab.
+1. **A gate that is not running says so.** Without `E2E_CWV_LAB` the spec prints
+   an explicit `[cwv-lab] SKIP: …` line and marks the test skipped — it never
+   passes silently. When it does run, an LCP that is not recorded (an observer
+   with no entries, or a browser without support for the entry type) is a
+   **failure**, not a pass.
+2. **Lab numbers are not written as if they were field p75.** The threshold
+   constants carry the comment "a LAB number from one machine — a regression
+   detector, not field p75", and the per-run log prints the same sentence.
+   **INP is not measured and not claimed** — without real user interaction it is
+   meaningless in a lab.
 
-## Adendum 2026-08-08 — Opsi B diambil; bagian RUM berhenti menggantung
+## Addendum 2026-08-08 — Option B taken; the RUM part stops dangling
 
-**Pemilik produk mengambil Opsi B.** Bagian RUM yang sengaja ditinggalkan pada
-4 Agustus kini punya jawaban, dan ADR ini pindah dari `Proposed` ke
-`Accepted (belum diimplementasikan)`.
+**The product owner took Option B.** The RUM part deliberately left open on
+4 August now has an answer, and this ADR moves from `Proposed` to
+`Accepted (not yet implemented)`.
 
-Yang diambil persis Opsi B sebagaimana tertulis, tanpa pelonggaran:
+What was taken is exactly Option B as written, with no loosening:
 
-- **Agregasi di titik masuk.** Server tidak pernah menyimpan sampel per-kunjungan;
-  ia meng-`UPSERT` ke bucket per-(tenant, pola rute, hari, metrik). Tidak ada
-  tabel baris mentah, tidak ada URL penuh, tidak ada identitas, tidak ada join ke
-  sesi.
-- **Opsi C tetap DITOLAK.** Kalau drill-down per-kunjungan suatu saat dibutuhkan,
-  ia ADR-nya sendiri dengan kebutuhannya tertulis — bukan perluasan diam-diam
-  atas keputusan ini.
-- **Postur privasi `visitor_analytics` tidak dibalik.** Justru sebaliknya: karena
-  tak ada detail pengunjung mentah yang tersimpan, `purge` tidak punya apa pun
-  untuk dihapus dan janji modulnya berdiri apa adanya.
+- **Aggregation at the entry point.** The server never stores a per-visit sample;
+  it `UPSERT`s into buckets per (tenant, route pattern, day, metric). There is no
+  raw-row table, no full URL, no identity, no join to the session.
+- **Option C remains REJECTED.** If per-visit drill-down is ever needed, it gets
+  its own ADR with its requirement written down — not a silent extension of this
+  decision.
+- **The `visitor_analytics` privacy posture is not reversed.** Quite the
+  opposite: because no raw visitor detail is stored, `purge` has nothing to
+  delete and the module's promise stands as it is.
 
-### Kenapa statusnya berkualifikasi, dan apa yang menegakkannya
+### Why the status is qualified, and what enforces it
 
-`Accepted (belum diimplementasikan)`, bukan `Accepted` polos, karena tak satu
-baris pun dari §"Bila Opsi B diambil, bentuknya" sudah dibangun. Kualifikasi itu
-**digerbangi**: ADR ini kini punya entri di peta
-`tests/adr-implementation-status.test.ts`, yang menegakkannya dua arah — selama
-artefaknya belum ada, kualifikasi wajib; begitu artefaknya mendarat, kualifikasi
-wajib dicabut pada PR yang sama.
+`Accepted (not yet implemented)`, not plain `Accepted`, because not a single
+line of §"If Option B is taken, its shape" has been built. That qualification is
+**gated**: this ADR now has an entry in the
+`tests/adr-implementation-status.test.ts` map, which enforces it in both
+directions — as long as the artifact does not exist, the qualification is
+mandatory; the moment the artifact lands, the qualification must be removed in
+the same PR.
 
-Artefak yang dipetakan adalah
-`visitor-analytics/domain/web-vitals-aggregate.ts` — **agregatnya**, bukan
-endpoint-nya dan bukan migrasinya. Itu disengaja: inti Opsi B adalah bahwa baris
-mentah tidak pernah disimpan, jadi berkas yang melakukan agregasi adalah
-keputusan ini dalam bentuk yang bisa dieksekusi. Memetakannya ke endpoint akan
-membiarkan implementasi baris-mentah memuaskan gerbangnya.
+The mapped artifact is
+`visitor-analytics/domain/web-vitals-aggregate.ts` — **the aggregate**, not the
+endpoint and not the migration. That is deliberate: the heart of Option B is
+that raw rows are never stored, so the file that does the aggregation is this
+decision in executable form. Mapping it to the endpoint would let a raw-row
+implementation satisfy the gate.
 
-### Yang harus dibawa PR implementasinya, di luar §"Bila Opsi B diambil, bentuknya"
+### What the implementation PR must carry, beyond §"If Option B is taken, its shape"
 
-`POST /api/v1/analytics/vitals` adalah **permukaan tulis publik tanpa
-autentikasi** — kelas permukaan yang paling sedikit dimiliki repo ini. Ia karena
-itu wajib membawa, dan di-review sebagai, hal-hal yang permukaan publik lain di
-sini sudah bawa:
+`POST /api/v1/analytics/vitals` is a **public write surface without
+authentication** — the class of surface this repo has the fewest of. It must
+therefore carry, and be reviewed for, the things the other public surfaces here
+already carry:
 
 1. `checkSharedRateLimit` ([ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md))
-   dan batas badan permintaan, keduanya sebelum satu baris pun ditulis.
-2. Normalisasi rute ke **POLA** sebelum penyimpanan, dengan daftar pola yang
-   diturunkan dari rute yang benar-benar ada — sebuah `route_pattern` yang
-   diterima apa adanya dari klien adalah kolom yang diisi penyerang.
-3. Nilai metrik yang divalidasi rentangnya. Sampel tak terbatas dari klien tak
-   tepercaya adalah cara paling langsung membuat p75 sebuah tenant tak berarti.
-4. `VISITOR_ANALYTICS_ENABLED` tetap menjadi saklarnya. Instalasi baru tetap
-   tidak mengumpulkan apa pun sampai operator memilihnya — Opsi B menambah apa
-   yang dikumpulkan saat saklar itu menyala, bukan mengubah bawaannya.
+   and a request body cap, both before a single row is written.
+2. Route normalisation to a **PATTERN** before storage, with a pattern list
+   derived from routes that actually exist — a `route_pattern` accepted verbatim
+   from the client is a column filled in by an attacker.
+3. Metric values with validated ranges. Unbounded samples from an untrusted
+   client are the most direct way to make a tenant's p75 meaningless.
+4. `VISITOR_ANALYTICS_ENABLED` remains the switch. A new installation still
+   collects nothing until the operator chooses it — Option B adds to what is
+   collected when that switch is on, it does not change its default.

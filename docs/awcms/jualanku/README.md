@@ -1,76 +1,77 @@
-# Jualanku.info — blueprint implementasi di `awcms`
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
 
-> **Status berkas ini: RENCANA, bukan deskripsi kode.** Tidak ada satu pun modul
-> `jualanku_*`, tabel `awcms_jualanku_*`, migrasi, rute, atau permission Jualanku
-> yang sudah ada di repo ini per tanggal dokumen. Sumber kebenaran keadaan kode
-> tetap `src/modules/index.ts`, `sql/`, dan `bun run check` — bila dokumen ini
-> berbeda dari kode, **kode yang benar**.
+# Jualanku.info — implementation blueprint in `awcms`
 
-Folder ini menerjemahkan dokumen validasi _"Validasi Arsitektur dan Standar —
+> **The status of this file: A PLAN, not a description of code.** Not a single
+> `jualanku_*` module, `awcms_jualanku_*` table, migration, route, or Jualanku
+> permission exists in this repo as of the document's date. The source of truth
+> for the state of the code remains `src/modules/index.ts`, `sql/`, and
+> `bun run check` — if this document differs from the code, **the code is right**.
+
+This folder translates the validation document _"Validasi Arsitektur dan Standar —
 Porting UI/UX Jualanku.info ke AWCMS dan AWCMS-Astro"_ v1.0 (PT TIM SIX,
-29 Juli 2026, status `APPROVE WITH CORRECTIONS`) menjadi rancangan yang bisa
-langsung dieksekusi di repo ini, **setelah dikoreksi terhadap kode nyata**.
-Keputusannya sendiri tercatat di
+29 July 2026, status `APPROVE WITH CORRECTIONS`) into a design that can be
+executed directly in this repo, **after correcting it against the real code**.
+The decision itself is recorded in
 [ADR-0045](../../adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md);
-folder ini adalah detail rancangan di bawah keputusan itu.
+this folder is the design detail beneath that decision.
 
-Sisi experience layer (rendering, adapter, deployment, BFF) dirancang di repo
-`ahliweb/awcms-astro`, karena perubahannya terjadi di sana.
+The experience layer side (rendering, adapters, deployment, the BFF) is designed
+in the `ahliweb/awcms-astro` repo, because that is where those changes happen.
 
-## Peta dokumen
+## Document map
 
-| Berkas                                                                         | Isi                                                                                                                               |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [01-arsitektur-porting.md](01-arsitektur-porting.md)                           | Pembagian lapisan, topologi, matriks rendering per permukaan, batas tanggung jawab BFF.                                           |
-| [02-model-tenant-merchant-otorisasi.md](02-model-tenant-merchant-otorisasi.md) | Tenant vs merchant, merchant sebagai business scope, katalog role & permission, aturan ABAC, matriks negative-authorization test. |
-| [03-bounded-context-dan-model-data.md](03-bounded-context-dan-model-data.md)   | Lima modul, draft `ModuleDescriptor`, kepemilikan tabel, ERD per konteks, aturan RLS & retensi.                                   |
-| [04-kontrak-api.md](04-kontrak-api.md)                                         | Namespace public/portal/admin, inventaris endpoint, envelope, idempotency, pagination, fragmen OpenAPI.                           |
-| [05-kontrak-sesi-dan-bff.md](05-kontrak-sesi-dan-bff.md)                       | Kontrak sesi lintas-origin, cookie/CSRF, penurunan tenant, rotasi & revokasi, model ancaman ringkas.                              |
-| [06-porting-uiux.md](06-porting-uiux.md)                                       | Disposition matrix Elementor, design token, spesifikasi layar, komponen, aksesibilitas, i18n.                                     |
-| [07-roadmap-gates-kepatuhan.md](07-roadmap-gates-kepatuhan.md)                 | Fase P0–P6, quality gate, KPI, RACI, kriteria go/pivot/pause/stop, standar & regulasi.                                            |
-| [08-koreksi-dokumen-validasi.md](08-koreksi-dokumen-validasi.md)               | Setiap klaim dokumen validasi yang **tidak cocok** dengan kode repo ini, beserta bukti dan koreksinya.                            |
+| File                                                                           | Contents                                                                                                                               |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [01-arsitektur-porting.md](01-arsitektur-porting.md)                           | Layer split, topology, the rendering matrix per surface, the boundary of the BFF's responsibilities.                                   |
+| [02-model-tenant-merchant-otorisasi.md](02-model-tenant-merchant-otorisasi.md) | Tenant vs merchant, merchant as a business scope, the role & permission catalogue, ABAC rules, the negative-authorization test matrix. |
+| [03-bounded-context-dan-model-data.md](03-bounded-context-dan-model-data.md)   | Five modules, the draft `ModuleDescriptor`, table ownership, the ERD per context, RLS & retention rules.                               |
+| [04-kontrak-api.md](04-kontrak-api.md)                                         | The public/portal/admin namespaces, the endpoint inventory, the envelope, idempotency, pagination, the OpenAPI fragment.               |
+| [05-kontrak-sesi-dan-bff.md](05-kontrak-sesi-dan-bff.md)                       | The cross-origin session contract, cookies/CSRF, tenant derivation, rotation & revocation, a brief threat model.                       |
+| [06-porting-uiux.md](06-porting-uiux.md)                                       | The Elementor disposition matrix, design tokens, screen specifications, components, accessibility, i18n.                               |
+| [07-roadmap-gates-kepatuhan.md](07-roadmap-gates-kepatuhan.md)                 | Phases P0–P6, quality gates, KPIs, RACI, go/pivot/pause/stop criteria, standards & regulations.                                        |
+| [08-koreksi-dokumen-validasi.md](08-koreksi-dokumen-validasi.md)               | Every claim in the validation document that does **not** match this repo's code, with the evidence and the correction.                 |
 
-## Prasyarat sebelum baris kode pertama (P0)
+## Prerequisites before the first line of code (P0)
 
-Urutannya mengikat: setiap butir menghasilkan artefak yang dipakai butir
-berikutnya.
+The order is binding: each item produces an artifact used by the next.
 
-1. **ADR-0045 diterima** (repo ini) dan **ADR rendering/BFF diterima** (repo
-   `awcms-astro`). — _selesai bersama perubahan ini._
-2. **Inventaris modul direkonsiliasi** sehingga `README.md`,
-   [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md), dan
-   [`docs/PROJECT_STATE.md`](../../PROJECT_STATE.md) menyebut daftar dan jumlah
-   yang sama dengan `src/modules/index.ts`. — _selesai bersama perubahan ini._
-3. **Kontrak sesi lintas-origin** ([05](05-kontrak-sesi-dan-bff.md)) disepakati,
-   masuk OpenAPI, dan punya test — termasuk test negatif untuk CSRF dan origin.
-4. **Model data merchant + business scope** ([02](02-model-tenant-merchant-otorisasi.md),
-   [03](03-bounded-context-dan-model-data.md)) disepakati, lengkap dengan matriks
-   negative-authorization yang harus merah sebelum kode ada.
-5. **Lima `ModuleDescriptor` + kepemilikan tabel** dibekukan
-   ([03](03-bounded-context-dan-model-data.md)) — module admission mengikuti
+1. **ADR-0045 accepted** (this repo) and the **rendering/BFF ADR accepted** (the
+   `awcms-astro` repo). — _done together with this change._
+2. **The module inventory reconciled** so that `README.md`,
+   [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md), and
+   [`docs/PROJECT_STATE.md`](../../PROJECT_STATE.md) name the same list and count
+   as `src/modules/index.ts`. — _done together with this change._
+3. **The cross-origin session contract** ([05](05-kontrak-sesi-dan-bff.md)) agreed,
+   in OpenAPI, and covered by tests — including negative tests for CSRF and origin.
+4. **The merchant + business scope data model** ([02](02-model-tenant-merchant-otorisasi.md),
+   [03](03-bounded-context-dan-model-data.md)) agreed, complete with the
+   negative-authorization matrix that must be red before any code exists.
+5. **The five `ModuleDescriptor`s + table ownership** frozen
+   ([03](03-bounded-context-dan-model-data.md)) — module admission follows
    [`../21_module_admission_governance.md`](../21_module_admission_governance.md):
-   satu ADR admission per modul domain sebelum scaffold.
+   one admission ADR per domain module before scaffolding.
 
-Baru setelah kelimanya tertutup, pekerjaan layar produksi dimulai — satu bounded
-context per unit kerja, masing-masing membawa migrasi, seed permission, fragmen
-OpenAPI, test (termasuk negatif), dokumen, dan changeset sendiri.
+Only once all five are closed does production screen work begin — one bounded
+context per unit of work, each carrying its own migration, permission seed,
+OpenAPI fragment, tests (including negative ones), documentation, and changeset.
 
-## Aturan yang mengikat implementasi
+## Rules that bind the implementation
 
-Diambil dari kontrak repo yang sudah berlaku, bukan aturan baru:
+Taken from repo contracts that already apply, not new rules:
 
-- **Modul domain hidup langsung di `src/modules/`** dan didaftarkan di
-  `src/modules/index.ts` (ADR-0034). Tidak ada repo turunan, tidak ada registry
-  ekstensi.
-- **Setiap tabel tenant-scoped wajib `FORCE` RLS** dan hanya boleh ditulis modul
-  pemiliknya (`bun run modules:table-writes:check`).
-- **Setiap endpoint melewati `defineTenantRoute` + guard default-deny**, dan
-  `resourceAttributes` untuk ABAC selalu dibaca dari baris nyata, tidak pernah
-  dari body request (ADR-0033).
-- **Permission baru = migrasi seed baru.** Descriptor modul saja tidak memberi
-  permission ke tenant yang sudah ada; tenant lama tetap 403 sampai backfill-nya
-  dijalankan.
-- **Aksi high-risk wajib idempotency key + audit + decision log**, dan pasangan
-  maker/checker-nya wajib dideklarasikan sebagai `sodRules` (ADR-0031).
-- **Kontrak API modular**: satu fragmen OpenAPI per modul, di-bundle deterministik
-  (ADR-0026). Endpoint tanpa fragmen tidak lulus `bun run api:spec:check`.
+- **Domain modules live directly in `src/modules/`** and are registered in
+  `src/modules/index.ts` (ADR-0034). No derived repo, no extension registry.
+- **Every tenant-scoped table must have `FORCE` RLS** and may only be written by
+  its owning module (`bun run modules:table-writes:check`).
+- **Every endpoint goes through `defineTenantRoute` + a default-deny guard**, and
+  the `resourceAttributes` for ABAC are always read from the real row, never from
+  the request body (ADR-0033).
+- **A new permission = a new seed migration.** The module descriptor alone does
+  not grant permissions to tenants that already exist; older tenants stay 403
+  until the backfill is run.
+- **High-risk actions must have an idempotency key + audit + decision log**, and
+  their maker/checker pair must be declared as `sodRules` (ADR-0031).
+- **Modular API contracts**: one OpenAPI fragment per module, bundled
+  deterministically (ADR-0026). An endpoint without a fragment does not pass
+  `bun run api:spec:check`.

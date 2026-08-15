@@ -1,68 +1,70 @@
-# ADR-0054 — Provisioning tenant: satu jalur pembuatan, ber-gerbang platform
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0054-tenant-provisioning.id.md)
+
+# ADR-0054 — Tenant provisioning: one creation path, platform-gated
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-02
-- **Pengambil keputusan:** @ahliweb
-- **Membangun di atas:** [ADR-0053](0053-platform-scoped-permissions.md) (permission ber-scope platform) — provisioning adalah konsumen kedua primitif itu, dan yang pertama membuat mode `multi` benar-benar bisa dicapai
-- **Terkait:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) §Keputusan butir 3 (gerbang navigasi), [ADR-0046](0046-idn-admin-regions-module-admission.md)
+- **Date:** 2026-08-02
+- **Decision maker:** @ahliweb
+- **Builds on:** [ADR-0053](0053-platform-scoped-permissions.md) (platform-scoped permissions) — provisioning is that primitive's second consumer, and the first thing that makes `multi` mode actually reachable
+- **Related:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) §Decision item 3 (navigation gate), [ADR-0046](0046-idn-admin-regions-module-admission.md)
 
-## Konteks
+## Context
 
-Sampai ADR ini, **tenant kedua tidak bisa dibuat sama sekali.**
+Until this ADR, **a second tenant could not be created at all.**
 
-`POST /api/v1/setup/initialize` meng-klaim singleton `awcms_setup_state`, jadi ia sukses **tepat sekali**. Tidak ada jalur lain yang menyentuh `awcms_tenants`. Konsekuensinya lebih dalam dari "fitur belum ada":
+`POST /api/v1/setup/initialize` claims the `awcms_setup_state` singleton, so it succeeds **exactly once**. No other path touches `awcms_tenants`. The consequences run deeper than "the feature does not exist yet":
 
-- Setiap deployment permanen single-tenant, dan cabang `multi` pada `resolveTenancyMode` (ADR-0053) **tak terjangkau**.
-- Gerbang platform ADR-0053 **belum pernah bertemu tenant kedua yang nyata** — ia benar secara konstruksi, tetapi kondisi yang ia jaga belum pernah ada.
-- Klaim "siap SaaS" pada [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md) berdiri di atas kemampuan yang belum ditulis.
+- Every deployment is permanently single-tenant, and the `multi` branch of `resolveTenancyMode` (ADR-0053) is **unreachable**.
+- The ADR-0053 platform gate **has never met a real second tenant** — it is correct by construction, but the condition it guards has never existed.
+- The "SaaS ready" claim in [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md) stands on a capability that had not been written.
 
-## Keputusan
+## Decision
 
-### 1. Satu jalur pembuatan tenant, dipakai bersama
+### 1. One tenant creation path, used by both
 
-`createTenantWithOwner` diekstrak dari `bootstrapPlatformTenant` dan dipakai **keduanya**. Ini bukan kerapian — ini kontrol keamanan.
+`createTenantWithOwner` is extracted out of `bootstrapPlatformTenant` and used by **both**. This is not tidiness — it is a security control.
 
-Satu-satunya hal yang tidak boleh berbeda antara wizard setup dan provisioning adalah `WHERE scope = 'tenant'` pada grant owner. Rutin provisioning yang ditulis mandiri — cara paling wajar membangunnya — akan membawa **salinan** `INSERT` yang, sepanjang hampir seluruh umur repo ini, **tidak punya filter itu**. Hasilnya: setiap pelanggan memegang wewenang atas data yang dilayani ke pelanggan lain, dan diff-nya lolos review.
+The only thing that must not differ between the setup wizard and provisioning is `WHERE scope = 'tenant'` on the owner grant. A provisioning routine written standalone — the most natural way to build it — would carry a **copy** of the `INSERT` that, for almost the entire life of this repo, **did not have that filter**. The result: every customer holds authority over data served to other customers, and the diff passes review.
 
-`grantPlatformScope` adalah **parameter**, bukan cabang atas "apakah ini tenant pertama?", supaya jawabannya **dinyatakan di call site** alih-alih disimpulkan.
+`grantPlatformScope` is a **parameter**, not a branch on "is this the first tenant?", so the answer is **stated at the call site** rather than inferred.
 
-### 2. Direktori dan provisioning sama-sama `scope: "platform"`
+### 2. Directory and provisioning are both `scope: "platform"`
 
-`create` jelas: menambah tenant menambah **pihak** ke deployment.
+`create` is obvious: adding a tenant adds a **party** to the deployment.
 
-`read` juga — dan ini yang mudah terlewat. Endpoint direktori mendaftar **SETIAP** tenant. Versi tenant-scoped-nya berarti owner pelanggan mana pun bisa meng-enumerasi daftar pelanggan platform, dan **tidak ada policy RLS yang akan keberatan**, karena `awcms_tenants` memang tabel akar tanpa RLS.
+`read` is too — and this is the one that is easy to miss. The directory endpoint lists **EVERY** tenant. A tenant-scoped version of it means any customer's owner can enumerate the platform's customer list, and **no RLS policy would object**, because `awcms_tenants` is by design a root table without RLS.
 
-Karena keduanya `platform`, `createTenantWithOwner` tidak akan pernah memberikannya ke tenant yang di-provision — **termasuk yang dibuat lewat endpoint ini sendiri**. Platform tidak bisa tanpa sengaja melahirkan pesaing wewenangnya.
+Because both are `platform`, `createTenantWithOwner` will never grant them to a provisioned tenant — **including one created through this very endpoint**. The platform cannot accidentally give birth to a rival to its own authority.
 
-### 3. Duplikat `tenant_code`: pre-check DAN savepoint
+### 3. Duplicate `tenant_code`: pre-check AND savepoint
 
-Keduanya perlu, dan alasannya bukan kehati-hatian berlebih. Di PostgreSQL `23505` **membatalkan transaksi**: menangkap error lalu melanjutkan tidak bekerja, dan commit yang `withTenant` lakukan pada 4xx yang di-`return` ikut gagal.
+Both are needed, and the reason is not excessive caution. In PostgreSQL `23505` **aborts the transaction**: catching the error and carrying on does not work, and the commit that `withTenant` performs on a 4xx that is `return`ed fails along with it.
 
-Jadi: `SELECT` menjawab kasus biasa tanpa pernah memancing error, dan `SAVEPOINT` membuat kasus **balapan** bisa dipulihkan — dua pemanggil dengan kode sama sama-sama lolos `SELECT`, satu kena unique index, dan `ROLLBACK TO SAVEPOINT` mengembalikan transaksi ke keadaan terpakai alih-alih mengubah kesalahan pengguna menjadi 500.
+So: the `SELECT` answers the ordinary case without ever provoking an error, and the `SAVEPOINT` makes the **race** case recoverable — two callers with the same code both pass the `SELECT`, one hits the unique index, and `ROLLBACK TO SAVEPOINT` returns the transaction to a usable state instead of turning a user mistake into a 500.
 
-### 4. Konteks tenant dikembalikan sebelum audit ditulis
+### 4. Tenant context is restored before the audit is written
 
-`createTenantWithOwner` menyetel `app.current_tenant_id` ke tenant yang **sedang dibuat** (tabelnya FORCE RLS), lalu mengembalikannya. Tanpa itu, baris audit dan catatan idempotency milik route akan mendarat di partisi tenant yang baru lahir — terlihat oleh pihak yang salah, tak terlihat oleh operator yang bertindak.
+`createTenantWithOwner` sets `app.current_tenant_id` to the tenant **being created** (its tables are FORCE RLS), then restores it. Without that, the route's audit rows and idempotency records would land in the newborn tenant's partition — visible to the wrong party, invisible to the operator who acted.
 
-### 5. Password owner tidak pernah masuk hash idempotency
+### 5. The owner password never enters the idempotency hash
 
-`computeRequestHash` keluarannya **disimpan**. Meng-hash password berarti menaruh kredensial at-rest di tabel yang tak seorang pun anggap penyimpanan kredensial. Hash-nya dibangun dari `tenantCode`/`tenantName`/`officeCode`/`ownerLoginIdentifier` saja — sudah cukup mengidentifikasi permintaan.
+`computeRequestHash`'s output is **stored**. Hashing the password means putting a credential at rest in a table nobody considers credential storage. The hash is built from `tenantCode`/`tenantName`/`officeCode`/`ownerLoginIdentifier` alone — that already identifies the request.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:**
-  - Mode `multi` menjadi keadaan nyata, bukan konstanta. Gerbang ADR-0053 kini punya kondisi yang benar-benar bisa terjadi.
-  - Prasyarat SaaS berikutnya berdiri di fondasi yang benar: jalur provisioning **mewarisi** filter `scope` alih-alih mengulang cacatnya.
-  - Wizard setup dan provisioning tidak bisa lagi menyimpang dalam hal yang paling berbahaya.
-- **Negatif / trade-off yang diterima:**
-  - Belum ada lifecycle tenant lain — suspend, rename, hapus. Provisioning saja. Menambahkannya tanpa memutuskan apa arti "hapus tenant" bagi data yang tersimpan akan menjadi tombol yang tak seorang pun bisa jelaskan akibatnya.
-  - Belum ada kuota/paket/penagihan. Ini bukan control plane SaaS; ini kemampuan yang harus ada **sebelum** control plane bisa dibangun.
-  - Audit operator lintas-tenant masih menjadi follow-up terbuka ADR-0052: baris audit provisioning mendarat di log tenant platform, yang benar, tetapi tenant yang dibuat tidak melihat catatan kelahirannya sendiri.
-- **Netral:**
-  - Nol perubahan untuk deployment yang tidak pernah mem-provision tenant kedua.
+- **Positive:**
+  - `multi` mode becomes a real state, not a constant. The ADR-0053 gate now has a condition that can actually occur.
+  - The next SaaS prerequisites stand on the right foundation: the provisioning path **inherits** the `scope` filter instead of repeating its defect.
+  - The setup wizard and provisioning can no longer diverge on the most dangerous point.
+- **Negative / accepted trade-offs:**
+  - There is no other tenant lifecycle yet — suspend, rename, delete. Provisioning only. Adding them without deciding what "delete a tenant" means for the stored data would be a button whose consequences nobody can explain.
+  - There are no quotas/plans/billing. This is not a SaaS control plane; it is the capability that must exist **before** a control plane can be built.
+  - Cross-tenant operator audit remains an open ADR-0052 follow-up: the provisioning audit rows land in the platform tenant's log, which is correct, but the created tenant does not see the record of its own birth.
+- **Neutral:**
+  - Zero change for deployments that never provision a second tenant.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Job operator (CLI) alih-alih endpoint** — ditolak. Preseden `idn-regions:activate` berlaku ketika **tidak ada subjek untuk dievaluasi**; di sini ada: tenant platform. Provisioning juga adalah pekerjaan yang wajar dilakukan lewat layar, berulang, oleh orang yang bukan operator shell.
-- **Melonggarkan singleton `awcms_setup_state`** — ditolak. Wizard setup itu bootstrap tanpa autentikasi; membuatnya bisa dipanggil berulang berarti membuka pembuatan tenant tanpa autentikasi. Singleton-nya justru penjagaannya.
-- **Menyalin logika pembuatan ke modul provisioning** — ditolak; lihat §Keputusan butir 1. Itu persis bentuk regresinya.
+- **An operator job (CLI) instead of an endpoint** — rejected. The `idn-regions:activate` precedent applies when **there is no subject to evaluate**; here there is one: the platform tenant. Provisioning is also work that is reasonably done through a screen, repeatedly, by people who are not shell operators.
+- **Loosening the `awcms_setup_state` singleton** — rejected. The setup wizard is unauthenticated bootstrap; making it callable repeatedly means opening unauthenticated tenant creation. The singleton is precisely what guards it.
+- **Copying the creation logic into the provisioning module** — rejected; see §Decision item 1. That is exactly the shape of the regression.

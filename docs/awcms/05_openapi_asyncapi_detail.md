@@ -1,16 +1,18 @@
-# Bagian 5 — OpenAPI dan AsyncAPI Detail
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](05_openapi_asyncapi_detail.id.md)
 
-> **Status dokumen:** target/rencana kontrak API dan event, bukan status implementasi. Belum ada endpoint atau event modul ERP yang diimplementasikan di repo ini — dokumen ini menjabarkan baseline kontrak yang **direncanakan** dibangun bertahap.
+# Part 5 — OpenAPI and AsyncAPI Detail
 
-> **Contoh domain (ilustratif).** Dokumen ini memakai domain ERP (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) sebagai contoh berjalan. **Pola & standar**-nya reusable untuk base AWCMS; **entitas, endpoint, dan istilah domain** adalah ilustrasi awal yang akan disempurnakan seiring modul dibangun. Lihat [README paket dokumen](README.md) §Reusable vs domain ERP.
+> **Document status:** target/plan for the API and event contracts, not implementation status. No ERP module endpoint or event has been implemented in this repo yet — this document lays out the contract baseline that is **planned** to be built incrementally.
 
-## Tujuan
+> **Domain example (illustrative).** This document uses the ERP domain (finance/accounting, inventory/warehouse, procurement, manufacturing, HR/payroll) as a running example. Its **patterns & standards** are reusable for the AWCMS base; the **entities, endpoints, and domain terms** are an initial illustration that will be refined as modules get built. See the [document package README](README.md) §Reusable vs ERP domain.
 
-Dokumen ini menjadi baseline kontrak API dan domain event AWCMS. Semua API baru wajib diperbarui di OpenAPI. Semua event baru wajib diperbarui di AsyncAPI.
+## Purpose
 
-## Versi kontrak
+This document is the baseline for the AWCMS API and domain event contracts. Every new API must be updated in OpenAPI. Every new event must be updated in AsyncAPI.
 
-`info.version` OpenAPI/AsyncAPI adalah SemVer independen dari versi rilis `package.json` — kebijakan lengkap + aturan bump akan dicatat sebagai ADR tersendiri di repo ini (mengikuti pola ADR versioning kontrak pada base sebelumnya). Divalidasi otomatis oleh `bun run api:spec:check` (harus berbentuk `X.Y.Z`).
+## Contract version
+
+The OpenAPI/AsyncAPI `info.version` is SemVer independent of the `package.json` release version — the full policy + bump rules will be recorded as a separate ADR in this repo (following the contract-versioning ADR pattern from the previous base). Validated automatically by `bun run api:spec:check` (must be shaped `X.Y.Z`).
 
 ## Standard API
 
@@ -20,7 +22,7 @@ Base path:
 /api/v1
 ```
 
-Response sukses:
+Success response:
 
 ```json
 {
@@ -33,49 +35,49 @@ Response sukses:
 }
 ```
 
-Response error:
+Error response:
 
 ```json
 {
   "success": false,
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Data tidak valid.",
+    "message": "Invalid data.",
     "details": [],
     "correlationId": "corr_..."
   }
 }
 ```
 
-## Header standard
+## Standard headers
 
-| Header                      |                       Wajib | Fungsi                                                        |
+| Header                      |                    Required | Function                                                      |
 | --------------------------- | --------------------------: | ------------------------------------------------------------- |
-| `Authorization`             |           Ya kecuali public | Bearer token                                                  |
-| `X-AWCMS-Tenant-ID`         |  Ya untuk tenant-scoped API | Tenant aktif                                                  |
-| `Idempotency-Key`           | Ya untuk mutation high-risk | Anti duplicate mutation                                       |
-| `X-Correlation-ID`          |                    Opsional | Trace request                                                 |
-| `X-Request-ID`              |                    Opsional | Trace client request                                          |
-| `Accept-Language`           |                    Opsional | Locale                                                        |
-| `X-AWCMS-Node-ID`           |               Ya untuk sync | Sync node                                                     |
-| `X-AWCMS-Timestamp`         |        Ya untuk signed sync | Anti replay                                                   |
-| `X-AWCMS-Signature`         |               Ya untuk sync | HMAC signature                                                |
-| `X-AWCMS-Signature-Version` |  Disarankan untuk sync (v2) | Versi skema signature; `"2"` mengikat tenant+node (GHSA-c972) |
+| `Authorization`             |       Yes except for public | Bearer token                                                  |
+| `X-AWCMS-Tenant-ID`         |  Yes for tenant-scoped APIs | Active tenant                                                 |
+| `Idempotency-Key`           | Yes for high-risk mutations | Anti duplicate mutation                                       |
+| `X-Correlation-ID`          |                    Optional | Trace request                                                 |
+| `X-Request-ID`              |                    Optional | Trace client request                                          |
+| `Accept-Language`           |                    Optional | Locale                                                        |
+| `X-AWCMS-Node-ID`           |                Yes for sync | Sync node                                                     |
+| `X-AWCMS-Timestamp`         |         Yes for signed sync | Anti replay                                                   |
+| `X-AWCMS-Signature`         |                Yes for sync | HMAC signature                                                |
+| `X-AWCMS-Signature-Version` |   Recommended for sync (v2) | Signature schema version; `"2"` binds tenant+node (GHSA-c972) |
 
 ## Soft delete API standard
 
-DELETE pada resource tenant-scoped yang deletable berarti **soft delete**, bukan physical delete. Endpoint harus terdokumentasi di OpenAPI dengan perilaku berikut:
+DELETE on a deletable tenant-scoped resource means **soft delete**, not physical delete. The endpoint must be documented in OpenAPI with the following behaviour:
 
-| Pola                                   | Fungsi                  | Catatan                                                                            |
-| -------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
-| `DELETE /<resources>/{id}`             | Soft delete resource    | Isi `deleted_at`, `deleted_by`, `delete_reason`; high-risk perlu `Idempotency-Key` |
-| `POST /<resources>/{id}/restore`       | Restore resource        | Validasi konflik unique key, status lifecycle, ABAC, dan audit                     |
-| `POST /<resources>/{id}/purge-request` | Request purge/anonymize | Hanya retention/legal; approval bila policy aktif                                  |
-| `GET /<resources>?includeDeleted=true` | List termasuk arsip     | Hanya role berizin; default `false`                                                |
+| Pattern                                | Function                | Notes                                                                               |
+| -------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| `DELETE /<resources>/{id}`             | Soft delete resource    | Fill `deleted_at`, `deleted_by`, `delete_reason`; high-risk needs `Idempotency-Key` |
+| `POST /<resources>/{id}/restore`       | Restore resource        | Validate unique key conflicts, lifecycle status, ABAC, and audit                    |
+| `POST /<resources>/{id}/purge-request` | Request purge/anonymize | Retention/legal only; approval if the policy is active                              |
+| `GET /<resources>?includeDeleted=true` | List including archive  | Permitted roles only; defaults to `false`                                           |
 
-Default response list/detail tidak menampilkan soft-deleted record. Detail soft-deleted tanpa permission mengembalikan `RESOURCE_NOT_FOUND`; dengan permission arsip boleh mengembalikan data masked dengan status `deleted`.
+The default list/detail response does not show soft-deleted records. Detail of a soft-deleted record without permission returns `RESOURCE_NOT_FOUND`; with the archive permission it may return masked data with status `deleted`.
 
-## Endpoint wajib idempotency (rencana)
+## Endpoints that require idempotency (planned)
 
 - `POST /finance/journal-batches/{id}/post`
 - `POST /finance/documents/{id}/cancel-request`
@@ -102,141 +104,141 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 
 ## Error code standard
 
-| Code                         | HTTP | Keterangan                                                       |
-| ---------------------------- | ---: | ---------------------------------------------------------------- |
-| `VALIDATION_ERROR`           |  400 | Data tidak valid                                                 |
-| `AUTH_REQUIRED`              |  401 | Belum login                                                      |
-| `TOKEN_EXPIRED`              |  401 | Token kadaluarsa                                                 |
-| `ACCESS_DENIED`              |  403 | Tidak punya akses                                                |
-| `TENANT_REQUIRED`            |  400 | Tenant wajib                                                     |
-| `RESOURCE_NOT_FOUND`         |  404 | Resource tidak ditemukan                                         |
-| `RESOURCE_DELETED`           |  410 | Resource sudah di-soft-delete dan butuh restore/arsip permission |
-| `IDEMPOTENCY_REQUIRED`       |  400 | Header idempotency wajib                                         |
-| `IDEMPOTENCY_CONFLICT`       |  409 | Key dipakai request berbeda                                      |
-| `WORKFLOW_APPROVAL_REQUIRED` |  409 | Perlu approval                                                   |
-| `STOCK_NOT_AVAILABLE`        |  409 | Stok tidak cukup                                                 |
-| `SYNC_CONFLICT`              |  409 | Konflik sync                                                     |
-| `PAYLOAD_TOO_LARGE`          |  413 | Body request melebihi batas ukuran                               |
-| `DATABASE_BUSY`              |  503 | Pool/DB sibuk                                                    |
-| `PROVIDER_ERROR`             |  502 | Provider eksternal gagal                                         |
-| `INTERNAL_ERROR`             |  500 | Error internal                                                   |
+| Code                         | HTTP | Description                                                           |
+| ---------------------------- | ---: | --------------------------------------------------------------------- |
+| `VALIDATION_ERROR`           |  400 | Invalid data                                                          |
+| `AUTH_REQUIRED`              |  401 | Not logged in                                                         |
+| `TOKEN_EXPIRED`              |  401 | Token expired                                                         |
+| `ACCESS_DENIED`              |  403 | No access                                                             |
+| `TENANT_REQUIRED`            |  400 | Tenant required                                                       |
+| `RESOURCE_NOT_FOUND`         |  404 | Resource not found                                                    |
+| `RESOURCE_DELETED`           |  410 | Resource is already soft-deleted and needs restore/archive permission |
+| `IDEMPOTENCY_REQUIRED`       |  400 | Idempotency header required                                           |
+| `IDEMPOTENCY_CONFLICT`       |  409 | Key used by a different request                                       |
+| `WORKFLOW_APPROVAL_REQUIRED` |  409 | Approval needed                                                       |
+| `STOCK_NOT_AVAILABLE`        |  409 | Not enough stock                                                      |
+| `SYNC_CONFLICT`              |  409 | Sync conflict                                                         |
+| `PAYLOAD_TOO_LARGE`          |  413 | Request body exceeds the size limit                                   |
+| `DATABASE_BUSY`              |  503 | Pool/DB busy                                                          |
+| `PROVIDER_ERROR`             |  502 | External provider failed                                              |
+| `INTERNAL_ERROR`             |  500 | Internal error                                                        |
 
-## API endpoint summary per modul (rencana)
+## API endpoint summary per module (planned)
 
 ### Foundation
 
-| Method | Endpoint  | Fungsi       |
+| Method | Endpoint  | Function     |
 | ------ | --------- | ------------ |
 | GET    | `/health` | Health check |
 
 ### Tenant Admin
 
-| Method   | Endpoint                      | Fungsi                       |
-| -------- | ----------------------------- | ---------------------------- |
-| GET      | `/setup/status`               | Status setup                 |
-| POST     | `/setup/initialize`           | Setup tenant pertama         |
-| GET      | `/tenants/current`            | Tenant aktif                 |
-| GET/POST | `/offices`                    | List/create office           |
-| PATCH    | `/offices/{officeId}`         | Update office                |
-| DELETE   | `/offices/{officeId}`         | Soft delete office jika aman |
-| POST     | `/offices/{officeId}/restore` | Restore office               |
+| Method   | Endpoint                      | Function                   |
+| -------- | ----------------------------- | -------------------------- |
+| GET      | `/setup/status`               | Setup status               |
+| POST     | `/setup/initialize`           | Set up the first tenant    |
+| GET      | `/tenants/current`            | Active tenant              |
+| GET/POST | `/offices`                    | List/create office         |
+| PATCH    | `/offices/{officeId}`         | Update office              |
+| DELETE   | `/offices/{officeId}`         | Soft delete office if safe |
+| POST     | `/offices/{officeId}/restore` | Restore office             |
 
 ### Identity & Access
 
-| Method | Endpoint                | Fungsi                 |
-| ------ | ----------------------- | ---------------------- |
-| POST   | `/auth/login`           | Login                  |
-| POST   | `/auth/logout`          | Logout                 |
-| GET    | `/auth/me`              | User aktif             |
-| GET    | `/access/modules`       | Daftar module/activity |
-| POST   | `/access/evaluate`      | Evaluasi ABAC          |
-| POST   | `/access/assignments`   | Assign access          |
-| GET    | `/access/decision-logs` | Decision log           |
+| Method | Endpoint                | Function             |
+| ------ | ----------------------- | -------------------- |
+| POST   | `/auth/login`           | Login                |
+| POST   | `/auth/logout`          | Logout               |
+| GET    | `/auth/me`              | Active user          |
+| GET    | `/access/modules`       | Module/activity list |
+| POST   | `/access/evaluate`      | ABAC evaluation      |
+| POST   | `/access/assignments`   | Assign access        |
+| GET    | `/access/decision-logs` | Decision log         |
 
 ### Profile Identity
 
-| Method   | Endpoint                        | Fungsi                             |
+| Method   | Endpoint                        | Function                           |
 | -------- | ------------------------------- | ---------------------------------- |
 | GET/POST | `/profiles`                     | List/create profile                |
-| GET      | `/profiles/{profileId}`         | Detail profile                     |
+| GET      | `/profiles/{profileId}`         | Profile detail                     |
 | POST     | `/profiles/resolve`             | Resolve/create profile             |
 | POST     | `/profiles/{profileId}/links`   | Link entity                        |
-| GET      | `/profiles/dedup-candidates`    | Kandidat duplikat                  |
+| GET      | `/profiles/dedup-candidates`    | Duplicate candidates               |
 | POST     | `/profiles/merge-requests`      | Request merge                      |
 | DELETE   | `/profiles/{profileId}`         | Soft delete profile/contact master |
 | POST     | `/profiles/{profileId}/restore` | Restore profile                    |
 
 ### Master Data & Inventory
 
-| Method    | Endpoint                               | Fungsi             |
+| Method    | Endpoint                               | Function           |
 | --------- | -------------------------------------- | ------------------ |
 | GET/POST  | `/inventory/items`                     | List/create item   |
-| GET/PATCH | `/inventory/items/{itemId}`            | Detail/update item |
+| GET/PATCH | `/inventory/items/{itemId}`            | Item detail/update |
 | DELETE    | `/inventory/items/{itemId}`            | Soft delete item   |
 | POST      | `/inventory/items/{itemId}/restore`    | Restore item       |
-| GET       | `/inventory/stock-balances`            | Stok               |
-| GET       | `/inventory/stock-movements`           | Mutasi stok        |
+| GET       | `/inventory/stock-balances`            | Stock              |
+| GET       | `/inventory/stock-movements`           | Stock movements    |
 | POST      | `/inventory/stock-adjustment-requests` | Request adjustment |
 | GET       | `/inventory/lots`                      | Lot/batch          |
 
 ### Finance & General Ledger
 
-| Method | Endpoint                                       | Fungsi                    |
+| Method | Endpoint                                       | Function                  |
 | ------ | ---------------------------------------------- | ------------------------- |
-| POST   | `/finance/journal-batches`                     | Buat jurnal draft         |
-| GET    | `/finance/journal-batches/{id}`                | Detail jurnal             |
-| POST   | `/finance/journal-batches/{id}/lines`          | Tambah baris jurnal       |
-| PATCH  | `/finance/journal-batches/{id}/lines/{lineId}` | Update baris jurnal       |
-| DELETE | `/finance/journal-batches/{id}/lines/{lineId}` | Hapus baris jurnal        |
-| POST   | `/finance/journal-batches/{id}/post`           | Posting jurnal            |
-| GET    | `/finance/documents/{id}`                      | Detail financial document |
+| POST   | `/finance/journal-batches`                     | Create draft journal      |
+| GET    | `/finance/journal-batches/{id}`                | Journal detail            |
+| POST   | `/finance/journal-batches/{id}/lines`          | Add journal line          |
+| PATCH  | `/finance/journal-batches/{id}/lines/{lineId}` | Update journal line       |
+| DELETE | `/finance/journal-batches/{id}/lines/{lineId}` | Delete journal line       |
+| POST   | `/finance/journal-batches/{id}/post`           | Post journal              |
+| GET    | `/finance/documents/{id}`                      | Financial document detail |
 | POST   | `/finance/documents/{id}/cancel-request`       | Request cancel            |
 
 ### Warehouse Management
 
-| Method   | Endpoint                                         | Fungsi                            |
-| -------- | ------------------------------------------------ | --------------------------------- |
-| GET/POST | `/warehouses`                                    | List/create warehouse             |
-| GET      | `/warehouses/{warehouseId}/stock`                | Stok gudang                       |
-| GET/POST | `/warehouses/{warehouseId}/bins`                 | Bin list/create                   |
-| DELETE   | `/warehouses/{warehouseId}/bins/{binId}`         | Soft delete bin jika saldo kosong |
-| POST     | `/warehouses/{warehouseId}/bins/{binId}/restore` | Restore bin                       |
-| POST     | `/warehouse-transfers`                           | Buat transfer                     |
-| POST     | `/warehouse-transfers/{id}/approve`              | Approve                           |
-| POST     | `/warehouse-transfers/{id}/ship`                 | Ship                              |
-| POST     | `/warehouse-transfers/{id}/receive`              | Receive                           |
-| POST     | `/cycle-counts`                                  | Buat cycle count                  |
+| Method   | Endpoint                                         | Function                               |
+| -------- | ------------------------------------------------ | -------------------------------------- |
+| GET/POST | `/warehouses`                                    | List/create warehouse                  |
+| GET      | `/warehouses/{warehouseId}/stock`                | Warehouse stock                        |
+| GET/POST | `/warehouses/{warehouseId}/bins`                 | Bin list/create                        |
+| DELETE   | `/warehouses/{warehouseId}/bins/{binId}`         | Soft delete bin if the balance is zero |
+| POST     | `/warehouses/{warehouseId}/bins/{binId}/restore` | Restore bin                            |
+| POST     | `/warehouse-transfers`                           | Create transfer                        |
+| POST     | `/warehouse-transfers/{id}/approve`              | Approve                                |
+| POST     | `/warehouse-transfers/{id}/ship`                 | Ship                                   |
+| POST     | `/warehouse-transfers/{id}/receive`              | Receive                                |
+| POST     | `/cycle-counts`                                  | Create cycle count                     |
 
 ### Accounting Tax/Coretax
 
-| Method   | Endpoint                          | Fungsi               |
+| Method   | Endpoint                          | Function             |
 | -------- | --------------------------------- | -------------------- |
 | GET/POST | `/tax/profiles`                   | Tax profile          |
 | GET/POST | `/tax/business-units`             | NITKU/ID TKU         |
 | GET/POST | `/tax/party-profiles`             | Party tax profile    |
 | POST     | `/tax/vat-invoices/generate`      | Generate VAT invoice |
 | GET      | `/tax/vat-invoices`               | List invoice         |
-| POST     | `/tax/vat-invoices/{id}/validate` | Validasi             |
+| POST     | `/tax/vat-invoices/{id}/validate` | Validate             |
 | POST     | `/tax/coretax/batches`            | Coretax batch export |
 
 ### Procurement & Vendor Management
 
-| Method   | Endpoint                                      | Fungsi                        |
+| Method   | Endpoint                                      | Function                      |
 | -------- | --------------------------------------------- | ----------------------------- |
 | GET/POST | `/procurement/vendors`                        | Vendor master                 |
 | GET/POST | `/procurement/purchase-requests`              | Purchase request              |
 | POST     | `/procurement/purchase-requests/{id}/approve` | Approve PR                    |
 | GET/POST | `/procurement/purchase-orders`                | Purchase order                |
 | POST     | `/procurement/purchase-orders/{id}/approve`   | Approve PO                    |
-| POST     | `/procurement/purchase-orders/{id}/receive`   | Terima barang (goods receipt) |
-| GET      | `/procurement/vendors/{id}/invoices`          | Invoice vendor                |
+| POST     | `/procurement/purchase-orders/{id}/receive`   | Receive goods (goods receipt) |
+| GET      | `/procurement/vendors/{id}/invoices`          | Vendor invoices               |
 | DELETE   | `/procurement/vendors/{id}`                   | Soft delete vendor            |
 | POST     | `/procurement/vendors/{id}/restore`           | Restore vendor                |
-| POST     | `/webhooks/procurement/vendor-portal`         | Webhook vendor portal         |
+| POST     | `/webhooks/procurement/vendor-portal`         | Vendor portal webhook         |
 
 ### Sync Storage
 
-| Method | Endpoint                       | Fungsi                |
+| Method | Endpoint                       | Function              |
 | ------ | ------------------------------ | --------------------- |
 | POST   | `/sync/push`                   | Push event            |
 | POST   | `/sync/pull`                   | Pull event            |
@@ -249,26 +251,26 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 
 Database-backed, tenant-aware module registry — generic infrastructure for managing every other registered module, not a domain-specific feature.
 
-| Method | Endpoint                               | Fungsi                                                     |
+| Method | Endpoint                               | Function                                                   |
 | ------ | -------------------------------------- | ---------------------------------------------------------- |
-| GET    | `/modules`                             | Katalog modul (code + DB registry)                         |
-| GET    | `/modules/{moduleKey}`                 | Detail satu modul                                          |
+| GET    | `/modules`                             | Module catalogue (code + DB registry)                      |
+| GET    | `/modules/{moduleKey}`                 | Detail of one module                                       |
 | POST   | `/modules/sync`                        | Sync descriptor code → DB registry                         |
-| GET    | `/modules/{moduleKey}/permissions`     | Status sinkron permission (synced/missing/orphaned)        |
-| GET    | `/modules/{moduleKey}/jobs`            | Registry command operasional (dokumentasi, tidak eksekusi) |
-| GET    | `/modules/{moduleKey}/health`          | Health/readiness cepat, read-only                          |
-| POST   | `/modules/{moduleKey}/health/check`    | Trigger health check eksplisit (+ provider check bila ada) |
-| GET    | `/tenant/modules`                      | Status enable/disable modul untuk tenant pemanggil         |
-| POST   | `/tenant/modules/{moduleKey}/enable`   | Aktifkan modul untuk tenant                                |
-| POST   | `/tenant/modules/{moduleKey}/disable`  | Nonaktifkan modul untuk tenant (butuh `reason`)            |
-| GET    | `/tenant/modules/{moduleKey}/settings` | Effective settings (default + override tenant)             |
-| PATCH  | `/tenant/modules/{moduleKey}/settings` | Update override settings tenant                            |
+| GET    | `/modules/{moduleKey}/permissions`     | Permission sync status (synced/missing/orphaned)           |
+| GET    | `/modules/{moduleKey}/jobs`            | Operational command registry (documentation, no execution) |
+| GET    | `/modules/{moduleKey}/health`          | Quick health/readiness, read-only                          |
+| POST   | `/modules/{moduleKey}/health/check`    | Trigger an explicit health check (+ provider check if any) |
+| GET    | `/tenant/modules`                      | Module enable/disable status for the calling tenant        |
+| POST   | `/tenant/modules/{moduleKey}/enable`   | Enable the module for the tenant                           |
+| POST   | `/tenant/modules/{moduleKey}/disable`  | Disable the module for the tenant (needs `reason`)         |
+| GET    | `/tenant/modules/{moduleKey}/settings` | Effective settings (default + tenant override)             |
+| PATCH  | `/tenant/modules/{moduleKey}/settings` | Update the tenant settings override                        |
 
-Tidak ada event AsyncAPI baru untuk modul ini — perubahan lifecycle/config modul tercatat lewat `awcms_audit_events` generik, bukan domain event terpisah.
+There is no new AsyncAPI event for this module — module lifecycle/config changes are recorded through the generic `awcms_audit_events`, not a separate domain event.
 
 ### AI, Reports, Logs, Workflow, Security
 
-| Modul    | Endpoint utama                                                   |
+| Module   | Main endpoints                                                   |
 | -------- | ---------------------------------------------------------------- |
 | AI       | `POST /ai/business-analyst/chat`                                 |
 | Reports  | `GET /reports/finance/daily`, `GET /reports/warehouse/dashboard` |
@@ -277,9 +279,9 @@ Tidak ada event AsyncAPI baru untuk modul ini — perubahan lifecycle/config mod
 | Workflow | `GET /workflow/tasks`, `POST /workflow/tasks/{id}/decision`      |
 | Security | `POST /security/go-live-gates/evaluate`                          |
 
-Modul lanjutan (Manufacturing, HR & Payroll, integrasi payment gateway/marketplace/logistik) belum memiliki daftar endpoint final — akan ditambahkan saat modul tersebut dirancang detail, mengikuti pola base path `/api/v1/<module>` yang sama.
+Later modules (Manufacturing, HR & Payroll, payment gateway/marketplace/logistics integrations) do not yet have a final endpoint list — it will be added when those modules are designed in detail, following the same `/api/v1/<module>` base path pattern.
 
-## Siklus request API
+## API request cycle
 
 ```mermaid
 sequenceDiagram
@@ -290,10 +292,10 @@ sequenceDiagram
   participant DB as PostgreSQL
   C->>API: HTTP + Authorization + X-AWCMS-Tenant-ID + Idempotency-Key
   API->>MW: Auth → Tenant/RLS → ABAC → Idempotency → Logging
-  MW->>SVC: Context tervalidasi
-  SVC->>DB: Transaction (bila mutation)
+  MW->>SVC: Validated context
+  SVC->>DB: Transaction (if a mutation)
   DB-->>SVC: Result
-  SVC-->>C: { success, data, meta } atau { success:false, error }
+  SVC-->>C: { success, data, meta } or { success:false, error }
 ```
 
 ## AsyncAPI event envelope
@@ -322,22 +324,22 @@ sequenceDiagram
 }
 ```
 
-Soft delete event memakai envelope yang sama. Pola nama event: `<module>.<resource>.soft_deleted`, `<module>.<resource>.restored`, dan `<module>.<resource>.purge_requested` bila event perlu disinkronkan atau dikonsumsi modul lain. Payload tidak boleh membawa PII mentah; gunakan identifier, status, dan metadata audit yang sudah diredaksi.
+Soft delete events use the same envelope. Event naming pattern: `<module>.<resource>.soft_deleted`, `<module>.<resource>.restored`, and `<module>.<resource>.purge_requested` when the event needs to be synchronised or consumed by another module. The payload must not carry raw PII; use identifiers, status, and already-redacted audit metadata.
 
 ## Event fan-out — `finance.journal.posted`
 
 ```mermaid
 flowchart LR
-  FIN[Finance & GL<br/>posting atomic] -->|publish| EVT{{finance.journal.posted}}
-  EVT --> INV[Inventory<br/>stock movement bila terkait]
+  FIN[Finance & GL<br/>atomic posting] -->|publish| EVT{{finance.journal.posted}}
+  EVT --> INV[Inventory<br/>stock movement if related]
   EVT --> TAX[Accounting Tax<br/>VAT invoice staging]
   EVT --> PROC[Procurement<br/>vendor invoice matching]
   EVT --> SYNC[Sync Storage<br/>outbox event]
-  EVT --> RPT[Reporting<br/>agregat harian]
+  EVT --> RPT[Reporting<br/>daily aggregate]
   EVT --> AUD[Audit event]
 ```
 
-## Event utama (rencana)
+## Main events (planned)
 
 | Event                                 | Producer        | Consumer                                     |
 | ------------------------------------- | --------------- | -------------------------------------------- |
@@ -363,10 +365,10 @@ flowchart LR
 
 ## Contract testing requirement
 
-- Semua endpoint punya success/error response schema.
-- Tenant-scoped API wajib tenant header.
-- Mutation high-risk wajib idempotency.
-- Sensitive fields tidak tampil penuh.
-- Event envelope lengkap.
-- Event payload sesuai schema.
-- Event tidak membawa raw sensitive data.
+- Every endpoint has a success/error response schema.
+- Tenant-scoped APIs must have the tenant header.
+- High-risk mutations must have idempotency.
+- Sensitive fields are not shown in full.
+- The event envelope is complete.
+- The event payload matches the schema.
+- Events do not carry raw sensitive data.

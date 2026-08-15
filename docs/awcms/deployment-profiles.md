@@ -1,41 +1,43 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](deployment-profiles.id.md)
+
 # Deployment Profiles
 
-> **Status dokumen:** target/rencana operasional, bukan status implementasi. Repo `awcms` saat ini belum punya kode modul ERP maupun `deploy/*`/`docker-compose.yml` yang nyata — dokumen ini mengadaptasi standar deployment yang sudah terbukti di basis `awcms-mini` (fully implemented di sana) menjadi **prosedur target** untuk platform ERP `awcms`. Struktur/mekanisme (profil environment, topologi TLS, model dua-peran database, job registry) dipertahankan sebagai standar wajib; nomor issue/PR dan riwayat implementasi spesifik `awcms-mini` dihapus karena tidak relevan untuk repo ini.
+> **Document status:** operational target/plan, not implementation status. The `awcms` repo currently has neither ERP module code nor real `deploy/*`/`docker-compose.yml` files — this document adapts the deployment standard already proven in the `awcms-mini` base (fully implemented there) into a **target procedure** for the `awcms` ERP platform. The structure/mechanisms (environment profiles, TLS topology, two-role database model, job registry) are kept as a mandatory standard; the `awcms-mini`-specific issue/PR numbers and implementation history are removed because they are not relevant for this repo.
 >
-> **Koreksi: sebagian `deploy/*` SUDAH ada.** `deploy/backup/backup-postgres.sh` + `deploy/backup/restore-postgres.sh` (§Backup lokal), `deploy/pgbouncer/`, `deploy/cron/`, dan `deploy/redis/` nyata di repo; yang masih rencana adalah `deploy/systemd/`, `deploy/nginx/`, `deploy/postgres/`, dan `docker-compose*.yml` di root repo. Perlakukan tiap rujukan berkas di bawah menurut daftar itu, bukan menurut kalimat status di atas.
+> **Correction: part of `deploy/*` ALREADY exists.** `deploy/backup/backup-postgres.sh` + `deploy/backup/restore-postgres.sh` (§Local backup), `deploy/pgbouncer/`, `deploy/cron/`, and `deploy/redis/` are real in the repo; what is still a plan is `deploy/systemd/`, `deploy/nginx/`, `deploy/postgres/`, and `docker-compose*.yml` at the repo root. Treat every file reference below according to that list, not according to the status sentence above.
 >
-> **Koreksi: `Dockerfile.production` SUDAH ada.** Ia nyata ada di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis — lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat. Jalur image-registry (Coolify pull-image, `docker run` langsung) di dokumen ini karena itu sudah bisa dipakai hari ini; hanya jalur `docker-compose.yml`/systemd/nginx/pgbouncer LAN-first di bawah yang masih rencana.
+> **Correction: `Dockerfile.production` ALREADY exists.** It is really there at the repo root (multi-stage, non-root user `bun`, healthcheck) and is already actively used by the `build` job in `.github/workflows/release.yml` to build+push the image to `ghcr.io/ahliweb/awcms` on every release — see [`release-process.md`](release-process.md) for an accurate status description. The image-registry path (Coolify pull-image, direct `docker run`) is in this document because it is already usable today; only the LAN-first `docker-compose.yml`/systemd/nginx/pgbouncer path below is still a plan.
 
-Dokumen ini adalah standar profil deployment untuk AWCMS (lihat ADR-0001, [`01_canvas_induk.md`](01_canvas_induk.md) §Stack final) — melengkapi referensi environment variable (`docs/awcms/18_configuration_env_reference.md`, menyusul) dengan pemetaan konkret: berkas mana di `deploy/` dan `docker-compose.yml` dipakai pada profil environment yang mana, begitu keduanya diimplementasikan.
+This document is the deployment profile standard for AWCMS (see ADR-0001, [`01_canvas_induk.md`](01_canvas_induk.md) §Final stack) — it complements the environment variable reference (`docs/awcms/18_configuration_env_reference.md`, to follow) with a concrete mapping: which file in `deploy/` and `docker-compose.yml` is used on which environment profile, once both are implemented.
 
-## Ringkasan
+## Summary
 
 ```mermaid
 flowchart LR
-  Dev[development] -->|bun run dev| Local[Lokal, tanpa provider]
-  Prod[production online] -->|systemd + nginx TLS| Public[Terpapar internet]
-  Lan[offline/LAN] -->|systemd atau compose, tanpa nginx| Lan1[Satu server LAN]
+  Dev[development] -->|bun run dev| Local[Local, no providers]
+  Prod[production online] -->|systemd + nginx TLS| Public[Internet-exposed]
+  Lan[offline/LAN] -->|systemd or compose, no nginx| Lan1[One LAN server]
 ```
 
-Tiga profil dan berkas `deploy/*` yang relevan untuk masing-masing (`deploy/backup/*` dan `deploy/pgbouncer/*` sudah nyata; `deploy/systemd/*`, `deploy/nginx/*`, dan `docker-compose.yml` masih rencana — lihat koreksi status di atas):
+The three profiles and the `deploy/*` files relevant to each (`deploy/backup/*` and `deploy/pgbouncer/*` are already real; `deploy/systemd/*`, `deploy/nginx/*`, and `docker-compose.yml` are still a plan — see the status correction above):
 
-| Profil                  | Karakteristik                                                                                                                       | Berkas `deploy/`/root yang relevan (rencana)                                                                                                                                                                            |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **development**         | Semua provider off, DB lokal, cookie tidak secure                                                                                   | `bun run dev` langsung (tidak perlu `deploy/*` atau `docker-compose.yml`); `.env` disalin dari `.env.example` apa adanya                                                                                                |
-| **production (online)** | HTTPS, secret manager, backup+restore teruji, sync opsional (mis. Coretax/payment gateway/marketplace)                              | `deploy/systemd/awcms.service.example`, `deploy/nginx/awcms.conf.example` (TLS termination), `deploy/backup/*`, opsional `deploy/pgbouncer/*` bila banyak koneksi pendek                                                |
-| **offline/LAN**         | Tanpa internet; sync/integrasi eksternal off atau tertunda; operasional ERP (transaksi, gudang, HR) tetap jalan penuh; backup lokal | `deploy/systemd/awcms.service.example` (atau `docker-compose.yml`) menjalankan app langsung di port 4321 — **nginx dapat dilewati sepenuhnya**, tidak ada eksposur publik; `deploy/backup/*` tetap wajib (backup lokal) |
+| Profile                 | Characteristics                                                                                                                    | Relevant `deploy/`/root files (planned)                                                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **development**         | All providers off, local DB, cookies not secure                                                                                    | `bun run dev` directly (no need for `deploy/*` or `docker-compose.yml`); `.env` copied from `.env.example` as-is                                                                                                          |
+| **production (online)** | HTTPS, secret manager, tested backup+restore, optional sync (e.g. Coretax/payment gateway/marketplace)                             | `deploy/systemd/awcms.service.example`, `deploy/nginx/awcms.conf.example` (TLS termination), `deploy/backup/*`, optionally `deploy/pgbouncer/*` if there are many short connections                                       |
+| **offline/LAN**         | No internet; external sync/integration off or deferred; ERP operations (transactions, warehouse, HR) still run fully; local backup | `deploy/systemd/awcms.service.example` (or `docker-compose.yml`) runs the app directly on port 4321 — **nginx can be skipped entirely**, there is no public exposure; `deploy/backup/*` is still mandatory (local backup) |
 
-**Tiga, bukan empat.** `staging` dulu baris keempat di tabel ini; ia **dihapus dari kosakata profil** ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md), sebagaimana diamandemen) — bukan sekadar tidak dijalankan di sini. `ModuleDeploymentProfile` di `src/modules/_shared/module-contract.ts` karena itu `development | production | offline-lan`. Sebuah profil yang tak pernah dilatih siapa pun adalah klaim, bukan kapabilitas: ia menempel di setiap `deploymentProfiles` modul, di setiap tabel dokumen, dan di setiap percabangan `APP_ENV` tanpa satu pun deployment yang membuktikannya benar.
+**Three, not four.** `staging` used to be the fourth row of this table; it has been **removed from the profile vocabulary** ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md), as amended) — not merely "not run here". `ModuleDeploymentProfile` in `src/modules/_shared/module-contract.ts` is therefore `development | production | offline-lan`. A profile nobody has ever drilled is a claim, not a capability: it clings to every module's `deploymentProfiles`, to every document table, and to every `APP_ENV` branch without a single deployment proving it true.
 
-Yang **tidak** hilang bersamanya adalah kontrak isolasinya — database sendiri, role/password sendiri, secret sendiri, integrasi keluar mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge per-environment. Kontrak itu berpindah rumah ke [`environments.md`](environments.md) §Kontrak isolasi environment kedua, dan kini berlaku bagi **environment kedua apa pun** yang seseorang dirikan di samping produksinya, apa pun namanya. Deployment milik repo ini sendiri tetap cuma satu: production di `awcms.ahlikoding.com` — yang akan "di-stage" di sini adalah templatenya sendiri, dan itu divalidasi rantai gerbang CI plus suite integrasi ber-Postgres, bukan salinan kedua yang berjalan. Panduan Coolify yang menurunkan aturan ini ke tingkat operator: [`deploy-coolify.md`](deploy-coolify.md).
+What did **not** disappear with it is its isolation contract — its own database, its own role/password, its own secrets, outbound integrations off, no writes to the production media bucket, DNS provider `manual`, per-environment purge tokens. That contract moved house to [`environments.md`](environments.md) §Second environment isolation contract, and now applies to **any second environment** someone stands up alongside their production, whatever they call it. This repo's own deployment is still just one: production at `awcms.ahlikoding.com` — what will be "staged" here is the template itself, and that is validated by the CI gate chain plus the Postgres-backed integration suite, not by a second running copy. The Coolify guide that derives this rule down to operator level: [`deploy-coolify.md`](deploy-coolify.md).
 
-Prinsip pemilihan: nginx (`deploy/nginx/`) hanya dibutuhkan saat butuh terminasi TLS untuk klien di luar mesin/jaringan tepercaya atau saat memfasadkan beberapa instance upstream — topologi LAN-first satu server bisa langsung menyajikan aplikasi di port 4321 tanpa reverse proxy sama sekali. PgBouncer (`deploy/pgbouncer/`) hanya untuk skenario koneksi pendek bervolume tinggi (mis. banyak worker sync integrasi eksternal berjalan bersamaan) — bukan kebutuhan default.
+Selection principle: nginx (`deploy/nginx/`) is only needed when you need TLS termination for clients outside the trusted machine/network, or when fronting several upstream instances — a single-server LAN-first topology can serve the application directly on port 4321 with no reverse proxy at all. PgBouncer (`deploy/pgbouncer/`) is only for high-volume short-connection scenarios (e.g. many external-integration sync workers running concurrently) — not a default need.
 
-## Konteks ERP: offline-first tetap wajib untuk operasional inti
+## ERP context: offline-first is still mandatory for core operations
 
-Prinsip LAN-first/offline-first yang menjadi standar dasar (ADR-0001) berlaku sama untuk modul ERP: transaksi finansial harian, pencatatan gudang/inventori, absensi HR, dan proses manufaktur **harus tetap berjalan penuh tanpa internet** pada topologi offline/LAN — hanya fitur yang secara inheren online-dependent (payment gateway, marketplace sync, e-Faktur/Coretax submission, resi logistik online) yang boleh tertunda/off pada profil ini, dan wajib di-outbox (ADR — outbox/queue untuk integrasi eksternal, lihat `AGENTS.md`) bukan disinkronkan secara sinkron dari jalur transaksi kritikal.
+The LAN-first/offline-first principle that is the base standard (ADR-0001) applies equally to ERP modules: daily financial transactions, warehouse/inventory recording, HR attendance, and manufacturing processes **must keep running fully without internet** on the offline/LAN topology — only features that are inherently online-dependent (payment gateway, marketplace sync, e-Faktur/Coretax submission, online logistics tracking numbers) may be deferred/off on this profile, and they must be outboxed (ADR — outbox/queue for external integrations, see `AGENTS.md`) rather than synchronised synchronously from the critical transaction path.
 
-## Cara menjalankan tiap profil
+## How to run each profile
 
 ### development
 
@@ -52,64 +54,64 @@ bun run dev
 bun install && bun run build
 sudo cp deploy/systemd/awcms.service.example /etc/systemd/system/awcms.service
 sudo cp deploy/nginx/awcms.conf.example /etc/nginx/sites-available/awcms.conf
-# ... adaptasi placeholder di kedua berkas (lihat komentar header masing-masing) ...
+# ... adapt the placeholders in both files (see the header comments in each) ...
 sudo systemctl enable --now awcms
 sudo systemctl reload nginx
 ```
 
-### offline/LAN — bare-metal (systemd, tanpa nginx)
+### offline/LAN — bare-metal (systemd, no nginx)
 
-Sama seperti di atas, minus langkah nginx — klien LAN mengakses aplikasi langsung di `http://<ip-server-lan>:4321`.
+The same as above, minus the nginx step — LAN clients reach the application directly at `http://<lan-server-ip>:4321`.
 
 ### production / offline-LAN — container (docker-compose.yml)
 
-`docker-compose.yml` di root repo (direncanakan) akan menjalankan stack LAN-first default: `app` (image `oven/bun:1.3.14` pinned, bukan `node`, sesuai standar Bun-only) dan `db` (`postgres:18.4`). PgBouncer tersedia sebagai service opsional `pgbouncer`, digerbangi Compose `profiles` sehingga tidak pernah otomatis aktif:
+The `docker-compose.yml` at the repo root (planned) will run the default LAN-first stack: `app` (image `oven/bun:1.3.14` pinned, not `node`, per the Bun-only standard) and `db` (`postgres:18.4`). PgBouncer is available as an optional `pgbouncer` service, gated by Compose `profiles` so it is never automatically active:
 
 ```bash
 cp .env.example .env
-export APP_UID=$(id -u) APP_GID=$(id -g)   # app berjalan sebagai user host, bukan root
-docker compose up --build           # app + db saja
-docker compose --profile pgbouncer up   # ikutkan pgbouncer opsional
+export APP_UID=$(id -u) APP_GID=$(id -g)   # app runs as the host user, not root
+docker compose up --build           # app + db only
+docker compose --profile pgbouncer up   # include the optional pgbouncer
 curl http://localhost:4321/api/v1/health
 ```
 
-**Container hardening (standar wajib sejak awal, bukan retrofit)**: `db` dan `pgbouncer` tidak boleh mempublikasikan port host secara default — hanya `app`'s `4321:4321` terbuka (satu-satunya kebutuhan topologi yang nyata). Untuk akses `psql`/GUI client lokal dari host, salin `docker-compose.override.yml.example` ke `docker-compose.override.yml` (auto-loaded, di-`.gitignore`) — mengikat kedua port ke `127.0.0.1` saja. Semua service (`db`/`migrate`/`app`/`pgbouncer`) wajib menjalankan `cap_drop: [ALL]` (plus `cap_add` minimal untuk `db`'s entrypoint sendiri), `security_opt: no-new-privileges:true`, healthcheck, dan starting-point `deploy.resources.limits`. PgBouncer's `pgbouncer.ini.example` wajib memakai `auth_type = scram-sha-256` (bukan `md5`).
+**Container hardening (a mandatory standard from the start, not a retrofit)**: `db` and `pgbouncer` must not publish host ports by default — only `app`'s `4321:4321` is open (the only real topological need). For local `psql`/GUI client access from the host, copy `docker-compose.override.yml.example` to `docker-compose.override.yml` (auto-loaded, `.gitignore`d) — it binds both ports to `127.0.0.1` only. Every service (`db`/`migrate`/`app`/`pgbouncer`) must run `cap_drop: [ALL]` (plus the minimal `cap_add` for `db`'s own entrypoint), `security_opt: no-new-privileges:true`, a healthcheck, and starting-point `deploy.resources.limits`. PgBouncer's `pgbouncer.ini.example` must use `auth_type = scram-sha-256` (not `md5`).
 
-`export APP_UID/APP_GID` wajib — tanpanya, `app` berjalan sebagai root di dalam container dan `bun install`/`bun run build` menulis berkas `node_modules/`/`dist/` bertahan sebagai milik root di repo hasil bind mount, yang kemudian memblokir `bun install`/`bun run build` sisi **host** pada checkout yang sama.
+`export APP_UID/APP_GID` is mandatory — without it, `app` runs as root inside the container and `bun install`/`bun run build` write `node_modules/`/`dist/` files that persist as root-owned in the bind-mounted repo, which then blocks **host**-side `bun install`/`bun run build` on the same checkout.
 
-Semua secret/config masuk lewat `env_file: .env` / `environment:` di `docker-compose.yml` — tidak ada nilai hardcode. `DATABASE_URL` di-override otomatis oleh `docker-compose.yml` agar menunjuk ke hostname service `db` (bukan `localhost` seperti default `.env.example`, yang ditujukan untuk deployment non-container).
+All secrets/config come in through `env_file: .env` / `environment:` in `docker-compose.yml` — no hardcoded values. `DATABASE_URL` is overridden automatically by `docker-compose.yml` so it points at the `db` service hostname (not `localhost` as `.env.example` defaults to, which is meant for non-container deployments).
 
-Compose juga mewujudkan model dua-peran di bawah tanpa langkah manual: service `migrate` (satu kali, sebagai superuser) menjalankan `db:migrate`, service `app` menunggu `migrate` selesai (`depends_on: … condition: service_completed_successfully`) lalu konek sebagai peran least-privilege — jadi `docker compose up` mengurut sendiri: `db` init membuat peran → `migrate` menerapkan skema + FORCE RLS + grant → `app` mulai.
+Compose also realises the two-role model below without a manual step: the `migrate` service (one-shot, as superuser) runs `db:migrate`, the `app` service waits for `migrate` to finish (`depends_on: … condition: service_completed_successfully`) and then connects as the least-privilege role — so `docker compose up` sequences itself: `db` init creates the roles → `migrate` applies the schema + FORCE RLS + grants → `app` starts.
 
-### production (online) — image registry (`Dockerfile.production` + `docker-compose.prod.yml`, opsional)
+### production (online) — image registry (`Dockerfile.production` + `docker-compose.prod.yml`, optional)
 
-`docker-compose.yml` di atas tetap jadi jalur yang direkomendasikan untuk topologi LAN-first satu-server (bind-mount + `bun install && bun run build` saat container start — praktis untuk operator yang `git pull`/rebuild in-place). `Dockerfile.production` (dipakai lewat `docker-compose.prod.yml` atau `docker build`/`docker run` manual) adalah jalur **opsional lain**, untuk deployment berbasis image registry (build sekali di CI, push image, pull+run identik di tiap environment) — dipakai saat build-saat-startup tidak diinginkan (cold start lebih lambat, image ingin immutable) atau saat orkestrator (Coolify, k8s, ECS, dsb.) mengharapkan image siap-pakai.
+The `docker-compose.yml` above remains the recommended path for the single-server LAN-first topology (bind-mount + `bun install && bun run build` at container start — practical for an operator who `git pull`s/rebuilds in place). `Dockerfile.production` (used via `docker-compose.prod.yml` or a manual `docker build`/`docker run`) is **another optional** path, for image-registry-based deployment (build once in CI, push the image, pull+run identically in every environment) — used when build-at-startup is undesirable (slower cold start, you want an immutable image) or when the orchestrator (Coolify, k8s, ECS, etc.) expects a ready-made image.
 
-Perbedaan kunci vs `docker-compose.yml`'s `app` service:
+Key differences vs `docker-compose.yml`'s `app` service:
 
-| Aspek       | `docker-compose.yml` (`app`)                                | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`     |
-| ----------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
-| Sumber kode | Bind-mount repo langsung (`volumes: - .:/app`)              | `COPY` ke dalam image saat build — immutable setelah dibuat     |
-| Build       | Saat container start (`bun install && bun run build`)       | Saat `docker build` (multi-stage) — start container jadi instan |
-| User        | Host user (`APP_UID`/`APP_GID`) — perlu bind-mount writable | User bawaan image `oven/bun:1.3.14`, `bun` (non-root, uid 1000) |
-| Filesystem  | Writable (bind mount + install/build di dalamnya)           | `read_only: true` + `tmpfs: [/tmp]`                             |
-| Migration   | Service `migrate` terpisah dalam compose yang sama          | Tidak disertakan — jalankan `bun run db:migrate` terpisah       |
-| Cocok untuk | LAN-first satu server, operator `git pull` in-place         | Registry/CI-push, orkestrator container (Coolify/k8s/ECS)       |
+| Aspect      | `docker-compose.yml` (`app`)                                  | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`          |
+| ----------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Code source | Bind-mounts the repo directly (`volumes: - .:/app`)           | `COPY` into the image at build — immutable once created              |
+| Build       | At container start (`bun install && bun run build`)           | At `docker build` (multi-stage) — container start is instant         |
+| User        | Host user (`APP_UID`/`APP_GID`) — needs a writable bind-mount | The `oven/bun:1.3.14` image default user, `bun` (non-root, uid 1000) |
+| Filesystem  | Writable (bind mount + install/build inside it)               | `read_only: true` + `tmpfs: [/tmp]`                                  |
+| Migration   | A separate `migrate` service in the same compose              | Not included — run `bun run db:migrate` separately                   |
+| Suited for  | LAN-first single server, operator `git pull` in place         | Registry/CI-push, container orchestrators (Coolify/k8s/ECS)          |
 
-Dua cara menjalankan image ini (rencana) — pilih salah satu:
+Two ways to run this image (planned) — pick one:
 
-**1. `docker-compose.prod.yml` (disarankan)** — stack standalone (bukan override `docker-compose.yml`) yang membangun `app` dari `Dockerfile.production` dan menjalankan `db` dengan hardening yang sama seperti `docker-compose.yml`'s `db`:
+**1. `docker-compose.prod.yml` (recommended)** — a standalone stack (not an override of `docker-compose.yml`) that builds `app` from `Dockerfile.production` and runs `db` with the same hardening as `docker-compose.yml`'s `db`:
 
 ```bash
 cp .env.example .env
-bun run db:migrate   # atau docker run sekali pakai, lihat di bawah — jalankan SEBELUM app start
+bun run db:migrate   # or a one-shot docker run, see below — run BEFORE the app starts
 docker compose -f docker-compose.prod.yml up -d --build
 curl http://localhost:4321/api/v1/health
 ```
 
-`app` di sini berjalan `read_only: true` (`tmpfs: [/tmp]`) — aman karena image ini tidak menulis ke filesystem-nya sendiri saat runtime. Untuk deploy dari image yang sudah di-push ke registry (bukan build lokal), ganti blok `build:` pada `app` di `docker-compose.prod.yml` dengan `image: <registry>/awcms:<tag>` langsung.
+`app` here runs `read_only: true` (`tmpfs: [/tmp]`) — safe because this image does not write to its own filesystem at runtime. To deploy from an image already pushed to a registry (rather than building locally), replace the `build:` block on `app` in `docker-compose.prod.yml` with `image: <registry>/awcms:<tag>` directly.
 
-**2. `docker build`/`docker run` manual** — untuk orkestrator yang tidak memakai Compose (Coolify, k8s, ECS, dst., lihat [`deploy-coolify.md`](deploy-coolify.md)):
+**2. Manual `docker build`/`docker run`** — for orchestrators that do not use Compose (Coolify, k8s, ECS, etc., see [`deploy-coolify.md`](deploy-coolify.md)):
 
 ```bash
 docker build -f Dockerfile.production -t awcms:prod .
@@ -124,203 +126,203 @@ docker run -d --name awcms \
 curl http://localhost:4321/api/v1/health
 ```
 
-`--cap-drop=ALL --security-opt=no-new-privileges:true` — standar wajib, tidak butuh `--cap-add` tambahan untuk app yang berjalan.
+`--cap-drop=ALL --security-opt=no-new-privileges:true` — a mandatory standard, and the running app needs no extra `--cap-add`.
 
-Secret (`DATABASE_URL`, `AUTH_IP_HASH_SECRET`, HMAC sync, kunci enkripsi MFA/SSO, kredensial integrasi eksternal, dst.) **selalu** disuntikkan saat `docker run`/lewat orkestrator (env var, secret store, atau `--env-file`) — **tidak pernah** dibakar ke dalam image. `.dockerignore` mengecualikan `.env`/`.env.*` dari build context. Untuk orkestrator yang mendukung file secret (Docker Swarm secrets, Kubernetes Secrets sebagai volume mount, dsb.), pola `_FILE` suffix adalah alternatif standar industri — belum wajib diimplementasikan di kode aplikasi; operator yang butuh ini bisa mem-bridge di level orkestrator (entrypoint script yang membaca file secret lalu `export` env var biasa sebelum `exec bun ...`).
+Secrets (`DATABASE_URL`, `AUTH_IP_HASH_SECRET`, sync HMAC, MFA/SSO encryption keys, external integration credentials, etc.) are **always** injected at `docker run`/via the orchestrator (env var, secret store, or `--env-file`) — **never** baked into the image. `.dockerignore` excludes `.env`/`.env.*` from the build context. For orchestrators that support secret files (Docker Swarm secrets, Kubernetes Secrets as a volume mount, etc.), the `_FILE` suffix pattern is the industry-standard alternative — not yet mandatory to implement in application code; an operator who needs it can bridge at the orchestrator level (an entrypoint script that reads the secret file then `export`s a normal env var before `exec bun ...`).
 
-Image ini **tidak** menjalankan migration — peran runtime-nya (`awcms_app`, least-privilege) tidak punya hak DDL/GRANT yang migration butuhkan (model dua-peran di bawah). Jalankan `bun run db:migrate` sebagai langkah terpisah (job CI, atau `docker run` sekali pakai dengan `DATABASE_URL` privileged) terhadap database baru sebelum container ini pertama kali dijalankan.
+This image does **not** run migrations — its runtime role (`awcms_app`, least-privilege) does not have the DDL/GRANT rights migrations need (the two-role model below). Run `bun run db:migrate` as a separate step (a CI job, or a one-shot `docker run` with a privileged `DATABASE_URL`) against a new database before this container is first started.
 
 ## TLS/trust boundaries
 
-Aplikasi ini **tidak pernah** melakukan terminasi TLS sendiri (tidak ada kode HTTPS listener) — di setiap topologi, TLS (bila ada) adalah tanggung jawab lapisan **di depan** aplikasi:
+This application **never** terminates TLS itself (there is no HTTPS listener code) — in every topology, TLS (where present) is the responsibility of the layer **in front of** the application:
 
-| Topologi                                                                            | Di mana TLS berhenti                                                                                                   | Trust boundary                                                                                                                                            |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **offline/LAN**                                                                     | Tidak ada TLS — `http://` langsung ke port 4321                                                                        | Batas kepercayaan = jaringan LAN itu sendiri (fisik/WiFi tepercaya); tidak ada eksposur internet, PostgreSQL tidak public berlaku sama untuk app port ini |
-| **production (online), bare-metal**                                                 | `deploy/nginx/awcms.conf.example` (reverse proxy TLS termination)                                                      | Publik ↔ nginx = batas TLS; nginx ↔ app (`localhost:4321`) = plaintext HTTP di **dalam** mesin yang sama, tidak melewati jaringan                         |
-| **production (online), container (`docker-compose.yml`/`docker-compose.prod.yml`)** | Reverse proxy di **luar** compose stack (nginx/Caddy/Coolify's built-in proxy) — compose sendiri tidak menyediakan TLS | Publik ↔ reverse proxy = batas TLS **hanya jika** reverse proxy benar-benar satu-satunya jalur masuk                                                      |
-| **PostgreSQL (`db`)/PgBouncer**                                                     | Tidak ada TLS by default (`sslmode` tidak dipaksa) — koneksi Postgres dalam Docker network internal                    | Trust boundary = Docker network compose itu sendiri (`db`/`pgbouncer` tidak publish port host, jadi tidak reachable dari luar mesin sama sekali)          |
+| Topology                                                                            | Where TLS stops                                                                                                       | Trust boundary                                                                                                                                              |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **offline/LAN**                                                                     | No TLS — `http://` straight to port 4321                                                                              | The trust boundary = the LAN itself (trusted physical/WiFi network); no internet exposure, "PostgreSQL is not public" applies the same way to this app port |
+| **production (online), bare-metal**                                                 | `deploy/nginx/awcms.conf.example` (reverse proxy TLS termination)                                                     | Public ↔ nginx = the TLS boundary; nginx ↔ app (`localhost:4321`) = plaintext HTTP **inside** the same machine, never crossing the network                  |
+| **production (online), container (`docker-compose.yml`/`docker-compose.prod.yml`)** | A reverse proxy **outside** the compose stack (nginx/Caddy/Coolify's built-in proxy) — compose itself provides no TLS | Public ↔ reverse proxy = the TLS boundary **only if** the reverse proxy really is the only way in                                                           |
+| **PostgreSQL (`db`)/PgBouncer**                                                     | No TLS by default (`sslmode` is not forced) — Postgres connections inside the internal Docker network                 | The trust boundary = the compose Docker network itself (`db`/`pgbouncer` publish no host ports, so they are not reachable from outside the machine at all)  |
 
-Implikasi operasional:
+Operational implications:
 
-- **Beda penting dari `db`/`pgbouncer`**: `app`'s `ports: ["4321:4321"]` **tetap terikat ke semua interface (`0.0.0.0`) secara default** di kedua compose file. Ini **bukan** berarti aman dijangkau reverse proxy saja — pada host dengan IP publik/LAN yang tidak sepenuhnya tepercaya, klien mana pun bisa langsung menghubungi `http://<host>:4321`, melewati reverse proxy TLS sepenuhnya. **Jangan pernah** expose `app`'s port 4321 langsung ke internet publik tanpa reverse proxy TLS di depannya — `AUTH_COOKIE_SECURE=true` (wajib untuk profil online) mengasumsikan klien browser benar-benar bicara HTTPS ke suatu titik; tanpa TLS termination, cookie secure dikirim lewat kanal plaintext (dan body request pertama seperti password login/data transaksi finansial terkirim plaintext apa pun status cookie-nya). Mitigasi ini **wajib** di level firewall/jaringan host (operator) — mis. `ufw`/`iptables` yang hanya mengizinkan port 4321 dari `localhost`/IP reverse proxy, bukan dari internet umum. Operator yang ingin compose sendiri menegakkan ini bisa mengikat `ports: ["127.0.0.1:4321:4321"]` bila reverse proxy berjalan di mesin yang sama di luar Docker.
-- `PUBLIC_TRUST_PROXY`/variabel sejenis (bila diimplementasikan untuk fitur online-only) HANYA aman di-set `true` tepat pada topologi baris "production (online)" di tabel ini — reverse proxy TLS yang menimpa (bukan menambahkan) `X-Forwarded-*` adalah prasyarat, bukan opsional.
-- Koneksi `app`↔`db`/`pgbouncer` plaintext-dalam-Docker-network diterima sebagai batas kepercayaan yang memadai **karena** jaringan itu tidak pernah reachable dari luar mesin (tidak ada host port publish default) — bila operator menjalankan `db` di mesin terpisah dari `app` (topologi multi-server, di luar cakupan `docker-compose.yml`/`docker-compose.prod.yml` bawaan), TLS Postgres (`sslmode=require` pada `DATABASE_URL` + sertifikat server Postgres) menjadi tanggung jawab operator.
+- **An important difference from `db`/`pgbouncer`**: `app`'s `ports: ["4321:4321"]` **is still bound to all interfaces (`0.0.0.0`) by default** in both compose files. This does **not** mean it is only reachable by the reverse proxy — on a host with a public/LAN IP that is not fully trusted, any client can contact `http://<host>:4321` directly, bypassing the TLS reverse proxy entirely. **Never** expose `app`'s port 4321 straight to the public internet without a TLS reverse proxy in front of it — `AUTH_COOKIE_SECURE=true` (mandatory for the online profile) assumes the browser client really is speaking HTTPS at some point; without TLS termination, secure cookies are sent over a plaintext channel (and the first request body, such as the login password or financial transaction data, is sent in plaintext regardless of the cookie's status). This mitigation is **mandatory** at the host firewall/network level (the operator) — e.g. `ufw`/`iptables` allowing port 4321 only from `localhost`/the reverse proxy IP, not from the general internet. An operator who wants compose itself to enforce this can bind `ports: ["127.0.0.1:4321:4321"]` if the reverse proxy runs on the same machine outside Docker.
+- `PUBLIC_TRUST_PROXY`/similar variables (if implemented for online-only features) are ONLY safe to set to `true` on exactly the "production (online)" row topology in this table — a TLS reverse proxy that overwrites (not appends to) `X-Forwarded-*` is a prerequisite, not optional.
+- The plaintext-inside-the-Docker-network `app`↔`db`/`pgbouncer` connection is accepted as an adequate trust boundary **because** that network is never reachable from outside the machine (no host ports published by default) — if the operator runs `db` on a machine separate from `app` (a multi-server topology, outside the scope of the bundled `docker-compose.yml`/`docker-compose.prod.yml`), Postgres TLS (`sslmode=require` on `DATABASE_URL` + a Postgres server certificate) becomes the operator's responsibility.
 
 ## Secrets via deployment references
 
-Konvensi standar repo ini ("secret hanya dari environment"): env var langsung (`${VAR:-default}` substitution di compose, `environment:`/`env_file:` di container, atau variabel shell/systemd `EnvironmentFile=` di bare-metal) — **tidak pernah** hardcode ke file yang di-commit.
+This repo's standard convention ("secrets only from the environment"): plain env vars (`${VAR:-default}` substitution in compose, `environment:`/`env_file:` in containers, or shell/systemd `EnvironmentFile=` variables on bare-metal) — **never** hardcoded into a committed file.
 
-Untuk orkestrator yang menyediakan mekanisme secret-at-rest terenkripsi sendiri (Docker Swarm `secrets:`, Kubernetes `Secret` sebagai volume mount, Coolify's secret manager, HashiCorp Vault, dsb.), env var biasa tetap bisa dipakai — orkestrator-orkestrator ini pada praktiknya menyuntikkan secret **sebagai** env var runtime (bukan file) ke container. Untuk orkestrator yang secara spesifik mewajibkan pola **file-based** (mis. Docker Swarm secrets di-mount sebagai file di `/run/secrets/<name>`, bukan env var) — operator pada topologi ini punya dua opsi:
+For orchestrators that provide their own encrypted secret-at-rest mechanism (Docker Swarm `secrets:`, Kubernetes `Secret` as a volume mount, Coolify's secret manager, HashiCorp Vault, etc.), plain env vars can still be used — in practice these orchestrators inject secrets **as** runtime env vars (not files) into the container. For orchestrators that specifically mandate a **file-based** pattern (e.g. Docker Swarm secrets mounted as files at `/run/secrets/<name>`, not env vars) — an operator on this topology has two options:
 
-1. **Bridge di entrypoint** (disarankan, tidak perlu ubah image/kode aplikasi): tulis skrip entrypoint kecil yang membaca file secret dari `/run/secrets/*`, `export` sebagai env var biasa, lalu `exec` command aslinya.
-2. **Env var langsung dari secret store orkestrator** (paling sederhana bila orkestratornya mendukung).
+1. **Bridge in the entrypoint** (recommended, no image/application code change needed): write a small entrypoint script that reads the secret files from `/run/secrets/*`, `export`s them as plain env vars, then `exec`s the original command.
+2. **Plain env vars straight from the orchestrator's secret store** (simplest when the orchestrator supports it).
 
-## Model dua-peran basis data (RLS enforcement)
+## Two-role database model (RLS enforcement)
 
-Isolasi antar-tenant/entitas ERP memakai PostgreSQL Row-Level Security (standar wajib — lihat AGENTS.md "PostgreSQL + RLS wajib"). `ENABLE ROW LEVEL SECURITY` saja **tidak cukup**: PostgreSQL melewati RLS untuk _pemilik_ tabel (kecuali `FORCE`) dan tanpa syarat untuk peran SUPERUSER/BYPASSRLS. Karena itu deployment wajib memakai dua peran:
+Isolation between tenants/ERP entities uses PostgreSQL Row-Level Security (a mandatory standard — see AGENTS.md "PostgreSQL + RLS mandatory"). `ENABLE ROW LEVEL SECURITY` alone is **not enough**: PostgreSQL bypasses RLS for the table _owner_ (unless `FORCE`) and unconditionally for SUPERUSER/BYPASSRLS roles. A deployment must therefore use two roles:
 
-- **Peran migrasi (privileged owner/superuser)** — menjalankan `bun run db:migrate`. Butuh hak DDL/GRANT. Ini `POSTGRES_USER` di `docker-compose.yml` / URL privileged yang dipakai sekali untuk migrasi.
-- **Peran aplikasi `awcms_app` (least-privilege)** — peran yang di-koneksi aplikasi saat runtime (`DATABASE_URL` di `.env`). Bukan owner, bukan superuser, hanya grant DML; setiap tabel tenant-scoped/entitas bisnis (ledger, payroll, inventory, dst.) wajib `FORCE ROW LEVEL SECURITY` plus default GUC fail-closed (`app.current_tenant_id` = UUID nol → tak cocok tenant mana pun → 0 baris) sehingga RLS benar-benar ditegakkan untuk peran ini.
+- **Migration role (privileged owner/superuser)** — runs `bun run db:migrate`. Needs DDL/GRANT rights. This is `POSTGRES_USER` in `docker-compose.yml` / the privileged URL used once for migrations.
+- **Application role `awcms_app` (least-privilege)** — the role the application connects as at runtime (`DATABASE_URL` in `.env`). Not the owner, not a superuser, DML grants only; every tenant-scoped/business-entity table (ledger, payroll, inventory, etc.) must have `FORCE ROW LEVEL SECURITY` plus a fail-closed default GUC (`app.current_tenant_id` = the zero UUID → matches no tenant → 0 rows) so that RLS is genuinely enforced for this role.
 
-Menjalankan aplikasi sebagai superuser membatalkan seluruh isolasi RLS — `bun run security:readiness` (menyusul) wajib memblokir go-live bila peran koneksi `DATABASE_URL` ternyata superuser/BYPASSRLS, atau bila ada tabel tenant/entitas bisnis tanpa `relforcerowsecurity`. Jalankan readiness dengan `DATABASE_URL` peran aplikasi, bukan URL migrasi.
+Running the application as a superuser voids the entire RLS isolation — `bun run security:readiness` (to follow) must block go-live if the `DATABASE_URL` connection role turns out to be superuser/BYPASSRLS, or if any tenant/business-entity table lacks `relforcerowsecurity`. Run readiness with the application role's `DATABASE_URL`, not the migration URL.
 
-Membuat peran aplikasi:
+Creating the application role:
 
-- **Container:** otomatis — `deploy/postgres/10-create-app-role.sh` (hook `/docker-entrypoint-initdb.d`) membuatnya dari `AWCMS_APP_DB_PASSWORD` saat init cluster pertama, lalu migrasi terkait memberi grant + FORCE RLS.
-- **Bare-metal/systemd:** sekali di awal, sebagai superuser — `CREATE ROLE awcms_app LOGIN PASSWORD '…';` — lalu `bun run db:migrate` (URL superuser). Setelah itu app konek sebagai `awcms_app` (`DATABASE_URL` di `.env`).
+- **Container:** automatic — `deploy/postgres/10-create-app-role.sh` (a `/docker-entrypoint-initdb.d` hook) creates it from `AWCMS_APP_DB_PASSWORD` at first cluster init, then the related migration grants it + FORCE RLS.
+- **Bare-metal/systemd:** once at the start, as superuser — `CREATE ROLE awcms_app LOGIN PASSWORD '…';` — then `bun run db:migrate` (superuser URL). After that the app connects as `awcms_app` (`DATABASE_URL` in `.env`).
 
-Peran tambahan opsional (defense-in-depth), kini **nyata** dan mengikuti pola yang sama — dibuat `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163): `awcms_worker` (tujuh cron worker: purge audit, dispatch object/email/domain-event/workflow/reporting, `WORKER_DATABASE_URL`) dan `awcms_setup` (hanya `POST /api/v1/setup/initialize`, `SETUP_DATABASE_URL`), masing-masing hanya GRANT per-jalur-tulis yang dipakai kodenya. Aktifkan opt-in sekali (`ALTER ROLE awcms_worker LOGIN PASSWORD '…';` lalu arahkan var-nya); keduanya fallback ke `DATABASE_URL`/`awcms_app` bila tidak di-set, jadi model dua-peran di atas tetap fondasi minimum yang wajib.
+Optional additional roles (defense-in-depth), now **real** and following the same pattern — created by `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163): `awcms_worker` (seven cron workers: audit purge, object/email/domain-event/workflow/reporting dispatch, `WORKER_DATABASE_URL`) and `awcms_setup` (only `POST /api/v1/setup/initialize`, `SETUP_DATABASE_URL`), each with GRANTs only for the write paths its code actually uses. Enable them opt-in once (`ALTER ROLE awcms_worker LOGIN PASSWORD '…';` then point the variable at it); both fall back to `DATABASE_URL`/`awcms_app` if unset, so the two-role model above is still the mandatory minimum foundation.
 
-## Validasi konfigurasi sebelum boot (`bun run config:validate`)
+## Configuration validation before boot (`bun run config:validate`)
 
-Prinsip konfigurasi wajib: "Konfigurasi tervalidasi saat boot; nilai wajib yang hilang menghentikan start dengan pesan jelas." Direncanakan: `scripts/validate-env.ts` (`bun run config:validate`).
+The mandatory configuration principle: "Configuration is validated at boot; a missing required value stops the start with a clear message." Planned: `scripts/validate-env.ts` (`bun run config:validate`).
 
-**Config registry & deprecated vars (direncanakan)**: `src/lib/config/registry.ts` menjadi sumber kebenaran terstruktur untuk setiap variabel (type/required/owner/sensitivity/profiles/deprecation). `bun run config:docs:check` (bagian dari `bun run check`) menjaga registry ini, `.env.example`, dan referensi konfigurasi tetap sinkron.
+**Config registry & deprecated vars (planned)**: `src/lib/config/registry.ts` becomes the structured source of truth for every variable (type/required/owner/sensitivity/profiles/deprecation). `bun run config:docs:check` (part of `bun run check`) keeps this registry, `.env.example`, and the configuration reference in sync.
 
-- Wajib non-kosong: `APP_ENV`, `APP_URL`, `DATABASE_URL`. Daftar ini terikat ke `RULES` di `scripts/validate-env.ts` oleh `tests/env-required-vars-doc.test.ts` — ubah salah satunya tanpa yang lain dan gate merah. (`APP_TIMEZONE` dan `AUTH_JWT_SECRET` pernah tercantum di sini; **keduanya tidak ada di awcms** — tidak dibaca kode mana pun — dan sudah dihapus.)
-- Kondisional: bila sync/integrasi eksternal (`AWCMS_SYNC_ENABLED=true`), maka `AWCMS_SYNC_HMAC_SECRET` wajib diisi dan bukan placeholder `.env.example` (`change-me`).
-- Kondisional: bila storage objek eksternal (`R2_ENABLED=true`), maka kredensial R2 terkait wajib diisi.
-- Tidak pernah mencetak nilai secret asli — hanya nama variabel yang hilang/tidak valid. Exit code bukan nol bila ada kegagalan.
+- Must be non-empty: `APP_ENV`, `APP_URL`, `DATABASE_URL`. This list is bound to `RULES` in `scripts/validate-env.ts` by `tests/env-required-vars-doc.test.ts` — change one without the other and the gate goes red. (`APP_TIMEZONE` and `AUTH_JWT_SECRET` used to be listed here; **neither exists in awcms** — no code reads them — and they have been removed.)
+- Conditional: if external sync/integration is on (`AWCMS_SYNC_ENABLED=true`), then `AWCMS_SYNC_HMAC_SECRET` must be filled in and must not be the `.env.example` placeholder (`change-me`).
+- Conditional: if external object storage is on (`R2_ENABLED=true`), then the related R2 credentials must be filled in.
+- Never prints the real secret values — only the names of missing/invalid variables. Non-zero exit code on any failure.
 
-`bun run production:preflight` (direncanakan) menjalankan `config:validate` sebagai tahap pertama, sebelum `db:migrate` — konfigurasi harus valid sebelum ada percobaan koneksi/migrasi apa pun.
+`bun run production:preflight` (planned) runs `config:validate` as its first stage, before `db:migrate` — the configuration must be valid before there is any connection/migration attempt at all.
 
-## Dispatcher terjadwal (sync/integrasi eksternal, email, dsb.)
+## Scheduled dispatchers (external sync/integration, email, etc.)
 
-Pola dispatcher CLI terjadwal (bukan endpoint HTTP) adalah standar untuk semua job yang bergantung provider eksternal (email, sync object storage, integrasi payment gateway/marketplace/Coretax/logistik) — direncanakan mengikuti pola `scripts/*.ts` yang idempoten (claim-lease `FOR UPDATE SKIP LOCKED`), aman dijalankan berulang, dengan retry/backoff dan circuit breaker per provider. Tidak melakukan apa pun (exit 0, tanpa efek) bila fitur terkait dimatikan di env — profil mana pun yang mematikan sebuah integrasi (mis. offline/LAN) aman menjalankan dispatcher tanpa efek samping.
+The scheduled CLI dispatcher pattern (not an HTTP endpoint) is the standard for every job that depends on an external provider (email, object storage sync, payment gateway/marketplace/Coretax/logistics integration) — planned to follow the idempotent `scripts/*.ts` pattern (claim-lease `FOR UPDATE SKIP LOCKED`), safe to run repeatedly, with retry/backoff and a per-provider circuit breaker. It does nothing (exit 0, no effect) when the related feature is switched off in the env — any profile that switches an integration off (e.g. offline/LAN) can safely run the dispatcher with no side effects.
 
-| Profil                               | Cara menjadwalkan                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **development**                      | Jalankan manual sesuai kebutuhan. Fitur eksternal biasanya `false` di `.env` dev — tidak perlu dijadwalkan sama sekali.                                                                                                                                                                                                                                                     |
-| **offline/LAN**                      | Integrasi eksternal biasanya off atau tertunda. Bila diaktifkan (mis. relay lokal), jadwalkan seperti profil systemd di bawah.                                                                                                                                                                                                                                              |
-| **production (bare-metal, systemd)** | `cron` atau systemd timer terpisah dari service utama (`awcms.service`).                                                                                                                                                                                                                                                                                                    |
-| **container (`docker-compose.yml`)** | Jalankan sebagai `docker compose exec app bun run <job>` lewat cron host, atau tambahkan service terjadwal terpisah.                                                                                                                                                                                                                                                        |
-| **Coolify/VPS**                      | Scheduled Task Coolify (bila tersedia) atau cron di VPS yang menjalankan **container one-shot** dari checkout repo pada tag rilis yang sedang berjalan — **bukan** `docker exec` ke container app: `Dockerfile.production` menghasilkan image runtime saja dan tidak mengirim `scripts/`. Perintah lengkap: [`deploy-coolify.md`](deploy-coolify.md) §Dispatcher terjadwal. |
+| Profile                              | How to schedule                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **development**                      | Run manually as needed. External features are usually `false` in the dev `.env` — no need to schedule anything at all.                                                                                                                                                                                                                                                    |
+| **offline/LAN**                      | External integrations are usually off or deferred. If enabled (e.g. a local relay), schedule as in the systemd profile below.                                                                                                                                                                                                                                             |
+| **production (bare-metal, systemd)** | `cron` or a systemd timer separate from the main service (`awcms.service`).                                                                                                                                                                                                                                                                                               |
+| **container (`docker-compose.yml`)** | Run as `docker compose exec app bun run <job>` from host cron, or add a separate scheduled service.                                                                                                                                                                                                                                                                       |
+| **Coolify/VPS**                      | A Coolify Scheduled Task (if available) or cron on the VPS running a **one-shot container** from a repo checkout at the release tag currently running — **not** `docker exec` into the app container: `Dockerfile.production` produces a runtime-only image and does not ship `scripts/`. Full commands: [`deploy-coolify.md`](deploy-coolify.md) §Scheduled dispatchers. |
 
-Contoh crontab (bare-metal/systemd, setiap 2 menit — pola generik untuk dispatcher email/sync):
+Example crontab (bare-metal/systemd, every 2 minutes — a generic pattern for the email/sync dispatchers):
 
 ```cron
 */2 * * * * cd /opt/awcms && /usr/local/bin/bun run email:dispatch >> /var/log/awcms/email-dispatch.log 2>&1
 ```
 
-Contoh untuk topologi container, dari cron host:
+Example for the container topology, from host cron:
 
 ```cron
 */2 * * * * cd /opt/awcms && docker compose exec -T app bun run email:dispatch >> /var/log/awcms/email-dispatch.log 2>&1
 ```
 
-Catatan operasional (standar wajib untuk setiap dispatcher yang dibangun):
+Operational notes (a mandatory standard for every dispatcher that gets built):
 
-- **Idempoten/aman dijalankan berulang** — pola claim-lease (`FOR UPDATE SKIP LOCKED`) membuat pemanggilan bersamaan atau tumpang tindih aman; tidak ada baris yang terkirim/diproses dua kali (mis. posting transaksi ganda, submission Coretax ganda).
-- **Retry/backoff tidak menjadi spam-loop**: entri yang gagal masuk `retry_wait` dengan `next_attempt_at` mundur eksponensial sebelum diklaim lagi.
-- **Circuit breaker provider terbuka**: bila provider eksternal (mis. payment gateway) sedang outage, dispatcher berhenti mengklaim apa pun sampai breaker pulih — cron tetap jalan setiap tick tanpa efek, tidak menambah beban ke provider yang sedang down.
-- **Multi-instance**: jadwalkan hanya dari **satu** instance/cron entry per deployment.
+- **Idempotent/safe to run repeatedly** — the claim-lease pattern (`FOR UPDATE SKIP LOCKED`) makes concurrent or overlapping invocations safe; no row is sent/processed twice (e.g. a double transaction posting, a double Coretax submission).
+- **Retry/backoff must not become a spam loop**: a failed entry goes into `retry_wait` with an exponentially backed-off `next_attempt_at` before it can be claimed again.
+- **The provider circuit breaker opens**: if an external provider (e.g. a payment gateway) is having an outage, the dispatcher stops claiming anything until the breaker recovers — cron still runs every tick with no effect, adding no load to a provider that is already down.
+- **Multi-instance**: schedule it from **one** instance/cron entry per deployment only.
 
 ## Job registry
 
-Setiap modul yang mendaftarkan command operasional terjadwal (dispatcher, purge
-retensi, rekonsiliasi) mendeklarasikannya di `ModuleDescriptor.jobs`. **Itu
-sumber kebenarannya, bukan dokumen ini** — tiap entri membawa `purpose`,
-`recommendedSchedule`, `environmentNotes`, dan `safeInOfflineLan`, dan disajikan
-langsung ke operator lewat:
+Every module that registers a scheduled operational command (dispatcher, retention
+purge, reconciliation) declares it in `ModuleDescriptor.jobs`. **That
+is the source of truth, not this document** — each entry carries `purpose`,
+`recommendedSchedule`, `environmentNotes`, and `safeInOfflineLan`, and is served
+directly to the operator through:
 
 ```
 GET /api/v1/modules/{moduleKey}/jobs
 ```
 
-Dokumen ini sengaja TIDAK menyalin daftarnya. Versi sebelumnya menyalin, dan
-salinan itu menua persis seperti yang diperkirakan: memuat tiga command ERP yang
-tak pernah ada (`finance:posting:dispatch`, `payroll:run:dispatch`,
-`inventory:sync:dispatch`) sementara sepuluh job yang benar-benar dikirim tak
-disebut sama sekali. Satu-satunya perbaikan yang bertahan adalah berhenti
-menyalinnya.
+This document deliberately does NOT copy that list. A previous version did, and
+that copy aged exactly as predicted: it listed three ERP commands that
+never existed (`finance:posting:dispatch`, `payroll:run:dispatch`,
+`inventory:sync:dispatch`) while the ten jobs that actually ship went
+unmentioned entirely. The only fix that lasted was to stop
+copying it.
 
-Yang dijamin gate, bukan kebiasaan:
+What the gates guarantee, rather than habit:
 
-- **`modules:jobs:check`** — tiap skrip di `JOB_WORK_CLASS_REGISTRY` wajib punya
-  `ModuleJobDescriptor` dengan `recommendedSchedule` yang tak kosong, atau
-  pengecualian ber-alasan STRUKTURAL. Job worker baru yang lupa deskriptornya
-  memerahkan CI di PR yang menambahkannya — tak bisa lagi mendarat lalu tak
-  pernah dijadwalkan siapa pun.
-- **`db:work-class:check`** — tiap skrip yang membuka koneksi worker/setup wajib
-  punya work class terdeklarasi; generatornya MENOLAK jalan saat peta dan disk
-  berselisih.
+- **`modules:jobs:check`** — every script in `JOB_WORK_CLASS_REGISTRY` must have
+  a `ModuleJobDescriptor` with a non-empty `recommendedSchedule`, or a
+  STRUCTURAL, reasoned exception. A new worker job that forgets its descriptor
+  turns CI red in the PR that adds it — it can no longer land and then never
+  be scheduled by anyone.
+- **`db:work-class:check`** — every script that opens a worker/setup connection must
+  have a declared work class; its generator REFUSES to run when the map and disk
+  disagree.
 
-Satu pengecualian tercatat hari ini: **`edge-cache:purge`**. Tak ada modul
-`edge_cache` untuk menggantungkan deskriptornya — edge cache adalah infrastruktur
-di `src/lib/edge-cache/` (ADR-0043), dan `ModuleDescriptor.jobs` di-key per
-modul. Jadwalnya: **setiap 10–30 detik**, cukup rapat supaya publikasi editor
-segera terlihat di edge. Alasan lengkapnya ada di
+One recorded exception today: **`edge-cache:purge`**. There is no
+`edge_cache` module to hang its descriptor on — the edge cache is infrastructure
+in `src/lib/edge-cache/` (ADR-0043), and `ModuleDescriptor.jobs` is keyed per
+module. Its schedule: **every 10–30 seconds**, tight enough that an editor's
+publish shows up at the edge promptly. The full reasoning is in
 `scripts/module-job-registry-check.ts`.
 
-Semua job bersifat operasi database murni kecuali yang secara eksplisit menyentuh
-provider eksternal (bila fiturnya aktif) — `safeInOfflineLan` di tiap deskriptor
-yang menyatakannya per job, jadi profil offline/LAN bisa diperiksa lewat API yang
-sama alih-alih menebak dari nama command.
+Every job is a pure database operation except those that explicitly touch an
+external provider (when the feature is active) — `safeInOfflineLan` in each descriptor
+states this per job, so the offline/LAN profile can be checked through the same
+API instead of guessing from the command name.
 
-**On-demand/manual (bukan cron berulang)** — dijalankan operator sesuai kebutuhan:
+**On-demand/manual (not recurring cron)** — run by the operator as needed:
 
-- `security:readiness` — sebelum go-live, dan periodik (mis. mingguan) terhadap **setiap** deployment hidup untuk mendeteksi drift. Di repo ini itu berarti satu deployment (production, [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)); instalasi yang menjalankan lebih dari satu environment menjalankannya di masing-masing, dengan `DATABASE_URL` environment itu sendiri — hasil dari satu environment tidak pernah menjadi bukti untuk environment lain.
-- `config:validate` — sebelum setiap deploy.
+- `security:readiness` — before go-live, and periodically (e.g. weekly) against **every** live deployment to detect drift. In this repo that means one deployment (production, [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)); an installation running more than one environment runs it in each, with that environment's own `DATABASE_URL` — a result from one environment is never evidence for another.
+- `config:validate` — before every deploy.
 
 ## Shared worker runner
 
-`src/lib/jobs/` SUDAH ada dan dipakai nyata — `job-runner.ts`, `batching.ts`,
-`retry-classification.ts`, dan `advisory-lock.ts` adalah implementasi
-berjalan, bukan rencana.
+`src/lib/jobs/` ALREADY exists and is genuinely used — `job-runner.ts`, `batching.ts`,
+`retry-classification.ts`, and `advisory-lock.ts` are running
+implementations, not a plan.
 
-**Dua model konkurensi, keduanya sah — pilih menurut bentuk jobnya, bukan menurut
-tahap migrasi.**
+**Two concurrency models, both legitimate — pick according to the shape of the job, not according to
+the migration stage.**
 
-| model                                                | job                                                                                                                                                                                                                                                                                                            | mekanisme                                                                                                                                |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **`runJob`** — advisory lock per nama job            | `domain-events:dispatch`, `workflow:escalations:dispatch`, `logs:audit:purge`, `reporting:projections:refresh`, `reporting:exports:dispatch`, `data-lifecycle:archive-purge`, `analytics:rollup`, `analytics:purge`, `news-media:reconcile`, `blog:publish:scheduled`, `identity-access:business-scope:expiry` | satu instance sekali jalan; cocok untuk sapuan seluruh tenant yang tak punya klaim per-baris                                             |
-| **claim-lease per baris** (`FOR UPDATE SKIP LOCKED`) | `email:dispatch`, `sync:objects:dispatch`, `edge-cache:purge`                                                                                                                                                                                                                                                  | aman dijalankan paralel — lihat §Catatan operasional di atas; antrean baris-per-baris tak butuh kunci selebar job                        |
-| **belum bermigrasi — tanpa kunci lintas-instance**   | `comments:retention`, `form-drafts:purge`, `site-search:reconcile`, `tenant-domain:dns:sync`                                                                                                                                                                                                                   | jadwalkan dari **satu** entri cron saja; adopsi `runJob` untuk keempatnya dilacak di [#291](https://github.com/ahliweb/awcms/issues/291) |
+| model                                              | job                                                                                                                                                                                                                                                                                                            | mechanism                                                                                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **`runJob`** — advisory lock per job name          | `domain-events:dispatch`, `workflow:escalations:dispatch`, `logs:audit:purge`, `reporting:projections:refresh`, `reporting:exports:dispatch`, `data-lifecycle:archive-purge`, `analytics:rollup`, `analytics:purge`, `news-media:reconcile`, `blog:publish:scheduled`, `identity-access:business-scope:expiry` | one instance at a time; suits an all-tenant sweep that has no per-row claim                                                             |
+| **per-row claim-lease** (`FOR UPDATE SKIP LOCKED`) | `email:dispatch`, `sync:objects:dispatch`, `edge-cache:purge`                                                                                                                                                                                                                                                  | safe to run in parallel — see §Operational notes above; a row-by-row queue needs no job-wide lock                                       |
+| **not yet migrated — no cross-instance lock**      | `comments:retention`, `form-drafts:purge`, `site-search:reconcile`, `tenant-domain:dns:sync`                                                                                                                                                                                                                   | schedule from **one** cron entry only; adopting `runJob` for all four is tracked in [#291](https://github.com/ahliweb/awcms/issues/291) |
 
-Versi sebelumnya dokumen ini menyatakan ketujuh dispatcher "semuanya dibangun di
-atas shared runner ini". Itu tidak benar untuk `email:dispatch` dan
-`sync:objects:dispatch`, dan salahnya ke arah yang menyesatkan: pembacanya akan
-menyimpulkan advisory lock sudah mencegah tumpang tindih di dalam aplikasi,
-padahal jaminannya datang dari klaim baris — mekanisme berbeda dengan sifat
-operasional berbeda (yang satu justru MENGIZINKAN worker paralel).
+A previous version of this document stated that all seven dispatchers were "all built on
+top of this shared runner". That was untrue for `email:dispatch` and
+`sync:objects:dispatch`, and wrong in the misleading direction: the reader would
+conclude that an advisory lock already prevents overlap inside the application,
+when in fact the guarantee comes from the row claim — a different mechanism with different
+operational properties (one of them actually ALLOWS parallel workers).
 
-`runJob` menyediakan:
+`runJob` provides:
 
-- **Advisory lock per nama job** (`pg_try_advisory_lock`, non-blocking, session-level, reserved connection terpisah dari handler) — mencegah dua instance job yang sama berjalan tumpang tindih.
-- **Bounded batching per tenant/entitas** (`iterateTenantsInBatches`/`runBoundedBatches`) dengan safety bound (`maxPasses`).
-- **Klasifikasi error** (`classifyError`): `retryable` vs `not_retryable` vs `unknown` — diagnostik, bukan retry-with-backoff otomatis.
-- **Redaksi** — seluruh error di `JobResult.error` melalui `sanitizeErrorForLog` sebelum dicetak/disimpan.
-- **Cancellation kooperatif** (SIGTERM/SIGINT-aware) dengan grace period sebelum pelepasan lock, agar tick/instance berikutnya tidak mengklaim lock yang sebenarnya masih dipegang handler yang sedang graceful-shutdown.
-- **Telemetry terstruktur** (`JobResult` JSON ke stdout + opsional `--json-output=<path>`).
+- **An advisory lock per job name** (`pg_try_advisory_lock`, non-blocking, session-level, on a reserved connection separate from the handler) — prevents two instances of the same job from running overlapped.
+- **Bounded batching per tenant/entity** (`iterateTenantsInBatches`/`runBoundedBatches`) with a safety bound (`maxPasses`).
+- **Error classification** (`classifyError`): `retryable` vs `not_retryable` vs `unknown` — diagnostic, not automatic retry-with-backoff.
+- **Redaction** — every error in `JobResult.error` goes through `sanitizeErrorForLog` before being printed/stored.
+- **Cooperative cancellation** (SIGTERM/SIGINT-aware) with a grace period before the lock is released, so that the next tick/instance does not claim a lock that is in fact still held by a handler in the middle of a graceful shutdown.
+- **Structured telemetry** (`JobResult` JSON to stdout + optional `--json-output=<path>`).
 
-Panduan adopsi untuk job baru:
+Adoption guidance for a new job:
 
-1. Gunakan `iterateTenantsInBatches` bila job iterasi tenant/entitas dengan bounded passes.
-2. Bungkus logic jadi satu `runJob({ name, description, handler })` — `name` harus stabil (dipakai sebagai lock key).
-3. Tambahkan `--dry-run` bila job punya cara wajar melakukan preview read-only tanpa mutasi (penting untuk job finansial/payroll — preview sebelum posting nyata).
-4. Cetak `printJobTelemetry(result)` + `writeJobTelemetry(...)` + `applyJobExitCode(result)` di akhir `main()`.
-5. Panggilan provider eksternal (payment gateway/marketplace/Coretax/logistik/email) TETAP di luar transaksi database — handler yang memanggil provider harus melakukannya di luar transaction block `withTenant`, tidak pernah di dalam satu transaksi bersama mutasi domain.
+1. Use `iterateTenantsInBatches` if the job iterates tenants/entities with bounded passes.
+2. Wrap the logic into a single `runJob({ name, description, handler })` — `name` must be stable (it is used as the lock key).
+3. Add `--dry-run` if the job has a sensible way to do a read-only preview without mutating (important for financial/payroll jobs — preview before the real posting).
+4. Print `printJobTelemetry(result)` + `writeJobTelemetry(...)` + `applyJobExitCode(result)` at the end of `main()`.
+5. External provider calls (payment gateway/marketplace/Coretax/logistics/email) STAY outside the database transaction — a handler that calls a provider must do so outside the `withTenant` transaction block, never inside one transaction together with the domain mutations.
 
-## Backup lokal (semua profil)
+## Local backup (all profiles)
 
-`deploy/backup/backup-postgres.sh` dan `deploy/backup/restore-postgres.sh` **nyata ada** di repo ini (Bash, membungkus `pg_dump`/`pg_restore`) — backup lokal wajib pada **semua** profil non-development, termasuk offline/LAN. Untuk platform ERP, ini krusial: backup adalah satu-satunya jalur pemulihan data finansial/inventori/payroll bila terjadi kegagalan.
+`deploy/backup/backup-postgres.sh` and `deploy/backup/restore-postgres.sh` **really exist** in this repo (Bash, wrapping `pg_dump`/`pg_restore`) — a local backup is mandatory on **all** non-development profiles, including offline/LAN. For an ERP platform this is crucial: backup is the only recovery path for financial/inventory/payroll data when something fails.
 
-**Backup yang sudah diverifikasi bisa di-restore adalah prasyarat migrasi, bukan tugas rutin di sampingnya.** Migrasi di repo ini forward-only (tidak ada `down`), jadi satu-satunya pembatalan yang nyata adalah restore — dan sebuah dump yang belum pernah diuji-restore bukan jalur pembatalan, ia hanya berkas. Pada topologi satu-environment ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)) beban itu bertambah: tidak ada environment pendahulu yang menerima `sql/NNN` lebih dulu, sehingga drill restore inilah yang ADR-0083 §Konsekuensi tunjuk sebagai penggantinya — mitigasi, bukan pengganti setara. `restore-postgres.sh` **tanpa** `--target` selalu restore ke database sekali pakai lalu men-drop-nya, jadi drill itu tidak pernah menyentuh database live; prosedur lengkapnya di [`database-migrations.md`](database-migrations.md) §Langkah 0, bentuk container one-shot untuk Coolify di [`deploy-coolify.md`](deploy-coolify.md) §Backup. Instalasi yang menjalankan lebih dari satu environment tetap wajib melakukannya per environment — dump satu environment tidak pernah menjadi jalur pemulihan environment lain.
+**A backup that has been verified as restorable is a prerequisite for migration, not a routine chore alongside it.** Migrations in this repo are forward-only (there is no `down`), so the only real rollback is a restore — and a dump that has never been restore-tested is not a rollback path, it is just a file. On a single-environment topology ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)) that burden grows: there is no preceding environment that receives `sql/NNN` first, so this restore drill is what ADR-0083 §Consequences points to as its replacement — a mitigation, not an equivalent substitute. `restore-postgres.sh` **without** `--target` always restores into a throwaway database and then drops it, so the drill never touches the live database; the full procedure is in [`database-migrations.md`](database-migrations.md) §Step 0, and the one-shot container form for Coolify is in [`deploy-coolify.md`](deploy-coolify.md) §Backup. An installation running more than one environment must still do it per environment — one environment's dump is never the recovery path for another.
 
-Yang benar-benar dikirim skrip itu hari ini: dump `--format=custom` polos plus sidecar `.sha256`, dan pemangkasan retensi (`BACKUP_RETENTION_DAYS`, default 14). Semuanya berjalan penuh **tanpa internet**, jadi profil offline/LAN tidak kehilangan apa pun. Enkripsi at-rest dan manifest bertanda tangan HMAC (`BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE`) tetap **standar target** dan disebut [`production-preflight-runbook.md`](production-preflight-runbook.md) §Stage 2 — tetapi **belum diimplementasikan**, dan skrip menolak jalan (bukan diam-diam mengabaikan) begitu salah satu variabel kunci itu diset, supaya tidak ada yang mengira dump polos itu terenkripsi. Sampai varian terenkripsinya ada, dump dilindungi izin filesystem dan salinan off-host, bukan oleh keyakinan. Off-site copy (pola 3-2-1) dan restore drill terjadwal juga belum dikirim sebagai otomasi — drill dijalankan manual sesuai [`database-migrations.md`](database-migrations.md) §Langkah 0.
+What those scripts actually ship today: a plain `--format=custom` dump plus a `.sha256` sidecar, and retention trimming (`BACKUP_RETENTION_DAYS`, default 14). All of it runs fully **without internet**, so the offline/LAN profile loses nothing. Encryption at rest and an HMAC-signed manifest (`BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE`) remain a **target standard** and are mentioned in [`production-preflight-runbook.md`](production-preflight-runbook.md) §Stage 2 — but they are **not implemented yet**, and the script refuses to run (rather than silently ignoring it) as soon as either of those key variables is set, so that nobody thinks the plain dump is encrypted. Until the encrypted variant exists, dumps are protected by filesystem permissions and off-host copies, not by belief. Off-site copies (the 3-2-1 pattern) and a scheduled restore drill have also not shipped as automation — the drill is run manually per [`database-migrations.md`](database-migrations.md) §Step 0.
 
-Direncanakan menyusul: `bun run resilience:dr-drill` untuk verifikasi failure-injection terkontrol (disconnect PostgreSQL, pool saturation, worker interruption, partial provider outage) — lihat `resilience-dr-verification.md` (menyusul, mengadaptasi pola yang sama dari basis).
+Planned to follow: `bun run resilience:dr-drill` for controlled failure-injection verification (PostgreSQL disconnect, pool saturation, worker interruption, partial provider outage) — see `resilience-dr-verification.md` (to follow, adapting the same pattern from the base).
 
-## Metrics dan observabilitas operasional
+## Metrics and operational observability
 
-Lihat [`observability-metrics.md`](observability-metrics.md) untuk arsitektur metrics port, tabel kardinalitas/privasi per metrik (termasuk metrik ERP spesifik — throughput transaksi, latensi posting, backlog sync), SLI/SLO awal, dan panduan burn-rate.
+See [`observability-metrics.md`](observability-metrics.md) for the metrics port architecture, the per-metric cardinality/privacy table (including ERP-specific metrics — transaction throughput, posting latency, sync backlog), the initial SLI/SLOs, and burn-rate guidance.
 
-## Lihat juga
+## See also
 
-- [`deploy-coolify.md`](deploy-coolify.md) — panduan deploy Coolify khusus: topologi single VPS, multi aplikasi dalam satu VPS, opsi PostgreSQL, dan checklist keamanan.
-- [`observability-metrics.md`](observability-metrics.md) — metrics port, SLI/SLO awal, dependency health endpoint.
-- [`performance-suite.md`](performance-suite.md) — performance suite representatif: fixture sintetik deterministik, skenario load/soak/saturasi-dan-recovery, budget regresi query-plan versioned.
-- [`release-process.md`](release-process.md) — Changesets, SBOM, signing, provenance untuk rilis image.
-- [`repo-inventory.md`](repo-inventory.md) — inventaris modul/migrasi/test/route yang dihasilkan otomatis dari repo (menyusul begitu ada modul aktif).
-- `AGENTS.md` — aturan wajib RLS/RBAC-ABAC/idempotency/audit yang melandasi standar deployment ini.
+- [`deploy-coolify.md`](deploy-coolify.md) — the Coolify-specific deploy guide: single VPS topology, multiple applications on one VPS, PostgreSQL options, and a security checklist.
+- [`observability-metrics.md`](observability-metrics.md) — metrics port, initial SLI/SLOs, dependency health endpoint.
+- [`performance-suite.md`](performance-suite.md) — a representative performance suite: deterministic synthetic fixtures, load/soak/saturation-and-recovery scenarios, versioned query-plan regression budgets.
+- [`release-process.md`](release-process.md) — Changesets, SBOM, signing, provenance for image releases.
+- [`repo-inventory.md`](repo-inventory.md) — a module/migration/test/route inventory generated automatically from the repo (to follow, once there is an active module).
+- `AGENTS.md` — the mandatory RLS/RBAC-ABAC/idempotency/audit rules underpinning this deployment standard.

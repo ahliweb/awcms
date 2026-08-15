@@ -1,263 +1,259 @@
-# ADR-0070 — Peran keluarga: `awcms-astro` memikul halaman publik dan permukaan admin USER
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.id.md)
+
+# ADR-0070 — Family roles: `awcms-astro` carries public pages and the USER admin surface
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-08
-- **Pengambil keputusan:** @ahliweb
-- **Mempersempit:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) — kata "seluruh layar admin" dipersempit menjadi "seluruh layar admin **SISTEM**". ADR-0051 **tidak** di-supersede: keputusan intinya berlaku utuh dan ketiga gerbang penggantinya tidak dilonggarkan sedikit pun. Berkasnya mendapat banner penanda; kalimatnya tidak ditulis ulang (Aturan 2 indeks ADR).
-- **Menyempurnakan:** [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) — kolom `awcms-astro` pada tabel peran dua repo di sana mendapat isi yang benar, lewat banner penanda dengan cara yang sama. Butir 1–5 §Keputusan-nya tidak berubah.
-- **Terkait:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + BFF), [ADR-0050](0050-bff-session-handoff-code.md) (kode serah-terima sesi), [ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) (kontrak konsumen beku), [ADR-0068](0068-family-standards-posture-editions-and-recorded-divergences.md) (mekanisme pencatatan divergence keluarga), `awcms-astro` ADR-0034 ([`docs/adr/0034-publik-secara-bawaan-admin-hanya-bila-dinyatakan.md`](https://github.com/ahliweb/awcms-astro/blob/main/docs/adr/0034-publik-secara-bawaan-admin-hanya-bila-dinyatakan.md))
+- **Date:** 2026-08-08
+- **Decision maker:** @ahliweb
+- **Narrows:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) — the phrase "every admin screen" is narrowed to "every **SYSTEM** admin screen". ADR-0051 is **not** superseded: its core decision holds in full and none of its three replacement gates are loosened by even a little. Its file gets a marker banner; its sentences are not rewritten (Rule 2 of the ADR index).
+- **Refines:** [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) — the `awcms-astro` column in the two-repo role table there gets its correct content, via a marker banner in the same way. Points 1–5 of its §Decision are unchanged.
+- **Related:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + BFF), [ADR-0050](0050-bff-session-handoff-code.md) (session handoff code), [ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) (frozen consumer contract), [ADR-0068](0068-family-standards-posture-editions-and-recorded-divergences.md) (mechanism for recording family divergences), `awcms-astro` ADR-0034 ([`docs/adr/0034-publik-secara-bawaan-admin-hanya-bila-dinyatakan.md`](https://github.com/ahliweb/awcms-astro/blob/main/docs/adr/0034-publik-secara-bawaan-admin-hanya-bila-dinyatakan.md))
 
-## Konteks
+## Context
 
-Pada 8 Agustus 2026, `awcms-astro` mendaratkan ADR-0034: repo itu adalah situs
-**publik** sebagai fungsi utama, dan **boleh** membawa permukaan admin untuk
-seorang **USER** — penulis, peninjau, kontributor — bila situsnya menyatakannya
-lewat `permukaanAdmin` di `src/config/site.ts`. Peran `owner` **ditolak gerbang**
-di sana, dan template-nya sendiri menyatakan nol permukaan terautentikasi.
+On 8 August 2026, `awcms-astro` landed ADR-0034: that repo is a **public**
+site as its primary function, and it **may** carry an admin surface for a
+**USER** — an author, a reviewer, a contributor — if the site declares it
+through `permukaanAdmin` in `src/config/site.ts`. The `owner` role is **rejected
+by a gate** there, and the template itself declares zero authenticated surfaces.
 
-ADR itu tidak diambil diam-diam. §Hubungan-nya menuliskan ketegangannya dengan
-repo ini secara terbuka, dan menutupnya dengan permintaan yang tidak bisa
-dipenuhi dari sana — sebagaimana berbunyi sebelum sisi sana memperbaruinya pada
-8 Agustus 2026:
+That ADR was not taken silently. Its §Relationship writes out the tension with
+this repo openly, and closes it with a request that cannot be fulfilled from
+there — as it read before that side updated it on 8 August 2026:
 
-> **Yang harus dilakukan di sisi sana, dan belum:** selisih ini pantas dicatat
-> sebagai divergence keluarga di `awcms-family-compatibility.yaml` milik
-> `awcms`, mengikuti pola `awcms` ADR-0068 — dengan pemilik dan `reviewDate`,
-> sehingga ia kembali ke meja alih-alih ditemukan ulang sebagai temuan. Repo ini
-> tidak bisa menulisnya sendiri; yang bisa dilakukan di sini adalah tidak
-> berpura-pura selisih itu tidak ada.
+> **What has to be done on that side, and has not been:** this difference
+> deserves to be recorded as a family divergence in `awcms`'s
+> `awcms-family-compatibility.yaml`, following the `awcms` ADR-0068 pattern —
+> with an owner and a `reviewDate`, so that it comes back to the table instead of
+> being rediscovered as a finding. This repo cannot write that itself; what can
+> be done here is to not pretend the difference does not exist.
 
-ADR ini adalah jawabannya.
+This ADR is the answer.
 
-### Apa yang sebenarnya bertabrakan
+### What actually collides
 
-ADR-0051 §Keputusan berbunyi:
+ADR-0051 §Decision reads:
 
-> Kami memutuskan **seluruh layar admin AWCMS — tenant maupun
-> owner/internal/platform — dibangun di repo `awcms`**, di bawah `/admin/*`,
-> memakai satu shell admin, satu sesi, satu sidebar berbasis registry, dan satu
-> postur CSP.
+> We decide that **every AWCMS admin screen — tenant as well as
+> owner/internal/platform — is built in the `awcms` repo**, under `/admin/*`,
+> using one admin shell, one session, one registry-based sidebar, and one
+> CSP posture.
 
-Sumbu kalimat itu adalah **audiens** — tenant versus owner/internal/platform.
-Istilah "admin USER" tidak muncul di dalamnya sama sekali, dan itu bukan
-kelalaian: pada 1 Agustus 2026 pertanyaannya memang belum ada. Yang ditolak
-ADR-0051 adalah pembagian ADR-0048, yang menaruh layar **owner/internal** di
-`awcms-astro` — persis peran yang hari ini **ditolak gerbang** di sana.
+The axis of that sentence is **audience** — tenant versus owner/internal/platform.
+The term "USER admin" does not appear in it at all, and that is not an
+oversight: on 1 August 2026 the question simply did not exist yet. What ADR-0051
+rejected was the ADR-0048 split, which put **owner/internal** screens in
+`awcms-astro` — precisely the role that is **rejected by a gate** there today.
 
-Paragraf berikutnya di ADR yang sama sudah lebih sempit daripada judul
-keputusannya:
+The next paragraph in the same ADR is already narrower than its decision
+headline:
 
-> Yang dicabut hanya perannya sebagai rumah layar admin **internal**.
+> What is revoked is only its role as the home of **internal** admin screens.
 
-Dua kalimat itu tidak sepenuhnya sama, dan selisih di antara keduanya persis
-ruang tempat permukaan admin USER berdiri. Tetapi **selisih yang hanya bisa
-dilihat dengan membandingkan dua paragraf bukan aturan** — ia bacaan. Kata
-"seluruh" harus dipersempit secara tertulis, atau ia akan dipakai untuk menolak
-pekerjaan yang sah, oleh pembaca yang benar-benar mengikuti aturan.
+Those two sentences are not entirely the same, and the difference between them
+is exactly the room in which the USER admin surface stands. But **a difference
+that can only be seen by comparing two paragraphs is not a rule** — it is a
+reading. The word "every" has to be narrowed in writing, or it will be used to
+reject legitimate work, by a reader who is genuinely following the rules.
 
-### Kenapa ini bukan pelonggaran keamanan
+### Why this is not a security loosening
 
-ADR-0051 sendiri yang menyediakan alasannya:
+ADR-0051 itself supplies the reason:
 
-> Yang menahan aksi lintas-tenant adalah gerbang otorisasi, bukan alamat repo
-> tempat tombolnya digambar.
+> What holds back cross-tenant actions is the authorization gate, not the repo
+> address where the button is drawn.
 
-Karena repo bukan pembatas audiens, memindahkan sebuah layar tidak memindahkan
-izinnya — ke arah mana pun. Itu yang membuat penyempitan ini murah: yang
-menentukan siapa boleh melakukan apa tetap RBAC/ABAC default-deny di sini, dan
-sebuah tombol yang digambar `awcms-astro` untuk peran yang ditolak `awcms` tetap
-tombol yang ditolak.
+Because the repo is not an audience boundary, moving a screen does not move its
+permissions — in either direction. That is what makes this narrowing cheap: what
+determines who may do what remains default-deny RBAC/ABAC here, and a button
+drawn by `awcms-astro` for a role that `awcms` rejects remains a rejected button.
 
-## Keputusan
+## Decision
 
-**Kami memutuskan mengganti sumbu pembagian layar dari AUDIENS menjadi APA YANG
-DIKELOLA**, dan menyatakan peran keluarga sebagai berikut.
+**We decide to change the axis of the screen split from AUDIENCE to WHAT IS
+MANAGED**, and to state the family roles as follows.
 
-| Repo                                                            | Peran                                                                                                                                                                                         |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | **System of record** — modular monolith, seluruh permukaan otorisasi, seluruh API, dan **seluruh layar admin SISTEM** (modul, peran, tenant, jejak audit, apa pun yang efeknya lintas-tenant) |
-| [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | **Halaman publik sebagai fungsi utama**, dan **permukaan admin USER bila situsnya menyatakannya**; tetap experience layer + BFF, dan **tak pernah sumber kebenaran**                          |
+| Repo                                                            | Role                                                                                                                                                                                             |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | **System of record** — modular monolith, every authorization surface, every API, and **every SYSTEM admin screen** (modules, roles, tenants, audit trail, anything whose effect is cross-tenant) |
+| [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | **Public pages as its primary function**, and **the USER admin surface if the site declares it**; still the experience layer + BFF, and **never the source of truth**                            |
 
-`awcms-mini` dan `awcms-micro` tetap **ARSIP**, tanpa perubahan dari
-[ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) §1. Kedua repo
-di atas adalah seluruh keluarga yang dikembangkan, dan pasangan keduanya adalah
-pengganti multiguna dari ketiga template lama — bukan salah satunya sendirian.
+`awcms-mini` and `awcms-micro` remain **ARCHIVES**, unchanged from
+[ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) §1. The two
+repos above are the whole family under development, and the pair of them is the
+general-purpose replacement for the three old templates — not either of them
+alone.
 
-### 1. Batasnya APA YANG DIKELOLA, bukan siapa yang memakainya
+### 1. The boundary is WHAT IS MANAGED, not who uses it
 
-Ini kalimat yang menentukan, dan ia sengaja tidak menyebut jabatan:
+This is the sentence that decides, and it deliberately does not name job titles:
 
-- **Admin SISTEM** — layar yang mengubah sesuatu **di luar isi satu situs**:
-  modul, peran dan izin, tenant, konfigurasi platform, jejak audit, dataset yang
-  dilayani ke banyak tenant. Dibangun **di sini**, di bawah satu shell
-  `/admin/*`, satu sesi, satu sidebar registry, satu postur CSP. Tidak berubah.
-- **Admin USER** — layar yang dipakai seorang pengguna untuk mengerjakan
-  **bagiannya sendiri di satu situs**: menulis sebuah artikel, mengajukannya
-  untuk ditinjau, mengelola profilnya sendiri. **Boleh** hidup di
-  `awcms-astro`, dan hanya bila situs itu menyatakannya.
+- **SYSTEM admin** — screens that change something **outside the content of a
+  single site**: modules, roles and permissions, tenants, platform
+  configuration, the audit trail, datasets served to many tenants. Built **here**,
+  under one `/admin/*` shell, one session, one registry sidebar, one CSP posture.
+  Unchanged.
+- **USER admin** — screens a user uses to do **their own part on one site**:
+  writing an article, submitting it for review, managing their own profile. They
+  **may** live in `awcms-astro`, and only if that site declares them.
 
-Ukurannya bukan siapa yang memakai layarnya melainkan **apa yang diubahnya**.
-Seorang `owner` yang menulis artikel sedang melakukan pekerjaan USER; seorang
-penulis yang bisa menyunting daftar peran tidak sedang melakukan pekerjaan USER,
-apa pun nama jabatannya.
+The measure is not who uses the screen but **what it changes**. An `owner`
+writing an article is doing USER work; an author who can edit the role list is
+not doing USER work, whatever their job title is called.
 
-### 2. `owner` tidak pernah masuk lewat sana, dan itu digerbangi di sana
+### 2. `owner` never gets in through there, and that is gated there
 
-`awcms-astro` menolak `owner` di `permukaanAdmin.peran` secara mekanis, bukan
-sebagai saran. Repo ini tidak perlu menegakkannya kedua kali — tetapi repo ini
-**mencatatnya sebagai syarat**: penyempitan di ADR ini berlaku selama gerbang
-itu ada di sana. Bila ia dicabut, selisihnya berubah sifat dan entri
-divergence-nya (§6) yang membawanya kembali ke meja.
+`awcms-astro` rejects `owner` in `permukaanAdmin.peran` mechanically, not as
+advice. This repo does not need to enforce it a second time — but this repo
+**records it as a condition**: the narrowing in this ADR holds as long as that
+gate exists there. If it is revoked, the difference changes character and its
+divergence entry (§6) is what brings it back to the table.
 
-### 3. Ketiga gerbang pengganti ADR-0051 TIDAK berubah
+### 3. ADR-0051's three replacement gates are UNCHANGED
 
-Dikutip utuh, karena ini bagian yang paling mungkin dikira ikut dilonggarkan:
+Quoted in full, because this is the part most likely to be mistaken for having
+been loosened too:
 
-> 1. **Aksi yang efeknya melintasi batas tenant wajib punya gerbang
->    platform-scoped di `awcms`**, bukan sekadar RBAC tenant. Permission yang
->    di-seed ke role `owner` setiap tenant **tidak boleh** cukup untuk
->    menjalankannya.
-> 2. **Aksi lintas-tenant tidak boleh masuk katalog yang di-seed ke role
->    tenant.** Bila sebuah aksi mengubah data yang dilayani ke tenant lain,
->    permission-nya bukan permission tenant.
-> 3. **Layar platform-scoped tetap tunduk pada gerbang itu**, dan
->    `requiredPermission` pada entri `navigation`-nya harus permission platform
->    tersebut — sehingga owner tenant biasa tidak melihat menunya dan, lebih
->    penting, tetap ditolak endpoint-nya kalau ia menebak URL-nya.
+> 1. **An action whose effect crosses a tenant boundary must have a
+>    platform-scoped gate in `awcms`**, not merely tenant RBAC. Permissions
+>    seeded to the `owner` role of every tenant **must not** be enough to run it.
+> 2. **A cross-tenant action must not enter the catalogue seeded to tenant
+>    roles.** If an action changes data served to another tenant, its permission
+>    is not a tenant permission.
+> 3. **A platform-scoped screen remains subject to that gate**, and the
+>    `requiredPermission` on its `navigation` entry must be that platform
+>    permission — so that an ordinary tenant owner does not see the menu and,
+>    more importantly, is still rejected by the endpoint if they guess the URL.
 
-Ketiganya berlaku penuh. Temuan terbuka ADR-0051 untuk
-`idn_admin_regions.dataset.configure`/`.restore` sudah **ditutup**:
-[ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) mencabut
-permukaan HTTP keduanya (`sql/084`), lalu
-[ADR-0053](0053-platform-scoped-permissions.md) mengembalikannya sebagai
-permission ber-`scope: platform` (`sql/085`) dan menyatakan dirinya memenuhi
-butir 1–3 di atas. ADR ini tidak mengubah apa pun dari itu.
+All three hold in full. ADR-0051's open finding for
+`idn_admin_regions.dataset.configure`/`.restore` has been **closed**:
+[ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) revoked the
+HTTP surface of both (`sql/084`), then
+[ADR-0053](0053-platform-scoped-permissions.md) brought them back as
+`scope: platform` permissions (`sql/085`) and declared itself to satisfy points
+1–3 above. This ADR changes nothing of that.
 
-### 4. Tidak ada kemampuan yang hanya ada di sana
+### 4. No capability exists only over there
 
-Setiap kemampuan yang dijangkau seorang USER lewat `awcms-astro` **wajib juga
-bisa dikelola dari `/admin/*` di sini**. Ini aturan cermin dari §2 dan menutup
-pintu yang sama dari arah berlawanan: penolakan `owner` menjaga platform tidak
-bisa dicapai DARI sana, dan aturan ini menjaga tidak ada yang LEPAS ke sana.
+Every capability a USER reaches through `awcms-astro` **must also be manageable
+from `/admin/*` here**. This is the mirror rule of §2 and closes the same door
+from the opposite direction: rejecting `owner` keeps the platform from being
+reachable FROM there, and this rule keeps anything from ESCAPING to there.
 
-Urutan kerjanya mengikuti: **`awcms` dulu, selalu.** Sebuah fitur yang mendarat
-di `awcms-astro` sebelum layar pengelolanya ada di sini adalah fitur yang tidak
-bisa dimatikan siapa pun.
+The work order follows: **`awcms` first, always.** A feature that lands in
+`awcms-astro` before its management screen exists here is a feature nobody can
+turn off.
 
-### 5. Yang TIDAK berubah, dinyatakan supaya tidak ditafsirkan ikut berubah
+### 5. What does NOT change, stated so it is not read as changing too
 
-- **`awcms-astro` tak pernah sumber kebenaran.** ADR-0045 §2 berlaku penuh: BFF
-  mengorkestrasi dan memproyeksikan; ia tidak pernah memutuskan. Penyempitan ini
-  soal siapa yang boleh melihat sebuah layar, bukan soal siapa yang memutuskan
-  apa yang boleh dilihatnya.
-- **`awcms-astro` tidak menyentuh PostgreSQL `awcms` langsung.** Tidak ada basis
-  data di sana, dan ADR ini tidak membuka satu pun jalur baru ke sana.
-- **[ADR-0050](0050-bff-session-handoff-code.md) kini punya audiens yang
-  dinyatakan.** Kode serah-terima sesi ditulis saat ADR-0048 memberi
-  `awcms-astro` layar owner/internal; ADR-0051 mencabut peran itu dan
-  menyisakannya dengan **motivasi berkurang** — §Konsekuensi ADR-0051 menyatakan
-  pekerjaan BFF (ADR-0049/0050) "tetap terpakai untuk perannya di ADR-0045",
-  tetapi tanpa menyebut layar mana. Sekarang layarnya punya nama, dan audiensnya
-  dinyatakan eksplisit: **USER, tidak pernah `owner`.**
-- **[ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) tidak diperluas
-  di sini, dan itu disengaja.** `CONSUMER_PATHS` punya dua bagian:
-  `CONSUMED_PATHS` (dipanggil hari ini) dan `COMMITTED_PATHS` (dijanjikan lewat
-  ADR, sengaja dibekukan sebelum ada pemanggil — syaratnya "no ADR, no entry").
-  Jadi mekanisme untuk menjanjikan sebuah permukaan lebih dulu memang ada; yang
-  belum ada adalah **bentuk yang bisa dijanjikan**. Permukaan admin USER belum
-  punya satu pun endpoint yang diputuskan, sehingga ia belum masuk keduanya. Ia
-  menyusul lewat jalur ADR-0065 sendiri saat bentuknya diputuskan.
+- **`awcms-astro` is never the source of truth.** ADR-0045 §2 holds in full: the
+  BFF orchestrates and projects; it never decides. This narrowing is about who
+  may see a screen, not about who decides what they may see.
+- **`awcms-astro` does not touch the `awcms` PostgreSQL directly.** There is no
+  database there, and this ADR opens no new path to it.
+- **[ADR-0050](0050-bff-session-handoff-code.md) now has a stated audience.** The
+  session handoff code was written when ADR-0048 gave `awcms-astro`
+  owner/internal screens; ADR-0051 revoked that role and left it with
+  **diminished motivation** — ADR-0051 §Consequences states that the BFF work
+  (ADR-0049/0050) "remains in use for its role in ADR-0045", but without naming
+  which screens. Now the screens have a name, and their audience is stated
+  explicitly: **USER, never `owner`.**
+- **[ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) is not extended
+  here, and that is deliberate.** `CONSUMER_PATHS` has two parts:
+  `CONSUMED_PATHS` (called today) and `COMMITTED_PATHS` (promised via an ADR,
+  deliberately frozen before any caller exists — the condition being "no ADR, no
+  entry"). So the mechanism for promising a surface in advance does exist; what
+  does not exist yet is **a shape that can be promised**. The USER admin surface
+  does not have a single decided endpoint yet, so it is in neither. It follows
+  later through ADR-0065's own path once its shape is decided.
 - **[ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
-  §"`awcms-astro` belum punya layar admin sama sekali"** adalah fakta bertanggal
-  1 Agustus 2026 dan **tidak disunting**. Ia benar pada hari itu, dan hari ini
-  pun template `awcms-astro` masih menyatakan nol permukaan admin — yang mendarat
-  di sana adalah izinnya, bukan layarnya.
+  §"`awcms-astro` has no admin screens at all yet"** is a fact dated
+  1 August 2026 and is **not edited**. It was true on that day, and even today
+  the `awcms-astro` template still declares zero admin surfaces — what landed
+  there is the permission, not the screen.
 
-### 6. Selisihnya dicatat sebagai divergence keluarga, dengan tanggal tinjau
+### 6. The difference is recorded as a family divergence, with a review date
 
-Mengikuti pola [ADR-0068](0068-family-standards-posture-editions-and-recorded-divergences.md)
-dan [ADR-0069](0069-cross-origin-isolation-divergence-with-awcms-astro.md):
-entri `admin-user-surface-in-awcms-astro` di
+Following the pattern of [ADR-0068](0068-family-standards-posture-editions-and-recorded-divergences.md)
+and [ADR-0069](0069-cross-origin-isolation-divergence-with-awcms-astro.md):
+the `admin-user-surface-in-awcms-astro` entry in
 [`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml),
-dengan `owner: "@ahliweb"` dan `reviewDate: "2027-02-04"` — sekohort dengan
-empat entri lain sehingga seluruh postur keluarga ditinjau dalam satu duduk.
+with `owner: "@ahliweb"` and `reviewDate: "2027-02-04"` — in the same cohort as
+four other entries so that the whole family posture is reviewed in one sitting.
 
-Kenapa selisih ini perlu tanggal tinjau sementara keputusan di atas sudah tegas:
-yang ditinjau bukan "apakah admin USER boleh di sana" melainkan **apakah
-batasnya masih di tempat yang sama**. Permukaan yang tumbuh satu layar per
-kuartal adalah cara paling wajar sebuah "admin USER" berubah menjadi admin
-sistem tanpa ada yang memutuskannya.
+Why this difference needs a review date while the decision above is already
+firm: what is reviewed is not "may USER admin be over there" but **whether the
+boundary is still in the same place**. A surface that grows one screen per
+quarter is the most natural way a "USER admin" turns into a system admin without
+anyone deciding it.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:**
-  - Kata "seluruh" di ADR-0051 berhenti dipakai untuk menolak pekerjaan yang
-    sah. Seorang agen yang membaca `AGENTS.md` mendapat aturan yang cocok dengan
-    keputusan yang benar-benar berlaku di kedua repo.
-  - Selisih antar-repo berhenti menjadi keputusan yatim. Ia punya berkas,
-    pemilik, dan tanggal yang mengembalikannya ke meja — bentuk kegagalan yang
-    ADR-0068 lahir untuk mencegahnya.
-  - ADR-0050 berhenti menggantung. Pekerjaan serah-terima sesi punya audiens
-    yang dinyatakan namanya, bukan sekadar "tetap terpakai" tanpa layar yang
-    menunjuknya.
-  - Sumbu "apa yang dikelola" bisa diterapkan pada layar yang belum ada.
-    Sumbu "audiens" tidak bisa: ia menuntut daftar jabatan, dan daftar jabatan
-    menua setiap kali sebuah peran ditambahkan.
-- **Negatif / trade-off yang diterima:**
-  - **Satu kemampuan kini bisa punya dua layar** — satu untuk USER di
-    `awcms-astro`, satu untuk pengelolanya di sini. Itu biaya nyata, dan §4
-    yang membuatnya disengaja alih-alih tak terlihat.
-  - **Batas "SISTEM versus USER" adalah penilaian, bukan gerbang.** Tidak ada
-    tes yang bisa memutuskan sebuah layar termasuk yang mana; yang bisa
-    digerbangi hanya izinnya. Karena itu §6 memberinya tanggal tinjau alih-alih
-    berpura-pura ia terjaga mesin.
-  - Sebagian motivasi ADR-0051 ("satu shell, satu sesi, satu postur CSP")
-    berlaku untuk permukaan SISTEM saja. Sebuah situs yang menyalakan
-    `permukaanAdmin` memikul sesi dan CSRF-nya sendiri di sana — biaya yang
-    `awcms-astro` ADR-0034 nyatakan eksplisit supaya dipilih, bukan diwarisi.
-- **Netral:**
-  - **Nol perubahan kode berjalan di repo ini.** Ini keputusan tata kelola;
-    seluruh gerbang teknis tetap utuh, dan tidak ada satu pun izin yang
-    berpindah.
-  - Permukaan publik `awcms` sendiri (`/blog/{tenantCode}/**`, keluarga
-    host-resolved `/news/**`, `robots`/`sitemap`/`feed`, `/search`) tidak
-    tersentuh — ADR-0059/ADR-0061 tetap berlaku apa adanya.
-    Sebuah situs boleh disajikan dari sini, dari `awcms-astro`, atau dari
-    keduanya; yang diputuskan ADR ini adalah di mana LAYAR dibangun.
+- **Positive:**
+  - The word "every" in ADR-0051 stops being used to reject legitimate work. An
+    agent reading `AGENTS.md` gets a rule that matches the decisions that
+    actually hold in both repos.
+  - The inter-repo difference stops being an orphan decision. It has a file, an
+    owner, and a date that brings it back to the table — the failure mode that
+    ADR-0068 was born to prevent.
+  - ADR-0050 stops dangling. The session handoff work has an audience with a
+    name, not just "remains in use" with no screen pointing at it.
+  - The "what is managed" axis can be applied to screens that do not exist yet.
+    The "audience" axis cannot: it demands a list of job titles, and a list of
+    job titles goes stale every time a role is added.
+- **Negative / accepted trade-offs:**
+  - **One capability can now have two screens** — one for the USER in
+    `awcms-astro`, one for its management here. That is a real cost, and §4 is
+    what makes it deliberate rather than invisible.
+  - **The "SYSTEM versus USER" boundary is a judgement, not a gate.** There is no
+    test that can decide which of the two a screen belongs to; only its
+    permission can be gated. That is why §6 gives it a review date instead of
+    pretending it is machine-guarded.
+  - Part of ADR-0051's motivation ("one shell, one session, one CSP posture")
+    applies to the SYSTEM surface only. A site that turns on `permukaanAdmin`
+    carries its own session and CSRF over there — a cost that `awcms-astro`
+    ADR-0034 states explicitly so it is chosen, not inherited.
+- **Neutral:**
+  - **Zero changes to running code in this repo.** This is a governance
+    decision; every technical gate stays intact, and not a single permission
+    moves.
+  - `awcms`'s own public surface (`/blog/{tenantCode}/**`, the host-resolved
+    `/news/**` family, `robots`/`sitemap`/`feed`, `/search`) is untouched —
+    ADR-0059/ADR-0061 continue to hold as they are.
+    A site may be served from here, from `awcms-astro`, or from both; what this
+    ADR decides is where the SCREENS are built.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Men-supersede ADR-0051** — ditolak. Keputusan intinya berlaku utuh, dan
-  men-supersede-nya akan mencabut ketiga gerbang pengganti di §Keputusan-nya
-  bersama keputusan itu. Gerbang-gerbang itu justru bagian yang paling ingin
-  dipertahankan; mencabutnya untuk melebarkan satu pengecualian adalah harga
-  yang tidak sebanding dengan apa pun.
-- **Membiarkan selisih ini hidup sebagai bacaan** atas §Keputusan ADR-0051 —
-  kalimat pembukanya versus paragraf "Yang dicabut hanya perannya sebagai rumah
-  layar admin internal" — ditolak. Aturan yang hanya bisa dilihat dengan membandingkan dua paragraf akan
-  dibaca sebagai konflik oleh orang berikutnya, dan orang berikutnya akan
-  memilih paragraf yang lebih tegas. Yang paling mungkin terjadi bukan
-  pelanggaran, melainkan **penolakan pekerjaan yang sah** oleh pembaca yang
-  benar-benar patuh.
-- **Mencatat divergence tanpa ADR** — tidak mungkin secara mekanis, dan itu
-  disengaja: `scripts/family-conformance-check.ts` menuntut berkas ADR yang
-  dirujuk sebuah entri benar-benar ada, sehingga sebuah selisih tidak bisa
-  dicatat tanpa alasan yang tertulis lengkap.
-- **Memindahkan permukaan admin USER ke sini juga** (mis. `/admin/tulis`) —
-  ditolak. Ia menuntut setiap penulis di setiap situs turunan punya sesi di
-  `awcms` dan menavigasi shell admin platform untuk menulis satu artikel,
-  sementara yang dikerjakannya seluruhnya milik situsnya sendiri. Itu
-  memindahkan orang, bukan risiko — dan risikonya sudah ditahan gerbang
-  otorisasi, bukan oleh alamat repo.
-- **Membolehkan permukaan admin USER tanpa deklarasi di sisi sana**, mengandalkan
-  review — ditolak di sana, dan repo ini setuju: bentuk kegagalannya adalah
-  build hijau dengan permukaan terautentikasi yang tidak pernah diputuskan
-  siapa pun.
-- **Menyatakan ulang bahwa `awcms-mini`/`awcms-micro` dihentikan lewat ADR
-  ketiga** — ditolak. [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md)
-  membekukannya dan [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
-  §1 menutup jalur port keluar; keduanya final dan tidak dibantah siapa pun.
-  Yang tertinggal bukan keputusannya melainkan **penerapannya** di berkas-berkas
-  yang belum menyusul — dan itu pekerjaan menyunting, bukan pekerjaan
-  memutuskan. ADR ketiga yang mengulang keputusan yang sama justru membuat
-  pembaca berikutnya mengira ada tiga aturan berbeda.
+- **Superseding ADR-0051** — rejected. Its core decision holds in full, and
+  superseding it would revoke the three replacement gates in its §Decision along
+  with that decision. Those gates are precisely the part we most want to keep;
+  revoking them in order to widen one exception is a price that is not worth
+  anything.
+- **Letting this difference live as a reading** of ADR-0051 §Decision — its
+  opening sentence versus the paragraph "What is revoked is only its role as the
+  home of internal admin screens" — rejected. A rule that can only be seen by comparing two paragraphs will be
+  read as a conflict by the next person, and the next person will pick the more
+  emphatic paragraph. What is most likely to happen is not a violation, but
+  **the rejection of legitimate work** by a genuinely compliant reader.
+- **Recording the divergence without an ADR** — mechanically impossible, and
+  that is deliberate: `scripts/family-conformance-check.ts` demands that the ADR
+  file an entry references actually exists, so a difference cannot be recorded
+  without a fully written reason.
+- **Moving the USER admin surface here too** (e.g. `/admin/tulis`) — rejected.
+  It would demand that every author on every derived site have a session in
+  `awcms` and navigate the platform admin shell to write one article, while
+  everything they are doing belongs entirely to their own site. That moves
+  people, not risk — and the risk is already held back by the authorization
+  gate, not by the repo address.
+- **Allowing a USER admin surface without a declaration on that side**, relying
+  on review — rejected there, and this repo agrees: the failure mode is a green
+  build with an authenticated surface nobody ever decided on.
+- **Restating that `awcms-mini`/`awcms-micro` are discontinued via a third ADR**
+  — rejected. [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md)
+  froze them and [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
+  §1 closed the outbound port path; both are final and disputed by nobody.
+  What is left is not the decision but **its application** in the files that
+  have not caught up yet — and that is editing work, not deciding work. A third
+  ADR repeating the same decision would only make the next reader think there
+  are three different rules.

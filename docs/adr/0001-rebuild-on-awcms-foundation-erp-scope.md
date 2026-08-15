@@ -1,34 +1,36 @@
-# ADR-0001 — Rebuild AWCMS sebagai platform ERP di atas standar modular monolith
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0001-rebuild-on-awcms-foundation-erp-scope.id.md)
 
-- **Status:** Accepted (poin 3 & satu alternatif di-amend oleh [ADR-0022](0022-erp-modules-live-in-extension-repos.md))
-- **Tanggal:** 2026-07-14
-- **Terkait:** riwayat migrasi ADR-013..023 (repo lama, migrasi Bun & off-Supabase); [ADR-0013](0013-extension-layers-and-boundary-model.md), [ADR-0020](0020-erp-extension-readiness-contracts.md), [ADR-0022](0022-erp-modules-live-in-extension-repos.md)
+# ADR-0001 — Rebuild AWCMS as an ERP platform on modular monolith standards
 
-> **Amandemen (ADR-0022, 2026-07-16).** Poin 3 di bawah — "modul domain ERP … dikembangkan sebagai modul di `src/modules/`" — **tidak lagi berlaku**. Sejak epic #738 (`platform-evolution`, ADR-0013/0020), modul domain ERP hidup di **repo ekstensi/turunan terpisah** (lapisan _ERP Extension_/_Derived Application_), bukan di dalam base ini; base hanya menyediakan modul fondasi reusable + kontrak netral kesiapan ERP. Alternatif "mengembangkan ERP di repo terpisah" yang dahulu ditolak (lihat §Alternatif) **kini menjadi arah yang diadopsi**. Poin 1, 2, 4 dan seluruh standar teknis fondasi tetap berlaku. Lihat [ADR-0022](0022-erp-modules-live-in-extension-repos.md).
+- **Status:** Accepted (point 3 & one alternative amended by [ADR-0022](0022-erp-modules-live-in-extension-repos.md))
+- **Date:** 2026-07-14
+- **Related:** migration history ADR-013..023 (old repo, Bun migration & off-Supabase); [ADR-0013](0013-extension-layers-and-boundary-model.md), [ADR-0020](0020-erp-extension-readiness-contracts.md), [ADR-0022](0022-erp-modules-live-in-extension-repos.md)
 
-## Konteks
+> **Amendment (ADR-0022, 2026-07-16).** Point 3 below — "ERP domain modules … developed as modules in `src/modules/`" — **no longer applies**. Since epic #738 (`platform-evolution`, ADR-0013/0020), ERP domain modules live in **separate extension/derived repos** (the _ERP Extension_/_Derived Application_ layers), not inside this base; the base only provides reusable foundation modules + neutral ERP-readiness contracts. The alternative "develop the ERP in a separate repo" that was rejected back then (see §Alternatives) **is now the adopted direction**. Points 1, 2, 4 and all of the foundation's technical standards still apply. See [ADR-0022](0022-erp-modules-live-in-extension-repos.md).
 
-Repo `awcms` sebelumnya berisi platform CMS berbasis Node.js, Vite/React (admin & public terpisah), dan Supabase. Sepanjang migrasi bertahap (ADR-013..023), seluruh komponen (mcp, public, admin) dipindah ke runtime Bun dan lepas dari Supabase. Setelah migrasi selesai, file legacy dihapus sepenuhnya (`chore(foundation): remove legacy repository files`), menyisakan repo tanpa kode aktif.
+## Context
 
-Kebutuhan bisnis saat ini lebih besar dari sekadar CMS/base generik: platform **ERP** (keuangan, inventori, procurement, manufaktur, HR/payroll) serta **integrasi dengan solusi bisnis lain** (payment gateway, marketplace, sistem pajak/Coretax, logistik), dengan skala multi-tenant/multi-entitas.
+The `awcms` repo previously held a CMS platform built on Node.js, Vite/React (admin & public separated), and Supabase. Over the course of a staged migration (ADR-013..023), every component (mcp, public, admin) was moved to the Bun runtime and off Supabase. Once the migration finished, the legacy files were removed entirely (`chore(foundation): remove legacy repository files`), leaving a repo with no active code.
 
-## Keputusan
+The current business need is bigger than a generic CMS/base: an **ERP** platform (finance, inventory, procurement, manufacturing, HR/payroll) plus **integration with other business solutions** (payment gateway, marketplace, tax/Coretax systems, logistics), at multi-tenant/multi-entity scale.
 
-Kami memutuskan:
+## Decision
 
-1. Repo `awcms` **tidak diarsipkan** — dibangun ulang sebagai platform ERP modular monolith dengan standar teknis: Bun (runtime, Bun-only), Astro 7 (SSR), PostgreSQL + RLS wajib, RBAC/ABAC default-deny, offline-first/LAN-first dengan sync outbox HMAC-signed, kontrak OpenAPI/AsyncAPI, idempotency pada mutation high-risk, dan audit trail dengan redaksi.
-2. Standar teknis dasar tersebut dicatat sebagai ADR di `docs/adr/` repo ini (menyusul ADR-0002 dst.) dan menjadi baseline yang mengikat untuk seluruh modul.
-3. ~~Modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll) dan modul integrasi bisnis eksternal dikembangkan sebagai modul di `src/modules/`, mengikuti struktur modular monolith yang sama (module.ts + domain/application/infrastructure/api).~~ **(Di-amend oleh [ADR-0022](0022-erp-modules-live-in-extension-repos.md): modul domain ERP hidup di repo ekstensi/turunan terpisah, bukan di `src/modules/` base; base hanya menyediakan modul fondasi reusable + kontrak netral kesiapan ERP.)**
-4. Setiap penyesuaian standar untuk kebutuhan spesifik ERP (mis. kebutuhan performa/skala tertentu) wajib dicatat sebagai ADR terpisah dengan alasan eksplisit, bukan penyimpangan diam-diam.
+We decided:
 
-## Konsekuensi
+1. The `awcms` repo is **not archived** — it is rebuilt as a modular monolith ERP platform with these technical standards: Bun (runtime, Bun-only), Astro 7 (SSR), PostgreSQL + mandatory RLS, default-deny RBAC/ABAC, offline-first/LAN-first with an HMAC-signed sync outbox, OpenAPI/AsyncAPI contracts, idempotency on high-risk mutations, and an audit trail with redaction.
+2. Those baseline technical standards are recorded as ADRs in this repo's `docs/adr/` (starting with ADR-0002 onward) and become the binding baseline for every module.
+3. ~~ERP domain modules (finance, inventory, procurement, manufacturing, hr-payroll) and external business integration modules are developed as modules in `src/modules/`, following the same modular monolith structure (module.ts + domain/application/infrastructure/api).~~ **(Amended by [ADR-0022](0022-erp-modules-live-in-extension-repos.md): ERP domain modules live in separate extension/derived repos, not in the base's `src/modules/`; the base only provides reusable foundation modules + neutral ERP-readiness contracts.)**
+4. Any adjustment of the standards for ERP-specific needs (e.g. a particular performance/scale requirement) must be recorded as a separate ADR with an explicit rationale, not as a silent deviation.
 
-- **Positif:** fondasi teknis (RLS, ABAC, offline-first, kontrak API) sudah terbukti dan tidak perlu didesain ulang dari nol; riwayat git migrasi sebelumnya tetap relevan sebagai konteks historis; satu repo, satu standar, mengurangi biaya koordinasi lintas repo.
-- **Trade-off:** repo ini menanggung sendiri keseluruhan beban maintenance fondasi + modul ERP (tidak ada pembagian dengan base terpisah); disiplin ADR diperlukan agar modul ERP tidak diam-diam melanggar standar dasar.
-- **Netral:** repo ini memiliki `AGENTS.md`, `docs/adr/`, dan dokumen governance sendiri yang menaungi baik standar fondasi maupun kebutuhan ERP.
+## Consequences
 
-## Alternatif yang dipertimbangkan
+- **Positive:** the technical foundation (RLS, ABAC, offline-first, API contracts) is already proven and does not need to be designed from scratch again; the previous migration git history stays relevant as historical context; one repo, one standard, lowering cross-repo coordination cost.
+- **Trade-off:** this repo carries the entire maintenance burden of the foundation + the ERP modules by itself (there is no split with a separate base); ADR discipline is required so ERP modules do not silently violate the baseline standards.
+- **Neutral:** this repo has its own `AGENTS.md`, `docs/adr/`, and governance documents covering both the foundation standards and the ERP requirements.
 
-- **Mengarsipkan repo dan mengembangkan ERP di repo/base terpisah** — ~~ditolak: memecah standar dan kode menjadi dua repo menambah overhead sinkronisasi tanpa manfaat jelas untuk skala tim saat ini.~~ **(Di-amend oleh [ADR-0022](0022-erp-modules-live-in-extension-repos.md): mengembangkan ERP di repo terpisah — di atas base ini, bukan mengarsipkannya — kini justru menjadi arah yang diadopsi. Epic #738 menyediakan komposisi modul build-time, manifest kompatibilitas, dan kontrak port/event berversi yang menghilangkan overhead sinkronisasi yang dahulu jadi dasar penolakan.)**
-- **Mempertahankan platform lama (Node/Vite/React/Supabase)** — ditolak: bertentangan dengan arah migrasi Bun yang sudah diselesaikan (ADR-019) dan menambah biaya pemeliharaan stack yang sudah usang.
-- **Membangun ERP dari nol tanpa standar modular monolith yang jelas** — ditolak: berisiko mengulang masalah base non-modular (sulit dipisah, potensi jadi big ball of mud) yang sudah dihindari lewat pengalaman migrasi sebelumnya.
+## Alternatives considered
+
+- **Archive the repo and develop the ERP in a separate repo/base** — ~~rejected: splitting standards and code across two repos adds synchronisation overhead with no clear benefit at the current team scale.~~ **(Amended by [ADR-0022](0022-erp-modules-live-in-extension-repos.md): developing the ERP in a separate repo — on top of this base, not archiving it — is now the adopted direction. Epic #738 provides build-time module composition, a compatibility manifest, and versioned port/event contracts that remove the synchronisation overhead which used to be the basis for the rejection.)**
+- **Keep the old platform (Node/Vite/React/Supabase)** — rejected: it contradicts the already-completed Bun migration direction (ADR-019) and adds maintenance cost for an already-obsolete stack.
+- **Build the ERP from scratch without clear modular monolith standards** — rejected: it risks repeating the non-modular base problems (hard to split, likely to become a big ball of mud) that previous migration experience already taught us to avoid.

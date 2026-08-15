@@ -1,172 +1,176 @@
-# ADR-0090 — Akses terdelegasi mencetak tenant user SUNGGUHAN
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0090-delegated-access-prints-a-real-tenant-user.id.md)
 
-- **Status:** Diterima (2026-08-13).
-- **Konteks:** Issue #423 Gelombang 8 PR 8.2. Migrasi `sql/117`.
-- **Membangun di atas:**
-  [ADR-0089](0089-a-partner-is-an-ordinary-tenant.md) (partner adalah tenant
-  biasa; jangkauan adalah data, dan barisnya milik tenant TARGET),
-  [ADR-0050](0050-bff-session-handoff-code.md) (artefak ber-hash berumur pendek
-  yang MENCETAK sesi segar — bentuk yang dipinjam persis di sini),
+# ADR-0090 — Delegated access prints a REAL tenant user
+
+- **Status:** Accepted (2026-08-13).
+- **Context:** Issue #423 Wave 8 PR 8.2. Migration `sql/117`.
+- **Builds on:**
+  [ADR-0089](0089-a-partner-is-an-ordinary-tenant.md) (a partner is an ordinary
+  tenant; reach is data, and the row belongs to the TARGET tenant),
+  [ADR-0050](0050-bff-session-handoff-code.md) (a short-lived hashed artifact
+  that PRINTS a fresh session — the exact shape borrowed here),
   [ADR-0082](0082-an-invitation-carries-its-own-policy.md)
-  (`materializeMembership`: satu penulis keanggotaan, dan ia menolak role
-  sistem), dan [ADR-0085](0085-one-human-one-credential-many-tenants.md)
-  (manusia yang menebus sudah punya kredensial global — tanpa itu ADR ini
-  harus menciptakan kredensial kedua untuk orang yang sama).
+  (`materializeMembership`: one membership writer, and it rejects system
+  roles), and [ADR-0085](0085-one-human-one-credential-many-tenants.md) (the
+  human redeeming already has a global credential — without it this ADR would
+  have to create a second credential for the same person).
 
-## Keputusan
+## Decision
 
-Sebuah grant yang ditebus **tidak menghasilkan aktor jenis baru.** Ia
-menghasilkan baris `awcms_tenant_users` biasa di tenant target, terikat role
-yang **dipilih pelanggan**, dengan tanggal mati.
+A redeemed grant **does not produce a new kind of actor.** It produces an
+ordinary `awcms_tenant_users` row in the target tenant, bound to a role
+**chosen by the customer**, with an expiry date.
 
-Itu seluruh idenya: **RLS, decision log, audit, SoD, dan business-scope facts
-bekerja tanpa satu pun perubahan**, karena aktornya memang benar-benar tenant
-user di sana. Alternatifnya — sebuah "aktor partner" yang bukan tenant user —
-menuntut setiap pembaca otorisasi di repo ini belajar bentuk kedua, dan yang
-lupa belajar akan gagal terbuka.
+That is the whole idea: **RLS, the decision log, audit, SoD, and business-scope
+facts work without a single change**, because the actor really is a tenant user
+there. The alternative — a "partner actor" that is not a tenant user — demands
+that every authorization reader in this repo learn a second shape, and whoever
+forgets to learn it fails open.
 
-Yang menyeberangi batas antar-organisasi adalah **kode penebusan berumur
-pendek** (`awcmsd_…`, hash `dg-sha256:`), bukan kredensial hidup dan bukan
-pembacaan lintas-tenant.
+What crosses the inter-organization boundary is the **short-lived redemption
+code** (`awcmsd_…`, hash `dg-sha256:`), not a live credential and not a
+cross-tenant read.
 
-## Tidak ada role `support` yang ditanam platform
+## There is no platform-planted `support` role
 
-Rencana Gelombang 8 menulis "terikat role `support` terbatas". Diperiksa:
-**role di repo ini adalah baris PER-TENANT**, dan satu-satunya yang ditanam
-adalah `owner` (`platform-bootstrap.ts`). Menanam `support` ke setiap tenant
-menuntut seed migration **plus backfill** — seed hanya menjangkau tenant yang
-dibuat sesudahnya, dan tenant lama akan diam-diam 403, jebakan yang sudah
-tercatat di repo ini.
+The Wave 8 plan wrote "bound to a limited `support` role". Checked: **roles in
+this repo are PER-TENANT rows**, and the only one that is planted is `owner`
+(`platform-bootstrap.ts`). Planting `support` into every tenant demands a seed
+migration **plus a backfill** — a seed only reaches tenants created after it,
+and older tenants would silently 403, a trap already recorded in this repo.
 
-Tetapi keberatan yang sebenarnya bukan mekanis. Menanam `support` berarti
-**platform memutuskan apa yang boleh disentuh partner di dalam tenant orang
-lain.** ADR-0089 baru saja menolak bentuk itu untuk pertanyaan siapa partnernya;
-menerimanya untuk pertanyaan apa yang boleh dilakukannya akan membatalkannya
-dari sisi lain.
+But the real objection is not mechanical. Planting `support` means **the
+platform decides what a partner may touch inside someone else's tenant.**
+ADR-0089 just rejected that shape for the question of who the partner is;
+accepting it for the question of what the partner may do would undo it from the
+other side.
 
-`role_id` menunjuk role yang **sudah ada di tenant target**. Pelanggan memilih.
-`materializeMembership` menolak role `is_system`, jadi `owner` bukan pilihan —
-penolakan yang sudah ada dan kini menanggung beban baru.
+`role_id` points at a role that **already exists in the target tenant**. The
+customer chooses. `materializeMembership` rejects `is_system` roles, so `owner`
+is not an option — an existing rejection that now carries new weight.
 
-## Satu hal yang pilihan role TIDAK bisa batasi
+## The one thing the role choice CANNOT bound
 
-Pilihan role adalah kontrol umumnya. Ada satu hal yang tidak bisa ia batasi
-dengan aman: **otoritas access-control**.
+The role choice is the general control. There is one thing it cannot safely
+bound: **access-control authority**.
 
-Aktor terdelegasi yang boleh memberi role, membuat grup, atau menyetel kebijakan
-dapat menciptakan kuasa yang **hidup melewati grantnya sendiri**. Cabut
-grantnya, matikan tenant usernya, dan baris yang ia berikan kepada orang lain
-tetap ada. **Pencabutan berhenti menjadi pencabutan** — dan tidak ada satu pun
-gerbang yang akan menyebutkannya, karena setiap langkahnya sah.
+A delegated actor who may grant roles, create groups, or set policy can create
+power that **outlives its own grant**. Revoke the grant, deactivate its tenant
+user, and the rows it handed to other people remain. **Revocation stops being
+revocation** — and not a single gate will say so, because every step of it was
+legitimate.
 
-Karena itu chokepoint menolak, deny-only, di atas `fetchGrantedPermissionKeys`
-bersama gerbang struktural lain (aturan lintas-gelombang 1): **di modul
-`identity_access`, aktor terdelegasi hanya MEMBACA.**
+So the chokepoint rejects, deny-only, on top of `fetchGrantedPermissionKeys`
+alongside the other structural gates (cross-wave rule 1): **in the
+`identity_access` module, a delegated actor only READS.**
 
-Bentuknya satu kalimat, bukan daftar aksi. Daftar aksi akan menua diam-diam
-setiap kali modul itu menumbuhkan aktivitas baru, dan yang menua di sini adalah
-lubang. Melebarkannya kelak menuntut menyebut aksi mana dan mengapa aksi itu
-tidak bisa menciptakan persistensi. Kegagalannya juga berpihak dengan benar:
-terlalu ketat berarti pelanggan mengerjakan sendiri satu langkah, bukan lubang
-keamanan.
+Its shape is one sentence, not a list of actions. A list of actions would go
+stale silently every time that module grows a new activity, and what goes stale
+here is a hole. Widening it later demands naming which action and why that
+action cannot create persistence. Its failure mode also leans the right way:
+too strict means the customer performs one step themselves, not a security
+hole.
 
-## `principal_kind` ada di `awcms_tenant_users`, bukan di sesi
+## `principal_kind` lives on `awcms_tenant_users`, not on the session
 
-Gerbang itu harus bisa dijawab oleh **setiap** jalur yang sampai ke chokepoint,
-dan ada dua: lewat sesi (`resolveTenantPrincipal`) dan lewat tenant user
-langsung (`resolveTenantPrincipalForTenantUser`, jalur kredensial mesin).
+That gate must be answerable by **every** path that reaches the chokepoint, and
+there are two: via a session (`resolveTenantPrincipal`) and via a tenant user
+directly (`resolveTenantPrincipalForTenantUser`, the machine-credential path).
 
-Menyandarkannya pada `awcms_sessions.origin_auth` akan membuat jalur kedua
-**tidak tergerbangi**, dan kegagalannya senyap — kelas "penulis pindah,
-pembacanya tidak" yang menghasilkan ADR-0079. Kolomnya karena itu ada di baris
-yang **kedua jalur sudah SELECT**: gerbangnya gratis dan tidak bisa dilewati.
+Leaning on `awcms_sessions.origin_auth` would leave the second path
+**ungated**, and its failure would be silent — the "the writer moved, its
+readers did not" class that produced ADR-0079. The column therefore lives on
+the row that **both paths already SELECT**: the gate is free and cannot be
+bypassed.
 
-Ia **write-once**. Sebuah keanggotaan terdelegasi lahir terdelegasi dan tidak
-pernah menjadi anggota biasa, jadi tidak ada kewajiban penulis kedua yang bisa
-hanyut. `machine` sengaja tidak menjadi nilai ketiga meski atribut ABAC
-`subject.principalKind` yang direncanakan program memuatnya: kredensial mesin
-bukan tenant user, jenisnya dibawa namespace hash-nya (ADR-0049), dan
-menyalinnya ke sini menciptakan sumber kedua yang bisa berbeda pendapat.
+It is **write-once**. A delegated membership is born delegated and never
+becomes an ordinary member, so there is no second-writer obligation that could
+drift. `machine` deliberately is not a third value even though the planned ABAC
+attribute `subject.principalKind` includes it: a machine credential is not a
+tenant user, its kind is carried by its hash namespace (ADR-0049), and copying
+it here creates a second source that can disagree.
 
-## Kode penebusan adalah bearer kedua yang harus DITOLAK gerbang
+## The redemption code is a second bearer the gate must REJECT
 
-ADR-0088 menetapkan bahwa token seleksi tidak boleh pernah mengautentikasi
-`authorizeInTransaction`. Kode ini bergabung dengannya di pernyataan pertama
-yang sama, dengan alasan yang sama: seseorang **akan** menempelkannya ke header
-`Authorization`, dan sebuah hash yang kebetulan tidak cocok dengan baris sesi
-mana pun adalah kebetulan penyimpanan, bukan kontrol.
+ADR-0088 established that a selection token must never authenticate
+`authorizeInTransaction`. This code joins it in that same first statement, for
+the same reason: someone **will** paste it into an `Authorization` header, and
+a hash that happens not to match any session row is a storage coincidence, not
+a control.
 
-Prefiksnya juga masuk `RESERVED_TOKEN_PREFIXES`, sehingga token sesi acak tidak
-akan pernah lahir di namespace yang gerbangnya tolak.
+Its prefix also joins `RESERVED_TOKEN_PREFIXES`, so a random session token can
+never be born in a namespace the gate rejects.
 
-## Mati bersama grantnya, di transaksi yang sama
+## Dies with its grant, in the same transaction
 
-Pencabutan dan kedaluwarsa menonaktifkan keanggotaan **dan** mencabut sesinya di
-transaksi yang sama — pola `setTenantUserStatus`, dengan taruhan lebih tinggi
-karena akun itu milik organisasi lain.
+Revocation and expiry deactivate the membership **and** revoke its sessions in
+the same transaction — the `setTenantUserStatus` pattern, with higher stakes
+because the account belongs to another organization.
 
-`setTenantUserStatus` sendiri sengaja **tidak** dipakai: aturan "tidak boleh
-menonaktifkan diri sendiri" dan "admin sistem terakhir" di sana adalah kontrol
-untuk ANGGOTA, dan keduanya salah di sini. Sebuah keanggotaan terdelegasi tidak
-boleh bisa memblokir pencabutannya sendiri dengan memegang role sistem — dan
-lewat `materializeMembership` ia memang tidak bisa memegangnya, yang membuat
-aturan itu bukan sekadar salah tetapi juga tak berlaku.
+`setTenantUserStatus` itself is deliberately **not** used: the "cannot
+deactivate yourself" and "last system admin" rules there are controls for
+MEMBERS, and both are wrong here. A delegated membership must not be able to
+block its own revocation by holding a system role — and via
+`materializeMembership` it cannot hold one, which makes that rule not merely
+wrong but also inapplicable.
 
-Sesi terdelegasi membawa `origin_auth = 'delegated'` dan **tidak boleh
-berpindah tenant**. Sebuah grant untuk tenant C yang bisa dibawa ke tenant D
-bukan grant; ia pintu masuk. Aturan non-switchable berhenti dieja inline di
-`switch.ts` dan menjadi satu daftar, `NON_SWITCHABLE_ORIGIN_AUTH` — dua nilai
-masih boleh dieja, tiga sudah menjadi tempat nilai keempat terlupakan.
+Delegated sessions carry `origin_auth = 'delegated'` and **must not switch
+tenants**. A grant for tenant C that can be carried into tenant D is not a
+grant; it is a way in. The non-switchable rule stops being spelled inline in
+`switch.ts` and becomes one list, `NON_SWITCHABLE_ORIGIN_AUTH` — two values may
+still be spelled out, three is already where the fourth value gets forgotten.
 
-## Konsekuensi
+## Consequences
 
-- Grant yang berumur lebih dari 31 hari **tidak bisa ada** (CHECK `sql/117`),
-  dan aturannya 30 (`DELEGATED_ACCESS_MAX_TTL_DAYS`). Selisih satu hari
-  disengaja: `created_at` DEFAULT `now()` adalah instant MULAI TRANSAKSI
-  sementara `expires_at` dihitung jam aplikasi yang selalu belakangan, jadi
-  CHECK "tepat 30 hari" akan menolak baris yang benar-benar normal.
-- Karena TTL-nya terbatas, deskriptor retensi 365 hari **aman memakai
-  `executionMode: 'generic'`** — sapuan berbasis umur tidak bisa menghapus grant
-  hidup, karena tidak ada grant hidup yang cukup tua untuk dijangkaunya. Ini
-  satu-satunya deskriptor di modul ini yang bisa mengatakan itu.
-- Grant tidak bisa ada tanpa kemitraan hidup: FK komposit ke
+- A grant living longer than 31 days **cannot exist** (CHECK `sql/117`), and
+  the rule is 30 (`DELEGATED_ACCESS_MAX_TTL_DAYS`). The one-day difference is
+  deliberate: `created_at` DEFAULT `now()` is the TRANSACTION START instant
+  while `expires_at` is computed from an application clock that is always
+  later, so a CHECK for "exactly 30 days" would reject perfectly normal rows.
+- Because its TTL is bounded, the 365-day retention descriptor **can safely use
+  `executionMode: 'generic'`** — an age-based sweep cannot delete a live grant,
+  because no live grant is old enough to be reached. This is the only
+  descriptor in this module that can say that.
+- A grant cannot exist without a live partnership: a composite FK to
   `awcms_partner_managed_tenants (tenant_id, partner_tenant_id)`.
-- PR ini mendarat **inert** — belum ada rute yang memanggilnya. Permukaannya PR
-  8.4, dan PR itu tidak akan juga menambahkan model datanya.
+- This PR lands **inert** — no route calls it yet. Its surface is PR 8.4, and
+  that PR will not also add its data model.
 
-## Koreksi (PR 8.4, `sql/120`) — grant hidup lebih lama dari kemitraannya
+## Correction (PR 8.4, `sql/120`) — a grant outlives its partnership
 
-`sql/117` mengikat grant ke baris kemitraan dengan FK komposit, dan alasannya
-terdengar benar: "sebuah grant hanya bisa ada di tempat kemitraannya ada".
+`sql/117` bound a grant to the partnership row with a composite FK, and the
+reasoning sounded right: "a grant can only exist where its partnership exists".
 
-**Diukur dengan menjalankannya, itu salah.** Begitu satu grant pernah dibuat,
-memutus kemitraan GAGAL selamanya: grant yang sudah dicabut tetap mereferensi
-baris pemetaan, dan pencabutan sengaja tidak menghapusnya — ia catatan retensi
-365 hari. Jadi pelanggan yang paling butuh memutus kemitraan, yang partnernya
-PERNAH benar-benar masuk, adalah satu-satunya yang tidak bisa.
+**Measured by running it, that is wrong.** Once a single grant has ever been
+created, breaking the partnership FAILS forever: an already-revoked grant still
+references the mapping row, and revocation deliberately does not delete it — it
+is a 365-day retention record. So the customer who most needs to break the
+partnership, whose partner ACTUALLY got in at some point, is the only one who
+cannot.
 
-Yang benar: **grant adalah SEJARAH, kemitraan adalah KEADAAN SEKARANG.** "Siapa
-yang pernah bisa melihat data kami" justru paling ditanyakan setelah vendornya
-diberhentikan. FK-nya dipindahkan ke registri `awcms_partners`, dan invarian
-"tidak ada grant tanpa kemitraan hidup" tetap ditegakkan basis data **saat
-penulisan** lewat `INSERT … SELECT … WHERE EXISTS` — predikat di dalam statement
-yang sama, bukan pemeriksaan yang mendahuluinya, karena yang kedua adalah TOCTOU.
+The right shape: **a grant is HISTORY, a partnership is PRESENT STATE.** "Who
+was ever able to see our data" is asked most precisely after the vendor has
+been dismissed. The FK is moved to the `awcms_partners` registry, and the
+invariant "no grant without a live partnership" stays enforced by the database
+**at write time** via `INSERT … SELECT … WHERE EXISTS` — a predicate inside the
+same statement, not a check that precedes it, because the latter is a TOCTOU.
 
-Ditemukan E2E, bukan review. Itu sendiri catatan yang layak: FK-nya terbaca
-benar di setiap pembacaan sampai ada yang menjalankan urutan lengkapnya.
+Found by E2E, not by review. That itself is a note worth keeping: the FK read
+correctly on every reading until someone ran the full sequence.
 
-## Ditolak
+## Rejected
 
-- **Role `support` yang ditanam platform** (dan seed+backfill yang menyertainya).
-- **Aktor partner yang bukan tenant user** — setiap pembaca otorisasi harus
-  belajar bentuk kedua, dan yang lupa gagal terbuka.
-- **Menyalin hash kredensial principal ke `awcms_identities.password_hash`
-  tenant target** — kredensial di tempat kedua, persis yang ADR-0085 hindari.
-  Kolomnya diisi hash dari 32 byte acak: "tidak" yang tetap "tidak" siapa pun
-  yang membacanya nanti.
-- **Menurunkan alamat manusia dari string yang dipasok tenant target** — itu
-  akan membiarkan tenant memilih principal SIAPA yang keanggotaannya menempel.
-  Alamatnya dibaca dari baris principal global, lewat store yang memilikinya.
-- **Memakai `setTenantUserStatus` untuk mematikan keanggotaan terdelegasi.**
-- **Membiarkan sesi terdelegasi berpindah tenant.**
-- **Daftar aksi terlarang** alih-alih satu kalimat tentang satu modul.
+- **A platform-planted `support` role** (and the seed+backfill that comes with
+  it).
+- **A partner actor that is not a tenant user** — every authorization reader
+  would have to learn a second shape, and whoever forgets fails open.
+- **Copying the principal's credential hash into the target tenant's
+  `awcms_identities.password_hash`** — a credential in a second place, exactly
+  what ADR-0085 avoids. The column is filled with a hash of 32 random bytes: a
+  "no" that stays "no" for whoever reads it later.
+- **Deriving the human's address from a string supplied by the target tenant** —
+  that would let the tenant choose WHOSE principal the membership attaches to.
+  The address is read from the global principal row, via the store that owns it.
+- **Using `setTenantUserStatus` to kill a delegated membership.**
+- **Letting a delegated session switch tenants.**
+- **A list of forbidden actions** instead of one sentence about one module.

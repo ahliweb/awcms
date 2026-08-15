@@ -1,74 +1,76 @@
-# ADR-0032 — Compatibility manifest keluarga AWCMS dan CI conformance terhadap standar AWCMS-Mini
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0032-family-compatibility-manifest-and-ci-conformance.id.md)
+
+# ADR-0032 — AWCMS family compatibility manifest and CI conformance against the AWCMS-Mini standard
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-19
-- **Pengambil keputusan:** maintainer
-- **Terkait:** Issue #183, epic #177 (kesiapan fondasi ERP turunan, Wave 1); ADR-0001 (rebuild di atas fondasi awcms-mini); ADR-0008 (versioning kontrak independen); ADR-0015 (compatibility manifest aplikasi turunan — pola yang di-mirror ke arah hulu); ADR-0025 (module composition #178); ADR-0026 (modular OpenAPI #182); ADR-0023 (dokumentasi dwibahasa); ADR-0027/0028/0029/0030/0031 (sumber intentional divergence)
+- **Date:** 2026-07-19
+- **Decision-maker:** maintainer
+- **Related:** Issue #183, epic #177 (derived ERP foundation readiness, Wave 1); ADR-0001 (rebuild on the awcms-mini foundation); ADR-0008 (independent contract versioning); ADR-0015 (derived-application compatibility manifest — the pattern mirrored upstream); ADR-0025 (module composition #178); ADR-0026 (modular OpenAPI #182); ADR-0023 (bilingual documentation); ADR-0027/0028/0029/0030/0031 (sources of intentional divergence)
 
-## Konteks
+## Context
 
-AWCMS mengadopsi standar teknis AWCMS-Mini (ADR-0001), tetapi sinkronisasinya bergantung pada port manual, dokumentasi, dan review manusia. Pola itu berulang kali menghasilkan drift pada migration reference, skill agent, modul, CI gate, dan dokumentasi — dan tidak ada satu artefak pun yang bisa dibaca mesin untuk membedakan:
+AWCMS adopts the AWCMS-Mini technical standard (ADR-0001), but keeping in sync relies on manual porting, documentation, and human review. That pattern has repeatedly produced drift in migration references, agent skills, modules, CI gates, and documentation — and there is not a single machine-readable artifact that can distinguish:
 
-- bagian yang **wajib kompatibel secara semantik** dengan standar (default-deny, RLS, redaction, audit, idempotency, envelope, migration immutability);
-- bagian yang **sengaja berbeda** karena scope AWCMS adalah fondasi kesiapan ERP, bukan produk CMS (mis. SSRF guard membalik keputusan mini, MFA session-assurance dibangun baru, modul konten tidak diport);
-- **versi stack** yang telah diuji bersama (Bun/Astro/@astrojs/node/TypeScript/PostgreSQL);
-- **bukti conformance** yang dapat diaudit.
+- the parts that **must be semantically compatible** with the standard (default-deny, RLS, redaction, audit, idempotency, envelope, migration immutability);
+- the parts that are **deliberately different** because AWCMS's scope is ERP readiness foundation, not a CMS product (e.g. the SSRF guard reversing mini's decision, MFA session-assurance built fresh, content modules not ported);
+- the **stack versions** that have been tested together (Bun/Astro/@astrojs/node/TypeScript/PostgreSQL);
+- the **conformance evidence** that can be audited.
 
-ADR-0015 (Issue #741, diadaptasi dari mini) sudah membangun manifest kompatibilitas ke arah **hilir** — bagaimana aplikasi turunan menyatakan kompatibilitasnya terhadap rilis base. ADR ini membangun lapisan yang saling melengkapi ke arah **hulu**: bagaimana base AWCMS menyatakan conformance-nya terhadap standar keluarga AWCMS, ditegakkan CI.
+ADR-0015 (Issue #741, adapted from mini) already built the compatibility manifest in the **downstream** direction — how a derived application states its compatibility with a base release. This ADR builds the complementary layer in the **upstream** direction: how the AWCMS base states its conformance with the AWCMS family standard, enforced by CI.
 
-## Keputusan
+## Decision
 
-### 1. Manifest machine-readable versioned + schema
+### 1. A versioned machine-readable manifest + schema
 
-`awcms-family-compatibility.yaml` (root repo) adalah sumber deklaratif tunggal. Divalidasi oleh `validateFamilyManifestShape()` di `src/modules/_shared/family-contract.ts` (validator otoritatif, zero-import — sama disiplin dengan `module-contract.ts`) DAN dipublikasikan sebagai JSON Schema draft-07 `awcms-family-compatibility.schema.json` untuk tooling eksternal. Kedua sisi dijaga tidak drift: gate memverifikasi daftar `required` skema JSON sama dengan `REQUIRED_TOP_LEVEL_KEYS` validator.
+`awcms-family-compatibility.yaml` (repo root) is the single declarative source. It is validated by `validateFamilyManifestShape()` in `src/modules/_shared/family-contract.ts` (the authoritative, zero-import validator — the same discipline as `module-contract.ts`) AND published as JSON Schema draft-07 `awcms-family-compatibility.schema.json` for external tooling. Both sides are kept from drifting: the gate verifies that the JSON schema's `required` list equals the validator's `REQUIRED_TOP_LEVEL_KEYS`.
 
-### 2. Family contract version — skema versioning KETUJUH
+### 2. Family contract version — the SEVENTH versioning scheme
 
-`FAMILY_CONTRACT_VERSION` (`family-contract.ts`, `"1.0.0"`) adalah skema versioning ketujuh di atas enam yang sudah didokumentasikan ADR-0008/ADR-0015 (package release, kontrak REST, kontrak event, module descriptor, per-capability, extension-manifest). Ia adalah versi yang setiap fixture/snapshot conformance dipin. Setiap contract versi yang dideklarasikan manifest WAJIB salah satu dari:
+`FAMILY_CONTRACT_VERSION` (`family-contract.ts`, `"1.0.0"`) is the seventh versioning scheme on top of the six already documented by ADR-0008/ADR-0015 (package release, REST contract, event contract, module descriptor, per-capability, extension-manifest). It is the version every conformance fixture/snapshot is pinned to. Every contract version the manifest declares MUST be one of:
 
-- **cocok dengan konstanta sumber nyata** — `MODULE_CONTRACT_VERSION`, `CAPABILITY_CONTRACT_VERSIONS`, `info.version` OpenAPI/AsyncAPI (gate membaca sumber dan gagal saat mismatch); atau
-- **family-owned** — dipin ke `FAMILY_OWNED_CONTRACT_VERSIONS` (`family-contract.ts`) dan diberi gigi oleh contract test SEMANTIK yang berubah RED bila kontrolnya drift (envelope, tenant-context/RLS, audit/redaction, idempotency, migration checksum).
+- **matching a real source constant** — `MODULE_CONTRACT_VERSION`, `CAPABILITY_CONTRACT_VERSIONS`, the OpenAPI/AsyncAPI `info.version` (the gate reads the source and fails on mismatch); or
+- **family-owned** — pinned in `FAMILY_OWNED_CONTRACT_VERSIONS` (`family-contract.ts`) and given teeth by SEMANTIC contract tests that go RED when their control drifts (envelope, tenant-context/RLS, audit/redaction, idempotency, migration checksum).
 
-Tidak ada nomor versi mengambang tanpa sumber kebenaran.
+No version number floats without a source of truth.
 
-### 3. Gate `family:conformance:check` — wiring di tiga tempat (pelajaran PR #769/#770)
+### 3. The `family:conformance:check` gate — wired in three places (the lesson of PR #769/#770)
 
-`scripts/family-conformance-check.ts` — pure (tanpa DB/network), aman di setiap build. Cross-reference manifest terhadap sumber nyata, memvalidasi allow-list intentional divergence (well-formed, tidak kedaluwarsa, ADR ada), dan meng-emit evidence report pass/fail per contract (tanpa secret/DSN — di-assert `assertEvidenceReportSecretFree`). Fungsi keputusan murni `collectFamilyConformanceChecks(manifest, actuals)` menerima `actuals` yang di-inject supaya contract test bisa memutasi satu fakta dan membuktikan gate RED (pola injeksi `checkRuntimeRoleGrants(policy?)`).
+`scripts/family-conformance-check.ts` — pure (no DB/network), safe in every build. It cross-references the manifest against real sources, validates the intentional divergence allow-list (well-formed, not expired, ADR exists), and emits a pass/fail evidence report per contract (no secrets/DSNs — asserted by `assertEvidenceReportSecretFree`). The pure decision function `collectFamilyConformanceChecks(manifest, actuals)` takes injected `actuals` so contract tests can mutate one fact and prove the gate goes RED (the `checkRuntimeRoleGrants(policy?)` injection pattern).
 
-Sesuai ADR-0015 §6: ditambahkan ke (1) `package.json`'s `check`, (2) langkah bernama eksplisit di `.github/workflows/ci.yml`'s `quality` job (bukan diasumsikan otomatis), dan (3) `release.yml` mewarisi via `bun run check` verbatim. Parity dijaga `tests/family-conformance-ci-parity.test.ts` agar langkah tak bisa hilang diam-diam dari CI atau `bun run check`.
+Per ADR-0015 §6: it is added to (1) `package.json`'s `check`, (2) an explicitly named step in `.github/workflows/ci.yml`'s `quality` job (not assumed automatic), and (3) `release.yml` inherits it verbatim via `bun run check`. Parity is guarded by `tests/family-conformance-ci-parity.test.ts` so the step cannot silently disappear from CI or from `bun run check`.
 
-### 4. Contract test SEMANTIK, bukan byte-equality
+### 4. SEMANTIC contract tests, not byte-equality
 
-Setiap kontrol reusable kritis dipin ke perilaku, dan tiap test MUTATION-PROVABLE (berubah RED bila kontrol dilemahkan): module descriptor/composition (duplicate module key → invalid), tenant-context fail-closed di bawah `FORCE RLS` (tanpa GUC → nol baris; policy fail-open → bocor semua baris), response envelope, audit/redaction (redactor dilemahkan → kebocoran terdeteksi), idempotency (hash collapse → konflik tak terdeteksi), migration immutability/checksum (edit migration terapan → `validateAppliedChecksums` throw — murni, tanpa DB), OpenAPI/AsyncAPI metadata, database role/RLS (`checkRlsEnabled` FORCE invariant). Bagian yang butuh Postgres nyata (`tests/family-conformance-db.test.ts`) di-gate `DATABASE_URL` dan masuk daftar eksplisit suite ad-hoc DB di ci.yml + release.yml (dua-suite-DB tak boleh tabrakan dalam satu proses `bun test`).
+Every critical reusable control is pinned to behaviour, and each test is MUTATION-PROVABLE (goes RED if the control is weakened): module descriptor/composition (duplicate module key → invalid), tenant-context fail-closed under `FORCE RLS` (no GUC → zero rows; a fail-open policy → every row leaks), the response envelope, audit/redaction (weaken the redactor → the leak is detected), idempotency (hash collapse → the conflict goes undetected), migration immutability/checksum (edit an applied migration → `validateAppliedChecksums` throws — pure, no DB), OpenAPI/AsyncAPI metadata, database role/RLS (the `checkRlsEnabled` FORCE invariant). The parts that need a real Postgres (`tests/family-conformance-db.test.ts`) are gated on `DATABASE_URL` and listed explicitly in the ad-hoc DB suite list in ci.yml + release.yml (the two DB suites must not collide inside one `bun test` process).
 
-Setiap pelemahan default-deny/RLS/redaction/audit/idempotency dianggap **breaking** (MAJOR family contract) dan membuat conformance gagal.
+Any weakening of default-deny/RLS/redaction/audit/idempotency counts as **breaking** (a MAJOR family contract change) and makes conformance fail.
 
-Kontrak **Astro SSR build/start on Bun** TIDAK punya test standalone di suite conformance (build+start+probe duplikat hanya akan menjalankan ulang job `e2e-smoke`). Ia dieksekusi nyata oleh `bun run build` (di dalam `bun run check`) DAN job `e2e-smoke` yang men-start server hasil-build di Bun (`bun ./dist/standalone-entry.mjs`) lalu menjalankan login/SSR render. `tests/family-conformance-ci-parity.test.ts` meng-assert job `e2e-smoke` + baris start itu ADA di ci.yml — jadi menghapusnya memerahkan conformance.
+The **Astro SSR build/start on Bun** contract has NO standalone test in the conformance suite (a duplicate build+start+probe would only re-run the `e2e-smoke` job). It is really exercised by `bun run build` (inside `bun run check`) AND by the `e2e-smoke` job, which starts the built server on Bun (`bun ./dist/standalone-entry.mjs`) and then runs login/SSR rendering. `tests/family-conformance-ci-parity.test.ts` asserts that the `e2e-smoke` job + that start line EXIST in ci.yml — so removing them turns conformance red.
 
-### 5. Compatibility matrix: current DAN minimum-supported dijalankan nyata
+### 5. Compatibility matrix: current AND minimum-supported are really run
 
-Job `quality` mem-pin Bun current (1.3.14); job terpisah `minimum-supported` men-setup dan MENJALANKAN floor `engines.bun >=1.3.0` (Bun 1.3.0) untuk subset bermakna: `bun install --frozen-lockfile`, `typecheck`, `build` (Astro SSR), `family:conformance:check`. Diverifikasi nyata: Bun 1.3.0 menjalankan subset itu bersih. Gate sendiri meng-assert himpunan versi Bun di CI = TEPAT {current, minimum} (`stack.bun.ci` + `stack.bun.ciMinimum`, dan `ciMinimum` == floor `engines`), sehingga menghapus job minimum-supported memerahkan gate. Astro/@astrojs/node/TypeScript "minimum" == range caret current-nya (`^7.0.7`/`^11.0.2`/`^7.0.2`), jadi tak butuh cell terpisah; PostgreSQL hanya mendeklarasikan 18.4 (tanpa floor terpisah), jadi tak ada gap PG minimum.
+The `quality` job pins current Bun (1.3.14); a separate `minimum-supported` job sets up and RUNS the `engines.bun >=1.3.0` floor (Bun 1.3.0) for a meaningful subset: `bun install --frozen-lockfile`, `typecheck`, `build` (Astro SSR), `family:conformance:check`. Verified for real: Bun 1.3.0 runs that subset cleanly. The gate itself asserts that the set of Bun versions in CI is EXACTLY {current, minimum} (`stack.bun.ci` + `stack.bun.ciMinimum`, with `ciMinimum` == the `engines` floor), so removing the minimum-supported job turns the gate red. The Astro/@astrojs/node/TypeScript "minimum" == the caret range of their current versions (`^7.0.7`/`^11.0.2`/`^7.0.2`), so no separate cell is needed; PostgreSQL only declares 18.4 (no separate floor), so there is no minimum-PG gap.
 
-### 6. Intentional divergence butuh alasan + owner + review date + ADR
+### 6. Intentional divergence requires a reason + owner + review date + ADR
 
-Allow-list `intentionalDivergences` mendaftar setiap perbedaan sengaja dari standar mini. Bukan backlog port yang belum selesai — tiap entri punya `reason`, `owner`, `reviewDate` (gate gagal saat kedaluwarsa — divergence tak-ter-review tak bisa hidup selamanya), dan `adr` (file yang harus ada). Divergence awal: modul konten tak diport (ADR-0022), ModuleType tanpa "derived" (ADR-0025), OpenAPI satu-file-per-modul (ADR-0026), SSRF blokir IP privat (ADR-0028), MFA session-assurance baru (ADR-0027), business-scope resolver base NO-OP (ADR-0030), SoD rule ilustratif di fixture (ADR-0031), Turnstile pertahankan gate profil (ADR-0029), SemVer lanjut lini major legacy (ADR-0024).
+The `intentionalDivergences` allow-list records every deliberate difference from the mini standard. It is not a backlog of unfinished ports — each entry has a `reason`, an `owner`, a `reviewDate` (the gate fails when it expires — an un-reviewed divergence cannot live forever), and an `adr` (a file that must exist). The initial divergences: content modules not ported (ADR-0022), ModuleType without "derived" (ADR-0025), OpenAPI one-file-per-module (ADR-0026), SSRF blocking private IPs (ADR-0028), new MFA session-assurance (ADR-0027), the base business-scope resolver being a NO-OP (ADR-0030), illustrative SoD rules in a fixture (ADR-0031), Turnstile keeping the profile gate (ADR-0029), SemVer continuing the legacy major line (ADR-0024).
 
-### 7. Tanpa dependency live ke upstream mini
+### 7. No live dependency on upstream mini
 
-CI tidak pernah mengunduh branch mini. Semua conformance dibuktikan terhadap konstanta sumber lokal + fixture yang dipin; build reproducible walau GitHub eksternal tak tersedia (ADR-0015 §5 prinsip yang sama).
+CI never downloads a mini branch. All conformance is proven against local source constants + pinned fixtures; the build is reproducible even when external GitHub is unavailable (the same principle as ADR-0015 §5).
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** perubahan fondasi terhadap standar keluarga jadi eksplisit, dapat diuji, dan tidak bergantung perbandingan copy file. Manifest tervalidasi schema; drift versi/divergence memerahkan CI.
-- **Positif:** contract test semantik menangkap pelemahan nyata (bukan cuma perubahan sumber), dibuktikan mutasi (fail-open RLS, redaction bypass, envelope drift, duplicate module key, edit migration terapan).
-- **Positif (F1):** AC "menguji current DAN minimum-supported" dipenuhi nyata — job `minimum-supported` menjalankan Bun 1.3.0 (floor), dan gate meng-assert himpunan Bun CI = {current, minimum}. Cell minimum mencakup install/typecheck/build/family-conformance; residual: Astro/@astrojs/node/TS minimum == caret current (tak butuh cell terpisah), PostgreSQL tanpa floor terpisah.
-- **Positif (F3):** drift indeks ADR ditutup gate `check-docs` (`checkAdrIndexCoverage`) — setiap `docs/adr/NNNN-*.md` (kecuali template 0000) wajib punya baris di `README.id.md`; menghapus baris/menambah ADR tak-terindeks memerahkan CI. Indeks 0027-0032 yang sempat drift kini dilengkapi.
-- **Netral (F4):** manifest hanya mendeklarasikan capability yang modul pemiliknya benar-benar ada di base (`party_directory`/`profile_identity`); tiga capability konten (`news_media`/`public_content`/`social_publishing`) yang terbawa dari mini dihapus dari `CAPABILITY_CONTRACT_VERSIONS` + manifest karena modul CMS pemiliknya dikecualikan (`no-content-website-modules`, ADR-0022) — mengoreksi ketidakjujuran daftar. Detail historis daftar 4-capability ada di ADR-0015 §1 (tak diedit; ADR historis, dikoreksi oleh ADR ini).
-- **Negatif/trade-off:** skema versioning ketujuh menambah permukaan kebijakan — didokumentasikan di `family-contract.ts` + `docs/awcms/family-compatibility.md`.
-- **Netral:** tidak ada migration (tooling/docs saja); tidak mengubah kontrak modul/OpenAPI yang ada.
+- **Positive:** foundational changes relative to the family standard become explicit, testable, and no longer dependent on comparing copies of files. The manifest is schema-validated; version/divergence drift turns CI red.
+- **Positive:** semantic contract tests catch real weakenings (not just source changes), proven by mutation (fail-open RLS, redaction bypass, envelope drift, duplicate module key, editing an applied migration).
+- **Positive (F1):** the AC "test current AND minimum-supported" is really met — the `minimum-supported` job runs Bun 1.3.0 (the floor), and the gate asserts the CI Bun set = {current, minimum}. The minimum cell covers install/typecheck/build/family-conformance; residual: the Astro/@astrojs/node/TS minimum == the caret of current (no separate cell needed), PostgreSQL has no separate floor.
+- **Positive (F3):** ADR index drift is closed by the `check-docs` gate (`checkAdrIndexCoverage`) — every `docs/adr/NNNN-*.md` (except template 0000) must have a row in `README.id.md`; deleting a row or adding an unindexed ADR turns CI red. The 0027-0032 index entries that had drifted are now filled in.
+- **Neutral (F4):** the manifest declares only capabilities whose owning module actually exists in the base (`party_directory`/`profile_identity`); the three content capabilities (`news_media`/`public_content`/`social_publishing`) carried over from mini are removed from `CAPABILITY_CONTRACT_VERSIONS` + the manifest because their owning CMS modules are excluded (`no-content-website-modules`, ADR-0022) — correcting the dishonesty of that list. The historical detail of the 4-capability list is in ADR-0015 §1 (not edited; it is a historical ADR, corrected by this one).
+- **Negative/trade-off:** a seventh versioning scheme enlarges the policy surface — documented in `family-contract.ts` + `docs/awcms/family-compatibility.md`.
+- **Neutral:** no migration (tooling/docs only); no change to existing module/OpenAPI contracts.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Git submodule seluruh source mini + diff byte** — ditolak (out of scope issue): nondeterministik, bergantung repo lain live, dan menyamakan seluruh source bukan tujuan (AWCMS sengaja berbeda scope).
-- **Menambah dependency validator JSON Schema (ajv, dll.)** — ditolak: Bun-only minim-dependency (ADR-0002); validator TypeScript tulisan tangan cukup untuk skema kecil ini, JSON Schema tetap dipublikasi untuk interop.
-- **Family contract version = package release version** — ditolak: keduanya berevolusi berbeda (ADR-0008 sudah menetapkan versioning independen); lini major legacy (ADR-0024) tak boleh mengikat kontrak keluarga.
+- **Git-submoduling the whole mini source + byte diffing** — rejected (out of scope for the issue): non-deterministic, dependent on another repo being live, and making the entire source identical is not the goal (AWCMS deliberately has a different scope).
+- **Adding a JSON Schema validator dependency (ajv, etc.)** — rejected: Bun-only, minimal dependencies (ADR-0002); a hand-written TypeScript validator is enough for this small schema, and the JSON Schema is still published for interop.
+- **Family contract version = package release version** — rejected: the two evolve differently (ADR-0008 already established independent versioning); the legacy major line (ADR-0024) must not bind the family contract.

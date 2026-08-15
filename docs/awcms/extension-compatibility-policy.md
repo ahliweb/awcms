@@ -1,8 +1,10 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](extension-compatibility-policy.id.md)
+
 # Derived-Application Compatibility, Deprecation, and Support-Window Policy
 
-> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Mekanisme aplikasi-turunan yang dijelaskan dokumen ini — `extension:check` (`scripts/extension-check.ts`), `extension.manifest.json`, `ApplicationModuleRegistry` — **DIBATALKAN**, bukan sekadar ditunda. Keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif; modul domain/website ditambahkan langsung ke `src/modules/` template. Dokumen ini dipertahankan sebagai catatan historis.
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** The derived-application mechanism this document describes — `extension:check` (`scripts/extension-check.ts`), `extension.manifest.json`, `ApplicationModuleRegistry` — has been **CANCELLED**, not merely postponed. The AWCMS family (`awcms-mini`/`awcms`/`awcms-micro`) is now a set of **used-directly** templates, with no derivative repo created; domain/website modules are added directly to the template's `src/modules/`. This document is kept as a historical record.
 
-> **Status dokumen.** Kebijakan versi/deprecation di bawah menggambarkan tooling `extension:check` yang **tidak akan diimplementasikan** — dicabut oleh ADR-0034 (bukan "rencana lokasi yang akan dibuat"). Isi berikut adalah catatan historis dari desain jalur-turunan yang diwarisi base awcms-mini; tidak lagi mengikat repo `awcms` saat ini.
+> **Document status.** The versioning/deprecation policy below describes `extension:check` tooling that **will not be implemented** — it was revoked by ADR-0034 (not "a planned location yet to be built"). What follows is a historical record of the derived-pathway design inherited from the awcms-mini base; it no longer binds the current `awcms` repo.
 
 This document is the authoritative policy reference for every SemVer scheme a
 derived application's `extension.manifest.json` declares itself against,
@@ -22,9 +24,9 @@ is a common mistake this document exists to prevent.
 | #   | Scheme                                                                       | Where it lives                                        | Bumped when…                                                                | Authoritative doc                                                                |
 | --- | ---------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | 1   | Package release (`package.json` `version`)                                   | This repository's own release                         | Any PR that changes application behavior (Changesets-driven)                | `09_roadmap_repository_commit.md` §Versioning (out of scope for this adaptation) |
-| 2   | REST contract (`openapi/awcms-public-api.openapi.yaml` `info.version`)       | The OpenAPI document                                  | The REST contract SHAPE changes                                             | ADR-0008 (belum ditulis di awcms — akan diadaptasi dari awcms-mini)              |
+| 2   | REST contract (`openapi/awcms-public-api.openapi.yaml` `info.version`)       | The OpenAPI document                                  | The REST contract SHAPE changes                                             | ADR-0008 (not yet written in awcms — will be adapted from awcms-mini)            |
 | 3   | Event contract (`asyncapi/awcms-domain-events.asyncapi.yaml` `info.version`) | The AsyncAPI document                                 | The event contract SHAPE changes                                            | ADR-0008                                                                         |
-| 4   | Module descriptor contract (`MODULE_CONTRACT_VERSION`)                       | `src/modules/_shared/module-contract.ts`              | The `ModuleDescriptor`/`ApplicationModuleRegistry` TYPE shape changes       | ADR-0015 §1 (belum ditulis)                                                      |
+| 4   | Module descriptor contract (`MODULE_CONTRACT_VERSION`)                       | `src/modules/_shared/module-contract.ts`              | The `ModuleDescriptor`/`ApplicationModuleRegistry` TYPE shape changes       | ADR-0015 §1 (not yet written)                                                    |
 | 5   | Capability contract (`CAPABILITY_CONTRACT_VERSIONS[key]`)                    | `src/modules/_shared/capability-contract-versions.ts` | A specific capability's port interface (`_shared/ports/*.ts`) shape changes | ADR-0015 §1                                                                      |
 | 6   | Manifest schema (`EXTENSION_MANIFEST_SCHEMA_VERSION`)                        | `src/modules/_shared/extension-manifest-contract.ts`  | The compatibility manifest's OWN field shape changes                        | ADR-0015 §1                                                                      |
 
@@ -74,10 +76,10 @@ MAJOR bump of its own scheme:
    actual current one).
 
 No fixed calendar SLA (e.g. "deprecated fields are removed after exactly
-90 days") is imposed — awcms pre-1.0.0 package release policy (mengikuti
-pola release awcms-mini, akan didokumentasikan saat skill/release process
-awcms sendiri ditulis) already documents that "minor boleh memuat
-penyesuaian belum stabil". The MAJOR/MINOR/PATCH discipline above is the
+90 days") is imposed — the awcms pre-1.0.0 package release policy (following
+the awcms-mini release pattern, to be documented once awcms's own
+skill/release process is written) already documents that "a minor may carry
+adjustments that are not yet stable". The MAJOR/MINOR/PATCH discipline above is the
 actual enforced guarantee once implemented; a MINOR release is never a
 surprise breaking change regardless of how much or little time passed
 since the deprecation announcement.
@@ -129,12 +131,12 @@ built):
 
 - [`docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md`](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)
   — the rebuild decision this document's adaptation follows.
-- `docs/adr/0015-derived-application-compatibility-manifest.md` (belum
-  ditulis di awcms — akan diadaptasi dari awcms-mini bila/ketika modul
-  eksternal/turunan menjadi relevan untuk platform ERP ini).
+- `docs/adr/0015-derived-application-compatibility-manifest.md` (not yet
+  written in awcms — will be adapted from awcms-mini if/when external or
+  derived modules become relevant for this ERP platform).
 - `derived-application-guide.md` — the practical, step-by-step guide
   for a derived application author (out of scope for this adaptation;
   not applicable unless AWCMS itself becomes a base for derived apps).
-- `tests/fixtures/extension-contract-incompatible/README.md` (belum
-  ditulis) — eight concrete examples of exactly what each incompatibility
+- `tests/fixtures/extension-contract-incompatible/README.md` (not yet
+  written) — eight concrete examples of exactly what each incompatibility
   class looks like in a real manifest, to be mirrored from awcms-mini.

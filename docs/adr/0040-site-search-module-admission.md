@@ -1,128 +1,130 @@
-# ADR-0040 — Admission `site_search` (Official Optional Module): pencarian PostgreSQL FTS lintas-konten lewat search-source descriptor, DAG-safe inward
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0040-site-search-module-admission.id.md)
+
+# ADR-0040 — Admission of `site_search` (Official Optional Module): cross-content PostgreSQL FTS via search-source descriptors, DAG-safe inward
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-25
-- **Pengambil keputusan:** @ahliweb
-- **Mengadaptasi:** awcms-micro `src/modules/site-search/` + ADR-0031 (issue #270, epic #261 Gelombang 2; di awcms-micro migrasinya bernomor 087/088 — penomoran repo itu, bukan repo ini) ke basis `awcms`. Di sini skema mendarat di `sql/064` dan seed permission di `sql/065`.
-- **Terkait:** ADR-0038/0039 (`seo_distribution` — preseden kontribusi INWARD: modul konten adalah PENYEDIA, modul agregator KONSUMEN), ADR-0037 (`data_lifecycle`, dua tabel telemetri modul ini di-register ke sana), ADR-0036 (`media_library` — penyedia search source lanjutan), ADR-0013 §1/§6 (modul tidak menulis ke tabel modul lain; kolaborasi lewat kontrak yang dideklarasikan modul pemilik), ADR-0009 (rute publik tenant-scoped berbasis `tenantCode`), ADR-0011 (capability port), ADR-0035 (program penyerapan awcms-micro), [`docs/awcms/absorb-awcms-micro-roadmap.md`](../awcms/absorb-awcms-micro-roadmap.md) §Gelombang 1.
+- **Date:** 2026-07-25
+- **Decision maker:** @ahliweb
+- **Adapts:** awcms-micro `src/modules/site-search/` + ADR-0031 (issue #270, epic #261 Wave 2; in awcms-micro the migrations are numbered 087/088 — that repo's numbering, not this one's) onto the `awcms` base. Here the schema lands in `sql/064` and the permission seed in `sql/065`.
+- **Related:** ADR-0038/0039 (`seo_distribution` — the precedent for INWARD contribution: the content module is the PROVIDER, the aggregator module the CONSUMER), ADR-0037 (`data_lifecycle`, this module's two telemetry tables are registered there), ADR-0036 (`media_library` — a follow-up search source provider), ADR-0013 §1/§6 (a module does not write to another module's tables; collaboration goes through a contract declared by the owning module), ADR-0009 (tenant-scoped public routes based on `tenantCode`), ADR-0011 (capability ports), ADR-0035 (the awcms-micro absorption programme), [`docs/awcms/absorb-awcms-micro-roadmap.md`](../awcms/absorb-awcms-micro-roadmap.md) §Wave 1.
 
-## Konteks
+## Context
 
-Basis ini hari ini punya pencarian **per-modul**: `blog_content` memiliki `search_vector` di `awcms_blog_posts`/`awcms_blog_pages` (migrasi `sql/035`) plus rute `/blog/{tenantCode}/search`. Yang belum ada adalah pencarian **lintas-konten, satu tenant** — satu permukaan terindeks yang menyatukan post, halaman, dan tipe konten mana pun yang menyusul, lengkap dengan suggestion, rebuild, dan rekonsiliasi.
+This base has **per-module** search today: `blog_content` owns `search_vector` on `awcms_blog_posts`/`awcms_blog_pages` (migration `sql/035`) plus the route `/blog/{tenantCode}/search`. What does not exist is **cross-content, single-tenant** search — one indexed surface unifying posts, pages, and whatever content types come next, complete with suggestions, rebuild, and reconciliation.
 
-Kalau kebutuhan itu dipenuhi ad hoc, setiap modul konten berikutnya akan menumbuhkan versi indeks/relevansi/snippet-nya sendiri — persis drift lintas-modul yang ADR-0036/0038 baru saja bersusah payah membalik untuk media dan SEO. Keputusan yang harus mengikat **sebelum** kode: siapa yang memiliki indeks pencarian, ke arah mana dependency mengalir, dan lewat seam apa modul konten menyumbang sumber-pencarian tanpa saling impor dan tanpa menulis ke tabel indeks orang lain.
+If that need is met ad hoc, every subsequent content module will grow its own version of indexing/relevance/snippets — exactly the cross-module drift ADR-0036/0038 just went to great lengths to invert for media and SEO. The decisions that must be bound **before** code: who owns the search index, which way dependencies flow, and through what seam a content module contributes a search source without cross-imports and without writing into someone else's index table.
 
-Fakta grounding yang sudah ada dan **tidak** ditulis ulang oleh modul ini:
+Grounding facts that already exist and are **not** rewritten by this module:
 
-- `blog_content` sudah memiliki predikat "publik + terbit" tunggal (`status='published' AND visibility='public' AND deleted_at IS NULL AND published_at IS NOT NULL AND published_at <= now()`) yang dipakai rute publiknya sendiri **dan** adapter `seo_facts`-nya. `site_search` mengonsumsi predikat itu lewat descriptor, bukan memodelkannya ulang.
-- `tenant_domain` (ADR-0010, mendarat lewat #219) me-resolve tenant dari host untuk rute publik. Permukaan pencarian publik memakainya persis seperti rute discovery `seo_distribution`.
-- Rute konten publik basis ini **berbasis path tenant** (`/blog/{tenantCode}/{slug}`, ADR-0009) — bukan `/news/:slug` host-resolved seperti awcms-micro. Itu satu-satunya perbedaan struktural yang menembus sampai ke bentuk descriptor (§7).
+- `blog_content` already owns a single "public + published" predicate (`status='published' AND visibility='public' AND deleted_at IS NULL AND published_at IS NOT NULL AND published_at <= now()`) used by its own public routes **and** by its `seo_facts` adapter. `site_search` consumes that predicate through a descriptor rather than re-modelling it.
+- `tenant_domain` (ADR-0010, landed via #219) resolves the tenant from the host for public routes. The public search surface uses it exactly like the `seo_distribution` discovery routes do.
+- This base's public content routes are **tenant-path based** (`/blog/{tenantCode}/{slug}`, ADR-0009) — not host-resolved `/news/:slug` like awcms-micro. That is the one structural difference that reaches all the way into the descriptor shape (§7).
 
-## Keputusan
+## Decision
 
-Kami mengadmisi **`site_search`** sebagai **Official Optional Module** (fitur produk generik lintas domain website, opt-in per tenant), memakai **PostgreSQL full-text search sebagai default** (`tsvector`/GIN; `pg_trgm` HANYA untuk suggestion typeahead judul), dan mewujudkan kolaborasinya lewat **search-source contribution contract** — **bukan** impor internal lintas-modul dan **bukan** tulisan langsung ke shared table (ADR-0013 §6).
+We admit **`site_search`** as an **Official Optional Module** (a generic cross-domain website product feature, opt-in per tenant), using **PostgreSQL full-text search as the default** (`tsvector`/GIN; `pg_trgm` ONLY for title typeahead suggestions), and realising its collaboration through a **search-source contribution contract** — **not** cross-module internal imports and **not** direct writes into a shared table (ADR-0013 §6).
 
-Arah kepemilikan dinyatakan tegas, meniru ADR-0038: **modul konten adalah PENYEDIA "search sources"; `site_search` adalah KONSUMEN/agregator.** Tidak ada modul yang sudah ada dibuat bergantung pada `site_search`, dan `site_search` tidak mengambil lifecycle dependency apa pun ke modul konten (hanya ke Core) — sehingga graf tetap DAG-safe.
+The direction of ownership is stated firmly, mirroring ADR-0038: **content modules are the PROVIDERS of "search sources"; `site_search` is the CONSUMER/aggregator.** No existing module is made to depend on `site_search`, and `site_search` takes no lifecycle dependency on any content module (only on Core) — so the graph stays DAG-safe.
 
-### 1. Parameter admission
+### 1. Admission parameters
 
-| Parameter                   | Nilai                                                                                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Nama                        | Site Search                                                                                                                            |
-| `key`                       | `site_search`                                                                                                                          |
-| Kategori                    | **Official Optional Module** — pencarian situs kebutuhan generik **setiap** situs publik lintas vertikal, opt-in per tenant            |
-| `type` di kode              | `domain` (sama seperti `blog_content`/`news_portal`/`seo_distribution`)                                                                |
-| `isCore`                    | tidak                                                                                                                                  |
-| `status`                    | `active` — descriptor + kode runtime mendarat bersama                                                                                  |
-| Lifecycle `dependencies`    | `["tenant_admin", "identity_access"]` **saja** — tidak ke `blog_content`/`news_portal`/`media_library`                                 |
-| Kontribusi sumber-pencarian | descriptor-list `ModuleDescriptor.searchSources` (§3) — **bukan** capability `provides` (>1 penyedia = `capability_provider_conflict`) |
-| Kelas kompatibilitas        | Indeks + query dari DB lokal = **offline-lan-safe**; layanan search eksternal (Elastic/OpenSearch/vector) = **di luar scope**          |
+| Parameter                  | Value                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Name                       | Site Search                                                                                                                                |
+| `key`                      | `site_search`                                                                                                                              |
+| Category                   | **Official Optional Module** — site search is a generic need of **every** public site across verticals, opt-in per tenant                  |
+| `type` in code             | `domain` (same as `blog_content`/`news_portal`/`seo_distribution`)                                                                         |
+| `isCore`                   | no                                                                                                                                         |
+| `status`                   | `active` — descriptor + runtime code land together                                                                                         |
+| Lifecycle `dependencies`   | `["tenant_admin", "identity_access"]` **only** — not on `blog_content`/`news_portal`/`media_library`                                       |
+| Search-source contribution | the descriptor list `ModuleDescriptor.searchSources` (§3) — **not** a `provides` capability (>1 provider = `capability_provider_conflict`) |
+| Compatibility class        | Index + queries from the local DB = **offline-lan-safe**; external search services (Elastic/OpenSearch/vector) = **out of scope**          |
 
-### 2. Arah dependency — kenapa panah menunjuk ke DALAM (DAG-safe)
+### 2. Dependency direction — why the arrow points INWARD (DAG-safe)
 
-| Modul           | Peran terhadap `site_search`                          | Lifecycle `dependencies`              |
-| --------------- | ----------------------------------------------------- | ------------------------------------- |
-| `blog_content`  | **penyedia** search source (post `/blog/:code/:slug`) | tidak berubah                         |
-| `news_portal`   | menyusun post berita, bukan resource mandiri          | tidak berubah                         |
-| `media_library` | **penyedia** (opsional, follow-up) metadata media     | tidak berubah                         |
-| `site_search`   | **konsumen/agregator** (memiliki indeks + query)      | `["tenant_admin", "identity_access"]` |
+| Module          | Role with respect to `site_search`                          | Lifecycle `dependencies`              |
+| --------------- | ----------------------------------------------------------- | ------------------------------------- |
+| `blog_content`  | **provider** of a search source (posts `/blog/:code/:slug`) | unchanged                             |
+| `news_portal`   | composes news posts, not an independent resource            | unchanged                             |
+| `media_library` | **provider** (optional, follow-up) of media metadata        | unchanged                             |
+| `site_search`   | **consumer/aggregator** (owns the index + the queries)      | `["tenant_admin", "identity_access"]` |
 
-**Invariant yang dikunci:** tidak ada modul yang `dependencies`- atau `consumes`-nya menyebut `site_search` (ditegakkan test `tests/site-search-module.test.ts`). Arah kontribusi dibalik dari desain naif "search mengimpor tiap modul konten": kalau `site_search` mengonsumsi port milik `blog_content`, agregator akan menyeret dependency ke setiap modul konten. Dengan membalik arah — konten **mendeklarasikan** search source, search menemukannya lewat `listModules()` — `site_search` tetap ignorant terhadap modul konten mana pun.
+**The invariant that is locked:** no module names `site_search` in its `dependencies` or `consumes` (enforced by the test `tests/site-search-module.test.ts`). The direction of contribution is inverted from the naive design "search imports every content module": if `site_search` consumed a port owned by `blog_content`, the aggregator would drag a dependency onto every content module. By inverting the direction — content **declares** a search source, search discovers it through `listModules()` — `site_search` stays ignorant of any content module.
 
-### 3. Contribution contract — kenapa descriptor-list, BUKAN capability `provides`
+### 3. The contribution contract — why a descriptor list, NOT a `provides` capability
 
-ADR-0038 memodelkan `seo_facts` sebagai **satu** capability `provides` (hanya `blog_content` mendeklarasikannya, karena `module-composition.ts`'s `checkCapabilityBindings` menandai `capability_provider_conflict` bila >1 modul mendeklarasikan `provides` string yang sama). Untuk pencarian kita **memang** ingin banyak modul konten menyumbang → memodelkan `search_source` sebagai capability `provides` akan langsung memicu konflik itu.
+ADR-0038 modelled `seo_facts` as a **single** `provides` capability (only `blog_content` declares it, because `module-composition.ts`'s `checkCapabilityBindings` flags `capability_provider_conflict` when >1 module declares `provides` for the same string). For search we **do** want many content modules to contribute → modelling `search_source` as a `provides` capability would trigger that conflict immediately.
 
-Maka seam-nya adalah **descriptor-list** — pola `dataLifecycle`/`sodRules`/`reportingProjections` yang sudah ada: setiap modul mendeklarasikan array `ModuleDescriptor.searchSources` **di `module.ts`-nya sendiri**, dan `site_search` mengagregasi lewat `listModules()` (`site-search/domain/search-source-registry.ts`). `MODULE_CONTRACT_VERSION` naik `2.1.0` → `2.2.0` (MINOR, murni aditif — setiap `module.ts` yang tidak punya `searchSources` tetap valid).
+So the seam is a **descriptor list** — the existing `dataLifecycle`/`sodRules`/`reportingProjections` pattern: each module declares a `ModuleDescriptor.searchSources` array **in its own `module.ts`**, and `site_search` aggregates through `listModules()` (`site-search/domain/search-source-registry.ts`). `MODULE_CONTRACT_VERSION` goes `2.1.0` → `2.2.0` (MINOR, purely additive — every `module.ts` without `searchSources` stays valid).
 
-**`SearchSourceDescriptor` adalah DATA MURNI, bukan extractor executable.** Descriptor mendeklarasikan, sebagai konstanta reviewed build-time: `resourceType`, tabel/kolom sumber, template URL publik, **publication filter deklaratif** (equals/notNull/isNull/timeReached), `weight` relevansi, dan `privacyClassification`. Engine generik (`application/search-index-engine.ts`) membangun query BER-PARAMETER dari descriptor — nilai selalu bound parameter; hanya IDENTIFIER (nama tabel/kolom) yang diinterpolasi, dan itu divalidasi ketat (`^[a-z][a-z0-9_]*$`, tabel harus berprefiks `awcms_`) — **preseden persis `data_lifecycle`'s generic executionMode**. Gate CI-nya `bun run site-search:sources:check`, di rantai `bun run check`.
+**`SearchSourceDescriptor` is PURE DATA, not an executable extractor.** A descriptor declares, as build-time reviewed constants: `resourceType`, the source table/columns, the public URL template, a **declarative publication filter** (equals/notNull/isNull/timeReached), a relevance `weight`, and `privacyClassification`. A generic engine (`application/search-index-engine.ts`) builds PARAMETERISED queries from the descriptor — values are always bound parameters; only IDENTIFIERS (table/column names) are interpolated, and those are validated strictly (`^[a-z][a-z0-9_]*$`, tables must be prefixed `awcms_`) — **exactly the precedent of `data_lifecycle`'s generic executionMode**. Its CI gate is `bun run site-search:sources:check`, in the `bun run check` chain.
 
-### 4. Model indeks — proyeksi tenant-scoped, reconcile deterministik
+### 4. The index model — a tenant-scoped projection, deterministic reconcile
 
-- **Tabel indeks** `awcms_site_search_documents` (RLS FORCE, satu doc per `(tenant, source_key, resource_id, locale)`) dengan `search_vector tsvector GENERATED ALWAYS ... STORED` (`setweight` title=A/summary=B/tags=C/body=D) + index GIN. `pg_trgm` GIN pada `title` **hanya** untuk suggestion typeahead.
-- **reconcile** deterministik: upsert semua doc publik saat ini (skip bila `source_checksum` cocok), hapus doc indeks yang resource-nya tidak lagi memenuhi predikat sumber. Idempoten: menjalankan ulang saat sinkron = no-op.
-- **rebuild** penuh idempoten (DELETE doc tenant → reconcile; hasil akhir identik apa pun state awal).
-- **reindex satu-resource** (`reindexSearchResource`) — primitive event-shaped, pertahanan stale-leakage: archive/delete/unpublish menghapus dari hasil publik tanpa sisa.
-- **Event-driven**: `blog_content` di basis ini menerbitkan lifecycle sebagai **log line**, bukan event outbox nyata. Maka **reconcile terjadwal** (`bun run site-search:reconcile`) adalah backbone deterministik hari ini; `reindexSearchResource` adalah seam yang aktif begitu sebuah modul konten menerbitkan event lifecycle nyata.
+- **Index table** `awcms_site_search_documents` (RLS FORCE, one doc per `(tenant, source_key, resource_id, locale)`) with `search_vector tsvector GENERATED ALWAYS ... STORED` (`setweight` title=A/summary=B/tags=C/body=D) + a GIN index. A `pg_trgm` GIN index on `title` is **only** for typeahead suggestions.
+- **reconcile** is deterministic: upsert every currently public doc (skipped when `source_checksum` matches), delete index docs whose resource no longer satisfies the source predicate. Idempotent: re-running while in sync is a no-op.
+- **rebuild** is a fully idempotent rebuild (DELETE the tenant's docs → reconcile; the end state is identical whatever the starting state).
+- **single-resource reindex** (`reindexSearchResource`) — an event-shaped primitive, the defence against stale leakage: archive/delete/unpublish removes it from public results with nothing left behind.
+- **Event-driven**: in this base, `blog_content` publishes lifecycle as a **log line**, not a real outbox event. So **scheduled reconcile** (`bun run site-search:reconcile`) is the deterministic backbone today; `reindexSearchResource` is the seam that goes live the moment a content module publishes real lifecycle events.
 
-### 5. Kontrak query publik + suggestion
+### 5. The public query + suggestion contract
 
-| Aspek                   | Invariant                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tenant/locale scope** | Setiap query dibatasi `tenant_id` (RLS FORCE + predikat) DAN `locale`.                                                                |
-| **Publication-state**   | Difilter di boundary sumber→indeks; query indeks **bukan** sumber otorisasi. Tidak ada draft/preview/private/deleted di hasil.        |
-| **Normalisasi query**   | Trim, batas panjang min/max, kolaps whitespace, strip control char, lalu ke `websearch_to_tsquery('simple', $1)` sebagai bound param. |
-| **Snippet/highlight**   | `ts_headline` dengan sentinel non-HTML → escape HTML seluruhnya → sentinel diganti `<mark>` — markup dari konten tidak pernah lolos.  |
-| **Pagination**          | Keyset cursor `(rank, id)`, `LIMIT` dibatasi.                                                                                         |
-| **Anonim**              | Rate limit per-IP, batas panjang query, result caps.                                                                                  |
-| **Cache key**           | `buildSearchCacheKey` menolak menyusun key tanpa `tenant_id`+`locale`+`query`-hash.                                                   |
+| Aspect                  | Invariant                                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tenant/locale scope** | Every query is constrained by `tenant_id` (RLS FORCE + predicate) AND `locale`.                                                                     |
+| **Publication state**   | Filtered at the source→index boundary; the index query is **not** an authorization source. No drafts/previews/private/deleted in results.           |
+| **Query normalisation** | Trim, min/max length bounds, whitespace collapse, control-character stripping, then into `websearch_to_tsquery('simple', $1)` as a bound param.     |
+| **Snippet/highlight**   | `ts_headline` with a non-HTML sentinel → HTML-escape the whole thing → replace the sentinel with `<mark>` — markup from content never gets through. |
+| **Pagination**          | Keyset cursor `(rank, id)`, bounded `LIMIT`.                                                                                                        |
+| **Anonymous**           | Per-IP rate limit, query length bounds, result caps.                                                                                                |
+| **Cache key**           | `buildSearchCacheKey` refuses to assemble a key without `tenant_id`+`locale`+`query`-hash.                                                          |
 
-### 6. Konfigurasi tenant, admin, retensi/audit
+### 6. Tenant configuration, admin, retention/audit
 
-- **Config tenant** (`awcms_site_search_settings`, RLS FORCE, 1 baris/tenant, CHECK-bounded): `enabled`, `enabled_resource_types`, `result_limit`, `min_query_length`, `suggestions_enabled`, `suggestion_limit`, `analytics_enabled`.
-- **Permission** (`sql/065`): `site_search.index.{read,reconcile,rebuild}`, `site_search.settings.{read,update}`, `site_search.diagnostics.read`. `rebuild` HIGH-RISK; `reconcile` **sengaja tidak** high-risk (sinkronisasi proyeksi yang sepenuhnya regenerable) tetapi tetap `Idempotency-Key`-ed + teraudit. `reconcile` adalah anggota BARU union `AccessAction`.
-- **Retensi:** `awcms_site_search_query_log` dan `awcms_site_search_index_failures` didaftarkan sebagai `HighVolumeTableDescriptor` `generic` (ADR-0037). Tabel indeks sendiri **tidak** — ia di-rebuild, bukan di-purge.
-- **Query logging** opt-in + minimized: hanya sha256 query ternormalisasi + panjang + locale + jumlah hasil. Query mentah tidak pernah disimpan.
+- **Tenant config** (`awcms_site_search_settings`, RLS FORCE, 1 row/tenant, CHECK-bounded): `enabled`, `enabled_resource_types`, `result_limit`, `min_query_length`, `suggestions_enabled`, `suggestion_limit`, `analytics_enabled`.
+- **Permissions** (`sql/065`): `site_search.index.{read,reconcile,rebuild}`, `site_search.settings.{read,update}`, `site_search.diagnostics.read`. `rebuild` is HIGH-RISK; `reconcile` is **deliberately not** high-risk (a projection sync that is entirely regenerable) but is still `Idempotency-Key`-ed + audited. `reconcile` is a NEW member of the `AccessAction` union.
+- **Retention:** `awcms_site_search_query_log` and `awcms_site_search_index_failures` are registered as `generic` `HighVolumeTableDescriptor`s (ADR-0037). The index table itself is **not** — it is rebuilt, not purged.
+- **Query logging** is opt-in + minimised: only the sha256 of the normalised query + length + locale + result count. The raw query is never stored.
 
-### 7. Adaptasi khusus awcms (bukan kelalaian port)
+### 7. awcms-specific adaptations (not port oversights)
 
-| Area                | awcms-micro                     | Di sini                                                                                                                                                                                                                                |
-| ------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| URL konten publik   | host-resolved `/news/:slug`     | `/blog/:tenantCode/:slug` (ADR-0009) — descriptor mendapat placeholder `:tenantCode` yang di-resolve engine sekali per run dari `awcms_tenants.tenant_code`, lalu di-encode                                                            |
-| Typeahead `/search` | inline `<script>` ARIA combobox | **tidak diport** — CSP basis ini tidak punya `'unsafe-inline'` untuk script dan halaman publik di sini adalah APIRoute HTML tanpa langkah bundling. Halaman ship core no-JS; `/suggest` tetap tersedia untuk client bundled milik tema |
-| Label halaman       | gettext `createTranslator`      | `DEFAULT_SEARCH_PAGE_LABELS` (basis ini tidak punya runtime katalog i18n) — tetap parameter agar penambahan i18n kelak jadi perubahan caller                                                                                           |
-| Gate registry       | hanya unit test                 | ditambah CLI gate `site-search:sources:check` di rantai `check` (konvensi basis ini untuk setiap registry descriptor)                                                                                                                  |
-| Blog PAGES          | tidak diindeks (tak ada rute)   | sama — tidak diindeks; halaman tidak punya rute publik di basis ini, jadi hit-nya akan 404                                                                                                                                             |
+| Area                | awcms-micro                     | Here                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public content URL  | host-resolved `/news/:slug`     | `/blog/:tenantCode/:slug` (ADR-0009) — the descriptor gets a `:tenantCode` placeholder that the engine resolves once per run from `awcms_tenants.tenant_code`, then encodes                                                        |
+| `/search` typeahead | inline `<script>` ARIA combobox | **not ported** — this base's CSP has no `'unsafe-inline'` for scripts and the public page here is an HTML APIRoute with no bundling step. The page ships core no-JS; `/suggest` remains available for a theme's own bundled client |
+| Page labels         | gettext `createTranslator`      | `DEFAULT_SEARCH_PAGE_LABELS` (this base has no i18n catalogue runtime) — kept as a parameter so that adding i18n later is a caller change                                                                                          |
+| Registry gate       | unit test only                  | plus the CLI gate `site-search:sources:check` in the `check` chain (this base's convention for every descriptor registry)                                                                                                          |
+| Blog PAGES          | not indexed (no route)          | same — not indexed; pages have no public route in this base, so a hit would 404                                                                                                                                                    |
 
-## Threat model (bagian dari acceptance)
+## Threat model (part of acceptance)
 
-| Ancaman                         | Kontrol                                                                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **SQL injection**               | Query & filter selalu bound parameter; descriptor IDENTIFIER divalidasi ketat sebelum interpolasi.                      |
-| **XSS lewat snippet**           | `ts_headline` sentinel non-HTML → escape HTML seluruh string → ganti sentinel `<mark>`.                                 |
-| **Draft/private leakage**       | Publication-filter deklaratif ditegakkan di boundary sumber→indeks; reindex menghapus yang jadi non-publik.             |
-| **Cross-tenant / cross-locale** | RLS FORCE + predikat `tenant_id`/`locale` di setiap query; cache key wajib memuat tenant+locale; uji isolasi integrasi. |
-| **Query abuse**                 | Rate limit per-IP, batas panjang query, result caps, index bounded (LIMIT + keyset).                                    |
-| **Open redirect / path escape** | `:tenantCode`/`:slug`/`:id` selalu `encodeURIComponent` saat index time; template wajib path absolut tanpa skema.       |
-| **Cache poisoning**             | `buildSearchCacheKey` tenant+locale+query-hash — menolak key tanpa komponen isolasi.                                    |
-| **Search sebagai authz source** | Indeks HANYA proyeksi konten publik; sumber kebenaran visibilitas tetap modul konten.                                   |
+| Threat                          | Control                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **SQL injection**               | Queries & filters are always bound parameters; descriptor IDENTIFIERS are validated strictly before interpolation.               |
+| **XSS via snippets**            | `ts_headline` non-HTML sentinel → HTML-escape the whole string → replace the sentinel with `<mark>`.                             |
+| **Draft/private leakage**       | The declarative publication filter is enforced at the source→index boundary; reindex removes anything that became non-public.    |
+| **Cross-tenant / cross-locale** | RLS FORCE + `tenant_id`/`locale` predicates on every query; the cache key must carry tenant+locale; integration isolation tests. |
+| **Query abuse**                 | Per-IP rate limit, query length bounds, result caps, bounded index (LIMIT + keyset).                                             |
+| **Open redirect / path escape** | `:tenantCode`/`:slug`/`:id` are always `encodeURIComponent`d at index time; templates must be absolute paths without a scheme.   |
+| **Cache poisoning**             | `buildSearchCacheKey` is tenant+locale+query-hash — it refuses a key without the isolation components.                           |
+| **Search as an authz source**   | The index is ONLY a projection of public content; the source of truth for visibility remains the content module.                 |
 
-## Out of scope (ditegakkan)
+## Out of scope (enforced)
 
-Layanan search SaaS/Elasticsearch/OpenSearch, vector/semantic AI ranking, cross-tenant global search, mengindeks data privat/admin bisnis, dan memakai proyeksi search sebagai sumber otorisasi — **tidak** diadmisi. PostgreSQL FTS adalah default sampai ada bukti kuat ia tidak cukup.
+SaaS search services/Elasticsearch/OpenSearch, vector/semantic AI ranking, cross-tenant global search, indexing private/business-admin data, and using the search projection as an authorization source — are **not** admitted. PostgreSQL FTS is the default until there is strong evidence it is not enough.
 
-## Konsekuensi
+## Consequences
 
-**Positif.** Kepemilikan indeks pencarian eksplisit; satu otoritas relevansi/snippet/rebuild; tipe konten baru menyumbang lewat satu descriptor tanpa `site_search` mengenal satu pun secara spesifik. DAG aman. Publication-state, tenant/locale isolation, dan snippet-escaping dikunci sebagai kontrak sejak hari nol. PostgreSQL FTS lokal = offline-lan-safe.
+**Positive.** Search index ownership is explicit; a single authority for relevance/snippets/rebuild; a new content type contributes through one descriptor without `site_search` knowing any of them specifically. The DAG stays safe. Publication state, tenant/locale isolation, and snippet escaping are locked in as contracts from day zero. Local PostgreSQL FTS = offline-lan-safe.
 
-**Negatif / trade-off yang diterima.** Indeks adalah proyeksi kedua (di atas `search_vector` per-modul yang sudah ada) → butuh reconcile/rebuild untuk konsistensi; biaya disengaja demi pencarian lintas-konten yang seragam. Karena `blog_content` menerbitkan lifecycle sebagai log line, indexing incremental low-latency menunggu event nyata; sampai itu, reconcile terjadwal adalah backbone. Halaman `/search` ship tanpa typeahead sampai ada tema dengan client bundled.
+**Negative / accepted trade-offs.** The index is a second projection (on top of the existing per-module `search_vector`) → it needs reconcile/rebuild for consistency; a deliberate cost in exchange for uniform cross-content search. Because `blog_content` publishes lifecycle as a log line, low-latency incremental indexing waits on real events; until then, scheduled reconcile is the backbone. The `/search` page ships without typeahead until there is a theme with a bundled client.
 
-**Netral.** `site_search` menyentuh permukaan yang sama dengan `seo_distribution` (URL publik) dan `visitor_analytics` (query publik) — koordinasi lewat descriptor/log, bukan tabel bersama.
+**Neutral.** `site_search` touches the same surfaces as `seo_distribution` (public URLs) and `visitor_analytics` (public queries) — coordination goes through descriptors/logs, not shared tables.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Memodelkan `search_source` sebagai capability `provides`.** Ditolak: >1 penyedia = `capability_provider_conflict`; descriptor-list `listModules()` adalah seam yang benar untuk banyak penyedia.
-- **Extractor executable per modul, di-wire di composition root gaya `seo_facts`.** Ditolak untuk source-extraction: descriptor data murni + engine generik reviewed lebih sempit dan lebih mudah di-audit.
-- **Menyatukan pencarian ke `blog_content` yang sudah ada.** Ditolak: pencarian lintas-konten bukan milik satu modul konten; agregator netral adalah tempat yang benar.
-- **Layanan search eksternal (Elastic/OpenSearch/vector).** Ditolak: tidak ada bukti PostgreSQL FTS tidak cukup untuk scope website.
-- **Menyimpan URL relatif tanpa `:tenantCode` dan menambahkan prefiks saat query.** Ditolak: URL akan benar hanya untuk pemanggil yang ingat menambahkannya, dan checksum dokumen tidak akan menangkap perubahan `tenant_code` — menyimpan URL final membuat rename tenant otomatis meng-update dokumen pada reconcile berikutnya.
+- **Modelling `search_source` as a `provides` capability.** Rejected: >1 provider = `capability_provider_conflict`; a `listModules()` descriptor list is the right seam for many providers.
+- **An executable extractor per module, wired at the composition root in the `seo_facts` style.** Rejected for source extraction: a pure data descriptor + a reviewed generic engine is narrower and easier to audit.
+- **Folding search into the existing `blog_content`.** Rejected: cross-content search does not belong to one content module; a neutral aggregator is the right place.
+- **An external search service (Elastic/OpenSearch/vector).** Rejected: there is no evidence PostgreSQL FTS is insufficient for the website scope.
+- **Storing relative URLs without `:tenantCode` and adding the prefix at query time.** Rejected: the URL would be correct only for callers that remember to add it, and the document checksum would not catch a `tenant_code` change — storing the final URL makes a tenant rename automatically update the documents on the next reconcile.

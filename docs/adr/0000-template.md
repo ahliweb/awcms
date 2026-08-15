@@ -1,25 +1,27 @@
-# ADR-NNNN — Judul keputusan
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0000-template.id.md)
+
+# ADR-NNNN — Decision title
 
 - **Status:** Proposed | Accepted | Deprecated | Superseded by ADR-XXXX
-- **Tanggal:** YYYY-MM-DD
-- **Pengambil keputusan:** <maintainer>
-- **Terkait:** <doc/ADR/issue terkait, termasuk ADR awcms bila relevan>
+- **Date:** YYYY-MM-DD
+- **Decision maker:** <maintainer>
+- **Related:** <related doc/ADR/issue, including an awcms ADR when relevant>
 
-## Konteks
+## Context
 
-Apa masalah/kekuatan yang mendorong keputusan ini? Fakta, batasan, dan asumsi yang relevan.
+What problem/forces drive this decision? The relevant facts, constraints, and assumptions.
 
-## Keputusan
+## Decision
 
-Keputusan yang diambil, dinyatakan tegas ("Kami memutuskan untuk …").
+The decision taken, stated firmly ("We decided to …").
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** manfaat yang diperoleh.
-- **Negatif / trade-off:** biaya, batasan, atau risiko yang diterima.
-- **Netral:** implikasi lain yang perlu diketahui.
+- **Positive:** the benefits gained.
+- **Negative / trade-off:** the costs, limits, or risks accepted.
+- **Neutral:** other implications worth knowing.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Alternatif A** — alasan tidak dipilih.
-- **Alternatif B** — alasan tidak dipilih.
+- **Alternative A** — why it was not chosen.
+- **Alternative B** — why it was not chosen.

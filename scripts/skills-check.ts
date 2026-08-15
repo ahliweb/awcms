@@ -110,7 +110,7 @@ const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Reference targets `scripts/README.md` §Ditunda declares as legitimately
+ * Reference targets `scripts/README.md` §Deferred declares as legitimately
  * absent, which that section **explicitly permits** skills to name:
  *
  * > Nama-nama ini boleh disebut sebagai **target** di `docs/awcms/` dan
@@ -137,7 +137,7 @@ const DEFERRED_TARGET_PREFIXES: readonly string[] = [
 
 export type SkillProblem = { skill: string; message: string };
 
-/** True when a `bun run` target is real, or declared deferred by `scripts/README.md` §Ditunda. */
+/** True when a `bun run` target is real, or declared deferred by `scripts/README.md` §Deferred. */
 export function isKnownRunTarget(
   target: string,
   packageScripts: ReadonlySet<string>,
@@ -187,7 +187,7 @@ export function checkCitedRunTargets(
       skill,
       message:
         `tells the reader to run \`bun run ${target}\`, which is not in package.json and is not ` +
-        "listed as a deferred target in `scripts/README.md` §Ditunda. Name the real mechanism, or " +
+        "listed as a deferred target in `scripts/README.md` §Deferred. Name the real mechanism, or " +
         "write the placeholder so it cannot be mistaken for a command."
     }));
 }

@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Module Management
 
 Database-backed, tenant-aware module registry. Generic infrastructure for

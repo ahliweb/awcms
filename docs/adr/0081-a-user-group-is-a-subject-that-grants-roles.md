@@ -1,146 +1,146 @@
-# ADR-0081 — Sebuah grup pengguna adalah SUBJEK, dan ia memberi PERAN
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0081-a-user-group-is-a-subject-that-grants-roles.id.md)
 
-- **Status:** Diterima (2026-08-10).
-- **Konteks:** Issue #423 Gelombang 3 PR 3.5 (penutup gelombang). Migrasi
-  `sql/104` (skema) dan `sql/105` (permission).
-- **Membangun di atas:** [ADR-0078](0078-a-grant-carries-its-own-scope.md)
-  (`subject_type` sengaja menerima satu nilai supaya penambahan ini bukan
-  backfill), [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)
-  (satu sumber grant — tanpa itu, PR ini harus menyentuh tujuh pembaca), dan
+# ADR-0081 — A user group is a SUBJECT, and it grants ROLES
+
+- **Status:** Accepted (2026-08-10).
+- **Context:** Issue #423 Wave 3 PR 3.5 (the wave's closer). Migrations
+  `sql/104` (schema) and `sql/105` (permissions).
+- **Builds on:** [ADR-0078](0078-a-grant-carries-its-own-scope.md)
+  (`subject_type` deliberately accepts a single value so that this addition is not
+  a backfill), [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)
+  (one grant source — without it, this PR would have to touch seven readers), and
   [ADR-0080](0080-a-scoped-grant-covers-only-what-its-role-confers.md).
 
-## Keputusan
+## Decision
 
-`awcms_user_groups` + `awcms_user_group_members`, dan
-`awcms_access_policies.subject_type` kini menerima `'user_group'` dengan kolom
-subjek ber-XOR. Sebuah grup memegang grant persis seperti orang memegangnya.
+`awcms_user_groups` + `awcms_user_group_members`, and
+`awcms_access_policies.subject_type` now accepts `'user_group'` with XOR'd subject
+columns. A group holds a grant exactly the way a person holds one.
 
-Keanggotaan menjangkau setiap pembaca lewat SATU cabang tambahan di
+Membership reaches every reader through ONE additional branch in
 `activeRoleGrants`.
 
-## Mode kegagalan senyap yang ditolak desain ini
+## The silent failure mode this design rejects
 
-Sebuah grup bisa saja dibangun untuk memberi **permission key** langsung. Dari
-luar tampilannya identik, dan salahnya tidak akan terlihat siapa pun:
+A group could just as well have been built to grant **permission keys** directly.
+From the outside it would look identical, and its wrongness would be visible to
+nobody:
 
-Subjek akan memegang kunci-kuncinya sementara `subject.roles` tetap KOSONG. Maka
-kebijakan tenant `subject.roles in ["editor"]` diam-diam berhenti cocok.
-Kebijakan **allow** yang berhenti cocok adalah penyempitan — aman, dan ada yang
-menyadarinya. Kebijakan **deny** yang berhenti cocok adalah **INERT**, yaitu
-pelebaran, dan tak ada yang mengamatinya. SoD ikut buta dengan cara yang sama:
-faktanya dikunci pada grant peran, jadi grant turunan-grup tidak akan membawa
-konflik — tepat untuk grant yang keberadaan fitur grup dimaksudkan
-menciptakannya.
+The subject would hold the keys while `subject.roles` stayed EMPTY. So a tenant
+policy `subject.roles in ["editor"]` silently stops matching. An **allow** policy
+that stops matching is a narrowing — safe, and somebody notices. A **deny** policy
+that stops matching is **INERT**, that is a widening, and nobody observes it. SoD
+goes blind the same way: its facts are keyed on role grants, so a group-derived
+grant would not carry a conflict — exactly for the grants the group feature exists
+to create.
 
-Karena grant mendarat di `awcms_access_policies`, semua itu tidak bisa terjadi:
-`subject.roles`, `fetchGrantedPermissionKeys`, kedua resolver SoD, daftar admin,
-dan guard administrator-terakhir mendapatkannya sekaligus.
+Because the grant lands in `awcms_access_policies`, none of that can happen:
+`subject.roles`, `fetchGrantedPermissionKeys`, both SoD resolvers, the admin
+lists, and the last-administrator guard all get it at once.
 
-## Gerbang yang direncanakan tidak dibangun, dan itu bukan pemotongan
+## The planned gate was not built, and that is not a shortcut
 
-Rencana program meminta gerbang baru `access:sod-fact-parity:check` yang
-mewajibkan kedua resolver merujuk satu konstanta `grantSourceTables()` bersama.
+The programme plan called for a new gate `access:sod-fact-parity:check` requiring
+both resolvers to reference one shared `grantSourceTables()` constant.
 
-Ia tidak dibangun karena **ADR-0079 sudah menutup celahnya lebih rapat**. Para
-pembaca tidak lagi menyebut tabel grant sama sekali — mereka menyisipkan
-`activeRoleGrants`, dan `access:grant-readers:check` menolak berkas mana pun yang
-merakit join-nya sendiri. Gerbang yang mewajibkan dua resolver merujuk konstanta
-yang sama akan menjadi pemeriksaan yang lebih lemah dari yang sudah berlaku:
-"merujuk konstanta yang sama" bisa benar sementara kedua query berbeda, sedangkan
-"memakai fragmen yang sama" tidak bisa.
+It was not built because **ADR-0079 already closed the gap more tightly**. The
+readers no longer name the grant tables at all — they inline `activeRoleGrants`,
+and `access:grant-readers:check` rejects any file that assembles its own join. A
+gate requiring two resolvers to reference the same constant would be a weaker
+check than the one already in force: "references the same constant" can be true
+while the two queries differ, whereas "uses the same fragment" cannot.
 
-Yang menggantikannya sudah ada dan diperluas di PR ini:
-`tests/grant-source-parity.test.ts` (statis: tiap pembaca menyisipkan fragmennya)
-dan `tests/integration/user-groups.integration.test.ts` (perilaku: peran
-turunan-grup sampai ke SETIAP pembaca, `subject.roles` dan SoD termasuk).
+What replaces it already exists and is extended in this PR:
+`tests/grant-source-parity.test.ts` (static: every reader inlines the fragment)
+and `tests/integration/user-groups.integration.test.ts` (behavioural: a
+group-derived role reaches EVERY reader, `subject.roles` and SoD included).
 
-## `external_id`, bukan `group_code`, sebagai kunci sinkron
+## `external_id`, not `group_code`, as the sync key
 
-Rename di IdP tidak boleh meng-orphan grup. `group_code` adalah label manusia dan
-manusia mengganti nama; `external_id` adalah nama grup itu menurut direktori dan
-ia selamat melewati rename.
+A rename in the IdP must not orphan a group. `group_code` is a human label and
+humans rename things; `external_id` is the group's name according to the
+directory, and it survives a rename.
 
-**SCIM tidak dibangun.** Yang dibangun adalah bentuk yang tidak perlu dimigrasi
-saat ia dibangun, plus PENOLAKANNYA: grup `source = 'scim'` menolak rename dan
-mutasi keanggotaan dengan `409 GROUP_EXTERNALLY_MANAGED`. Suntingan lokal yang
-diam-diam dibatalkan sinkron berikutnya lebih buruk daripada suntingan yang tak
-pernah diterima — admin yang tidak bisa melihat itu terjadi akan mengulanginya.
+**SCIM was not built.** What was built is the shape that will not need migrating
+when it is built, plus its REFUSAL: a group with `source = 'scim'` rejects renames
+and membership mutations with `409 GROUP_EXTERNALLY_MANAGED`. A local edit that is
+silently undone by the next sync is worse than an edit that was never accepted —
+an admin who cannot see it happen will do it again.
 
-`source` juga tidak diterima dari request. Pemanggil yang bisa menyatakan sebuah
-grup `scim` sedang menyatakannya tak-bisa-disunting lewat satu-satunya permukaan
-yang ada, tanpa direktori di belakangnya untuk menyuntingnya.
+`source` is also not accepted from the request. A caller who can declare a group
+`scim` is declaring it un-editable through the only surface that exists, with no
+directory behind it to edit it.
 
-## Kenapa memberi grup sebuah PERAN memakai `access_control.assign`
+## Why granting a group a ROLE uses `access_control.assign`
 
-Dua otoritas berbeda, dan menyatukannya adalah kesalahannya.
+Two different authorities, and merging them is the mistake.
 
-`user_groups.assign` memasukkan orang KE DALAM grup. `access_control.assign` —
-yang sudah ada dan sudah berarti "membagikan peran" — adalah yang memberi grup
-perannya, lewat endpoint yang sama dengan yang memberi orang perannya.
+`user_groups.assign` puts people INTO a group. `access_control.assign` — which
+already exists and already means "hand out a role" — is what grants a group its
+role, through the same endpoint that grants a person theirs.
 
-Membaliknya adalah jalur eskalasi tanpa nama yang jelas: administrator grup yang
-juga bisa memberi peran kepada grupnya sendiri bisa memberi `owner` kepada grup
-yang ia anggotai. Karena itu `assignRoleToGroup` juga menolak peran `is_system`,
-sama seperti jalur per-orang — dan di sini penolakan itu lebih penting, karena
-grant kepada grup menjangkau juga setiap orang yang ditambahkan NANTI.
+Inverting it is an escalation path with no clear name: a group administrator who
+can also grant roles to their own group can grant `owner` to a group they belong
+to. That is also why `assignRoleToGroup` rejects `is_system` roles, just like the
+per-person path — and here that refusal matters more, because a grant to a group
+also reaches everyone added LATER.
 
-## Tak ada `delete`
+## No `delete`
 
-Memensiunkan grup bukan satu keputusan melainkan tiga: apa yang terjadi pada
-grant yang dipegangnya, pada keanggotaannya, dan pada `external_id` yang besok
-akan disodorkan direktori lagi. Mengirim `delete` sebelum ketiganya dijawab
-akan menelantarkan grant (peran yang tak dipegang siapa pun menurut baris yang
-masih menyatakan sebaliknya) atau menghancurkan satu-satunya catatan siapa
-memegang apa.
+Retiring a group is not one decision but three: what happens to the grants it
+holds, to its memberships, and to the `external_id` the directory will present
+again tomorrow. Shipping `delete` before all three are answered would either
+orphan the grants (a role nobody holds according to a row still claiming
+otherwise) or destroy the only record of who held what.
 
-Soft-delete SUDAH punya arti yang benar — `deleted_at IS NULL` ada di cabang
-grup `activeRoleGrants`, jadi grup yang ditandai terhapus memberi NOL — tetapi
-permukaan yang menyetelnya menunggu keputusan itu.
+Soft-delete ALREADY has the right meaning — `deleted_at IS NULL` is in the group
+branch of `activeRoleGrants`, so a group marked deleted grants ZERO — but the
+surface that sets it waits on that decision.
 
-## Mencabut NOT NULL dari tabel otorisasi hidup
+## Dropping NOT NULL from a live authorization table
 
-Kata-katanya terdengar persis seperti perubahan yang DITOLAK ADR-0078 terhadap
-`awcms_access_assignments`, jadi perbedaannya layak ditulis: di sana yang
-dicabut adalah **indeks unik**, yang salah ke arah **MEMBOLEHKAN** (dua baris di
-tempat satu dulu diizinkan) tanpa satu pun gerbang memerah.
+The words sound exactly like the change ADR-0078 REJECTED against
+`awcms_access_assignments`, so the difference is worth writing down: there what was
+dropped was a **unique index**, which is wrong in the **PERMITTING** direction (two
+rows where one used to be allowed) with not one gate going red.
 
-Di sini `NOT NULL` DIGANTI oleh CHECK yang lebih ketat di blok statement yang
-sama: baris tanpa subjek, dengan dua subjek, atau dengan subjek yang tidak sesuai
-diskriminatornya sendiri kini DITOLAK, padahal sebelumnya ia sekadar tidak bisa
-direpresentasikan.
+Here `NOT NULL` is REPLACED by a stricter CHECK in the same statement block: a row
+with no subject, with two subjects, or with a subject that does not match its own
+discriminator is now REJECTED, where previously it merely could not be
+represented.
 
-Satu konsekuensi yang mudah terlewat: indeks unik parsial atas grant aktif harus
-mendapat saudara. `NULL` tidak sama dengan `NULL` di indeks unik, jadi indeks
-lama berhenti membatasi apa pun begitu `tenant_user_id` boleh NULL — sebuah grup
-akan bisa memegang peran yang sama di scope yang sama berapa kali pun.
+One consequence that is easy to miss: the partial unique index over active grants
+must get a sibling. `NULL` does not equal `NULL` in a unique index, so the old
+index stops constraining anything the moment `tenant_user_id` may be NULL — a group
+would be able to hold the same role in the same scope any number of times.
 
-## Yang DITOLAK
+## What was REJECTED
 
-1. **Grup memberi permission langsung** — mode kegagalan senyap di atas.
-2. **Permission `user_groups.grant` tersendiri** — jalur eskalasi di atas.
-3. **`delete` untuk grup** — tiga keputusan yang belum dijawab.
-4. **Gerbang `access:sod-fact-parity:check`** — digantikan oleh mekanisme yang
-   lebih kuat, bukan dilewati.
-5. **`UNION` alih-alih `UNION ALL`** di cabang grup — subjek bisa memegang peran
-   yang sama langsung DAN lewat grup, dan tiap konsumen sudah men-dedupe apa yang
-   perlu (`SELECT DISTINCT`, `EXISTS`). Membayar sort di jalur otorisasi untuk
-   menghemat mereka nol adalah membayar di tempat yang paling mahal.
-6. **Menerima `source` dari request** — lihat di atas.
-7. **Mengaudit anggota grup saat grant peran diberikan** — daftar itu benar saat
-   ditulis dan berhenti benar begitu ada yang bergabung. Yang diaudit adalah
-   GRUP-nya; siapa yang terjangkau adalah pertanyaan keanggotaan, dan keanggotaan
-   punya jejak auditnya sendiri.
+1. **Groups granting permissions directly** — the silent failure mode above.
+2. **A separate `user_groups.grant` permission** — the escalation path above.
+3. **`delete` for groups** — three unanswered decisions.
+4. **The `access:sod-fact-parity:check` gate** — replaced by a stronger mechanism,
+   not skipped.
+5. **`UNION` instead of `UNION ALL`** in the group branch — a subject can hold the
+   same role directly AND through a group, and every consumer already dedupes what
+   it needs to (`SELECT DISTINCT`, `EXISTS`). Paying for a sort on the
+   authorization path to save them nothing is paying in the most expensive place.
+6. **Accepting `source` from the request** — see above.
+7. **Auditing a group's members when a role grant is made** — that list is correct
+   when written and stops being correct the moment somebody joins. What is audited
+   is the GROUP; who is reached is a membership question, and membership has its
+   own audit trail.
 
-## Konsekuensi
+## Consequences
 
-- `activeRoleGrants` kini `UNION ALL` dua cabang. Ia tetap SATU query, dan
-  indeks `awcms_user_group_members_subject_idx` ada khusus untuk join itu.
-- `GRANT_TABLES` gerbang pembaca bertambah dua nama: mengubah siapa yang ada di
-  sebuah grup adalah mengubah otorisasi, jadi berkas yang melakukannya harus
-  tercatat.
-- Dua entri baru di `BOUNDED_BY_DESIGN` menaikkan plafonnya dari 3 ke 5. Plafon
-  itu ada untuk memaksa percakapan, dan percakapannya terjadi: keempat entri
-  adalah SATU argumen dalam dua paruh — tabel yang barisnya adalah grant
-  buatan administrator, plus tabel yang dibatasi olehnya. Kenaikan berikutnya
-  harus lebih sulit dari yang ini.
-- Gelombang 3 selesai.
+- `activeRoleGrants` is now a `UNION ALL` of two branches. It remains ONE query,
+  and the index `awcms_user_group_members_subject_idx` exists specifically for that
+  join.
+- The reader gate's `GRANT_TABLES` gains two names: changing who is in a group is
+  changing authorization, so a file that does it must be on the record.
+- Two new entries in `BOUNDED_BY_DESIGN` raise its ceiling from 3 to 5. That
+  ceiling exists to force a conversation, and the conversation happened: all four
+  entries are ONE argument in two halves — the table whose rows are
+  administrator-made grants, plus the table bounded by it. The next raise must be
+  harder than this one.
+- Wave 3 is done.

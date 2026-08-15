@@ -1,10 +1,12 @@
-# Bagian 6 — GitHub Issues Detail (Base Generik)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](06_github_issues_detail.id.md)
 
-AWCMS adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** — base modular monolith reusable. Backlog di dokumen ini **berfokus pada modul generik/fondasi** yang menjadi bagian AWCMS sendiri (Foundation, Tenant/Identity/Profile, Sync Storage, UI Experience, Management Reporting, Observability/Pooling/Security Readiness, Workflow Approval, Setup/Deployment). Modul domain (ERP: katalog produk, gudang, pajak/Coretax, akuntansi; website/e-commerce; konten; CRM; AI business analyst; dan sejenisnya) ditambahkan **langsung di `src/modules/` template ini** ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) sebagai modul bertipe `domain` — bukan di aplikasi turunan terpisah. Lihat `docs/awcms/README.md`.
+# Part 6 — GitHub Issues Detail (Generic Base)
 
-Nomor epic mengikuti riwayat backlog asli (epic domain sudah dihapus, sehingga ada celah nomor — ini disengaja, bukan kesalahan, agar traceability terhadap issue GitHub yang sudah dibuat tetap valid).
+AWCMS is the **AWCMS-family ERP/back-office template that is used directly** — a reusable modular monolith base. The backlog in this document **focuses on the generic/foundation modules** that are part of AWCMS itself (Foundation, Tenant/Identity/Profile, Sync Storage, UI Experience, Management Reporting, Observability/Pooling/Security Readiness, Workflow Approval, Setup/Deployment). Domain modules (ERP: product catalogue, warehouse, tax/Coretax, accounting; website/e-commerce; content; CRM; AI business analyst; and the like) are added **directly in this template's `src/modules/`** ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) as `domain`-type modules — not in a separate derived application. See `docs/awcms/README.md`.
 
-## Label rekomendasi
+Epic numbers follow the original backlog history (the domain epics have been removed, so there are gaps in the numbering — this is deliberate, not a mistake, so that traceability to the GitHub issues already created stays valid).
+
+## Recommended labels
 
 ```text
 type:epic
@@ -34,7 +36,7 @@ status:blocked
 status:needs-review
 ```
 
-## Ketergantungan milestone
+## Milestone dependencies
 
 ```mermaid
 flowchart LR
@@ -45,9 +47,9 @@ flowchart LR
   M7 --> M8
 ```
 
-## Milestone rekomendasi
+## Recommended milestones
 
-| Milestone                              | Fokus                                                               |
+| Milestone                              | Focus                                                               |
 | -------------------------------------- | ------------------------------------------------------------------- |
 | M0 — Repository Foundation             | Skeleton, migration runner, OpenAPI/AsyncAPI, setup wizard          |
 | M2 — Identity, Tenant, Profile         | Tenant, profile, auth, access                                       |
@@ -55,20 +57,20 @@ flowchart LR
 | M7 — UI/UX & Reporting                 | Admin shell, management reporting views                             |
 | M8 — Security, Performance, Production | Logging, pooling, workflow approval, security readiness, deployment |
 
-## Dokumen acuan per epic
+## Reference documents per epic
 
-Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Semua epic tunduk pada keputusan arsitektural di [`../adr/`](../adr/README.md) dan threat model di doc 20.
+Besides docs 01–05, every epic must read the related technical design documents. Every epic is subject to the architectural decisions in [`../adr/`](../adr/README.md) and the threat model in doc 20.
 
-| Epic                        | Dokumen acuan utama                                                      |
+| Epic                        | Main reference documents                                                 |
 | --------------------------- | ------------------------------------------------------------------------ |
 | 0 Foundation                | 09, 10, 11, 16 (migration runner, pool), 18 (env); ADR 0001–0002, 0007   |
 | 2 Tenant/Identity/Profile   | 03, 04, 16 (RLS/SET LOCAL), **17 (seed/RBAC/ABAC)**; ADR 0003–0004       |
 | 6 Sync Storage              | 03, 10 (HMAC), 15 (offline client), 16 (outbox); ADR 0006                |
-| 8 UI Experience             | **14 (design system/layar)**, **15 (frontend/offline)**                  |
+| 8 UI Experience             | **14 (design system/screens)**, **15 (frontend/offline)**                |
 | 9 Management Reporting      | 03, 05, 14 (dashboard UI)                                                |
 | 10 Logging/Pooling/Security | **16 (pool/backpressure)**, 07, 03, **20 (threat model)**; ADR 0003–0005 |
 | 11 Workflow Approval        | 03, 17 (self-approval policy); ADR 0004                                  |
-| 12 Setup & Deployment       | **17 (seed wizard)**, **18 (env/topologi)**, 07                          |
+| 12 Setup & Deployment       | **17 (seed wizard)**, **18 (env/topology)**, 07                          |
 
 ---
 
@@ -76,15 +78,15 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ## Issue 0.1 — Initialize AWCMS Modular Monolith Repository Structure
 
-**Problem:** AWCMS membutuhkan struktur repository yang konsisten, modular, dan siap dikembangkan bertahap.
+**Problem:** AWCMS needs a repository structure that is consistent, modular, and ready to be built out incrementally.
 
-**Scope:** Buat struktur `src/modules`, `_shared`, `src/lib`, `sql`, `scripts`, `openapi`, `asyncapi`, `docs`, `deploy`, `tests`, `fixtures`; buat `package.json`, `astro.config.mjs`, `tsconfig.json`, `.gitignore`, `.env.example`, `README.md`; buat module contract, module registry, API response helper, dan health endpoint.
+**Scope:** Create the `src/modules`, `_shared`, `src/lib`, `sql`, `scripts`, `openapi`, `asyncapi`, `docs`, `deploy`, `tests`, `fixtures` structure; create `package.json`, `astro.config.mjs`, `tsconfig.json`, `.gitignore`, `.env.example`, `README.md`; create the module contract, the module registry, the API response helper, and the health endpoint.
 
-**Out of scope:** Migration runner detail, login, dan modul domain (katalog, transaksi, dsb.) — modul domain ditambahkan langsung di `src/modules/` mengikuti pola tersendiri, di luar backlog fondasi ini.
+**Out of scope:** Migration runner details, login, and domain modules (catalogue, transactions, etc.) — domain modules are added directly in `src/modules/` following their own pattern, outside this foundation backlog.
 
-**Acceptance criteria:** Struktur tersedia, build pass, health endpoint ada, README menjelaskan stack, shared convention untuk soft-delete DTO/query helper terdokumentasi, tidak ada secret.
+**Acceptance criteria:** The structure exists, the build passes, the health endpoint exists, the README explains the stack, the shared convention for the soft-delete DTO/query helper is documented, and there are no secrets.
 
-**Security notes:** `.env` ignored, `.env.example` placeholder, no hardcoded secret.
+**Security notes:** `.env` ignored, `.env.example` placeholders, no hardcoded secret.
 
 **Testing:** `bun install`, `bun run build`.
 
@@ -92,19 +94,19 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ## Issue 0.2 — Add SQL Migration Runner
 
-**Problem:** Perubahan database harus terkontrol dan berurutan.
+**Problem:** Database changes must be controlled and sequential.
 
-**Scope:** `scripts/db-migrate.ts`, `awcms_schema_migrations`, checksum, skip migration yang sudah applied, command `db:migrate`, migration guide.
+**Scope:** `scripts/db-migrate.ts`, `awcms_schema_migrations`, checksum, skipping already-applied migrations, the `db:migrate` command, a migration guide.
 
-**Acceptance criteria:** Migration berjalan berurutan, tidak double-run, error menghentikan proses, password DB tidak bocor.
+**Acceptance criteria:** Migrations run in order, do not double-run, an error stops the process, and the DB password does not leak.
 
 **Testing:** `bun run db:migrate`, `bun run build`.
 
 ## Issue 0.3 — Add OpenAPI and AsyncAPI Baseline
 
-**Scope:** OpenAPI master, shared schemas, security schemes, AsyncAPI event envelope, script `api:spec:check`.
+**Scope:** OpenAPI master, shared schemas, security schemes, AsyncAPI event envelope, the `api:spec:check` script.
 
-**Acceptance criteria:** API spec valid, AsyncAPI valid, shared response schema tersedia, soft delete/restore/purge pattern terdokumentasi, HMAC sync header terdokumentasi.
+**Acceptance criteria:** The API spec is valid, the AsyncAPI is valid, the shared response schema exists, the soft delete/restore/purge pattern is documented, and the HMAC sync header is documented.
 
 ---
 
@@ -112,27 +114,27 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ## Issue 2.1 — Add Tenant and Office Schema
 
-**Scope:** `awcms_tenants`, `awcms_offices`, `awcms_tenant_settings`, `awcms_physical_locations`, RLS, unique tenant/office code, soft delete untuk office/location.
+**Scope:** `awcms_tenants`, `awcms_offices`, `awcms_tenant_settings`, `awcms_physical_locations`, RLS, unique tenant/office code, soft delete for office/location.
 
-**Acceptance criteria:** Tenant dan office dapat dibuat, tipe office lengkap, duplicate ditolak, tenant inactive ditolak transaksi, office/location soft-deleted tidak muncul di list default dan restore diaudit.
+**Acceptance criteria:** Tenants and offices can be created, the office types are complete, duplicates are rejected, an inactive tenant is refused transactions, soft-deleted offices/locations do not appear in the default list, and restores are audited.
 
 ## Issue 2.2 — Add Central Profile Schema
 
-**Scope:** `awcms_profiles`, identifiers, channels, addresses, entity links, audit logs, merge request, soft delete/restore profile/contact master.
+**Scope:** `awcms_profiles`, identifiers, channels, addresses, entity links, audit logs, merge requests, soft delete/restore for the profile/contact master.
 
-**Acceptance criteria:** Profile bisa link ke entitas modul lain; identifier dimasking; duplicate resolver bekerja; profile soft-deleted tidak di-resolve untuk transaksi baru kecuali di-restore.
+**Acceptance criteria:** A profile can link to another module's entity; identifiers are masked; the duplicate resolver works; a soft-deleted profile is not resolved for new transactions unless restored.
 
 ## Issue 2.3 — Add Identity Login and Tenant User Membership
 
-**Scope:** Identity, password hash, tenant user, login/logout/me endpoint.
+**Scope:** Identity, password hash, tenant user, login/logout/me endpoints.
 
-**Acceptance criteria:** Login sukses/gagal, tenant inactive ditolak, password tidak tampil.
+**Acceptance criteria:** Login succeeds/fails, an inactive tenant is rejected, the password is never shown.
 
 ## Issue 2.4 — Add RBAC and ABAC Access Control
 
 **Scope:** Role, permission, activity registry, ABAC policy, assignment, decision log, evaluator.
 
-**Acceptance criteria:** Default deny, deny overrides allow, operator ditolak akses modul yang tidak diizinkan, decision log tercatat.
+**Acceptance criteria:** Default deny, deny overrides allow, an operator is denied access to modules that are not permitted, and the decision log is recorded.
 
 ---
 
@@ -142,19 +144,19 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 **Scope:** Sync nodes, outbox, inbox, batches, checkpoints, signed push/pull.
 
-**Acceptance criteria:** HMAC validasi, duplicate batch idempotent, checkpoint updated.
+**Acceptance criteria:** HMAC validation, duplicate batches are idempotent, checkpoints are updated.
 
 ## Issue 6.2 — Add Sync Conflict Tracking and Resolution
 
 **Scope:** Conflict table, resolution API, conflict types.
 
-**Acceptance criteria:** Immutable conflict manual, resolution audit.
+**Acceptance criteria:** Manual conflicts are immutable, resolutions are audited.
 
 ## Issue 6.3 — Add R2 Object Sync Queue
 
 **Scope:** R2 buckets, object queue, checksum, retry.
 
-**Acceptance criteria:** Local file queued, upload optional, checksum verified.
+**Acceptance criteria:** Local files are queued, upload is optional, checksums are verified.
 
 ---
 
@@ -170,7 +172,7 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ## Issue 9.1 — Add Management Reporting Views
 
-**Scope:** Tenant activity summary, access/audit summary, sync health, module usage dashboard (generic reporting views — modul domain menambah view domainnya sendiri di `src/modules/`).
+**Scope:** Tenant activity summary, access/audit summary, sync health, module usage dashboard (generic reporting views — domain modules add their own domain views in `src/modules/`).
 
 ---
 
@@ -180,7 +182,7 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 **Scope:** JSON logger, correlation ID, redaction, audit, log APIs.
 
-**Acceptance criteria tambahan:** Soft delete, restore, dan purge high-risk tercatat di audit dengan attributes yang sudah diredaksi.
+**Additional acceptance criteria:** High-risk soft delete, restore, and purge are recorded in the audit with already-redacted attributes.
 
 ## Issue 10.2 — Add Database Connection Pooling and Backpressure
 
@@ -204,7 +206,7 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ## Issue 12.1 — Add Initial Setup Wizard API
 
-**Scope:** Setup status, initialize tenant/owner/office/role/ABAC default, setup lock.
+**Scope:** Setup status, initialize tenant/owner/office/role/ABAC defaults, setup lock.
 
 ## Issue 12.2 — Add Offline/LAN Deployment Profile
 
@@ -212,36 +214,36 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 ---
 
-# Status: backlog aktif di GitHub
+# Status: active backlog on GitHub
 
-Dokumen ini adalah template/backlog issue atomic generik untuk AWCMS base. Snapshot live GitHub terbaru (2026-07-04) mencatat **18 issue OPEN** dari backlog ini di `ahliweb/awcms`.
+This document is the generic atomic issue template/backlog for the AWCMS base. The most recent live GitHub snapshot (2026-07-04) records **18 OPEN issues** from this backlog in `ahliweb/awcms`.
 
-Nomor `Issue X.Y` pada dokumen ini adalah **kode traceability internal**, bukan nomor issue GitHub. Untuk mengetahui nomor issue GitHub dari kode X.Y, lihat tabel di `github/issues-open-001.md` (belum ada — di-generate skill `awcms-github-snapshot` sekali dijalankan).
+The `Issue X.Y` numbers in this document are an **internal traceability code**, not GitHub issue numbers. To find the GitHub issue number for an X.Y code, see the table in `github/issues-open-001.md` (does not exist yet — generated by the `awcms-github-snapshot` skill once it is run).
 
-## Riwayat perubahan backlog (2026-07-04)
+## Backlog change history (2026-07-04)
 
-Backlog awal berisi 38 issue, termasuk epic domain POS/retail (Legacy Migration, POS MVP, Warehouse Management, CRM Receipt Delivery, Accounting & Coretax, sebagian UI/Reporting/AI) yang **tidak sesuai konteks AWCMS sebagai contoh repo pengembangan umum**. 20 issue domain tersebut ditutup (`not planned`) di GitHub dengan catatan bahwa domainnya kini dibangun sebagai modul bertipe `domain` **langsung di `src/modules/` template ini** ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)), bukan dihapus historisnya. 2 issue (Admin shell, Management Reporting) digeneralisasi wording-nya agar tidak lagi memuat istilah domain (mis. "Petugas", "Sales daily/stock/tax/warehouse dashboard"). Milestone dan label domain yang menjadi tidak terpakai turut dibersihkan (lihat `github/README.md` §Genericization).
+The initial backlog contained 38 issues, including POS/retail domain epics (Legacy Migration, POS MVP, Warehouse Management, CRM Receipt Delivery, Accounting & Coretax, and parts of UI/Reporting/AI) that **do not fit the context of AWCMS as a general development repository example**. Those 20 domain issues were closed (`not planned`) on GitHub with a note that their domain is now built as `domain`-type modules **directly in this template's `src/modules/`** ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)), rather than having their history deleted. 2 issues (Admin shell, Management Reporting) had their wording generalised so they no longer carry domain terms (e.g. "Cashier", "Sales daily/stock/tax/warehouse dashboard"). Domain milestones and labels that became unused were cleaned up as well (see `github/README.md` §Genericization).
 
-Status awal issue yang tersisa:
+Initial status of the remaining issues:
 
-1. Sprint 1 (Issue 0.1, 0.2, 0.3) berlabel `status:ready`.
-2. 15 issue lain berlabel `status:blocked` karena bergantung pada milestone yang belum selesai (lihat §Ketergantungan milestone di atas).
-3. Setelah suatu issue selesai dan di-merge, ubah label issue yang dependency-nya baru terpenuhi dari `status:blocked` menjadi `status:ready` di GitHub.
-4. Refresh snapshot di `github/README.md`, `github/issues-open-NNN.md`, `github/issues-closed-NNN.md`, dan `github/labels-milestones.md` setiap kali status/label/milestone berubah.
+1. Sprint 1 (Issue 0.1, 0.2, 0.3) labelled `status:ready`.
+2. 15 other issues labelled `status:blocked` because they depend on milestones that are not finished yet (see §Milestone dependencies above).
+3. Once an issue is done and merged, change the label of the issues whose dependency has just been satisfied from `status:blocked` to `status:ready` on GitHub.
+4. Refresh the snapshot in `github/README.md`, `github/issues-open-NNN.md`, `github/issues-closed-NNN.md`, and `github/labels-milestones.md` every time a status/label/milestone changes.
 
-### Koreksi urutan sprint (2026-07-05)
+### Sprint ordering correction (2026-07-05)
 
-Sprint awal semula menempatkan **Issue 12.1 (Setup Wizard API)** di Sprint 1, sejajar dengan 0.1–0.3. Ini keliru: setup wizard menginisialisasi tenant, owner, office, role, permission, dan ABAC default — data yang skema-nya baru dibuat oleh Issue 2.1 (tenant/office), 2.3 (identity/login), dan 2.4 (RBAC/ABAC), semuanya Sprint 2/3. Audit implementasi Issue 0.1–0.3 (`AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`) menemukan skema database masih kosong (hanya `awcms_modules`/`awcms_schema_migrations`) saat 12.1 hendak dikerjakan. **12.1 dipindah ke Sprint 3**, setelah 2.4, pada tabel dan diagram di bawah.
+The initial sprint plan placed **Issue 12.1 (Setup Wizard API)** in Sprint 1, alongside 0.1–0.3. That was wrong: the setup wizard initialises the tenant, owner, office, role, permission, and ABAC defaults — data whose schema is only created by Issue 2.1 (tenant/office), 2.3 (identity/login), and 2.4 (RBAC/ABAC), all of them Sprint 2/3. The implementation audit of Issue 0.1–0.3 (`AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`) found the database schema still empty (only `awcms_modules`/`awcms_schema_migrations`) when 12.1 was about to be worked on. **12.1 was moved to Sprint 3**, after 2.4, in the table and diagram below.
 
-### Koreksi urutan sprint (2) — Sprint 4/5 tertukar (2026-07-05)
+### Sprint ordering correction (2) — Sprint 4/5 swapped (2026-07-05)
 
-Sprint awal (setelah koreksi #1) menempatkan **10.1–10.3 (M8 — Security/Performance/Production) di Sprint 4**, sebelum **6.1–6.3 (M5 — Sync Storage) dan 8.1/9.1 (M7 — UI/UX & Reporting) di Sprint 5** — bertentangan dengan §Ketergantungan milestone di atas, yang menetapkan `M5 → M8` dan `M7 → M8` (M8 butuh M5 **dan** M7 selesai lebih dulu, bukan sebaliknya). Sprint 5 versi awal juga keliru mencampur `11.1`/`12.2` (keduanya milestone M8) bersama issue M5/M7. Ditemukan saat menutup Issue 12.1 dan hendak merekomendasikan langkah berikutnya — label GitHub `10.1`/`10.2`/`10.3`/`11.1`/`12.2` tetap `status:blocked` (tidak keliru diubah jadi `status:ready`). Diperbaiki: **Sprint 4 = 6.1, 6.2, 6.3, 8.1, 9.1** (M5+M7, keduanya cuma butuh M2 yang sudah tuntas, boleh paralel); **Sprint 5 = 10.1, 10.2, 10.3, 11.1, 12.2** (M8, semuanya).
+The initial sprint plan (after correction #1) placed **10.1–10.3 (M8 — Security/Performance/Production) in Sprint 4**, before **6.1–6.3 (M5 — Sync Storage) and 8.1/9.1 (M7 — UI/UX & Reporting) in Sprint 5** — contradicting §Milestone dependencies above, which sets `M5 → M8` and `M7 → M8` (M8 needs M5 **and** M7 finished first, not the other way round). The initial Sprint 5 also wrongly mixed `11.1`/`12.2` (both milestone M8) in with M5/M7 issues. Found while closing Issue 12.1 and about to recommend the next step — the GitHub labels for `10.1`/`10.2`/`10.3`/`11.1`/`12.2` remained `status:blocked` (they were not mistakenly changed to `status:ready`). Fixed: **Sprint 4 = 6.1, 6.2, 6.3, 8.1, 9.1** (M5+M7, both only needing M2 which is already complete, may run in parallel); **Sprint 5 = 10.1, 10.2, 10.3, 11.1, 12.2** (M8, all of them).
 
-Untuk membangun modul domain baru (ERP, website/e-commerce, konten): tambahkan modul domainnya **langsung di `src/modules/`** template ini ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) sebagai modul bertipe `domain`, mengikuti pola modul base — bukan sebagai aplikasi turunan/repo terpisah.
+To build a new domain module (ERP, website/e-commerce, content): add the domain module **directly in this template's `src/modules/`** ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) as a `domain`-type module, following the base module pattern — not as a derived application/separate repo.
 
-Snapshot isi GitHub aktual dicatat di `github/README.md` (belum ada — lihat catatan di atas). Snapshot dipisah menjadi file `issues-open-NNN.md` dan `issues-closed-NNN.md`, dengan batas maksimal 100 issue per file. Dokumen ini tetap menjadi template/rencana issue atomic; folder `github/` menjadi arsip state GitHub yang direfresh dari `gh`.
+The actual GitHub content snapshot is recorded in `github/README.md` (does not exist yet — see the note above). The snapshot is split into `issues-open-NNN.md` and `issues-closed-NNN.md` files, with a maximum of 100 issues per file. This document remains the atomic issue template/plan; the `github/` folder is the archive of GitHub state refreshed from `gh`.
 
-# Sprint awal rekomendasi
+# Recommended initial sprints
 
 ```mermaid
 flowchart LR
@@ -253,19 +255,19 @@ flowchart LR
 
 1. Sprint 1: 0.1, 0.2, 0.3.
 2. Sprint 2: 2.1, 2.2, 2.3.
-3. Sprint 3: 2.4, 12.1 (setup wizard menunggu tenant/identity/RBAC/ABAC dari 2.1–2.4 — lihat §Koreksi urutan sprint).
-4. Sprint 4: 6.1, 6.2, 6.3 (M5 — Sync Storage), 8.1, 9.1 (M7 — UI/UX & Reporting) — keduanya hanya bergantung pada M2 (tuntas), boleh paralel.
-5. Sprint 5: 10.1, 10.2, 10.3, 11.1, 12.2 (M8 — Security/Performance/Production — lihat §Koreksi urutan sprint (2) untuk kenapa ini digeser setelah Sprint 4, bukan sebelumnya).
+3. Sprint 3: 2.4, 12.1 (the setup wizard waits for tenant/identity/RBAC/ABAC from 2.1–2.4 — see §Sprint ordering correction).
+4. Sprint 4: 6.1, 6.2, 6.3 (M5 — Sync Storage), 8.1, 9.1 (M7 — UI/UX & Reporting) — both depend only on M2 (complete), and may run in parallel.
+5. Sprint 5: 10.1, 10.2, 10.3, 11.1, 12.2 (M8 — Security/Performance/Production — see §Sprint ordering correction (2) for why this was moved after Sprint 4, not before).
 
 # Definition of Done
 
-- Scope sesuai issue.
-- Tidak ada unrelated change.
-- Migration jika schema berubah.
-- OpenAPI jika API berubah.
-- AsyncAPI jika event berubah.
-- Test relevan.
-- Docs update.
-- Security checklist pass.
-- Soft delete policy pass untuk resource yang deletable; posted/append-only entity tidak bisa dihapus.
-- Laporan implementasi tersedia.
+- Scope matches the issue.
+- No unrelated changes.
+- A migration if the schema changes.
+- OpenAPI if the API changes.
+- AsyncAPI if events change.
+- Relevant tests.
+- Docs updated.
+- Security checklist passes.
+- Soft delete policy passes for deletable resources; posted/append-only entities cannot be deleted.
+- An implementation report is available.

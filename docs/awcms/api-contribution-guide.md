@@ -1,47 +1,49 @@
-# Panduan Kontribusi API untuk Modul Domain/Website (Issue #182, ADR-0026)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](api-contribution-guide.id.md)
 
-> **Reframing [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) & [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md).** Jalur "aplikasi turunan di repo terpisah" (ADR-0022) DICABUT — keluarga AWCMS kini template **dipakai-langsung**, dan `awcms` diposisikan **online-first hybrid + superset** yang menyerap klaster website/e-commerce awcms-micro langsung ke `src/modules/` (ADR-0035). Baca dokumen ini dengan pemetaan: "repo/modul turunan" = modul domain/website/e-commerce yang ditambahkan **langsung ke `src/modules/`** template ini. Pipeline OpenAPI modular (fragment per-modul + bundler + composition seam) tetap nyata dan berlaku; hanya framing repo terpisah yang usang.
+# API Contribution Guide for Domain/Website Modules (Issue #182, ADR-0026)
 
-Dokumen ini menjelaskan cara sebuah **modul domain/website** (mis. ERP di
-atas base AWCMS) menyumbang kontrak REST untuk domainnya
-sendiri, **tanpa mengedit fragment OpenAPI root/base** maupun berkas bundle.
+> **Reframing by [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) & [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md).** The "derived application in a separate repo" pathway (ADR-0022) is REVOKED — the AWCMS family is now a set of **used-directly** templates, and `awcms` is positioned as an **online-first hybrid + superset** that absorbs the awcms-micro website/e-commerce cluster straight into `src/modules/` (ADR-0035). Read this document with that mapping: "derived repo/module" = a domain/website/e-commerce module added **directly to `src/modules/`** of this template. The modular OpenAPI pipeline (per-module fragment + bundler + composition seam) is still real and still applies; only the separate-repo framing is obsolete.
 
-Baca dulu: [`openapi/README.md`](../../openapi/README.md) (struktur fragment +
-bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
-(keputusan kepemilikan/komposisi).
+This document explains how a **domain/website module** (e.g. an ERP on
+top of the AWCMS base) contributes the REST contract for its own
+domain, **without editing the root/base OpenAPI fragment** or the bundle file.
 
-## Prinsip
+Read first: [`openapi/README.md`](../../openapi/README.md) (fragment structure +
+bundler) and [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
+(the ownership/composition decision).
 
-- **Kepemilikan per modul.** Satu modul = satu fragment
-  `openapi/modules/<module>.openapi.yaml`. Setiap modul memiliki fragmentnya
-  sendiri; ia tidak menambahkan path/operation/schema ke fragment modul lain.
-- **Bundle di-generate, deterministik.** Kontrak publik akhir selalu hasil
-  `bun run openapi:bundle` — tidak pernah diedit tangan. Input sama → output
-  byte-identik.
-- **Default-deny override.** Fragment modul TIDAK bisa menimpa path,
-  operation, atau schema root/base/shared. Percobaan menimpa melempar
-  `BundleConflictError` dan menggagalkan gate.
-- **Envelope seragam.** Semua response error (4xx/5xx) wajib resolve ke schema
-  `ApiError` shared (root fragment). Response sukses memakai pola
-  `success: true` + `data`. Gate `standard error schema` menegakkan ini.
-- **Kontrak = wajib.** Setiap route `/api/v1/**` wajib punya operasi OpenAPI dan
-  sebaliknya (route↔contract parity). `operationId` wajib unik global.
+## Principles
 
-## Langkah
+- **Ownership per module.** One module = one fragment
+  `openapi/modules/<module>.openapi.yaml`. Every module owns its own
+  fragment; it does not add paths/operations/schemas to another module's fragment.
+- **The bundle is generated and deterministic.** The final public contract is always the
+  output of `bun run openapi:bundle` — never hand-edited. Same input → byte-identical
+  output.
+- **Default-deny override.** A module fragment CANNOT override a root/base/shared
+  path, operation, or schema. An override attempt throws
+  `BundleConflictError` and fails the gate.
+- **Uniform envelope.** Every error response (4xx/5xx) must resolve to the shared
+  `ApiError` schema (root fragment). Success responses use the
+  `success: true` + `data` pattern. The `standard error schema` gate enforces this.
+- **The contract is mandatory.** Every `/api/v1/**` route must have an OpenAPI operation and
+  vice versa (route↔contract parity). `operationId` must be globally unique.
 
-1. **Buat fragment modul** (termasuk modul domain/website) di `src/modules/`
-   template ini ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md):
-   template dipakai-langsung, tidak ada repo turunan terpisah), mis.
-   `openapi/modules/<module>.openapi.yaml`. Isi `paths` (path modul
-   Anda, semua di bawah `basePath` modul, mis. `/api/v1/<domain>/...`) dan —
-   bila perlu — `components.schemas` yang HANYA dipakai modul Anda. Rujuk
-   komponen shared base lewat `$ref` seperti biasa
+## Steps
+
+1. **Create the module fragment** (including for a domain/website module) in `src/modules/`
+   of this template ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md):
+   templates are used directly, there is no separate derived repo), e.g.
+   `openapi/modules/<module>.openapi.yaml`. Fill in `paths` (your module's
+   paths, all under the module's `basePath`, e.g. `/api/v1/<domain>/...`) and —
+   if needed — `components.schemas` used ONLY by your module. Reference
+   the base's shared components via `$ref` as usual
    (`#/components/responses/BadRequest`, `#/components/schemas/ApiMeta`,
-   `#/components/parameters/CorrelationId`). Fragment TIDAK berdiri sendiri
-   sebagai OpenAPI valid — itu wajar; `$ref` shared resolve setelah merge.
+   `#/components/parameters/CorrelationId`). A fragment does NOT stand on its own
+   as valid OpenAPI — that is expected; shared `$ref`s resolve after the merge.
 
-2. **Deklarasikan `api.openApiPath`** di `module.ts` modul Anda,
-   menunjuk fragment tersebut:
+2. **Declare `api.openApiPath`** in your module's `module.ts`,
+   pointing at that fragment:
 
    ```ts
    api: {
@@ -50,29 +52,29 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
    }
    ```
 
-   Field ini juga yang dibaca readiness-check `module_management`
-   (`openapi_documented`) untuk memastikan modul mendokumentasikan API-nya.
+   This field is also what the `module_management` readiness check reads
+   (`openapi_documented`) to make sure a module documents its API.
 
-   Menunjuknya ke BUNDEL (`openapi/awcms-public-api.openapi.yaml`) kini
-   memerahkan gate: selain mengklaim seluruh permukaan modul lain, ia
-   meninggalkan fragment asli modul itu tanpa pemilik — persis bagaimana
-   fragment `news_portal` bertahan setelah modulnya dipensiunkan ADR-0044.
-   Gate menuntut relasi satu-ke-satu dua arah: tiap modul menunjuk satu
-   fragment yang ADA di `openapi/modules/`, dan tiap fragment diklaim tepat
-   satu modul terdaftar (`foundation.openapi.yaml` satu-satunya pengecualian
-   ter-review — ia memang milik platform, bukan modul).
+   Pointing it at the BUNDLE (`openapi/awcms-public-api.openapi.yaml`) now
+   turns the gate red: besides claiming every other module's surface, it
+   leaves that module's own fragment ownerless — exactly how the
+   `news_portal` fragment survived after its module was retired by ADR-0044.
+   The gate demands a one-to-one relationship in both directions: every module points at one
+   fragment that EXISTS in `openapi/modules/`, and every fragment is claimed by exactly
+   one registered module (`foundation.openapi.yaml` being the only reviewed
+   exception — it genuinely belongs to the platform, not to a module).
 
-3. **Deklarasikan tag modul Anda di katalog root.** Tag operasi yang tidak ada
-   di `tags:` pada `openapi/awcms-public-api.src.yaml` membuat operasi itu
-   HILANG dari `docs/awcms/api-reference.md` — generator mengelompokkan menurut
-   tag yang DIDEKLARASIKAN. Ini bukan hipotesis: 55 operasi milik empat modul
+3. **Declare your module's tag in the root catalogue.** An operation tag that is not present
+   in `tags:` of `openapi/awcms-public-api.src.yaml` makes that operation
+   DISAPPEAR from `docs/awcms/api-reference.md` — the generator groups by
+   DECLARED tags. This is not hypothetical: 55 operations belonging to four modules
    (`blog_content`, `visitor_analytics`, `tenant_domain`, `data_lifecycle`)
-   pernah tak terdokumentasi karena ini, dengan seluruh gate hijau. Gate tag
-   kini menolaknya dari dua arah sekaligus — tag operasi tak-terdeklarasi DAN
-   tag terdeklarasi yang tak dipakai siapa pun (bekas modul pensiunan).
+   were once undocumented because of this, with every gate green. The tag gate
+   now rejects it from both directions at once — undeclared operation tags AND
+   declared tags nobody uses (leftovers from retired modules).
 
-4. **Gabungkan lewat composition seam.** Build mem-feed setiap
-   `openApiPath` modul teregistrasi ke seam `extraFragmentFiles`:
+4. **Compose via the composition seam.** The build feeds every registered module's
+   `openApiPath` into the `extraFragmentFiles` seam:
 
    ```ts
    import { buildBundledDocument } from "./scripts/openapi-bundle";
@@ -83,11 +85,11 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
    });
    ```
 
-   Alternatif paling sederhana: taruh fragmentnya di
-   `openapi/modules/` sehingga ikut ter-glob oleh bundler default. Yang
-   penting: **fragment root/base yang sudah ada tidak diedit langsung.**
+   The simplest alternative: put the fragment in
+   `openapi/modules/` so it is picked up by the bundler's default glob. What
+   matters: **the existing root/base fragment is not edited directly.**
 
-5. **Regenerate + validasi:**
+5. **Regenerate + validate:**
 
    ```bash
    bun run openapi:bundle
@@ -96,32 +98,32 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
    bun run api:docs:check
    ```
 
-   Commit fragment Anda, bundle yang di-generate, dan referensi Markdown dalam
-   satu PR.
+   Commit your fragment, the generated bundle, and the Markdown reference in
+   one PR.
 
-## Kesalahan umum
+## Common mistakes
 
-- **Menimpa path/schema base** → `BundleConflictError`. Pilih path/nama schema
-  yang unik untuk domain Anda.
-- **Response error inline (bukan `ApiError`)** → gate `standard error schema`
-  merah. Pakai `$ref: "#/components/responses/*"` atau `#/components/schemas/ApiError`.
-- **Route tanpa operasi (atau sebaliknya)** → gate route parity merah.
-- **`operationId` bertabrakan dengan operasi base** → gunakan prefiks domain
-  (mis. `listSalesInvoices`, bukan `list`).
-- **Mengedit `openapi/awcms-public-api.openapi.yaml` langsung** → gate bundle
-  freshness merah (bundle di-generate, bukan sumber).
-- **Tag operasi tak dideklarasikan di katalog root** → gate tag merah. Gejalanya
-  kalau gate ini tak ada: operasi Anda hilang dari referensi API tanpa satu pun
-  pesan error.
-- **Fragment tanpa modul pemilik** (mis. modul dihapus/dilebur tapi fragmentnya
-  ditinggal, atau `openApiPath` menunjuk bundel) → gate kepemilikan fragment
-  merah. Saat sebuah modul dilebur, PINDAHKAN path+schema-nya ke fragment modul
-  penerusnya lalu hapus fragment lamanya.
+- **Overriding a base path/schema** → `BundleConflictError`. Pick a path/schema name
+  unique to your domain.
+- **Inline error responses (not `ApiError`)** → the `standard error schema` gate goes
+  red. Use `$ref: "#/components/responses/*"` or `#/components/schemas/ApiError`.
+- **A route with no operation (or vice versa)** → the route parity gate goes red.
+- **An `operationId` colliding with a base operation** → use a domain prefix
+  (e.g. `listSalesInvoices`, not `list`).
+- **Editing `openapi/awcms-public-api.openapi.yaml` directly** → the bundle
+  freshness gate goes red (the bundle is generated, not a source).
+- **An operation tag not declared in the root catalogue** → the tag gate goes red. The symptom
+  if this gate did not exist: your operation vanishes from the API reference without a single
+  error message.
+- **A fragment with no owning module** (e.g. the module was deleted/merged but its fragment
+  was left behind, or `openApiPath` points at the bundle) → the fragment ownership gate goes
+  red. When a module is merged away, MOVE its paths+schemas into the successor module's
+  fragment and then delete the old fragment.
 
 ## Versioning
 
-`info.version` kontrak adalah SemVer independen dari versi package (ADR-0008):
-PATCH = dokumentasi, MINOR = tambahan backward-compatible (endpoint/field
-opsional baru), MAJOR = breaking (hapus/rename field/endpoint, ubah bentuk
-response). Perubahan bentuk kontrak base wajib changeset + (bila keputusan
-arsitektural) ADR.
+The contract's `info.version` is SemVer independent of the package version (ADR-0008):
+PATCH = documentation, MINOR = backward-compatible additions (a new optional
+endpoint/field), MAJOR = breaking (removing/renaming a field/endpoint, changing a response
+shape). A change to the base contract's shape requires a changeset + (if it is an
+architectural decision) an ADR.

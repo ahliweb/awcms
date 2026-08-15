@@ -1,455 +1,466 @@
-# Bagian 18 — Configuration dan Environment Reference
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](18_configuration_env_reference.id.md)
 
-> **Status (2026-07-14):** Repo `awcms` baru pada tahap fondasi ulang
-> (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
-> **belum ada modul ERP yang diimplementasikan**. Dokumen ini adalah
-> **standar/pola target** untuk konfigurasi fondasi (runtime, database, auth,
-> sync, storage) yang akan berlaku begitu implementasi dimulai — diadaptasi
-> dari base [awcms-mini](https://github.com/ahliweb/awcms-mini) yang sudah
-> fully implemented, DIKURANGI seluruh env var yang spesifik untuk fitur CMS
-> (blog/news portal, social publishing, visitor analytics publik, R2 media
-> berita) yang tidak relevan untuk skop ERP repo ini. Env var spesifik modul
-> ERP (finance, inventory, procurement, manufacturing, HR/payroll) dan
-> integrasi bisnis (payment gateway, marketplace, Coretax, logistik) BELUM
-> ada — akan didokumentasikan bertahap begitu modul itu benar-benar dibangun
-> (lihat §ERP & integrasi bisnis — placeholder di bawah), bukan ditulis di
-> muka.
+# Part 18 — Configuration and Environment Reference
 
-## Tujuan
+> **Status (2026-07-14):** the `awcms` repo is only at the re-foundation stage
+> (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
+> **no ERP module has been implemented yet**. This document is the
+> **target standard/pattern** for foundation configuration (runtime, database,
+> auth, sync, storage) that will apply once implementation starts — adapted
+> from the [awcms-mini](https://github.com/ahliweb/awcms-mini) base which is
+> already fully implemented, MINUS every env var specific to CMS features
+> (blog/news portal, social publishing, public visitor analytics, news media
+> R2) that is irrelevant to this repo's ERP scope. Env vars specific to ERP
+> modules (finance, inventory, procurement, manufacturing, HR/payroll) and
+> business integrations (payment gateway, marketplace, Coretax, logistics) DO
+> NOT exist yet — they will be documented incrementally once those modules are
+> actually built (see §ERP & business integrations — placeholder below), not
+> written up front.
 
-Dokumen ini akan melengkapi referensi konfigurasi fondasi AWCMS: seluruh
-environment variable, feature flag opsional, presedensi konfigurasi, profil
-per-environment, penanganan secret, dan topologi deployment offline/LAN-first
-yang menjadi baseline platform ERP ini.
+## Purpose
 
-## Prinsip konfigurasi
+This document will complete the AWCMS foundation configuration reference: every
+environment variable, optional feature flag, configuration precedence,
+per-environment profiles, secret handling, and the offline/LAN-first deployment
+topology that is the baseline of this ERP platform.
 
-1. Semua secret hanya dari **environment**, tidak pernah di kode/commit.
-2. `.env` di-ignore; `.env.example` hanya placeholder.
-3. Provider eksternal (payment gateway, marketplace, tax/logistik, dst.)
-   **opsional** via feature flag; default off.
-4. Operasional inti (mis. transaksi/pencatatan) tidak boleh gagal karena
-   provider off — degradasi anggun (queue/pending), bukan hard failure.
-5. Konfigurasi tervalidasi saat boot; nilai wajib yang hilang menghentikan
-   start dengan pesan jelas.
-6. Soft delete adalah perilaku platform wajib, bukan feature flag;
-   retention/purge dikontrol policy dan workflow.
-7. Runtime, build, dan seluruh tooling wajib **Bun** (Bun-only); tidak ada
-   binary `node` di jalur dev/build/deploy.
+## Configuration principles
+
+1. Every secret comes only from the **environment**, never from code/commits.
+2. `.env` is ignored; `.env.example` holds placeholders only.
+3. External providers (payment gateway, marketplace, tax/logistics, etc.) are
+   **optional** behind a feature flag; off by default.
+4. Core operations (e.g. transactions/bookkeeping) must not fail because a
+   provider is off — graceful degradation (queue/pending), not hard failure.
+5. Configuration is validated at boot; a missing required value stops the start
+   with a clear message.
+6. Soft delete is mandatory platform behaviour, not a feature flag;
+   retention/purge is controlled by policy and workflow.
+7. Runtime, build, and all tooling must be **Bun** (Bun-only); there is no
+   `node` binary anywhere in the dev/build/deploy path.
 
 ## Runtime & tooling (Bun-only)
 
-- **Runtime & package manager**: Bun (`packageManager: bun@x.y.z` mengunci
-  versi). Semua script `package.json` dipanggil via `bun`/`bun run`; tidak
-  ada `node`/`npm`/`npx`/`pnpm`/`yarn`.
-- **Build/dev**: bin dengan shebang node (astro/vite) dijalankan
-  `bun --bun …` agar tidak jatuh ke binary `node`. Jangan sediakan varian
-  script `build:node`.
-- **Server**: `Bun.serve` native; jika memakai `@astrojs/node` (standalone)
-  untuk SSR, entry dijalankan `bun ./dist/standalone-entry.mjs` (runtime tetap
-  Bun).
-- **Database**: `Bun.sql` atau `postgres` (postgres.js).
-- **Deployment**: `deploy/systemd` `ExecStart` memakai path `bun`; image
-  container memakai basis `oven/bun` (bukan `node`). CI Bun-only
+- **Runtime & package manager**: Bun (`packageManager: bun@x.y.z` pins the
+  version). Every `package.json` script is invoked via `bun`/`bun run`; there is
+  no `node`/`npm`/`npx`/`pnpm`/`yarn`.
+- **Build/dev**: bins with a node shebang (astro/vite) are run with
+  `bun --bun …` so they do not fall back to the `node` binary. Do not provide a
+  `build:node` script variant.
+- **Server**: native `Bun.serve`; if `@astrojs/node` (standalone) is used for
+  SSR, the entry is run with `bun ./dist/standalone-entry.mjs` (the runtime is
+  still Bun).
+- **Database**: `Bun.sql` or `postgres` (postgres.js).
+- **Deployment**: `deploy/systemd` `ExecStart` uses the `bun` path; the
+  container image is based on `oven/bun` (not `node`). CI is Bun-only
   (setup-bun, `bun install --frozen-lockfile`, `bun test`,
   `bun --bun astro build`).
-- **Diizinkan** (bukan pelanggaran): import `node:*` (API bawaan Bun) dan
-  `@types/*` di devDependencies — keduanya tidak menarik runtime Node.js.
+- **Allowed** (not a violation): importing `node:*` (Bun's built-in API) and
+  `@types/*` in devDependencies — neither pulls in a Node.js runtime.
 
-## Presedensi
+## Precedence
 
 ```mermaid
 flowchart LR
-  Def[Default kode] --> Env[Environment variable] --> Set[awcms_tenant_settings - per tenant/entitas] --> Eff[Konfigurasi efektif]
+  Def[Code default] --> Env[Environment variable] --> Set[awcms_tenant_settings - per tenant/entity] --> Eff[Effective configuration]
 ```
 
-- Runtime/secret (DB, auth, HMAC sync, provider key): dari **environment**.
-- Preferensi tenant/entitas (locale, timezone, theme): dari **`awcms_tenants`**;
-  flag fitur tampilan: dari **`awcms_tenant_settings`**. Dikelola lewat
-  `GET/PATCH /api/v1/settings` dan layar `/admin/settings` (rencana target).
-- Retention soft delete/purge dapat menjadi tenant policy, tetapi tidak boleh
-  menonaktifkan audit, RLS, atau default filter `deleted_at IS NULL`.
+- Runtime/secrets (DB, auth, sync HMAC, provider key): from the
+  **environment**.
+- Tenant/entity preferences (locale, timezone, theme): from **`awcms_tenants`**;
+  display feature flags: from **`awcms_tenant_settings`**. Managed through
+  `GET/PATCH /api/v1/settings` and the `/admin/settings` screen (target plan).
+- Soft delete/purge retention may become a tenant policy, but it must never
+  disable audit, RLS, or the default `deleted_at IS NULL` filter.
 
-## Referensi environment variable
+## Environment variable reference
 
-Legenda: Wajib = perlu untuk boot; Sensitif = jangan bocor ke log/response.
+Legend: Required = needed to boot; Sensitive = must not leak into
+logs/responses.
 
-> **Catatan status**: tabel di bawah adalah target standar konfigurasi
-> fondasi. `src/lib/config/registry.ts`, `scripts/validate-env.ts`, dan
-> `scripts/config-docs-check.ts` (config registry terstruktur + parity check
-> tiga arah registry/`.env.example`/dokumen ini) **belum diimplementasikan**
-> di repo ini — akan dibangun mengikuti pola yang sama seperti awcms-mini
-> begitu implementasi fondasi dimulai.
+> **Status note**: the table below is the target standard for foundation
+> configuration. `src/lib/config/registry.ts`, `scripts/validate-env.ts`, and
+> `scripts/config-docs-check.ts` (structured config registry + three-way parity
+> check between the registry/`.env.example`/this document) **have not been
+> implemented** in this repo — they will be built following the same pattern as
+> awcms-mini once foundation implementation starts.
 
-### Inti aplikasi
+### Application core
 
-| Var                         | Wajib | Default                 | Sensitif | Fungsi                                                           |
-| --------------------------- | ----- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| `APP_ENV`                   | Ya    | `development`           | –        | development/test/production (`staging` DIHAPUS — ADR-0083)       |
-| `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                |
-| `LOG_LEVEL`                 | –     | `info`                  | –        | debug/info/warn/error                                            |
-| `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log |
-| `FORM_DRAFT_RETENTION_DAYS` | –     | `30`                    | –        | Retensi draft form `expired`/`abandoned` (hari)                  |
+| Var                         | Required | Default                 | Sensitive | Purpose                                                                   |
+| --------------------------- | -------- | ----------------------- | --------- | ------------------------------------------------------------------------- |
+| `APP_ENV`                   | Yes      | `development`           | –         | development/test/production (`staging` REMOVED — ADR-0083)                |
+| `APP_URL`                   | Yes      | `http://localhost:4321` | –         | Application base URL                                                      |
+| `LOG_LEVEL`                 | –        | `info`                  | –         | debug/info/warn/error                                                     |
+| `AUDIT_LOG_RETENTION_DAYS`  | –        | `730`                   | –         | Retention of `awcms_audit_events` (days), used by the audit log purge job |
+| `FORM_DRAFT_RETENTION_DAYS` | –        | `30`                    | –         | Retention of `expired`/`abandoned` form drafts (days)                     |
 
-Timezone/locale default per tenant/entitas direncanakan dari data
-(`awcms_tenants`/`awcms_tenant_settings`), bukan env var — mengikuti pola
-awcms-mini yang men-deprecate `APP_TIMEZONE`/`APP_DEFAULT_LOCALE` sebagai env
-var karena nilai efektifnya selalu berasal dari DB per tenant.
+The default timezone/locale per tenant/entity is planned to come from data
+(`awcms_tenants`/`awcms_tenant_settings`), not env vars — following the
+awcms-mini pattern that deprecated `APP_TIMEZONE`/`APP_DEFAULT_LOCALE` as env
+vars because their effective value always comes from the DB per tenant.
 
 ### Database & pool
 
-| Var                             | Wajib | Default                         | Sensitif | Fungsi                                                                                                            |
-| ------------------------------- | ----- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                  | Ya    | –                               | Ya       | Koneksi PostgreSQL runtime; arahkan ke role `awcms_app` (lihat §Model role database)                              |
-| `AWCMS_APP_DB_PASSWORD`         | –     | –                               | Ya       | Password role `awcms_app` dipakai script init container; harus sama dengan password di `DATABASE_URL`             |
-| `DATABASE_POOL_MAX`             | –     | `20`                            | –        | Maks koneksi pool (kind `app`; default untuk `worker`/`setup` juga, kecuali di-override)                          |
-| `DATABASE_POOL_MAX_WORKER`      | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `worker`                                                                   |
-| `DATABASE_POOL_MAX_SETUP`       | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `setup`                                                                    |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | –     | `15000`                         | –        | Timeout statement                                                                                                 |
-| `DATABASE_PGBOUNCER`            | –     | `false`                         | –        | Mode PgBouncer (transaction)                                                                                      |
-| `WORKER_DATABASE_URL`           | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah background job/cron. Opt-in ke role `awcms_worker` (sql/022) — lihat §Model role database |
-| `SETUP_DATABASE_URL`            | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah `POST /api/v1/setup/initialize`. Opt-in ke role `awcms_setup` (sql/022)                   |
+| Var                             | Required | Default                           | Sensitive | Purpose                                                                                                                     |
+| ------------------------------- | -------- | --------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | Yes      | –                                 | Yes       | Runtime PostgreSQL connection; point it at the `awcms_app` role (see §Database role model)                                  |
+| `AWCMS_APP_DB_PASSWORD`         | –        | –                                 | Yes       | Password of the `awcms_app` role used by the container init script; must match the password in `DATABASE_URL`               |
+| `DATABASE_POOL_MAX`             | –        | `20`                              | –         | Max pool connections (kind `app`; also the default for `worker`/`setup` unless overridden)                                  |
+| `DATABASE_POOL_MAX_WORKER`      | –        | falls back to `DATABASE_POOL_MAX` | –         | Override for max pool connections of kind `worker`                                                                          |
+| `DATABASE_POOL_MAX_SETUP`       | –        | falls back to `DATABASE_POOL_MAX` | –         | Override for max pool connections of kind `setup`                                                                           |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | –        | `15000`                           | –         | Statement timeout                                                                                                           |
+| `DATABASE_PGBOUNCER`            | –        | `false`                           | –         | PgBouncer mode (transaction)                                                                                                |
+| `WORKER_DATABASE_URL`           | –        | falls back to `DATABASE_URL`      | Yes       | Separate connection + pool for background jobs/cron. Opt-in to the `awcms_worker` role (sql/022) — see §Database role model |
+| `SETUP_DATABASE_URL`            | –        | falls back to `DATABASE_URL`      | Yes       | Separate connection + pool for `POST /api/v1/setup/initialize`. Opt-in to the `awcms_setup` role (sql/022)                  |
 
-#### Model role database
+#### Database role model
 
-Yang **benar-benar ada** di repo ini (Issue #141, #160, #163) adalah **empat**
-role: migration owner, `awcms_app`, dan — opt-in — `awcms_worker`/`awcms_setup`.
+What **actually exists** in this repo (Issue #141, #160, #163) is **four**
+roles: the migration owner, `awcms_app`, and — opt-in —
+`awcms_worker`/`awcms_setup`.
 
-1. **Migration owner** (superuser/owner) — dipakai `bun run db:migrate` saja.
-   Satu-satunya role yang bisa `ALTER`/`DROP`/`CREATE`/`GRANT`. Runner
-   membaca env var yang **sama** (`DATABASE_URL`), jadi jalankan migrasi
-   dengan var itu ditimpa ke connection string owner, bukan `awcms_app`.
-2. **`awcms_app`** ("web runtime", `DATABASE_URL`) — melayani setiap HTTP
-   request dan setiap background job. Dibuat
-   `sql/019_awcms_db_role_separation.sql`: bukan superuser, bukan BYPASSRLS,
-   bukan pemilik tabel, DML saja (tanpa DDL). Di situlah RLS baru menjadi
-   batas keamanan nyata: `FORCE ROW LEVEL SECURITY` (migration 017) menutup
-   bypass pemilik tabel, tapi SUPERUSER/BYPASSRLS melewati RLS tanpa peduli
-   FORCE — jadi kedua bagian harus ada, dan sebelum 019 **belum**.
-   Dibuat NOLOGIN tanpa password; deployment mengaktifkannya sekali dengan
-   `ALTER ROLE awcms_app LOGIN PASSWORD '<secret>';` (password tidak pernah
-   masuk migration).
-   Default GUC fail-closed `app.current_tenant_id =
-'00000000-0000-0000-0000-000000000000'` ikut disetel pada role ini:
-   query yang menyentuh tabel RLS di luar `withTenant()` mendapat **nol
-   baris**, bukan error `unrecognized configuration parameter` dan bukan data
-   tenant lain.
+1. **Migration owner** (superuser/owner) — used by `bun run db:migrate` only.
+   The only role that can `ALTER`/`DROP`/`CREATE`/`GRANT`. The runner reads the
+   **same** env var (`DATABASE_URL`), so run migrations with that var overridden
+   to the owner's connection string, not `awcms_app`.
+2. **`awcms_app`** ("web runtime", `DATABASE_URL`) — serves every HTTP request
+   and every background job. Created by
+   `sql/019_awcms_db_role_separation.sql`: not a superuser, not BYPASSRLS, not
+   a table owner, DML only (no DDL). That is where RLS finally becomes a real
+   security boundary: `FORCE ROW LEVEL SECURITY` (migration 017) closes the
+   table-owner bypass, but SUPERUSER/BYPASSRLS walks past RLS regardless of
+   FORCE — so both halves must be present, and before 019 that was **not** the
+   case.
+   It is created NOLOGIN without a password; a deployment activates it once with
+   `ALTER ROLE awcms_app LOGIN PASSWORD '<secret>';` (the password never enters
+   a migration).
+   The fail-closed default GUC `app.current_tenant_id =
+'00000000-0000-0000-0000-000000000000'` is set on this role as well:
+   a query touching an RLS table outside `withTenant()` gets **zero rows**, not
+   an `unrecognized configuration parameter` error and not another tenant's
+   data.
 
-Penyempitan grant tabel global (Issue #160,
-`sql/021_awcms_db_role_grants_narrow.sql`): pada tabel **global tanpa RLS**,
-`awcms_app` **tidak lagi** memegang DML berlebih yang jadi residual #159 —
-sekarang **read-only** pada `awcms_permissions` (katalog permission, hanya diseed
-migration) dan `awcms_schema_migrations` (ledger migrasi, hanya ditulis
-`db:migrate` sebagai owner), dan **tidak bisa `DELETE`** `awcms_tenants` maupun
-`awcms_setup_state`. Yang **sengaja dipertahankan** karena benar-benar dipakai
-jalur kode `awcms_app`: `INSERT`/`UPDATE`/`SELECT` pada `awcms_tenants` (INSERT
-lewat wizard setup yang fallback ke koneksi `awcms_app`; UPDATE lewat layar
-tenant-settings) dan `awcms_setup_state` (lock singleton via jalur setup), plus
-DML penuh pada tabel module-registry (`awcms_modules` + turunannya) yang ditulis
-saat request oleh module-management. Regresi (tabel global baru ikut terbawa
-blanket DML dari default privileges, atau tabel tenant-scoped baru RLS-forced
-tapi **ungranted** → `permission denied`) ditangkap cek `security:readiness`
-"Runtime role table grants match least-privilege matrix".
+Narrowing of global table grants (Issue #160,
+`sql/021_awcms_db_role_grants_narrow.sql`): on **global tables without RLS**,
+`awcms_app` **no longer** holds the excess DML that was residual #159 — it is
+now **read-only** on `awcms_permissions` (the permission catalogue, seeded only
+by migrations) and `awcms_schema_migrations` (the migration ledger, written only
+by `db:migrate` as owner), and it **cannot `DELETE`** from `awcms_tenants` or
+`awcms_setup_state`. What is **deliberately kept** because the `awcms_app` code
+path genuinely uses it: `INSERT`/`UPDATE`/`SELECT` on `awcms_tenants` (INSERT
+through the setup wizard that falls back to the `awcms_app` connection; UPDATE
+through the tenant-settings screen) and `awcms_setup_state` (singleton lock via
+the setup path), plus full DML on the module-registry tables (`awcms_modules` +
+its descendants) written at request time by module-management. Regressions (a
+new global table swept up in blanket DML from default privileges, or a new
+tenant-scoped table that is RLS-forced but **ungranted** → `permission denied`)
+are caught by the `security:readiness` check "Runtime role table grants match
+least-privilege matrix".
 
-3. **`awcms_worker`** ("background worker", `WORKER_DATABASE_URL`) dan
-4. **`awcms_setup`** ("bootstrap/setup", `SETUP_DATABASE_URL`) — dibuat
-   `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163, paruh kedua pemecahan
-   role mini-045; paruh pertama = penyempitan `awcms_app` di sql/021).
-   `awcms_worker` melayani tujuh cron worker (purge audit, dispatch object/
-   email/domain-event/workflow/reporting), `awcms_setup` melayani bootstrap
-   `POST /api/v1/setup/initialize`. Masing-masing hanya memegang GRANT
-   per-jalur-tulis yang benar-benar dipakai kodenya (ditelusuri per-script di
-   repo INI, bukan disalin dari mini — set worker mini
-   visitor-analytics/blog/form-drafts tidak ada di sini), dengan **nol** akses
-   ke katalog global yang tidak disentuhnya (`awcms_permissions`,
-   `awcms_schema_migrations`, `awcms_setup_state`, module registry). Keduanya
-   bukan superuser/BYPASSRLS/owner, punya default GUC fail-closed sama seperti
-   `awcms_app`, dan NOLOGIN tanpa password sampai deployment mengaktifkannya.
+3. **`awcms_worker`** ("background worker", `WORKER_DATABASE_URL`) and
+4. **`awcms_setup`** ("bootstrap/setup", `SETUP_DATABASE_URL`) — created by
+   `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163, the second half of the
+   mini-045 role split; the first half = narrowing `awcms_app` in sql/021).
+   `awcms_worker` serves seven cron workers (audit purge, object/email/
+   domain-event/workflow/reporting dispatch), `awcms_setup` serves the
+   `POST /api/v1/setup/initialize` bootstrap. Each holds only the
+   per-write-path GRANTs its code actually uses (traced per script in THIS
+   repo, not copied from mini — mini's visitor-analytics/blog/form-drafts
+   worker set does not exist here), with **zero** access to the global
+   catalogues it does not touch (`awcms_permissions`,
+   `awcms_schema_migrations`, `awcms_setup_state`, the module registry).
+   Neither is superuser/BYPASSRLS/owner, both carry the same fail-closed default
+   GUC as `awcms_app`, and both are NOLOGIN without a password until a
+   deployment activates them.
 
-**OPT-IN, bukan breaking.** `getWorkerDatabaseClient`/`getSetupDatabaseClient`
-(`src/lib/database/client.ts`) tetap fallback ke `DATABASE_URL` (koneksi
-`awcms_app`) saat `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` kosong — deployment
-yang mengelola satu connection string tetap jalan tanpa perubahan, dan role
-sekadar ada tak terpakai sampai sebuah URL diarahkan padanya. Manfaat opt-in:
-**isolasi pool** (job lambat tidak menghabiskan koneksi yang melayani HTTP,
-`DATABASE_POOL_MAX_WORKER`/`DATABASE_POOL_MAX_SETUP`) **plus isolasi role
-least-privilege nyata**. Konsekuensi jujur dari desain opsional ini: isolasi
-`awcms_app` dari `awcms_tenants`/`awcms_setup_state` baru **penuh** setelah
-`SETUP_DATABASE_URL` diarahkan ke `awcms_setup` — sampai itu, wizard setup masih
-menjalankan INSERT/UPDATE-nya sebagai `awcms_app` lewat jalur fallback (persis
-alasan sql/021 mempertahankan INSERT/UPDATE `awcms_app` di kedua tabel itu).
+**OPT-IN, not breaking.** `getWorkerDatabaseClient`/`getSetupDatabaseClient`
+(`src/lib/database/client.ts`) still fall back to `DATABASE_URL` (the
+`awcms_app` connection) when `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` are
+empty — a deployment that manages a single connection string keeps working
+unchanged, and the roles simply sit there unused until a URL is pointed at them.
+The benefit of opting in: **pool isolation** (a slow job does not exhaust the
+connections serving HTTP,
+`DATABASE_POOL_MAX_WORKER`/`DATABASE_POOL_MAX_SETUP`) **plus real
+least-privilege role isolation**. The honest consequence of this optional
+design: isolating `awcms_app` from `awcms_tenants`/`awcms_setup_state` is only
+**complete** once `SETUP_DATABASE_URL` points at `awcms_setup` — until then the
+setup wizard still runs its INSERT/UPDATE as `awcms_app` through the fallback
+path (exactly why sql/021 kept `awcms_app`'s INSERT/UPDATE on both of those
+tables).
 
-Regresi grant untuk KEDUA lapis role ditangkap cek `security:readiness`: tabel
-global baru ikut blanket-DML atau tabel tenant-scoped baru ungranted pada
-`awcms_app` oleh "Runtime role table grants match least-privilege matrix"; dan
-`awcms_worker`/`awcms_setup` yang — bila diprovisikan — under/over-granted
-dibanding matriksnya oleh "Worker/setup least-privilege role grants match
-matrix" (non-blocking bila role belum diprovisikan: default fallback). Dibanding
-kondisi sebelum 019 (semuanya lewat superuser), ini perbaikan tegas berlapis.
+Grant regressions for BOTH role layers are caught by the `security:readiness`
+check: a new global table swept into blanket DML or a new tenant-scoped table
+ungranted on `awcms_app` by "Runtime role table grants match least-privilege
+matrix"; and `awcms_worker`/`awcms_setup` that — when provisioned — are
+under/over-granted relative to their matrix by "Worker/setup least-privilege
+role grants match matrix" (non-blocking when the role is not yet provisioned:
+the default fallback). Compared with the state before 019 (everything through a
+superuser), this is a firm layered improvement.
 
-#### Kapasitas deployment-aware (target)
+#### Deployment-aware capacity (target)
 
-Direncanakan model kapasitas koneksi lintas-instance yang sama seperti
-awcms-mini — pool/work-class per proses vs kapasitas PostgreSQL/PgBouncer
-yang disetujui untuk seluruh armada instance, divalidasi lewat perintah
-`database:capacity:check` sebelum go-live.
+The plan is the same cross-instance connection capacity model as awcms-mini —
+per-process pool/work-class versus the PostgreSQL/PgBouncer capacity approved
+for the whole fleet of instances, validated through the
+`database:capacity:check` command before go-live.
 
-| Var                                             | Wajib | Default | Sensitif | Fungsi                                                                                                             |
-| ----------------------------------------------- | ----- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –     | `4`     | –        | Kedalaman antrean FIFO per work class = max konkurensi x angka ini; penuh -> reject langsung (503 + `Retry-After`) |
-| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –     | `1`     | –        | Instance `app` (web/SSR) minimum yang diharapkan berjalan bersamaan                                                |
-| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –     | `1`     | –        | Instance `app` steady-state yang diharapkan                                                                        |
-| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –     | `1`     | –        | Batas atas horizontal instance `app`                                                                               |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –     | `0`     | –        | Instance `worker` minimum (script periodik, bukan daemon selalu-jalan)                                             |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –     | `1`     | –        | Instance `worker` steady-state yang diharapkan                                                                     |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –     | `1`     | –        | Batas atas horizontal instance `worker`                                                                            |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –     | `0`     | –        | Instance `setup` minimum                                                                                           |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –     | `0`     | –        | Instance `setup` steady-state yang diharapkan                                                                      |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –     | `1`     | –        | Batas atas horizontal instance `setup`                                                                             |
-| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –     | `200`   | –        | `pgbouncer.ini`'s `max_client_conn` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                               |
-| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –     | `20`    | –        | `pgbouncer.ini`'s `default_pool_size` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                             |
-| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –     | `100`   | –        | Budget koneksi PostgreSQL/PgBouncer yang disetujui untuk deployment ini                                            |
-| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –     | `5`     | –        | Koneksi dicadangkan untuk admin/migration/backup-restore — tidak pernah dipakai sizing runtime app/worker/setup    |
+| Var                                             | Required | Default | Sensitive | Purpose                                                                                                              |
+| ----------------------------------------------- | -------- | ------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –        | `4`     | –         | FIFO queue depth per work class = max concurrency x this number; when full -> immediate reject (503 + `Retry-After`) |
+| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –        | `1`     | –         | Minimum `app` (web/SSR) instances expected to run concurrently                                                       |
+| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –        | `1`     | –         | Expected steady-state `app` instances                                                                                |
+| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –        | `1`     | –         | Horizontal upper bound of `app` instances                                                                            |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –        | `0`     | –         | Minimum `worker` instances (periodic scripts, not always-on daemons)                                                 |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –        | `1`     | –         | Expected steady-state `worker` instances                                                                             |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –        | `1`     | –         | Horizontal upper bound of `worker` instances                                                                         |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –        | `0`     | –         | Minimum `setup` instances                                                                                            |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –        | `0`     | –         | Expected steady-state `setup` instances                                                                              |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –        | `1`     | –         | Horizontal upper bound of `setup` instances                                                                          |
+| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –        | `200`   | –         | Expected `max_client_conn` from `pgbouncer.ini` (when `DATABASE_PGBOUNCER=true`)                                     |
+| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –        | `20`    | –         | Expected `default_pool_size` from `pgbouncer.ini` (when `DATABASE_PGBOUNCER=true`)                                   |
+| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –        | `100`   | –         | PostgreSQL/PgBouncer connection budget approved for this deployment                                                  |
+| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –        | `5`     | –         | Connections reserved for admin/migration/backup-restore — never used by app/worker/setup runtime sizing              |
 
-Default di atas ditujukan aman untuk topologi LAN-first satu-instance tanpa
-PgBouncer. Naikkan var instance MAX hanya saat benar-benar scale-out
-horizontal.
+The defaults above are meant to be safe for a single-instance LAN-first
+topology without PgBouncer. Raise the instance MAX vars only when you genuinely
+scale out horizontally.
 
-### Auth & keamanan
+### Auth & security
 
-| Var                                         | Wajib          | Default                                  | Sensitif | Fungsi                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------- | -------------- | ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AUTH_SESSION_TTL_MIN`                      | –              | `120`                                    | –        | Umur sesi (token opaque, disimpan sebagai `token_hash` — bukan JWT)                                                                                                                                                                                                                                                                                                                        |
-| `AUTH_COOKIE_SECURE`                        | Ya (produksi)  | –                                        | –        | Runtime memasang atribut `Secure` cookie sesi **hanya** bila nilainya persis `"true"` — variabel yang **tidak diset berarti cookie TANPA `Secure`**, itulah alasan aturannya dibalik: `config:validate` di produksi menolak nilai apa pun selain `"true"`, termasuk keadaan tidak diset (gagal-tertutup, `scripts/validate-env.ts`; keadaan-absen digerbangi `tests/validate-env.test.ts`) |
-| `AUTH_LOGIN_MAX_ATTEMPTS`                   | –              | `5`                                      | –        | Lockout login — **per principal**, satu penghitung per manusia lintas seluruh tenant (ADR-0086)                                                                                                                                                                                                                                                                                            |
-| `AUTH_LOGIN_RATE_LIMIT_MAX`                 | –              | `20`                                     | –        | Rate limit login per sumber+tenant                                                                                                                                                                                                                                                                                                                                                         |
-| `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC`          | –              | `60`                                     | –        | Jendela waktu rate limit login (detik)                                                                                                                                                                                                                                                                                                                                                     |
-| `TRUSTED_PROXY_ENABLED`                     | Ya (produksi)  | `false`                                  | –        | Wajib eksplisit di produksi. `true` bila di belakang proxy tepercaya (profil nginx); `false` bila terekspos langsung. Salah pilih merusak rate limit login ke dua arah — lihat catatan di bawah                                                                                                                                                                                            |
-| `TRUSTED_PROXY_HOP_COUNT`                   | –              | `1`                                      | –        | Jumlah hop tepercaya di depan proses ini. Entri klien dihitung dari KANAN sejauh angka ini; entri di kirinya bisa ditulis penyerang dan tak pernah dibaca (#438). Ditolak `config:validate` bila `TRUSTED_PROXY_ENABLED` bukan `true`                                                                                                                                                      |
-| `AUTH_IP_HASH_SECRET`                       | –              | –                                        | secret   | Kunci HMAC `ipHash` audit login; kosong → kunci acak per proses (hash tak sebanding lintas restart)                                                                                                                                                                                                                                                                                        |
-| `AUTH_PASSWORD_RESET_TOKEN_TTL_MIN`         | –              | `30`                                     | –        | Umur token reset password                                                                                                                                                                                                                                                                                                                                                                  |
-| `AUTH_PASSWORD_RESET_RATE_LIMIT_MAX`        | –              | `5`                                      | –        | Rate limit forgot/reset per sumber+tenant                                                                                                                                                                                                                                                                                                                                                  |
-| `AUTH_PASSWORD_RESET_RATE_LIMIT_WINDOW_SEC` | –              | `900`                                    | –        | Jendela waktu rate limit reset password (detik)                                                                                                                                                                                                                                                                                                                                            |
-| `AUTH_INVITATION_TOKEN_TTL_HOURS`           | –              | `168`                                    | –        | Umur tautan undangan, dalam JAM (ADR-0082). Resend merotasi token sehingga TTL dihitung ulang dari resend; basis data membatasi resend 5 kali per baris                                                                                                                                                                                                                                    |
-| `AUTH_INVITATION_RATE_LIMIT_MAX`            | –              | `5`                                      | –        | Rate limit preview/accept undangan per sumber+tenant                                                                                                                                                                                                                                                                                                                                       |
-| `AUTH_INVITATION_RATE_LIMIT_WINDOW_SEC`     | –              | `900`                                    | –        | Jendela waktu rate limit undangan (detik)                                                                                                                                                                                                                                                                                                                                                  |
-| `AUTH_ONLINE_SECURITY_ENABLED`              | –              | `false`                                  | –        | Gate full-online-only auth hardening — lihat §Full-online auth security hardening di bawah                                                                                                                                                                                                                                                                                                 |
-| `AUTH_ONLINE_SECURITY_PROFILE`              | –              | `disabled`                               | –        | `disabled` (default) atau `full_online`; wajib `full_online` bila `AUTH_ONLINE_SECURITY_ENABLED=true`                                                                                                                                                                                                                                                                                      |
-| `TURNSTILE_ENABLED`                         | –              | `false`                                  | –        | Cloudflare Turnstile bot protection                                                                                                                                                                                                                                                                                                                                                        |
-| `TURNSTILE_SITE_KEY`                        | bila Turnstile | –                                        | –        | Site key publik (bukan secret) — dirender di widget `/login`                                                                                                                                                                                                                                                                                                                               |
-| `TURNSTILE_SECRET_KEY`                      | bila Turnstile | –                                        | Ya       | Secret key — hanya untuk verifikasi server-side                                                                                                                                                                                                                                                                                                                                            |
-| `TURNSTILE_VERIFY_TIMEOUT_MS`               | –              | `5000`                                   | –        | Timeout panggilan siteverify Cloudflare (ms)                                                                                                                                                                                                                                                                                                                                               |
-| `AUTH_MFA_ENABLED`                          | –              | `false`                                  | –        | MFA/TOTP login challenge                                                                                                                                                                                                                                                                                                                                                                   |
-| `AUTH_MFA_SECRET_ENCRYPTION_KEY`            | bila MFA       | –                                        | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest TOTP secret                                                                                                                                                                                                                                                                                                                       |
-| `AUTH_MFA_TOTP_ISSUER`                      | –              | `AWCMS`                                  | –        | Nama issuer yang tampil di aplikasi authenticator                                                                                                                                                                                                                                                                                                                                          |
-| `AUTH_MFA_TOTP_PERIOD_SEC`                  | –              | `30`                                     | –        | Panjang time-step TOTP (detik)                                                                                                                                                                                                                                                                                                                                                             |
-| `AUTH_MFA_TOTP_DIGITS`                      | –              | `6`                                      | –        | Jumlah digit kode TOTP (`6` atau `8`)                                                                                                                                                                                                                                                                                                                                                      |
-| `AUTH_MFA_CHALLENGE_TTL_SEC`                | –              | `300`                                    | –        | Umur challenge MFA login (detik)                                                                                                                                                                                                                                                                                                                                                           |
-| `AUTH_MFA_RATE_LIMIT_MAX`                   | –              | `5`                                      | –        | Rate limit verifikasi MFA per sumber+tenant                                                                                                                                                                                                                                                                                                                                                |
-| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC`            | –              | `300`                                    | –        | Jendela waktu rate limit verifikasi MFA (detik)                                                                                                                                                                                                                                                                                                                                            |
-| `AUTH_GOOGLE_LOGIN_ENABLED`                 | –              | `false`                                  | –        | Google OIDC login                                                                                                                                                                                                                                                                                                                                                                          |
-| `AUTH_GOOGLE_CLIENT_ID`                     | bila Google    | –                                        | –        | OAuth client ID dari Google Cloud Console                                                                                                                                                                                                                                                                                                                                                  |
-| `AUTH_GOOGLE_CLIENT_SECRET`                 | bila Google    | –                                        | Ya       | OAuth client secret — hanya untuk token exchange server-side                                                                                                                                                                                                                                                                                                                               |
-| `AUTH_GOOGLE_ALLOWED_DOMAINS`               | –              | –                                        | –        | Daftar domain email (dipisah koma) yang boleh auto-link; kosong = auto-link selalu ditolak                                                                                                                                                                                                                                                                                                 |
-| `AUTH_GOOGLE_REDIRECT_PATH`                 | –              | `/api/v1/auth/providers/google/callback` | –        | Path callback OAuth di bawah `APP_URL`                                                                                                                                                                                                                                                                                                                                                     |
-| `AUTH_SSO_ENABLED`                          | –              | `false`                                  | –        | Generic tenant OIDC SSO                                                                                                                                                                                                                                                                                                                                                                    |
-| `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`        | bila SSO       | –                                        | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest client secret provider — beda dari key MFA                                                                                                                                                                                                                                                                                        |
-| `AUTH_SSO_DISCOVERY_TIMEOUT_MS`             | –              | `5000`                                   | –        | Timeout discovery/JWKS/token-exchange OIDC provider tenant (ms)                                                                                                                                                                                                                                                                                                                            |
-| `AUTH_SSO_MAX_PROVIDERS_PER_TENANT`         | –              | `20`                                     | –        | Batas jumlah baris provider aktif per tenant                                                                                                                                                                                                                                                                                                                                               |
+| Var                                         | Required         | Default                                  | Sensitive | Purpose                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ---------------- | ---------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_SESSION_TTL_MIN`                      | –                | `120`                                    | –         | Session lifetime (opaque token, stored as `token_hash` — not a JWT)                                                                                                                                                                                                                                                                                                                                            |
+| `AUTH_COOKIE_SECURE`                        | Yes (production) | –                                        | –         | The runtime sets the session cookie's `Secure` attribute **only** when the value is exactly `"true"` — a variable that is **not set means a cookie WITHOUT `Secure`**, which is why the rule is inverted: in production `config:validate` rejects any value other than `"true"`, including the unset state (fail-closed, `scripts/validate-env.ts`; the absent state is gated by `tests/validate-env.test.ts`) |
+| `AUTH_LOGIN_MAX_ATTEMPTS`                   | –                | `5`                                      | –         | Login lockout — **per principal**, one counter per human across every tenant (ADR-0086)                                                                                                                                                                                                                                                                                                                        |
+| `AUTH_LOGIN_RATE_LIMIT_MAX`                 | –                | `20`                                     | –         | Login rate limit per source+tenant                                                                                                                                                                                                                                                                                                                                                                             |
+| `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC`          | –                | `60`                                     | –         | Login rate limit time window (seconds)                                                                                                                                                                                                                                                                                                                                                                         |
+| `TRUSTED_PROXY_ENABLED`                     | Yes (production) | `false`                                  | –         | Must be explicit in production. `true` when behind a trusted proxy (the nginx profile); `false` when directly exposed. Choosing wrong breaks the login rate limit in both directions — see the note below                                                                                                                                                                                                      |
+| `TRUSTED_PROXY_HOP_COUNT`                   | –                | `1`                                      | –         | Number of trusted hops in front of this process. The client entry is counted from the RIGHT by this number; entries to its left can be written by an attacker and are never read (#438). Rejected by `config:validate` when `TRUSTED_PROXY_ENABLED` is not `true`                                                                                                                                              |
+| `AUTH_IP_HASH_SECRET`                       | –                | –                                        | secret    | HMAC key for the login audit `ipHash`; empty → a random per-process key (hashes are not comparable across restarts)                                                                                                                                                                                                                                                                                            |
+| `AUTH_PASSWORD_RESET_TOKEN_TTL_MIN`         | –                | `30`                                     | –         | Password reset token lifetime                                                                                                                                                                                                                                                                                                                                                                                  |
+| `AUTH_PASSWORD_RESET_RATE_LIMIT_MAX`        | –                | `5`                                      | –         | Forgot/reset rate limit per source+tenant                                                                                                                                                                                                                                                                                                                                                                      |
+| `AUTH_PASSWORD_RESET_RATE_LIMIT_WINDOW_SEC` | –                | `900`                                    | –         | Password reset rate limit time window (seconds)                                                                                                                                                                                                                                                                                                                                                                |
+| `AUTH_INVITATION_TOKEN_TTL_HOURS`           | –                | `168`                                    | –         | Invitation link lifetime, in HOURS (ADR-0082). Resend rotates the token so the TTL is recomputed from the resend; the database limits resends to 5 per row                                                                                                                                                                                                                                                     |
+| `AUTH_INVITATION_RATE_LIMIT_MAX`            | –                | `5`                                      | –         | Invitation preview/accept rate limit per source+tenant                                                                                                                                                                                                                                                                                                                                                         |
+| `AUTH_INVITATION_RATE_LIMIT_WINDOW_SEC`     | –                | `900`                                    | –         | Invitation rate limit time window (seconds)                                                                                                                                                                                                                                                                                                                                                                    |
+| `AUTH_ONLINE_SECURITY_ENABLED`              | –                | `false`                                  | –         | Gate for full-online-only auth hardening — see §Full-online auth security hardening below                                                                                                                                                                                                                                                                                                                      |
+| `AUTH_ONLINE_SECURITY_PROFILE`              | –                | `disabled`                               | –         | `disabled` (default) or `full_online`; must be `full_online` when `AUTH_ONLINE_SECURITY_ENABLED=true`                                                                                                                                                                                                                                                                                                          |
+| `TURNSTILE_ENABLED`                         | –                | `false`                                  | –         | Cloudflare Turnstile bot protection                                                                                                                                                                                                                                                                                                                                                                            |
+| `TURNSTILE_SITE_KEY`                        | if Turnstile     | –                                        | –         | Public site key (not a secret) — rendered in the `/login` widget                                                                                                                                                                                                                                                                                                                                               |
+| `TURNSTILE_SECRET_KEY`                      | if Turnstile     | –                                        | Yes       | Secret key — server-side verification only                                                                                                                                                                                                                                                                                                                                                                     |
+| `TURNSTILE_VERIFY_TIMEOUT_MS`               | –                | `5000`                                   | –         | Timeout for the Cloudflare siteverify call (ms)                                                                                                                                                                                                                                                                                                                                                                |
+| `AUTH_MFA_ENABLED`                          | –                | `false`                                  | –         | MFA/TOTP login challenge                                                                                                                                                                                                                                                                                                                                                                                       |
+| `AUTH_MFA_SECRET_ENCRYPTION_KEY`            | if MFA           | –                                        | Yes       | AES-256-GCM key (base64, 32 bytes) for encryption-at-rest of the TOTP secret                                                                                                                                                                                                                                                                                                                                   |
+| `AUTH_MFA_TOTP_ISSUER`                      | –                | `AWCMS`                                  | –         | Issuer name shown in the authenticator app                                                                                                                                                                                                                                                                                                                                                                     |
+| `AUTH_MFA_TOTP_PERIOD_SEC`                  | –                | `30`                                     | –         | TOTP time-step length (seconds)                                                                                                                                                                                                                                                                                                                                                                                |
+| `AUTH_MFA_TOTP_DIGITS`                      | –                | `6`                                      | –         | Number of TOTP code digits (`6` or `8`)                                                                                                                                                                                                                                                                                                                                                                        |
+| `AUTH_MFA_CHALLENGE_TTL_SEC`                | –                | `300`                                    | –         | MFA login challenge lifetime (seconds)                                                                                                                                                                                                                                                                                                                                                                         |
+| `AUTH_MFA_RATE_LIMIT_MAX`                   | –                | `5`                                      | –         | MFA verification rate limit per source+tenant                                                                                                                                                                                                                                                                                                                                                                  |
+| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC`            | –                | `300`                                    | –         | MFA verification rate limit time window (seconds)                                                                                                                                                                                                                                                                                                                                                              |
+| `AUTH_GOOGLE_LOGIN_ENABLED`                 | –                | `false`                                  | –         | Google OIDC login                                                                                                                                                                                                                                                                                                                                                                                              |
+| `AUTH_GOOGLE_CLIENT_ID`                     | if Google        | –                                        | –         | OAuth client ID from the Google Cloud Console                                                                                                                                                                                                                                                                                                                                                                  |
+| `AUTH_GOOGLE_CLIENT_SECRET`                 | if Google        | –                                        | Yes       | OAuth client secret — server-side token exchange only                                                                                                                                                                                                                                                                                                                                                          |
+| `AUTH_GOOGLE_ALLOWED_DOMAINS`               | –                | –                                        | –         | Comma-separated list of email domains allowed to auto-link; empty = auto-link is always refused                                                                                                                                                                                                                                                                                                                |
+| `AUTH_GOOGLE_REDIRECT_PATH`                 | –                | `/api/v1/auth/providers/google/callback` | –         | OAuth callback path under `APP_URL`                                                                                                                                                                                                                                                                                                                                                                            |
+| `AUTH_SSO_ENABLED`                          | –                | `false`                                  | –         | Generic tenant OIDC SSO                                                                                                                                                                                                                                                                                                                                                                                        |
+| `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`        | if SSO           | –                                        | Yes       | AES-256-GCM key (base64, 32 bytes) for encryption-at-rest of a provider's client secret — different from the MFA key                                                                                                                                                                                                                                                                                           |
+| `AUTH_SSO_DISCOVERY_TIMEOUT_MS`             | –                | `5000`                                   | –         | Timeout for tenant OIDC provider discovery/JWKS/token-exchange (ms)                                                                                                                                                                                                                                                                                                                                            |
+| `AUTH_SSO_MAX_PROVIDERS_PER_TENANT`         | –                | `20`                                     | –         | Limit on the number of active provider rows per tenant                                                                                                                                                                                                                                                                                                                                                         |
 
-### Full-online auth security hardening (opsional, target)
+### Full-online auth security hardening (optional, target)
 
-Gate bersama untuk fitur online-only: Cloudflare Turnstile, MFA/TOTP, Google
-OIDC login, generic tenant OIDC SSO, dan admin policy UI. **Bukan** pengganti
-model deployment `APP_ENV=production` — deployment offline/LAN direncanakan
-bisa production-grade secara operasional tanpa pernah butuh fitur
-online-only ini.
+A shared gate for online-only features: Cloudflare Turnstile, MFA/TOTP, Google
+OIDC login, generic tenant OIDC SSO, and the admin policy UI. It is **not** a
+replacement for the `APP_ENV=production` deployment model — an offline/LAN
+deployment is planned to be operationally production-grade without ever needing
+these online-only features.
 
-- `AUTH_ONLINE_SECURITY_ENABLED` tidak di-set (atau bukan `"true"`) → seluruh
-  fitur hardening online-only dianggap nonaktif; tidak ada credential
-  provider apa pun yang dibutuhkan. Ini default setiap deployment
-  offline/LAN.
-- `AUTH_ONLINE_SECURITY_ENABLED=true` mewajibkan
-  `AUTH_ONLINE_SECURITY_PROFILE=full_online` — nilai lain (termasuk
-  `"disabled"` yang eksplisit kontradiktif) direncanakan gagal
-  `config:validate`.
-- Direncanakan satu helper terpusat (pola `isFullOnlineSecurityActive(env)`)
-  yang wajib dipanggil setiap fitur online/provider-terkait sebelum
-  melakukan apa pun yang online/provider-terkait — jangan re-derive aturan
-  "keduanya harus setuju" di tempat lain.
-- **Cloudflare Turnstile** — direncanakan divalidasi independen dari gate di
-  atas, tapi aktivasi runtime butuh KEDUANYA (gate ∧ `TURNSTILE_ENABLED=true`).
-  Berlaku di `POST /auth/login`, `/auth/password/forgot`,
-  `/auth/password/reset`, `/setup/initialize` — token diverifikasi
-  server-side ke Cloudflare siteverify SEBELUM proses password/DB yang
-  mahal. Verifikasi fail-closed by design; hanya kegagalan transport genuine
-  ke Cloudflare yang membuka circuit breaker-nya — respons `success:false`
-  yang normal (token client memang salah) tidak memicu breaker.
-- **MFA/TOTP** — `AUTH_MFA_ENABLED` direncanakan divalidasi independen dari
-  gate di atas, tapi aktivasi runtime butuh KEDUANYA. MFA **opt-in per
-  identity**, bukan mandatory tenant-wide. TOTP secret dienkripsi at rest
-  (AES-256-GCM, `AUTH_MFA_SECRET_ENCRYPTION_KEY`) — satu-satunya secret
-  aplikasi yang dienkripsi reversibel, bukan di-hash, karena harus bisa
-  dihitung ulang untuk verifikasi kode. Recovery code disimpan hash-only.
-  Reset password TIDAK menonaktifkan MFA.
-- **Google OIDC login** — provider account ditautkan via `sub` (subject
-  OIDC), TIDAK PERNAH via email — auto-link by email hanya terjadi bila
-  `email_verified` DAN domain-nya ada di `AUTH_GOOGLE_ALLOWED_DOMAINS`
-  (kosong = auto-link selalu ditolak, fail-closed). ID token diverifikasi
-  kriptografis penuh (signature, issuer, audience, expiry, nonce).
-- **Generic tenant OIDC SSO** — jalur PARALEL untuk provider
-  tenant-configured (Okta, Azure AD, Keycloak, dst.), terpisah dari Google
-  OIDC login. Client secret provider terenkripsi AES-256-GCM ATAU env-var
-  reference — persis salah satu, tidak pernah keduanya, dan tidak pernah
-  plaintext di response API manapun. **Break-glass enforcement**:
-  `sso_required=true` atau `password_login_enabled=false` tidak bisa
-  disimpan kecuali minimal satu identity break-glass yang saat ini aktif —
-  dicek ulang dari DB di titik SAVE dan di titik readiness/go-live.
-- **Admin policy UI** — menampilkan ringkasan status seluruh fitur di atas;
-  di setiap deployment offline/LAN/local (default), halaman hanya
-  menampilkan informasi read-only, tanpa form/tabel apa pun.
+- `AUTH_ONLINE_SECURITY_ENABLED` unset (or not `"true"`) → every online-only
+  hardening feature is considered off; no provider credential of any kind is
+  required. This is the default for every offline/LAN deployment.
+- `AUTH_ONLINE_SECURITY_ENABLED=true` requires
+  `AUTH_ONLINE_SECURITY_PROFILE=full_online` — any other value (including an
+  explicitly contradictory `"disabled"`) is planned to fail `config:validate`.
+- The plan is one centralised helper (the `isFullOnlineSecurityActive(env)`
+  pattern) that every online/provider-related feature must call before doing
+  anything online/provider-related — do not re-derive the "both must agree"
+  rule anywhere else.
+- **Cloudflare Turnstile** — planned to be validated independently of the gate
+  above, but runtime activation requires BOTH (gate ∧ `TURNSTILE_ENABLED=true`).
+  It applies to `POST /auth/login`, `/auth/password/forgot`,
+  `/auth/password/reset`, `/setup/initialize` — the token is verified
+  server-side against Cloudflare siteverify BEFORE the expensive password/DB
+  work. Verification is fail-closed by design; only a genuine transport failure
+  to Cloudflare opens its circuit breaker — a normal `success:false` response
+  (the client token really is wrong) does not trip the breaker.
+- **MFA/TOTP** — `AUTH_MFA_ENABLED` is planned to be validated independently of
+  the gate above, but runtime activation requires BOTH. MFA is **opt-in per
+  identity**, not mandatory tenant-wide. The TOTP secret is encrypted at rest
+  (AES-256-GCM, `AUTH_MFA_SECRET_ENCRYPTION_KEY`) — the only application secret
+  that is reversibly encrypted rather than hashed, because it must be
+  recomputable to verify a code. Recovery codes are stored hash-only. A
+  password reset does NOT disable MFA.
+- **Google OIDC login** — the provider account is linked via `sub` (the OIDC
+  subject), NEVER via email — auto-link by email only happens when
+  `email_verified` is true AND its domain is in `AUTH_GOOGLE_ALLOWED_DOMAINS`
+  (empty = auto-link is always refused, fail-closed). The ID token is fully
+  cryptographically verified (signature, issuer, audience, expiry, nonce).
+- **Generic tenant OIDC SSO** — a PARALLEL path for tenant-configured providers
+  (Okta, Azure AD, Keycloak, etc.), separate from Google OIDC login. The
+  provider's client secret is either AES-256-GCM encrypted OR an env-var
+  reference — exactly one, never both, and never plaintext in any API response.
+  **Break-glass enforcement**: `sso_required=true` or
+  `password_login_enabled=false` cannot be saved unless at least one break-glass
+  identity is currently active — re-checked from the DB at SAVE time and at
+  readiness/go-live time.
+- **Admin policy UI** — shows a status summary of every feature above; in every
+  offline/LAN/local deployment (the default) the page only shows read-only
+  information, without any form or table.
 
-### Batas ukuran request body (target)
+### Request body size limits (target)
 
-Direncanakan sebagai konstanta kode (bukan env var) — sengaja tidak dibuat
-configurable agar tidak ada deployment yang bisa diam-diam melonggarkan
-plafon keras tanpa review kode. Setiap handler `/api/*` yang menerima body
-membaca lewat helper `readJsonBody`/`readTextBody`/`readFormBody` (pengganti
-`request.json()`/`.text()`/`.formData()` langsung) — menegakkan
-`Content-Length` yang dideklarasikan SEBELUM byte apa pun dibaca, dan
-penghitungan byte streaming untuk body chunked/tanpa `Content-Length`. Tier
-direncanakan: `default` (128 KiB, mayoritas endpoint CRUD/settings/auth),
-`large` (5 MiB, endpoint konten-berat/batch — mis. import data
-finance/inventory, `sync/push`/`sync/objects` batch). Plafon keras 10 MiB —
-tidak ada tier yang boleh melebihinya. Body yang terlalu besar selalu `413
-PAYLOAD_TOO_LARGE`.
+Planned as code constants (not env vars) — deliberately not made configurable
+so that no deployment can silently loosen the hard ceiling without a code
+review. Every `/api/*` handler that accepts a body reads through the
+`readJsonBody`/`readTextBody`/`readFormBody` helpers (replacing direct
+`request.json()`/`.text()`/`.formData()`) — enforcing the declared
+`Content-Length` BEFORE any byte is read, plus streaming byte counting for
+chunked bodies/bodies without a `Content-Length`. The planned tiers:
+`default` (128 KiB, the majority of CRUD/settings/auth endpoints),
+`large` (5 MiB, content-heavy/batch endpoints — e.g. finance/inventory data
+import, `sync/push`/`sync/objects` batches). The hard ceiling is 10 MiB — no
+tier may exceed it. An oversized body is always `413 PAYLOAD_TOO_LARGE`.
 
 ### Sync & node
 
-| Var                       | Wajib     | Default | Sensitif | Fungsi                                                                                                    |
-| ------------------------- | --------- | ------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `AWCMS_SYNC_ENABLED`      | –         | `false` | –        | Aktifkan sync hybrid (offline-first outbox)                                                               |
-| `AWCMS_SYNC_HMAC_SECRET`  | bila sync | –       | Ya       | Signature HMAC                                                                                            |
-| `AWCMS_SYNC_MAX_SKEW_SEC` | –         | `300`   | –        | Toleransi anti-replay                                                                                     |
-| `SYNC_HMAC_ALLOW_LEGACY`  | –         | `true`  | –        | Terima signature v1 (tak mengikat tenant/node, rentan GHSA-c972); set `false` setelah semua node kirim v2 |
+| Var                       | Required | Default | Sensitive | Purpose                                                                                                        |
+| ------------------------- | -------- | ------- | --------- | -------------------------------------------------------------------------------------------------------------- |
+| `AWCMS_SYNC_ENABLED`      | –        | `false` | –         | Enable hybrid sync (offline-first outbox)                                                                      |
+| `AWCMS_SYNC_HMAC_SECRET`  | if sync  | –       | Yes       | HMAC signature                                                                                                 |
+| `AWCMS_SYNC_MAX_SKEW_SEC` | –        | `300`   | –         | Anti-replay tolerance                                                                                          |
+| `SYNC_HMAC_ALLOW_LEGACY`  | –        | `true`  | –         | Accept v1 signatures (not bound to tenant/node, vulnerable to GHSA-c972); set `false` once every node sends v2 |
 
-Identitas node direncanakan berasal dari tabel `awcms_sync_nodes` (DB),
-teregistrasi otomatis lewat header/HMAC saat request sync pertama — bukan
-env var terpisah (mengikuti temuan awcms-mini yang men-deprecate
-`AWCMS_MINI_NODE_ID` karena tidak pernah dibaca kode).
+Node identity is planned to come from the `awcms_sync_nodes` table (DB),
+registered automatically through the header/HMAC on the first sync request —
+not a separate env var (following the awcms-mini finding that deprecated
+`AWCMS_MINI_NODE_ID` because no code ever read it).
 
 ### Storage
 
-| Var                             | Wajib   | Default | Sensitif | Fungsi                                                                            |
-| ------------------------------- | ------- | ------- | -------- | --------------------------------------------------------------------------------- |
-| `R2_ENABLED`                    | –       | `false` | –        | Aktifkan object storage R2 (mis. lampiran dokumen finance, foto barang inventory) |
-| `R2_ACCOUNT_ID`                 | bila R2 | –       | –        | Akun R2 (identifier, bukan kredensial)                                            |
-| `R2_ACCESS_KEY_ID`              | bila R2 | –       | Ya       | Kredensial R2                                                                     |
-| `R2_SECRET_ACCESS_KEY`          | bila R2 | –       | Ya       | Kredensial R2                                                                     |
-| `R2_BUCKET`                     | bila R2 | –       | –        | Bucket                                                                            |
-| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –       | `10000` | –        | Timeout upload dispatcher                                                         |
+| Var                             | Required | Default | Sensitive | Purpose                                                                             |
+| ------------------------------- | -------- | ------- | --------- | ----------------------------------------------------------------------------------- |
+| `R2_ENABLED`                    | –        | `false` | –         | Enable R2 object storage (e.g. finance document attachments, inventory item photos) |
+| `R2_ACCOUNT_ID`                 | if R2    | –       | –         | R2 account (an identifier, not a credential)                                        |
+| `R2_ACCESS_KEY_ID`              | if R2    | –       | Yes       | R2 credential                                                                       |
+| `R2_SECRET_ACCESS_KEY`          | if R2    | –       | Yes       | R2 credential                                                                       |
+| `R2_BUCKET`                     | if R2    | –       | –         | Bucket                                                                              |
+| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –        | `10000` | –         | Dispatcher upload timeout                                                           |
 
-Storage lokal filesystem (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) sengaja
-tidak dijadikan env var terpisah — mengikuti temuan awcms-mini bahwa
-switch lokal/R2 sesungguhnya cukup satu flag (`R2_ENABLED`).
+Local filesystem storage (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) is
+deliberately not made a separate env var — following the awcms-mini finding
+that the local/R2 switch really only needs one flag (`R2_ENABLED`).
 
-### Cache tepi / Varnish (ADR-0042)
+### Edge cache / Varnish (ADR-0042)
 
-Tier cache OPSIONAL di depan aplikasi (`src/lib/edge-cache/config.ts`,
-[`edge-cache-architecture.md`](edge-cache-architecture.md)). Seluruh variabel
-tidak diset secara default, dan tidak diset berarti subsistem **benar-benar
-inert** — tidak ada surrogate header, tidak ada invalidasi, tidak ada
-perubahan perilaku. Mengaktifkannya adalah perubahan dua sisi: aplikasi
-dikonfigurasi di sini DAN container Varnish dipasang di depan
+An OPTIONAL cache tier in front of the application
+(`src/lib/edge-cache/config.ts`,
+[`edge-cache-architecture.md`](edge-cache-architecture.md)). None of these
+variables is set by default, and not being set means the subsystem is
+**genuinely inert** — no surrogate header, no invalidation, no behavioural
+change. Turning it on is a two-sided change: the application is configured here
+AND a Varnish container is put in front
 (`infra/varnish/docker-compose.varnish.yml`).
 
-| Var                                         | Wajib         | Default | Sensitif | Fungsi                                                                                                                                                                                                                                                                     |
-| ------------------------------------------- | ------------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EDGE_CACHE_MODE`                           | –             | `off`   | –        | `off` (inert) \| `auto` (TTL menanjak hanya saat origin tertekan — direkomendasikan) \| `on` (selalu iklankan TTL terdeklarasi). Mode TIDAK pernah mengubah APA yang boleh di-cache — itu allow-list fail-closed                                                           |
-| `EDGE_CACHE_PURGE_ENDPOINT`                 | bila aktif    | –       | –        | Listener Varnish tujuan permintaan `BAN` (invalidasi), mis. `http://varnish:80`. Tanpa ini konten yang diedit tetap tampil sampai TTL habis. Catatan: purge menjangkau **Varnish saja** — lihat §Batas jangkauan purge di `edge-cache-architecture.md`                     |
-| `EDGE_CACHE_PURGE_TOKEN`                    | bila endpoint | –       | Ya       | Shared secret header `X-Edge-Purge-Token`, wajib sama dengan milik container Varnish. Endpoint TANPA token = temuan CRITICAL `security:readiness`: VCL menolak BAN tak-terautentikasi, tiap invalidasi gagal senyap dan situs menyajikan konten basi sambil terlihat sehat |
-| `EDGE_CACHE_MAX_TTL_SECONDS`                | –             | `300`   | –        | Plafon keras TTL tepi yang diiklankan; meng-clamp surface yang mendeklarasikan lebih panjang. Nilai `0` saat cache aktif = tidak ada yang pernah di-cache (dilaporkan validator)                                                                                           |
-| `EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS` | –             | `600`   | –        | Lama tepi boleh menyajikan salinan basi sambil revalidasi latar — proteksi utama thundering herd ke database                                                                                                                                                               |
-| `EDGE_CACHE_AUTO_REQUEST_RATE_THRESHOLD`    | –             | `5`     | –        | Ambang request/detik berkelanjutan yang memulai tanjakan TTL mode `auto` (TTL penuh tercapai pada 2× ambang)                                                                                                                                                               |
-| `EDGE_CACHE_AUTO_LATENCY_THRESHOLD_MS`      | –             | `250`   | –        | Ambang rata-rata bergulir latensi origin (ms) yang memulai tanjakan TTL mode `auto`                                                                                                                                                                                        |
-| `EDGE_CACHE_AUTO_WINDOW_SECONDS`            | –             | `60`    | –        | Jendela pengukuran ambang mode `auto` (detik)                                                                                                                                                                                                                              |
-| `EDGE_CACHE_PURGE_BATCH_SIZE`               | –             | `200`   | –        | Baris antrean purge yang dikuras per tenant per pass `bun run edge-cache:purge`                                                                                                                                                                                            |
+| Var                                         | Required    | Default | Sensitive | Purpose                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | ----------- | ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EDGE_CACHE_MODE`                           | –           | `off`   | –         | `off` (inert) \| `auto` (TTL ramps up only when the origin is under pressure — recommended) \| `on` (always advertise the declared TTL). The mode NEVER changes WHAT may be cached — that is a fail-closed allow-list                                                                         |
+| `EDGE_CACHE_PURGE_ENDPOINT`                 | if enabled  | –       | –         | The Varnish listener that receives `BAN` (invalidation) requests, e.g. `http://varnish:80`. Without it, edited content keeps being served until the TTL expires. Note: purge reaches **Varnish only** — see §Purge reach limits in `edge-cache-architecture.md`                               |
+| `EDGE_CACHE_PURGE_TOKEN`                    | if endpoint | –       | Yes       | Shared secret for the `X-Edge-Purge-Token` header, must match the Varnish container's. An endpoint WITHOUT a token = a CRITICAL `security:readiness` finding: the VCL rejects unauthenticated BANs, every invalidation fails silently and the site serves stale content while looking healthy |
+| `EDGE_CACHE_MAX_TTL_SECONDS`                | –           | `300`   | –         | Hard ceiling on the advertised edge TTL; it clamps any surface declaring something longer. A value of `0` while the cache is active = nothing is ever cached (reported by the validator)                                                                                                      |
+| `EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS` | –           | `600`   | –         | How long the edge may serve a stale copy while revalidating in the background — the main thundering-herd protection for the database                                                                                                                                                          |
+| `EDGE_CACHE_AUTO_REQUEST_RATE_THRESHOLD`    | –           | `5`     | –         | The sustained requests/second threshold that starts the `auto` mode TTL ramp (full TTL is reached at 2× the threshold)                                                                                                                                                                        |
+| `EDGE_CACHE_AUTO_LATENCY_THRESHOLD_MS`      | –           | `250`   | –         | The rolling-average origin latency threshold (ms) that starts the `auto` mode TTL ramp                                                                                                                                                                                                        |
+| `EDGE_CACHE_AUTO_WINDOW_SECONDS`            | –           | `60`    | –         | The measurement window for the `auto` mode thresholds (seconds)                                                                                                                                                                                                                               |
+| `EDGE_CACHE_PURGE_BATCH_SIZE`               | –           | `200`   | –         | Purge queue rows drained per tenant per `bun run edge-cache:purge` pass                                                                                                                                                                                                                       |
 
-Salah isi yang paling mahal bukan yang memerahkan boot: endpoint tanpa token
-(invalidasi gagal senyap, konten basi tak terbatas) dan `MAX_TTL` yang
-dinaikkan tanpa sadar (satu deklarasi ceroboh mem-pin konten basi di tepi) —
-keduanya diperiksa `config:validate`/`security:readiness`, bukan ditebak.
+The most expensive misconfiguration is not the one that turns boot red: an
+endpoint without a token (invalidation fails silently, stale content forever)
+and a `MAX_TTL` raised without noticing (one careless declaration pins stale
+content at the edge) — both are checked by
+`config:validate`/`security:readiness`, not guessed at.
 
-### Email (notifikasi — target)
+### Email (notifications — target)
 
-Direncanakan sebagai modul base reusable untuk password reset, system
-announcement, dan notifikasi workflow (mis. approval finance/procurement
-yang butuh persetujuan berjenjang) — provider-neutral.
+Planned as a reusable base module for password reset, system announcements, and
+workflow notifications (e.g. finance/procurement approvals needing multi-level
+sign-off) — provider-neutral.
 
-| Var                      | Wajib      | Default | Sensitif | Fungsi                                                    |
-| ------------------------ | ---------- | ------- | -------- | --------------------------------------------------------- |
-| `EMAIL_ENABLED`          | –          | `false` | –        | Aktifkan modul email                                      |
-| `EMAIL_PROVIDER`         | bila aktif | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial) |
-| `EMAIL_FROM_ADDRESS`     | bila aktif | –       | –        | Alamat pengirim default                                   |
-| `EMAIL_FROM_NAME`        | –          | `AWCMS` | –        | Nama pengirim default                                     |
-| `EMAIL_SEND_TIMEOUT_MS`  | –          | `10000` | –        | Timeout satu percobaan kirim (dispatcher)                 |
-| `EMAIL_SEND_MAX_RETRIES` | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final              |
+| Var                      | Required   | Default | Sensitive | Purpose                                                    |
+| ------------------------ | ---------- | ------- | --------- | ---------------------------------------------------------- |
+| `EMAIL_ENABLED`          | –          | `false` | –         | Enable the email module                                    |
+| `EMAIL_PROVIDER`         | if enabled | –       | –         | Email provider adapter (`log` for dev without credentials) |
+| `EMAIL_FROM_ADDRESS`     | if enabled | –       | –         | Default sender address                                     |
+| `EMAIL_FROM_NAME`        | –          | `AWCMS` | –         | Default sender name                                        |
+| `EMAIL_SEND_TIMEOUT_MS`  | –          | `10000` | –         | Timeout for a single send attempt (dispatcher)             |
+| `EMAIL_SEND_MAX_RETRIES` | –          | `5`     | –         | Retry attempt limit before a final `failed`                |
 
-Kredensial provider email konkret (mis. `EMAIL_<PROVIDER>_API_TOKEN`)
-ditambahkan begitu adapter provider tersebut benar-benar diimplementasikan —
-tidak didaftarkan di muka.
+Concrete email provider credentials (e.g. `EMAIL_<PROVIDER>_API_TOKEN`) are
+added once that provider adapter is actually implemented — they are not
+registered up front.
 
 ### Data lifecycle (target)
 
-Direncanakan modul System Foundation untuk registry tabel bervolume tinggi
-lintas modul dan mesin lifecycle (retensi/partisi/arsip/legal
-hold/purge aman) — relevan untuk data finance/transaksi ERP yang bervolume
-tinggi dan punya kewajiban retensi/audit jangka panjang.
+Planned as a System Foundation module for a cross-module registry of
+high-volume tables and a lifecycle engine (retention/partitioning/archive/legal
+hold/safe purge) — relevant for high-volume ERP finance/transaction data with
+long-term retention/audit obligations.
 
-| Var                                | Wajib | Default                        | Sensitif | Fungsi                                                                     |
-| ---------------------------------- | ----- | ------------------------------ | -------- | -------------------------------------------------------------------------- |
-| `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` | –     | `./var/data-lifecycle-archive` | –        | Root filesystem tempat local/offline archive adapter menulis artefak arsip |
+| Var                                | Required | Default                        | Sensitive | Purpose                                                                      |
+| ---------------------------------- | -------- | ------------------------------ | --------- | ---------------------------------------------------------------------------- |
+| `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` | –        | `./var/data-lifecycle-archive` | –         | Filesystem root where the local/offline archive adapter writes its artifacts |
 
-### ERP & integrasi bisnis — placeholder
+### ERP & business integrations — placeholder
 
-Belum ada env var spesifik modul ERP (finance/accounting, inventory/
-warehouse, procurement, manufacturing, HR/payroll) maupun integrasi bisnis
-eksternal (payment gateway, marketplace, tax/Coretax, logistics provider) di
-repo ini — **belum ada modul yang diimplementasikan** (lihat status di atas).
+There are no env vars specific to ERP modules (finance/accounting, inventory/
+warehouse, procurement, manufacturing, HR/payroll) or to external business
+integrations (payment gateway, marketplace, tax/Coretax, logistics provider) in
+this repo — **no module has been implemented yet** (see the status above).
 
-Saat modul-modul tersebut mulai dibangun, env var-nya akan didokumentasikan
-di sini mengikuti pola yang sama seperti section lain di atas: flag
-`*_ENABLED` default `false`, kredensial hanya dari environment/secret
-manager (tidak pernah kolom DB tenant-controlled kecuali accepted-risk yang
-didokumentasikan eksplisit), circuit breaker + timeout per provider,
-degradasi anggun saat provider off (transaksi tetap tercatat, sinkronisasi
-ke provider tertunda — bukan gagal total), dan cross-field validation lewat
-`config:validate`/`security:readiness`. Lihat
+As those modules start being built, their env vars will be documented here
+following the same pattern as every other section above: an `*_ENABLED` flag
+defaulting to `false`, credentials only from the environment/a secret manager
+(never a tenant-controlled DB column unless there is an explicitly documented
+accepted risk), a circuit breaker + timeout per provider, graceful degradation
+when a provider is off (the transaction is still recorded, synchronisation to
+the provider is deferred — not a total failure), and cross-field validation
+through `config:validate`/`security:readiness`. See
 [`templates/module-proposal-template.md`](templates/module-proposal-template.md)
-dan
+and
 [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md)
-untuk proses admission modul baru, termasuk checklist khusus provider
-eksternal.
+for the admission process for a new module, including the checklist specific to
+external providers.
 
 ## Feature flag
 
 ```mermaid
 flowchart LR
-  Boot[Boot] --> Val[Validasi env]
+  Boot[Boot] --> Val[Env validation]
   Val --> Flags{Feature flags}
-  Flags -->|R2 off| L[Storage lokal]
-  Flags -->|EMAIL_ENABLED off| Q0[Email module - outbox menunggu, dispatcher tidak jalan]
+  Flags -->|R2 off| L[Local storage]
+  Flags -->|EMAIL_ENABLED off| Q0[Email module - outbox waits, dispatcher does not run]
   Flags -->|Sync off| LanOnly[LAN-only]
-  Flags -->|Provider ERP eksternal off| Q1[Transaksi tetap tercatat - sinkronisasi ke provider tertunda]
+  Flags -->|External ERP provider off| Q1[Transaction still recorded - synchronisation to the provider deferred]
 ```
 
-Aturan: fitur off tidak menghentikan operasional inti (pencatatan transaksi);
-pesan/objek/dokumen tetap masuk queue dan menunggu fitur diaktifkan.
+Rule: a feature being off does not stop core operations (recording
+transactions); messages/objects/documents still enter the queue and wait for
+the feature to be enabled.
 
-## `.env.example` lengkap (rekomendasi, target)
+## Complete `.env.example` (recommended, target)
 
 ```env
-# Inti
+# Core
 APP_ENV=development
 APP_URL=http://localhost:4321
 LOG_LEVEL=info
@@ -498,67 +509,70 @@ SYNC_HMAC_ALLOW_LEGACY=true
 OBJECT_SYNC_UPLOAD_TIMEOUT_MS=10000
 R2_ENABLED=false
 
-# Email (notifikasi)
+# Email (notifications)
 EMAIL_ENABLED=false
 EMAIL_FROM_NAME=AWCMS
 EMAIL_SEND_TIMEOUT_MS=10000
 EMAIL_SEND_MAX_RETRIES=5
 
-# ERP & integrasi bisnis (belum ada — lihat §ERP & integrasi bisnis di atas)
+# ERP & business integrations (not present yet — see §ERP & business integrations above)
 ```
 
-## Profil per-environment
+## Per-environment profiles
 
-| Environment         | Karakteristik                                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| development         | Semua provider off, DB lokal, cookie tidak secure                                                              |
-| production (online) | HTTPS, secret manager, backup+restore teruji, sync opsional                                                    |
-| **offline/LAN**     | Tanpa internet; sync/R2/provider eksternal off atau tertunda; operasional inti tetap penuh jalan; backup lokal |
+| Environment         | Characteristics                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| development         | All providers off, local DB, cookie not secure                                                             |
+| production (online) | HTTPS, secret manager, tested backup+restore, sync optional                                                |
+| **offline/LAN**     | No internet; sync/R2/external providers off or deferred; core operations still fully running; local backup |
 
-Tiga, bukan empat: `staging` dihapus dari kosakata profil deployment
+Three, not four: `staging` was removed from the deployment profile vocabulary
 ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)
-sebagaimana diamandemen). Kontrak isolasinya tidak ikut hilang — ia berlaku
-untuk environment kedua apa pun yang seseorang dirikan, dan tertulis di
-[`environments.md`](environments.md) §Kontrak isolasi environment kedua.
-`test` tetap nilai `APP_ENV` yang diterima untuk eksekusi test otomatis; itu
-bukan profil deployment.
+as amended). Its isolation contract did not disappear with it — it applies to
+any second environment someone stands up, and is written down in
+[`environments.md`](environments.md) §Second-environment isolation contract.
+`test` is still an accepted `APP_ENV` value for automated test execution; that
+is not a deployment profile.
 
-## Topologi deployment LAN-first
+## LAN-first deployment topology
 
 ```mermaid
 flowchart TB
-  subgraph LAN["Kantor / Gudang / LAN"]
-    P1[Aplikasi Operasional 1]
-    P2[Aplikasi Operasional 2]
+  subgraph LAN["Office / Warehouse / LAN"]
+    P1[Operational Application 1]
+    P2[Operational Application 2]
     A1[Admin]
     Srv[AWCMS - Bun/Astro]
     DB[(PostgreSQL)]
-    Bak[Backup lokal]
+    Bak[Local backup]
     Srv --- DB
     Srv --- Bak
     P1 --- Srv
     P2 --- Srv
     A1 --- Srv
   end
-  Srv -. saat online .-> Cloud[(Server pusat / R2 / provider ERP eksternal)]
+  Srv -. when online .-> Cloud[(Central server / R2 / external ERP provider)]
 ```
 
-- Satu server LAN menjalankan aplikasi + PostgreSQL; klien via jaringan lokal.
-- Provider eksternal & sync hanya saat online; operasional inti tidak
-  bergantung padanya.
+- One LAN server runs the application + PostgreSQL; clients connect over the
+  local network.
+- External providers & sync only when online; core operations do not depend on
+  them.
 - Deployment: `deploy/systemd`, `deploy/nginx`, `deploy/pgbouncer`,
-  `deploy/backup` (rencana, mengikuti pola awcms-mini).
+  `deploy/backup` (planned, following the awcms-mini pattern).
 
-## Validasi konfigurasi saat boot
+## Configuration validation at boot
 
-- Var wajib hilang → gagal start dengan pesan jelas (tanpa membocorkan nilai).
-- Flag aktif tanpa kredensial (mis. `R2_ENABLED=true` tanpa key) → gagal start.
-- Secret tidak pernah masuk log (redaction).
+- A missing required var → fail to start with a clear message (without leaking
+  the value).
+- A flag enabled without credentials (e.g. `R2_ENABLED=true` without a key) →
+  fail to start.
+- Secrets never enter logs (redaction).
 
 ## Acceptance criteria (target)
 
-- Boot memvalidasi env; var wajib hilang menghentikan start dengan pesan aman.
-- Provider off tidak menghentikan operasional inti; pesan/objek/dokumen masuk queue.
-- Secret hanya dari env; tidak ada di kode/commit/log/response.
-- Preferensi tenant (locale/theme) dari `awcms_tenants`, bukan hardcode.
-- Profil offline/LAN berjalan penuh tanpa internet.
+- Boot validates the env; a missing required var stops the start with a safe message.
+- A provider being off does not stop core operations; messages/objects/documents enter the queue.
+- Secrets come only from the env; none in code/commits/logs/responses.
+- Tenant preferences (locale/theme) come from `awcms_tenants`, not hardcoded.
+- The offline/LAN profile runs fully without internet.

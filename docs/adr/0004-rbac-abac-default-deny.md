@@ -1,24 +1,26 @@
-# ADR-0004 — RBAC + ABAC default-deny sebagai baseline akses
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0004-rbac-abac-default-deny.id.md)
+
+# ADR-0004 — RBAC + ABAC default-deny as the access baseline
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-05
-- **Terkait:** `docs/awcms/17_default_seed_rbac_abac.md`, `docs/awcms/10_template_kode_coding_standard.md` (§ABAC guard)
+- **Date:** 2026-07-05
+- **Related:** `docs/awcms/17_default_seed_rbac_abac.md`, `docs/awcms/10_template_kode_coding_standard.md` (§ABAC guard)
 
-## Konteks
+## Context
 
-Kontrol akses berbasis peran (RBAC) saja tidak cukup untuk aturan yang bergantung atribut (kepemilikan resource, scope office, self-approval, kondisi lingkungan). Model akses harus aman secara default dan dapat diaudit.
+Role-based access control (RBAC) alone is not enough for rules that depend on attributes (resource ownership, office scope, self-approval, environmental conditions). The access model must be secure by default and auditable.
 
-## Keputusan
+## Decision
 
-Kami memutuskan memakai **RBAC + ABAC** dengan prinsip **default deny** dan **deny overrides allow**. RBAC memberi baseline permission per peran (`module.activity.action`); ABAC menyaring lebih lanjut berdasarkan atribut. Semua endpoint non-public wajib melewati ABAC guard. Setiap keputusan **deny high-risk** dicatat di decision log. RLS tetap wajib sebagai pertahanan berlapis (lihat ADR-0003).
+We decided to use **RBAC + ABAC** with the principles of **default deny** and **deny overrides allow**. RBAC gives a baseline permission per role (`module.activity.action`); ABAC filters further based on attributes. Every non-public endpoint must pass through the ABAC guard. Every **high-risk deny** decision is recorded in the decision log. RLS remains mandatory as a defence layer (see ADR-0003).
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** aman secara default; kebijakan kompleks (scope, self-approval, masking) dapat dinyatakan sebagai policy; keputusan akses auditable.
-- **Trade-off:** setiap endpoint butuh deklarasi akses; evaluator + policy store menambah kompleksitas.
-- **Netral:** seed default (peran, permission, policy) dibuat saat setup wizard.
+- **Positive:** secure by default; complex policies (scope, self-approval, masking) can be expressed as policy; access decisions are auditable.
+- **Trade-off:** every endpoint needs an access declaration; the evaluator + policy store add complexity.
+- **Neutral:** the default seed (roles, permissions, policies) is created by the setup wizard.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **RBAC saja** — ditolak: tidak menangani aturan beratribut.
-- **Default allow + blacklist** — ditolak: melanggar prinsip aman-secara-default.
+- **RBAC only** — rejected: does not handle attribute-based rules.
+- **Default allow + blacklist** — rejected: violates the secure-by-default principle.

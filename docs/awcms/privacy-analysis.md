@@ -1,151 +1,153 @@
-# Analisis privasi (langkah 3 alur pengembangan)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](privacy-analysis.id.md)
 
-> **Yang dijawab dokumen ini:** data pribadi apa yang dipegang TEMPLATE ini,
-> berdasarkan apa ia disimpan selama itu, dan di mana klaim itu **ditegakkan**
-> alih-alih sekadar dinyatakan.
+# Privacy analysis (step 3 of the development flow)
+
+> **What this document answers:** what personal data THIS TEMPLATE holds,
+> on what basis it is kept for as long as it is, and where that claim is **enforced**
+> rather than merely stated.
 >
-> **Yang TIDAK dijawab dokumen ini, dan tidak bisa:** dasar hukum pemrosesan,
-> penunjukan DPO, perjanjian pemroses data, dan transfer lintas-yurisdiksi.
-> Semuanya adalah fakta tentang **deployment dan organisasi yang memakainya**,
-> bukan tentang kodenya. Sebuah template yang berpura-pura menjawabnya akan
-> memberi operator rasa aman yang tidak dibelinya apa pun.
+> **What this document does NOT answer, and cannot:** the legal basis for processing,
+> DPO appointment, data processor agreements, and cross-jurisdiction transfers.
+> All of those are facts about the **deployment and the organisation using it**,
+> not about the code. A template that pretends to answer them would
+> give the operator a sense of safety it bought them nothing.
 
-- **Langkah alur:** 3 ([`alur-pengembangan.md`](alur-pengembangan.md)).
-- **Pasangannya:** [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md)
-  menjawab "siapa penyerangnya"; dokumen ini menjawab "data siapa yang ada di
-  sini". Keduanya langkah 3 dan keduanya wajib.
-- **Template per-fitur:** [`templates/privacy-analysis-template.md`](templates/privacy-analysis-template.md).
+- **Flow step:** 3 ([`alur-pengembangan.md`](alur-pengembangan.md)).
+- **Its counterpart:** [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md)
+  answers "who is the attacker"; this document answers "whose data is in
+  here". Both are step 3 and both are mandatory.
+- **Per-feature template:** [`templates/privacy-analysis-template.md`](templates/privacy-analysis-template.md).
 
-## 1. Aturan yang membuat dokumen ini tidak menua
+## 1. The rule that keeps this document from going stale
 
-Setiap klaim di bawah menunjuk ke tempat yang **digerbangi**. Itu bukan gaya
-penulisan — ia satu-satunya alasan halaman ini bisa dipercaya enam bulan lagi.
+Every claim below points at a place that is **gated**. That is not a writing
+style — it is the only reason this page can still be trusted six months from now.
 
-| Jenis klaim                    | Di mana ia ditegakkan                                                                                                                                    |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| berapa lama data disimpan      | deskriptor `dataLifecycle` per tabel + `data-lifecycle:table-coverage:check` — **setiap tabel wajib menjawab**, dan yang tidak menjawab memerahkan build |
-| apa yang tidak boleh masuk log | `_shared/redaction.ts`, dipanggil `recordAuditEvent` sebelum INSERT                                                                                      |
-| siapa boleh membaca apa        | RLS `FORCE` + chokepoint default-deny (`security:readiness`, `access:chokepoint:check`)                                                                  |
-| apakah tabel baru terlewat     | tidak bisa: tabel `awcms_%` tanpa RLS harus terdaftar ber-alasan di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`                                                  |
+| Kind of claim                   | Where it is enforced                                                                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| how long data is kept           | per-table `dataLifecycle` descriptor + `data-lifecycle:table-coverage:check` — **every table must answer**, and one that does not answer reddens the build |
+| what must never end up in a log | `_shared/redaction.ts`, called by `recordAuditEvent` before the INSERT                                                                                     |
+| who may read what               | RLS `FORCE` + default-deny chokepoint (`security:readiness`, `access:chokepoint:check`)                                                                    |
+| whether a new table was missed  | it cannot be: an `awcms_%` table without RLS must be listed with a reason in `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`                                           |
 
-Halaman ini **sengaja tidak** menyalin angka retensi per tabel. Salinan itu akan
-basi pada hari pertama seseorang mengubah deskriptornya, dan angka basi di
-dokumen privasi lebih berbahaya daripada tidak ada angka sama sekali.
+This page **deliberately does not** copy the per-table retention numbers. Such a copy would go
+stale on the first day someone changes the descriptor, and a stale number in
+a privacy document is more dangerous than no number at all.
 
-## 2. Kategori data pribadi yang dipegang basis ini
+## 2. Categories of personal data this base holds
 
-Diturunkan dari skema nyata, bukan dari ingatan.
+Derived from the real schema, not from memory.
 
-### 2.1 Identitas dan kredensial
+### 2.1 Identity and credentials
 
-| Data                        | Di mana                                                                  | Catatan                                                                                            |
-| --------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| alamat login (email)        | `awcms_identities.login_identifier`, `awcms_principals.email_normalized` | Sejak ADR-0085 alamatnya juga hidup **global** — satu manusia, satu baris principal, lintas tenant |
-| hash kata sandi             | `awcms_principals.password_hash`                                         | Hash, tidak pernah plaintext. Kolom per-tenant menjadi peninggalan                                 |
-| nama tampilan / nama legal  | `awcms_profiles.display_name`, `legal_name`                              | Diisi manusia; template tidak memvalidasi bentuknya                                                |
-| rahasia MFA + recovery code | `awcms_principal_mfa_factors`, `awcms_principal_mfa_recovery_codes`      | Terenkripsi (konstruksi `sql/024`), global sejak ADR-0087                                          |
+| Data                       | Where                                                                    | Notes                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| login address (email)      | `awcms_identities.login_identifier`, `awcms_principals.email_normalized` | Since ADR-0085 the address also lives **globally** — one human, one principal row, across tenants |
+| password hash              | `awcms_principals.password_hash`                                         | A hash, never plaintext. The per-tenant column becomes a leftover                                 |
+| display name / legal name  | `awcms_profiles.display_name`, `legal_name`                              | Filled in by humans; the template does not validate its shape                                     |
+| MFA secret + recovery code | `awcms_principal_mfa_factors`, `awcms_principal_mfa_recovery_codes`      | Encrypted (`sql/024` construction), global since ADR-0087                                         |
 
-**Konsekuensi yang harus dibaca operator:** tiga tabel di atas **GLOBAL, tanpa
-RLS** (ADR-0085/0087). Isolasinya bukan RLS melainkan empat kontrol pengganti,
-salah satunya gerbang `identity:principal-access:check` yang membatasi berkas
-mana boleh menyebut tabel itu sama sekali.
+**The consequence the operator must read:** the three tables above are **GLOBAL, without
+RLS** (ADR-0085/0087). Their isolation is not RLS but four substitute controls,
+one of them the `identity:principal-access:check` gate that limits which files
+may mention those tables at all.
 
-### 2.2 Aktivitas dan jejak
+### 2.2 Activity and traces
 
-| Data                 | Di mana                    | Catatan                                                                                    |
-| -------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| jejak audit tindakan | `awcms_audit_events`       | `attributes` **di-redaksi sebelum INSERT** (`_shared/redaction.ts`)                        |
-| keputusan otorisasi  | `awcms_abac_decision_logs` | Tabel terbesar di repo; hanya kode kebijakan + alasan statis, tanpa nilai atribut          |
-| sesi                 | `awcms_sessions`           | Hash token, bukan token                                                                    |
-| analitik pengunjung  | `awcms_visitor_*`          | `ip_hash` / `user_agent_hash` / `visitor_key_hash`, **HMAC ber-salt** — bukan nilai mentah |
+| Data                    | Where                      | Notes                                                                                    |
+| ----------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| audit trail of actions  | `awcms_audit_events`       | `attributes` is **redacted before the INSERT** (`_shared/redaction.ts`)                  |
+| authorization decisions | `awcms_abac_decision_logs` | The largest table in the repo; only policy codes + static reasons, no attribute values   |
+| sessions                | `awcms_sessions`           | A token hash, not the token                                                              |
+| visitor analytics       | `awcms_visitor_*`          | `ip_hash` / `user_agent_hash` / `visitor_key_hash`, **salted HMAC** — not the raw values |
 
-Kunci redaksi yang berlaku hari ini ada di `REDACTION_KEYS`
-(`src/modules/_shared/redaction.ts`) dan mencakup antara lain `password`,
+The redaction keys in force today live in `REDACTION_KEYS`
+(`src/modules/_shared/redaction.ts`) and cover, among others, `password`,
 `token`, `secret`, `npwp`, `nik`, `phone`, `whatsapp`, `email`, `cookie`, plus
-sinonim alamat IP yang dicocokkan **persis** (`ip`, `clientip`, `xforwardedfor`)
-— substring akan merusak `description` dan `shipping`.
+IP address synonyms matched **exactly** (`ip`, `clientip`, `xforwardedfor`)
+— a substring match would wreck `description` and `shipping`.
 
-### 2.3 Data yang dimasukkan pengguna akhir
+### 2.3 Data entered by end users
 
-`awcms_comments`, `awcms_form_drafts`, dan modul domain yang ditambahkan di
-`src/modules/`. **Basis ini tidak tahu apa yang akan dimasukkan ke sana**, dan
-itulah sebabnya template per-fitur di bawah menuntut jawabannya per fitur alih-
-alih menebak di sini.
+`awcms_comments`, `awcms_form_drafts`, and the domain modules added in
+`src/modules/`. **This base does not know what will be entered there**, and
+that is exactly why the per-feature template below demands the answer per feature instead
+of guessing here.
 
-### 2.4 Data lintas-organisasi (Gelombang 8)
+### 2.4 Cross-organisation data (Wave 8)
 
-Sejak ADR-0090, seorang manusia dari organisasi LAIN bisa menjadi anggota sebuah
-tenant. Konsekuensi privasinya dinyatakan supaya tidak ditemukan belakangan:
+Since ADR-0090, a human from ANOTHER organisation can become a member of a
+tenant. The privacy consequences are stated here so they are not discovered later:
 
-- alamat orang itu **masuk** ke `awcms_identities` tenant target saat penebusan;
-- setiap tindakannya membawa `actor_tenant_id` + `delegated_grant_id`
-  (ADR-0091), sehingga pelanggan bisa menjawab "apa yang dilakukan vendor kami";
-- id operator platform **sengaja tidak** menyeberang ke log pelanggan — ia uuid
-  buram yang tak bisa mereka resolusi sekaligus identifier pihak ketiga.
+- that person's address **enters** the target tenant's `awcms_identities` at redemption time;
+- every action of theirs carries `actor_tenant_id` + `delegated_grant_id`
+  (ADR-0091), so the customer can answer "what did our vendor do";
+- the platform operator's id **deliberately does not** cross over into the customer's log — it is an
+  opaque uuid they cannot resolve and at the same time a third party's identifier.
 
-## 3. Tiga pertanyaan yang wajib dijawab SETIAP fitur baru
+## 3. The three questions EVERY new feature must answer
 
-Ini isi langkah 3 untuk sebuah perubahan, dan jawabannya masuk ke PR-nya:
+This is what step 3 amounts to for a change, and the answers go into its PR:
 
-1. **Data pribadi apa yang fitur ini kumpulkan atau tampilkan yang sebelumnya
-   tidak ada di sistem?** "Tidak ada" adalah jawaban yang sah dan paling sering
-   benar — tetapi ia harus ditulis, bukan diasumsikan.
-2. **Berapa lama ia disimpan, dan apa yang MENGHAPUSNYA?** Bila jawabannya
-   sebuah tabel baru, deskriptor `dataLifecycle`-nya adalah jawabannya dan
-   gerbangnya sudah menuntutnya. Bila jawabannya "selamanya", itu keputusan yang
-   harus terlihat.
-3. **Siapa yang bisa melihatnya, dan apa yang menghentikan orang lain?** Untuk
-   data ber-tenant, jawabannya RLS + chokepoint. Untuk apa pun yang GLOBAL,
-   jawabannya harus lebih panjang dan biasanya berarti ADR.
+1. **What personal data does this feature collect or display that was not
+   previously in the system?** "None" is a valid and most often
+   correct answer — but it must be written down, not assumed.
+2. **How long is it kept, and what DELETES it?** If the answer is
+   a new table, its `dataLifecycle` descriptor is the answer and
+   the gate already demands it. If the answer is "forever", that is a decision that
+   must be visible.
+3. **Who can see it, and what stops everyone else?** For
+   tenant-scoped data, the answer is RLS + chokepoint. For anything GLOBAL,
+   the answer must be longer and usually means an ADR.
 
-## 4. Hak subjek data — posisi template, dinyatakan jujur
+## 4. Data subject rights — the template's position, stated honestly
 
-| Hak                  | Yang disediakan basis ini                                                                                                             | Yang belum ada                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| akses / portabilitas | deskriptor `subjectData` per-tabel + dua gerbang, **dan endpoint ekspornya** (`POST …/subject-requests/export`, ADR-0094 gelombang 2) | —                              |
-| penghapusan          | alur "hapus orang ini" **maker/checker** (`…/erase` + `…/{id}/decide`), lima mode penghapusan per-tabel                               | —                              |
-| koreksi              | permukaan admin untuk profil dan identitas                                                                                            | —                              |
-| pembatasan/keberatan | penonaktifan tenant user + pencabutan sesi                                                                                            | tidak ada penandaan per-tujuan |
+| Right                 | What this base provides                                                                                                         | What is missing         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| access / portability  | per-table `subjectData` descriptor + two gates, **and the export endpoint** (`POST …/subject-requests/export`, ADR-0094 wave 2) | —                       |
+| erasure               | a **maker/checker** "erase this person" flow (`…/erase` + `…/{id}/decide`), five per-table erasure modes                        | —                       |
+| rectification         | admin surfaces for profiles and identities                                                                                      | —                       |
+| restriction/objection | deactivating a tenant user + revoking sessions                                                                                  | no per-purpose flagging |
 
-**KOREKSI 13 Agustus 2026.** Dua baris pertama tabel ini sebelumnya berbunyi
-"endpoint ekspornya belum ada" dan "alur hapus orang ini belum ada". Keduanya
-**sudah dibangun** oleh Issue #557 — jangan bangun ulang, dan jangan mengutip
-versi lama dokumen ini sebagai bukti celah.
+**CORRECTION 13 August 2026.** The first two rows of this table previously read
+"the export endpoint does not exist yet" and "there is no erase-this-person flow yet". Both
+**have been built** by Issue #557 — do not build them again, and do not quote an
+older version of this document as evidence of a gap.
 
-**Urutannya disengaja, dan itulah bagian yang layak diingat.** #542 mendaratkan
-fondasinya lebih dulu dan menyisakan **139 tabel di ledger utang**; #557 menolak
-mendaratkan endpoint di atas ledger itu, karena ekspor yang menjawab dengan 3
-tabel dan diam untuk 139 sisanya adalah laporan yang **ditandatangani dan tidak
-lengkap** — lebih buruk daripada tidak ada laporan. Jadi #557 membayar utangnya
-sampai habis lebih dulu: **139 → 0** (147 tabel = 140 berdeskriptor + 7 ditolak
-beralasan), baru kemudian membangun permukaannya.
+**The ordering was deliberate, and that is the part worth remembering.** #542 landed
+the foundation first and left **139 tables in the debt ledger**; #557 refused
+to land an endpoint on top of that ledger, because an export that answers with 3
+tables and stays silent about the remaining 139 is a report that is **signed and
+incomplete** — worse than no report at all. So #557 paid the debt off
+in full first: **139 → 0** (147 tables = 140 with a descriptor + 7 rejected
+with a reason), and only then built the surface.
 
-Konsekuensinya untuk pembaca hari ini: pertanyaan _tabel mana yang harus dijawab
-sebuah permintaan_ — bagian yang paling mahal bila dibangun belakangan — sudah
-terjawab untuk seluruh skema, dan dijaga dua gerbang yang menanyakan hal
-berbeda: `subject-data:coverage:check` (apakah setiap tabel menjawab) dan
-`subject-data:registry:check` (apakah jawabannya benar terhadap `sql/`).
-Ekspornya **menyatakan cakupannya sendiri**: tabel yang sengaja tidak dijawab
-(global, atau tanpa kolom subjek) ikut disebut dalam laporan, karena laporan
-per-tenant yang diam-diam menghilangkan `awcms_principals` tidak bisa dibedakan
-dari laporan yang ditulis sebelum tabel itu ada.
+The consequence for today's reader: the question _which tables a request must
+answer_ — the part that is most expensive if built later — is already
+answered for the entire schema, and guarded by two gates that ask different
+things: `subject-data:coverage:check` (does every table answer) and
+`subject-data:registry:check` (is the answer correct against `sql/`).
+The export **states its own coverage**: tables deliberately left unanswered
+(global, or without a subject column) are named in the report too, because a
+per-tenant report that silently drops `awcms_principals` cannot be told apart
+from a report written before that table existed.
 
-Penghapusan adalah **maker/checker** (ADR-0094 Keputusan 3): peminta tidak
-pernah bisa menyetujui permintaannya sendiri, ditegakkan empat lapis — dua
-permission terpisah, aturan SoD `critical`, CHECK constraint, dan satu UPDATE
-kondisional. Ekspor dan penghapusan adalah **dua otoritas berbeda**: memegang
-hak membaca bukan alasan memegang hak menghancurkan.
+Erasure is **maker/checker** (ADR-0094 Decision 3): the requester can
+never approve their own request, enforced in four layers — two
+separate permissions, a `critical` SoD rule, a CHECK constraint, and one conditional
+UPDATE. Export and erasure are **two different authorities**: holding
+the right to read is not a reason to hold the right to destroy.
 
-Subjeknya adalah **tenant user, dijawab per tenant**. Tidak ada satu tombol
-"lupakan saya di mana-mana", dan itu bukan penyederhanaan: tiap tenant adalah
-pengendali data yang terpisah, dan FORCE RLS memodelkan hal yang benar.
+The subject is a **tenant user, answered per tenant**. There is no single
+"forget me everywhere" button, and that is not a simplification: each tenant is a
+separate data controller, and FORCE RLS models the correct thing.
 
-## 5. Yang hanya bisa dijawab operator
+## 5. What only the operator can answer
 
-- Dasar hukum tiap kegiatan pemrosesan.
-- Apakah organisasi itu pengendali atau pemroses, dan perjanjian yang menyertai.
-- Lokasi penyimpanan dan transfer lintas-yurisdiksi — fakta deployment
-  ([`environments.md`](environments.md)), bukan fakta kode.
-- Kewajiban pemberitahuan pelanggaran dan tenggatnya.
-- Retensi **aktual** yang dipilih: deskriptor punya `retentionMinDays`/`MaxDays`
-  dan sebuah default; angka yang berlaku adalah yang di-set deployment.
+- The legal basis for each processing activity.
+- Whether that organisation is a controller or a processor, and the agreements that come with it.
+- Storage location and cross-jurisdiction transfers — a deployment fact
+  ([`environments.md`](environments.md)), not a code fact.
+- Breach notification obligations and their deadlines.
+- The **actual** retention chosen: the descriptor has `retentionMinDays`/`MaxDays`
+  and a default; the number in force is the one the deployment sets.

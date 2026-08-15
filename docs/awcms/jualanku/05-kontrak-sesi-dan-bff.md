@@ -1,95 +1,97 @@
-# 05 — Kontrak sesi lintas-origin dan BFF
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](05-kontrak-sesi-dan-bff.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status. Endpoint introspeksi sesi
-> **belum ada** di repo ini.
+# 05 — Cross-origin session contract and the BFF
 
-## 1. Apa yang sudah ada (dan sering salah dibaca)
+> Plan. See the [README](README.md) for status. The session introspection
+> endpoint **does not exist yet** in this repo.
 
-| Fakta di kode                                                                                                                                             | Berkas                                                                 |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Login mengembalikan token **dan** menyetel dua cookie httpOnly: `awcms_session` + `awcms_tenant_id` (`SameSite=Lax`, `Secure` lewat `AUTH_COOKIE_SECURE`) | `src/pages/api/v1/auth/login.ts`, `src/lib/auth/ssr-session.ts`        |
-| Guard menerima **header bearer + tenant header ATAU cookie** — header menang, cookie fallback                                                             | `resolveAuthInputs()` di `identity-access/application/access-guard.ts` |
-| `GET /api/v1/auth/me` menerima **bearer saja**                                                                                                            | `src/pages/api/v1/auth/me.ts`                                          |
-| Sesi disimpan sebagai hash token, bisa dicabut; MFA/step-up menaikkan assurance dan **merotasi** sesi                                                     | modul `identity_access`                                                |
+## 1. What already exists (and is often misread)
 
-Kesimpulan yang benar: yang hilang bukan "dukungan cookie", melainkan **kontrak
-sesi untuk origin yang berbeda**. Cookie `awcms_session` milik origin `awcms`;
-browser di `jualanku.info` tidak akan pernah mengirimkannya, dan tidak boleh.
+| Fact in the code                                                                                                                                 | File                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Login returns a token **and** sets two httpOnly cookies: `awcms_session` + `awcms_tenant_id` (`SameSite=Lax`, `Secure` via `AUTH_COOKIE_SECURE`) | `src/pages/api/v1/auth/login.ts`, `src/lib/auth/ssr-session.ts`        |
+| The guard accepts a **bearer header + tenant header OR a cookie** — the header wins, the cookie is the fallback                                  | `resolveAuthInputs()` in `identity-access/application/access-guard.ts` |
+| `GET /api/v1/auth/me` accepts **bearer only**                                                                                                    | `src/pages/api/v1/auth/me.ts`                                          |
+| Sessions are stored as a token hash, can be revoked; MFA/step-up raises assurance and **rotates** the session                                    | the `identity_access` module                                           |
 
-## 2. Bentuk yang disetujui
+The correct conclusion: what is missing is not "cookie support" but a **session
+contract for a different origin**. The `awcms_session` cookie belongs to the
+`awcms` origin; a browser on `jualanku.info` will never send it, and must not.
+
+## 2. The agreed shape
 
 ```
-Browser  ──cookie httpOnly "jualanku_portal"──►  awcms-astro (BFF)
-                                                   │  memegang pemetaan
-                                                   │  cookie portal → token sesi awcms
-                                                   │  (server-side, tidak pernah ke klien)
+Browser  ──httpOnly cookie "jualanku_portal"──►  awcms-astro (BFF)
+                                                   │  holds the mapping
+                                                   │  portal cookie → awcms session token
+                                                   │  (server-side, never reaches the client)
                                                    ▼
-                                        awcms  /api/v1/auth/session (introspeksi)
+                                        awcms  /api/v1/auth/session (introspection)
                                         awcms  /api/v1/jualanku/portal/**
 ```
 
-- Browser **tidak pernah** memegang token `awcms`.
-- BFF mengirim token sebagai `Authorization: Bearer` + `x-awcms-tenant-id` ke
-  `awcms` lewat jaringan privat.
-- Tenant diturunkan BFF dari konfigurasi deployment/host (`tenant_domain`),
-  tidak pernah dari input pengguna.
+- The browser **never** holds an `awcms` token.
+- The BFF sends the token as `Authorization: Bearer` + `x-awcms-tenant-id` to
+  `awcms` over the private network.
+- The tenant is derived by the BFF from the deployment/host configuration
+  (`tenant_domain`), never from user input.
 
-## 3. Endpoint introspeksi yang harus ditambahkan
+## 3. The introspection endpoint that must be added
 
-`GET /api/v1/auth/session` — pemilik: `identity_access`.
+`GET /api/v1/auth/session` — owner: `identity_access`.
 
-- **Input:** bearer token + tenant header (dipanggil BFF, bukan browser).
-- **Output (safe claims saja):** `identityId`, `tenantId`, `displayName`,
-  `roles[]`, `assuranceLevel` (aal1/aal2), `expiresAt`, `scopes[]` (referensi
-  scope merchant/affiliate yang aktif).
-- **Tidak pernah dikembalikan:** token, hash token, status password, secret MFA,
-  recovery code, email/telepon mentah, atau atribut apa pun yang tidak dibutuhkan
-  header portal.
-- **Fail-closed & anti-oracle:** sesi tidak valid/kedaluwarsa/dicabut
-  menghasilkan satu bentuk respons yang sama (401 `AUTH_REQUIRED`), tanpa
-  membedakan "tidak ada" dari "kedaluwarsa".
-- Rate-limited, tidak pernah di-cache (`no-store`).
+- **Input:** bearer token + tenant header (called by the BFF, not by the browser).
+- **Output (safe claims only):** `identityId`, `tenantId`, `displayName`,
+  `roles[]`, `assuranceLevel` (aal1/aal2), `expiresAt`, `scopes[]` (references to
+  the active merchant/affiliate scopes).
+- **Never returned:** the token, the token hash, password status, MFA secrets,
+  recovery codes, raw email/phone, or any attribute the portal header does not
+  need.
+- **Fail-closed & anti-oracle:** an invalid/expired/revoked session produces one
+  and the same response shape (401 `AUTH_REQUIRED`), without distinguishing
+  "does not exist" from "expired".
+- Rate-limited, never cached (`no-store`).
 
-Alternatif yang **ditolak**: mengizinkan browser publik memanggil `/api/v1/**`
-langsung dengan cookie lintas-site. Itu memindahkan pemilihan tenant, CSRF, dan
-CORS ke klien.
+The **rejected** alternative: letting the public browser call `/api/v1/**`
+directly with cross-site cookies. That moves tenant selection, CSRF, and CORS
+onto the client.
 
-## 4. Kewajiban BFF
+## 4. BFF obligations
 
-| Kebutuhan           | Ketentuan                                                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Cookie portal       | `HttpOnly`, `Secure`, `SameSite=Lax` (atau `Strict` bila alur login tidak butuh redirect lintas-site), `Path=/`.                      |
-| Penyimpanan token   | Token `awcms` disimpan server-side (session store BFF) atau di dalam cookie terenkripsi — **tidak pernah** di JS.                     |
-| CSRF                | Origin/Referer check **plus** token double-submit/synchronizer untuk setiap mutasi. Bukan salah satu saja.                            |
-| Tenant              | Ditetapkan server dari host mapping; header tenant dari klien diabaikan total.                                                        |
-| Logout              | Panggil logout `awcms` (revokasi sumber kebenaran) **lebih dulu**, baru hapus cookie portal. Urutan terbalik meninggalkan sesi hidup. |
-| Rotasi              | Setelah login, setelah step-up/perubahan privilege, dan setelah recovery. Rotasi mencegah session fixation.                           |
-| Revokasi            | Sumber kebenaran tetap `awcms`. BFF tidak menyimpan daftar sesi sendiri, tidak "mengingat" sesi yang sudah dicabut.                   |
-| Cache               | `Cache-Control: private, no-store` untuk seluruh respons portal dan `_portal-api`.                                                    |
-| Error               | Envelope `awcms` diterjemahkan ke view model; `correlationId` diteruskan ke log kedua sisi.                                           |
-| Timeout & degradasi | `awcms` tidak tersedia → halaman error yang jujur, bukan halaman kosong yang tampak berhasil.                                         |
+| Requirement           | Rule                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Portal cookie         | `HttpOnly`, `Secure`, `SameSite=Lax` (or `Strict` if the login flow needs no cross-site redirect), `Path=/`.                                   |
+| Token storage         | The `awcms` token is kept server-side (the BFF session store) or inside an encrypted cookie — **never** in JS.                                 |
+| CSRF                  | An Origin/Referer check **plus** a double-submit/synchronizer token for every mutation. Not just one of them.                                  |
+| Tenant                | Set by the server from the host mapping; a tenant header from the client is ignored entirely.                                                  |
+| Logout                | Call the `awcms` logout (revocation at the source of truth) **first**, then delete the portal cookie. The reverse order leaves a live session. |
+| Rotation              | After login, after a step-up/privilege change, and after recovery. Rotation prevents session fixation.                                         |
+| Revocation            | The source of truth stays `awcms`. The BFF keeps no session list of its own and does not "remember" a session that has been revoked.           |
+| Cache                 | `Cache-Control: private, no-store` for every portal and `_portal-api` response.                                                                |
+| Errors                | The `awcms` envelope is translated into a view model; the `correlationId` is forwarded into the logs on both sides.                            |
+| Timeout & degradation | `awcms` unavailable → an honest error page, not a blank page that looks like a success.                                                        |
 
-## 5. Model ancaman ringkas
+## 5. Condensed threat model
 
-| Ancaman                                        | Kontrol                                                                                          |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Pencurian token lewat XSS di portal            | Token tidak pernah di JS; CSP ketat; tidak ada `set:html` dari sumber selain renderer terkontrol |
-| CSRF pada mutasi portal                        | Origin check + token CSRF + `SameSite`                                                           |
-| Session fixation                               | Rotasi sesi setelah login/step-up                                                                |
-| Confused deputy (BFF dipakai jadi proxy bebas) | BFF hanya punya daftar rute upstream yang eksplisit; tidak ada path passthrough generik          |
-| Tenant tampering                               | Tenant server-derived; header tenant klien diabaikan                                             |
-| Kebocoran privat ke cache/sitemap              | `no-store` + rute privat tidak pernah masuk sitemap + gate cache surface                         |
-| Enumerasi akun/merchant                        | Respons seragam; 404 anti-oracle; rate limit pada login dan lookup                               |
-| Replay mutasi                                  | Idempotency key pada aksi high-risk                                                              |
+| Threat                                         | Control                                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Token theft via XSS in the portal              | The token is never in JS; strict CSP; no `set:html` from any source other than a controlled renderer |
+| CSRF on portal mutations                       | Origin check + CSRF token + `SameSite`                                                               |
+| Session fixation                               | Session rotation after login/step-up                                                                 |
+| Confused deputy (the BFF used as a free proxy) | The BFF only has an explicit list of upstream routes; there is no generic path passthrough           |
+| Tenant tampering                               | The tenant is server-derived; a client tenant header is ignored                                      |
+| Private data leaking into a cache/sitemap      | `no-store` + private routes never enter the sitemap + the cache surface gate                         |
+| Account/merchant enumeration                   | Uniform responses; anti-oracle 404; rate limits on login and lookup                                  |
+| Mutation replay                                | An idempotency key on high-risk actions                                                              |
 
-## 6. Test yang wajib menyertai kontrak ini
+## 6. Tests that must accompany this contract
 
-1. Sesi valid → introspeksi mengembalikan hanya safe claims (uji field-by-field:
-   kebocoran field baru harus memerahkan test).
-2. Sesi dicabut/kedaluwarsa → 401 dengan bentuk respons identik.
-3. Mutasi tanpa token CSRF → ditolak; dengan Origin asing → ditolak.
-4. Header tenant dari klien diabaikan (kirim tenant lain → tetap tenant host).
-5. Logout portal → sesi `awcms` benar-benar tidak bisa dipakai lagi.
-6. Step-up MFA memutasi assurance dan **merotasi** token; token lama mati.
-7. Respons portal tidak pernah membawa `Cache-Control` yang bisa di-cache
-   bersama.
+1. Valid session → introspection returns only the safe claims (test field by
+   field: a newly leaked field must turn the test red).
+2. Revoked/expired session → 401 with an identical response shape.
+3. A mutation without a CSRF token → rejected; with a foreign Origin → rejected.
+4. A tenant header from the client is ignored (send a different tenant → it stays
+   the host's tenant).
+5. Portal logout → the `awcms` session really cannot be used again.
+6. An MFA step-up mutates assurance and **rotates** the token; the old token dies.
+7. A portal response never carries a `Cache-Control` that allows shared caching.

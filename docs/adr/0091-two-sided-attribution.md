@@ -1,145 +1,143 @@
-# ADR-0091 — Atribusi dua sisi, dan catatan kelahiran yang akhirnya bisa ditulis
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0091-two-sided-attribution.id.md)
 
-- **Status:** Diterima (2026-08-13).
-- **Konteks:** Issue #423 Gelombang 8 PR 8.3. Migrasi `sql/118`.
-- **Membangun di atas:**
-  [ADR-0090](0090-delegated-access-prints-a-real-tenant-user.md) (aktor
-  terdelegasi adalah tenant user sungguhan — yang membuat setiap catatan
-  tentangnya terlihat seperti catatan tentang karyawan),
-  [ADR-0054](0054-tenant-provisioning.md) (tindak lanjut terbuka yang ditutup di
-  sini), dan [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (decision log adalah
-  tabel terbesar di repo ini — apa pun yang ditambahkan padanya harus
-  membayar sewanya).
+# ADR-0091 — Two-sided attribution, and the birth certificate that can finally be written
 
-## Masalah yang dibuat ADR-0090
+- **Status:** Accepted (2026-08-13).
+- **Context:** Issue #423 Wave 8 PR 8.3. Migration `sql/118`.
+- **Builds on:**
+  [ADR-0090](0090-delegated-access-prints-a-real-tenant-user.md) (a delegated
+  actor is a real tenant user — which makes every record about them look like a
+  record about an employee),
+  [ADR-0054](0054-tenant-provisioning.md) (an open follow-up that is closed
+  here), and [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (the decision log is
+  the largest table in this repo — anything added to it has to
+  pay its rent).
 
-Keputusan ADR-0090 yang membuat segalanya bekerja tanpa perubahan — **aktor
-terdelegasi adalah tenant user sungguhan** — juga membuat satu hal berhenti
-bekerja: catatannya tidak bisa dibedakan.
+## The problem ADR-0090 created
 
-`actor_tenant_user_id` pada baris audit menunjuk baris keanggotaan yang
-sempurna biasa di tenant C. Tidak ada apa pun padanya yang mengatakan orang di
-baliknya bekerja untuk tenant X. Pertanyaan **"apa saja yang dilakukan vendor
-kami di dalam sistem kami"** karena itu tidak punya query — setiap barisnya
-tampak seperti baris karyawan.
+The ADR-0090 decision that made everything work with no changes — **a delegated
+actor is a real tenant user** — also made one thing stop working: its records
+cannot be told apart.
 
-## Keputusan
+`actor_tenant_user_id` on an audit row points at a perfectly ordinary membership
+row in tenant C. Nothing on it says the person behind it works for tenant X. The
+question **"what has our vendor done inside our system"** therefore has no query
+— every one of its rows looks like an employee row.
 
-Tiga kolom, dan masing-masing menjawab satu pertanyaan:
+## Decision
 
-| Kolom                                         | Menjawab                              |
-| --------------------------------------------- | ------------------------------------- |
-| `awcms_audit_events.actor_tenant_id`          | aktornya dari tenant mana             |
-| `awcms_audit_events.delegated_grant_id`       | grant mana yang membuatnya bisa       |
-| `awcms_abac_decision_logs.delegated_grant_id` | sama, pada setiap keputusan otorisasi |
+Three columns, and each answers one question:
 
-## NULL berarti "dari dalam", bukan "tidak diketahui"
+| Column                                        | Answers                                   |
+| --------------------------------------------- | ----------------------------------------- |
+| `awcms_audit_events.actor_tenant_id`          | which tenant the actor is from            |
+| `awcms_audit_events.delegated_grant_id`       | which grant made it possible              |
+| `awcms_abac_decision_logs.delegated_grant_id` | the same, on every authorization decision |
 
-`actor_tenant_id` **tidak** ditulis pada setiap baris. Menuliskannya akan
-menduplikasi `tenant_id` pada 99,9% baris, dan kolom yang hampir selalu sama
-dengan tetangganya berhenti dibaca — yang justru saat itulah satu baris tempat
-ia berbeda lewat tanpa terlihat.
+## NULL means "from inside", not "unknown"
 
-Bentuknya bukan penemuan baru: `awcms_tenant_status_transitions.actor_tenant_id`
-(`sql/092`) sudah memakainya sejak ADR-0054. PR ini memakai bentuk yang sudah
-ada alih-alih menciptakan yang kedua.
+`actor_tenant_id` is **not** written on every row. Writing it would duplicate
+`tenant_id` on 99.9% of rows, and a column that is nearly always the same as its
+neighbour stops being read — which is exactly when the one row where it differs
+goes past unseen.
 
-Konsekuensi yang dinyatakan: **tidak ada backfill.** Baris yang sudah ada
-ditulis sebelum akses terdelegasi ada, jadi NULL pada semuanya sudah benar.
-Mengisinya dengan `tenant_id` akan mengubah setiap baris lama menjadi klaim yang
-kebetulan benar dan menghapus perbedaan yang menjadi seluruh guna kolom ini.
+The shape is not a new invention: `awcms_tenant_status_transitions.actor_tenant_id`
+(`sql/092`) has used it since ADR-0054. This PR uses the shape that already exists
+instead of creating a second one.
 
-## FK-nya komposit, dan itu bukan gaya
+A stated consequence: **no backfill.** The existing rows were written before
+delegated access existed, so NULL on all of them is already correct. Filling them
+with `tenant_id` would turn every old row into a claim that happens to be true and
+would erase the distinction that is this column's entire purpose.
+
+## The FK is composite, and that is not style
 
 `(tenant_id, delegated_grant_id)` → `awcms_delegated_access_grants
-(tenant_id, id)`. FK sederhana pada `id` saja **melewati RLS**, seperti setiap
-FK, dan akan menerima id grant milik tenant lain — sebuah baris audit yang
-menyebut grant yang tidak pernah menjangkau tenant ini. Tuntutan yang sama
-menghasilkan FK komposit office di #149.
+(tenant_id, id)`. A simple FK on `id` alone **bypasses RLS**, like every FK, and
+would accept another tenant's grant id — an audit row naming a grant that never
+reached this tenant. The same demand produced the composite office FK in #149.
 
-CHECK pasangannya menutup setengah-jawaban: sebuah baris tidak boleh menyebut
-grant tanpa menyebut tenant asalnya.
+Its paired CHECK closes the half-answer: a row must not name a grant without
+naming the tenant it came from.
 
-## Decision log TIDAK mendapat `actor_tenant_id`
+## The decision log does NOT get `actor_tenant_id`
 
-Ia hanya mendapat `delegated_grant_id`, dan penghematan itu disengaja.
+It only gets `delegated_grant_id`, and that saving is deliberate.
 
-Baris decision log ditulis chokepoint pada jalur panas **setiap request** —
-tabel terbesar di repo ini (ADR-0072). Tenant asal dapat diturunkan dari
-grant-nya lewat satu join yang hanya dijalankan investigasi. Menyimpan keduanya
-berarti menulis dua kolom per request untuk menghindari satu join yang
-dijalankan beberapa kali setahun.
+Decision log rows are written by the chokepoint on the hot path of **every
+request** — the largest table in this repo (ADR-0072). The originating tenant can
+be derived from its grant through one join that only an investigation runs. Storing
+both means writing two columns per request to avoid one join that is run a few
+times a year.
 
-Alasan yang sama membuat index-nya **parsial**: kolomnya NULL pada hampir setiap
-baris, dan index penuh atasnya adalah biaya tanpa pembaca.
+The same reason makes its index **partial**: the column is NULL on nearly every
+row, and a full index over it is cost with no reader.
 
-## Grant-nya diresolusi dengan query KEDUA, bukan join
+## The grant is resolved with a SECOND query, not a join
 
-`resolveDelegatedGrantId` berjalan hanya bila `principal_kind = 'delegated'`.
+`resolveDelegatedGrantId` runs only when `principal_kind = 'delegated'`.
 
-Menjoinkan tabel grant ke query autentikasi akan membuat **setiap request
-biasa** membayar index probe supaya request yang jarang bisa menghemat satu
-round trip. Biayanya mendarat di tempat yang salah.
+Joining the grant table into the authentication query would make **every ordinary
+request** pay an index probe so that the rare request could save one round trip.
+The cost would land in the wrong place.
 
-Resolusinya juga **fail-quiet**, dan itu aman justru karena sifat kolomnya: id
-grant adalah **atribusi, bukan input otorisasi**. Tidak ada yang diizinkan atau
-ditolak karenanya, jadi yang hilang bila ia tidak ketemu adalah satu kolom pada
-baris audit — tidak pernah sebuah keputusan.
+The resolution is also **fail-quiet**, and that is safe precisely because of the
+column's nature: the grant id is **attribution, not authorization input**. Nothing
+is allowed or denied because of it, so what is lost when it is not found is one
+column on an audit row — never a decision.
 
-## Catatan kelahiran yang akhirnya bisa ditulis
+## The birth certificate that can finally be written
 
-ADR-0054 meninggalkan satu tindak lanjut terbuka:
+ADR-0054 left one open follow-up:
 
-> baris audit provisioning mendarat di log tenant platform, yang benar, tetapi
-> **tenant yang dibuat tidak melihat catatan kelahirannya sendiri.**
+> provisioning audit rows land in the platform tenant's log, which is correct, but
+> **the created tenant does not see its own birth certificate.**
 
-Ia terbuka karena **tampak mustahil**, dan tampak mustahil karena alasan yang
-benar: `awcms_audit_events` FORCE RLS, jadi tenant platform tidak bisa
-menyisipkan baris ber-`tenant_id` tenant lain. Dinding yang sama menjatuhkan
-rencana ADR-0087 dan ADR-0088.
+It stayed open because it **looked impossible**, and it looked impossible for the
+right reason: `awcms_audit_events` is FORCE RLS, so the platform tenant cannot
+insert a row bearing another tenant's `tenant_id`. The same wall brought down the
+ADR-0087 and ADR-0088 plans.
 
-Yang membuatnya bisa di sini adalah sesuatu yang sudah ada dan tidak diperhatikan
-siapa pun: `createTenantWithOwner` **sudah berdiri di dalam konteks tenant
-baru** — ia melakukan `SET LOCAL app.current_tenant_id` di awal dan
-memulihkannya di akhir. Catatan kelahirannya ditulis dari DALAM, di jendela yang
-sudah ada, tanpa satu pun penulisan lintas-tenant.
+What makes it possible here is something that already existed and that nobody
+noticed: `createTenantWithOwner` **already stands inside the new tenant's
+context** — it does `SET LOCAL app.current_tenant_id` at the start and restores it
+at the end. Its birth certificate is written from INSIDE, in a window that already
+exists, without a single cross-tenant write.
 
-Itu juga alasan temuan ini masuk ADR alih-alih menjadi satu commit diam-diam:
-tiga PR berturut-turut menyimpulkan "tidak bisa dilakukan" dari premis yang
-benar, dan yang membedakan kasus ini bukan aturan baru melainkan **di mana kode
-itu kebetulan berdiri**. Orang berikutnya yang membaca "tidak bisa menulis
-lintas tenant" harus juga membaca kalimat ini.
+That is also why this finding goes into an ADR instead of becoming a quiet commit:
+three PRs in a row concluded "cannot be done" from a correct premise, and what
+makes this case different is not a new rule but **where the code happens to
+stand**. The next person who reads "cannot write across tenants" must read this
+sentence too.
 
-**`actor_tenant_user_id` sengaja tidak ikut menyeberang.** `actor_tenant_id`
-memberi pelanggan fakta yang mereka butuhkan — tenant ini dibuat oleh platform.
-Id operator perseorangan adalah uuid buram yang tidak bisa mereka resolusi (RLS
-menghalangi mereka membaca `awcms_tenant_users` platform) sekaligus tetap
-sebuah identifier yang diserahkan ke pihak ketiga. Ia tinggal di baris sisi
-platform, tempat ia bisa diresolusi.
+**`actor_tenant_user_id` deliberately does not cross over.** `actor_tenant_id`
+gives the customer the fact they need — this tenant was created by the platform.
+The individual operator's id is an opaque uuid they cannot resolve (RLS stops them
+reading the platform's `awcms_tenant_users`) while still being an identifier handed
+to a third party. It stays on the platform-side row, where it can be resolved.
 
-## Konsekuensi
+## Consequences
 
-- Pertanyaan "apa saja yang dilakukan orang luar di tenant saya" menjadi satu
-  query ber-index atas `awcms_audit_events (tenant_id, actor_tenant_id,
-created_at DESC)`.
-- Pertanyaan "apa saja yang terjadi di bawah grant ini" menjadi satu query, dan
-  ia menjangkau **kedua** tabel — tindakannya dan setiap keputusan otorisasi
-  yang mendahuluinya.
-- Tenant yang baru dibuat kini punya tepat satu baris audit `create` di lognya
-  sendiri, ber-`actor_tenant_id` platform. Tindak lanjut ADR-0054 **tertutup**.
-- Kolom-kolom ini mendarat **inert bagi setiap deployment yang belum memakai
-  akses terdelegasi**: NULL di mana-mana, tidak ada perilaku yang berubah, dan
-  satu baris baru saat provisioning.
+- The question "what have outsiders done in my tenant" becomes one indexed query
+  over `awcms_audit_events (tenant_id, actor_tenant_id, created_at DESC)`.
+- The question "what has happened under this grant" becomes one query, and it
+  reaches **both** tables — the actions and every authorization decision that
+  preceded them.
+- A newly created tenant now has exactly one `create` audit row in its own log,
+  bearing the platform's `actor_tenant_id`. The ADR-0054 follow-up is **closed**.
+- These columns land **inert for every deployment not yet using delegated
+  access**: NULL everywhere, no behaviour changed, and one new row at provisioning
+  time.
 
-## Ditolak
+## Rejected
 
-- **Backfill `actor_tenant_id = tenant_id`** untuk baris lama.
-- **`actor_tenant_id` pada decision log** — dua kolom per request untuk
-  menghindari satu join investigasi.
-- **Index penuh** atas kolom yang hampir selalu NULL.
-- **Join tabel grant ke query autentikasi** — biaya pada setiap request biasa
-  demi request yang jarang.
-- **Membawa `actor_tenant_user_id` platform ke dalam log pelanggan.**
-- **Menjadikan id grant input otorisasi.** Ia atribusi; membuat sebuah keputusan
-  bergantung padanya akan mengubah kegagalan resolusi yang tidak berbahaya
-  menjadi kegagalan akses.
+- **Backfilling `actor_tenant_id = tenant_id`** for old rows.
+- **`actor_tenant_id` on the decision log** — two columns per request to avoid one
+  investigative join.
+- **A full index** over a column that is nearly always NULL.
+- **Joining the grant table into the authentication query** — a cost on every
+  ordinary request for the sake of the rare one.
+- **Carrying the platform's `actor_tenant_user_id` into the customer's log.**
+- **Making the grant id an authorization input.** It is attribution; making a
+  decision depend on it would turn a harmless resolution failure into an access
+  failure.

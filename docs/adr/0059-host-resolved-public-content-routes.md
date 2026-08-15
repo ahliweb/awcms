@@ -1,82 +1,84 @@
-# ADR-0059 — Rute konten publik host-resolved: keluarga `/news/**`, bukan `/blog/{slug}`
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0059-host-resolved-public-content-routes.id.md)
+
+# ADR-0059 — Host-resolved public content routes: the `/news/**` family, not `/blog/{slug}`
 
 - **Status:** Superseded by [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
-- **Tanggal:** 2026-08-03
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0009](0009-public-tenant-scoped-routes.md) (rute publik path-based `/blog/{tenantCode}`), [ADR-0010](0010-public-host-tenant-routing.md) (resolusi tenant dari host + `PUBLIC_TENANT_RESOLUTION_MODE`), [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md) (rute discovery + seam `seo_facts`), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (surface cache tepi), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (preseden: kepemilikan pindah, nama permukaan tidak), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (kemampuan dibangun di sini, bukan di-port)
+- **Date:** 2026-08-03
+- **Decision makers:** @ahliweb
+- **Related:** [ADR-0009](0009-public-tenant-scoped-routes.md) (path-based public routes `/blog/{tenantCode}`), [ADR-0010](0010-public-host-tenant-routing.md) (tenant resolution from host + `PUBLIC_TENANT_RESOLUTION_MODE`), [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md) (discovery routes + `seo_facts` seam), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (edge cache surfaces), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (precedent: ownership moves, surface names do not), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (capabilities are built here, not ported)
 
-> **Dibaca sebagai sejarah.** [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
-> (8 Agustus 2026) membelah kosakata URL publik keluarga: `/blog/**` milik repo
-> ini, `/news/**` milik `awcms-astro`. Keluarga rute yang ADR ini daratkan karena
-> itu **tidak dibangun di sini** — yang dicabut alamatnya, bukan kemampuannya.
-> Dua keputusan di bawah **tetap berlaku** dan dinyatakan ulang di ADR-0071 §3
-> supaya tidak ikut gugur: invarian §C ("jangan pernah mengiklankan URL yang
-> tidak kita layani") dan penolakan §E mendeklarasikan surface cache tepi
-> host-resolved sebelum kunci per-host diverifikasi. Kalimat ADR ini sengaja
-> tidak ditulis ulang (Aturan 2 indeks ADR).
+> **Read this as history.** [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+> (8 August 2026) splits the family's public URL vocabulary: `/blog/**` belongs to this
+> repo, `/news/**` belongs to `awcms-astro`. The route family this ADR landed is
+> therefore **not built here** — what was revoked is its address, not its capability.
+> Two decisions below **still hold** and are restated in ADR-0071 §3
+> so they do not fall with it: the §C invariant ("never advertise a URL we do
+> not serve") and the §E refusal to declare a host-resolved edge cache surface
+> before the per-host key is verified. The sentences of this ADR are deliberately
+> not rewritten (ADR index Rule 2).
 >
-> Rutenya masih ada di `src/pages/news/` saat banner ini ditulis; ADR-0071 §4
-> menjadwalkan penghapusannya dan `tests/url-vocabulary-split.test.ts`
-> menegakkan jadwal itu dua arah.
+> The routes still exist under `src/pages/news/` at the time this banner was written; ADR-0071 §4
+> schedules their removal and `tests/url-vocabulary-split.test.ts`
+> enforces that schedule in both directions.
 
-## Konteks
+## Context
 
-### 1. Cacat yang tercatat di backlog ternyata BUKAN cacat itu
+### 1. The defect recorded in the backlog turned out NOT to be that defect
 
-`docs/PROJECT_STATE.md` §4 (3 Agustus 2026) mencatat, sebagai temuan yang "lebih
-tajam dari follow-up":
+`docs/PROJECT_STATE.md` §4 (3 August 2026) records, as a finding "sharper than
+the follow-up":
 
-> `createBlogContentSeoFactsAdapter` memakai `DEFAULT_PUBLIC_BASE_PATH` `/blog`,
-> jadi tiap canonical/`<loc>`/tautan feed yang dipancarkan `seo_distribution`
-> menunjuk `/blog/{slug}` … untuk tenant host-resolved, **setiap URL di sitemap
-> dan feed menunjuk halaman yang 404**.
+> `createBlogContentSeoFactsAdapter` uses `DEFAULT_PUBLIC_BASE_PATH` `/blog`,
+> so every canonical/`<loc>`/feed link emitted by `seo_distribution`
+> points at `/blog/{slug}` … for a host-resolved tenant, **every URL in the sitemap
+> and feed points at a page that 404s**.
 
-Diverifikasi ke kode, klaim itu **salah**. Rute discovery tidak pernah memakai
-default itu. Satu-satunya composition root yang membangun adapter untuk mereka —
-`src/modules/seo-distribution/presentation/discovery-providers.ts` — memanggil
+Verified against the code, that claim is **wrong**. The discovery routes never used
+that default. The only composition root that builds the adapter for them —
+`src/modules/seo-distribution/presentation/discovery-providers.ts` — calls
 
 ```ts
 providers.push(createBlogContentSeoFactsAdapter(`/blog/${tenantCode}`));
 ```
 
-dan `git log -S` menunjukkan baris itu ada **sejak modulnya mendarat** (#223).
-Docblock fungsinya bahkan menuliskan alasannya: "there is no host-based
+and `git log -S` shows that line has been there **since the module landed** (#223).
+The function's docblock even spells out why: "there is no host-based
 `/blog/{slug}` route in this base yet … Advertising `/blog/{slug}` would 404 for
-crawlers." Nilai default `/blog` pada `createBlogContentSeoFactsAdapter` hanya
-dipakai oleh singleton `blogContentSeoFactsAdapter` yang **nol pemanggil di
-`src/`** (hanya test). Enam rute discovery melewati satu choke point,
-`serveDiscovery` → `resolveEnabledSeoProviders`, jadi tidak ada jalur kedua yang
-bisa melewatkannya.
+crawlers." The default value `/blog` on `createBlogContentSeoFactsAdapter` is only
+used by the `blogContentSeoFactsAdapter` singleton, which has **zero callers in
+`src/`** (tests only). Six discovery routes pass through a single choke point,
+`serveDiscovery` → `resolveEnabledSeoProviders`, so there is no second path that
+could bypass it.
 
-Ini kelas kesalahan yang repo ini sudah kenal (lihat ADR-0058 §1: dua "temuan"
-yang langsung tertulis sebagai keputusan padahal rutenya membantah). Dicatat di
-sini supaya koreksinya punya rujukan, dan supaya angka backlog berikutnya dibaca
-sebagai klaim yang harus diverifikasi.
+This is an error class this repo already knows (see ADR-0058 §1: two "findings"
+written straight down as decisions when the routes contradicted them). Recorded
+here so the correction has a reference, and so the next backlog item is read
+as a claim that must be verified.
 
-### 2. Cacat yang SEBENARNYA ada: mode host-resolved tidak punya rute konten
+### 2. The defect that ACTUALLY exists: host-resolved mode has no content routes
 
-Yang benar-benar hilang bukan kebenaran URL sitemap, melainkan keluarga rutenya
-sendiri. `tenant_domain` (#219) memetakan host → tenant, `seo_distribution`
-(#223/#224) melayani `/robots.txt`, `/sitemap*.xml`, `/feed.*` di root host,
-`site_search` (#231) melayani `/search` di root host, `comments` (ADR-0041)
-melayani API komentar publiknya host-resolved. Tetapi **konten yang ditunjuk
-semua permukaan itu hanya bisa dibaca lewat `/blog/{tenantCode}/{slug}`**.
+What is genuinely missing is not the correctness of sitemap URLs but the route family
+itself. `tenant_domain` (#219) maps host → tenant, `seo_distribution`
+(#223/#224) serves `/robots.txt`, `/sitemap*.xml`, `/feed.*` at the host root,
+`site_search` (#231) serves `/search` at the host root, `comments` (ADR-0041)
+serves its public comment API host-resolved. But **the content all those surfaces
+point at can only be read via `/blog/{tenantCode}/{slug}`**.
 
-Akibatnya sebuah tenant dengan domain sendiri — persis kasus yang `tenant_domain`
-ada untuk melayani — menerbitkan sitemap di `https://acme.com/sitemap.xml` yang
-setiap `<loc>`-nya berbentuk `https://acme.com/blog/acme/hello-world`: benar,
-resolve, dan membawa pengenal yang justru dihapus oleh keputusan memakai domain
-sendiri. Janji ADR-0010 ("URL bersih tanpa tenant code") tidak pernah sampai ke
-lapisan konten.
+The consequence is that a tenant with its own domain — precisely the case `tenant_domain`
+exists to serve — publishes a sitemap at `https://acme.com/sitemap.xml` in which
+every `<loc>` has the form `https://acme.com/blog/acme/hello-world`: correct,
+resolvable, and carrying the very identifier the decision to use its own domain
+removed. The ADR-0010 promise ("clean URLs without a tenant code") never reached
+the content layer.
 
-### 3. `/blog/{slug}` tidak bisa menjadi bentuknya — dibuktikan, bukan diduga
+### 3. `/blog/{slug}` cannot be its shape — proven, not assumed
 
-Bentuk yang backlog sebutkan (`/blog/{slug}`) **bertabrakan** dengan rute daftar
-ADR-0009 (`/blog/{tenantCode}`): dua-duanya satu segmen dinamis di bawah `/blog`,
-jadi `/blog/apa-pun` ambigu — slug post atau kode tenant?
+The shape the backlog named (`/blog/{slug}`) **collides** with the ADR-0009 listing
+route (`/blog/{tenantCode}`): both are a single dynamic segment under `/blog`,
+so `/blog/anything` is ambiguous — post slug or tenant code?
 
-Diuji langsung di repo ini (berkas probe `src/pages/blog/[slug].ts`, lalu
-`bun run build`, lalu dihapus):
+Tested directly in this repo (probe file `src/pages/blog/[slug].ts`, then
+`bun run build`, then deleted):
 
 ```
 [WARN] [router] The route "/blog/[slug]" is defined in both "src/pages/blog/[slug].ts"
@@ -85,133 +87,132 @@ cannot be defined more than once.
 [WARN] [router] A collision will result in a hard error in following versions of Astro.
 ```
 
-Buildnya **tetap sukses**. Jadi biayanya bukan kegagalan yang terlihat melainkan
-satu rute yang diam-diam menutupi rute lain hari ini, dan build yang gagal keras
-pada versi Astro berikutnya. Menyelesaikannya di runtime (satu berkas yang
-menebak "ini slug atau kode tenant?") justru memindahkan ambiguitas ke tempat
-yang lebih buruk: siapa pun yang boleh menulis slug post bisa menaungi URL
-daftar milik tenant lain, atau sebaliknya sebuah kode tenant baru mematikan URL
-post yang sudah terindeks — dua arah kegagalan yang keduanya senyap.
+The build **still succeeds**. So the cost is not a visible failure but one route
+silently shadowing another today, and a hard build failure on the next Astro
+version. Resolving it at runtime (one file guessing "is this a slug or a tenant code?")
+merely moves the ambiguity somewhere worse: anyone allowed to write a post slug
+could shadow another tenant's listing URL, or conversely a new tenant code kills
+an already-indexed post URL — two failure directions, both silent.
 
-### 4. `publicBasePath` versi arsip adalah pabrik cacat yang sama
+### 4. The archive's `publicBasePath` is a factory for the same defect
 
-`awcms-micro` (arsip, ADR-0055) menyelesaikan ini dengan keluarga rute fisik
-`/news/**` plus setting per-tenant `publicBasePath`/`publicLabel`. Dokumentasinya
-sendiri menyatakan batasnya: setting itu **hanya mengubah URL self-referential**
-(canonical, `<loc>`, tautan internal) dan **tidak** memindahkan rute file-based
-yang benar-benar melayani. Artinya menyetelnya ke nilai apa pun selain path
-fisiknya menghasilkan persis cacat yang ADR ini tutup — permukaan yang
-mengiklankan URL yang 404 — hanya saja per-tenant dan tanpa gerbang. Setting itu
-**tidak** diadopsi.
+`awcms-micro` (archive, ADR-0055) solved this with a physical route family
+`/news/**` plus per-tenant settings `publicBasePath`/`publicLabel`. Its own
+documentation states the limit: that setting **only changes self-referential URLs**
+(canonical, `<loc>`, internal links) and does **not** move the file-based route
+that actually serves. That means setting it to any value other than the physical
+path produces exactly the defect this ADR closes — a surface that
+advertises URLs which 404 — only per-tenant and without a gate. That setting is
+**not** adopted.
 
-## Keputusan
+## Decision
 
-### A. Keluarga rute host-resolved ada di `/news/**`, empat rute
+### A. The host-resolved route family lives at `/news/**`, four routes
 
-`/news` (indeks), `/news/{slug}` (detail), `/news/category/{slug}`,
-`/news/tag/{slug}`. Tanpa segmen `tenantCode`: tenant diresolusi dari request
-(`resolvePublicTenantFromRequest`, ADR-0010) persis seperti `/search` dan rute
-discovery.
+`/news` (index), `/news/{slug}` (detail), `/news/category/{slug}`,
+`/news/tag/{slug}`. Without a `tenantCode` segment: the tenant is resolved from the request
+(`resolvePublicTenantFromRequest`, ADR-0010) exactly like `/search` and the
+discovery routes.
 
-Kenapa `/news` dan bukan kosakata baru: ia satu-satunya nama yang **sudah**
-dipakai repo ini untuk permukaan yang sama (`awcms_news_portal_*`,
-`/api/v1/news-portal/*`, `NEWS_MEDIA_R2_*`, tag OpenAPI `News Media`), dan
-`blog_content/module.ts` + README-nya sudah memerikan `/news/**` sebagai
-keluarga yang **sengaja belum ada** ("PORT-TIME DROPS"). Keputusan ini
-mengaktifkan desain yang sudah tertulis, bukan menambah desain ketiga. Preseden
-namanya ADR-0044 §3/§6 dan ADR-0036: kepemilikan berpindah, nama permukaan
-tidak.
+Why `/news` and not new vocabulary: it is the only name this repo **already**
+uses for the same surface (`awcms_news_portal_*`,
+`/api/v1/news-portal/*`, `NEWS_MEDIA_R2_*`, OpenAPI tag `News Media`), and
+`blog_content/module.ts` plus its README already describe `/news/**` as a family
+that is **deliberately absent** ("PORT-TIME DROPS"). This decision
+activates a design that is already written down, it does not add a third design. Its
+naming precedent is ADR-0044 §3/§6 and ADR-0036: ownership moves, surface names do
+not.
 
-**Yang sengaja TIDAK ikut**: `/news/feed.xml`, `/news/sitemap-news.xml`,
-`/news/search`. Ketiganya sudah dilayani host-resolved di root host
+**What is deliberately NOT included**: `/news/feed.xml`, `/news/sitemap-news.xml`,
+`/news/search`. All three are already served host-resolved at the host root
 (`/feed.xml`, `/atom.xml`, `/feed.json`, `/sitemap.xml`, `/sitemap-{n}.xml`,
-`/search`). Menduplikasinya berarti satu host punya dua sitemap dan dua titik
-penegakan `rssEnabled` — biaya SEO dan sumber divergensi, tanpa kemampuan baru.
+`/search`). Duplicating them means one host has two sitemaps and two enforcement
+points for `rssEnabled` — an SEO cost and a source of divergence, with no new capability.
 
-Keluarga legacy `/blog/{tenantCode}` **tidak berubah dan tidak dipensiunkan**
-(ADR-0009 tetap berlaku): keduanya hidup berdampingan, masing-masing dengan
-saklar per-tenant sendiri.
+The legacy `/blog/{tenantCode}` family is **unchanged and not retired**
+(ADR-0009 still holds): the two live side by side, each with its own per-tenant
+switch.
 
-### B. Satu gerbang bersama, sebentuk dengan `site_search` dan `comments`
+### B. One shared gate, the same shape as `site_search` and `comments`
 
 `withHostResolvedBlogTenant` (`blog-content/application/public-host-route-tenant-resolution.ts`):
-resolusi host → cek modul `blog_content` enabled → cek `publicRouteMode` tenant →
-jalankan handler di dalam satu `withTenantOrThrow`. Setiap hasil non-serving
-kolaps ke `null` yang sama (404 generik) — tak pernah membocorkan yang mana — dan
-cabang "tenant tak ter-resolve" membayar bentuk round-trip yang sama lewat
+host resolution → check `blog_content` module enabled → check the tenant's `publicRouteMode` →
+run the handler inside a single `withTenantOrThrow`. Every non-serving outcome
+collapses to the same `null` (generic 404) — never leaking which one — and
+the "tenant not resolved" branch pays the same round-trip shape via
 `padUnresolvedHostRouteLatency` (`withSiteSearchTenant`/`withCommentsTenant`
-sudah menetapkan polanya; tanpa padding, latensi menjawab "hostname ini memetakan
-ke tenant aktif").
+already set the pattern; without padding, latency answers "this hostname maps
+to an active tenant").
 
-Saklar barunya `publicRouteMode` (`domain_default` | `disabled`, default
-`domain_default`) di `settings.defaults` descriptor — store yang sudah ada, bukan
-store ketiga, dan simetris dengan `legacyTenantRouteEnabled` milik keluarga
-legacy. Normalisasi fail-safe di sisi baca (framework module-settings tidak
-memvalidasi tipe per-field).
+The new switch is `publicRouteMode` (`domain_default` | `disabled`, default
+`domain_default`) in the descriptor's `settings.defaults` — an existing store, not a
+third store, and symmetric with the legacy family's `legacyTenantRouteEnabled`.
+Fail-safe normalization on the read side (the module-settings framework does not
+validate per-field types).
 
-### C. Base path SEO mengikuti keluarga yang benar-benar melayani
+### C. The SEO base path follows the family that actually serves
 
-`resolveEnabledSeoProviders` kini membaca setting rute publik tenant dan memilih:
+`resolveEnabledSeoProviders` now reads the tenant's public route settings and chooses:
 
-| `publicRouteMode` | `legacyTenantRouteEnabled` | Base path canonical/`<loc>`/feed |
+| `publicRouteMode` | `legacyTenantRouteEnabled` | canonical/`<loc>`/feed base path |
 | ----------------- | -------------------------- | -------------------------------- |
-| `domain_default`  | apa pun                    | `/news`                          |
+| `domain_default`  | anything                   | `/news`                          |
 | `disabled`        | `true`                     | `/blog/{tenantCode}`             |
-| `disabled`        | `false`                    | **nol provider** — tak ada URL   |
+| `disabled`        | `false`                    | **zero providers** — no URLs     |
 
-Baris ketiga adalah inti aturannya: bila tenant mematikan KEDUA keluarga, tidak
-ada URL konten yang bisa diiklankan, jadi sitemap/feed-nya kosong alih-alih
-memuat tautan yang pasti 404. Invarian "jangan pernah mengiklankan URL yang tak
-kita layani" ditegakkan test, bukan hanya prosa.
+The third row is the heart of the rule: if a tenant turns BOTH families off, there is
+no content URL that can be advertised, so its sitemap/feed is empty instead of
+carrying links that are certain to 404. The invariant "never advertise a URL we do
+not serve" is enforced by tests, not just prose.
 
-Rute discovery diresolusi dengan resolver host yang sama dengan keluarga
-`/news`, jadi keduanya selalu sepakat tentang tenant mana yang dimaksud.
+The discovery routes are resolved with the same host resolver as the `/news`
+family, so the two always agree about which tenant is meant.
 
-### D. Nol migrasi, nol permission baru, nol perubahan OpenAPI
+### D. Zero migrations, zero new permissions, zero OpenAPI changes
 
-Rute publik anonim tidak punya guard permission dan — mengikuti preseden
-`/blog/{tenantCode}` dan rute discovery (ADR-0038 §4) — berada di luar kontrak
-OpenAPI. Kepemilikan rute dinyatakan dengan menambah `"/news"` ke
+Anonymous public routes have no permission guard and — following the precedent of
+`/blog/{tenantCode}` and the discovery routes (ADR-0038 §4) — sit outside the
+OpenAPI contract. Route ownership is declared by adding `"/news"` to
 `blog_content.api.routes` (`modules:routes:check`).
 
-### E. Cache tepi: belum ada surface yang dideklarasikan, dan itu keputusan
+### E. Edge cache: no surface is declared yet, and that is a decision
 
-`/news/**` adalah permukaan **host-resolved**: path-nya identik untuk setiap
-tenant, jadi kunci cache-nya harus memuat host. `surface-registry.ts` sudah
-menahan permukaan discovery root untuk alasan tetangganya (tenant tak bisa
-diturunkan dari path) dan menyatakan "a dead declaration is worse than an honest
-omission". Mendeklarasikan `/news/**` sebelum kunci per-host diverifikasi di VCL
-adalah cara paling langsung memasang kebocoran lintas-tenant di cache bersama.
-Jadi: tidak dideklarasikan → `surface_not_declared` → `Cache-Control: private,
-no-store`. Follow-up yang sama dengan discovery root (thread `locals`, kunci
-per-host), dicatat di `docs/awcms/edge-cache-architecture.md`.
+`/news/**` is a **host-resolved** surface: its path is identical for every
+tenant, so its cache key must include the host. `surface-registry.ts` already
+holds back the root discovery surfaces for its neighbour's reason (the tenant cannot
+be derived from the path) and states "a dead declaration is worse than an honest
+omission". Declaring `/news/**` before the per-host key is verified in the VCL
+is the most direct way to install a cross-tenant leak in a shared cache.
+So: not declared → `surface_not_declared` → `Cache-Control: private,
+no-store`. The same follow-up as root discovery (thread `locals`, per-host
+key), recorded in `docs/awcms/edge-cache-architecture.md`.
 
-## Konsekuensi
+## Consequences
 
-- Deployment host-resolved akhirnya punya URL konten tanpa kode tenant, dan
-  sitemap/feed/canonical-nya menunjuk ke sana.
-- Sebuah tenant kini bisa mematikan seluruh permukaan konten publiknya (kedua
-  keluarga `disabled`/`false`) — dan sitemap-nya ikut kosong, bukan rusak.
-- Dua keluarga rute untuk konten yang sama berarti dua URL untuk satu post pada
-  deployment yang mengaktifkan keduanya. Itu **duplikasi terkendali**, bukan
-  ambigu: canonical selalu satu (tabel §C), jadi mesin pencari diberi satu
-  jawaban. Tenant yang tidak menginginkannya mematikan salah satunya.
-- `/news` menjadi kata yang dipesan pada host mana pun. Konsisten dengan
-  `RESERVED_SEGMENTS` edge-cache dan dengan `/search`; dicatat di README modul.
-- Rute `/news/**` tidak ter-cache di tepi sampai follow-up §E mendarat.
+- Host-resolved deployments finally have content URLs without a tenant code, and
+  their sitemap/feed/canonical point at them.
+- A tenant can now switch off its entire public content surface (both
+  families `disabled`/`false`) — and its sitemap goes empty with it, rather than broken.
+- Two route families for the same content means two URLs for one post on a
+  deployment that enables both. That is **controlled duplication**, not
+  ambiguity: the canonical is always exactly one (table §C), so search engines are given one
+  answer. A tenant that does not want it switches one of them off.
+- `/news` becomes a reserved word on any host. Consistent with the edge-cache
+  `RESERVED_SEGMENTS` and with `/search`; recorded in the module README.
+- `/news/**` routes are not edge-cached until the §E follow-up lands.
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-1. **`/blog/{slug}` (bentuk yang backlog sebutkan)** — tabrakan rute yang
-   dibuktikan di §3; senyap hari ini, gagal keras nanti.
-2. **Satu berkas yang menebak slug-atau-kode-tenant di runtime** — memindahkan
-   ambiguitas ke lapisan otorisasi de-facto: penulis konten bisa menaungi URL
-   tenant lain, atau kode tenant baru mematikan URL post terindeks.
-3. **Slug di root host (`/{slug}`)** — menelan setiap path satu segmen, menabrak
-   `/[...path]` (yang menjalankan resolusi redirect dan pencatatan 404
-   `seo_distribution`), dan mendahului `awcms_blog_pages` yang justru pemilik
-   alami slug root.
-4. **Setting `publicBasePath` per-tenant (versi arsip)** — §4: mengubah tautan
-   tanpa memindahkan rute = memproduksi URL 404 per-tenant, tanpa gerbang.
-5. **Memensiunkan `/blog/{tenantCode}`** — ADR-0009 adalah satu-satunya bentuk
-   yang bekerja tanpa DNS/TLS sama sekali (deployment LAN/offline, doc 18).
+1. **`/blog/{slug}` (the shape the backlog named)** — the route collision
+   proven in §3; silent today, hard failure later.
+2. **One file that guesses slug-or-tenant-code at runtime** — moves the
+   ambiguity into a de-facto authorization layer: a content author could shadow another
+   tenant's URL, or a new tenant code kills an indexed post URL.
+3. **A slug at the host root (`/{slug}`)** — swallows every single-segment path, collides with
+   `/[...path]` (which runs redirect resolution and `seo_distribution` 404
+   logging), and pre-empts `awcms_blog_pages`, which is the natural owner
+   of root slugs.
+4. **A per-tenant `publicBasePath` setting (the archive's version)** — §4: changing links
+   without moving routes = producing 404 URLs per tenant, without a gate.
+5. **Retiring `/blog/{tenantCode}`** — ADR-0009 is the only shape
+   that works with no DNS/TLS at all (LAN/offline deployments, doc 18).

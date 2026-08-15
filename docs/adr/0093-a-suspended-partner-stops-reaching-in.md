@@ -1,150 +1,148 @@
-# ADR-0093 — Partner yang di-suspend BERHENTI menjangkau, dan grant-nya tetap ada
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0093-a-suspended-partner-stops-reaching-in.id.md)
 
-- **Status:** Diterima (2026-08-13).
-- **Konteks:** Issue #543. Migrasi `sql/124`.
-- **Membangun di atas:**
-  [ADR-0089](0089-a-partner-is-an-ordinary-tenant.md) (partner adalah tenant
-  biasa; registri milik platform),
+# ADR-0093 — A suspended partner STOPS reaching in, and its grants remain
+
+- **Status:** Accepted (2026-08-13).
+- **Context:** Issue #543. Migration `sql/124`.
+- **Builds on:**
+  [ADR-0089](0089-a-partner-is-an-ordinary-tenant.md) (a partner is an ordinary
+  tenant; the registry belongs to the platform),
   [ADR-0073](0073-suspension-is-a-service-state-not-a-login-state.md)
-  (suspensi ditegakkan di chokepoint, bukan oleh job),
-  [ADR-0084](0084-an-entitlement-refuses-it-never-grants.md) (entitlement
-  MENOLAK, ia tidak pernah mencabut yang sudah berjalan), dan
+  (suspension is enforced at the chokepoint, not by a job),
+  [ADR-0084](0084-an-entitlement-refuses-it-never-grants.md) (an entitlement
+  REFUSES, it never revokes what is already running), and
   [ADR-0090](0090-delegated-access-prints-a-real-tenant-user.md) /
-  [ADR-0091](0091-two-sided-attribution.md) (aktor terdelegasi adalah tenant
-  user nyata dengan atribusi dua sisi).
+  [ADR-0091](0091-two-sided-attribution.md) (a delegated actor is a real tenant
+  user with two-sided attribution).
 
-## Kenapa ADR, dan kenapa sekarang
+## Why an ADR, and why now
 
-`sql/116` memberi `awcms_partners` sebuah kolom `status` yang dipatok ke
-`'active'` oleh CHECK, dan menuliskan syaratnya sendiri di header berkasnya:
+`sql/116` gave `awcms_partners` a `status` column pinned to `'active'` by a
+CHECK, and wrote its own condition in the file header:
 
-> PR 8.4 melebarkan CHECK ini di PR yang sama dengan pembacanya, atau tidak
-> sama sekali.
+> PR 8.4 widens this CHECK in the same PR as its reader, or not at all.
 
-Mengirim partner yang BISA di-suspend sebelum ada yang MEMBACA suspensi adalah
-kontrol yang terbaca sebagai ditegakkan padahal tidak — bentuk yang sama yang
-`sql/106` pakai untuk `scope_type`. Jadi pertanyaannya bukan "tambah kolom",
-melainkan **apa arti partner tersuspensi**, dan itu tiga keputusan.
+Shipping a partner that CAN be suspended before anything READS the suspension is
+a control that reads as enforced while it is not — the same shape `sql/106` used
+for `scope_type`. So the question is not "add a column", it is **what a suspended
+partner means**, and that is three decisions.
 
-## Keputusan 1 — Suspensi MENGHENTIKAN jangkauan yang sedang berjalan
+## Decision 1 — Suspension STOPS reach that is already running
 
-Bukan hanya menolak keterlibatan baru.
+Not merely refusing new engagements.
 
-Preseden terdekat menunjuk dua arah, dan perbedaannya adalah alasannya:
+The nearest precedents point in two directions, and the difference is their
+reasoning:
 
-- **ADR-0084** memutuskan bahwa entitlement **menolak** dan tidak pernah
-  mencabut yang sudah berjalan. Alasannya proporsionalitas: entitlement adalah
-  gerbang KOMERSIAL, dan memutus pekerjaan yang sedang berjalan karena sebuah
-  paket berubah adalah hukuman yang tidak sebanding dengan sebabnya.
-- **ADR-0073** memutuskan bahwa tenant tersuspensi **berhenti dilayani seketika
-  di chokepoint**, sesi yang sudah terbit sekalipun. Alasannya ditulis di
-  sana: sebelum itu, mensuspend tenant mematikan situs publiknya seketika
-  sementara setiap sesi admin yang sudah terbit tetap berkuasa penuh sampai
-  kedaluwarsa sendiri — "pelanggan kehilangan apa yang dilihat pengunjungnya
-  dan tetap memegang apa yang bisa mengubah datanya".
+- **ADR-0084** decided that an entitlement **refuses** and never revokes what is
+  already running. The reason is proportionality: an entitlement is a COMMERCIAL
+  gate, and cutting off work in progress because a plan changed is a punishment
+  out of proportion to its cause.
+- **ADR-0073** decided that a suspended tenant **stops being served immediately at
+  the chokepoint**, already-issued sessions included. The reason is written there:
+  before that, suspending a tenant killed its public site instantly while every
+  already-issued admin session stayed fully in power until it expired on its own —
+  "the customer loses what its visitors see and keeps holding what can change its
+  data".
 
-Suspensi partner adalah kelas yang KEDUA. Ia bukan perubahan paket; ia tindakan
-terhadap pihak yang jangkauannya ke dalam data pelanggan justru sedang ingin
-dihentikan. Suspensi yang hanya menolak keterlibatan BARU akan membiarkan
-setiap aktor terdelegasi yang sudah masuk terus bekerja — persis kegagalan yang
-ADR-0073 namai, dipindahkan satu tingkat ke luar.
+Partner suspension is the SECOND class. It is not a plan change; it is an action
+against a party whose reach into customer data is exactly what you are trying to
+stop. A suspension that only refuses NEW engagements would let every delegated
+actor already inside keep working — precisely the failure ADR-0073 named, moved
+one level outwards.
 
-Karena itu penegakannya di **chokepoint**, bukan job. Job meninggalkan jendela;
-chokepoint dievaluasi per-request.
+That is why enforcement is at the **chokepoint**, not a job. A job leaves a
+window; a chokepoint is evaluated per request.
 
-## Keputusan 2 — Grant yang hidup TIDAK ikut mati
+## Decision 2 — Live grants do NOT die with it
 
-`sql/120` sengaja membuat grant **hidup lebih lama** dari kemitraannya, dan
-alasannya ditulis di sana: "siapa yang pernah bisa melihat data kami, dan
-sampai kapan" harus tetap terjawab SESUDAH vendornya diberhentikan — justru
-terutama sesudah itu.
+`sql/120` deliberately makes grants **outlive** their partnership, and the reason
+is written there: "who was ever able to see our data, and until when" must remain
+answerable AFTER the vendor has been let go — especially after that.
 
-Suspensi karena itu tidak mencabut, tidak menghapus, dan tidak menyentuh satu
-baris grant pun. Ia membuat grant itu **tidak berlaku**, bukan tidak ada. Baris
-tetap sebagai catatan; akses yang diberikannya berhenti.
+Suspension therefore does not revoke, does not delete, and does not touch a
+single grant row. It makes those grants **ineffective**, not absent. The rows
+stay as a record; the access they conferred stops.
 
-Bentuk ini sudah punya nama di repo: "status adalah cache, `effective_to` vs
-`now()` adalah gerbang sebenarnya" (`isSoDConflictExceptionCurrentlyValid`).
-Keberlakuan DIHITUNG, tidak disimpan — sehingga tidak ada dua tempat yang bisa
-menyimpang, dan memulihkan partner memulihkan jangkauannya tanpa ada yang harus
-menulis ulang apa pun.
+This shape already has a name in the repo: "status is a cache, `effective_to` vs
+`now()` is the real gate" (`isSoDConflictExceptionCurrentlyValid`). Validity is
+COMPUTED, not stored — so there are no two places that can diverge, and restoring
+a partner restores its reach without anyone having to rewrite anything.
 
-Kalau kelak sebuah keputusan MEMANG ingin membunuh grant saat suspensi, ia
-membatalkan `sql/120` dan wajib mengatakannya. ADR ini tidak.
+If a future decision DOES want to kill grants on suspension, it overturns
+`sql/120` and must say so. This ADR does not.
 
-## Keputusan 3 — Sesi anggota terdelegasi yang sedang berjalan ikut berhenti
+## Decision 3 — Running delegated member sessions stop too
 
-Konsekuensi langsung dari Keputusan 1: kalau penegakannya di chokepoint, tidak
-ada yang perlu memutus sesi. Sesi tetap ada dan setiap keputusan yang dimintanya
-ditolak, persis bentuk ADR-0073 untuk tenant tersuspensi.
+A direct consequence of Decision 1: if enforcement is at the chokepoint, nothing
+needs to cut sessions. The session stays and every decision it asks for is
+refused, exactly the ADR-0073 shape for a suspended tenant.
 
-## Bagaimana chokepoint bisa membacanya sama sekali
+## How the chokepoint can read it at all
 
-Ini pertanyaan pertama Definition of Ready, dan repo ini sudah membayarnya dua
-kali (ADR-0087 dan ADR-0088 sama-sama merencanakan pembacaan lintas-tenant yang
-FORCE RLS larang).
+This is the Definition of Ready's first question, and this repo has paid for it
+twice already (ADR-0087 and ADR-0088 both planned a cross-tenant read that FORCE
+RLS forbids).
 
-`awcms_partners` milik tenant PLATFORM dan ber-FORCE RLS. Chokepoint berjalan di
-tenant PELANGGAN. Ia **tidak bisa** membaca tabel itu — dan rencana apa pun yang
-mengandaikan sebaliknya sudah salah sebelum ditulis.
+`awcms_partners` belongs to the PLATFORM tenant and has FORCE RLS. The chokepoint
+runs in the CUSTOMER tenant. It **cannot** read that table — and any plan that
+assumes otherwise is wrong before it is written.
 
-Tiga jalan, dan dua ditolak:
+Three routes, and two are rejected:
 
-- **Denormalisasi status ke baris milik pelanggan.** Platform juga tidak bisa
-  menulis baris pelanggan di bawah RLS, jadi ini menuntut job per-tenant — yang
-  membawa kembali jendela yang Keputusan 1 tolak, plus dua salinan yang bisa
-  menyimpang.
-- **Mencabut FORCE RLS dari registri.** Menukar isolasi tenant demi satu
-  pembacaan.
-- **Fungsi SECURITY DEFINER sempit** — yang dipilih, dan yang sudah
-  diantisipasi header `sql/116` sendiri ("dilayani fungsi SECURITY DEFINER
-  sempit, preseden `sql/048`").
+- **Denormalise the status into rows owned by the customer.** The platform cannot
+  write customer rows under RLS either, so this demands a per-tenant job — which
+  brings back the window Decision 1 refuses, plus two copies that can diverge.
+- **Drop FORCE RLS from the registry.** Trading tenant isolation for one read.
+- **A narrow SECURITY DEFINER function** — the one chosen, and the one `sql/116`'s
+  own header already anticipated ("served by a narrow SECURITY DEFINER function,
+  precedent `sql/048`").
 
-`awcms_partner_registry_status(p_partner_tenant_id uuid) RETURNS text` menjawab
-SATU pertanyaan dan tidak mengembalikan baris apa pun. Keempat pengaman
-`sql/048`/`sql/119` berlaku, dengan role pemilik yang SAMA (`awcms_partner_view`,
-NOLOGIN, tanpa anggota) — dan satu batasan tambahan yang khas di sini: ia
-mengembalikan **teks status, bukan baris**, sehingga tidak ada kolom registri
-lain yang bisa bocor lewatnya, dan tidak ada `WHERE` yang bisa dilupakan
-pemanggilnya.
+`awcms_partner_registry_status(p_partner_tenant_id uuid) RETURNS text` answers ONE
+question and returns no rows at all. All four `sql/048`/`sql/119` safeguards
+apply, with the SAME owner role (`awcms_partner_view`, NOLOGIN, no members) — plus
+one extra restriction specific here: it returns **the status text, not a row**, so
+no other registry column can leak through it, and there is no `WHERE` its caller
+can forget.
 
-**Tidak dikenal berarti MENOLAK.** `NULL` (tidak ada baris registri) diperlakukan
-sama dengan tersuspensi. Itu tak terjangkau hari ini — FK `sql/120` menuntut
-partner terdaftar selama ada grant — dan justru karena tak terjangkau, memilih
-fail-closed tidak bisa mematahkan apa pun yang berjalan.
+**Unknown means REFUSE.** `NULL` (no registry row) is treated the same as
+suspended. That is unreachable today — `sql/120`'s FK requires a registered
+partner for as long as a grant exists — and precisely because it is unreachable,
+choosing fail-closed cannot break anything that is running.
 
-## Yang MENOLAK, dan di mana
+## What REFUSES, and where
 
-| Titik                              | Apa yang berubah                                                           |
-| ---------------------------------- | -------------------------------------------------------------------------- |
-| chokepoint                         | aktor `delegated` yang partnernya bukan `active` → 403 `PARTNER_SUSPENDED` |
-| `POST /access/partner-engagements` | menyewa partner tersuspensi ditolak                                        |
-| `POST /access/delegated-grants`    | predikat `EXISTS` di dalam INSERT ikut menuntut partner `active`           |
+| Point                              | What changes                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| chokepoint                         | a `delegated` actor whose partner is not `active` → 403 `PARTNER_SUSPENDED` |
+| `POST /access/partner-engagements` | engaging a suspended partner is refused                                     |
+| `POST /access/delegated-grants`    | the `EXISTS` predicate inside the INSERT also demands an `active` partner   |
 
-Yang ketiga di dalam statement, bukan mendahuluinya, dengan alasan `sql/120`:
-pemeriksaan TypeScript sebelum INSERT adalah TOCTOU; predikat di statement yang
-sama tidak bisa.
+The third one is inside the statement rather than preceding it, for `sql/120`'s
+reason: a TypeScript check before the INSERT is TOCTOU; a predicate in the same
+statement cannot be.
 
-## Siapa yang boleh men-suspend
+## Who may suspend
 
-`identity_access.partner_registry.disable` dan `.restore`, keduanya
-`scope = 'platform'` seperti dua saudara mereka di `sql/123`. Suspensi adalah
-pernyataan platform tentang siapa yang boleh menjadi partner di deployment ini
-— bukan keputusan pelanggan tentang tenantnya sendiri, yang sudah punya
-namanya sendiri (`partner_access.configure`, dan pelanggan bisa memutus
-kapan saja tanpa meminta siapa pun).
+`identity_access.partner_registry.disable` and `.restore`, both
+`scope = 'platform'` like their two siblings in `sql/123`. Suspension is a
+platform statement about who may be a partner in this deployment — not a
+customer's decision about its own tenant, which already has its own name
+(`partner_access.configure`, and a customer can cut the connection at any time
+without asking anyone).
 
-Aksi `disable`/`restore` dipakai ulang alih-alih `suspend`/`reinstate` baru:
-keduanya sudah ada di `AccessAction`, dan `tenant_admin.tenant_lifecycle`
-memakai pasangan yang sama untuk tindakan yang sama bentuknya.
+The `disable`/`restore` actions are reused instead of new `suspend`/`reinstate`
+ones: both already exist in `AccessAction`, and `tenant_admin.tenant_lifecycle`
+uses the same pair for an action of the same shape.
 
-## Ditolak
+## Rejected
 
-- **Menyamakan suspensi partner dengan suspensi tenant partner.** ADR-0073 sudah
-  mensuspend tenant, dan itu menghentikan partner dilayani DI TENANTNYA SENDIRI
-  — bukan di tenant pelanggan. Ia juga terlalu tumpul: tenant partner bisa saja
-  pelanggan berbayar atas haknya sendiri, dan memutus bisnisnya karena
-  kemitraannya bermasalah adalah hukuman yang salah sasaran.
-- **`status` bebas-teks.** CHECK dilebarkan ke dua nilai persis, bukan dibuka.
-  Nilai ketiga kelak adalah satu DROP/ADD CONSTRAINT lagi, di PR yang sama
-  dengan pembacanya — aturan `sql/116` tetap berlaku untuk dirinya sendiri.
+- **Equating partner suspension with suspending the partner's tenant.** ADR-0073
+  already suspends tenants, and that stops the partner being served IN ITS OWN
+  TENANT — not in the customer's tenant. It is also far too blunt: the partner
+  tenant may well be a paying customer in its own right, and cutting off its
+  business because its partnership is in trouble is a punishment aimed at the
+  wrong target.
+- **Free-text `status`.** The CHECK is widened to exactly two values, not opened
+  up. A third value later is one more DROP/ADD CONSTRAINT, in the same PR as its
+  reader — `sql/116`'s rule still applies to itself.
