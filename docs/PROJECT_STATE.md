@@ -115,7 +115,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | ADR                               | **0000**–**0099** (`0000` = template; highest ADR status: **Accepted (not yet implemented)**) | `ls docs/adr/`                                                                          |
 | Admin screens                     | **43** `.astro` files in `src/pages/admin/`; **0 of 22** modules without `navigation:`        | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **56** (30.212 lines) — on typechecking see §6                                                | `find src -name '*.astro'`                                                              |
-| Gates                             | **50** in the `bun run check` chain                                                           | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **52** in the `bun run check` chain                                                           | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**                    | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -359,6 +359,338 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **RECOMMENDATION ROUND — 17 August 2026, whole-repo audit across ten dimensions.**
+  **38 recommendations from 48 verified findings.** Method: ten independent finders
+  (functional gaps, algorithmic cost, DB query shape, request-path performance,
+  authorization, input handling, auth/session/crypto, job reliability, reusable-function
+  discipline, operability), each followed by an adversarial verifier instructed to
+  REFUTE, that re-opened every cited file. 51 findings went in; **3 were refuted, 1 was
+  already tracked, 24 survived CONFIRMED and 25 survived PARTIAL** (real but narrowed —
+  they are recorded here in their narrowed form).
+
+  **Read this limitation first: no live database was used.** No `EXPLAIN`, no job
+  executed, no cross-tenant request issued. Every index claim below is derived from DDL
+  plus btree prefix rules, not a measured plan. Items are ordered by
+  (severity × reachability) / effort within each group.
+
+  ### Do first — best payoff-to-effort across all four groups
+  1. **A1** — one line in each of two predicates; converts a permanently-live
+     cross-organisation grant into a fail-closed one.
+  2. **A2** — one read + one refusal in the one place twelve handlers share; closes a
+     session-minting loop into a suspended tenant.
+  3. **A3** — a regex; removes an arbitrary-process-env read primitive _before_ SSO is
+     switched on.
+  4. **D1** — two lines in `ops/run-job.sh`; stops archives and exports being written
+     into a container deleted seconds later while the DB records them as present.
+  5. **C1** — one migration; removes a tenant-wide scan + sort from `/admin/blog`,
+     `/admin/pages` and `GET /api/v1/blog/posts`.
+
+  Immediately after: **A4** (`readJsonBody` on `dry-run.ts` alone — the only pre-auth
+  route) and **D2** (the shared comment stripper, because it is what lets the next
+  defect of this class ship green).
+
+  ### A. Security
+  1. **A1 — a redeemed delegated-access grant never expires.** _(found independently by
+     two dimensions, from the job side and the chokepoint side)_
+     `identity-access/application/auth-context.ts:63-70` and `:101-108`;
+     `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
+     `sql/117:105,165`. `expireDelegatedAccessGrants` has **zero callers** — no job
+     descriptor, no script, no `package.json` target — both request-time resolvers filter
+     on `revoked_at IS NULL` only, and the role grant written at redemption omits
+     `effective_to`, which `activeRoleGrants` reads as in force forever. A partner
+     engagement scoped "until 30 September" confers its role indefinitely, and the 31-day
+     `CHECK` in `sql/117` is inert. ADR-0090 promises "revocation **and expiry**
+     deactivate the membership in the same transaction"; the expiry half has no executor.
+     `sql/117:165` even ships a `(tenant_id, expires_at)` index built for that sweep.
+     **Change:** add `AND g.expires_at > now()` to both predicates (expiry then falls
+     through the existing `isDelegatedPartnerRefused` null-is-refuse branch — no new code
+     path); pass the grant's `expiresAt` as `effective_to`; then add the job so sessions
+     are actually revoked.
+  2. **A2 — ADR-0073 suspension does not reach the self-service or client-credential
+     route factories.** `_shared/tenant-route.ts:247-301` and `:342-379`;
+     `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.
+     The check lives only in `authorizeInTransaction` and `ssr-session.ts`, and neither
+     factory calls it, so a suspended tenant's live session can still write profiles,
+     rewrite its credential, and mint **new** sessions indefinitely — the foothold
+     outlives the TTL suspension was meant to drain. `push/subscriptions/index.ts:154`
+     checks by hand; its sibling `DELETE` does not, which is the asymmetry proving the
+     omission is accidental. **Change:** resolve `awcms_tenants.status` once inside both
+     factories; delete the hand-rolled copy; extend `api:tenant-route:check` to assert it.
+  3. **A3 — a tenant SSO admin can name ANY env var as the OIDC client secret and POST
+     it to a host they choose.** `tenant-sso.ts:180-184`;
+     `tenant-sso-policy.ts:229-239,333-348`; `generic-oidc-client.ts:268-277`.
+     `client_secret_env_var` is validated only as a non-empty string, then read as
+     `env[...]` and sent to a discovery endpoint derived from the admin-supplied
+     `issuer_url`, before any ID-token validation. `DATABASE_URL` and
+     `AUTH_MFA_SECRET_ENCRYPTION_KEY` are reachable. Not live (`AUTH_SSO_ENABLED` off),
+     but it is a tenant-admin → deployment-compromise primitive the day SSO is enabled.
+     **Change:** require `^AWCMS_SSO_CLIENT_SECRET_[A-Z0-9_]{1,48}$` in both validators
+     and re-assert it before touching `env`.
+  4. **A4 — pre-auth unbounded body buffering; 23 routes skip `readJsonBody`.**
+     `data-lifecycle/dry-run.ts:32-44`; `security/request-body-limit.ts:127-132`.
+     `resolveAuthInputs` checks only the _presence_ of a tenant header and token, then
+     `await request.json()` runs. `checkContentLengthCeiling` returns true when the header
+     is absent, so a chunked body with no `Content-Length` is buffered without bound
+     before any DB or session work. Availability only — but unauthenticated.
+     **Change:** convert the 23 files (`dry-run.ts` first, the only pre-auth one), then
+     gate bare `request.json()/.text()/.formData()` under `src/pages/api/`.
+  5. **A5 — password reset changes the credential in EVERY tenant but revokes sessions in
+     only one.** `password-reset.ts:259,267`; `session-revocation.ts:26-31`.
+     `setPrincipalCredentialForIdentity` is global by design (ADR-0086);
+     `revokeAllSessionsForIdentity` carries `WHERE tenant_id = …`. A user whose tenant-B
+     cookie was stolen and who recovers from tenant A changes the password everywhere and
+     revokes nothing in B. "Sign me out everywhere" has the same boundary, and two doc
+     comments assert the guarantee the code no longer provides. **Change:** add
+     `credential_epoch` to `awcms_principals`, bump it in the statement that replaces the
+     hash, stamp it on sessions, reject stale-epoch sessions. Until then, correct the
+     false comments.
+  6. **A6 — blog feed/sitemap escape with `escapeHtml` instead of `escapeXmlText`.**
+     `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`.
+     One C0 control character in a post title (`validateTitleField` checks length only)
+     makes the whole channel non-well-formed XML and every reader rejects it. ADR-0038
+     named `escapeXmlText`; it was applied to the `seo_distribution` serializers, which
+     are 404 in production, and not to these routes, which are 200.
+  7. **A7 — sync-storage uses node-supplied strings verbatim as a server filesystem path
+     and as an object-store key.** `sync-storage/domain/object-queue.ts:40-58,91`;
+     `object-storage-uploader.ts:110-129`. `localPath` gets no root confinement and the
+     cron dispatcher does `Bun.file(input.localPath)` on the **server**, returning the
+     distinguishing error text to the node via `last_error` — an arbitrary-path oracle.
+     `objectKey` gets no tenant prefix, so one node can overwrite another tenant's object.
+     Requires a compromised legitimate node (`AWCMS_SYNC_ENABLED` + `R2_ENABLED` + the
+     deployment HMAC secret), which is why it is not higher.
+  8. **A8 — public site-search rate-limit config is neither validated nor NaN-guarded.**
+     `site-search/query.ts:34-37`; `suggest.ts:27-32`. A typo yields `NaN`, and both
+     `count > NaN` and `now - windowStart >= NaN` are false — **the limiter is off** on an
+     anonymous full-text endpoint while the `rate_limited` metric stays at zero and
+     confirms it as "no abuse". An empty value yields `0` and 429s every visitor.
+
+  ### B. Performance (request path + delivery)
+  9. **B1 — every `can()` affordance probe re-runs the FULL authorization pipeline.**
+     `lib/auth/admin-screen.ts:241-252`. One `/admin/blog` render issues 11
+     `authorizeInTransaction` calls ≈ 66 sequential round trips on one reserved
+     `interactive` connection (max 8 process-wide), ~50 of them re-reading byte-identical
+     rows, plus 11 decision-log inserts per page view. 112 `can()` calls across 38
+     screens; no budget measures the chokepoint. **Change:** memoize per transaction
+     (WeakMap keyed on `tx`) or add a `canInTransaction` probe modelled on
+     `evaluateFieldAccessInTransaction`, which already reuses context and writes no log.
+  10. **B2 — `isLegacyTenantRouteEnabled` reads `awcms_blog_settings` and discards it.**
+      `public-route-settings.ts:68-87`; called from all 7 `/blog/[tenantCode]/*` routes.
+      One wholly wasted round trip on every anonymous page view — 100% of them on a
+      default deployment, where the edge cache is off.
+  11. **B3 — `/blog/*` routes never publish `locals.edgeCacheTenantId`.** The routes
+      already resolved the tenant and drop the id, so middleware repeats the
+      `awcms_tenants` lookup on every cache MISS. One call per route; the working
+      precedent is `seo-distribution/presentation/discovery-route.ts:145`.
+  12. **B4 — `AdminLayout` opens a third transaction whose first read is a column nobody
+      fetched.** `AdminLayout.astro:184-206`. `tenant_name` is fetched separately from the
+      same row `readTenantDisplayDefaults` already selects.
+  13. **B5 — ~6 middleware round trips per public request before the page's first query.**
+      `middleware.ts:305`; `redirect-resolution-service.ts:170-212`. Paid even by tenants
+      with zero redirect rules. `standar-performa-dan-keamanan.md:195` claims the
+      ≤3-query hot-read ceiling is "measured", but **both budget suites call directory
+      functions directly and never drive middleware**, so the excess is structurally
+      invisible to the gate that claims to enforce it.
+  14. **B6 — in-process rate-limit `buckets` Map has no eviction.**
+      `security/rate-limit.ts:57`. One permanent entry per distinct client IP; Redis is
+      off by default so this is the live path. A slow leak, not an acute risk — but the
+      failure mode is an OOM of the process holding every other cache.
+
+  ### C. Algorithm / query cost
+  15. **C1 — no index supports the blog list ordering.** `blog-post-directory.ts:398,436`;
+      `sql/035:95-119,174-193`. Four list queries order by `updated_at DESC` (one keyset by
+      `created_at DESC, id DESC`); none of the seven indexes leads with either column, so
+      each `/admin/blog`, `/admin/pages` and `GET /api/v1/blog/posts` is a tenant-wide scan
+      - top-N sort, plus a second full scan for `count(*)`. `db:fk-index:check` cannot see
+        it — `updated_at` is not a foreign key. Cost is O(tenant posts), not O(page size).
+  16. **C2 — `purgeVisitorAnalyticsData` is the only unbounded retention purge in the
+      repo.** `retention-purge.ts:91-117`. Four statements with no batch limit, each using
+      `RETURNING id` only to take a JS-side `.length`. Every sibling caps at 5000 and loops.
+  17. **C3 — sync push does read-modify-write on `current_version` with no row lock.**
+      `sync/push.ts:132-137`. Two concurrent batches both read 5, both pass the conflict
+      check, both write the literal `6`: two conflicting events accepted, zero conflict
+      rows, one increment lost. Harmless downstream today only because `awcms_sync_inbox`
+      has no consumer — it is a defect in the conflict foundation itself.
+  18. **C4 — reporting projection cursor advances past rows inserted earlier but committed
+      later.** `projection-incremental-worker.ts:195-223`. No upper bound, no lag window.
+      Because `now()` is transaction-start, a long transaction's row can commit after the
+      cursor has moved past its timestamp — never selected again. **ADR-0077 rejected
+      exactly this shape for sync-pull**; this engine kept it, and ADR-0072 declares the
+      incremental value authoritative, so nothing reconciles it.
+  19. **C5 — subject-data export: 49 unbounded reads in one interactive transaction, two
+      over unindexed actor columns.** `subject-data-executor.ts:200-217`. No LIMIT, no
+      cursor, all rows buffered; `awcms_audit_events.actor_tenant_user_id` and the
+      `awcms_domain_events` twin have no index and are **not FK columns, so
+      `db:fk-index:check` structurally cannot see them**. The route's own comment claims
+      "a bounded set of rows".
+  20. **C6 — `/admin/roles` is an N+1 plus an O(roles × catalogue) payload.**
+      `roles.astro:88-94`. `listRolePermissions` awaited once per role (up to 100,
+      sequential); the ~230-row catalogue rendered as `<option>` once per role.
+  21. **C7 — `prepareCandidates` re-escapes every tag name inside the sort comparator.**
+      `internal-tag-linking.ts:155-158`. Measured 1090 calls/sort vs 100 for
+      decorate-sort-undecorate. On by default on every public article render; absolute
+      saving is small (~0.14 ms), which is why it is last.
+
+  ### D. Functional improvements & maintainability
+  22. **D1 — scheduled jobs run in a container with no volume and a lossy env
+      allow-list.** `ops/run-job.sh:88,92`. `docker run --rm` with **no `-v`**: lifecycle
+      archives and report exports are written into a container deleted seconds later while
+      `awcms_data_lifecycle_archive_manifests` and `awcms_report_export_runs` record them
+      as present — the README's restore procedure cannot be executed and scheduled exports
+      404 on download. Separately the hand-maintained `printenv | grep -E` drops ~10
+      variables scheduled jobs actually read (the `^CLOUDFLARE_` alternative is anchored
+      and misses `TENANT_DOMAIN_CLOUDFLARE_*`), and the job still exits 0. Latent only
+      because `.env.example`'s values happen to equal the code defaults.
+  23. **D2 — four copies of a naive `stripComments` swallow real code; five gates scan
+      less than they claim.** `table-write-ownership-check.ts:68`;
+      `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;
+      `identity-principal-access-check.ts:177`; `work-class-registry-generate.ts:101`. The
+      block-comment regex runs over the whole file first, so any docblock containing a
+      route glob like `` `/api/v1/partner/**` `` deletes everything to the next `*/`.
+      **Mutation-proven:** a planted `INSERT INTO` at `identity-access/module.ts:41` is
+      invisible to `modules:table-writes:check`; 59 files lose real code versus the oracle.
+      No gate signal differs _today_ — this is a latent fail-open that grows with every new
+      docblock. The correct string-aware version already exists at
+      `i18n-catalog-check.ts:263`. **Change:** extract it to `scripts/lib/source-text.ts`
+      and delete the five copies.
+  24. **D3 — `LOG_LEVEL=warn` passes `config:validate` and is silently ignored; `warning`,
+      the value the logger implements, is rejected.** `validate-env.ts:51-56`;
+      `logger.ts:12,21-26`. There is no value that both passes the validated contract and
+      works, so the firehose keeps shipping while the operator believes it is quieted.
+  25. **D4 — two analytics jobs branch on `result instanceof Response` after
+      `withTenantOrThrow` — dead code hiding a real abort.** `visitor-analytics-rollup.ts:97-106`.
+      `tenantsSkipped` is permanently 0, the `partial` warning can never fire, and
+      backpressure abandons every remaining tenant instead of skipping one. The rollup
+      targets _yesterday_ only, so an aborted run leaves a permanent hole.
+  26. **D5 — `site-search:reconcile` exits 0 and prints `failures=0` when a whole source
+      fails.** `site-search-reconcile.ts:57-83`. The engine's `break` happens before
+      `results.push`, so a failed source contributes zero to `failureCount`. Public search
+      stops updating while every operator signal says success.
+  27. **D6 — email circuit breaker is fed by per-message rejections, and an open breaker is
+      recorded as a real attempt.** `mailketing-provider.ts:91-107`. An invalid-recipient
+      rejection — a fact about the row — records a breaker failure, contrary to the file's
+      own header and to the rule `push-delivery` states explicitly. Once open, the
+      dispatcher writes a `failure` row and burns `retry_count` for messages that never
+      reached the provider: **the delivery ledger records contacts that did not happen.**
+  28. **D7 — `tenant_domain`'s declared `defaultVerificationMethod: "manual"` has no runtime
+      reader.** `tenant-domain/module.ts:163`. The validator defaults to `null` and
+      verification answers `missing_verification_method` — the `pending_verification` state
+      §4 item 6 already observes in production, without naming this cause.
+  29. **D8 — `media_library.enforcement.*` is filed as a screening DECISION naming a screen
+      that does not implement it.** `admin-screen-coverage-check.ts:91,93`. A relocation
+      that never happened is recorded as judgement, so the shrink-only ledger does not
+      count it.
+  30. **D9 — `ship-logs.sh` names its output file at attach time and never rotates.**
+      `ops/ship-logs.sh:53-57`. `$(date)` is expanded once when the tailer is spawned and
+      the fd lives until the next deploy, so today's lines land in a file dated by the last
+      deploy and the 30-day `-mtime` sweep can never touch the open file.
+  31. **D10 — nothing in the deploy or LB path consults the readiness endpoint that already
+      exists.** `health.ts:8-14`; `infra/varnish/default.vcl:26-34`. Coolify, the Docker
+      HEALTHCHECK and the Varnish probe all use the deliberately dependency-free liveness
+      endpoint, so a release with an unreachable database is marked successful and cut
+      over. `/api/v1/database/pool/health` reports `databaseReachable` +
+      `circuitBreakerState`, is equally unauthenticated, and is wired to nothing.
+  32. **D11 — six job scripts call `withTenantOrThrow` with no `workClass`, so they run as
+      `interactive`.** Nightly purges attribute their pool pressure to the bucket that
+      serves live users. Both `work-class-registry.ts:11-17` and
+      `database-capacity-runbook.md:268-282` assert jobs never reach
+      `acquireWorkClassSlot` — that is now false, and `site-search-reconcile.ts:69` passes
+      `maintenance` where the registry says `background_sync`, so the drift runs both ways.
+  33. **D12 — three near-identical JSON fetch cores in `src/lib/ui/`, plus dead `postJson`
+      carrying a false comment.** `admin-form-client.ts:77-173`. They have **already
+      drifted**: `sendJson` supports `extraHeaders` (Idempotency-Key), bodyless requests and
+      `DELETE`; `sendJsonWithFieldErrors` supports none. `postJson` has zero callers while
+      claiming to serve "existing create-form call sites".
+  34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` has 3 users and 20 hand-inlined copies.**
+      `_shared/keyset-pagination.ts:56-59`. The constant hardcodes bare `created_at` and its
+      own docblock concedes callers must "wrap it in a table alias" — impossible for a
+      string. All 20 copies are byte-correct today, so this is prospective: one dropped
+      `AT TIME ZONE 'UTC'` or `US`→`MS` silently resurrects #158's 105-rows-paged-to-4
+      defect, past page 1 only, where no test would see it.
+  35. **D14 — finish the `scripts/lib/` extraction that has already started.**
+      `repo-inventory.ts:339-370`; `project-state-inventory.ts:198-225`; five
+      `MIGRATIONS_DIR = "sql"` declarations + four verbatim loads; `deriveTableRlsStates`
+      exported from a **generator** and imported by two gates. The markdown-escape fix
+      landed in one of three `parseInventoryRows` copies; the non-empty assertion exists in
+      one of six migration loaders. `scripts/lib/repo-files.ts` now exists and six scripts
+      are migrated — this is finishing a started job.
+  36. **D15 — workflow `notify` nodes silently do nothing, and both composition roots
+      justify it with a false claim.** `workflow-notification-port-adapter.ts:18` has zero
+      importers; two routes say the `email` module "has not been ported yet" — it is live
+      and owns the adapter. Unreachable today (`startWorkflowInstance` has no caller), so
+      the live defect is the two misleading comments.
+  37. **D16 — the media orphan lifecycle state is unreachable.**
+      `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` is the repo's only
+      writer of `status='orphaned'` and has zero callers, so the stale-orphan sweep, its
+      partial index and `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` gate a permanently empty set —
+      and a zero counter reads identically to a clean bucket. It is a leftover of the
+      pre-ADR-0036 model: `sql/087` deleted the attach/detach relation, so no reference
+      count exists to derive "orphaned" from. **Prefer deletion** unless orphan detection
+      is being built.
+  38. **D17 — homepage sections and ad placements have no eligibility-aware read surface.**
+      The three rendering helpers having zero callers is a **signed deferral** (ADR-0071
+      moved public news rendering to `awcms-astro`). The genuinely missing piece is narrow:
+      the ad list returns `media_object_id` with no resolved `public_url` and no
+      verified-status join, so an external renderer cannot reproduce the media safety
+      filter from the endpoint alone.
+
+  ### Deliberately NOT recommended (recorded so the question is not reopened blind)
+  - **Making `/api/v1/health` dependency-aware.** It does no DB call by design and three
+    documents say so. A DB-dependent liveness probe turns a Postgres blip into a restart
+    loop and makes Varnish mark its only backend sick. The correct change is D10 — point
+    the _deploy gate and LB probe_ at the readiness endpoint that already exists.
+  - **Building the public homepage-section / ad renderer here.** ADR-0071 moved public news
+    rendering to `awcms-astro`, and `ad-placement-directory.ts:309-312` records the
+    deferral in the source. Writing it here would re-create the surface the ADR removed.
+    Only the narrow media-URL gap in D17 is worth closing.
+  - **A full 17-walker directory-traversal consolidation.** `scripts/lib/repo-files.ts`
+    exists and six scripts are migrated; the alleged trigger is not reachable via
+    `bun run` (verified: `cd src && bun run edge-cache:surfaces:check` passes, and the
+    direct invocation fails loudly rather than silently). Replace the two `catch { return; }`
+    walkers (folded into D14) and stop.
+
+  ### What this round did NOT examine
+
+  No live database (no `EXPLAIN`, no job run, no cross-tenant request). The `tests/` tree
+  was not audited for its own coverage or duplication — several findings hinge on "no test
+  would see this" without that being verified. `sql/` bodies were read only where targeted
+  (007, 009, 011, 035, 041, 050, 087, 090, 117); lock behaviour of 001–128 was not reviewed.
+  `theming`, `site-search`, `comments`, `push-delivery` and `visitor-analytics` internals
+  were examined only at descriptor + zero-caller level. Not line-read:
+  `security/turnstile.ts`, the IP blocklists in `ssrf-guard.ts`, self-registration and
+  invitation-acceptance, and the OIDC JWT/JWKS internals. The 42 admin `.astro` screens
+  were not measured for cumulative per-render query counts — B1/B4 are anchored on
+  `/admin/blog` and the layout only, and a per-screen pass is a plausible next audit.
+  Excluded as already tracked: `SYNC_HMAC_ALLOW_LEGACY` (GHSA-c972-3q5p-g3h4), MFA/SSO/
+  Turnstile off in production, the `edge-cache:purge` crontab absence, and the
+  Varnish/s-maxage/asset-budget items below.
+
+- **OPEN DECISION — 17 August 2026: the six pre-model git tags.** `bun run version:check`
+  (gate 52) now holds the `vX.Y.Z` model at every commit, and it exempts six tags by exact
+  name: `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0`. All six predate the rebuild
+  (ADR-0024); `3.0.0` sits on commit `b23d3308` beside `v3.0.0`, one release under two
+  names. Every tag cut since `v5.1.0` (16 July 2026) already conforms — 15 of 15.
+
+  **Left in place deliberately, pending a decision that is the maintainer's.** Deleting a
+  published tag is outward-facing and irreversible: `release-process.md` §Rollback already
+  argues against removing published tags on the grounds that consumers who pulled them
+  lose the ability to diagnose what they have, and these six are visible on the GitHub
+  Releases page as Pre-release entries of the legacy codebase.
+
+  The two options, both defensible:
+  1. **Keep them, exempted** (current state). Cost: the Releases page keeps showing two
+     spellings, and a reader comparing `3.0.0` with `v3.0.0` cannot tell they are one
+     release without reading ADR-0024.
+  2. **Delete the six** (`git push origin :refs/tags/<name>`), keeping the `v`-prefixed
+     `v3.0.0` that already covers the duplicate. `2.9.9`, `2.12.0`, `3.1.0`, `4.3.1` and
+     `4.5.0` have no `v` twin, so deleting those removes the release from the tag
+     namespace entirely — which is why this is not a cleanup to do silently. Afterwards
+     `LEGACY_UNPREFIXED_TAGS` shrinks to whatever remains, and the gate keeps working.
+
+  **Not recommended: rewriting them into `v`-prefixed tags.** Re-tagging the same commits
+  under new names would present five releases as if they had always followed a model
+  introduced a year later, and the image digests and attestations published against the
+  old names would keep pointing at bytes those names no longer designate.
 
 - **RECOMMENDATION ROUND — 15 August 2026, derived from the repo + the v9.1.2 production
   that is CURRENTLY RUNNING.** Every finding below has evidence that was run, not

@@ -29,7 +29,7 @@
  *
  * It also cannot know whether a translation is CORRECT. Nothing mechanical can.
  */
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import {
@@ -44,8 +44,8 @@ import {
   SUPPORTED_LOCALES,
   type Locale
 } from "../src/lib/i18n/locales";
+import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
 
-const REPO_ROOT = join(import.meta.dir, "..");
 const SOURCE_ROOTS = ["src"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".astro"];
 
@@ -102,30 +102,15 @@ interface Failure {
 }
 
 function listSourceFiles(): string[] {
-  const found: string[] = [];
-
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-
-      if (statSync(full).isDirectory()) {
-        if (entry === "node_modules" || entry === "catalogs") continue;
-        walk(full);
-        continue;
-      }
-
-      if (SOURCE_EXTENSIONS.some((ext) => entry.endsWith(ext))) {
-        found.push(full);
-      }
-    }
-  };
-
-  for (const root of SOURCE_ROOTS) {
-    const full = join(REPO_ROOT, root);
-    if (existsSync(full)) walk(full);
-  }
-
-  return found;
+  return SOURCE_ROOTS.flatMap((root) =>
+    // `tolerateMissing` preserves the previous `existsSync` guard: a scan root
+    // that is absent contributes nothing instead of throwing.
+    listFilesRecursive(join(REPO_ROOT, root), {
+      extensions: SOURCE_EXTENSIONS,
+      skipDirectories: ["node_modules", "catalogs"],
+      tolerateMissing: true
+    })
+  );
 }
 
 /**

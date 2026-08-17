@@ -26,8 +26,10 @@
  * Escape hatch: `LOGGING_LINT_EXEMPTIONS` di bawah, di-key `"path:line"`,
  * untuk false-positive nyata yang tak bisa ditulis ulang — kosong saat ini.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+
+import { listFilesRecursive } from "./lib/repo-files";
 
 export type LoggingLintProblem = {
   file: string;
@@ -225,43 +227,20 @@ export function scanSourceForLoggingProblems(
   return problems;
 }
 
-async function walkFiles(dir: string, extensions: string[]): Promise<string[]> {
-  let entries;
-
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...(await walkFiles(full, extensions)));
-    } else if (
-      extensions.some((ext) => entry.name.endsWith(ext)) &&
-      !entry.name.endsWith(".test.ts")
-    ) {
-      files.push(full);
-    }
-  }
-
-  return files;
-}
-
 export async function runLoggingLintCheck(
   rootDir = process.cwd()
 ): Promise<LoggingLintProblem[]> {
   const problems: LoggingLintProblem[] = [];
 
   for (const root of SCAN_ROOTS) {
-    const files = await walkFiles(
-      path.join(rootDir, root.dir),
-      root.extensions
-    );
+    // `tolerateMissing`: a scan root that is absent in a caller-supplied
+    // `rootDir` (the tests pass fixture trees) must scan to nothing rather
+    // than throw.
+    const files = listFilesRecursive(path.join(rootDir, root.dir), {
+      extensions: root.extensions,
+      excludeSuffixes: [".test.ts"],
+      tolerateMissing: true
+    });
 
     for (const file of files) {
       const source = await readFile(file, "utf8");

@@ -43,6 +43,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { listModules } from "../src/modules";
+import { listFilesRecursive } from "./lib/repo-files";
 import { routeOf } from "./validate-module-routes";
 
 const DOC_PATH = "docs/awcms/repo-inventory.md";
@@ -178,21 +179,6 @@ export function deriveTableRlsStates(
 // ---------------------------------------------------------------------------
 
 export type CountRow = { label: string; count: number };
-
-function listFilesRecursive(dir: string): string[] {
-  const out: string[] = [];
-
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else out.push(full);
-    }
-  };
-
-  walk(dir);
-  return out;
-}
 
 /**
  * Test files per top-level directory under `tests/`. Only files that a test

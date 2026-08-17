@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](release-process.md)
 
-<!-- i18n-source-hash: sha256:664eb6ad50b301742f281e47d320682dd6ebfead9f17bab84166a25ba1caf7db -->
+<!-- i18n-source-hash: sha256:59723d41620c971a3545efac40a2fdd893a4020143299d0990dd42765d842660 -->
 
 # Release Process — Changesets, SBOM, Signing, Provenance
 
@@ -32,6 +32,41 @@ flowchart TD
 
 Kedua trigger wajib menjalankan `validate` job yang persis sama — jalur rehearsal bukan jalan pintas melewati quality gate, hanya melewati tag-ancestor guard dan `release:verify` (keduanya `if: github.event_name == 'push'`; `bun run check` sendiri selalu berjalan).
 
+## 0. Model versi: `vX.Y.Z`
+
+Satu nomor versi, tiga tempat, tiga ejaan — dan hanya satu yang memikul `v`:
+
+| Di mana                  | Ejaan    | Contoh                        |
+| ------------------------ | -------- | ----------------------------- |
+| `package.json`           | `X.Y.Z`  | `9.1.2`                       |
+| tag git / GitHub Release | `vX.Y.Z` | `v9.1.2`                      |
+| tag image container      | `X.Y.Z`  | `ghcr.io/ahliweb/awcms:9.1.2` |
+
+`release.yml` menurunkan tag image dengan membuang prefiksnya (`VERSION="${GITHUB_REF_NAME#v}"`), sehingga `…:v9.1.2` tidak ada di registry — lihat §Verification untuk `manifest unknown` yang dihasilkan bila `v` ikut ditulis. `scripts/lib/semver.ts` memiliki ketiga ejaan itu; `releaseTagFor()` adalah satu-satunya tempat `v` ditambahkan.
+
+**Hanya versi rilis.** `X.Y.Z` berarti persis tiga field numerik: tanpa sufiks prerelease (`-rc.1`), tanpa build metadata (`+build.5`), tanpa leading zero. Ini lebih ketat daripada yang diizinkan SemVer, dengan sengaja. Trigger tag `release.yml` adalah glob `v*.*.*`, dan sebuah glob tidak bisa menyatakan "tanpa prerelease" — `v1.2.3-rc.1` cocok dengannya dan akan mencapai jalur publish. Pola di `semver.ts` adalah satu-satunya yang menolaknya, dan karena itulah `version:check` menegaskan `release:verify` masih terpasang di `validate`.
+
+**Bump datang dari changesets, tidak pernah manual.** `bun run changeset:version` menulis `package.json` dan section `CHANGELOG.md` bersama-sama. Satu-satunya pengecualian dalam sejarah repo ini adalah lompatan manual `0.2.0` → `5.0.0`, yang secara struktural tidak bisa dilakukan changesets (ia hanya bisa menaikkan) — tercatat di [ADR-0024](../adr/0024-semver-numbering-continues-legacy-major-line.md).
+
+### `bun run version:check` (di rantai `check`)
+
+Model di atas dulu hanya ditegakkan `release:verify`, di dalam job yang berjalan _karena_ sebuah tag di-push. Setiap cara membuatnya salah karena itu tetap hijau di `main` dan baru muncul setelah tag menjadi publik — sementara §Rollback tegas menyatakan tag yang sudah terbit tidak pernah dipotong ulang. `version:check` memindahkan model yang sama ke setiap commit:
+
+| Aturan                                 | Yang ditangkapnya                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `package-version`                      | `package.json` bukan `X.Y.Z` — prerelease, terpotong, leading zero, atau memikul `v`.                        |
+| `changelog-headings`                   | Heading `## ` yang bukan versi rilis (satu `## Unreleased` liar mengubah potongan release notes).            |
+| `changelog-order`                      | Section tidak urut terbaru-ke-terlama, atau section ganda.                                                   |
+| `changelog-newest`                     | Section terbaru tidak sepakat dengan `package.json` — bump yang entri changelog-nya tak pernah ditulis.      |
+| `tag-namespace`                        | Tag yang bukan `vX.Y.Z`.                                                                                     |
+| `version-behind-tags`                  | `package.json` duduk DI BAWAH tag terbit terbaru, sehingga bump berikutnya menerbitkan ulang nomor terpakai. |
+| `release-trigger` / `release-backstop` | Glob `v*.*.*` ditinggalkan tanpa step `release:verify` yang membatasinya.                                    |
+| `changeset-frontmatter`                | Changeset pending yang mendeklarasikan bump tak valid atau nama paket asing.                                 |
+
+**Enam tag mendahului model ini** — `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0` — semuanya dipotong tooling basis kode lama sebelum rebuild (ADR-0024), dan `3.0.0` duduk di commit `b23d3308` berdampingan dengan `v3.0.0`: satu rilis dengan dua nama. Mereka adalah daftar pengecualian bernama-persis yang TERTUTUP di `scripts/version-check.ts`; yang ketujuh tidak bisa muncul tanpa seseorang menyuntingnya. Ke-15 tag yang dipotong sejak `v5.1.0` (16 Juli 2026) semuanya sudah patuh — gerbang ini mengubah rentetan itu menjadi invarian.
+
+> **Aturan tag butuh tag untuk bisa melihat.** `actions/checkout` default itu shallow dan tidak mengambil satu tag pun, sehingga aturan itu akan melapor `UNENFORCED` selamanya — hijau, dan buta. Karena itu job `quality` di `ci.yml` menyetel `fetch-tags: true`, dan `tests/version-check.test.ts` menegaskan baris itu masih ada agar tidak bisa dihapus diam-diam.
+
 ## 1. PR-time gate: `changesets.yml`
 
 `scripts/changeset-policy-check.ts` (`bun run changesets:policy:check`) memutuskan apakah sebuah PR butuh changeset baru, memakai riwayat PR yang sudah merge di repo ini sendiri sebagai ground truth untuk apa yang tergolong "docs-only/chore":
@@ -55,7 +90,10 @@ Dua entry point, keduanya konvergen ke job graph yang sama:
 ### `validate` job (read-only)
 
 1. **Ancestor-of-main guard** (rilis nyata saja) — `git merge-base --is-ancestor HEAD origin/main`. Selama repo ini belum punya branch protection rule di `main`, guard ini adalah pengganti level-workflow untuk "publish hanya dari branch terproteksi": tag yang commit-nya bukan bagian dari riwayat `origin/main` ditolak sebelum apa pun dibangun.
-2. **`bun run release:verify`** (rilis nyata saja, `scripts/release-verify.ts`) — memastikan versi tag yang di-push cocok dengan `package.json`, bahwa `CHANGELOG.md` punya section `## [X.Y.Z]` untuknya, dan tidak ada berkas changeset yang belum terkonsumsi di `.changeset/`.
+2. **`bun run release:verify`** (rilis nyata saja, `scripts/release-verify.ts`) — memastikan tag yang di-push cocok model `vX.Y.Z` (§0), bahwa versinya cocok dengan `package.json`, bahwa `CHANGELOG.md` punya section `## X.Y.Z` untuknya (`## [X.Y.Z]` juga diterima, untuk section tulisan tangan seperti lompatan ADR-0024), dan tidak ada berkas changeset yang belum terkonsumsi di `.changeset/`. Sebagian besar ini kini juga diperiksa di setiap commit oleh `version:check`; yang tetap eksklusif milik release time adalah perbandingan tag↔`package.json` (belum ada tag sebelum push) dan tuntutan agar `.changeset/` kosong (ia memang sengaja penuh di antara rilis).
+
+   Tag yang diverifikasi datang dari `RELEASE_VERIFY_TAG`, yang diset `release.yml` dari `github.ref_name`. Fallback lokalnya memakai `git tag --points-at HEAD` yang difilter ke `vX.Y.Z`, **bukan** `git describe --exact-match`: commit `b23d3308` memikul `3.0.0` sekaligus `v3.0.0`, dan `describe` memilih di antara keduanya menurut urutan internal git, bukan menurut model — melaporkan kegagalan pola atas tag yang tidak dipilih siapa pun, tanpa satu pun bagian pesannya menyebut tag kedua sebagai sebabnya.
+
 3. **`bun run check`** (terhadap Postgres service nyata yang sudah dimigrasi) — quality gate penuh, diverifikasi ulang saat release time, bukan dipercaya dari hasil CI yang mungkin sudah basi. Ini harus **lebih ketat** daripada `quality` job milik `ci.yml`, bukan identik dengannya — pastikan setiap step yang dijalankan `bun run check` juga dijalankan `ci.yml`'s `quality` job (mis. `i18n:pot:check`, `config:docs:check`, `logging:lint:check`, `api:docs:check`, `repo:inventory:check`) agar drift semacam ini tidak bisa merge ke `main` lewat PR hijau dan baru muncul saat tag-push.
 
    (Catatan historis: versi lama paragraf ini menyarankan menambahkan `extension:check` — kompatibilitas manifest aplikasi turunan — ke composite `check` dan `ci.yml`. Saran itu **tidak lagi berlaku**: jalur aplikasi-turunan beserta `extension:check` sudah **dicabut oleh [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)**. Prinsipnya tetap: setiap check baru yang ditambahkan ke `package.json`'s `check` composite harus juga menjadi step eksplisit bernama di `ci.yml`'s `quality` job dalam PR yang sama, agar tidak muncul kelas drift yang sama.)

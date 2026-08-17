@@ -46,6 +46,7 @@ import path from "node:path";
 
 import { listModules } from "../src/modules";
 import { MODULE_CONTRACT_VERSION } from "../src/modules/_shared/module-contract";
+import { listFilesRecursive } from "./lib/repo-files";
 
 const DOC_PATH = "docs/PROJECT_STATE.md";
 export const BEGIN = "<!-- project-state-inventory:mulai -->";
@@ -288,21 +289,6 @@ export function diffAgainstFresh(
 // ---------------------------------------------------------------------------
 // Collection from disk
 // ---------------------------------------------------------------------------
-
-function listFilesRecursive(dir: string): string[] {
-  const out: string[] = [];
-
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else out.push(full);
-    }
-  };
-
-  walk(dir);
-  return out;
-}
 
 export function collectInventory(): ProjectStateInventory {
   const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {

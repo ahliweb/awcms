@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:c17f38815554b6f323b9b98d6b886625ea44dce4281878302609d2e85dec518c -->
+<!-- i18n-source-hash: sha256:c77faa564e71c0c79daab718d5ea597701b42bb8d3d31d67f1a9105904fb5b67 -->
 
 # AWCMS — Project State & Continuation
 
@@ -115,7 +115,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **56** (30.144 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Gerbang                            | **52** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -359,6 +359,322 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN REKOMENDASI — 17 Agustus 2026, audit seluruh repo atas sepuluh dimensi.**
+  **38 rekomendasi dari 48 temuan terverifikasi.** Metode: sepuluh pencari independen
+  (celah fungsional, ongkos algoritma, bentuk query DB, performa jalur request,
+  otorisasi, penanganan input, auth/sesi/kripto, keandalan job, disiplin fungsi
+  reusable, operabilitas), masing-masing diikuti verifikator adversarial yang
+  diperintahkan MEMBANTAH dan membuka ulang tiap berkas yang dikutip. 51 temuan masuk;
+  **3 dibantah, 1 sudah terlacak, 24 lolos CONFIRMED dan 25 lolos PARTIAL** (nyata tapi
+  dipersempit — dicatat di sini dalam bentuk sempitnya).
+
+  **Baca batasan ini lebih dulu: TIDAK ada database hidup yang dipakai.** Tidak ada
+  `EXPLAIN`, tidak ada job dijalankan, tidak ada request lintas-tenant. Tiap klaim indeks
+  di bawah diturunkan dari DDL plus aturan prefix btree, bukan dari rencana yang diukur.
+  Item diurutkan menurut (severity × keterjangkauan) / usaha di dalam tiap kelompok.
+
+  ### Kerjakan dulu — imbalan terbaik per usaha lintas keempat kelompok
+  1. **A1** — satu baris pada masing-masing dari dua predikat; mengubah grant
+     lintas-organisasi yang hidup permanen menjadi fail-closed.
+  2. **A2** — satu baca + satu penolakan di satu tempat yang dipakai bersama dua belas
+     handler; menutup loop pencetakan sesi ke tenant yang ditangguhkan.
+  3. **A3** — sebuah regex; menghapus primitif baca-sembarang-env **sebelum** SSO
+     dinyalakan.
+  4. **D1** — dua baris di `ops/run-job.sh`; menghentikan arsip dan ekspor ditulis ke
+     dalam container yang dihapus beberapa detik kemudian sementara DB mencatatnya ada.
+  5. **C1** — satu migrasi; menghapus scan se-tenant + sort dari `/admin/blog`,
+     `/admin/pages`, dan `GET /api/v1/blog/posts`.
+
+  Sesudahnya: **A4** (`readJsonBody` pada `dry-run.ts` saja — satu-satunya rute
+  pra-autentikasi) dan **D2** (pemotong komentar bersama, karena itulah yang membuat
+  cacat kelas berikutnya bisa lolos hijau).
+
+  ### A. Keamanan
+  1. **A1 — grant delegated-access yang sudah ditebus TIDAK PERNAH kedaluwarsa.**
+     _(ditemukan independen oleh dua dimensi, dari sisi job dan dari sisi chokepoint)_
+     `identity-access/application/auth-context.ts:63-70` dan `:101-108`;
+     `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
+     `sql/117:105,165`. `expireDelegatedAccessGrants` punya **NOL pemanggil** — tanpa
+     deskriptor job, tanpa skrip, tanpa target `package.json` — kedua resolver waktu-request
+     hanya menyaring `revoked_at IS NULL`, dan grant peran yang ditulis saat penebusan
+     menghilangkan `effective_to`, yang dibaca `activeRoleGrants` sebagai berlaku selamanya.
+     Keterlibatan mitra ber-scope "sampai 30 September" memberi perannya tanpa batas, dan
+     `CHECK` 31 hari di `sql/117` menjadi inert. ADR-0090 menjanjikan "pencabutan **dan
+     kedaluwarsa** menonaktifkan keanggotaan dalam transaksi yang sama"; paruh kedaluwarsa
+     tidak punya eksekutor. `sql/117:165` bahkan mengirim indeks `(tenant_id, expires_at)`
+     yang dibangun untuk sapuan itu. **Ubah:** tambahkan `AND g.expires_at > now()` pada
+     kedua predikat (kedaluwarsa lalu jatuh ke cabang null-is-refuse
+     `isDelegatedPartnerRefused` yang sudah ada — tanpa jalur kode baru); teruskan
+     `expiresAt` grant sebagai `effective_to`; lalu tambahkan job-nya supaya sesi
+     benar-benar dicabut.
+  2. **A2 — penangguhan ADR-0073 tidak menjangkau factory rute self-service maupun
+     client-credential.** `_shared/tenant-route.ts:247-301` dan `:342-379`;
+     `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.
+     Pemeriksaannya hanya ada di `authorizeInTransaction` dan `ssr-session.ts`, dan tidak
+     satu pun factory memanggilnya, jadi sesi hidup milik tenant yang ditangguhkan masih
+     bisa menulis profil, menulis ulang kredensialnya, dan mencetak sesi **baru** tanpa
+     batas — pijakan itu hidup lebih lama daripada TTL yang seharusnya dikuras penangguhan.
+     `push/subscriptions/index.ts:154` memeriksa dengan tangan; saudara `DELETE`-nya tidak,
+     dan asimetri itulah yang membuktikan kelalaian ini tidak disengaja.
+  3. **A3 — admin SSO tenant bisa menyebut env var APA PUN sebagai client secret OIDC dan
+     mengirimkannya ke host pilihannya.** `tenant-sso.ts:180-184`;
+     `tenant-sso-policy.ts:229-239,333-348`. `client_secret_env_var` hanya divalidasi
+     sebagai string tak-kosong, lalu dibaca `env[...]` dan dikirim ke endpoint discovery
+     yang diturunkan dari `issuer_url` pilihan admin, sebelum validasi ID-token apa pun.
+     `DATABASE_URL` dan `AUTH_MFA_SECRET_ENCRYPTION_KEY` terjangkau. Belum hidup
+     (`AUTH_SSO_ENABLED` mati), tetapi ini primitif tenant-admin → kompromi-deployment pada
+     hari SSO dinyalakan.
+  4. **A4 — buffering body tak terbatas pra-autentikasi; 23 rute melewati `readJsonBody`.**
+     `data-lifecycle/dry-run.ts:32-44`; `security/request-body-limit.ts:127-132`.
+     `resolveAuthInputs` hanya memeriksa _keberadaan_ header tenant dan token, lalu
+     `await request.json()` berjalan. `checkContentLengthCeiling` mengembalikan true saat
+     header tidak ada, jadi body chunked tanpa `Content-Length` di-buffer tanpa batas
+     sebelum kerja DB atau sesi apa pun. Hanya ketersediaan — tetapi tanpa autentikasi.
+  5. **A5 — reset kata sandi mengganti kredensial di SETIAP tenant tetapi mencabut sesi
+     hanya di satu.** `password-reset.ts:259,267`; `session-revocation.ts:26-31`.
+     `setPrincipalCredentialForIdentity` global by design (ADR-0086);
+     `revokeAllSessionsForIdentity` membawa `WHERE tenant_id = …`. Pengguna yang cookie
+     tenant-B-nya dicuri lalu memulihkan dari tenant A mengubah kata sandi di mana-mana dan
+     tidak mencabut apa pun di B. "Keluarkan saya dari semua perangkat" punya batas yang
+     sama, dan dua komentar dokumen menegaskan jaminan yang tidak lagi diberikan kodenya.
+  6. **A6 — feed/sitemap blog meng-escape dengan `escapeHtml`, bukan `escapeXmlText`.**
+     `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`. Satu
+     karakter kontrol C0 pada judul pos (`validateTitleField` hanya memeriksa panjang)
+     membuat seluruh channel menjadi XML tidak well-formed dan setiap pembaca menolaknya.
+     ADR-0038 menyebut `escapeXmlText`; itu diterapkan pada serializer `seo_distribution`
+     yang 404 di produksi, dan tidak pada rute ini yang 200.
+  7. **A7 — sync-storage memakai string dari node apa adanya sebagai jalur filesystem
+     server dan sebagai kunci object-store.** `sync-storage/domain/object-queue.ts:40-58,91`;
+     `object-storage-uploader.ts:110-129`. `localPath` tidak dikurung akar dan dispatcher
+     cron melakukan `Bun.file(input.localPath)` di **server**, mengembalikan teks galat yang
+     membedakan ke node lewat `last_error` — sebuah orakel jalur sembarang. `objectKey`
+     tidak diberi prefix tenant, jadi satu node bisa menimpa objek tenant lain. Butuh node
+     sah yang dikompromikan, itulah sebabnya tidak lebih tinggi.
+  8. **A8 — konfigurasi rate-limit site-search publik tidak divalidasi dan tidak dijaga
+     NaN.** `site-search/query.ts:34-37`; `suggest.ts:27-32`. Satu salah ketik menghasilkan
+     `NaN`, dan baik `count > NaN` maupun `now - windowStart >= NaN` bernilai false —
+     **limiter-nya mati** pada endpoint full-text anonim sementara metrik `rate_limited`
+     tetap nol dan meneguhkannya sebagai "tidak ada penyalahgunaan". Nilai kosong
+     menghasilkan `0` dan mem-429 setiap pengunjung.
+
+  ### B. Performa (jalur request + pengiriman)
+  9. **B1 — tiap probe afordans `can()` menjalankan ULANG SELURUH pipeline otorisasi.**
+     `lib/auth/admin-screen.ts:241-252`. Satu render `/admin/blog` menerbitkan 11 panggilan
+     `authorizeInTransaction` ≈ 66 round trip berurutan pada satu koneksi `interactive`
+     terpesan (maksimum 8 se-proses), ~50 di antaranya membaca ulang baris yang identik
+     byte-per-byte, plus 11 insert decision-log per tampilan halaman. 112 panggilan `can()`
+     di 38 layar; tidak ada budget yang mengukur chokepoint.
+  10. **B2 — `isLegacyTenantRouteEnabled` membaca `awcms_blog_settings` lalu membuangnya.**
+      `public-route-settings.ts:68-87`; dipanggil ketujuh rute `/blog/[tenantCode]/*`. Satu
+      round trip terbuang penuh pada setiap tampilan halaman anonim — 100% dari semuanya
+      pada deployment default, tempat edge cache mati.
+  11. **B3 — rute `/blog/*` tidak pernah menerbitkan `locals.edgeCacheTenantId`.** Rute
+      sudah meresolusi tenant lalu membuang id-nya, jadi middleware mengulang lookup
+      `awcms_tenants` pada tiap MISS cache. Presedennya sudah bekerja di
+      `seo-distribution/presentation/discovery-route.ts:145`.
+  12. **B4 — `AdminLayout` membuka transaksi ketiga yang baca pertamanya adalah kolom yang
+      tak diambil siapa pun.** `AdminLayout.astro:184-206`. `tenant_name` diambil terpisah
+      dari baris yang sama yang sudah dipilih `readTenantDisplayDefaults`.
+  13. **B5 — ~6 round trip middleware per request publik sebelum query pertama halaman.**
+      `middleware.ts:305`; `redirect-resolution-service.ts:170-212`. Dibayar bahkan oleh
+      tenant tanpa satu pun aturan redirect. `standar-performa-dan-keamanan.md:195` mengaku
+      plafon ≤3 query hot-read "terukur", tetapi **kedua suite budget memanggil fungsi
+      directory langsung dan tidak pernah menggerakkan middleware**, jadi kelebihannya
+      secara struktural tak terlihat oleh gerbang yang mengaku menegakkannya.
+  14. **B6 — Map `buckets` rate-limit in-process tanpa eviction.**
+      `security/rate-limit.ts:57`. Satu entri permanen per IP klien berbeda; Redis mati
+      secara default sehingga inilah jalur hidupnya. Kebocoran lambat, bukan risiko akut —
+      tetapi mode gagalnya adalah OOM proses yang memegang setiap cache lain.
+
+  ### C. Ongkos algoritma / query
+  15. **C1 — tidak ada indeks yang mendukung pengurutan daftar blog.**
+      `blog-post-directory.ts:398,436`; `sql/035:95-119,174-193`. Empat query daftar
+      mengurut `updated_at DESC` (satu keyset `created_at DESC, id DESC`); tidak satu pun
+      dari tujuh indeks dipimpin kolom itu, jadi tiap `/admin/blog`, `/admin/pages`, dan
+      `GET /api/v1/blog/posts` adalah scan se-tenant + sort top-N, plus scan penuh kedua
+      untuk `count(*)`. `db:fk-index:check` tidak bisa melihatnya — `updated_at` bukan
+      foreign key. Ongkosnya O(pos tenant), bukan O(ukuran halaman).
+  16. **C2 — `purgeVisitorAnalyticsData` satu-satunya purge retensi tanpa batas di repo.**
+      `retention-purge.ts:91-117`. Empat statement tanpa batas batch, tiap-tiap memakai
+      `RETURNING id` hanya untuk mengambil `.length` di sisi JS. Setiap saudaranya membatasi
+      di 5000 dan mengulang.
+  17. **C3 — sync push melakukan read-modify-write pada `current_version` tanpa row lock.**
+      `sync/push.ts:132-137`. Dua batch bersamaan sama-sama membaca 5, sama-sama lolos
+      pemeriksaan konflik, sama-sama menulis literal `6`: dua event berkonflik diterima, nol
+      baris konflik, satu increment hilang.
+  18. **C4 — cursor proyeksi reporting melewati baris yang disisipkan lebih dulu tetapi
+      di-commit belakangan.** `projection-incremental-worker.ts:195-223`. Tanpa batas atas,
+      tanpa jendela lag. Karena `now()` adalah waktu mulai transaksi, baris dari transaksi
+      panjang bisa commit setelah cursor melewati timestamp-nya — tidak pernah terpilih
+      lagi. **ADR-0077 menolak persis bentuk ini untuk sync-pull**; mesin ini
+      mempertahankannya.
+  19. **C5 — ekspor data subjek: 49 baca tak terbatas dalam satu transaksi interactive, dua
+      di antaranya atas kolom aktor tanpa indeks.** `subject-data-executor.ts:200-217`.
+      Tanpa LIMIT, tanpa cursor, semua baris di-buffer; `awcms_audit_events.actor_tenant_user_id`
+      dan kembarannya di `awcms_domain_events` tidak berindeks dan **bukan kolom FK sehingga
+      `db:fk-index:check` secara struktural tidak bisa melihatnya**.
+  20. **C6 — `/admin/roles` adalah N+1 plus payload O(peran × katalog).**
+      `roles.astro:88-94`. `listRolePermissions` di-await sekali per peran (sampai 100,
+      berurutan); katalog ~230 baris dirender sebagai `<option>` sekali per peran.
+  21. **C7 — `prepareCandidates` meng-escape ulang tiap nama tag di dalam komparator sort.**
+      `internal-tag-linking.ts:155-158`. Terukur 1090 panggilan/sort vs 100 untuk
+      decorate-sort-undecorate. Hemat absolutnya kecil (~0,14 ms), itulah sebabnya terakhir.
+
+  ### D. Perbaikan fungsional & kemudahan pemeliharaan
+  22. **D1 — job terjadwal berjalan di container tanpa volume dan dengan allow-list env yang
+      bocor.** `ops/run-job.sh:88,92`. `docker run --rm` **tanpa `-v`**: arsip lifecycle dan
+      ekspor laporan ditulis ke dalam container yang dihapus beberapa detik kemudian
+      sementara `awcms_data_lifecycle_archive_manifests` dan `awcms_report_export_runs`
+      mencatatnya ada — prosedur restore di README tidak bisa dijalankan dan ekspor
+      terjadwal 404 saat diunduh. Terpisah dari itu, `printenv | grep -E` yang dirawat
+      tangan membuang ~10 variabel yang benar-benar dibaca job terjadwal (alternatif
+      `^CLOUDFLARE_` ter-anchor sehingga melewatkan `TENANT_DOMAIN_CLOUDFLARE_*`), dan
+      job-nya tetap keluar 0.
+  23. **D2 — empat salinan `stripComments` naif menelan kode nyata; lima gerbang memindai
+      lebih sedikit dari yang diakuinya.** `table-write-ownership-check.ts:68`;
+      `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;
+      `identity-principal-access-check.ts:177`; `work-class-registry-generate.ts:101`. Regex
+      komentar blok berjalan atas seluruh berkas lebih dulu, jadi docblock apa pun yang
+      memuat glob rute seperti `` `/api/v1/partner/**` `` menghapus semuanya sampai `*/`
+      berikutnya. **Terbukti lewat mutasi:** `INSERT INTO` yang ditanam di
+      `identity-access/module.ts:41` tak terlihat oleh `modules:table-writes:check`; 59
+      berkas kehilangan kode nyata dibanding orakel. Tidak ada sinyal gerbang yang berbeda
+      _hari ini_ — ini fail-open laten yang tumbuh tiap ada docblock baru. Versi
+      sadar-string yang benar sudah ada di `i18n-catalog-check.ts:263`.
+  24. **D3 — `LOG_LEVEL=warn` lolos `config:validate` dan diabaikan diam-diam; `warning`,
+      nilai yang diimplementasikan logger, ditolak.** `validate-env.ts:51-56`;
+      `logger.ts:12,21-26`. Tidak ada nilai yang sekaligus lolos kontrak tervalidasi dan
+      bekerja, jadi firehose terus mengirim sementara operator percaya sudah diredam.
+  25. **D4 — dua job analitik bercabang pada `result instanceof Response` setelah
+      `withTenantOrThrow` — kode mati yang menyembunyikan abort nyata.**
+      `visitor-analytics-rollup.ts:97-106`. `tenantsSkipped` permanen 0, peringatan
+      `partial` tak pernah bisa menyala, dan backpressure meninggalkan setiap tenant sisa
+      alih-alih melewati satu.
+  26. **D5 — `site-search:reconcile` keluar 0 dan mencetak `failures=0` saat satu sumber
+      penuh gagal.** `site-search-reconcile.ts:57-83`. `break` di mesinnya terjadi sebelum
+      `results.push`, jadi sumber yang gagal menyumbang nol ke `failureCount`. Pencarian
+      publik berhenti diperbarui sementara setiap sinyal operator mengatakan sukses.
+  27. **D6 — circuit breaker email disuapi penolakan per-pesan, dan breaker terbuka dicatat
+      sebagai percobaan nyata.** `mailketing-provider.ts:91-107`. Penolakan penerima tak
+      sah — fakta tentang barisnya — mencatat kegagalan breaker, bertentangan dengan header
+      berkas itu sendiri. Sekali terbuka, dispatcher menulis baris `failure` dan membakar
+      `retry_count` untuk pesan yang tak pernah sampai ke provider: **buku besar pengiriman
+      mencatat kontak yang tidak terjadi.**
+  28. **D7 — `defaultVerificationMethod: "manual"` yang dideklarasikan `tenant_domain` tidak
+      punya pembaca runtime.** `tenant-domain/module.ts:163`. Validatornya default `null` dan
+      verifikasi menjawab `missing_verification_method` — keadaan `pending_verification` yang
+      sudah diamati item 6 §4 di produksi, tanpa menyebut sebab ini.
+  29. **D8 — `media_library.enforcement.*` diarsipkan sebagai KEPUTUSAN penyaringan yang
+      menyebut layar yang tidak mengimplementasikannya.** `admin-screen-coverage-check.ts:91,93`.
+      Relokasi yang tak pernah terjadi tercatat sebagai penilaian, sehingga ledger yang hanya
+      boleh menyusut tidak menghitungnya.
+  30. **D9 — `ship-logs.sh` menamai berkas keluarannya saat attach dan tidak pernah
+      merotasi.** `ops/ship-logs.sh:53-57`. `$(date)` diekspansi sekali saat tailer
+      dijalankan dan fd-nya hidup sampai deploy berikutnya, jadi baris hari ini mendarat di
+      berkas bertanggal deploy terakhir dan sapuan `-mtime` 30 hari tak pernah bisa
+      menyentuh berkas yang terbuka itu.
+  31. **D10 — tidak ada apa pun di jalur deploy atau load balancer yang membaca endpoint
+      readiness yang sudah ada.** `health.ts:8-14`; `infra/varnish/default.vcl:26-34`.
+      Coolify, HEALTHCHECK Docker, dan probe Varnish semuanya memakai endpoint liveness yang
+      sengaja bebas dependensi, jadi rilis dengan database tak terjangkau ditandai sukses
+      lalu dialihkan.
+  32. **D11 — enam skrip job memanggil `withTenantOrThrow` tanpa `workClass`, jadi berjalan
+      sebagai `interactive`.** Purge malam menisbatkan tekanan pool-nya ke ember yang
+      melayani pengguna hidup. Baik `work-class-registry.ts:11-17` maupun
+      `database-capacity-runbook.md:268-282` menegaskan job tak pernah mencapai
+      `acquireWorkClassSlot` — itu kini salah.
+  33. **D12 — tiga inti fetch JSON nyaris identik di `src/lib/ui/`, plus `postJson` mati yang
+      membawa komentar palsu.** `admin-form-client.ts:77-173`. Keduanya **sudah menyimpang**:
+      `sendJson` mendukung `extraHeaders` (Idempotency-Key), request tanpa body, dan
+      `DELETE`; `sendJsonWithFieldErrors` tidak satu pun.
+  34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` punya 3 pemakai dan 20 salinan inline tangan.**
+      `_shared/keyset-pagination.ts:56-59`. Konstantanya mengeraskan `created_at` telanjang
+      dan docblock-nya sendiri mengakui pemanggil harus "membungkusnya dalam alias tabel" —
+      mustahil untuk sebuah string. Kedua puluh salinan benar byte hari ini, jadi ini
+      prospektif: satu `AT TIME ZONE 'UTC'` yang hilang atau `US`→`MS` menghidupkan lagi
+      cacat #158 secara senyap, hanya setelah halaman 1, tempat tak ada tes yang melihat.
+  35. **D14 — selesaikan ekstraksi `scripts/lib/` yang sudah dimulai.**
+      `repo-inventory.ts:339-370`; `project-state-inventory.ts:198-225`; lima deklarasi
+      `MIGRATIONS_DIR = "sql"` + empat pemuatan verbatim; `deriveTableRlsStates` diekspor
+      dari sebuah **generator** dan diimpor dua gerbang. Perbaikan escape markdown mendarat
+      di satu dari tiga salinan `parseInventoryRows`. `scripts/lib/repo-files.ts` kini ada
+      dan enam skrip sudah dipindah — ini menyelesaikan pekerjaan yang sudah dimulai.
+  36. **D15 — node `notify` workflow diam-diam tidak melakukan apa pun, dan kedua composition
+      root membenarkannya dengan klaim palsu.** `workflow-notification-port-adapter.ts:18`
+      nol pengimpor; dua rute menyebut modul `email` "belum di-port" — ia hidup dan memiliki
+      adapternya.
+  37. **D16 — keadaan siklus hidup orphan media tak terjangkau.**
+      `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` satu-satunya penulis
+      `status='orphaned'` di repo dan punya nol pemanggil, sehingga sapuan stale-orphan,
+      indeks parsialnya, dan `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` menjaga himpunan yang
+      permanen kosong — dan penghitung nol terbaca identik dengan bucket bersih.
+      **Utamakan penghapusan** kecuali deteksi orphan memang sedang dibangun.
+  38. **D17 — homepage section dan ad placement tidak punya permukaan baca yang sadar
+      kelayakan.** Ketiga helper rendering bernol pemanggil adalah **penangguhan
+      bertanda tangan** (ADR-0071). Yang benar-benar hilang sempit: daftar iklan
+      mengembalikan `media_object_id` tanpa `public_url` terresolusi dan tanpa join status
+      terverifikasi.
+
+  ### Sengaja TIDAK direkomendasikan (dicatat agar pertanyaannya tak dibuka ulang buta)
+  - **Membuat `/api/v1/health` sadar dependensi.** Ia sengaja tidak memanggil DB dan tiga
+    dokumen menyatakannya. Probe liveness yang bergantung DB mengubah kedipan Postgres
+    menjadi loop restart dan membuat Varnish menandai satu-satunya backend-nya sakit.
+    Perubahan yang benar adalah D10.
+  - **Membangun renderer homepage-section / iklan publik di sini.** ADR-0071 memindahkan
+    rendering berita publik ke `awcms-astro`, dan `ad-placement-directory.ts:309-312`
+    mencatat penangguhannya di dalam sumber. Menulisnya di sini akan menciptakan ulang
+    permukaan yang dihapus ADR itu.
+  - **Konsolidasi penuh 17 penelusur direktori.** `scripts/lib/repo-files.ts` sudah ada dan
+    enam skrip sudah dipindah; pemicu yang dituduhkan tidak terjangkau lewat `bun run`
+    (terverifikasi). Ganti kedua penelusur `catch { return; }` (dilipat ke D14) lalu
+    berhenti.
+
+  ### Yang TIDAK diperiksa putaran ini
+
+  Tidak ada database hidup (tanpa `EXPLAIN`, tanpa job dijalankan, tanpa request
+  lintas-tenant). Pohon `tests/` tidak diaudit untuk cakupan atau duplikasinya sendiri —
+  beberapa temuan bersandar pada "tak ada tes yang akan melihat ini" tanpa itu
+  diverifikasi. Isi `sql/` hanya dibaca yang ditarget (007, 009, 011, 035, 041, 050, 087,
+  090, 117); perilaku kunci migrasi 001–128 tidak ditinjau. Internal `theming`,
+  `site-search`, `comments`, `push-delivery`, dan `visitor-analytics` diperiksa hanya pada
+  tingkat deskriptor + nol-pemanggil. Tidak dibaca baris-per-baris:
+  `security/turnstile.ts`, blocklist IP di `ssrf-guard.ts`, self-registration dan
+  penerimaan undangan, serta internal JWT/JWKS OIDC. Ke-42 layar admin `.astro` tidak
+  diukur untuk jumlah query kumulatif per render — B1/B4 hanya berjangkar pada
+  `/admin/blog` dan layout-nya. Dikecualikan karena sudah terlacak:
+  `SYNC_HMAC_ALLOW_LEGACY` (GHSA-c972-3q5p-g3h4), MFA/SSO/Turnstile mati di produksi,
+  ketiadaan crontab `edge-cache:purge`, dan item Varnish/s-maxage/asset-budget di bawah.
+
+- **KEPUTUSAN TERBUKA — 17 Agustus 2026: enam tag git pra-model.** `bun run version:check`
+  (gerbang 52) kini memegang model `vX.Y.Z` di setiap commit, dan ia mengecualikan enam tag
+  bernama persis: `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0`. Keenamnya mendahului
+  rebuild (ADR-0024); `3.0.0` duduk di commit `b23d3308` berdampingan dengan `v3.0.0`, satu
+  rilis dengan dua nama. Setiap tag yang dipotong sejak `v5.1.0` (16 Juli 2026) sudah patuh
+  — 15 dari 15.
+
+  **Sengaja DIBIARKAN, menunggu keputusan yang merupakan hak maintainer.** Menghapus tag
+  yang sudah terbit itu menghadap keluar dan tak bisa dibatalkan: `release-process.md`
+  §Rollback sudah berargumen menolak penghapusan tag terbit dengan alasan konsumen yang
+  sudah menariknya kehilangan kemampuan mendiagnosis apa yang mereka punya, dan keenamnya
+  terlihat di halaman GitHub Releases sebagai entri Pre-release basis kode lama.
+
+  Dua opsi, keduanya bisa dipertahankan:
+  1. **Pertahankan, dengan pengecualian** (keadaan saat ini). Biayanya: halaman Releases
+     tetap menampilkan dua ejaan, dan pembaca yang membandingkan `3.0.0` dengan `v3.0.0`
+     tidak bisa tahu keduanya satu rilis tanpa membaca ADR-0024.
+  2. **Hapus keenamnya** (`git push origin :refs/tags/<nama>`), mempertahankan `v3.0.0`
+     berprefiks yang sudah menutupi duplikatnya. `2.9.9`, `2.12.0`, `3.1.0`, `4.3.1`, dan
+     `4.5.0` TIDAK punya kembaran ber-`v`, sehingga menghapusnya mengeluarkan rilis itu
+     dari namespace tag sepenuhnya — itulah sebabnya ini bukan bersih-bersih yang boleh
+     dilakukan diam-diam. Sesudahnya `LEGACY_UNPREFIXED_TAGS` menyusut ke sisanya, dan
+     gerbangnya tetap bekerja.
+
+  **Tidak direkomendasikan: menulis ulang mereka menjadi tag berprefiks `v`.** Men-tag ulang
+  commit yang sama dengan nama baru akan menyajikan lima rilis seolah-olah mereka selalu
+  mengikuti model yang baru diperkenalkan setahun kemudian, dan digest image serta
+  attestation yang terbit atas nama lama akan tetap menunjuk byte yang tidak lagi ditunjuk
+  nama-nama itu.
 
 - **PUTARAN REKOMENDASI — 15 Agustus 2026, diturunkan dari repo + produksi v9.1.2
   yang SEDANG BERJALAN.** Tiap temuan di bawah punya bukti yang dijalankan, bukan

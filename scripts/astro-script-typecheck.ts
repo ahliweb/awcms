@@ -47,8 +47,10 @@
  * `.gitignore`d, so the alternative is a file that is invisible to git and
  * wrong.
  */
-import { readdir, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import { listFilesRecursive } from "./lib/repo-files";
 
 const PAGES_ROOT = "src/pages";
 
@@ -92,23 +94,8 @@ export function generatedNameFor(astroPath: string): string {
   return path.join(path.dirname(astroPath), `${base}${GENERATED_SUFFIX}`);
 }
 
-async function walk(dir: string): Promise<string[]> {
-  const found: string[] = [];
-
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const absolute = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      found.push(...(await walk(absolute)));
-    } else if (entry.isFile()) {
-      found.push(absolute);
-    }
-  }
-
-  return found;
-}
-
 async function main(): Promise<void> {
-  const entries = await walk(PAGES_ROOT);
+  const entries = listFilesRecursive(PAGES_ROOT);
 
   const stale = entries.filter((file) => file.endsWith(GENERATED_SUFFIX));
   if (stale.length > 0) {

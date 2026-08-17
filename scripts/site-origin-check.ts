@@ -33,10 +33,10 @@
  * worse than no gate. So the rules match interpolation into a string, not the
  * `.origin` property itself.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
+import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
 
 /** The one module allowed to decide a scheme. */
 const RESOLVER = "src/lib/http/site-origin.ts";
@@ -44,7 +44,7 @@ const RESOLVER = "src/lib/http/site-origin.ts";
 /** Roots that can emit an outward-facing URL. */
 const SCANNED_ROOTS = ["src"];
 
-const SCANNED_EXTENSIONS = new Set([".ts", ".astro"]);
+const SCANNED_EXTENSIONS = [".ts", ".astro"] as const;
 
 export type OriginViolation = {
   file: string;
@@ -77,18 +77,13 @@ const REQUEST_ORIGIN = /\$\{[^}]*\burl\.origin\b[^}]*\}/;
 const HARDCODED_SCHEME = /https?:\/\/\$\{[^}]*\}(?=[/`$])/;
 
 /** Recursively list scannable files under `dir`, repo-relative. */
-function listFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(path.join(ROOT, dir))) {
-    if (entry === "node_modules" || entry.startsWith(".")) continue;
-    const rel = `${dir}/${entry}`;
-    const stat = statSync(path.join(ROOT, rel));
-    if (stat.isDirectory()) {
-      listFiles(rel, out);
-    } else if (SCANNED_EXTENSIONS.has(path.extname(entry))) {
-      out.push(rel);
-    }
-  }
-  return out;
+function listFiles(dir: string): string[] {
+  return listFilesRecursive(path.join(REPO_ROOT, dir), {
+    extensions: SCANNED_EXTENSIONS,
+    skipDirectories: ["node_modules"],
+    skipDotEntries: true,
+    relativeTo: REPO_ROOT
+  });
 }
 
 /**
@@ -141,7 +136,7 @@ const ADVICE: Record<OriginViolation["rule"], string> = {
 if (import.meta.main) {
   const violations = SCANNED_ROOTS.flatMap((root) =>
     listFiles(root).flatMap((file) =>
-      scanSource(file, readFileSync(path.join(ROOT, file), "utf8"))
+      scanSource(file, readFileSync(path.join(REPO_ROOT, file), "utf8"))
     )
   );
 

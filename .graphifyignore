@@ -1,0 +1,61 @@
+# What stays OUT of the knowledge graph (`graphify-out/`).
+#
+# Syntax is `.gitignore` syntax, and graphify reads this file AFTER `.gitignore`
+# — so it can only ever exclude MORE, never re-include something `.gitignore`
+# already dropped. Adding a line here is safe in exactly one direction: the
+# graph gets narrower, never wider.
+#
+# `bun run graph:artifacts:check` enforces the entries below that are plain
+# paths or directories: a rebuild that ran without this file re-admits what was
+# excluded here, and that gate is what catches it. Glob patterns are REPORTED as
+# unenforced rather than silently skipped — an exclusion that looks guarded and
+# is not is worse than one that is plainly manual.
+#
+# Read `docs/awcms/knowledge-graph.md` before adding an entry. Exclusion is
+# content the graph will no longer be able to answer from, so the bar is a
+# measured one: does this path restate something already indexed, or form a blob
+# that connects only to itself?
+
+# ---------------------------------------------------------------------------
+# Translation mirrors (`*.id.md`) — the source is indexed, not both halves.
+# ---------------------------------------------------------------------------
+#
+# ADR-0097 makes English at the bare path the source and Indonesian at
+# `<name>.id.md` a mirror that records the hash of the English it was translated
+# from. A mirror therefore RESTATES its source word for word, in another
+# language. Indexing both puts every concept into the graph twice, and the
+# second copy contributes no sentence the first did not.
+#
+# This is not a hypothetical cost. When this file was written the corpus held
+# 260 tracked `*.id.md` files and the last graph had scanned only 4 of them —
+# because 256 of them (`.claude/skills/**/SKILL.id.md`) landed on 2026-08-15 in
+# commit 01c06f39, AFTER that graph was built. So the exclusion reads as
+# near-free against today's artifact (8 nodes, 0.08%) while actually preventing
+# 256 restatements from entering on the next rebuild.
+#
+# The failure mode is specific, not merely bloat. A pair of documents with
+# identical content clusters into two adjacent, nearly indistinguishable
+# communities, and the automatic hub namer gives both the same name — which is
+# precisely what `graph:artifacts:check` rejects ("no two communities share a
+# name"). Without this line the first wave of mirrors would turn that gate red
+# on the next rebuild, for a reason that has nothing to do with the code.
+#
+# Nothing is lost: every mirror's source is indexed, and `bun run
+# check:docs:translation` already guards that the mirrors stay current.
+#
+# This is a GLOB, so the gate reports it as UNENFORCED rather than checking it.
+# That is the correct state to print, not to hide.
+*.id.md
+
+# ---------------------------------------------------------------------------
+# Deliberately NOT excluded — recorded so the question is not reopened blind.
+# ---------------------------------------------------------------------------
+#
+# `.changeset/` — the sibling repo `awcms-astro` excludes it, and that decision
+# does NOT transfer here. There it was 171 of 971 nodes (18% of the graph) with
+# 139 of 178 edges pointing at other changesets: many nodes, almost no bridges,
+# which is the definition of an isolated blob. Measured in THIS repo it is 15
+# nodes from 5 files (0.16%), with 8 of 17 edges crossing out to the rest of the
+# corpus. Same directory name, opposite shape — excluding it here would buy
+# nothing and lose release rationale that does connect. PR #400 settled this;
+# re-measure before revisiting it.
