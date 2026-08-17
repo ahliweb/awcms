@@ -7,7 +7,8 @@ import {
   parseVersionFromTag,
   checkTagMatchesPackageVersion,
   checkChangelogHasSection,
-  checkNoPendingChangesets
+  checkNoPendingChangesets,
+  selectReleaseTag
 } from "../scripts/lib/release-verify-checks.ts";
 
 describe("parseVersionFromTag", () => {
@@ -80,5 +81,58 @@ describe("checkNoPendingChangesets", () => {
 
   test("mengabaikan berkas non-.md (mis. config.json bila ikut ter-list)", () => {
     expect(checkNoPendingChangesets(["config.json", "README.md"])).toBeNull();
+  });
+});
+
+describe("selectReleaseTag", () => {
+  /**
+   * Mempersempit union `{tag} | {error}` dan GAGAL keras bila ternyata sebuah
+   * tag terpilih — supaya "seharusnya error" tidak lolos diam-diam sebagai
+   * `undefined.toContain(...)`.
+   * @param {{ tag: string } | { error: string }} result
+   * @returns {string}
+   */
+  function errorOf(result) {
+    if (!("error" in result)) {
+      throw new Error(`Diharapkan error, malah terpilih tag ${result.tag}.`);
+    }
+    return result.error;
+  }
+
+  test("memilih satu-satunya tag rilis", () => {
+    const result = selectReleaseTag(["v9.1.2"]);
+    expect(result).toEqual({ tag: "v9.1.2" });
+  });
+
+  test("commit bertag ganda `3.0.0` + `v3.0.0` resolve deterministik ke v3.0.0", () => {
+    // Kasus nyata: commit b23d3308. `git describe --tags --exact-match`
+    // memilih menurut urutan internal git; filter ini memilih menurut model.
+    expect(selectReleaseTag(["3.0.0", "v3.0.0"])).toEqual({ tag: "v3.0.0" });
+    // Urutan masukan tidak boleh mengubah hasil.
+    expect(selectReleaseTag(["v3.0.0", "3.0.0"])).toEqual({ tag: "v3.0.0" });
+  });
+
+  test("tag non-rilis diabaikan, bukan dipilih", () => {
+    expect(selectReleaseTag(["dryrun-abc123", "v8.1.0"])).toEqual({
+      tag: "v8.1.0"
+    });
+  });
+
+  test("error menyebut tag yang ADA ketika tak satu pun berpola vX.Y.Z", () => {
+    const message = errorOf(selectReleaseTag(["3.0.0", "nightly"]));
+    expect(message).toContain("3.0.0");
+    expect(message).toContain("nightly");
+  });
+
+  test("error ketika HEAD tidak memikul tag apa pun", () => {
+    expect(errorOf(selectReleaseTag([]))).toContain(
+      "tidak memikul tag apa pun"
+    );
+  });
+
+  test("dua tag rilis pada satu commit menuntut keputusan eksplisit", () => {
+    // Ambigu SEBENARNYA — bukan sesuatu yang boleh ditebak diam-diam.
+    const message = errorOf(selectReleaseTag(["v9.1.2", "v9.2.0"]));
+    expect(message).toContain("RELEASE_VERIFY_TAG");
   });
 });

@@ -30,6 +30,41 @@ flowchart TD
 
 Both triggers must run exactly the same `validate` job — the rehearsal path is not a shortcut around the quality gate, it only skips the tag-ancestor guard and `release:verify` (both `if: github.event_name == 'push'`; `bun run check` itself always runs).
 
+## 0. The version model: `vX.Y.Z`
+
+One version number, three places, three spellings — and only one of them carries the `v`:
+
+| Where                    | Spelling | Example                       |
+| ------------------------ | -------- | ----------------------------- |
+| `package.json`           | `X.Y.Z`  | `9.1.2`                       |
+| git tag / GitHub Release | `vX.Y.Z` | `v9.1.2`                      |
+| container image tag      | `X.Y.Z`  | `ghcr.io/ahliweb/awcms:9.1.2` |
+
+`release.yml` derives the image tag by stripping the prefix (`VERSION="${GITHUB_REF_NAME#v}"`), so `…:v9.1.2` does not exist in the registry — see §Verification for the `manifest unknown` this produces if the `v` is written along with it. `scripts/lib/semver.ts` owns all three spellings; `releaseTagFor()` is the only place the `v` is added.
+
+**Release versions only.** `X.Y.Z` means exactly three numeric fields: no prerelease suffix (`-rc.1`), no build metadata (`+build.5`), no leading zeros. This is stricter than SemVer allows, deliberately. `release.yml`'s tag trigger is the glob `v*.*.*`, and a glob cannot express "no prerelease" — `v1.2.3-rc.1` matches it and would reach the publish path. The pattern in `semver.ts` is the only thing that rejects it, which is why `version:check` asserts that `release:verify` is still wired into `validate` at all.
+
+**Bumps come from changesets, never by hand.** `bun run changeset:version` writes `package.json` and the `CHANGELOG.md` section together. The one exception in this repo's history is the manual `0.2.0` → `5.0.0` jump, which changesets structurally cannot do (it can only increment) — recorded in [ADR-0024](../adr/0024-semver-numbering-continues-legacy-major-line.md).
+
+### `bun run version:check` (in the `check` chain)
+
+The model above used to be enforced only by `release:verify`, inside a job that runs _because_ a tag was pushed. Every way of getting it wrong therefore stayed green on `main` and surfaced only once the tag was public — and §Rollback is explicit that a published tag is never re-cut over. `version:check` moves the same model to every commit:
+
+| Rule                                   | What it catches                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `package-version`                      | `package.json` is not `X.Y.Z` — prerelease, truncated, leading zero, or carrying a `v`.                |
+| `changelog-headings`                   | A `## ` heading that is not a release version (a stray `## Unreleased` re-slices release notes).       |
+| `changelog-order`                      | Sections not strictly newest-to-oldest, or a duplicated section.                                       |
+| `changelog-newest`                     | The newest section disagrees with `package.json` — a bump whose changelog entry was never written.     |
+| `tag-namespace`                        | A tag that is not `vX.Y.Z`.                                                                            |
+| `version-behind-tags`                  | `package.json` sitting BELOW the newest published tag, so the next bump would re-issue a taken number. |
+| `release-trigger` / `release-backstop` | The `v*.*.*` glob left without the `release:verify` step that constrains it.                           |
+| `changeset-frontmatter`                | A pending changeset declaring an invalid bump or a foreign package name.                               |
+
+**Six tags predate the model** — `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0` — all cut by the legacy codebase's tooling before the rebuild (ADR-0024), and `3.0.0` sits on commit `b23d3308` beside `v3.0.0`: one release under two names. They are a closed, exact-name exemption list in `scripts/version-check.ts`; a seventh cannot be added without editing it. Every one of the 15 tags cut since `v5.1.0` (2026-07-16) already conforms — this gate turns that streak into an invariant.
+
+> **The tag rule needs tags to see.** A default `actions/checkout` is shallow and fetches none, so the rule would report `UNENFORCED` forever — green, and blind. `ci.yml`'s `quality` job therefore sets `fetch-tags: true`, and `tests/version-check.test.ts` asserts that line is still there, so it cannot be removed silently.
+
 ## 1. PR-time gate: `changesets.yml`
 
 `scripts/changeset-policy-check.ts` (`bun run changesets:policy:check`) decides whether a PR needs a new changeset, using this repo's own merged-PR history as ground truth for what counts as "docs-only/chore":
@@ -53,7 +88,10 @@ Two entry points, both converging on the same job graph:
 ### `validate` job (read-only)
 
 1. **Ancestor-of-main guard** (real releases only) — `git merge-base --is-ancestor HEAD origin/main`. As long as this repo has no branch protection rule on `main`, this guard is the workflow-level substitute for "publish only from a protected branch": a tag whose commit is not part of `origin/main`'s history is rejected before anything is built.
-2. **`bun run release:verify`** (real releases only, `scripts/release-verify.ts`) — makes sure the pushed tag's version matches `package.json`, that `CHANGELOG.md` has a `## [X.Y.Z]` section for it, and that there are no unconsumed changeset files left in `.changeset/`.
+2. **`bun run release:verify`** (real releases only, `scripts/release-verify.ts`) — makes sure the pushed tag matches the `vX.Y.Z` model (§0), that its version matches `package.json`, that `CHANGELOG.md` has a `## X.Y.Z` section for it (`## [X.Y.Z]` is also accepted, for hand-written sections such as the ADR-0024 jump), and that there are no unconsumed changeset files left in `.changeset/`. Most of this is now also checked at every commit by `version:check`; what stays exclusive to release time is the tag↔`package.json` comparison (there is no tag before the push) and the demand that `.changeset/` be empty (it is deliberately full between releases).
+
+   The tag being verified comes from `RELEASE_VERIFY_TAG`, which `release.yml` sets from `github.ref_name`. The local fallback resolves it with `git tag --points-at HEAD` filtered to `vX.Y.Z`, **not** `git describe --exact-match`: commit `b23d3308` carries both `3.0.0` and `v3.0.0`, and `describe` picks between them by git's internal ordering rather than by the model — reporting a pattern failure against a tag nobody chose, with nothing in the message naming the second tag as the cause.
+
 3. **`bun run check`** (against a real, already-migrated Postgres service) — the full quality gate, re-verified at release time rather than trusted from a possibly stale CI result. This must be **stricter** than `ci.yml`'s `quality` job, not identical to it — make sure every step `bun run check` runs is also run by `ci.yml`'s `quality` job (e.g. `i18n:pot:check`, `config:docs:check`, `logging:lint:check`, `api:docs:check`, `repo:inventory:check`) so that this kind of drift cannot merge to `main` through a green PR and only surface on a tag push.
 
    (Historical note: an older version of this paragraph suggested adding `extension:check` — derived-application manifest compatibility — to the `check` composite and to `ci.yml`. That advice **no longer applies**: the derived-application pathway together with `extension:check` has been **revoked by [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)**. The principle stands: every new check added to `package.json`'s `check` composite must also become an explicit named step in `ci.yml`'s `quality` job in the same PR, so the same class of drift cannot appear.)

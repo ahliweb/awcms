@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4c16d68e9d37b3a8a908200cfbc48d90cdd307e0e2ca71d077c3a4c115a799dc -->
+<!-- i18n-source-hash: sha256:01fcfae3594fe890a762358c6cb11737789f833a51e050df6bcc7ed72bf33d5a -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-105 target menjalankan berkas di `scripts/`; 46 di antaranya
+107 target menjalankan berkas di `scripts/`; 48 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -84,6 +84,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `entitlements:backfill`                  | `identity-access-entitlement-backfill.ts`      | —    |
 | `family:conformance:check`               | `family-conformance-check.ts`                  | ✅   |
 | `form-drafts:purge`                      | `form-draft-purge.ts`                          | —    |
+| `graph:artifacts:check`                  | `graph-artifacts-check.ts`                     | ✅   |
 | `i18n:catalog:check`                     | `i18n-catalog-check.ts`                        | ✅   |
 | `i18n:compile`                           | `i18n-compile.ts`                              | —    |
 | `i18n:screens:check`                     | `i18n-screen-coverage-check.ts`                | ✅   |
@@ -137,6 +138,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `sync:objects:dispatch`                  | `object-sync-dispatch.ts`                      | —    |
 | `sync:objects:purge`                     | `object-queue-purge.ts`                        | —    |
 | `tenant-domain:dns:sync`                 | `tenant-domain-dns-sync.ts`                    | —    |
+| `version:check`                          | `version-check.ts`                             | ✅   |
 | `workflow:escalations:dispatch`          | `workflow-escalations-dispatch.ts`             | —    |
 
 <!-- END GENERATED: script-inventory -->

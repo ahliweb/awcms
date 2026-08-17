@@ -8,18 +8,53 @@
  * belum dikonsumsi tersisa di `.changeset/`.
  */
 
+import { isReleaseTag } from "./semver";
+
 export type Problem = { message: string };
 
-const TAG_PATTERN = /^v(\d+\.\d+\.\d+)$/;
+/**
+ * Re-exported from `scripts/lib/semver.ts`, which owns the `vX.Y.Z` model for
+ * the whole repo (`version:check` enforces the same definition at every
+ * commit, not just at tag-push time). The pattern used to live here as a
+ * private `/^v(\d+\.\d+\.\d+)$/`, which admitted `v01.2.3` — SemVer §2 forbids
+ * leading zeros exactly because `01.2.3` and `1.2.3` read as one release under
+ * two names, and this repo already carries a same-commit tag pair (`3.0.0` +
+ * `v3.0.0`) showing what that looks like.
+ */
+export { parseVersionFromTag } from "./semver";
 
 /**
- * @param tag mis. `v5.0.0`
- * @returns versi tanpa prefix `v` (mis. `5.0.0`), atau null bila tag tidak
- *   cocok pola `vX.Y.Z`.
+ * Memilih SATU tag rilis dari daftar tag yang menunjuk sebuah commit.
+ *
+ * Ini menggantikan `git describe --tags --exact-match HEAD`, yang tidak
+ * deterministik pada commit bertag ganda. Kasusnya nyata di repo ini: commit
+ * `b23d3308` memikul `3.0.0` DAN `v3.0.0` — satu rilis, dua nama — sehingga
+ * `describe` memilih menurut urutan internal git, bukan menurut model. Bila
+ * yang terpilih `3.0.0`, release:verify gagal dengan "tidak cocok pola
+ * vX.Y.Z" sambil menyebut tag yang tidak dipilih siapa pun, dan penyebab
+ * sebenarnya (ada tag kedua) tidak muncul di pesan mana pun.
+ *
+ * @param pointingTags nama tag yang menunjuk commit tersebut
  */
-export function parseVersionFromTag(tag: string): string | null {
-  const match = tag.trim().match(TAG_PATTERN);
-  return match ? match[1]! : null;
+export function selectReleaseTag(
+  pointingTags: readonly string[]
+): { tag: string } | { error: string } {
+  const releaseTags = pointingTags.filter(isReleaseTag);
+
+  if (releaseTags.length === 1) return { tag: releaseTags[0]! };
+
+  if (releaseTags.length === 0) {
+    return {
+      error:
+        pointingTags.length > 0
+          ? `HEAD memikul tag [${pointingTags.join(", ")}], tidak satu pun berpola vX.Y.Z.`
+          : "RELEASE_VERIFY_TAG tidak diset dan HEAD tidak memikul tag apa pun."
+    };
+  }
+
+  return {
+    error: `HEAD memikul ${releaseTags.length} tag rilis (${releaseTags.join(", ")}) — set RELEASE_VERIFY_TAG secara eksplisit.`
+  };
 }
 
 /**

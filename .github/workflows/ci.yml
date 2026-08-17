@@ -43,6 +43,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # `bun run check` memuat `version:check`, yang memverifikasi seluruh
+          # namespace tag mematuhi model `vX.Y.Z`. Checkout default itu shallow
+          # dan TIDAK mengambil satu tag pun, sehingga aturan itu akan melihat
+          # nol tag — dan sebuah aturan yang melapor "OK, 0 tag diperiksa"
+          # tidak bisa dibedakan dari aturan yang benar-benar lulus. Ini kelas
+          # cacat yang sama dengan gerbang cakupan yang hijau karena tidak
+          # melihat apa-apa. `fetch-tags` membuat aturan itu punya data;
+          # `tests/version-check.test.ts` mengikat baris ini agar tidak bisa
+          # dihapus diam-diam.
+          fetch-tags: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -60,7 +71,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Full quality gate (bun run check — seluruh 34 gerbang)
+      - name: Full quality gate (bun run check — seluruh 52 gerbang)
         # `check` memuat `bun test` polos. Suite DB-gated lama (masing-masing
         # membuka koneksi ad-hoc ke `DATABASE_URL`) tidak dirancang jalan
         # bersamaan atas satu database ter-migrasi dalam satu proses `bun

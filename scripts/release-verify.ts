@@ -19,26 +19,47 @@ import {
   parseVersionFromTag,
   checkTagMatchesPackageVersion,
   checkChangelogHasSection,
-  checkNoPendingChangesets
+  checkNoPendingChangesets,
+  selectReleaseTag
 } from "./lib/release-verify-checks";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
+/**
+ * Fallback lokal ketika `RELEASE_VERIFY_TAG` tidak diset.
+ *
+ * Memakai `git tag --points-at HEAD` dan MEMFILTER ke tag `vX.Y.Z`, bukan
+ * `git describe --tags --exact-match`. Sebabnya konkret: commit `b23d3308`
+ * di repo ini memikul DUA tag untuk rilis yang sama (`3.0.0` dan `v3.0.0`),
+ * dan `describe --exact-match` memilih salah satunya menurut urutan internal
+ * git — bukan menurut model. Bila yang terpilih `3.0.0`, release:verify gagal
+ * dengan "tag tidak cocok pola vX.Y.Z" sambil menyebut tag yang tidak dipilih
+ * siapa pun. Memfilter dulu membuat hasilnya deterministik.
+ */
 function resolveTag(): string {
   const fromEnv = process.env.RELEASE_VERIFY_TAG?.trim();
   if (fromEnv) return fromEnv;
 
+  let pointing: string[];
   try {
-    return execFileSync(
-      "git",
-      ["describe", "--tags", "--exact-match", "HEAD"],
-      { cwd: ROOT, encoding: "utf8" }
-    ).trim();
+    pointing = execFileSync("git", ["tag", "--points-at", "HEAD"], {
+      cwd: ROOT,
+      encoding: "utf8"
+    })
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   } catch {
     throw new Error(
-      "Tidak bisa menentukan tag rilis: RELEASE_VERIFY_TAG tidak diset dan HEAD tidak persis di sebuah tag (git describe --exact-match gagal)."
+      "Tidak bisa menentukan tag rilis: RELEASE_VERIFY_TAG tidak diset dan `git tag --points-at HEAD` gagal."
     );
   }
+
+  const selected = selectReleaseTag(pointing);
+  if ("error" in selected) {
+    throw new Error(`Tidak bisa menentukan tag rilis: ${selected.error}`);
+  }
+  return selected.tag;
 }
 
 if (import.meta.main) {
