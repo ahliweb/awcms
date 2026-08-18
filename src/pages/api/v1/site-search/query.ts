@@ -9,6 +9,7 @@ import {
   checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
+import { parsePositiveIntSetting } from "../../../../lib/security/env-thresholds";
 import { ok, fail } from "../../../../modules/_shared/api-response";
 import { withSiteSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
 import { recordSearchQuery } from "../../../../modules/site-search/application/search-query-log";
@@ -31,9 +32,20 @@ import {
  * query-length-bounded, and result-capped. Every non-resolving/disabled/short
  * outcome returns the same neutral empty payload — never leak WHY.
  */
-const RATE_LIMIT_MAX = Number(process.env.SITE_SEARCH_RATE_LIMIT_MAX ?? 60);
-const RATE_LIMIT_WINDOW_SEC = Number(
-  process.env.SITE_SEARCH_RATE_LIMIT_WINDOW_SEC ?? 60
+// Parsed rather than coerced: `Number(process.env.X ?? 60)` yields `NaN` for a
+// non-numeric value, and `count > NaN` is false — which switches this limiter
+// OFF on an anonymous full-text endpoint while the `rate_limited` metric stays
+// at zero and reads as "no abuse". The literal `process.env.NAME` spelling is
+// kept because `config:env:coverage:check` cannot see a computed read.
+const RATE_LIMIT_MAX = parsePositiveIntSetting(
+  process.env.SITE_SEARCH_RATE_LIMIT_MAX,
+  60,
+  "SITE_SEARCH_RATE_LIMIT_MAX"
+);
+const RATE_LIMIT_WINDOW_SEC = parsePositiveIntSetting(
+  process.env.SITE_SEARCH_RATE_LIMIT_WINDOW_SEC,
+  60,
+  "SITE_SEARCH_RATE_LIMIT_WINDOW_SEC"
 );
 
 export const GET: APIRoute = async ({ request, url, clientAddress }) => {

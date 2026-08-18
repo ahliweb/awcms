@@ -9,6 +9,7 @@ import {
   checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
+import { parsePositiveIntSetting } from "../../../../lib/security/env-thresholds";
 import { ok, fail } from "../../../../modules/_shared/api-response";
 import { withSiteSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
 import { suggestSiteContent } from "../../../../modules/site-search/application/search-service";
@@ -24,11 +25,17 @@ import {
  * at most `suggestion_limit` title suggestions; disabled when the tenant turns
  * suggestions off.
  */
-const RATE_LIMIT_MAX = Number(
-  process.env.SITE_SEARCH_SUGGEST_RATE_LIMIT_MAX ?? 120
+// See `query.ts` — same defect, same fix. Suggestions run on every keystroke,
+// so an off-by-NaN limiter here is the cheaper of the two endpoints to abuse.
+const RATE_LIMIT_MAX = parsePositiveIntSetting(
+  process.env.SITE_SEARCH_SUGGEST_RATE_LIMIT_MAX,
+  120,
+  "SITE_SEARCH_SUGGEST_RATE_LIMIT_MAX"
 );
-const RATE_LIMIT_WINDOW_SEC = Number(
-  process.env.SITE_SEARCH_SUGGEST_RATE_LIMIT_WINDOW_SEC ?? 60
+const RATE_LIMIT_WINDOW_SEC = parsePositiveIntSetting(
+  process.env.SITE_SEARCH_SUGGEST_RATE_LIMIT_WINDOW_SEC,
+  60,
+  "SITE_SEARCH_SUGGEST_RATE_LIMIT_WINDOW_SEC"
 );
 
 export const GET: APIRoute = async ({ request, url, clientAddress }) => {
