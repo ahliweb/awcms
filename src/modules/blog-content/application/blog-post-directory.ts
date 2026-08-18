@@ -697,12 +697,20 @@ export async function listBlogPostsForAdmin(
 }
 
 /**
- * Hard delete. `awcms_blog_post_terms` rows for this post are deleted
- * first — they are pure join metadata with no independent meaning once the
- * post is gone, unlike `awcms_blog_revisions` (no FK to the post,
- * intentionally left as historical record, same reasoning audit events keep
- * referencing purged resources by id). Caller must have already verified
- * `canPurgePost` (archived or soft-deleted) before calling this.
+ * Hard delete. Both join tables — `awcms_blog_post_terms` and
+ * `awcms_blog_post_institutions` (sql/131) — are deleted first. They are pure
+ * join metadata with no independent meaning once the post is gone, unlike
+ * `awcms_blog_revisions` (no FK to the post, intentionally left as historical
+ * record, same reasoning audit events keep referencing purged resources by
+ * id). Caller must have already verified `canPurgePost` (archived or
+ * soft-deleted) before calling this.
+ *
+ * Both DELETEs are load-bearing, not tidiness: each join table holds a real
+ * foreign key to `awcms_blog_posts`, so leaving either behind does not leak a
+ * row — it makes the post DELETE raise a foreign-key violation and the whole
+ * purge fail. That is why a new post-scoped join table must be added here in
+ * the same change that creates it; `awcms_blog_post_institutions` is the
+ * second, and the reason this comment now names the rule instead of the table.
  */
 export async function purgeBlogPost(
   tx: Bun.SQL,
@@ -711,6 +719,11 @@ export async function purgeBlogPost(
 ): Promise<boolean> {
   await tx`
     DELETE FROM awcms_blog_post_terms
+    WHERE tenant_id = ${tenantId} AND post_id = ${id}
+  `;
+
+  await tx`
+    DELETE FROM awcms_blog_post_institutions
     WHERE tenant_id = ${tenantId} AND post_id = ${id}
   `;
 

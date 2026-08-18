@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 22    |
-| Migrations                          | 130   |
-| `awcms_*` tables                    | 148   |
-| Tables with `FORCE` RLS             | 130   |
+| Migrations                          | 132   |
+| `awcms_*` tables                    | 150   |
+| Tables with `FORCE` RLS             | 132   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 398   |
-| Route files                         | 361   |
+| Test files                          | 399   |
+| Route files                         | 366   |
 | ADR                                 | 200   |
 
 ### Modules
@@ -177,6 +177,8 @@
 | 128 | `sql/128_awcms_principal_preferences.sql`                          |
 | 129 | `sql/129_awcms_worker_lifecycle_purge_grants.sql`                  |
 | 130 | `sql/130_awcms_principal_time_zone.sql`                            |
+| 131 | `sql/131_awcms_blog_content_classification_dimensions.sql`         |
+| 132 | `sql/132_awcms_blog_content_institution_permissions.sql`           |
 
 ### Tables & Row-Level Security
 
@@ -192,10 +194,12 @@
 | `awcms_bff_clients`                      | `sql/088_awcms_session_handoff_schema.sql`                 | yes | yes   |
 | `awcms_blog_ad_placements`               | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
 | `awcms_blog_ads`                         | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_institutions`                | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
 | `awcms_blog_internal_tag_link_settings`  | `sql/039_awcms_blog_content_internal_tag_links_schema.sql` | yes | yes   |
 | `awcms_blog_menu_items`                  | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
 | `awcms_blog_menus`                       | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
 | `awcms_blog_pages`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_post_institutions`           | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
 | `awcms_blog_post_terms`                  | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
 | `awcms_blog_posts`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
 | `awcms_blog_redirects`                   | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
@@ -335,7 +339,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 342        |
+| `(root)`      | 343        |
 | `e2e`         | 12         |
 | `integration` | 43         |
 | `unit`        | 1          |
@@ -344,8 +348,8 @@
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 294   |
-| `/admin/**`     | 43    |
+| `/api/v1/**`    | 298   |
+| `/admin/**`     | 44    |
 | publik / anonim | 24    |
 
 <!-- END GENERATED: repo-inventory -->

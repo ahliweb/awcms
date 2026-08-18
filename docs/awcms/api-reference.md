@@ -5614,6 +5614,176 @@ Gated by blog_content.ads.configure.
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/blog/institutions` — List this tenant's institutions
+
+- **operationId**: `blogListInstitutions`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.read. Optional ?branch= filter, which is what builds each mega menu in one query. Bounded at 200 rows ordered by name.
+
+**Parameters**
+
+| Name               | In     | Required | Type                             | Description |
+| ------------------ | ------ | -------- | -------------------------------- | ----------- |
+| `branch`           | query  | no       | enum(`legislative`, `executive`) |             |
+| `X-Correlation-ID` | header | no       | string                           |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching institutions.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/institutions` — Register an institution
+
+- **operationId**: `blogCreateInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.create. Not idempotent: a retry that duplicates a create is refused 409 by the slug unique index, so no Idempotency-Key is read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogInstitutionCreateInput`](#schema-bloginstitutioncreateinput)
+
+**Responses**
+
+| Status | Description                                  | Schema                                 |
+| ------ | -------------------------------------------- | -------------------------------------- |
+| 200    | Institution created.                         | object                                 |
+| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
+| 409    | An institution already exists for this slug. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/institutions/{id}` — Read one institution
+
+- **operationId**: `blogGetInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The institution.            | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/institutions/{id}` — Update an institution
+
+- **operationId**: `blogUpdateInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.update. Only supplied fields change; an explicit null clears an optional field. An empty body is rejected 400 rather than recorded as a no-op edit.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogInstitutionUpdateInput`](#schema-bloginstitutionupdateinput)
+
+**Responses**
+
+| Status | Description                                  | Schema                                 |
+| ------ | -------------------------------------------- | -------------------------------------- |
+| 200    | Institution updated.                         | object                                 |
+| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                          | [`ApiError`](#standard-error-envelope) |
+| 409    | An institution already exists for this slug. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/institutions/{id}` — Soft delete an institution
+
+- **operationId**: `blogDeleteInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.delete. The articles filed against it keep their link, so restoring the institution restores its archive intact.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Institution soft-deleted.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/institutions/{id}/purge` — Permanently remove a soft-deleted institution
+
+- **operationId**: `blogPurgeInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.purge. Requires a prior soft delete: the statement matches only a row whose deleted_at is set, so a live institution answers 404 rather than being destroyed. Deletes every awcms_blog_post_institutions link first, so the articles that named it lose this classification permanently. Idempotency-Key is REQUIRED — unlike restore, the effect cannot be safely replayed once the row is gone.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Institution purged.                                        | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/institutions/{id}/restore` — Restore a soft-deleted institution
+
+- **operationId**: `blogRestoreInstitution`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.institutions.restore. No Idempotency-Key is read: the statement only matches a currently soft-deleted row, so a replay writes no audit event and answers 404. Deleting released the slug, so 409 is returned when a live institution has taken it in the meantime.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                             | Schema                                 |
+| ------ | --------------------------------------- | -------------------------------------- |
+| 200    | Institution restored.                   | object                                 |
+| 400    | Validation error.                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.             | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                     | [`ApiError`](#standard-error-envelope) |
+| 409    | A live institution now holds this slug. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/blog/internal-tag-links/settings` — Read this tenant's automatic internal tag linking policy
 
 - **operationId**: `blogGetInternalTagLinkSettings`
@@ -6582,10 +6752,10 @@ Gated by blog_content.taxonomies.read. Optional ?taxonomyType= filter.
 
 **Parameters**
 
-| Name               | In     | Required | Type                    | Description |
-| ------------------ | ------ | -------- | ----------------------- | ----------- |
-| `taxonomyType`     | query  | no       | enum(`category`, `tag`) |             |
-| `X-Correlation-ID` | header | no       | string                  |             |
+| Name               | In     | Required | Type                                        | Description |
+| ------------------ | ------ | -------- | ------------------------------------------- | ----------- |
+| `taxonomyType`     | query  | no       | enum(`category`, `tag`, `channel`, `topic`) |             |
+| `X-Correlation-ID` | header | no       | string                                      |             |
 
 **Responses**
 
@@ -9142,6 +9312,58 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
 }
 ```
 
+### Schema: BlogInstitutionCreateInput
+
+| Field            | Type                             | Required | Nullable | Description                                                  |
+| ---------------- | -------------------------------- | -------- | -------- | ------------------------------------------------------------ |
+| `branch`         | enum(`legislative`, `executive`) | yes      | no       |                                                              |
+| `name`           | string                           | yes      | no       |                                                              |
+| `slug`           | string                           | yes      | no       | Lowercase alphanumeric segments separated by single hyphens. |
+| `regionCode`     | string                           | no       | yes      |                                                              |
+| `description`    | string                           | no       | yes      |                                                              |
+| `seoTitle`       | string                           | no       | yes      |                                                              |
+| `seoDescription` | string                           | no       | yes      |                                                              |
+
+**Example**
+
+```json
+{
+  "branch": "legislative",
+  "name": "string",
+  "slug": "example-slug",
+  "regionCode": "string",
+  "description": "string",
+  "seoTitle": "string",
+  "seoDescription": "string"
+}
+```
+
+### Schema: BlogInstitutionUpdateInput
+
+| Field            | Type                             | Required | Nullable | Description |
+| ---------------- | -------------------------------- | -------- | -------- | ----------- |
+| `branch`         | enum(`legislative`, `executive`) | no       | no       |             |
+| `name`           | string                           | no       | no       |             |
+| `slug`           | string                           | no       | no       |             |
+| `regionCode`     | string                           | no       | yes      |             |
+| `description`    | string                           | no       | yes      |             |
+| `seoTitle`       | string                           | no       | yes      |             |
+| `seoDescription` | string                           | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "branch": "legislative",
+  "name": "string",
+  "slug": "example-slug",
+  "regionCode": "string",
+  "description": "string",
+  "seoTitle": "string",
+  "seoDescription": "string"
+}
+```
+
 ### Schema: BlogPageWriteInput
 
 Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all fields optional on update).
@@ -9244,13 +9466,13 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
 
 ### Schema: BlogTermWriteInput
 
-| Field          | Type                    | Required | Nullable | Description |
-| -------------- | ----------------------- | -------- | -------- | ----------- |
-| `taxonomyType` | enum(`category`, `tag`) | no       | no       |             |
-| `parentId`     | string (uuid)           | no       | yes      |             |
-| `name`         | string                  | no       | no       |             |
-| `slug`         | string                  | no       | no       |             |
-| `description`  | string                  | no       | yes      |             |
+| Field          | Type                                        | Required | Nullable | Description |
+| -------------- | ------------------------------------------- | -------- | -------- | ----------- |
+| `taxonomyType` | enum(`category`, `tag`, `channel`, `topic`) | no       | no       |             |
+| `parentId`     | string (uuid)                               | no       | yes      |             |
+| `name`         | string                                      | no       | no       |             |
+| `slug`         | string                                      | no       | no       |             |
+| `description`  | string                                      | no       | yes      |             |
 
 **Example**
 

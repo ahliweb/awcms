@@ -19,7 +19,10 @@ import {
   listBlogTerms
 } from "../../../../../modules/blog-content/application/blog-taxonomy-directory";
 import { validateCreateBlogTermInput } from "../../../../../modules/blog-content/domain/blog-term-validation";
-import { isTaxonomyType } from "../../../../../modules/blog-content/domain/taxonomy-policy";
+import {
+  isTaxonomyType,
+  TAXONOMY_TYPE_LIST
+} from "../../../../../modules/blog-content/domain/taxonomy-policy";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -51,7 +54,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return fail(
       400,
       "VALIDATION_ERROR",
-      "taxonomyType must be one of category, tag."
+      `taxonomyType must be one of ${TAXONOMY_TYPE_LIST}.`
     );
   }
 
@@ -159,8 +162,19 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         );
       }
 
-      if (message.includes("awcms_blog_terms_tag_no_parent_check")) {
-        return fail(400, "VALIDATION_ERROR", "A tag must not have a parentId.");
+      // Matched on the shared `no_parent_check` suffix, NOT on either full
+      // constraint name. sql/131 renamed
+      // `awcms_blog_terms_tag_no_parent_check` ->
+      // `awcms_blog_terms_flat_taxonomy_no_parent_check` when `topic` became
+      // the second flat vocabulary, and a deployment runs both names in the
+      // window between the code rolling out and the migration applying. Pinning
+      // either one turns a 400 into a raw 500 for the duration of that window.
+      if (message.includes("no_parent_check")) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          `A ${input.taxonomyType} must not have a parentId.`
+        );
       }
 
       throw error;

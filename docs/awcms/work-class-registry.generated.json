@@ -237,6 +237,26 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/blog/institutions/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/institutions/[id]/purge.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/institutions/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/institutions/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/blog/internal-tag-links/settings.ts",
       "workClass": "interactive",
       "source": "default"

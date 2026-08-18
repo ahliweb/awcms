@@ -2,6 +2,7 @@ import { isValidSlug } from "./slug-policy";
 import {
   isTaxonomyType,
   validateTermParent,
+  TAXONOMY_TYPE_LIST,
   type TaxonomyType
 } from "./taxonomy-policy";
 import {
@@ -49,7 +50,7 @@ export type CreateBlogTermValidationResult =
   | { valid: true; value: CreateBlogTermInput }
   | { valid: false; errors: ValidationError[] };
 
-/** `POST /api/v1/blog/terms` (Issue #539). Doc issue #539 §Data Rules — Categories and Tags: a tag must reject `parentId` (`validateTermParent`), slug format matches posts/pages. */
+/** `POST /api/v1/blog/terms` (Issue #539). Doc issue #539 §Data Rules — Categories and Tags: a FLAT vocabulary must reject `parentId` (`validateTermParent`), slug format matches posts/pages. Since sql/131 the flat set is `tag` + `topic`, and the vocabulary itself is `category | tag | channel | topic`. */
 export function validateCreateBlogTermInput(
   body: unknown
 ): CreateBlogTermValidationResult {
@@ -59,7 +60,7 @@ export function validateCreateBlogTermInput(
   if (!isTaxonomyType(record.taxonomyType)) {
     errors.push({
       field: "taxonomyType",
-      message: "taxonomyType must be one of category, tag."
+      message: `taxonomyType must be one of ${TAXONOMY_TYPE_LIST}.`
     });
   }
 
@@ -151,8 +152,9 @@ export type UpdateBlogTermValidationResult =
  * validator (a pure function) does not have; the application layer
  * (`blog-taxonomy-directory.ts`'s `updateBlogTerm`) re-derives the
  * effective taxonomyType from the existing row before writing, and the
- * `awcms_blog_terms_tag_no_parent_check` DB constraint is the final
- * backstop either way.
+ * `awcms_blog_terms_flat_taxonomy_no_parent_check` DB constraint (renamed
+ * from `..._tag_no_parent_check` by sql/131, when `topic` became the second
+ * flat vocabulary) is the final backstop either way.
  */
 export function validateUpdateBlogTermInput(
   body: unknown
@@ -165,7 +167,7 @@ export function validateUpdateBlogTermInput(
     if (!isTaxonomyType(record.taxonomyType)) {
       errors.push({
         field: "taxonomyType",
-        message: "taxonomyType must be one of category, tag."
+        message: `taxonomyType must be one of ${TAXONOMY_TYPE_LIST}.`
       });
     } else {
       value.taxonomyType = record.taxonomyType;

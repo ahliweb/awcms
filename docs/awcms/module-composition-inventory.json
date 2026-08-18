@@ -28,8 +28,8 @@
           "optional": true
         }
       ],
-      "permissionCount": 41,
-      "navigationCount": 5,
+      "permissionCount": 47,
+      "navigationCount": 6,
       "jobCount": 3,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

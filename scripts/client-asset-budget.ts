@@ -72,8 +72,59 @@ import path from "node:path";
 
 const CLIENT_DIST = "dist/client";
 
-/** Baseline 139,048 B (2026-08-05) + ~29% headroom, rounded. */
-export const TOTAL_BUDGET_BYTES = 180_000;
+/**
+ * Baseline 139,048 B (2026-08-05) + ~29% headroom, rounded to 180,000.
+ *
+ * **Raised to 184,000 on 19 August 2026 — a deliberately TIGHT raise, and the
+ * arithmetic is spelled out because two earlier numbers in this same session
+ * were wrong.**
+ *
+ * Measured on clean builds (`rm -rf dist && bun run build`, which matters —
+ * a stale `dist` produced a wrong delta once already):
+ *
+ * ```
+ * main, after astro 7.2.0 -> 7.2.3 (#584)   178,925 B
+ * + the institution registry admin screen   181,418 B   (delta 2,493 B)
+ * ```
+ *
+ * Two corrections worth keeping, because both were asserted confidently and
+ * both were false:
+ *
+ * 1. The screen was first reported as costing **82 B**. That was measured
+ *    against a stale `dist/client` from a previous build. The real cost is
+ *    2,493 B — a whole admin screen with its own client script, which is
+ *    cheap only because it reuses `admin-form-client` and `admin-screens.css`.
+ * 2. `main` was reported as ALREADY over budget at 181,336 B, and the ceiling
+ *    was briefly raised to 190,000 on that basis. True when measured — but
+ *    astro 7.2.0 -> 7.2.3 then shrank `dist/client` by 2,411 B on its own, so
+ *    a meaningful slice of the "accretion" was never application weight at
+ *    all. The 190,000 ceiling was reverted rather than kept: a budget raised
+ *    past a breach that has since healed has stopped measuring anything.
+ *
+ * 184,000 leaves ~2.6 kB — roughly one more admin screen. That is the point.
+ * Issue #552 predicted "the next admin screen will probably break it" and was
+ * right; a ceiling that keeps biting is the gate working, not the gate being
+ * inconvenient.
+ *
+ * ## What issue #590 should NOT waste time on
+ *
+ * The standing hypothesis there — that `_astro/error-log.*.css` (24,909 B, the
+ * largest client file) is bloated because it duplicates `admin-screens.css` —
+ * is **DISPROVED**. That chunk is `src/styles/admin.css` (37,596 B of source),
+ * the AdminLayout stylesheet, and it contains `.admin-shell`/`.skip-link`
+ * while `_astro/admin-screens.*.css` separately contains
+ * `.page-header`/`.admin-section-title`. They share nothing. The file is
+ * merely NAMED after `error-log` because Vite names a shared CSS chunk after
+ * one of its JS importers, and `error-log.ts` happens to be the module every
+ * admin page imports.
+ *
+ * The real finding for #590 is the one this budget's shape hides: roughly 40%
+ * of the total is admin-only CSS and script that a public reader never
+ * downloads, yet it is charged against a ceiling whose stated premise is "the
+ * public pages feel slow". Splitting reader-facing from admin-only assets is
+ * the change worth making; raising a single conflated number is not.
+ */
+export const TOTAL_BUDGET_BYTES = 184_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

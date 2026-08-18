@@ -3912,3 +3912,63 @@ msgstr "Tidak tersedia pada deployment ini"
 
 msgid "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
 msgstr "Autentikasi dua faktor tidak tersedia pada deployment ini. Minta administrator mengaktifkannya."
+
+msgid "Add institution"
+msgstr "Tambah lembaga"
+
+msgid "All branches"
+msgstr "Semua cabang"
+
+msgid "All vocabularies"
+msgstr "Semua kosakata"
+
+msgid "Branch"
+msgstr "Cabang"
+
+msgid "Categories only — a tag or topic may not have a parent."
+msgstr "Hanya kategori — tag atau topik tidak boleh punya induk."
+
+msgid "Changing this changes the public landing-page URL. Record a redirect for the old one."
+msgstr "Mengubah ini mengubah URL halaman landing publik. Catat redirect untuk URL lama."
+
+msgid "Could not load institutions. Please try again."
+msgstr "Tidak dapat memuat lembaga. Silakan coba lagi."
+
+msgid "Create institution"
+msgstr "Buat lembaga"
+
+msgid "Deleted institutions"
+msgstr "Lembaga terhapus"
+
+msgid "Dotted code from the national region master, e.g. 62 or 62.71. Leave blank if the body is not tied to one region."
+msgstr "Kode bertitik dari master wilayah nasional, mis. 62 atau 62.71. Kosongkan bila lembaga tidak terikat pada satu wilayah."
+
+msgid "Edit institution"
+msgstr "Ubah lembaga"
+
+msgid "Institutions"
+msgstr "Lembaga"
+
+msgid "Institutions, by name."
+msgstr "Lembaga, berdasarkan nama."
+
+msgid "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
+msgstr "Lembaga legislatif dan eksekutif tempat artikel diarsipkan. Masing-masing punya halaman landing publik di slug-nya sendiri."
+
+msgid "Region code"
+msgstr "Kode wilayah"
+
+msgid "SEO description"
+msgstr "Deskripsi SEO"
+
+msgid "SEO title"
+msgstr "Judul SEO"
+
+msgid "Save institution"
+msgstr "Simpan lembaga"
+
+msgid "Showing the first 200 institutions by name. Filter by branch to narrow the list."
+msgstr "Menampilkan 200 lembaga pertama berdasarkan nama. Saring berdasarkan cabang untuk mempersempit daftar."
+
+msgid "You do not have permission to view the institution registry."
+msgstr "Anda tidak memiliki izin untuk melihat registri lembaga."
