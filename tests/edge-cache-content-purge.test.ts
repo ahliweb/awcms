@@ -182,7 +182,11 @@ describe("content write paths emit a purge", () => {
   test.each([
     ["src/pages/api/v1/blog/posts/[id].ts", 2],
     ["src/pages/api/v1/blog/posts/index.ts", 1],
-    ["src/modules/blog-content/application/blog-scheduled-publish.ts", 1],
+    // 2 since Issue #591: the publish sweep and the unpublish sweep each emit
+    // one. The second matters MORE than the first — a withdrawn article still
+    // sitting in the edge cache is the withdrawal not having happened, which is
+    // the failure an embargo exists to prevent.
+    ["src/modules/blog-content/application/blog-scheduled-publish.ts", 2],
     // `theming` owns the `theming-tokens` surface, so these three change what a
     // cached object contains. `news_portal` and `media_library` are absent on
     // purpose: they own no declared surface, so a ban keyed to them would match

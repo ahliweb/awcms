@@ -393,13 +393,30 @@ export function validateUpdateBlogPostInput(
 
 export type ScheduleBlogPostInput = {
   scheduledAt: Date;
+  /**
+   * Issue #591 — the optional closing edge of the publication window. Absent
+   * means "stays published until an editor archives it by hand", which is what
+   * every scheduled post did before this field existed.
+   */
+  unpublishAt: Date | null;
 };
 
 export type ScheduleBlogPostValidationResult =
   | { valid: true; value: ScheduleBlogPostInput }
   | { valid: false; errors: ValidationError[] };
 
-/** `POST /api/v1/blog/posts/{id}/schedule` body: `{ scheduledAt: <ISO 8601 datetime> }`, must be in the future. */
+/**
+ * `POST /api/v1/blog/posts/{id}/schedule` body:
+ * `{ scheduledAt: <ISO 8601 datetime>, unpublishAt?: <ISO 8601 datetime> | null }`.
+ *
+ * `scheduledAt` must be in the future. `unpublishAt`, when supplied, must be
+ * strictly after `scheduledAt` — a window that closes before it opens is not an
+ * exotic input, it is a typo an editor makes at the end of a shift, and the
+ * symptom would be an article that appears and vanishes on the next sweep with
+ * nothing on screen explaining why. Rejected here as a field error rather than
+ * left to `awcms_blog_posts_unpublish_after_publish_check`, which would surface
+ * as a raw constraint violation.
+ */
 export function validateScheduleBlogPostInput(
   body: unknown
 ): ScheduleBlogPostValidationResult {
@@ -435,7 +452,49 @@ export function validateScheduleBlogPostInput(
     };
   }
 
-  return { valid: true, value: { scheduledAt } };
+  if (record.unpublishAt === undefined || record.unpublishAt === null) {
+    return { valid: true, value: { scheduledAt, unpublishAt: null } };
+  }
+
+  if (typeof record.unpublishAt !== "string") {
+    return {
+      valid: false,
+      errors: [
+        {
+          field: "unpublishAt",
+          message: "unpublishAt must be an ISO 8601 datetime or null."
+        }
+      ]
+    };
+  }
+
+  const unpublishAt = new Date(record.unpublishAt);
+
+  if (Number.isNaN(unpublishAt.getTime())) {
+    return {
+      valid: false,
+      errors: [
+        {
+          field: "unpublishAt",
+          message: "unpublishAt must be a valid ISO 8601 datetime."
+        }
+      ]
+    };
+  }
+
+  if (unpublishAt.getTime() <= scheduledAt.getTime()) {
+    return {
+      valid: false,
+      errors: [
+        {
+          field: "unpublishAt",
+          message: "unpublishAt must be after scheduledAt."
+        }
+      ]
+    };
+  }
+
+  return { valid: true, value: { scheduledAt, unpublishAt } };
 }
 
 export type SoftDeleteBlogPostInput = DeleteReasonInput;

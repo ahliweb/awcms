@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 22    |
-| Migrations                          | 132   |
+| Migrations                          | 133   |
 | `awcms_*` tables                    | 150   |
 | Tables with `FORCE` RLS             | 132   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 399   |
+| Test files                          | 400   |
 | Route files                         | 366   |
 | ADR                                 | 200   |
 
@@ -179,6 +179,7 @@
 | 130 | `sql/130_awcms_principal_time_zone.sql`                            |
 | 131 | `sql/131_awcms_blog_content_classification_dimensions.sql`         |
 | 132 | `sql/132_awcms_blog_content_institution_permissions.sql`           |
+| 133 | `sql/133_awcms_blog_content_scheduled_unpublish.sql`               |
 
 ### Tables & Row-Level Security
 
@@ -339,7 +340,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 343        |
+| `(root)`      | 344        |
 | `e2e`         | 12         |
 | `integration` | 43         |
 | `unit`        | 1          |

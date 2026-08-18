@@ -310,3 +310,151 @@ export async function publishDueScheduledPosts(
     { workClass: "maintenance" }
   );
 }
+
+/** Same per-run bound and the same reasoning as `SCHEDULED_PUBLISH_BATCH_LIMIT`. */
+export const SCHEDULED_UNPUBLISH_BATCH_LIMIT = 200;
+
+export type UnpublishDuePostsResult = {
+  unpublishedCount: number;
+  unpublishedPostIds: string[];
+  /** `true` when this run filled the batch; the remainder is finished on the next run. */
+  partial: boolean;
+};
+
+type DueUnpublishRow = {
+  id: string;
+  slug: string;
+};
+
+/**
+ * Scheduled UNPUBLISHING (Issue #591) — the other half of `scheduled_at`.
+ *
+ * A post becomes due when `status = 'published' AND unpublish_at <= now()`, and
+ * the transition is to `archived` rather than `draft`. That choice is not
+ * cosmetic: `draft` says "unfinished work", and an embargoed article that ran
+ * its course is the opposite — it was finished, it was live, and it is now
+ * withdrawn. `archived` is also the status every public read path already
+ * excludes, so nothing downstream needs a new case.
+ *
+ * ## Why this lives in the SAME job, not a second cron entry
+ *
+ * Two job descriptors mean two schedules, and two schedules drift: an operator
+ * disables one, or a container ships with only one crontab line, and posts
+ * publish forever while nothing ever withdraws them. That failure is invisible
+ * — the site looks like it is working. One command doing both sweeps cannot
+ * half-run.
+ *
+ * ## What it deliberately does NOT do
+ *
+ * No content quality checklist. The publish sweep gates on it because
+ * publishing exposes content to readers and the checklist is what stands
+ * between a reader and a broken article. Withdrawing content exposes nobody,
+ * and a checklist that could BLOCK a withdrawal would hold an expired embargo
+ * open on the strength of a missing alt text — the exact inversion of what the
+ * gate is for.
+ *
+ * Idempotent by construction: the `WHERE` matches only `published` rows, so a
+ * re-run finds the already-archived post gone from the batch. Nothing is
+ * written twice and no audit event is duplicated.
+ */
+export async function unpublishDuePosts(
+  sql: Bun.SQL,
+  tenantId: string,
+  options: PublishDueScheduledPostsOptions = {}
+): Promise<UnpublishDuePostsResult> {
+  const now = options.now ?? new Date();
+  const correlationId = options.correlationId;
+
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const due = (await tx`
+        SELECT id, slug
+        FROM awcms_blog_posts
+        WHERE tenant_id = ${tenantId} AND status = 'published'
+          AND unpublish_at IS NOT NULL AND unpublish_at <= ${now}
+          AND deleted_at IS NULL
+        ORDER BY unpublish_at ASC
+        LIMIT ${SCHEDULED_UNPUBLISH_BATCH_LIMIT}
+        FOR UPDATE SKIP LOCKED
+      `) as DueUnpublishRow[];
+
+      const partial = due.length === SCHEDULED_UNPUBLISH_BATCH_LIMIT;
+      const unpublishedPostIds: string[] = [];
+
+      for (const post of due) {
+        await tx`
+          UPDATE awcms_blog_posts
+          SET status = 'archived',
+              version = version + 1,
+              updated_at = ${now}
+          WHERE tenant_id = ${tenantId} AND id = ${post.id}
+        `;
+
+        unpublishedPostIds.push(post.id);
+
+        await recordAuditEvent(tx, {
+          tenantId,
+          moduleKey: "blog_content",
+          action: "blog.post.unpublished",
+          resourceType: "blog_post",
+          resourceId: post.id,
+          // `warning`, not `info`: content LEAVING the public surface without a
+          // human in the loop is the kind of event an operator should be able
+          // to find when a reader asks where an article went.
+          severity: "warning",
+          message: `Blog post unpublished by schedule: ${post.slug}.`,
+          correlationId
+        });
+
+        log("info", "blog-content.post.unpublished", {
+          correlationId,
+          tenantId,
+          moduleKey: "blog_content",
+          postId: post.id,
+          slug: post.slug,
+          trigger: "scheduled_unpublish"
+        });
+      }
+
+      // `unpublish_at` is deliberately LEFT SET rather than nulled the way
+      // `scheduled_at` is cleared on publish. The two are not symmetric:
+      // `scheduled_at` describes an intent that has been carried out and would
+      // re-fire if kept, whereas `unpublish_at` is the RECORD of why this post
+      // is archived — clearing it would erase the only trace distinguishing
+      // "withdrawn on schedule" from "an editor archived it", and the CHECK
+      // keeps it consistent if the post is ever republished with a new window.
+      if (unpublishedPostIds.length > 0) {
+        // ADR-0042 — same transaction as the transition, so a rollback leaves
+        // no stray purge and a commit cannot lose its invalidation. This is the
+        // half that matters most: a withdrawn article still sitting in the edge
+        // cache is the withdrawal not happening.
+        await enqueueModuleContentPurge(
+          tx,
+          tenantId,
+          "blog_content",
+          "blog.post.unpublished"
+        );
+      }
+
+      await recordAuditEvent(tx, {
+        tenantId,
+        moduleKey: "blog_content",
+        action: "blog.post.scheduled_unpublish_executed",
+        resourceType: "blog_post",
+        severity: "info",
+        message: `Scheduled unpublish ran: ${unpublishedPostIds.length} post(s) withdrawn.`,
+        attributes: { unpublishedCount: unpublishedPostIds.length },
+        correlationId
+      });
+
+      return {
+        unpublishedCount: unpublishedPostIds.length,
+        unpublishedPostIds,
+        partial
+      };
+    },
+    { workClass: "maintenance" }
+  );
+}

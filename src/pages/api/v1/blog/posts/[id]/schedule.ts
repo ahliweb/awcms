@@ -45,7 +45,16 @@ const SCHEDULE_GUARD = {
 
 const IDEMPOTENCY_SCOPE = "blog_post_schedule";
 
-/** `POST /api/v1/blog/posts/{id}/schedule` (Issue #538). Body: `{ scheduledAt: <ISO 8601 datetime, future> }`. High-risk mutation: requires `Idempotency-Key`. */
+/**
+ * `POST /api/v1/blog/posts/{id}/schedule` (Issue #538). Body:
+ * `{ scheduledAt: <ISO 8601 datetime, future>, unpublishAt?: <ISO 8601 datetime> | null }`.
+ * High-risk mutation: requires `Idempotency-Key`.
+ *
+ * `unpublishAt` (Issue #591) closes the publication window. It is carried in
+ * the idempotency request hash alongside `scheduledAt`, so re-sending the same
+ * key with a DIFFERENT withdrawal date is a 409 rather than a silent no-op —
+ * two different windows are two different requests.
+ */
 export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
   const postId = params.id;
@@ -90,11 +99,12 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     );
   }
 
-  const { scheduledAt } = validation.value;
+  const { scheduledAt, unpublishAt } = validation.value;
   const requestHash = computeRequestHash({
     postId,
     action: "schedule",
-    scheduledAt: scheduledAt.toISOString()
+    scheduledAt: scheduledAt.toISOString(),
+    unpublishAt: unpublishAt?.toISOString() ?? null
   });
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -204,7 +214,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tenantId,
       postId,
       "scheduled",
-      { scheduledAt }
+      { scheduledAt, unpublishAt }
     );
 
     if (!updated) {
@@ -220,7 +230,10 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       resourceId: postId,
       severity: "info",
       message: `Blog post scheduled: ${updated.slug}.`,
-      attributes: { scheduledAt: scheduledAt.toISOString() },
+      attributes: {
+        scheduledAt: scheduledAt.toISOString(),
+        unpublishAt: unpublishAt?.toISOString() ?? null
+      },
       correlationId
     });
 
@@ -230,7 +243,8 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       moduleKey: "blog_content",
       postId,
       slug: updated.slug,
-      scheduledAt: scheduledAt.toISOString()
+      scheduledAt: scheduledAt.toISOString(),
+      unpublishAt: unpublishAt?.toISOString() ?? null
     });
 
     const successResponse = ok({ ...updated, qualityChecklist: checklist });
