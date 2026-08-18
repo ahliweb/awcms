@@ -6,6 +6,7 @@ import {
   checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
+import { parsePositiveIntSetting } from "../../../../lib/security/env-thresholds";
 import {
   bodyTooLargeResponse,
   readJsonBody
@@ -26,9 +27,19 @@ import { bootstrapPlatformTenant } from "../../../../modules/tenant-admin/applic
  * Cloudflare siteverify round-trips (and multi-row bootstrap attempts) an
  * unauthenticated caller can drive on a full-online deployment.
  */
-const SETUP_RATE_LIMIT_MAX = Number(process.env.SETUP_RATE_LIMIT_MAX ?? 10);
-const SETUP_RATE_LIMIT_WINDOW_SEC = Number(
-  process.env.SETUP_RATE_LIMIT_WINDOW_SEC ?? 60
+// The highest-value of the three: this endpoint bootstraps a tenant, office and
+// owner for an UNAUTHENTICATED caller, and the rate limit is the only thing
+// bounding how many Cloudflare siteverify round-trips and multi-row bootstrap
+// attempts one caller can drive. A `NaN` ceiling removes that bound entirely.
+const SETUP_RATE_LIMIT_MAX = parsePositiveIntSetting(
+  process.env.SETUP_RATE_LIMIT_MAX,
+  10,
+  "SETUP_RATE_LIMIT_MAX"
+);
+const SETUP_RATE_LIMIT_WINDOW_SEC = parsePositiveIntSetting(
+  process.env.SETUP_RATE_LIMIT_WINDOW_SEC,
+  60,
+  "SETUP_RATE_LIMIT_WINDOW_SEC"
 );
 
 /**
