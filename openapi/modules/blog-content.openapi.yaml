@@ -391,6 +391,17 @@ paths:
                 scheduledAt:
                   type: string
                   format: date-time
+                unpublishAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: >-
+                    Issue #591 — closes the publication window. When the moment
+                    arrives, blog:publish:scheduled transitions the post to
+                    archived. Must be strictly after scheduledAt; omitted or null
+                    means the post stays published until an editor archives it by
+                    hand. Carried in the idempotency request hash, so replaying a
+                    key with a different withdrawal date is a 409, not a no-op.
       responses:
         "200":
           description: Post scheduled (or an idempotent replay).
@@ -3111,6 +3122,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        unpublishAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Issue #591 — when the scheduled-publish job archives this post. Null = stays published until archived by hand.
         createdAt:
           type: string
           format: date-time

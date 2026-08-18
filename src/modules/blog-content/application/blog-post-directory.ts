@@ -83,6 +83,7 @@ export type BlogPostView = {
   locale: string;
   publishedAt: Date | null;
   scheduledAt: Date | null;
+  unpublishAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -124,6 +125,7 @@ type BlogPostRow = {
   locale: string;
   published_at: Date | null;
   scheduled_at: Date | null;
+  unpublish_at: Date | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -156,6 +158,7 @@ function toView(row: BlogPostRow): BlogPostView {
     locale: row.locale,
     publishedAt: row.published_at,
     scheduledAt: row.scheduled_at,
+    unpublishAt: row.unpublish_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -191,7 +194,7 @@ export async function createBlogPost(
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
   `) as BlogPostRow[];
@@ -216,7 +219,7 @@ export async function fetchBlogPostById(
         SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
         FROM awcms_blog_posts
@@ -226,7 +229,7 @@ export async function fetchBlogPostById(
         SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
         FROM awcms_blog_posts
@@ -382,7 +385,7 @@ export async function listBlogPostsFullPage(
     SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id,
       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
@@ -493,7 +496,7 @@ export async function updateBlogPost(
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
   `) as BlogPostRow[];
@@ -521,6 +524,12 @@ export async function softDeleteBlogPost(
 
 export type TransitionBlogPostStatusOptions = {
   scheduledAt?: Date;
+  /**
+   * Issue #591. `undefined` leaves the stored value alone; an explicit `null`
+   * clears it. The distinction matters: publishing a post must not silently
+   * discard a withdrawal date an editor set while scheduling it.
+   */
+  unpublishAt?: Date | null;
 };
 
 /**
@@ -545,13 +554,22 @@ export async function transitionBlogPostStatus(
           WHEN ${toStatus !== "scheduled"} THEN NULL
           ELSE scheduled_at
         END,
+        -- Deliberately NOT cleared on a transition the way scheduled_at is.
+        -- scheduled_at describes an intent that has been carried out and would
+        -- re-fire if kept; unpublish_at describes a window that is still open,
+        -- and dropping it when the post publishes would silently cancel the
+        -- withdrawal the editor set at the same moment.
+        unpublish_at = CASE
+          WHEN ${options.unpublishAt === undefined} THEN unpublish_at
+          ELSE ${options.unpublishAt ?? null}
+        END,
         version = version + 1,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
   `) as BlogPostRow[];
@@ -573,7 +591,7 @@ export async function restoreBlogPost(
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
-      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id
   `) as BlogPostRow[];
