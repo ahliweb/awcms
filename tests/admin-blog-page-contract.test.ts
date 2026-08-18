@@ -154,10 +154,13 @@ describe("/admin/blog permission gates", () => {
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
     // 43 until ADR-0058 §C/§D revoked `seo.configure` and `posts.export`
-    // (`sql/089`). The number is pinned rather than derived so that a
-    // permission appearing or vanishing has to be a decision someone edits
-    // this line for.
-    expect(declared.size).toBe(41);
+    // (`sql/089`), leaving 41. Now 47: sql/131-132 added the institution
+    // registry, whose six actions (`read`/`create`/`update`/`delete`/
+    // `restore`/`purge`) are gated separately from `taxonomies.*` because an
+    // institution owns a public landing page with its own SEO metadata. The
+    // number is pinned rather than derived so that a permission appearing or
+    // vanishing has to be a decision someone edits this line for.
+    expect(declared.size).toBe(47);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
@@ -386,9 +389,12 @@ describe("/admin/blog permission gates", () => {
       (module) => module.key === "blog_content"
     )?.navigation;
 
-    expect(navigation).toHaveLength(5);
+    // 6 since sql/131: `/admin/blog-institutions` joined posts, pages,
+    // taxonomy, presentation and settings.
+    expect(navigation).toHaveLength(6);
     expect(navigation?.map((entry) => entry.path).sort()).toEqual([
       "/admin/blog",
+      "/admin/blog-institutions",
       "/admin/blog-pages",
       "/admin/blog-presentation",
       "/admin/blog-settings",

@@ -15,7 +15,11 @@ import {
 import { validateSeoFields } from "../src/modules/blog-content/domain/seo-validation";
 import {
   isTaxonomyType,
-  validateTermParent
+  isFlatTaxonomyType,
+  validateTermParent,
+  FLAT_TAXONOMY_TYPES,
+  TAXONOMY_TYPES,
+  TAXONOMY_TYPE_LIST
 } from "../src/modules/blog-content/domain/taxonomy-policy";
 import { isSignificantContentChange } from "../src/modules/blog-content/domain/revision-policy";
 
@@ -203,10 +207,34 @@ describe("validateSeoFields", () => {
 });
 
 describe("taxonomy-policy", () => {
-  test("isTaxonomyType recognizes category and tag only", () => {
+  test("isTaxonomyType recognizes the four vocabularies and nothing else", () => {
     expect(isTaxonomyType("category")).toBe(true);
     expect(isTaxonomyType("tag")).toBe(true);
+    // sql/131 — PRD LenteraKalteng §8.5 needs channel and topic as dimensions
+    // distinct from category/tag.
+    expect(isTaxonomyType("channel")).toBe(true);
+    expect(isTaxonomyType("topic")).toBe(true);
     expect(isTaxonomyType("bogus")).toBe(false);
+    // Institution and region are deliberately NOT taxonomy types — the first
+    // is its own table (it carries a branch, a region code and landing SEO),
+    // the second references the idn_admin_regions master by code (PRD §12.3).
+    expect(isTaxonomyType("institution")).toBe(false);
+    expect(isTaxonomyType("region")).toBe(false);
+  });
+
+  test("TAXONOMY_TYPES and TAXONOMY_TYPE_LIST stay in step", () => {
+    // The message rendered to API callers is derived, not retyped: when this
+    // enum widened, a hard-coded "one of category, tag" would have kept
+    // telling callers that channel is invalid while the validator accepted it.
+    expect(TAXONOMY_TYPE_LIST).toBe(TAXONOMY_TYPES.join(", "));
+    expect(TAXONOMY_TYPE_LIST).toContain("channel");
+  });
+
+  test("every FLAT_TAXONOMY_TYPES member is a real taxonomy type", () => {
+    for (const type of FLAT_TAXONOMY_TYPES) {
+      expect(isTaxonomyType(type)).toBe(true);
+      expect(isFlatTaxonomyType(type)).toBe(true);
+    }
   });
 
   test("rejects a tag with a parentId", () => {
@@ -217,8 +245,28 @@ describe("taxonomy-policy", () => {
     }
   });
 
+  test("rejects a topic with a parentId", () => {
+    // The regression this guards: `validateTermParent` used to compare against
+    // the literal "tag". Under that version a nested topic passed validation
+    // and only failed at the database, surfacing as a raw constraint violation
+    // instead of a field-level error.
+    const result = validateTermParent("topic", "term-1", "term-2");
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors[0]?.field).toBe("parentId");
+      expect(result.errors[0]?.message).toContain("topic");
+    }
+  });
+
   test("allows a category with a distinct parentId", () => {
     const result = validateTermParent("category", "term-1", "term-2");
+    expect(result.valid).toBe(true);
+  });
+
+  test("allows a channel with a distinct parentId", () => {
+    // Channels are primary navigation and a second level (Olahraga -> Sepak
+    // Bola) is a real editorial possibility, so they are NOT flat.
+    const result = validateTermParent("channel", "term-1", "term-2");
     expect(result.valid).toBe(true);
   });
 

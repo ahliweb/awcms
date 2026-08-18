@@ -114,9 +114,20 @@ export const blogContentModule = defineModule({
       requiredPermission: "blog_content.taxonomies.read"
     },
     {
+      // Its own entry rather than a tab on `/admin/blog-taxonomy`: an
+      // institution is not a term (it carries a branch, a region code and its
+      // own landing SEO), and its five actions are gated on a separate
+      // activity — so an operator holding `taxonomies.read` and nothing else
+      // must not be shown a screen every control of which will 403.
+      labelKey: "admin.layout.nav_blog_institutions",
+      path: "/admin/blog-institutions",
+      order: 39,
+      requiredPermission: "blog_content.institutions.read"
+    },
+    {
       labelKey: "admin.layout.nav_blog_presentation",
       path: "/admin/blog-presentation",
-      order: 39,
+      order: 40,
       requiredPermission: "blog_content.templates.read"
     },
     {
@@ -126,7 +137,7 @@ export const blogContentModule = defineModule({
       // and sitemap are served at all.
       labelKey: "admin.layout.nav_blog_settings",
       path: "/admin/blog-settings",
-      order: 40,
+      order: 41,
       requiredPermission: "blog_content.settings.read"
     }
   ],
@@ -215,12 +226,54 @@ export const blogContentModule = defineModule({
     {
       activityCode: "taxonomies",
       action: "read",
-      description: "Read blog categories and tags"
+      description: "Read blog categories, tags, channels and topics"
     },
     {
       activityCode: "taxonomies",
       action: "configure",
-      description: "Create, update, or delete blog categories and tags"
+      description:
+        "Create, update, or delete blog categories, tags, channels and topics"
+    },
+    // Institutions are gated separately from `taxonomies` on purpose (sql/132):
+    // an institution owns a public landing page with its own SEO title and
+    // description, so `institutions.update` is the power to rewrite what search
+    // engines index for thirty pages. Folding it into `taxonomies.configure`
+    // would hand that to everyone allowed to fix a tag's spelling, with no
+    // grantable way to separate the two afterwards.
+    {
+      activityCode: "institutions",
+      action: "read",
+      description:
+        "Read this tenant's institution registry (the legislative/executive bodies articles are filed against)"
+    },
+    {
+      activityCode: "institutions",
+      action: "create",
+      description:
+        "Register a new institution, including the slug its public landing page is served at"
+    },
+    {
+      activityCode: "institutions",
+      action: "update",
+      description:
+        "Update an institution — including its landing-page SEO title/description, which changes what search engines index"
+    },
+    {
+      activityCode: "institutions",
+      action: "delete",
+      description:
+        "Soft-delete an institution; its slug is released and its articles keep their other classifications"
+    },
+    {
+      activityCode: "institutions",
+      action: "restore",
+      description: "Restore a soft-deleted institution"
+    },
+    {
+      activityCode: "institutions",
+      action: "purge",
+      description:
+        "Permanently remove a soft-deleted institution and every article link pointing at it — irreversible, audited at critical severity"
     },
     {
       activityCode: "revisions",
@@ -403,6 +456,122 @@ export const blogContentModule = defineModule({
    * stamp. Exporting the second kind would hand a subject the tenant's whole
    * content catalogue because they once tidied it.
    */
+  /**
+   * ADR-0037 (`data_lifecycle`). `blog_content` had no `dataLifecycle` array
+   * until sql/131 added the institution registry: every table it owned before
+   * that predates the rule and sits on the coverage gate's legacy ledger.
+   *
+   * Both descriptors are `delegated` rather than `generic`, and that is the
+   * whole point of them. `generic` is age-only with no status predicate, so it
+   * would delete an institution for being OLD — DPRD Kalteng, created once,
+   * correct ever since, referenced by thousands of archived articles. What
+   * removes a row here is an operator purging one they already soft-deleted,
+   * which is a decision, not an age.
+   */
+  dataLifecycle: [
+    {
+      key: "blog_content.blog_institutions",
+      tableName: "awcms_blog_institutions",
+      ownerModuleKey: "blog_content",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "system_event",
+      // The window describes how long a SOFT-DELETED institution stays
+      // restorable before an operator may purge it — not how long a live one
+      // lives, which is forever. Wide, because the mistake this protects
+      // against ("we dissolved the wrong body") is often noticed only when an
+      // old article's landing page 404s.
+      retentionMinDays: 30,
+      retentionMaxDays: 3650,
+      defaultRetentionDays: 365,
+      partition: {
+        eligible: false,
+        rationale:
+          "Bounded by how many legislative and executive bodies exist in the tenant's coverage area — thirty for the province this landed for. Partitioning a table that will not reach four figures would add operational surface with nothing to show for it."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The row is a label for a public institution: a name, a branch, a region code and landing-page copy, all of it reconstructible from the tenant's own published pages. Archiving it would preserve nothing that the articles referencing it do not already say."
+      },
+      deletion: {
+        mode: "status_transition_then_purge",
+        rationale:
+          "Exactly the two phases the endpoints implement: DELETE /api/v1/blog/institutions/{id} sets deleted_at (reversible, slug released), then POST .../purge physically removes the row. purgeInstitution refuses a row whose deleted_at IS NULL, so the transition is not merely conventional — it is in the statement's predicate."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id"],
+          purpose:
+            "awcms_blog_institutions_tenant_idx (sql/131) — the tenant predicate every read and the purge share."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). A purge is irreversible outside a restore, which is why the endpoint requires a prior soft delete and audits at critical severity.",
+      executionMode: "delegated",
+      existingAdopter: {
+        purgeFunctionRef:
+          "src/modules/blog-content/application/institution-directory.ts#purgeInstitution",
+        description:
+          "Operator-driven, not scheduled: POST /api/v1/blog/institutions/{id}/purge (gated by blog_content.institutions.purge, Idempotency-Key required) deletes the awcms_blog_post_institutions rows pointing at the institution and then the institution itself, refusing any row that is not already soft-deleted. There is deliberately no cron job — an institution has no expiry, and a scheduled sweep would delete a correct row for being old."
+      }
+    },
+    {
+      key: "blog_content.blog_post_institutions",
+      tableName: "awcms_blog_post_institutions",
+      ownerModuleKey: "blog_content",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "system_event",
+      // Inherited, not independent: a link lives exactly as long as the post or
+      // the institution it joins. The numbers mirror the institution
+      // descriptor so the pair cannot be read as two different policies.
+      retentionMinDays: 30,
+      retentionMaxDays: 3650,
+      defaultRetentionDays: 365,
+      partition: {
+        eligible: false,
+        rationale:
+          "Bounded by its parent: at most one row per (post, institution) pair, enforced by awcms_blog_post_institutions_unique, and written only by a full-replace sync so editing a post cannot accumulate rows."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "Two ids and a timestamp. The post carries the byline and the institution carries the name; a join row archived without both is not readable as anything."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "There is no intermediate state to transition through — the row is removed outright when either parent goes, by the same statement that removes the parent."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id"],
+          purpose:
+            "awcms_blog_post_institutions_tenant_idx (sql/131); the two directional lookups are served by awcms_blog_post_institutions_post_idx and _institution_idx, which are also what the two purge statements below use."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore. Restoring a post or an institution without this table restores an article that has silently lost its institution classification, which is why it is never archived or restored separately.",
+      executionMode: "delegated",
+      existingAdopter: {
+        purgeFunctionRef:
+          "src/modules/blog-content/application/blog-post-directory.ts#purgeBlogPost",
+        description:
+          "TWO adopters, because this table has two parents. purgeBlogPost deletes the rows for a post before deleting the post; purgeInstitution (institution-directory.ts) deletes the rows for an institution before deleting the institution. Both DELETEs are load-bearing rather than tidy — each parent column is a real foreign key, so skipping either does not orphan rows, it makes the parent DELETE fail."
+      }
+    }
+  ],
   subjectData: [
     {
       key: "blog_content.blog_posts",
@@ -572,6 +741,27 @@ export const blogContentModule = defineModule({
       erasure: "retain_under_obligation",
       rationale:
         "Which ad appears in which slot. A join row between an ad and a placement target, carrying no author and no viewer."
+    },
+    {
+      key: "blog_content.blog_institutions",
+      tableName: "awcms_blog_institutions",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The legislative and executive bodies articles are filed against — public institutions, not people. `name` is an organisation's name and `seo_title`/`seo_description` are landing-page copy about that organisation; the deletion stamp is its only link to anybody."
+    },
+    {
+      key: "blog_content.blog_post_institutions",
+      tableName: "awcms_blog_post_institutions",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The join between a post and the institutions it names. Two ids and a timestamp; the post carries the byline and answers for it — the same position `blog_content.blog_post_terms` takes."
     },
     {
       key: "blog_content.blog_post_terms",

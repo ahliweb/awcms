@@ -146,8 +146,15 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
         );
       }
 
-      if (message.includes("awcms_blog_terms_tag_no_parent_check")) {
-        return fail(400, "VALIDATION_ERROR", "A tag must not have a parentId.");
+      // See the sibling comment in `terms/index.ts`: matched on the shared
+      // `no_parent_check` suffix so the handler spans both the pre- and
+      // post-sql/131 constraint names.
+      if (message.includes("no_parent_check")) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "A flat taxonomy type (tag, topic) must not have a parentId."
+        );
       }
 
       throw error;

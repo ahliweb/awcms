@@ -3925,3 +3925,63 @@ msgstr ""
 
 msgid "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
 msgstr ""
+
+msgid "Add institution"
+msgstr ""
+
+msgid "All branches"
+msgstr ""
+
+msgid "All vocabularies"
+msgstr ""
+
+msgid "Branch"
+msgstr ""
+
+msgid "Categories only — a tag or topic may not have a parent."
+msgstr ""
+
+msgid "Changing this changes the public landing-page URL. Record a redirect for the old one."
+msgstr ""
+
+msgid "Could not load institutions. Please try again."
+msgstr ""
+
+msgid "Create institution"
+msgstr ""
+
+msgid "Deleted institutions"
+msgstr ""
+
+msgid "Dotted code from the national region master, e.g. 62 or 62.71. Leave blank if the body is not tied to one region."
+msgstr ""
+
+msgid "Edit institution"
+msgstr ""
+
+msgid "Institutions"
+msgstr ""
+
+msgid "Institutions, by name."
+msgstr ""
+
+msgid "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
+msgstr ""
+
+msgid "Region code"
+msgstr ""
+
+msgid "SEO description"
+msgstr ""
+
+msgid "SEO title"
+msgstr ""
+
+msgid "Save institution"
+msgstr ""
+
+msgid "Showing the first 200 institutions by name. Filter by branch to narrow the list."
+msgstr ""
+
+msgid "You do not have permission to view the institution registry."
+msgstr ""

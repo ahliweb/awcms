@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:c5be5c3c01ec19c8516df22e6e7cf8756381b36e291acab2e217ca339e61c1e6 -->
+<!-- i18n-source-hash: sha256:103b468786721f3b27d5d9863ea7a8cae52d4fc9b622051b63119c074d753812 -->
 
 # Blog Content
 
@@ -66,7 +66,7 @@ Migration 052 (Issue #641, epic `news_portal`) menambah 3 permission lagi: `inte
 - `page-type.ts` (Issue #539) — enum `PageType` (`standard | landing | legal | system`) + `isPageType`.
 - `slug-policy.ts` — `isValidSlug` (format) + `slugify` (derivasi dari title; pemanggil tetap wajib cek keunikan sendiri).
 - `seo-validation.ts` — `validateSeoFields` (`seoTitle` ≤70 char, `metaDescription` ≤160 char, `canonicalUrl` harus URL http(s) absolut).
-- `taxonomy-policy.ts` — `validateTermParent` (tag tidak boleh punya parent, term tidak boleh jadi parent dirinya sendiri) — pre-check aplikasi sebelum constraint DB `awcms_blog_terms_tag_no_parent_check` tersentuh.
+- `taxonomy-policy.ts` — `validateTermParent` (vocabulary DATAR — `tag` atau `topic` — tidak boleh punya parent, term tidak boleh jadi parent dirinya sendiri) — pre-check aplikasi sebelum constraint DB `awcms_blog_terms_flat_taxonomy_no_parent_check` tersentuh. Sejak sql/131 vocabulary-nya `category | tag | channel | topic` (PRD LenteraKalteng §8.5).
 - `content-access-policy.ts` (Issue #539) — `evaluateContentUpdateAccess`, generic ABAC ownership override (lihat §ABAC di bawah) diekstrak dari `post-access-policy.ts` Issue #538 supaya `page-access-policy.ts` bisa memakai ulang logic yang sama persis, bukan duplikat. `post-access-policy.ts`/`page-access-policy.ts` sekarang jadi thin wrapper yang mengunci `updateGuard` masing-masing (`blog_content.posts.update` / `.pages.update`).
 - `blog-post-validation.ts` — `validateCreateBlogPostInput`/`validateUpdateBlogPostInput`/`validateScheduleBlogPostInput`/`validateSoftDeleteBlogPostInput`. Issue #539 menambah `termIds?: string[]` (validasi bentuk saja — array UUID, dedup; eksistensi per-tenant dicek di application layer).
 - `blog-page-validation.ts` (Issue #539) — sama strukturnya seperti `blog-post-validation.ts`, plus `pageType`/`parentPageId` (menolak diri sendiri sebagai parent)/`menuOrder` (integer ≥0).

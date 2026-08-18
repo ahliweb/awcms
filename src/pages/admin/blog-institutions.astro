@@ -1,0 +1,736 @@
+---
+/**
+ * `/admin/blog-institutions` — the institution registry console
+ * (PRD LenteraKalteng §12.2, migration sql/131).
+ *
+ * An institution is the legislative or executive body an article is filed
+ * against. It is deliberately NOT a taxonomy term, so it is deliberately not
+ * on `/admin/blog-taxonomy`: it carries a branch, a region code from the
+ * national master, and the SEO title/description of a public landing page.
+ * Those last two are why the five actions here are gated on
+ * `blog_content.institutions.*` rather than on `taxonomies.configure` — see
+ * sql/132's header for the blast-radius argument.
+ *
+ * ## The two views
+ *
+ * `?deleted=1` switches the table from live rows to soft-deleted ones. That
+ * switch is what makes `institutions.restore` reachable at all: an institution
+ * nobody can list is an institution nobody can restore, and the permission
+ * would have been a declaration with no screen behind it.
+ *
+ * ## Idempotency
+ *
+ * Exactly ONE request from this screen carries an `Idempotency-Key`: purge.
+ * Create is protected by the slug unique index, and restore is idempotent by
+ * construction (its UPDATE only matches a currently-deleted row), so for those
+ * the header would imply a replay contract the routes never offered — the same
+ * conclusion `/admin/blog-taxonomy` reaches. Purge is the exception: the row is
+ * gone after the first call, so a replay cannot tell "already done" from "never
+ * existed", and those two deserve different answers.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes
+ * is the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  listInstitutions,
+  type InstitutionView
+} from "../../modules/blog-content/application/institution-directory";
+import {
+  isInstitutionBranch,
+  INSTITUTION_BRANCHES,
+  type InstitutionBranch
+} from "../../modules/blog-content/domain/institution-validation";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const branchRaw = readParam("branch");
+// An unknown value is dropped rather than forwarded: a hand-edited query
+// string must not turn this screen into an error page.
+const branchFilter: InstitutionBranch | undefined = isInstitutionBranch(
+  branchRaw
+)
+  ? branchRaw
+  : undefined;
+
+const showDeleted = readParam("deleted") === "1";
+
+/** `?edit=<id>` opens the edit form for one institution, below the table. */
+const editingId = readParam("edit");
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "institutions",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    institutions: await listInstitutions(tx, ssr.tenantId, {
+      branch: branchFilter,
+      deleted: showDeleted
+    }),
+    canCreate: await can({
+      moduleKey: "blog_content",
+      activityCode: "institutions",
+      action: "create"
+    }),
+    canUpdate: await can({
+      moduleKey: "blog_content",
+      activityCode: "institutions",
+      action: "update"
+    }),
+    canDelete: await can({
+      moduleKey: "blog_content",
+      activityCode: "institutions",
+      action: "delete"
+    }),
+    canRestore: await can({
+      moduleKey: "blog_content",
+      activityCode: "institutions",
+      action: "restore"
+    }),
+    canPurge: await can({
+      moduleKey: "blog_content",
+      activityCode: "institutions",
+      action: "purge"
+    })
+  }),
+  onError: (error) => {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has no institutions".
+    logAdminPageError(
+      "admin/blog-institutions.astro: failed to load institutions",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const institutions: InstitutionView[] =
+  screen.state === "allowed" ? screen.data.institutions : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
+const canPurge = screen.state === "allowed" && screen.data.canPurge;
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString() : "—";
+}
+
+/** Rebuilds the current query string with keys replaced — keeps the filters across links. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query
+    ? `/admin/blog-institutions?${query}`
+    : "/admin/blog-institutions";
+}
+
+const editing = editingId
+  ? (institutions.find((entry) => entry.id === editingId) ?? null)
+  : null;
+
+// Live rows offer Edit + Delete; the deleted view offers Restore only. Editing
+// a soft-deleted row would write through `updateInstitution`, whose UPDATE
+// filters on `deleted_at IS NULL` and would silently match nothing.
+const showsRowActions = showDeleted
+  ? canRestore || canPurge
+  : canUpdate || canDelete;
+const columnCount = 6 + (showsRowActions ? 1 : 0);
+const hasFilter = branchFilter !== undefined;
+---
+
+<AdminLayout title="Institutions">
+  <header class="page-header fade-in-up">
+    <h1 id="institutions-heading">{t("Institutions")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    screen.state === "denied" && (
+      <p class="state-notice" id="institutions-denied">
+        {t("You do not have permission to view the institution registry.")}
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice" id="institutions-error">
+        {t("Could not load institutions. Please try again.")}
+      </p>
+    )
+  }
+
+  <p class="form-error" id="institution-action-error" hidden></p>
+
+  {
+    canRead && !loadError && (
+      <form
+        method="get"
+        class="admin-toolbar fade-in-up"
+        id="institution-filter-form"
+      >
+        <label for="filter-branch">{t("Branch")}</label>
+        <select id="filter-branch" name="branch">
+          <option value="" selected={branchFilter === undefined}>
+            {t("All branches")}
+          </option>
+          {INSTITUTION_BRANCHES.map((branch) => (
+            <option value={branch} selected={branchFilter === branch}>
+              {t(branch)}
+            </option>
+          ))}
+        </select>
+
+        <label for="filter-deleted">{t("Show")}</label>
+        <select id="filter-deleted" name="deleted">
+          <option value="" selected={!showDeleted}>
+            {t("Active")}
+          </option>
+          <option value="1" selected={showDeleted}>
+            {t("Deleted")}
+          </option>
+        </select>
+
+        <button type="submit">{t("Apply filter")}</button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="institution-list-title"
+      >
+        <h2 class="admin-section-title" id="institution-list-title">
+          {showDeleted ? t("Deleted institutions") : t("Institutions")}
+          <span class="count-pill">{institutions.length}</span>
+        </h2>
+
+        {/* Bounded read, and the screen says so rather than implying the
+            tenant has no more. `listInstitutions` is LIMIT 200. */}
+        {institutions.length === 200 && (
+          <p class="state-notice" id="institutions-truncated">
+            {t(
+              "Showing the first 200 institutions by name. Filter by branch to narrow the list."
+            )}
+          </p>
+        )}
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="blog-institutions-table"
+          >
+            <caption class="sr-only">{t("Institutions, by name.")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Branch")}</th>
+                <th scope="col">{t("Region code")}</th>
+                <th scope="col">{t("SEO title")}</th>
+                <th scope="col">{t("Description")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {showsRowActions && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {institutions.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={columnCount}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▤
+                      </span>
+                      <span class="empty-state-title">
+                        {showDeleted
+                          ? "No deleted institutions"
+                          : hasFilter
+                            ? "No institutions in this branch"
+                            : "No institutions yet"}
+                      </span>
+                      <span class="empty-state-text">
+                        {showDeleted
+                          ? "Nothing to restore."
+                          : hasFilter
+                            ? "Clear the filter above to see every institution."
+                            : "Create one below to start filing articles against a body."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                institutions.map((entry) => (
+                  <tr data-institution-row={entry.id}>
+                    <td data-label="Name">
+                      <span set:text={entry.name} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{entry.slug}</span>
+                      </span>
+                    </td>
+                    <td data-label="Branch">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          entry.branch === "legislative" ? "info" : "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.branch}
+                      </span>
+                    </td>
+                    <td data-label="Region code">
+                      {entry.regionCode ? (
+                        <span class="cell-code" set:text={entry.regionCode} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="SEO title">
+                      {entry.seoTitle ? (
+                        <span set:text={entry.seoTitle} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Description">
+                      {entry.description ? (
+                        <span set:text={entry.description} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.updatedAt)}
+                      </span>
+                    </td>
+                    {showsRowActions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {showDeleted ? (
+                            <>
+                              {canRestore && (
+                                <button
+                                  type="button"
+                                  class="btn-inline institution-restore-btn"
+                                  data-institution-id={entry.id}
+                                  data-institution-name={entry.name}
+                                >
+                                  {t("Restore")}
+                                </button>
+                              )}
+                              {canPurge && (
+                                <button
+                                  type="button"
+                                  class="btn-inline institution-purge-btn"
+                                  data-institution-id={entry.id}
+                                  data-institution-name={entry.name}
+                                >
+                                  {t("Purge")}
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {canUpdate && (
+                                <a
+                                  class="quick-link"
+                                  href={linkWith({ edit: entry.id })}
+                                >
+                                  {t("Edit")}
+                                  <span
+                                    class="quick-link-arrow"
+                                    aria-hidden="true"
+                                  >
+                                    →
+                                  </span>
+                                </a>
+                              )}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  class="btn-inline institution-delete-btn"
+                                  data-institution-id={entry.id}
+                                  data-institution-name={entry.name}
+                                >
+                                  {t("Delete")}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    editing && canUpdate && !showDeleted && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="institution-edit-title"
+      >
+        <h2 class="admin-section-title" id="institution-edit-title">
+          {t("Edit institution")}
+        </h2>
+
+        <p class="form-error" id="institution-edit-error" hidden />
+
+        <form id="institution-edit-form" class="admin-form">
+          <input type="hidden" id="edit-institution-id" value={editing.id} />
+
+          <div class="form-row">
+            <label for="edit-name">{t("Name")}</label>
+            <input
+              id="edit-name"
+              name="name"
+              type="text"
+              required
+              value={editing.name}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="edit-slug">{t("Slug")}</label>
+            <input
+              id="edit-slug"
+              name="slug"
+              type="text"
+              required
+              value={editing.slug}
+            />
+            <p class="form-hint">
+              {t(
+                "Changing this changes the public landing-page URL. Record a redirect for the old one."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="edit-branch">{t("Branch")}</label>
+            <select id="edit-branch" name="branch" required>
+              {INSTITUTION_BRANCHES.map((branch) => (
+                <option value={branch} selected={editing.branch === branch}>
+                  {t(branch)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="edit-region-code">{t("Region code")}</label>
+            <input
+              id="edit-region-code"
+              name="regionCode"
+              type="text"
+              value={editing.regionCode ?? ""}
+            />
+            <p class="form-hint">
+              {t(
+                "Dotted code from the national region master, e.g. 62 or 62.71. Leave blank if the body is not tied to one region."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="edit-description">{t("Description")}</label>
+            <input
+              id="edit-description"
+              name="description"
+              type="text"
+              value={editing.description ?? ""}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="edit-seo-title">{t("SEO title")}</label>
+            <input
+              id="edit-seo-title"
+              name="seoTitle"
+              type="text"
+              value={editing.seoTitle ?? ""}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="edit-seo-description">{t("SEO description")}</label>
+            <input
+              id="edit-seo-description"
+              name="seoDescription"
+              type="text"
+              value={editing.seoDescription ?? ""}
+            />
+          </div>
+
+          <div class="form-actions">
+            <button type="submit">{t("Save institution")}</button>
+            <a class="btn-inline" href={linkWith({ edit: null })}>
+              {t("Cancel")}
+            </a>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canCreate && !showDeleted && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="institution-create-title"
+      >
+        <h2 class="admin-section-title" id="institution-create-title">
+          {t("Add institution")}
+        </h2>
+
+        <p class="form-error" id="institution-create-error" hidden />
+
+        <form id="institution-create-form" class="admin-form">
+          <div class="form-row">
+            <label for="create-name">{t("Name")}</label>
+            <input id="create-name" name="name" type="text" required />
+          </div>
+
+          <div class="form-row">
+            <label for="create-slug">{t("Slug")}</label>
+            <input id="create-slug" name="slug" type="text" required />
+          </div>
+
+          <div class="form-row">
+            <label for="create-branch">{t("Branch")}</label>
+            <select id="create-branch" name="branch" required>
+              {INSTITUTION_BRANCHES.map((branch) => (
+                <option value={branch}>{t(branch)}</option>
+              ))}
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="create-region-code">{t("Region code")}</label>
+            <input id="create-region-code" name="regionCode" type="text" />
+          </div>
+
+          <div class="form-row">
+            <label for="create-description">{t("Description")}</label>
+            <input id="create-description" name="description" type="text" />
+          </div>
+
+          <div class="form-row">
+            <label for="create-seo-title">{t("SEO title")}</label>
+            <input id="create-seo-title" name="seoTitle" type="text" />
+          </div>
+
+          <div class="form-row">
+            <label for="create-seo-description">{t("SEO description")}</label>
+            <input
+              id="create-seo-description"
+              name="seoDescription"
+              type="text"
+            />
+          </div>
+
+          <div class="form-actions">
+            <button type="submit">{t("Create institution")}</button>
+          </div>
+        </form>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import {
+    blankToNull,
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("institution-action-error");
+  const editError = messageBox("institution-edit-error");
+  const createError = messageBox("institution-create-error");
+
+  const SLUG_CONFLICT = "An institution already exists with that slug.";
+
+  onAction(".institution-delete-btn", async (button) => {
+    const id = button.dataset.institutionId;
+    if (!id) return;
+
+    const name = button.dataset.institutionName ?? "this institution";
+    // States what survives, because the answer is "everything": the delete is
+    // soft and the article links are kept, so promising less would push
+    // operators into rebuilding a registry they never actually lost.
+    if (
+      !window.confirm(
+        `Delete "${name}"? Its articles keep their link to it, and you can ` +
+          `restore it from the Deleted view.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // `reason` is required by the endpoint, same convention as posts,
+        // pages and terms. The screen supplies a constant rather than
+        // prompting: the operator already confirmed, and a second modal to
+        // type prose is friction that produces "asdf" in the audit trail.
+        sendJson("DELETE", `/api/v1/blog/institutions/${id}`, {
+          reason: "Deleted from the institution registry console."
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not delete the institution. Please try again.",
+      "Deleting…"
+    );
+  });
+
+  onAction(".institution-restore-btn", async (button) => {
+    const id = button.dataset.institutionId;
+    if (!id) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/blog/institutions/${id}/restore`, {}),
+      (errorCode) =>
+        // The one conflict worth naming: deleting released the slug, so
+        // another institution may have taken it. Generic copy here would send
+        // the operator looking for a server fault instead of a name clash.
+        errorCode === "SLUG_CONFLICT"
+          ? "Another institution now holds this slug. Rename that one first."
+          : "Could not restore the institution. Please try again.",
+      "Restoring…"
+    );
+  });
+
+  onAction(".institution-purge-btn", async (button) => {
+    const id = button.dataset.institutionId;
+    if (!id) return;
+
+    const name = button.dataset.institutionName ?? "this institution";
+    // Names the irreversible part explicitly, and names WHAT is lost. Copy that
+    // says only "permanently delete" leaves an operator to discover afterwards
+    // that the archive's classification went with it.
+    if (
+      !window.confirm(
+        `Permanently purge "${name}"? This cannot be undone: every article ` +
+          `link to it is deleted too, and those articles lose this ` +
+          `classification. Restore it instead if you are unsure.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // The one request on this screen that carries the header. Purge is the
+        // only endpoint here whose effect a replay cannot safely repeat.
+        sendJson("POST", `/api/v1/blog/institutions/${id}/purge`, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      "Could not purge the institution. Please try again.",
+      "Purging…"
+    );
+  });
+
+  onSubmit("institution-edit-form", async ({ data, submit }) => {
+    const idField = document.getElementById(
+      "edit-institution-id"
+    ) as HTMLInputElement | null;
+    if (!idField) return;
+
+    await mutateAndReload(
+      submit,
+      editError,
+      () =>
+        sendJson("PATCH", `/api/v1/blog/institutions/${idField.value}`, {
+          name: field(data, "name"),
+          slug: field(data, "slug"),
+          branch: field(data, "branch"),
+          // Explicit `null` rather than omitted throughout: clearing a field is
+          // a real edit, and omitting the key would silently keep the old
+          // value — the failure mode where an operator empties a box, saves,
+          // and the old text is still on the public page.
+          regionCode: blankToNull(field(data, "regionCode")),
+          description: blankToNull(field(data, "description")),
+          seoTitle: blankToNull(field(data, "seoTitle")),
+          seoDescription: blankToNull(field(data, "seoDescription"))
+        }),
+      (errorCode) =>
+        errorCode === "SLUG_CONFLICT"
+          ? SLUG_CONFLICT
+          : "Could not save the institution. Check the name, slug and region code, then try again.",
+      "Saving…"
+    );
+  });
+
+  onSubmit("institution-create-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson("POST", "/api/v1/blog/institutions", {
+          name: field(data, "name"),
+          slug: field(data, "slug"),
+          branch: field(data, "branch"),
+          regionCode: blankToNull(field(data, "regionCode")),
+          description: blankToNull(field(data, "description")),
+          seoTitle: blankToNull(field(data, "seoTitle")),
+          seoDescription: blankToNull(field(data, "seoDescription"))
+        }),
+      (errorCode) =>
+        errorCode === "SLUG_CONFLICT"
+          ? SLUG_CONFLICT
+          : "Could not create the institution. Check the name, slug and region code, then try again.",
+      "Creating…"
+    );
+  });
+</script>
