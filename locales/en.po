@@ -3985,3 +3985,24 @@ msgstr ""
 
 msgid "You do not have permission to view the institution registry."
 msgstr ""
+
+msgid "Add block"
+msgstr ""
+
+msgid "Block style"
+msgstr ""
+
+msgid "Bullet"
+msgstr ""
+
+msgid "Formatting"
+msgstr ""
+
+msgid "Numbered"
+msgstr ""
+
+msgid "Preserved as-is — edit it in the media library."
+msgstr ""
+
+msgid "Unlink"
+msgstr ""

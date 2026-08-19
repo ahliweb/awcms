@@ -3972,3 +3972,24 @@ msgstr "Menampilkan 200 lembaga pertama berdasarkan nama. Saring berdasarkan cab
 
 msgid "You do not have permission to view the institution registry."
 msgstr "Anda tidak memiliki izin untuk melihat registri lembaga."
+
+msgid "Add block"
+msgstr "Tambah blok"
+
+msgid "Block style"
+msgstr "Gaya blok"
+
+msgid "Bullet"
+msgstr "Butir"
+
+msgid "Formatting"
+msgstr "Pemformatan"
+
+msgid "Numbered"
+msgstr "Bernomor"
+
+msgid "Preserved as-is — edit it in the media library."
+msgstr "Dipertahankan apa adanya — sunting di pustaka media."
+
+msgid "Unlink"
+msgstr "Lepas tautan"
