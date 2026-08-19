@@ -121,7 +121,15 @@ import {
   MAX_EXCERPT_LENGTH,
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
-import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
+import {
+  blockToEditableHtml,
+  describeOpaqueNode,
+  toEditorRows
+} from "../../lib/ui/portable-text-editor";
+import {
+  PORTABLE_TEXT_BLOCK_STYLES,
+  type PortableTextBlock
+} from "../../modules/blog-content/domain/portable-text";
 import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
@@ -310,14 +318,19 @@ const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const editingPost = screen.state === "allowed" ? screen.data.editingPost : null;
 
 /**
- * `null` when the stored document holds a block this plain-paragraph textarea
- * cannot represent — a gallery, a video embed. The screen then offers NO body
- * field for that post, so those blocks survive a save of its title or slug.
- * `""` is the different, legitimate answer for a post with no blocks.
+ * ADR-0100 / Issue #589 — the block editor's rows.
+ *
+ * The screen used to compute `readParagraphBodyText(...)` here and render
+ * `null` — NO body field at all — for any post holding a gallery or a video,
+ * because the plain `<textarea>` it had could only write paragraphs and saving
+ * would have destroyed them. That refusal was correct for that editor and is
+ * exactly what this issue removes: a gallery is now an OPAQUE CARD carried
+ * through byte-identical, so the post is editable without its blocks being at
+ * risk.
  */
-const editingBodyText = editingPost
-  ? readParagraphBodyText(editingPost.contentJson)
-  : null;
+const editorRows = editingPost
+  ? toEditorRows(editingPost.bodyPortableText)
+  : [];
 
 const STATUS_VARIANT: Record<string, string> = {
   draft: "neutral",
@@ -859,24 +872,75 @@ const selectedPost = selectedPostId
             />
           </label>
 
-          {editingBodyText === null ? (
-            <p class="form-legend">
-              {t(
-                "The body of this post holds blocks this plain-text editor cannot represent \u2014 an image gallery or a video embed. Title, slug, visibility and excerpt are still editable; the body is left untouched, because saving it from here would drop those blocks."
+          <div class="pt-editor" id="edit-body-editor">
+            <div class="pt-toolbar" role="toolbar" aria-label={t("Formatting")}>
+              <button type="button" class="pt-mark" data-mark="strong">
+                <strong>B</strong>
+              </button>
+              <button type="button" class="pt-mark" data-mark="em">
+                <em>I</em>
+              </button>
+              <button type="button" class="pt-mark" data-mark="code">
+                {"<>"}
+              </button>
+              <button type="button" class="pt-link">
+                {t("Link")}
+              </button>
+              <button type="button" class="pt-unlink">
+                {t("Unlink")}
+              </button>
+              <select class="pt-style" aria-label={t("Block style")}>
+                {PORTABLE_TEXT_BLOCK_STYLES.map((style) => (
+                  <option value={style}>{style}</option>
+                ))}
+              </select>
+              <button type="button" class="pt-list" data-list="bullet">
+                {t("Bullet")}
+              </button>
+              <button type="button" class="pt-list" data-list="number">
+                {t("Numbered")}
+              </button>
+              <button type="button" class="pt-add">
+                {t("Add block")}
+              </button>
+            </div>
+
+            <div class="pt-rows" id="edit-body-rows">
+              {editorRows.map((row) =>
+                row.opaque ? (
+                  <div
+                    class="pt-row pt-row--opaque"
+                    data-opaque={JSON.stringify(row.node)}
+                  >
+                    <span class="pt-opaque-label">
+                      {describeOpaqueNode(row.node)}
+                    </span>
+                    <span class="cell-muted">
+                      {t("Preserved as-is — edit it in the media library.")}
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    class="pt-row"
+                    data-key={(row.node as PortableTextBlock)._key}
+                    data-style={(row.node as PortableTextBlock).style}
+                    data-list={(row.node as PortableTextBlock).listItem ?? ""}
+                    data-markdefs={JSON.stringify(
+                      (row.node as PortableTextBlock).markDefs ?? []
+                    )}
+                  >
+                    <div
+                      class="pt-block"
+                      contenteditable="true"
+                      set:html={blockToEditableHtml(
+                        row.node as PortableTextBlock
+                      )}
+                    />
+                  </div>
+                )
               )}
-            </p>
-          ) : (
-            <label for="edit-body">
-              {t("Body")}
-              <textarea
-                id="edit-body"
-                name="body"
-                rows="14"
-                required
-                set:text={editingBodyText}
-              />
-            </label>
-          )}
+            </div>
+          </div>
 
           <button type="submit" id="post-edit-submit">
             {t("Save post")}
@@ -997,9 +1061,9 @@ const selectedPost = selectedPostId
   } from "../../lib/ui/admin-form-client";
   import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
   import {
-    buildContentJsonFromBodyText,
-    buildContentTextFromBodyText
-  } from "../../lib/ui/blog-body-editor";
+    buildBlockFromEditable,
+    nextEditorKey
+  } from "../../lib/ui/portable-text-editor";
 
   const actionError = messageBox("blog-action-error");
   const createError = messageBox("post-create-error");
@@ -1017,7 +1081,8 @@ const selectedPost = selectedPostId
     locale: "Locale",
     visibility: "Visibility",
     contentJson: "Body",
-    contentText: "Body"
+    contentText: "Body",
+    bodyPortableText: "Body"
   };
 
   /** Publish/schedule/archive/restore/purge/revision-restore all require the header. */
@@ -1192,19 +1257,221 @@ const selectedPost = selectedPostId
     );
   });
 
+  /* ------------------------------------------------------------- editor */
+
+  /**
+   * Paste is inserted as PLAIN TEXT, deliberately.
+   *
+   * It is the single decision that removes this editor's hardest security
+   * question. The editable region then only ever contains tags this page
+   * created through the toolbar, so the serializer never has to reason about
+   * what a browser produced from somebody's Word document. It is also the
+   * better editorial outcome: pasted markup is a newsroom problem in its own
+   * right, and the copy that survives is the copy the author meant.
+   */
+  function interceptPaste(root: HTMLElement): void {
+    root.addEventListener("paste", (event) => {
+      const clipboard = (event as ClipboardEvent).clipboardData;
+      if (!clipboard) return;
+      event.preventDefault();
+      const text = clipboard.getData("text/plain");
+      document.execCommand("insertText", false, text);
+    });
+  }
+
+  function activeBlock(): HTMLElement | null {
+    const selection = window.getSelection();
+    const node = selection?.anchorNode ?? null;
+    if (!node) return null;
+    const element =
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as HTMLElement)
+        : node.parentElement;
+    return element?.closest<HTMLElement>(".pt-block") ?? null;
+  }
+
+  function activeRow(): HTMLElement | null {
+    return activeBlock()?.closest<HTMLElement>(".pt-row") ?? null;
+  }
+
+  function wrapSelection(open: string, close: string): void {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+    // `insertHTML` with the selection's own TEXT, escaped — never its HTML.
+    // Re-inserting the selected markup is how a nested tag soup appears after
+    // three clicks, and how anything the parser does not know gets duplicated.
+    const text = selection.toString();
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    document.execCommand("insertHTML", false, `${open}${escaped}${close}`);
+  }
+
+  function wireEditor(root: HTMLElement): void {
+    interceptPaste(root);
+
+    for (const button of root.querySelectorAll<HTMLButtonElement>(".pt-mark")) {
+      button.addEventListener("mousedown", (event) => {
+        // `mousedown`, not `click`: clicking a button blurs the editable and
+        // collapses the selection before a click handler ever runs.
+        event.preventDefault();
+        const mark = button.dataset.mark;
+        if (mark === "strong") document.execCommand("bold");
+        else if (mark === "em") document.execCommand("italic");
+        else if (mark === "code") wrapSelection("<code>", "</code>");
+      });
+    }
+
+    root
+      .querySelector<HTMLButtonElement>(".pt-link")
+      ?.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        const row = activeRow();
+        if (!row) return;
+
+        const href = window.prompt(
+          "Link URL (https://, mailto:, tel: or /path)"
+        );
+        if (!href) return;
+
+        const key = nextEditorKey("k");
+        const defs = JSON.parse(row.dataset.markdefs || "[]") as unknown[];
+        defs.push({ _type: "link", _key: key, href });
+        row.dataset.markdefs = JSON.stringify(defs);
+        wrapSelection(`<a data-mark="${key}">`, "</a>");
+      });
+
+    root
+      .querySelector<HTMLButtonElement>(".pt-unlink")
+      ?.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        document.execCommand("unlink");
+      });
+
+    root
+      .querySelector<HTMLSelectElement>(".pt-style")
+      ?.addEventListener("change", (event) => {
+        const row = activeRow();
+        if (!row) return;
+        row.dataset.style = (event.target as HTMLSelectElement).value;
+      });
+
+    for (const button of root.querySelectorAll<HTMLButtonElement>(".pt-list")) {
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        const row = activeRow();
+        if (!row) return;
+        const wanted = button.dataset.list ?? "";
+        // Second click on the same kind clears it, so a list can be undone
+        // without reaching for a different control.
+        row.dataset.list = row.dataset.list === wanted ? "" : wanted;
+      });
+    }
+
+    root
+      .querySelector<HTMLButtonElement>(".pt-add")
+      ?.addEventListener("click", () => {
+        const rows = root.querySelector<HTMLElement>(".pt-rows");
+        if (!rows) return;
+        const row = document.createElement("div");
+        row.className = "pt-row";
+        row.dataset.key = nextEditorKey("b");
+        row.dataset.style = "normal";
+        row.dataset.list = "";
+        row.dataset.markdefs = "[]";
+        const block = document.createElement("div");
+        block.className = "pt-block";
+        block.contentEditable = "true";
+        row.append(block);
+        rows.append(row);
+        block.focus();
+      });
+  }
+
+  /**
+   * Reads the rows back into a Portable Text document.
+   *
+   * Opaque rows are parsed straight out of `data-opaque` and pushed unchanged.
+   * That is the whole point of this issue: the previous editor refused to open
+   * a post containing a gallery because it could only write paragraphs.
+   */
+  function readEditorDocument(root: HTMLElement): unknown[] {
+    const out: unknown[] = [];
+
+    for (const row of root.querySelectorAll<HTMLElement>(".pt-row")) {
+      const opaque = row.dataset.opaque;
+      if (opaque) {
+        try {
+          out.push(JSON.parse(opaque));
+        } catch {
+          // A card whose payload will not parse is DROPPED rather than sent as
+          // a broken node — but only after this branch has been reached, which
+          // cannot happen for markup this page rendered itself.
+        }
+        continue;
+      }
+
+      const block = row.querySelector<HTMLElement>(".pt-block");
+      if (!block) continue;
+
+      const html = block.innerHTML.trim();
+      const key = row.dataset.key || nextEditorKey("b");
+      const style = (row.dataset.style || "normal") as never;
+      const listItem = (row.dataset.list || undefined) as never;
+      let defs: never[] = [];
+      try {
+        defs = JSON.parse(row.dataset.markdefs || "[]");
+      } catch {
+        defs = [];
+      }
+
+      const built = buildBlockFromEditable(key, html, style, listItem, defs);
+
+      // A block whose every span is empty contributes nothing to the article
+      // and would render as a stray empty paragraph.
+      if (built.children.every((child) => child.text.trim() === "")) continue;
+
+      out.push(built);
+    }
+
+    return out;
+  }
+
+  const editBodyEditor = document.getElementById("edit-body-editor");
+  if (editBodyEditor) wireEditor(editBodyEditor);
+
   onSubmit("post-create-form", async ({ data, submit }) => {
     const bodyText = String(data.get("body") ?? "");
-    const contentText = buildContentTextFromBodyText(bodyText);
+
+    // The create form stays a plain textarea on purpose: a new draft has no
+    // galleries or links to preserve, one blank-line-separated paragraph per
+    // block is the fastest way to get a story down, and the block editor is
+    // there the moment it is reopened for editing.
+    const paragraphs = bodyText
+      .split(/\n\s*\n/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
 
     // Checked here as well as by `required`, because `required` accepts a
     // textarea holding only whitespace and the validator does not — this is
     // the one rejection the form can name before the round trip.
-    if (contentText === "") {
+    if (paragraphs.length === 0) {
       createError.show(
         "The body cannot be empty — write at least one paragraph."
       );
       return;
     }
+
+    const bodyPortableText = paragraphs.map((text, index) => ({
+      _type: "block",
+      _key: `b${index}`,
+      style: "normal",
+      children: [
+        { _type: "span", _key: `b${index}s0`, text, marks: [] as string[] }
+      ],
+      markDefs: [] as unknown[]
+    }));
 
     const excerpt = field(data, "excerpt");
     const body: Record<string, unknown> = {
@@ -1212,12 +1479,10 @@ const selectedPost = selectedPostId
       slug: field(data, "slug"),
       locale: field(data, "locale") || "id",
       visibility: String(data.get("visibility") ?? "public"),
-      // `{ blocks: [...] }` — the shape `content-block-rendering.ts` defines
-      // and every reader of `content_json` expects. This used to be `{}` with
-      // an empty `contentText`, which `validateContentTextField` refuses: every
-      // create from this form was answered 400.
-      contentJson: buildContentJsonFromBodyText(bodyText),
-      contentText
+      // ADR-0100 — the body is Portable Text. `contentText` is derived by the
+      // server and REFUSED if sent, and `contentJson` is the optional envelope
+      // whose `blocks` key the server overwrites with the projection.
+      bodyPortableText
     };
     // Omitted rather than sent as "": an empty string is a value, and the
     // validator treats absent as "no excerpt".
@@ -1257,22 +1522,21 @@ const selectedPost = selectedPostId
       excerpt: field(data, "excerpt") || null
     };
 
-    // Absent when the stored document holds blocks this editor cannot
-    // represent: the field is not rendered, so the body is not sent, so those
-    // blocks survive the save.
-    if (data.has("body")) {
-      const bodyText = String(data.get("body") ?? "");
-      const contentText = buildContentTextFromBodyText(bodyText);
+    // ADR-0100 — the body is Portable Text read back out of the block editor.
+    // Opaque rows (a gallery, a video) come back byte-identical, which is what
+    // lets a post containing one be edited at all; the previous editor refused
+    // to open it rather than risk destroying them.
+    if (editBodyEditor) {
+      const document_ = readEditorDocument(editBodyEditor);
 
-      if (contentText === "") {
+      if (document_.length === 0) {
         editError.show(
           "The body cannot be empty — write at least one paragraph."
         );
         return;
       }
 
-      body.contentJson = buildContentJsonFromBodyText(bodyText);
-      body.contentText = contentText;
+      body.bodyPortableText = document_;
     }
 
     // No `Idempotency-Key`: `PATCH /api/v1/blog/posts/{id}` requires none —

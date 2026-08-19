@@ -454,3 +454,90 @@
      and wrap beneath the name on narrow ones. */
   margin-inline-end: auto;
 }
+
+/* Portable Text block editor (ADR-0100, Issue #589).
+   One editable element per block, which is what keeps every hard editing case
+   local and is why this needs no editing framework. */
+.pt-editor {
+  margin: var(--sp-3) 0;
+}
+
+.pt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  align-items: center;
+  padding: var(--sp-2);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--color-surface-muted);
+}
+
+.pt-toolbar button,
+.pt-toolbar select {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-sm);
+  line-height: 1.2;
+}
+
+.pt-rows {
+  border: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.pt-row + .pt-row {
+  border-top: 1px dashed var(--color-border);
+}
+
+.pt-block {
+  padding: var(--sp-2) var(--sp-3);
+  min-height: 2.2em;
+  outline: none;
+}
+
+.pt-block:focus {
+  background: var(--color-surface-muted);
+}
+
+/* The style/list a block will SAVE as, shown on the block itself — an editor
+   whose formatting is only visible in a toolbar dropdown makes an author guess
+   what they are about to store. */
+.pt-row[data-style="h1"] .pt-block,
+.pt-row[data-style="h2"] .pt-block,
+.pt-row[data-style="h3"] .pt-block {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-lg);
+}
+
+.pt-row[data-style="blockquote"] .pt-block {
+  border-left: 3px solid var(--color-border);
+  font-style: italic;
+}
+
+.pt-row[data-list="bullet"] .pt-block::before {
+  content: "• ";
+  color: var(--color-text-muted);
+}
+
+.pt-row[data-list="number"] .pt-block::before {
+  content: "1. ";
+  color: var(--color-text-muted);
+}
+
+/* An opaque node — a gallery, a video. Rendered as a card and carried through
+   byte-identical, which is the whole reason this editor can open a post the
+   previous one refused. */
+.pt-row--opaque {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--color-surface-muted);
+}
+
+.pt-opaque-label {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+}
