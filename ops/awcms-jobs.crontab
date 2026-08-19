@@ -172,6 +172,14 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 #   A one-shot migration of legacy ad rows. Re-running it on a timer would
 #   re-ingest a source that is only supposed to be read once.
 
+# blog:portable-text:backfill
+#   One-shot data migration (ADR-0100). It converts each legacy
+#   content_json.blocks body into body_portable_text exactly once; its selection
+#   predicate is body_portable_text = '[]'::jsonb, so a scheduled re-run would
+#   find nothing and burn a connection every night forever. An operator runs it
+#   with --commit after sql/134 is applied, repeating until the report stops
+#   saying partial.
+
 # config:validate
 #   A deploy gate, not a background task: it runs as the first stage of a
 #   deployment and its whole value is failing BEFORE the app starts.

@@ -119,6 +119,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled-publish dispatcher (blog:publish:scheduled) — recurring, not latency-sensitive, but more time-relevant than a maintenance purge."
   },
+  "scripts/blog-portable-text-backfill.ts": {
+    workClass: "maintenance",
+    rationale:
+      "One-shot Portable Text cutover (blog:portable-text:backfill, ADR-0100) — not scheduled, run by an operator after sql/134, dry-run unless --commit. Delay-tolerant by nature: nothing waits on it, and it is bounded per run so a large tenant is finished across several invocations rather than by holding a connection open."
+  },
   "scripts/blog-ads-drop-readiness.ts": {
     workClass: "maintenance",
     rationale:

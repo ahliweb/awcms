@@ -55,6 +55,7 @@
     "identity-access:permissions:backfill": "bun scripts/identity-access-owner-permission-backfill.ts",
     "entitlements:backfill": "bun scripts/identity-access-entitlement-backfill.ts",
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",
+    "blog:portable-text:backfill": "bun scripts/blog-portable-text-backfill.ts",
     "blog:ads:ingest": "bun scripts/blog-ads-ingest.ts",
     "blog:ads:drop-readiness": "bun scripts/blog-ads-drop-readiness.ts",
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",

@@ -1342,6 +1342,12 @@
       "rationale": "One-shot operator-run data migration (blog:ads:ingest, ADR-0044 §4 Fase 2) — not recurring at all, which makes it the most delay-tolerant profile in this map: it runs once during a planned migration window with an operator watching, never on a timer alongside request traffic."
     },
     {
+      "path": "scripts/blog-portable-text-backfill.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "One-shot Portable Text cutover (blog:portable-text:backfill, ADR-0100) — not scheduled, run by an operator after sql/134, dry-run unless --commit. Delay-tolerant by nature: nothing waits on it, and it is bounded per run so a large tenant is finished across several invocations rather than by holding a connection open."
+    },
+    {
       "path": "scripts/blog-scheduled-publish.ts",
       "workClass": "background_sync",
       "source": "registry",
