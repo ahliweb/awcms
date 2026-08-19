@@ -912,6 +912,21 @@ export const blogContentModule = defineModule({
   },
   jobs: [
     {
+      command: "bun run blog:portable-text:backfill",
+      schedule: {
+        mode: "manual",
+        because:
+          "One-shot data migration (ADR-0100). It converts each legacy content_json.blocks body into body_portable_text exactly once; its selection predicate is body_portable_text = '[]'::jsonb, so a scheduled re-run would find nothing and burn a connection every night forever. An operator runs it with --commit after sql/134 is applied, repeating until the report stops saying partial."
+      },
+      purpose:
+        "Convert legacy content_json.blocks bodies to the canonical Portable Text column for every active tenant, rewriting content_text from the converted body. DRY-RUN unless --commit.",
+      recommendedSchedule:
+        "Once, by an operator, immediately after sql/134 is applied. Repeat until the run reports no remaining rows.",
+      environmentNotes:
+        "No external provider call — pure database conversion. Needs WORKER_DATABASE_URL; awcms_worker already holds the SELECT/UPDATE it uses.",
+      safeInOfflineLan: true
+    },
+    {
       command: "bun run blog:publish:scheduled",
       schedule: {
         mode: "cron",

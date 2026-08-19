@@ -92,6 +92,7 @@ describe("fetchModuleJobs", () => {
         // ad tables they read.
         "bun run blog:ads:drop-readiness",
         "bun run blog:ads:ingest",
+        "bun run blog:portable-text:backfill",
         "bun run blog:publish:scheduled",
         "bun run comments:retention",
         "bun run config:validate",
