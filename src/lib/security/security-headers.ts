@@ -91,6 +91,18 @@
  * deployment value can never reach the header — a rejected policy would take
  * every other directive down with it.
  *
+ * MEDIA UPLOADS — `connect-src`, the THIRD directive missed the same way. The
+ * direct-to-R2 flow has the browser `PUT` bytes to a presigned URL on R2's S3
+ * API endpoint, and `fetch`/`XHR` to a third-party origin is governed by
+ * `connect-src`. With no such directive it fell through to `default-src 'self'`
+ * and the browser refused every upload before a byte left the machine — which
+ * is why no upload UI existed to be broken (Issue #595).
+ *
+ * Note the origin is NOT the `img-src` one. Reads come from
+ * `NEWS_MEDIA_R2_PUBLIC_BASE_URL` (usually a custom domain); writes go to
+ * `https://{accountId}.r2.cloudflarestorage.com`. Reusing the public base here
+ * would emit a policy that reads correctly and still blocks every upload.
+ *
  * When no public media is configured — the LAN/offline default — the directive
  * is `img-src 'self' data:` and NO third-party origin appears anywhere in the
  * policy. That guarantee is unchanged. `data:` is stated in both cases because
@@ -103,6 +115,7 @@
 import { TURNSTILE_ORIGIN } from "./turnstile";
 import { THEME_INIT_SCRIPT_HASH } from "./theme-init-script";
 import { deriveMediaPublicOrigin } from "../../modules/media-library/domain/media-public-origin";
+import { deriveMediaUploadOrigin } from "../../modules/media-library/domain/media-upload-origin";
 import { resolveNewsMediaR2Config } from "../../modules/media-library/domain/media-r2-config";
 
 const BASE_CSP_DIRECTIVES = [
@@ -180,15 +193,59 @@ function mediaSrcSources(mediaPublicBaseUrl: string): string {
   return sources.join(" ");
 }
 
+/**
+ * `connect-src` is the THIRD directive missed the same way `img-src` and
+ * `media-src` were, and the one that made a whole feature impossible rather
+ * than merely ugly.
+ *
+ * The direct-to-R2 upload flow (`r2-upload-sop.md` §2) has the browser `PUT`
+ * bytes straight to a presigned URL on R2's S3 API endpoint — a THIRD-PARTY
+ * origin, and `fetch`/`XHR` to it is governed by `connect-src`. With no such
+ * directive it fell through to `default-src 'self'` and the browser refused
+ * the request before a byte left the machine, so no upload UI could work at
+ * all.
+ *
+ * The origin is NOT re-derived here: `deriveMediaUploadOrigin` owns it, and it
+ * is deliberately a DIFFERENT origin from the `img-src` one — reads come from
+ * `NEWS_MEDIA_R2_PUBLIC_BASE_URL` (usually a custom domain), writes go to
+ * `https://{accountId}.r2.cloudflarestorage.com`. Using the public base here
+ * would emit a policy that looks right and still blocks every upload.
+ *
+ * Unconditional, like its two siblings — naming the directive is the whole
+ * point. On a LAN/offline deployment R2 is off, `configured` is false, and the
+ * policy is exactly `connect-src 'self'` with no third-party origin anywhere.
+ */
+function connectSrcSources(
+  uploadAccountId: string,
+  uploadEndpointOverride: string
+): string {
+  const sources = ["'self'"];
+  const upload = deriveMediaUploadOrigin(
+    uploadAccountId,
+    uploadEndpointOverride
+  );
+
+  if (upload.configured && upload.origin !== null) {
+    sources.push(upload.origin);
+  }
+
+  return sources.join(" ");
+}
+
 function buildContentSecurityPolicy(
   turnstileEnabled: boolean,
-  mediaPublicBaseUrl: string
+  mediaPublicBaseUrl: string,
+  uploadAccountId: string,
+  uploadEndpointOverride: string
 ): string {
   const directives: string[] = [...BASE_CSP_DIRECTIVES];
 
   directives.push(`script-src ${scriptSrcSources(turnstileEnabled)}`);
   directives.push(`img-src ${imgSrcSources(mediaPublicBaseUrl)}`);
   directives.push(`media-src ${mediaSrcSources(mediaPublicBaseUrl)}`);
+  directives.push(
+    `connect-src ${connectSrcSources(uploadAccountId, uploadEndpointOverride)}`
+  );
 
   if (turnstileEnabled) {
     directives.push(`frame-src ${TURNSTILE_ORIGIN}`);
@@ -222,6 +279,26 @@ export type SecurityHeaderOptions = {
    * environment; `""` is the unconfigured state, not "use the default".
    */
   mediaPublicBaseUrl?: string;
+  /**
+   * The R2 account id whose S3 API endpoint the browser `PUT`s uploads to,
+   * and which therefore goes into `connect-src`.
+   *
+   * Separate from `mediaPublicBaseUrl` on purpose: reads and writes go to
+   * different origins (see `deriveMediaUploadOrigin`). Defaults to the
+   * deployment's own `NEWS_MEDIA_R2_ACCOUNT_ID` for the same reason
+   * `mediaPublicBaseUrl` defaults — a default of "unconfigured" would make the
+   * directive silently wrong on every deployment that accepts uploads.
+   *
+   * `""` is the unconfigured state, not "use the default".
+   */
+  mediaUploadAccountId?: string;
+  /**
+   * Test-only endpoint override, mirroring `media-r2-client.ts`'s own: when a
+   * local fake S3 server stands in for R2, the policy has to name IT or the
+   * fake is blocked exactly as the real endpoint would be — which would make
+   * an upload test pass or fail for a reason unrelated to what it tests.
+   */
+  mediaUploadEndpoint?: string;
 };
 
 export function buildSecurityHeaders(
@@ -232,7 +309,9 @@ export function buildSecurityHeaders(
       "Content-Security-Policy",
       buildContentSecurityPolicy(
         options.turnstileEnabled === true,
-        options.mediaPublicBaseUrl ?? resolveNewsMediaR2Config().publicBaseUrl
+        options.mediaPublicBaseUrl ?? resolveNewsMediaR2Config().publicBaseUrl,
+        options.mediaUploadAccountId ?? resolveNewsMediaR2Config().accountId,
+        options.mediaUploadEndpoint ?? ""
       )
     ],
     ["X-Content-Type-Options", "nosniff"],
