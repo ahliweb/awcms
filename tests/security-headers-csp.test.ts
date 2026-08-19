@@ -37,12 +37,14 @@ import { THEME_INIT_SCRIPT_HASH } from "../src/lib/security/theme-init-script";
 function cspFor(
   isProduction: boolean,
   turnstileEnabled = false,
-  mediaPublicBaseUrl = ""
+  mediaPublicBaseUrl = "",
+  mediaUploadAccountId = ""
 ): string {
   const header = buildSecurityHeaders({
     isProduction,
     turnstileEnabled,
-    mediaPublicBaseUrl
+    mediaPublicBaseUrl,
+    mediaUploadAccountId
   }).find(([name]) => name === "Content-Security-Policy");
 
   if (!header) {
@@ -55,9 +57,15 @@ function cspFor(
 function directives(
   isProduction = false,
   turnstileEnabled = false,
-  mediaPublicBaseUrl = ""
+  mediaPublicBaseUrl = "",
+  mediaUploadAccountId = ""
 ): string[] {
-  return cspFor(isProduction, turnstileEnabled, mediaPublicBaseUrl)
+  return cspFor(
+    isProduction,
+    turnstileEnabled,
+    mediaPublicBaseUrl,
+    mediaUploadAccountId
+  )
     .split(";")
     .map((directive) => directive.trim());
 }
@@ -69,7 +77,7 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     ).toContain("Content-Security-Policy");
   });
 
-  test("carries every directive ported from awcms-mini's own policy, plus the always-on script-src and img-src", () => {
+  test("carries every directive ported from awcms-mini's own policy, plus the always-on script-src, img-src, media-src and connect-src", () => {
     expect(directives()).toEqual([
       "default-src 'self'",
       "object-src 'none'",
@@ -78,7 +86,8 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
       "frame-ancestors 'none'",
       `script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`,
       "img-src 'self' data:",
-      "media-src 'self'"
+      "media-src 'self'",
+      "connect-src 'self'"
     ]);
   });
 
@@ -410,6 +419,109 @@ describe("buildSecurityHeaders — media img-src", () => {
         delete process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL;
       } else {
         process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL = previous;
+      }
+    }
+  });
+});
+
+/**
+ * Issue #595 — `connect-src` and the direct-to-R2 upload.
+ *
+ * This is the third directive this policy needed and did not name; the first
+ * two (`img-src`, `media-src`) each made something render as nothing, and this
+ * one made a whole feature impossible: with `connect-src` falling through to
+ * `default-src 'self'`, the browser refuses the presigned `PUT` before a byte
+ * leaves the machine.
+ *
+ * The sharpest case here is `does NOT reuse the public media origin` — a policy
+ * built from the wrong R2 origin reads correctly and still blocks every upload.
+ */
+describe("buildSecurityHeaders — media upload connect-src (Issue #595)", () => {
+  const ACCOUNT = "abc123def456";
+  const UPLOAD_ORIGIN = `https://${ACCOUNT}.r2.cloudflarestorage.com`;
+  // Deliberately re-declared rather than shared with the img-src suite: the
+  // point of these cases is that the READ origin and the WRITE origin are
+  // different values, so they are written out separately here.
+  const READ_BASE = "https://media.example.com/news";
+  const READ_ORIGIN = "https://media.example.com";
+
+  test("names the R2 API origin, so the presigned PUT is not blocked by our own policy", () => {
+    expect(directives(false, false, "", ACCOUNT)).toContain(
+      `connect-src 'self' ${UPLOAD_ORIGIN}`
+    );
+  });
+
+  test("emits connect-src 'self' with NO origin when uploads are not configured — the LAN/offline guarantee", () => {
+    expect(directives()).toContain("connect-src 'self'");
+    expect(cspFor(true)).not.toContain("r2.cloudflarestorage.com");
+  });
+
+  test("does NOT reuse the public media origin — reads and writes go to different hosts", () => {
+    // The trap this test exists for: using `mediaPublicBaseUrl` for connect-src
+    // yields a policy that looks configured and still blocks every upload,
+    // because the presigned PUT never goes to the custom read domain.
+    const policy = cspFor(false, false, READ_BASE, ACCOUNT);
+    const connect = policy
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("connect-src"));
+
+    expect(connect).toBe(`connect-src 'self' ${UPLOAD_ORIGIN}`);
+    expect(connect).not.toContain(READ_ORIGIN);
+  });
+
+  test("a malformed account id adds no origin at all, rather than a broken one", () => {
+    // A rejected policy takes every other directive down with it, so a value
+    // that cannot be a host must degrade to "no source", never to a guess.
+    expect(directives(false, false, "", "not a valid host!")).toContain(
+      "connect-src 'self'"
+    );
+  });
+
+  test("is additive: enabling uploads changes connect-src and nothing else", () => {
+    const off = directives(false, false, "", "");
+    const on = directives(false, false, "", ACCOUNT);
+
+    expect(on.length).toBe(off.length);
+    expect(on.filter((d) => !d.startsWith("connect-src"))).toEqual(
+      off.filter((d) => !d.startsWith("connect-src"))
+    );
+  });
+
+  test("an explicit empty string means unconfigured, not 'read the environment'", () => {
+    const previous = process.env.NEWS_MEDIA_R2_ACCOUNT_ID;
+    process.env.NEWS_MEDIA_R2_ACCOUNT_ID = ACCOUNT;
+
+    try {
+      expect(cspFor(true, false, "", "")).not.toContain(UPLOAD_ORIGIN);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEWS_MEDIA_R2_ACCOUNT_ID;
+      } else {
+        process.env.NEWS_MEDIA_R2_ACCOUNT_ID = previous;
+      }
+    }
+  });
+
+  test("falls back to the deployment's own NEWS_MEDIA_R2_ACCOUNT_ID when no caller passes one — an inert fix is the failure mode here", () => {
+    // Both real call sites (`src/middleware.ts`, `standalone-entry.ts`) omit
+    // the option, so if the default did not read the environment the directive
+    // would be permanently `'self'` and every upload would stay blocked while
+    // this suite passed.
+    const previous = process.env.NEWS_MEDIA_R2_ACCOUNT_ID;
+    process.env.NEWS_MEDIA_R2_ACCOUNT_ID = ACCOUNT;
+
+    try {
+      const header = buildSecurityHeaders({ isProduction: false }).find(
+        ([name]) => name === "Content-Security-Policy"
+      );
+
+      expect(header?.[1]).toContain(`connect-src 'self' ${UPLOAD_ORIGIN}`);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEWS_MEDIA_R2_ACCOUNT_ID;
+      } else {
+        process.env.NEWS_MEDIA_R2_ACCOUNT_ID = previous;
       }
     }
   });
