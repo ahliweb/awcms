@@ -16,8 +16,12 @@ export type BlogContentCoreInput = {
   title: string;
   slug: string;
   excerpt: string | null;
+  /**
+   * ADR-0100 — the non-body ENVELOPE. The body lives in `bodyPortableText`;
+   * this carries whatever else a consumer stores here (notably `awcmsAstro`),
+   * and its `blocks` key is overwritten with the derived projection on write.
+   */
   contentJson: Record<string, unknown>;
-  contentText: string;
   locale: string;
 };
 
@@ -186,6 +190,28 @@ export function validateDeleteReasonInput(
   return { valid: true, value: { reason: record.reason.trim() } };
 }
 
+/**
+ * ADR-0100 — `contentText` is DERIVED and must not be supplied.
+ *
+ * Refused loudly rather than ignored. A field that is silently dropped is one a
+ * caller keeps sending for months while believing it does something, and the
+ * belief only surfaces when their search results disagree with their articles.
+ * The message names the replacement so the fix is obvious from the response.
+ */
+export function rejectSuppliedContentText(
+  value: unknown
+): ValidationError | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  return {
+    field: "contentText",
+    message:
+      "contentText is derived from bodyPortableText and must not be supplied (ADR-0100). Remove it from the request."
+  };
+}
+
 export function validateBlogContentCore(
   body: unknown
 ): BlogContentCoreValidationResult {
@@ -194,8 +220,14 @@ export function validateBlogContentCore(
     validateTitleField(record.title),
     validateSlugField(record.slug),
     validateExcerptField(record.excerpt),
-    validateContentJsonField(record.contentJson),
-    validateContentTextField(record.contentText),
+    // ADR-0100 — `contentJson` is now the non-body ENVELOPE and is optional. It
+    // still carries `awcmsAstro`, the structured sidecar the sibling repo
+    // stores there, so a caller may send it; its `blocks` key is overwritten
+    // with the derived projection either way.
+    record.contentJson === undefined
+      ? null
+      : validateContentJsonField(record.contentJson),
+    rejectSuppliedContentText(record.contentText),
     validateLocaleField(record.locale)
   ].filter((error): error is ValidationError => error !== null);
 
@@ -212,8 +244,7 @@ export function validateBlogContentCore(
         record.excerpt === undefined || record.excerpt === null
           ? null
           : (record.excerpt as string).trim(),
-      contentJson: record.contentJson as Record<string, unknown>,
-      contentText: record.contentText as string,
+      contentJson: (record.contentJson ?? {}) as Record<string, unknown>,
       locale: isNonEmptyString(record.locale) ? record.locale.trim() : "id"
     }
   };

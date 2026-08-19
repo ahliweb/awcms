@@ -608,8 +608,13 @@ components:
           nullable: true
         contentJson:
           $ref: "#/components/schemas/BlogContentJson"
+          description: ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved.
         contentText:
           type: string
+          description: ADR-0100 — DERIVED from bodyPortableText. Still returned (it is what the full-text index is built from) but no longer accepted on write.
+          readOnly: true
+        bodyPortableText:
+          $ref: "#/components/schemas/PortableTextBody"
         status:
           type: string
           enum:
@@ -657,6 +662,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        unpublishAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Issue
         createdAt:
           type: string
           format: date-time
@@ -737,8 +747,9 @@ components:
           nullable: true
         contentJson:
           $ref: "#/components/schemas/BlogContentJson"
-        contentText:
-          type: string
+          description: ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved.
+        bodyPortableText:
+          $ref: "#/components/schemas/PortableTextBody"
         locale:
           type: string
         visibility:
@@ -878,6 +889,104 @@ components:
             - active
             - expired
             - revoked
+    PortableTextBody:
+      type: array
+      maxItems: 2000
+      description: ADR-0100 — the canonical article body. contentJson.blocks is a derived, LOSSY projection of this, written only so ahliweb/awcms-astro keeps rendering until it reads this field directly.
+      items:
+        $ref: "#/components/schemas/PortableTextNode"
+    PortableTextLinkAnnotation:
+      type: object
+      required:
+        - _type
+        - _key
+        - href
+      properties:
+        _type:
+          type: string
+          enum:
+            - link
+        _key:
+          type: string
+        href:
+          type: string
+          maxLength: 2048
+          description: "Relative, or http/https/mailto/tel. Checked by URL parsing rather than a pattern, so java\\nscript: and JaVaScRiPt: are refused too."
+    PortableTextNode:
+      type: object
+      required:
+        - _type
+        - _key
+      description: One node of a CLOSED Portable Text vocabulary (ADR-0100). _type is one of block, gallery, videoNews — anything else is refused at write time, which is what keeps "there is no field where arbitrary markup could live" true.
+      properties:
+        _type:
+          type: string
+          enum:
+            - block
+            - gallery
+            - videoNews
+        _key:
+          type: string
+        style:
+          type: string
+          enum:
+            - normal
+            - h1
+            - h2
+            - h3
+            - h4
+            - h5
+            - h6
+            - blockquote
+        listItem:
+          type: string
+          enum:
+            - bullet
+            - number
+        level:
+          type: integer
+          minimum: 1
+          maximum: 6
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortableTextSpan"
+        markDefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortableTextLinkAnnotation"
+        items:
+          type: array
+          description: Gallery items — present when _type is gallery.
+          items:
+            type: object
+        provider:
+          type: string
+          description: Present when _type is videoNews.
+        videoId:
+          type: string
+          description: Present when _type is videoNews.
+    PortableTextSpan:
+      type: object
+      required:
+        - _type
+        - _key
+        - text
+      properties:
+        _type:
+          type: string
+          enum:
+            - span
+        _key:
+          type: string
+        text:
+          type: string
+          description: PLAIN text — never markup.
+        marks:
+          type: array
+          items:
+            type: string
+          description: Decorator names (strong, em, code) and/or the _key of an annotation declared in this block's own markDefs. A mark naming neither is refused at write time as a dangling reference.
     ResolvedMediaReference:
       type: object
       description: A media object safe to reference publicly (verified/attached, same tenant, not deleted).

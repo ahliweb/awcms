@@ -31,7 +31,15 @@ describe("validateCreateBlogPageInput", () => {
     title: "About",
     slug: "about",
     contentJson: {},
-    contentText: "body"
+    bodyPortableText: [
+      {
+        _type: "block",
+        _key: "b0",
+        style: "normal",
+        children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+        markDefs: []
+      }
+    ]
   };
 
   test("accepts a minimal valid payload with defaults", () => {

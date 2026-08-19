@@ -30,7 +30,22 @@ describe("validateBlogContentCore", () => {
       slug: "hello-world",
       excerpt: null,
       contentJson: { blocks: [] },
-      contentText: "Hello world body."
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [
+            {
+              _type: "span",
+              _key: "b0s0",
+              text: "Hello world body.",
+              marks: []
+            }
+          ],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(true);
@@ -40,7 +55,6 @@ describe("validateBlogContentCore", () => {
         slug: "hello-world",
         excerpt: null,
         contentJson: { blocks: [] },
-        contentText: "Hello world body.",
         locale: "id"
       });
     }
@@ -50,7 +64,15 @@ describe("validateBlogContentCore", () => {
     const result = validateBlogContentCore({
       slug: "Not A Valid Slug!",
       contentJson: {},
-      contentText: "body"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(false);
@@ -66,7 +88,15 @@ describe("validateBlogContentCore", () => {
       title: "Title",
       slug: "title",
       contentJson: "not-an-object",
-      contentText: "body"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(false);
@@ -77,12 +107,15 @@ describe("validateBlogContentCore", () => {
     }
   });
 
-  test("rejects a <script> tag in contentText", () => {
+  test("rejects contentText outright — it is derived now, not supplied (ADR-0100)", () => {
     const result = validateBlogContentCore({
       title: "Title",
       slug: "title",
       contentJson: {},
-      contentText: "<script>alert(1)</script>"
+      // Refused because it is SUPPLIED at all, not because of its content: a
+      // field silently dropped is one a caller keeps sending for months.
+      contentText: "<script>alert(1)</script>",
+      bodyPortableText: []
     });
 
     expect(result.valid).toBe(false);
@@ -98,7 +131,15 @@ describe("validateBlogContentCore", () => {
       title: "Title",
       slug: "title",
       contentJson: { html: '<img src=x onerror="alert(1)">' },
-      contentText: "body"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(false);
@@ -109,12 +150,20 @@ describe("validateBlogContentCore", () => {
     }
   });
 
-  test("accepts plain contentJson/contentText with no markup", () => {
+  test("accepts a plain contentJson envelope and body with no markup", () => {
     const result = validateBlogContentCore({
       title: "Title",
       slug: "title",
       contentJson: { blocks: [{ type: "paragraph", text: "Hello" }] },
-      contentText: "Hello"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "Hello", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(true);
