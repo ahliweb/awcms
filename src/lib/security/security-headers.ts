@@ -260,11 +260,15 @@ export function buildSecurityHeaders(
     //     nothing here emits `Access-Control-Allow-Origin` (verified: zero
     //     occurrences in `src/`), so `same-origin` removes no capability that
     //     any browser client has today;
-    //   - `public/` holds exactly two files (`js/news-share.js`,
-    //     `css/public-content.css`) and `_astro/*` is hashed output — all of it
-    //     loaded by this origin's own pages, and all of it now actually
-    //     CARRYING these headers: until Issue #464 those responses bypassed
-    //     middleware entirely, so this bullet stated an intent, not a fact;
+    //   - `public/` holds `js/news-share.js`, `css/public-content.css` and
+    //     `push-sw.js`, and `_astro/*` is hashed output — all of it loaded by
+    //     this origin's own pages, and all of it now actually CARRYING these
+    //     headers: until Issue #464 those responses bypassed middleware
+    //     entirely, so this bullet stated an intent, not a fact. (This list
+    //     said "exactly two files" for ten days after `push-sw.js` landed;
+    //     ADR-0101 now gates the enumeration in `PUBLIC_ASSET_AUDIENCE` so it
+    //     cannot go stale again. A same-origin service worker script is
+    //     unaffected by CORP, so the reasoning below survives the correction.);
     //   - article images are served from R2 by `media_library`, a DIFFERENT
     //     origin, so image embedding is not this app's decision to make.
     //

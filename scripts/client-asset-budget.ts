@@ -18,8 +18,12 @@
  *
  * ## The budgets, derived from that measurement
  *
- * - `TOTAL_BUDGET_BYTES` = 180,000 — baseline 139,048 B + ~29% headroom,
- *   rounded to a number a human can remember. Catches slow accretion.
+ * The original single ceiling (`TOTAL_BUDGET_BYTES` = 180,000 — baseline
+ * 139,048 B + ~29% headroom) was split by ADR-0101 into one budget per
+ * audience, `READER_BUDGET_BYTES` and `APP_BUDGET_BYTES`; see the section on
+ * the split below for the measurement that forced it. Both still catch slow
+ * accretion, now without one surface's growth hiding inside the other's.
+ *
  * - `PER_FILE_BUDGET_BYTES` = 21,000 — largest file 16,800 B + 25%. Catches
  *   the other failure mode: one island importing a charting/date/editor
  *   dependency and shipping it as a single 200 KB chunk, which a generous
@@ -73,10 +77,55 @@ import path from "node:path";
 const CLIENT_DIST = "dist/client";
 
 /**
- * Baseline 139,048 B (2026-08-05) + ~29% headroom, rounded to 180,000.
+ * Which audience downloads each `public/` file — the ONLY assets a public
+ * content page loads (ADR-0101).
  *
- * **Raised to 192,000 on 19 August 2026 for the Portable Text block editor
- * (ADR-0100, Issue #589), and the measurement is the argument.**
+ * Everything under `_astro/` is Astro build output for `.astro` pages, and
+ * every one of those pages is admin, auth, the landing page, or the theming
+ * preview — so `_astro/*` is classified `app` structurally, with no list to
+ * maintain. `public/` is copied through verbatim and has no such structure, so
+ * its files are declared here.
+ *
+ * **This registry is a GATE, not documentation.** A file in `public/` that is
+ * not declared fails the check, and a declaration whose file is gone fails it
+ * too. That is deliberate: `src/lib/security/security-headers.ts` carried the
+ * sentence "`public/` holds exactly two files" while `public/` held three,
+ * because nothing forced the enumeration to stay true. An assertion nothing
+ * re-checks is a claim, and this one had already decayed.
+ */
+export const PUBLIC_ASSET_AUDIENCE: Readonly<Record<string, "reader" | "app">> =
+  Object.freeze({
+    // Linked by the shell in `blog-content/domain/public-page-rendering.ts`
+    // (`PUBLIC_CONTENT_STYLESHEET_HREF`) — every public article, page and index.
+    "css/public-content.css": "reader",
+    // Linked by `src/pages/blog/[tenantCode]/[slug].ts`
+    // (`NEWS_SHARE_CLIENT_SCRIPT_SRC`) — the share annotator on article pages.
+    "js/news-share.js": "reader",
+    // Registered by `src/lib/ui/push-subscription-client.ts`, reached from the
+    // `/admin/push-notifications` console. A reader never fetches it.
+    "push-sw.js": "app"
+  });
+
+/**
+ * What a READER downloads: 21,415 B measured 2026-08-20, budget 24,000.
+ *
+ * Deliberately tight. This is the number the original budget's premise — "the
+ * public pages feel slow" — was always about, and 2,585 B of headroom is about
+ * one more small script. It should be hard to grow this without saying why.
+ */
+export const READER_BUDGET_BYTES = 24_000;
+
+/**
+ * What the APP surface downloads (admin, auth, landing, theming preview):
+ * 165,274 B measured 2026-08-20, budget 172,000 (~4%).
+ *
+ * This inherits the accretion history below — it is the old total minus the
+ * reader assets, and it keeps the old total's job of catching slow growth one
+ * admin screen at a time.
+ *
+ * Its immediate predecessor was `TOTAL_BUDGET_BYTES` = 192,000, **raised on 19
+ * August 2026 for the Portable Text block editor (ADR-0100, Issue #589), and
+ * the measurement was the argument.**
  *
  * Measured on clean builds (`rm -rf dist && bun run build` — a stale `dist`
  * produced a wrong delta once already, so the clean step is not optional):
@@ -109,7 +158,7 @@ const CLIENT_DIST = "dist/client";
  * anything. 184,000 followed a real 2,493 B admin screen (first reported as
  * 82 B, measured against a stale `dist`).
  *
- * ## What issue #590 should NOT waste time on
+ * ## A hypothesis worth not re-testing (Issue #590)
  *
  * The hypothesis that `_astro/error-log.*.css` (24,909 B, the largest file) is
  * bloated by duplicating `admin-screens.css` is **DISPROVED**. That chunk is
@@ -119,13 +168,35 @@ const CLIENT_DIST = "dist/client";
  * It is merely NAMED after `error-log` because Vite names a shared CSS chunk
  * after one of its JS importers.
  *
- * The real finding for #590 is the one this budget's shape hides: roughly 40%
- * of the total is admin-only CSS and script a public reader never downloads,
- * charged against a ceiling whose stated premise is "the public pages feel
- * slow". Splitting reader-facing from admin-only assets is the change worth
- * making; raising a single conflated number is not.
+ * ## The split this file now enforces (Issue #590, ADR-0101)
+ *
+ * A single conflated ceiling was measuring the wrong thing. Attribution from
+ * Astro's own SSR route manifest (`dist/server/entry.mjs`, not from file
+ * names) on 2026-08-20:
+ *
+ * ```
+ * reader  (public content pages)   21,415 B   css/public-content.css + js/news-share.js
+ * app     (admin, auth, landing)  165,274 B   every _astro/* chunk + push-sw.js
+ * ```
+ *
+ * **The decisive fact: a public content page loads ZERO `_astro` assets.**
+ * Those pages are not Astro components — `src/pages/blog/`, `[...path].ts`,
+ * the feeds and the sitemaps are `.ts` routes that emit their own shell via
+ * `public-page-rendering.ts`, linking two absolute paths out of `public/`. The
+ * only non-admin routes carrying `styles` in the manifest are `/`, the five
+ * auth pages, and `/theming/preview/[token]`.
+ *
+ * So reader weight was 11% of a number dominated by admin, which made it
+ * effectively unmeasured: a 5,000 B reader-facing regression is a **23%**
+ * increase in what a reader downloads — exactly the premise this budget was
+ * built on — and it passed silently under a 192,000 B ceiling.
+ *
+ * An earlier revision of this comment said "roughly 40% of the total is
+ * admin-only". That was wrong in the other direction: admin-reachable is ~73%
+ * once page scripts are counted. Both numbers were guesses at a split nobody
+ * had measured; the two budgets below are measured.
  */
-export const TOTAL_BUDGET_BYTES = 192_000;
+export const APP_BUDGET_BYTES = 172_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
@@ -146,25 +217,55 @@ export const TOTAL_BUDGET_BYTES = 192_000;
  * improve the metric while making the thing the metric exists to protect
  * slightly worse.
  *
- * `TOTAL_BUDGET_BYTES` is deliberately NOT raised. The ceiling that actually
- * bounds what a reader downloads still binds at its original value, so this
- * change buys shape, not headroom.
+ * The surface budgets were deliberately NOT raised for it. The ceiling that
+ * actually bounds what a reader downloads still binds at its own value, so
+ * that change bought shape, not headroom.
  */
 export const PER_FILE_BUDGET_BYTES = 27_000;
+
+export type Audience = "reader" | "app";
 
 export type ClientAsset = { path: string; bytes: number };
 
 export type Measurement = { totalBytes: number; files: ClientAsset[] };
 
-export type Budget = { totalBudgetBytes: number; perFileBudgetBytes: number };
+export type Budget = {
+  readerBudgetBytes: number;
+  appBudgetBytes: number;
+  perFileBudgetBytes: number;
+};
 
 export type BudgetReport = {
   ok: boolean;
   totalBytes: number;
-  overTotal: boolean;
+  readerBytes: number;
+  appBytes: number;
+  overReader: boolean;
+  overApp: boolean;
   oversizedFiles: ClientAsset[];
+  /** `public/` files present in the build but absent from the registry. */
+  undeclared: ClientAsset[];
+  /** Registry entries with no file in the build. */
+  missing: string[];
   empty: boolean;
 };
+
+/**
+ * Which budget an asset counts against.
+ *
+ * `_astro/*` is structural: it is Vite output for `.astro` pages, and no
+ * public content route has one. Everything else came from `public/` and must
+ * be declared — `undefined` here is what the gate turns into a failure, so a
+ * new file cannot enter the build unclassified.
+ */
+export function classifyAsset(
+  assetPath: string,
+  registry: Readonly<Record<string, Audience>> = PUBLIC_ASSET_AUDIENCE
+): Audience | undefined {
+  const normalised = assetPath.split(path.sep).join("/");
+  if (normalised.startsWith("_astro/")) return "app";
+  return registry[normalised];
+}
 
 /**
  * Walk `root` recursively and size every regular file.
@@ -204,21 +305,54 @@ export async function measureClientAssets(root: string): Promise<Measurement> {
 export function evaluateBudget(
   measurement: Measurement,
   budget: Budget = {
-    totalBudgetBytes: TOTAL_BUDGET_BYTES,
+    readerBudgetBytes: READER_BUDGET_BYTES,
+    appBudgetBytes: APP_BUDGET_BYTES,
     perFileBudgetBytes: PER_FILE_BUDGET_BYTES
-  }
+  },
+  registry: Readonly<Record<string, Audience>> = PUBLIC_ASSET_AUDIENCE
 ): BudgetReport {
   const empty = measurement.files.length === 0;
-  const overTotal = measurement.totalBytes > budget.totalBudgetBytes;
+
+  let readerBytes = 0;
+  let appBytes = 0;
+  const undeclared: ClientAsset[] = [];
+
+  for (const file of measurement.files) {
+    const audience = classifyAsset(file.path, registry);
+    if (audience === "reader") readerBytes += file.bytes;
+    else if (audience === "app") appBytes += file.bytes;
+    else undeclared.push(file);
+  }
+
+  const present = new Set(
+    measurement.files.map((file) => file.path.split(path.sep).join("/"))
+  );
+  const missing = Object.keys(registry).filter(
+    (declared) => !present.has(declared)
+  );
+
+  const overReader = readerBytes > budget.readerBudgetBytes;
+  const overApp = appBytes > budget.appBudgetBytes;
   const oversizedFiles = measurement.files.filter(
     (file) => file.bytes > budget.perFileBudgetBytes
   );
 
   return {
-    ok: !empty && !overTotal && oversizedFiles.length === 0,
+    ok:
+      !empty &&
+      !overReader &&
+      !overApp &&
+      oversizedFiles.length === 0 &&
+      undeclared.length === 0 &&
+      missing.length === 0,
     totalBytes: measurement.totalBytes,
-    overTotal,
+    readerBytes,
+    appBytes,
+    overReader,
+    overApp,
     oversizedFiles,
+    undeclared,
+    missing,
     empty
   };
 }
@@ -247,13 +381,43 @@ export function formatFailure(
     return lines;
   }
 
-  if (report.overTotal) {
+  if (report.overReader) {
     lines.push(
-      `  - total ${formatBytes(report.totalBytes)} exceeds the budget of ` +
-        `${formatBytes(budget.totalBudgetBytes)}. Trim what the browser ` +
-        "downloads, or — if a feature genuinely bought this weight — " +
-        "re-measure and raise TOTAL_BUDGET_BYTES in " +
-        "scripts/client-asset-budget.ts as a reviewed diff."
+      `  - READER assets ${formatBytes(report.readerBytes)} exceed the budget ` +
+        `of ${formatBytes(budget.readerBudgetBytes)}. This is what a visitor ` +
+        "to a public article downloads, and it is the tightest budget here on " +
+        "purpose (ADR-0101). Trim it, or re-measure and raise " +
+        "READER_BUDGET_BYTES in scripts/client-asset-budget.ts as a reviewed " +
+        "diff that says which reader-visible feature bought the weight."
+    );
+  }
+
+  if (report.overApp) {
+    lines.push(
+      `  - APP assets ${formatBytes(report.appBytes)} exceed the budget of ` +
+        `${formatBytes(budget.appBudgetBytes)}. That is the admin, auth and ` +
+        "landing surface. Before raising APP_BUDGET_BYTES, check whether the " +
+        "growth is per-screen duplication — Issue #552 recovered 22,700 B by " +
+        "moving a hand-copied lifecycle into src/lib/ui/admin-form-client.ts."
+    );
+  }
+
+  for (const file of report.undeclared) {
+    lines.push(
+      `  - ${file.path} (${formatBytes(file.bytes)}) is in the build but not ` +
+        "in PUBLIC_ASSET_AUDIENCE. Declare it 'reader' (a public content page " +
+        "links it) or 'app' (only an admin/auth page reaches it) in " +
+        "scripts/client-asset-budget.ts. An unclassified asset is one nobody " +
+        "has decided the audience of, which is how reader weight grew unseen."
+    );
+  }
+
+  for (const declared of report.missing) {
+    lines.push(
+      `  - PUBLIC_ASSET_AUDIENCE declares ${declared}, which the build did ` +
+        "not emit. Either public/ lost the file and the entry should go, or " +
+        "the build is wrong. A registry describing files that no longer " +
+        "exist is the decay this gate exists to stop."
     );
   }
 
@@ -285,7 +449,8 @@ function isMissingDirectory(error: unknown): boolean {
 
 async function main(): Promise<void> {
   const budget: Budget = {
-    totalBudgetBytes: TOTAL_BUDGET_BYTES,
+    readerBudgetBytes: READER_BUDGET_BYTES,
+    appBudgetBytes: APP_BUDGET_BYTES,
     perFileBudgetBytes: PER_FILE_BUDGET_BYTES
   };
 
@@ -317,8 +482,11 @@ async function main(): Promise<void> {
 
   console.log(
     `build:asset-budget:check OK — ${measurement.files.length} files, total ` +
-      `${formatBytes(report.totalBytes)} within ` +
-      `${formatBytes(budget.totalBudgetBytes)}; largest file within ` +
+      `${formatBytes(report.totalBytes)}. Reader ` +
+      `${formatBytes(report.readerBytes)} within ` +
+      `${formatBytes(budget.readerBudgetBytes)}; app ` +
+      `${formatBytes(report.appBytes)} within ` +
+      `${formatBytes(budget.appBudgetBytes)}; largest file within ` +
       `${formatBytes(budget.perFileBudgetBytes)}.`
   );
 }
