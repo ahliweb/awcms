@@ -1,4 +1,5 @@
 import { log } from "../../../lib/logging/logger";
+import type { PortableTextDocument } from "../domain/portable-text";
 
 /**
  * Read/write query module for `awcms_blog_revisions` (Issue #541).
@@ -13,6 +14,8 @@ export type BlogRevisionSnapshot = {
   title: string;
   contentJson: Record<string, unknown>;
   contentText: string;
+  /** ADR-0100 — the body as it stood at this revision. `[]` on a revision written before the cutover; the restore path converts from `contentJson.blocks` in that case. */
+  bodyPortableText: PortableTextDocument;
   excerpt: string | null;
   seoTitle: string | null;
   metaDescription: string | null;
@@ -64,6 +67,8 @@ function toSummary(row: BlogRevisionSummaryRow): BlogRevisionSummary {
 export type BlogRevisionDetail = BlogRevisionSummary & {
   contentJson: Record<string, unknown>;
   contentText: string;
+  /** ADR-0100 — the body as it stood at this revision. `[]` on a revision written before the cutover; the restore path converts from `contentJson.blocks` in that case. */
+  bodyPortableText: PortableTextDocument;
   excerpt: string | null;
   seoTitle: string | null;
   metaDescription: string | null;
@@ -73,6 +78,7 @@ export type BlogRevisionDetail = BlogRevisionSummary & {
 type BlogRevisionDetailRow = BlogRevisionSummaryRow & {
   content_json: Record<string, unknown>;
   content_text: string;
+  body_portable_text: PortableTextDocument;
   excerpt: string | null;
   seo_title: string | null;
   meta_description: string | null;
@@ -84,6 +90,7 @@ function toDetail(row: BlogRevisionDetailRow): BlogRevisionDetail {
     ...toSummary(row),
     contentJson: row.content_json,
     contentText: row.content_text,
+    bodyPortableText: row.body_portable_text,
     excerpt: row.excerpt,
     seoTitle: row.seo_title,
     metaDescription: row.meta_description,
@@ -112,7 +119,8 @@ export async function createBlogRevision(
   const rows = (await tx`
     INSERT INTO awcms_blog_revisions
       (tenant_id, resource_type, resource_id, revision_number, title,
-       content_json, content_text, excerpt, seo_title, meta_description,
+       content_json, content_text, body_portable_text, excerpt, seo_title,
+       meta_description,
        canonical_url, status, change_note, created_by_tenant_user_id)
     VALUES (
       ${tenantId}, ${resourceType}, ${resourceId},
@@ -123,12 +131,14 @@ export async function createBlogRevision(
         0
       ) + 1,
       ${snapshot.title}, ${snapshot.contentJson}, ${snapshot.contentText},
+      ${JSON.stringify(snapshot.bodyPortableText)}::jsonb,
       ${snapshot.excerpt}, ${snapshot.seoTitle}, ${snapshot.metaDescription},
       ${snapshot.canonicalUrl}, ${snapshot.status}, ${changeNote},
       ${createdByTenantUserId}
     )
     RETURNING id, tenant_id, resource_type, resource_id, revision_number, title,
-      content_json, content_text, excerpt, seo_title, meta_description,
+      content_json, content_text, body_portable_text, excerpt, seo_title,
+      meta_description,
       canonical_url, status, change_note, created_by_tenant_user_id, created_at
   `) as BlogRevisionDetailRow[];
 
@@ -186,7 +196,8 @@ export async function fetchBlogRevisionById(
 ): Promise<BlogRevisionDetail | null> {
   const rows = (await tx`
     SELECT id, tenant_id, resource_type, resource_id, revision_number, title,
-      content_json, content_text, excerpt, seo_title, meta_description,
+      content_json, content_text, body_portable_text, excerpt, seo_title,
+      meta_description,
       canonical_url, status, change_note, created_by_tenant_user_id, created_at
     FROM awcms_blog_revisions
     WHERE tenant_id = ${tenantId} AND resource_type = ${resourceType}

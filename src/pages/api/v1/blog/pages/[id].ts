@@ -321,6 +321,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
           title: updated.title,
           contentJson: updated.contentJson,
           contentText: updated.contentText,
+          bodyPortableText: updated.bodyPortableText,
           excerpt: updated.excerpt,
           seoTitle: updated.seoTitle,
           metaDescription: updated.metaDescription,

@@ -1,6 +1,11 @@
 import type { APIRoute } from "astro";
 
 import {
+  contentBlocksToPortableText,
+  readLegacyBlocks
+} from "../../../../../../../../modules/blog-content/domain/portable-text-conversion";
+
+import {
   fail,
   jsonResponse,
   ok
@@ -212,10 +217,26 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       );
     }
 
+    // ADR-0100 — a revision written BEFORE the cutover carries an empty
+    // `bodyPortableText` and its real body in `contentJson.blocks`. Restoring it
+    // verbatim would blank the post, and nothing would fail: the row would be
+    // valid and the page would just be empty. So an empty body is converted
+    // from the revision's own envelope rather than trusted.
+    //
+    // This is the "restore revision bypasses the new write path" defect class
+    // this epic has already hit once, closed at the one call site that can
+    // reintroduce a legacy body into a live post.
+    const restoredBody =
+      revision.bodyPortableText.length > 0
+        ? revision.bodyPortableText
+        : contentBlocksToPortableText(
+            readLegacyBlocks(normalizedContentJson) ?? []
+          );
+
     const updated = await updateBlogPost(tx, tenantId, postId, {
       title: revision.title,
       contentJson: normalizedContentJson,
-      contentText: revision.contentText,
+      bodyPortableText: restoredBody,
       excerpt: revision.excerpt,
       seoTitle: revision.seoTitle,
       metaDescription: revision.metaDescription,
@@ -236,6 +257,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
         title: updated.title,
         contentJson: updated.contentJson,
         contentText: updated.contentText,
+        bodyPortableText: updated.bodyPortableText,
         excerpt: updated.excerpt,
         seoTitle: updated.seoTitle,
         metaDescription: updated.metaDescription,

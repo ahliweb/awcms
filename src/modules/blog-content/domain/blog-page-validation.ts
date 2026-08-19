@@ -1,7 +1,7 @@
 import {
   validateBlogContentCore,
   validateContentJsonField,
-  validateContentTextField,
+  rejectSuppliedContentText,
   validateDeleteReasonInput,
   validateExcerptField,
   validateLocaleField,
@@ -10,6 +10,8 @@ import {
   type DeleteReasonInput
 } from "./content-validation";
 import { validateSeoFields } from "./seo-validation";
+import { validatePortableTextDocument } from "./portable-text-validation";
+import type { PortableTextDocument } from "./portable-text";
 import {
   isBlogContentVisibility,
   type BlogContentVisibility
@@ -76,7 +78,8 @@ export type CreateBlogPageInput = {
   slug: string;
   excerpt: string | null;
   contentJson: Record<string, unknown>;
-  contentText: string;
+  /** ADR-0100 — the canonical body. `contentText` is derived from it, never supplied. */
+  bodyPortableText: PortableTextDocument;
   locale: string;
   visibility: BlogContentVisibility;
   featuredMediaId: string | null;
@@ -100,6 +103,14 @@ export function validateCreateBlogPageInput(
   const record = (body ?? {}) as Record<string, unknown>;
 
   const coreResult = validateBlogContentCore(record);
+
+  // ADR-0100 — the body is REQUIRED on create. An article with no body is not a
+  // draft, it is a row nothing can render, and accepting it would move the
+  // failure to whoever opens the page.
+  const bodyResult = validatePortableTextDocument(record.bodyPortableText);
+  if (!bodyResult.valid) {
+    errors.push(...bodyResult.errors);
+  }
   if (!coreResult.valid) {
     errors.push(...coreResult.errors);
   }
@@ -157,6 +168,7 @@ export function validateCreateBlogPageInput(
   if (
     errors.length > 0 ||
     !coreResult.valid ||
+    !bodyResult.valid ||
     !seoResult.valid ||
     !featuredMediaIdResult.valid ||
     !parentPageIdResult.valid ||
@@ -169,6 +181,7 @@ export function validateCreateBlogPageInput(
     valid: true,
     value: {
       ...coreResult.value,
+      bodyPortableText: bodyResult.valid ? bodyResult.value : [],
       visibility,
       featuredMediaId: featuredMediaIdResult.value,
       seoTitle: seoResult.value.seoTitle ?? null,
@@ -186,7 +199,7 @@ export type UpdateBlogPageInput = {
   slug?: string;
   excerpt?: string | null;
   contentJson?: Record<string, unknown>;
-  contentText?: string;
+  bodyPortableText?: PortableTextDocument;
   locale?: string;
   visibility?: BlogContentVisibility;
   featuredMediaId?: string | null;
@@ -248,12 +261,20 @@ export function validateUpdateBlogPageInput(
     }
   }
 
-  if (record.contentText !== undefined) {
-    const error = validateContentTextField(record.contentText);
-    if (error) {
-      errors.push(error);
+  // ADR-0100 — supplying `contentText` is refused rather than ignored.
+  const suppliedContentTextError = rejectSuppliedContentText(
+    record.contentText
+  );
+  if (suppliedContentTextError) {
+    errors.push(suppliedContentTextError);
+  }
+
+  if (record.bodyPortableText !== undefined) {
+    const result = validatePortableTextDocument(record.bodyPortableText);
+    if (!result.valid) {
+      errors.push(...result.errors);
     } else {
-      value.contentText = record.contentText as string;
+      value.bodyPortableText = result.value;
     }
   }
 

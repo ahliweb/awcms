@@ -22,7 +22,15 @@ describe("validateCreateBlogPostInput", () => {
       title: "Hello",
       slug: "hello",
       contentJson: {},
-      contentText: "body"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(true);
@@ -38,7 +46,15 @@ describe("validateCreateBlogPostInput", () => {
       title: "Hello",
       slug: "hello",
       contentJson: {},
-      contentText: "body",
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ],
       visibility: "bogus"
     });
 
@@ -53,7 +69,15 @@ describe("validateCreateBlogPostInput", () => {
       title: "Hello",
       slug: "hello",
       contentJson: {},
-      contentText: "body",
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ],
       featuredMediaId: "not-a-uuid"
     });
 
@@ -69,7 +93,15 @@ describe("validateCreateBlogPostInput", () => {
     const result = validateCreateBlogPostInput({
       slug: "hello",
       contentJson: {},
-      contentText: "body"
+      bodyPortableText: [
+        {
+          _type: "block",
+          _key: "b0",
+          style: "normal",
+          children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+          markDefs: []
+        }
+      ]
     });
 
     expect(result.valid).toBe(false);

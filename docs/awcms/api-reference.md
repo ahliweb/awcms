@@ -9368,22 +9368,22 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
 
 Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all fields optional on update).
 
-| Field             | Type                                           | Required | Nullable | Description |
-| ----------------- | ---------------------------------------------- | -------- | -------- | ----------- |
-| `title`           | string                                         | no       | no       |             |
-| `slug`            | string                                         | no       | no       |             |
-| `excerpt`         | string                                         | no       | yes      |             |
-| `contentJson`     | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       |             |
-| `contentText`     | string                                         | no       | no       |             |
-| `locale`          | string                                         | no       | no       |             |
-| `visibility`      | enum(`public`, `private`, `unlisted`)          | no       | no       |             |
-| `featuredMediaId` | string (uuid)                                  | no       | yes      |             |
-| `seoTitle`        | string                                         | no       | yes      |             |
-| `metaDescription` | string                                         | no       | yes      |             |
-| `canonicalUrl`    | string                                         | no       | yes      |             |
-| `pageType`        | enum(`standard`, `landing`, `legal`, `system`) | no       | no       |             |
-| `parentPageId`    | string (uuid)                                  | no       | yes      |             |
-| `menuOrder`       | integer                                        | no       | no       |             |
+| Field              | Type                                           | Required | Nullable | Description                                                                                                                                                    |
+| ------------------ | ---------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`            | string                                         | no       | no       |                                                                                                                                                                |
+| `slug`             | string                                         | no       | no       |                                                                                                                                                                |
+| `excerpt`          | string                                         | no       | yes      |                                                                                                                                                                |
+| `contentJson`      | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       | ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved. |
+| `bodyPortableText` | [`PortableTextBody`](#schema-portabletextbody) | no       | no       |                                                                                                                                                                |
+| `locale`           | string                                         | no       | no       |                                                                                                                                                                |
+| `visibility`       | enum(`public`, `private`, `unlisted`)          | no       | no       |                                                                                                                                                                |
+| `featuredMediaId`  | string (uuid)                                  | no       | yes      |                                                                                                                                                                |
+| `seoTitle`         | string                                         | no       | yes      |                                                                                                                                                                |
+| `metaDescription`  | string                                         | no       | yes      |                                                                                                                                                                |
+| `canonicalUrl`     | string                                         | no       | yes      |                                                                                                                                                                |
+| `pageType`         | enum(`standard`, `landing`, `legal`, `system`) | no       | no       |                                                                                                                                                                |
+| `parentPageId`     | string (uuid)                                  | no       | yes      |                                                                                                                                                                |
+| `menuOrder`        | integer                                        | no       | no       |                                                                                                                                                                |
 
 **Example**
 
@@ -9400,7 +9400,20 @@ Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all 
       }
     ]
   },
-  "contentText": "string",
+  "bodyPortableText": [
+    {
+      "_type": "block",
+      "_key": "string",
+      "style": "normal",
+      "listItem": "bullet",
+      "level": 1,
+      "children": [],
+      "markDefs": [],
+      "items": [],
+      "provider": "string",
+      "videoId": "string"
+    }
+  ],
   "locale": "string",
   "visibility": "public",
   "featuredMediaId": "00000000-0000-0000-0000-000000000000",
@@ -9417,23 +9430,23 @@ Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all 
 
 Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1/blog/posts/{id} (all fields optional, only present fields change).
 
-| Field                          | Type                                         | Required | Nullable | Description                                                                                      |
-| ------------------------------ | -------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `title`                        | string                                       | no       | no       |                                                                                                  |
-| `slug`                         | string                                       | no       | no       |                                                                                                  |
-| `excerpt`                      | string                                       | no       | yes      |                                                                                                  |
-| `contentJson`                  | [`BlogContentJson`](#schema-blogcontentjson) | no       | no       |                                                                                                  |
-| `contentText`                  | string                                       | no       | no       |                                                                                                  |
-| `locale`                       | string                                       | no       | no       |                                                                                                  |
-| `visibility`                   | enum(`public`, `private`, `unlisted`)        | no       | no       |                                                                                                  |
-| `featuredMediaId`              | string (uuid)                                | no       | yes      |                                                                                                  |
-| `seoImageMediaId`              | string (uuid)                                | no       | yes      | Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId. |
-| `seoTitle`                     | string                                       | no       | yes      |                                                                                                  |
-| `metaDescription`              | string                                       | no       | yes      |                                                                                                  |
-| `canonicalUrl`                 | string                                       | no       | yes      |                                                                                                  |
-| `termIds`                      | array of string (uuid)                       | no       | no       |                                                                                                  |
-| `translationGroupId`           | string (uuid)                                | no       | yes      |                                                                                                  |
-| `autoInternalTagLinksDisabled` | boolean                                      | no       | no       | Per-post opt-out of automatic internal tag linking.                                              |
+| Field                          | Type                                           | Required | Nullable | Description                                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                        | string                                         | no       | no       |                                                                                                                                                                |
+| `slug`                         | string                                         | no       | no       |                                                                                                                                                                |
+| `excerpt`                      | string                                         | no       | yes      |                                                                                                                                                                |
+| `contentJson`                  | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       | ADR-0100 — the non-body ENVELOPE, optional on write. Its blocks key is overwritten with the derived projection; other keys (notably awcmsAstro) are preserved. |
+| `bodyPortableText`             | [`PortableTextBody`](#schema-portabletextbody) | no       | no       |                                                                                                                                                                |
+| `locale`                       | string                                         | no       | no       |                                                                                                                                                                |
+| `visibility`                   | enum(`public`, `private`, `unlisted`)          | no       | no       |                                                                                                                                                                |
+| `featuredMediaId`              | string (uuid)                                  | no       | yes      |                                                                                                                                                                |
+| `seoImageMediaId`              | string (uuid)                                  | no       | yes      | Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId.                                                               |
+| `seoTitle`                     | string                                         | no       | yes      |                                                                                                                                                                |
+| `metaDescription`              | string                                         | no       | yes      |                                                                                                                                                                |
+| `canonicalUrl`                 | string                                         | no       | yes      |                                                                                                                                                                |
+| `termIds`                      | array of string (uuid)                         | no       | no       |                                                                                                                                                                |
+| `translationGroupId`           | string (uuid)                                  | no       | yes      |                                                                                                                                                                |
+| `autoInternalTagLinksDisabled` | boolean                                        | no       | no       | Per-post opt-out of automatic internal tag linking.                                                                                                            |
 
 **Example**
 
@@ -9450,7 +9463,20 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
       }
     ]
   },
-  "contentText": "string",
+  "bodyPortableText": [
+    {
+      "_type": "block",
+      "_key": "string",
+      "style": "normal",
+      "listItem": "bullet",
+      "level": 1,
+      "children": [],
+      "markDefs": [],
+      "items": [],
+      "provider": "string",
+      "videoId": "string"
+    }
+  ],
   "locale": "string",
   "visibility": "public",
   "featuredMediaId": "00000000-0000-0000-0000-000000000000",
@@ -9887,6 +9913,129 @@ Unparseable entries are refused at issuance. At request time an unreadable entry
 {
   "clientKey": "string",
   "redirectUri": "string"
+}
+```
+
+### Schema: PortableTextBody
+
+ADR-0100 — the canonical article body. contentJson.blocks is a derived, LOSSY projection of this, written only so ahliweb/awcms-astro keeps rendering until it reads this field directly.
+
+ADR-0100 — the canonical article body. contentJson.blocks is a derived, LOSSY projection of this, written only so ahliweb/awcms-astro keeps rendering until it reads this field directly.
+
+**Example**
+
+```json
+[
+  {
+    "_type": "block",
+    "_key": "string",
+    "style": "normal",
+    "listItem": "bullet",
+    "level": 1,
+    "children": [
+      {
+        "_type": "span",
+        "_key": "string",
+        "text": "string",
+        "marks": []
+      }
+    ],
+    "markDefs": [
+      {
+        "_type": "link",
+        "_key": "string",
+        "href": "string"
+      }
+    ],
+    "items": ["(operation-specific payload)"],
+    "provider": "string",
+    "videoId": "string"
+  }
+]
+```
+
+### Schema: PortableTextLinkAnnotation
+
+| Field   | Type         | Required | Nullable | Description                                                                                                                          |
+| ------- | ------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `_type` | enum(`link`) | yes      | no       |                                                                                                                                      |
+| `_key`  | string       | yes      | no       |                                                                                                                                      |
+| `href`  | string       | yes      | no       | Relative, or http/https/mailto/tel. Checked by URL parsing rather than a pattern, so java\\nscript: and JaVaScRiPt: are refused too. |
+
+**Example**
+
+```json
+{
+  "_type": "link",
+  "_key": "string",
+  "href": "string"
+}
+```
+
+### Schema: PortableTextNode
+
+One node of a CLOSED Portable Text vocabulary (ADR-0100). _type is one of block, gallery, videoNews — anything else is refused at write time, which is what keeps "there is no field where arbitrary markup could live" true.
+
+| Field      | Type                                                                        | Required | Nullable | Description                                    |
+| ---------- | --------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------- |
+| `_type`    | enum(`block`, `gallery`, `videoNews`)                                       | yes      | no       |                                                |
+| `_key`     | string                                                                      | yes      | no       |                                                |
+| `style`    | enum(`normal`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `blockquote`)            | no       | no       |                                                |
+| `listItem` | enum(`bullet`, `number`)                                                    | no       | no       |                                                |
+| `level`    | integer                                                                     | no       | no       |                                                |
+| `children` | array of [`PortableTextSpan`](#schema-portabletextspan)                     | no       | no       |                                                |
+| `markDefs` | array of [`PortableTextLinkAnnotation`](#schema-portabletextlinkannotation) | no       | no       |                                                |
+| `items`    | array of object                                                             | no       | no       | Gallery items — present when _type is gallery. |
+| `provider` | string                                                                      | no       | no       | Present when _type is videoNews.               |
+| `videoId`  | string                                                                      | no       | no       | Present when _type is videoNews.               |
+
+**Example**
+
+```json
+{
+  "_type": "block",
+  "_key": "string",
+  "style": "normal",
+  "listItem": "bullet",
+  "level": 1,
+  "children": [
+    {
+      "_type": "span",
+      "_key": "string",
+      "text": "string",
+      "marks": []
+    }
+  ],
+  "markDefs": [
+    {
+      "_type": "link",
+      "_key": "string",
+      "href": "string"
+    }
+  ],
+  "items": ["(operation-specific payload)"],
+  "provider": "string",
+  "videoId": "string"
+}
+```
+
+### Schema: PortableTextSpan
+
+| Field   | Type            | Required | Nullable | Description                                                                                                                                                                        |
+| ------- | --------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_type` | enum(`span`)    | yes      | no       |                                                                                                                                                                                    |
+| `_key`  | string          | yes      | no       |                                                                                                                                                                                    |
+| `text`  | string          | yes      | no       | PLAIN text — never markup.                                                                                                                                                         |
+| `marks` | array of string | no       | no       | Decorator names (strong, em, code) and/or the _key of an annotation declared in this block's own markDefs. A mark naming neither is refused at write time as a dangling reference. |
+
+**Example**
+
+```json
+{
+  "_type": "span",
+  "_key": "string",
+  "text": "string",
+  "marks": ["string"]
 }
 ```
 

@@ -12,6 +12,11 @@ import {
   boundedPageNumber,
   boundedPageSize
 } from "../../_shared/offset-pagination";
+import {
+  portableTextToPlainText,
+  withProjectedBlocks
+} from "../domain/portable-text-conversion";
+import type { PortableTextDocument } from "../domain/portable-text";
 
 /**
  * Read/write query module for `awcms_blog_pages` (Issue #539) — same
@@ -87,6 +92,8 @@ export type BlogPageView = {
   excerpt: string | null;
   contentJson: Record<string, unknown>;
   contentText: string;
+  /** ADR-0100 — the canonical body. `contentJson.blocks` is a derived projection of it. */
+  bodyPortableText: PortableTextDocument;
   status: BlogContentStatus;
   visibility: BlogContentVisibility;
   featuredMediaId: string | null;
@@ -118,6 +125,7 @@ type BlogPageRow = {
   excerpt: string | null;
   content_json: Record<string, unknown>;
   content_text: string;
+  body_portable_text: PortableTextDocument;
   status: BlogContentStatus;
   visibility: BlogContentVisibility;
   featured_media_id: string | null;
@@ -150,6 +158,7 @@ function toView(row: BlogPageRow): BlogPageView {
     excerpt: row.excerpt,
     contentJson: row.content_json,
     contentText: row.content_text,
+    bodyPortableText: row.body_portable_text,
     status: row.status,
     visibility: row.visibility,
     featuredMediaId: row.featured_media_id,
@@ -182,18 +191,22 @@ export async function createBlogPage(
   const rows = (await tx`
     INSERT INTO awcms_blog_pages
       (tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-       content_text, status, visibility, featured_media_id, seo_title,
+       content_text, body_portable_text, status, visibility, featured_media_id,
+       seo_title,
        meta_description, canonical_url, locale, page_type, parent_page_id,
        menu_order)
     VALUES (
       ${tenantId}, ${authorTenantUserId}, ${input.title}, ${input.slug},
-      ${input.excerpt}, ${input.contentJson}, ${input.contentText}, 'draft',
+      ${input.excerpt},
+      ${withProjectedBlocks(input.contentJson, input.bodyPortableText)},
+      ${portableTextToPlainText(input.bodyPortableText)},
+      ${JSON.stringify(input.bodyPortableText)}::jsonb, 'draft',
       ${input.visibility}, ${input.featuredMediaId}, ${input.seoTitle},
       ${input.metaDescription}, ${input.canonicalUrl}, ${input.locale},
       ${input.pageType}, ${input.parentPageId}, ${input.menuOrder}
     )
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
@@ -216,7 +229,7 @@ export async function fetchBlogPageById(
     options.includeDeleted
       ? await tx`
         SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
@@ -225,7 +238,7 @@ export async function fetchBlogPageById(
       `
       : await tx`
         SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
@@ -365,8 +378,25 @@ export async function updateBlogPage(
     SET title = COALESCE(${input.title ?? null}, title),
         slug = COALESCE(${input.slug ?? null}, slug),
         excerpt = CASE WHEN ${input.excerpt === undefined} THEN excerpt ELSE ${input.excerpt ?? null} END,
-        content_json = COALESCE(${input.contentJson ?? null}, content_json),
-        content_text = COALESCE(${input.contentText ?? null}, content_text),
+        -- ADR-0100 — the three body columns move TOGETHER or not at all. A
+        -- partial update that changed the envelope without the body, or the
+        -- body without the derived search text, would leave the row internally
+        -- inconsistent in a way nothing downstream could detect.
+        content_json = CASE
+          WHEN ${input.bodyPortableText !== undefined}
+            THEN ${input.bodyPortableText === undefined ? null : withProjectedBlocks(input.contentJson, input.bodyPortableText)}
+          ELSE COALESCE(${input.contentJson ?? null}, content_json)
+        END,
+        content_text = CASE
+          WHEN ${input.bodyPortableText !== undefined}
+            THEN ${input.bodyPortableText === undefined ? null : portableTextToPlainText(input.bodyPortableText)}
+          ELSE content_text
+        END,
+        body_portable_text = CASE
+          WHEN ${input.bodyPortableText !== undefined}
+            THEN ${input.bodyPortableText === undefined ? null : JSON.stringify(input.bodyPortableText)}::jsonb
+          ELSE body_portable_text
+        END,
         locale = COALESCE(${input.locale ?? null}, locale),
         visibility = COALESCE(${input.visibility ?? null}, visibility),
         featured_media_id = CASE
@@ -392,7 +422,7 @@ export async function updateBlogPage(
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
@@ -453,7 +483,7 @@ export async function transitionBlogPageStatus(
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
@@ -475,7 +505,7 @@ export async function restoreBlogPage(
         restored_at = now(), restored_by = ${actorTenantUserId}, updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NOT NULL
     RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
-      content_text, status, visibility, featured_media_id, seo_title,
+      content_text, body_portable_text, status, visibility, featured_media_id, seo_title,
       meta_description, canonical_url, locale, page_type, parent_page_id,
       menu_order, published_at, scheduled_at, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
