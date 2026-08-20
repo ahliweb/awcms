@@ -1,0 +1,272 @@
+# Source fragment for the "site_profile" module (Issue #596, ADR-0102).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations.
+#
+# Nothing here is anonymous. "Public read" in Issue #596 means "the public
+# site's builder can read it", not "unauthenticated" — the same posture
+# GET /api/v1/media/public-origin takes. Contact details and an editorial
+# address are published by the site itself, but publishing them is the SITE's
+# decision to make in its templates, not this API's to make on its behalf.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# only resolve after `bun run openapi:bundle` merges this file with the root
+# fragment and every sibling module fragment. Edit this file, never the bundle.
+paths:
+  /api/v1/site-profile:
+    get:
+      operationId: siteProfileRead
+      tags:
+        - Site Profile
+      summary: Read this tenant's site chrome
+      description: >-
+        Gated by `site_profile.profile.read`. Returns an EMPTY profile (every
+        field null, `socialLinks` empty) when the tenant has never saved one, so
+        a consumer has a single shape to render and never branches on "no row
+        yet". Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: This tenant's site chrome.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SiteProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: siteProfileUpdate
+      tags:
+        - Site Profile
+      summary: Replace this tenant's site chrome
+      description: >-
+        Gated by `site_profile.profile.update`, separately grantable from
+        `.read` because changing what every public page's contact block says is
+        a different power from reading it. FULL REPLACE, not a patch: an omitted
+        or empty field is stored as null. That is deliberate — a form that
+        submits its whole state cannot express "leave this one alone", and
+        pretending it could would make clearing a wrong phone number impossible.
+        Requires an Idempotency-Key and is audited; the audit row records WHICH
+        FIELDS are set, never their values, because an address and a phone
+        number are contact data and the audit log is read more widely than the
+        screen.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteProfileWriteInput"
+      responses:
+        "200":
+          description: Saved site chrome.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SiteProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-profile/composed:
+    get:
+      operationId: siteProfileComposedRead
+      tags:
+        - Site Profile
+      summary: Site identity for a build client, both halves in one answer
+      description: >-
+        Gated by `site_profile.profile.read`. ADR-0102 splits OWNERSHIP —
+        `awcms_seo_tenant_settings` keeps what crawlers see (og:site_name, the
+        JSON-LD Organization node, the default og:image) and `awcms_site_profile`
+        owns what people read. That boundary is right for ownership and wrong
+        for consumers, so the composition happens here, once, rather than in
+        every build template that would otherwise have to call two endpoints and
+        merge them — and drift when one of them forgot.
+        `logoMediaId`/`faviconMediaId` are media object IDS, not URLs: a
+        consumer resolves them through media_library exactly as it resolves an
+        article image, which is what keeps managed-media enforcement meaningful.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Composed site identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/ComposedSiteIdentity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    SocialProfileLink:
+      type: object
+      required: [platform, url]
+      properties:
+        platform:
+          description: >-
+            A label, deliberately NOT an enumeration. Closing the set would mean
+            a migration every time a newsroom joins a new network, and unlike a
+            content block type nothing renders differently per value — an
+            unknown platform degrades to a plain link.
+          type: string
+          maxLength: 40
+        url:
+          description: >-
+            Absolute http(s) only. REFUSED rather than sanitized otherwise:
+            this is rendered as an <a href> on every public page, so a
+            javascript:/data: value would be stored XSS with a very long reach.
+          type: string
+          maxLength: 500
+    SiteProfile:
+      type: object
+      properties:
+        tagline:
+          type: string
+          nullable: true
+          maxLength: 200
+        copyrightNotice:
+          type: string
+          nullable: true
+          maxLength: 300
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        faviconMediaId:
+          description: >-
+            Separate from the logo on purpose: a favicon is square, tiny and
+            usually a different crop, and one field for both would force every
+            tenant to accept whichever compromise the renderer picked.
+          type: string
+          format: uuid
+          nullable: true
+        editorialAddress:
+          description: >-
+            Free text and multi-line on purpose — Indonesian addresses do not
+            decompose into street/city/postcode reliably, and forcing them to
+            would produce a form nobody can fill in correctly.
+          type: string
+          nullable: true
+          maxLength: 1000
+        contactEmail:
+          type: string
+          nullable: true
+          maxLength: 320
+        contactPhone:
+          type: string
+          nullable: true
+          maxLength: 50
+        whatsappNumber:
+          description: >-
+            Kept separate from contactPhone: a newsroom's WhatsApp tip line is
+            frequently not its switchboard number.
+          type: string
+          nullable: true
+          maxLength: 50
+        socialLinks:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SocialProfileLink"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SiteProfileWriteInput:
+      type: object
+      properties:
+        tagline:
+          type: string
+          nullable: true
+        copyrightNotice:
+          type: string
+          nullable: true
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        faviconMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        editorialAddress:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        whatsappNumber:
+          type: string
+          nullable: true
+        socialLinks:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SocialProfileLink"
+    ComposedSiteIdentity:
+      description: >-
+        Both halves of site identity in one answer. The four SEO-owned fields
+        are named exactly as seo_distribution names them, so this is visibly a
+        passthrough rather than a second definition that could drift.
+      allOf:
+        - $ref: "#/components/schemas/SiteProfile"
+        - type: object
+          properties:
+            siteName:
+              type: string
+              nullable: true
+            organizationName:
+              type: string
+              nullable: true
+            organizationLogoMediaId:
+              type: string
+              format: uuid
+              nullable: true
+            defaultSocialMediaId:
+              type: string
+              format: uuid
+              nullable: true

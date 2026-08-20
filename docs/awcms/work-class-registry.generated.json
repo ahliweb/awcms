@@ -1027,6 +1027,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/site-profile/composed.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/site-profile/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/site-search/index/failures.ts",
       "workClass": "reporting",
       "source": "explicit"

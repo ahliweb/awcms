@@ -318,6 +318,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // under tags the root catalog never declared.
       "Push Delivery",
       "SEO & Distribution",
+      // "Site Profile" (site_profile, ADR-0102, Issue #596) — genuinely new
+      // surface: the tenant's masthead/footer/contact identity plus the
+      // composed read a build client uses. Nothing here is anonymous.
+      "Site Profile",
       "Site Search",
       "Tenant Domains",
       "Theming",

@@ -8592,6 +8592,80 @@ PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale
 | 200    | Title suggestions (possibly empty).            | object                                 |
 | 429    | Too many suggestion requests from this source. | [`ApiError`](#standard-error-envelope) |
 
+## Site Profile
+
+Per-tenant SITE CHROME (site_profile module, Issue #596, ADR-0102) — the masthead tagline, footer copyright line, logo and favicon, editorial address, contact email/phone/WhatsApp, and social profile links that every public page renders. Before it, a footer, masthead, contact page and Organization JSON-LD node all had to hard-code the publisher's identity in frontend source, which made a second tenant impossible without a fork. The boundary against seo_distribution is deliberate: awcms_seo_tenant_settings keeps what CRAWLERS see (og:site_name, the JSON-LD Organization node, the default og:image) because each is an SEO output consumed by a meta-tag renderer, while this module owns what PEOPLE read. Nothing is duplicated across the two, so no value can drift, and consumers are never asked to know the split — GET /api/v1/site-profile/composed merges both halves for build clients. Social link URLs are REFUSED rather than sanitized unless absolute http(s), because they are rendered as <a href> on every public page. read and update are separately grantable: changing what every page's contact block says is a different power from reading it. Nothing here is anonymous — 'public read' means the public site's BUILDER can read it, not that anyone can.
+
+### `GET /api/v1/site-profile` — Read this tenant's site chrome
+
+- **operationId**: `siteProfileRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_profile.profile.read`. Returns an EMPTY profile (every field null, `socialLinks` empty) when the tenant has never saved one, so a consumer has a single shape to render and never branches on "no row yet". Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | This tenant's site chrome.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/site-profile` — Replace this tenant's site chrome
+
+- **operationId**: `siteProfileUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_profile.profile.update`, separately grantable from `.read` because changing what every public page's contact block says is a different power from reading it. FULL REPLACE, not a patch: an omitted or empty field is stored as null. That is deliberate — a form that submits its whole state cannot express "leave this one alone", and pretending it could would make clearing a wrong phone number impossible. Requires an Idempotency-Key and is audited; the audit row records WHICH FIELDS are set, never their values, because an address and a phone number are contact data and the audit log is read more widely than the screen.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SiteProfileWriteInput`](#schema-siteprofilewriteinput)
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Saved site chrome.                                         | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/site-profile/composed` — Site identity for a build client, both halves in one answer
+
+- **operationId**: `siteProfileComposedRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_profile.profile.read`. ADR-0102 splits OWNERSHIP — `awcms_seo_tenant_settings` keeps what crawlers see (og:site_name, the JSON-LD Organization node, the default og:image) and `awcms_site_profile` owns what people read. That boundary is right for ownership and wrong for consumers, so the composition happens here, once, rather than in every build template that would otherwise have to call two endpoints and merge them — and drift when one of them forgot. `logoMediaId`/`faviconMediaId` are media object IDS, not URLs: a consumer resolves them through media_library exactly as it resolves an article image, which is what keeps managed-media enforcement meaningful.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Composed site identity.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ## Comments
 
 Tenant-scoped, moderation-first commenting over PUBLISHED, PUBLIC commentable resources (comments module, ADR-0041) — the public, anonymous, host-resolved submit/list/reply/edit/report/delete-request surface plus the ABAC-guarded admin moderation queue, per-decision transitions, bulk moderation, and tenant comment configuration. A comment is only ever accepted against, or shown on, a resource that satisfies its owning module's declarative publicationFilter, so a draft/private/deleted/scheduled resource never receives or exposes comments, and the comment surface is NEVER an authorization source for the underlying resource. Bodies are stored as raw plain text and HTML-escaped on render (no stored HTML, therefore no stored XSS), permitting only http(s) autolinks with rel=nofollow ugc noopener noreferrer. The public list returns approved rows only and never moderation metadata. Public submit responses are deliberately uniform: an anti-abuse block, an unresolved resource, and an accepted-but-pending comment all return the same neutral body, so the endpoint cannot be used as an oracle for blocked terms or for unpublished content. moderation.approve/restore/delete and settings.update are high-risk, idempotency-keyed, and audited with a reason code.
@@ -10248,6 +10322,41 @@ Update the mutable fields (source path is immutable — supplied only at create)
 }
 ```
 
+### Schema: SiteProfileWriteInput
+
+| Field              | Type                                                      | Required | Nullable | Description |
+| ------------------ | --------------------------------------------------------- | -------- | -------- | ----------- |
+| `tagline`          | string                                                    | no       | yes      |             |
+| `copyrightNotice`  | string                                                    | no       | yes      |             |
+| `logoMediaId`      | string (uuid)                                             | no       | yes      |             |
+| `faviconMediaId`   | string (uuid)                                             | no       | yes      |             |
+| `editorialAddress` | string                                                    | no       | yes      |             |
+| `contactEmail`     | string                                                    | no       | yes      |             |
+| `contactPhone`     | string                                                    | no       | yes      |             |
+| `whatsappNumber`   | string                                                    | no       | yes      |             |
+| `socialLinks`      | array of [`SocialProfileLink`](#schema-socialprofilelink) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "tagline": "string",
+  "copyrightNotice": "string",
+  "logoMediaId": "00000000-0000-0000-0000-000000000000",
+  "faviconMediaId": "00000000-0000-0000-0000-000000000000",
+  "editorialAddress": "string",
+  "contactEmail": "user@example.com",
+  "contactPhone": "string",
+  "whatsappNumber": "string",
+  "socialLinks": [
+    {
+      "platform": "string",
+      "url": "https://example.com/resource"
+    }
+  ]
+}
+```
+
 ### Schema: SiteSearchSettingsUpdateRequest
 
 Every field is optional — an omitted field keeps its current value.
@@ -10273,6 +10382,22 @@ Every field is optional — an omitted field keeps its current value.
   "suggestionsEnabled": false,
   "suggestionLimit": 1,
   "analyticsEnabled": false
+}
+```
+
+### Schema: SocialProfileLink
+
+| Field      | Type   | Required | Nullable | Description                                                                                                                                                                                                                                       |
+| ---------- | ------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `platform` | string | yes      | no       | A label, deliberately NOT an enumeration. Closing the set would mean a migration every time a newsroom joins a new network, and unlike a content block type nothing renders differently per value — an unknown platform degrades to a plain link. |
+| `url`      | string | yes      | no       | Absolute http(s) only. REFUSED rather than sanitized otherwise: this is rendered as an <a href> on every public page, so a javascript:/data: value would be stored XSS with a very long reach.                                                    |
+
+**Example**
+
+```json
+{
+  "platform": "string",
+  "url": "https://example.com/resource"
 }
 ```
 

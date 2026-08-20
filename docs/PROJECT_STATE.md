@@ -110,11 +110,11 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Version                           | **9.1.2**                                                                              | `package.json`                                                                          |
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
-| Base modules                      | **22** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **134** (`sql/001`–`134`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0101** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
-| Admin screens                     | **44** `.astro` files in `src/pages/admin/`; **0 of 22** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **57** (32.032 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| Base modules                      | **23** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
+| Migrations                        | **135** (`sql/001`–`135`)                                                              | `ls sql/`                                                                               |
+| ADR                               | **0000**–**0102** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| Admin screens                     | **45** `.astro` files in `src/pages/admin/`; **0 of 23** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| `.astro` files                    | **58** (32.383 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **52** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -193,7 +193,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 3. What is already done (do not rebuild it)
 
-- **22 modules** registered with `FORCE` RLS, DB role separation
+- **23 modules** registered with `FORCE` RLS, DB role separation
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Advanced auth**: MFA TOTP + session-assurance/step-up (`sql/024`), tenant-aware
   OIDC/SSO + SSRF guard + break-glass (`sql/025`/`026`), profile-aware Turnstile bot

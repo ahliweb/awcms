@@ -85,6 +85,11 @@ export const BOUNDED_BY_DESIGN: readonly {
   reason: string;
 }[] = [
   {
+    table: "awcms_site_profile",
+    reason:
+      "ADR-0102. At most ONE row per tenant, by primary key — the row is upserted, never appended, so the table's ceiling IS `awcms_tenants` and no request path or job can add a second. Nothing here is traffic-generated: every value is typed by an administrator on `/admin/site-profile`. An age-based purge would be actively WRONG rather than merely unnecessary, for the same reason it is wrong for `awcms_principal_preferences`: `executionMode: 'generic'` deletes by age with no status predicate, so a newsroom that set its editorial address two years ago and has not touched it since — the healthy case — would have its masthead, footer and contact block silently emptied for being OLD. The row has no natural expiry and its age says nothing about whether it is still wanted; deleting it would blank the published contact details of a live site. Erasure is not a question here either: this is the PUBLISHER's own published identity, deliberately public, not a data subject's personal data — which is exactly why the audit row for a change records which fields are set and never their values."
+  },
+  {
     table: "awcms_principal_preferences",
     reason:
       "ADR-0095. At most ONE row per principal, by primary key — the row is upserted, never appended, so the table's ceiling IS the number of humans who have ever opened the language switcher, and it cannot exceed `awcms_principals`. Nothing in the request path inserts a second row and no job writes here at all (sql/128 grants `awcms_worker` nothing). An age-based purge would be actively wrong rather than merely unnecessary: `executionMode: 'generic'` deletes by age with no status predicate, so a reader who set Indonesian two years ago and has been happily reading it since would have their choice deleted for being OLD — the row has no natural expiry, and its age says nothing about whether it is still wanted. Erasure is answered instead by the `subjectData` descriptor in `identity_access`, on the same per-tenant boundary as `awcms_principals` itself."

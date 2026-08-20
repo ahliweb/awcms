@@ -356,7 +356,7 @@ describe("/admin/blog permission gates", () => {
     // `can({ moduleKey: "media_library" ... })` ever appears here, the
     // eleven-key contract above fails too — this names the reason.
     expect(page).not.toContain('moduleKey: "media_library"');
-    expect(page).toContain("fetchPickableMedia");
+    expect(page).toContain("wireMediaPickers");
   });
 
   test("the picker offers only verified, undeleted objects", async () => {

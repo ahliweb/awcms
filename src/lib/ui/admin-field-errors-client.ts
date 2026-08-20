@@ -71,12 +71,22 @@ function readFieldErrors(details: unknown): ApiFieldError[] {
 export async function sendJsonWithFieldErrors(
   method: "POST" | "PATCH" | "PUT",
   url: string,
-  body: unknown
+  body: unknown,
+  /**
+   * Extra request headers — in practice `Idempotency-Key`.
+   *
+   * Added for Issue #596: an endpoint can require an idempotency key AND
+   * return field-level errors, and before this a caller had to choose. The
+   * only way to have both was to drop to `sendJson` and lose the per-field
+   * mapping, which is why `/admin/seo` reports "invalid" without saying which
+   * field — a worse screen for no reason anybody chose.
+   */
+  extraHeaders?: Record<string, string>
 ): Promise<FieldErrorResult> {
   try {
     const response = await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       credentials: "same-origin",
       body: JSON.stringify(body)
     });
@@ -148,6 +158,12 @@ export async function submitWithFieldErrors(
     /** Shown for `SLUG_CONFLICT` / `CONFLICT`, which name no field. */
     conflict: string;
     failure: string;
+    /**
+     * Sends a fresh `Idempotency-Key` per submit. Required by every high-risk
+     * mutation in this repo; a double-submit then replays the first result
+     * instead of doing the work twice.
+     */
+    idempotent?: boolean;
   }
 ): Promise<void> {
   let rejected: ApiFieldError[] = [];
@@ -156,7 +172,14 @@ export async function submitWithFieldErrors(
     submit,
     box,
     async () => {
-      const result = await sendJsonWithFieldErrors(method, url, body);
+      const result = await sendJsonWithFieldErrors(
+        method,
+        url,
+        body,
+        options.idempotent === true
+          ? { "Idempotency-Key": crypto.randomUUID() }
+          : undefined
+      );
       rejected = result.fieldErrors;
       return result;
     },
