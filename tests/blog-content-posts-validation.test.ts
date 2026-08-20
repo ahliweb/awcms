@@ -225,3 +225,89 @@ describe("evaluatePostUpdateAccess", () => {
     expect(decision.matchedPolicy).toBe("default_deny");
   });
 });
+
+describe("institutionIds (Issue #595)", () => {
+  const MINIMAL = {
+    title: "Hello",
+    slug: "hello",
+    contentJson: {},
+    bodyPortableText: [
+      {
+        _type: "block",
+        _key: "b0",
+        style: "normal",
+        children: [{ _type: "span", _key: "s0", text: "body", marks: [] }],
+        markDefs: []
+      }
+    ]
+  };
+
+  test("is undefined when absent — absent means 'leave assignments alone'", () => {
+    const result = validateCreateBlogPostInput(MINIMAL);
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.institutionIds).toBeUndefined();
+  });
+
+  test("an EMPTY array survives as [] and is not folded into undefined", () => {
+    // The whole absent-vs-empty distinction depends on this: `[]` is the
+    // caller saying "remove them all", and collapsing it to `undefined` would
+    // make institutions impossible to unassign.
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      institutionIds: []
+    });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.institutionIds).toEqual([]);
+  });
+
+  test("accepts UUIDs and de-duplicates them", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      institutionIds: [id, id]
+    });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.institutionIds).toEqual([id]);
+  });
+
+  test("rejects a non-UUID, naming the field rather than termIds", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      institutionIds: ["not-a-uuid"]
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.map((e) => e.field)).toContain("institutionIds");
+      expect(result.errors.map((e) => e.field)).not.toContain("termIds");
+    }
+  });
+
+  test("rejects a non-array", () => {
+    const result = validateCreateBlogPostInput({
+      ...MINIMAL,
+      institutionIds: "11111111-1111-4111-8111-111111111111"
+    });
+
+    expect(result.valid).toBe(false);
+  });
+
+  test("update: absent leaves it out of the patch entirely", () => {
+    const result = validateUpdateBlogPostInput({ title: "New" });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect("institutionIds" in result.value).toBe(false);
+    }
+  });
+
+  test("update: [] is carried through, so a post can be un-assigned", () => {
+    const result = validateUpdateBlogPostInput({ institutionIds: [] });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value.institutionIds).toEqual([]);
+  });
+});

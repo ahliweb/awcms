@@ -26,6 +26,10 @@ import {
   countExistingTerms,
   syncPostTermAssignments
 } from "../../../../../modules/blog-content/application/blog-taxonomy-directory";
+import {
+  countExistingInstitutions,
+  syncPostInstitutionAssignments
+} from "../../../../../modules/blog-content/application/institution-directory";
 import { setPostTranslationGroup } from "../../../../../modules/blog-content/application/localized-content-directory";
 import { validateNewsMediaReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/news-media-reference-gate";
 import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/video-news-thumbnail-reference-gate";
@@ -217,6 +221,24 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       }
     }
 
+    // Issue #595 — same shape, same check as `termIds`. A bare FK violation
+    // would otherwise surface as a raw 500 instead of a named 400.
+    if (input.institutionIds && input.institutionIds.length > 0) {
+      const existingCount = await countExistingInstitutions(
+        tx,
+        tenantId,
+        input.institutionIds
+      );
+
+      if (existingCount !== input.institutionIds.length) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "institutionIds contains an id that does not exist for this tenant."
+        );
+      }
+    }
+
     const mediaReferenceValidation =
       await validateNewsMediaReferencesForFullOnlineR2Mode(
         tx,
@@ -287,6 +309,15 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       await syncPostTermAssignments(tx, tenantId, post.id, input.termIds);
     }
 
+    if (input.institutionIds) {
+      await syncPostInstitutionAssignments(
+        tx,
+        tenantId,
+        post.id,
+        input.institutionIds
+      );
+    }
+
     if (input.translationGroupId) {
       await setPostTranslationGroup(
         tx,
@@ -326,6 +357,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       slug: post.slug
     });
 
-    return ok({ ...post, termIds: input.termIds ?? [] });
+    return ok({
+      ...post,
+      termIds: input.termIds ?? [],
+      institutionIds: input.institutionIds ?? []
+    });
   });
 };

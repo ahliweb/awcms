@@ -31,6 +31,11 @@ import {
   fetchPostTermIds,
   syncPostTermAssignments
 } from "../../../../../modules/blog-content/application/blog-taxonomy-directory";
+import {
+  countExistingInstitutions,
+  fetchPostInstitutionIds,
+  syncPostInstitutionAssignments
+} from "../../../../../modules/blog-content/application/institution-directory";
 import { setPostTranslationGroup } from "../../../../../modules/blog-content/application/localized-content-directory";
 import { validateNewsMediaReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/news-media-reference-gate";
 import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/video-news-thumbnail-reference-gate";
@@ -98,8 +103,11 @@ export const GET: APIRoute = async ({ request, params, cookies }) => {
     }
 
     const termIds = await fetchPostTermIds(tx, tenantId, postId);
+    // Sequential, not concurrent: two queries on one transaction connection
+    // in parallel leak it.
+    const institutionIds = await fetchPostInstitutionIds(tx, tenantId, postId);
 
-    return ok({ ...post, termIds });
+    return ok({ ...post, termIds, institutionIds });
   });
 };
 
@@ -255,6 +263,22 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       }
     }
 
+    if (input.institutionIds && input.institutionIds.length > 0) {
+      const existingCount = await countExistingInstitutions(
+        tx,
+        tenantId,
+        input.institutionIds
+      );
+
+      if (existingCount !== input.institutionIds.length) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "institutionIds contains an id that does not exist for this tenant."
+        );
+      }
+    }
+
     const mediaReferenceValidation =
       await validateNewsMediaReferencesForFullOnlineR2Mode(
         tx,
@@ -320,6 +344,15 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
 
     if (input.termIds) {
       await syncPostTermAssignments(tx, tenantId, postId, input.termIds);
+    }
+
+    if (input.institutionIds) {
+      await syncPostInstitutionAssignments(
+        tx,
+        tenantId,
+        postId,
+        input.institutionIds
+      );
     }
 
     if (input.translationGroupId !== undefined) {

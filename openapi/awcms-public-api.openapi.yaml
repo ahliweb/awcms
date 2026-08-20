@@ -19499,6 +19499,12 @@ components:
           items:
             type: string
             format: uuid
+        institutionIds:
+          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them."
+          type: array
+          items:
+            type: string
+            format: uuid
     BlogPostSummary:
       type: object
       description: |
@@ -19596,6 +19602,12 @@ components:
           type: string
           nullable: true
         termIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        institutionIds:
+          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them."
           type: array
           items:
             type: string
