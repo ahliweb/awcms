@@ -57,7 +57,16 @@
  * PATCH it is sent as `null`, because absent means "leave unchanged" there and
  * an editor deleting a wrong meta description has to be able to make it gone.
  *
- * Still NOT here: terms and featured media.
+ * FEATURED MEDIA arrived in the same issue, through a reusable picker
+ * (`lib/ui/media-picker-client`). Its catalogue is read from the BROWSER
+ * against `GET /api/v1/media/objects/list`, which enforces
+ * `media_library.media.read` itself — so this screen still gates on
+ * `blog_content.posts.*` and nothing else, and the eleven-key contract below
+ * is untouched. Only `verified`, undeleted objects are offered: those are the
+ * ones `isPubliclyReferenceable` admits, and attaching anything else would let
+ * an author publish a story pointing at bytes that may not exist.
+ *
+ * Still NOT here: terms.
  *
  * Terms are still unassignable from here. `POST`/`PATCH` accept `termIds`, but
  * a picker needs the taxonomy catalogue, and reading it under this screen's
@@ -957,6 +966,51 @@ const selectedPost = selectedPostId
             </div>
           </div>
 
+          {/* Issue #595 — the featured image. The catalogue is read from the
+              BROWSER against `GET /api/v1/media/objects/list`, which enforces
+              `media_library.media.read` itself: this screen holds
+              `blog_content.posts.*` and nothing else, and borrowing another
+              module's permission server-side is a decision the contract test
+              exists to force. A caller without that permission is told so,
+              rather than shown an empty library. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Featured image")}</legend>
+
+            <input
+              type="hidden"
+              id="edit-featured-media-id"
+              name="featuredMediaId"
+              value={editingPost.featuredMediaId ?? ""}
+            />
+
+            <div class="media-choice" id="edit-featured-choice">
+              <p class="form-hint" id="edit-featured-label">
+                {editingPost.featuredMediaId
+                  ? t("An image is attached.")
+                  : t("No image attached.")}
+              </p>
+              <div class="media-choice-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary media-pick-btn"
+                  data-target="edit-featured-media-id"
+                  data-label="edit-featured-label"
+                >
+                  {t("Choose image")}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary media-clear-btn"
+                  data-target="edit-featured-media-id"
+                  data-label="edit-featured-label"
+                >
+                  {t("Remove image")}
+                </button>
+              </div>
+              <div class="media-picker-panel" hidden />
+            </div>
+          </fieldset>
+
           {/* Issue #595 — same three fields as the create form, prefilled.
               Clearing one sends `null` rather than omitting it: the PATCH
               validator reads absent as "leave unchanged" and `null` as
@@ -1102,6 +1156,44 @@ const selectedPost = selectedPostId
             <textarea id="create-body" name="body" rows="14" required />
           </label>
 
+          {/* Issue #595 — the same picker as the edit form, driven by the same
+              generic client wiring (`data-target`/`data-label`). */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Featured image")}</legend>
+
+            <input
+              type="hidden"
+              id="create-featured-media-id"
+              name="featuredMediaId"
+              value=""
+            />
+
+            <div class="media-choice" id="create-featured-choice">
+              <p class="form-hint" id="create-featured-label">
+                {t("No image attached.")}
+              </p>
+              <div class="media-choice-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary media-pick-btn"
+                  data-target="create-featured-media-id"
+                  data-label="create-featured-label"
+                >
+                  {t("Choose image")}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary media-clear-btn"
+                  data-target="create-featured-media-id"
+                  data-label="create-featured-label"
+                >
+                  {t("Remove image")}
+                </button>
+              </div>
+              <div class="media-picker-panel" hidden />
+            </div>
+          </fieldset>
+
           {/* Issue #595 — every article used to publish with no meta
               description and no canonical, and `seo_distribution` faithfully
               rendered that absence into `<head>` and into every share card.
@@ -1176,6 +1268,10 @@ const selectedPost = selectedPostId
     buildBlockFromEditable,
     nextEditorKey
   } from "../../lib/ui/portable-text-editor";
+  import {
+    describePickableMedia,
+    fetchPickableMedia
+  } from "../../lib/ui/media-picker-client";
 
   const actionError = messageBox("blog-action-error");
   const createError = messageBox("post-create-error");
@@ -1200,13 +1296,105 @@ const selectedPost = selectedPostId
     // says — the operator would be told a field they cannot find is wrong.
     seoTitle: "SEO title",
     metaDescription: "Meta description",
-    canonicalUrl: "Canonical URL"
+    canonicalUrl: "Canonical URL",
+    featuredMediaId: "Featured image"
   };
 
   /** Publish/schedule/archive/restore/purge/revision-restore all require the header. */
   function idempotency(): Record<string, string> {
     return { "Idempotency-Key": crypto.randomUUID() };
   }
+
+  /**
+   * Issue #595 — the featured-image picker, wired generically off
+   * `data-target`/`data-label` so both forms share one implementation and the
+   * ad inventory (#594) can reuse it without a second copy.
+   */
+  function wireMediaPickers(): void {
+    for (const button of document.querySelectorAll(".media-pick-btn")) {
+      if (!(button instanceof HTMLButtonElement)) continue;
+
+      button.addEventListener("click", async () => {
+        const choice = button.closest(".media-choice");
+        const panel = choice?.querySelector(".media-picker-panel");
+        if (!(panel instanceof HTMLElement)) return;
+
+        // A second click closes it, so the picker cannot strand a half-open
+        // panel over the rest of the form.
+        if (!panel.hidden) {
+          panel.hidden = true;
+          return;
+        }
+
+        panel.hidden = false;
+        panel.textContent = "Loading images…";
+
+        const result = await fetchPickableMedia();
+
+        if (!result.ok) {
+          panel.textContent =
+            result.reason === "forbidden"
+              ? "You do not have permission to browse the media library."
+              : "The media library could not be reached. Try again.";
+          return;
+        }
+
+        if (result.items.length === 0) {
+          // Says WHICH library is empty: only verified, undeleted objects are
+          // offered, so "no images" here does not mean nothing was uploaded.
+          panel.textContent =
+            "No verified images yet. Upload one from Media, then reopen this.";
+          return;
+        }
+
+        panel.replaceChildren();
+
+        for (const item of result.items) {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "media-option";
+
+          const thumb = document.createElement("img");
+          thumb.src = item.publicUrl;
+          thumb.alt = "";
+          thumb.loading = "lazy";
+          thumb.className = "media-option-thumb";
+
+          const label = document.createElement("span");
+          // `textContent`, never `innerHTML`: alt text and filenames arrive
+          // from whoever uploaded the file.
+          label.textContent = describePickableMedia(item);
+
+          option.append(thumb, label);
+          option.addEventListener("click", () => {
+            const target = document.getElementById(button.dataset.target ?? "");
+            const labelEl = document.getElementById(button.dataset.label ?? "");
+
+            if (target instanceof HTMLInputElement) target.value = item.id;
+            if (labelEl) labelEl.textContent = describePickableMedia(item);
+
+            panel.hidden = true;
+          });
+
+          panel.append(option);
+        }
+      });
+    }
+
+    for (const button of document.querySelectorAll(".media-clear-btn")) {
+      if (!(button instanceof HTMLButtonElement)) continue;
+
+      button.addEventListener("click", () => {
+        const target = document.getElementById(button.dataset.target ?? "");
+        const labelEl = document.getElementById(button.dataset.label ?? "");
+
+        if (target instanceof HTMLInputElement) target.value = "";
+        if (labelEl) labelEl.textContent = "No image attached.";
+      });
+    }
+  }
+
+  wireMediaPickers();
 
   /** Wires a row button to one endpoint, with an optional confirm and body. */
   function wireLifecycle(
@@ -1615,6 +1803,11 @@ const selectedPost = selectedPostId
       if (value !== "") body[name] = value;
     }
 
+    // Issue #595 — `null` on create too, not omitted: the validator accepts
+    // UUID-or-null and `null` is the honest "no featured image", where an
+    // omitted field would leave the reader of this payload guessing.
+    body.featuredMediaId = field(data, "featuredMediaId") || null;
+
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
@@ -1653,7 +1846,10 @@ const selectedPost = selectedPostId
       // on empty and the fields would be write-once.
       seoTitle: field(data, "seoTitle") || null,
       metaDescription: field(data, "metaDescription") || null,
-      canonicalUrl: field(data, "canonicalUrl") || null
+      canonicalUrl: field(data, "canonicalUrl") || null,
+      // Issue #595. `null` clears the featured image, for the same reason the
+      // SEO fields do — otherwise the wrong photo could never be detached.
+      featuredMediaId: field(data, "featuredMediaId") || null
     };
 
     // ADR-0100 — the body is Portable Text read back out of the block editor.

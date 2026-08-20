@@ -4023,3 +4023,18 @@ msgstr "Memakai judul artikel bila dikosongkan."
 
 msgid "Set this only when this article is a copy of one that lives elsewhere."
 msgstr "Isi hanya bila artikel ini salinan dari artikel yang aslinya berada di tempat lain."
+
+msgid "Featured image"
+msgstr "Gambar utama"
+
+msgid "An image is attached."
+msgstr "Sebuah gambar terpasang."
+
+msgid "No image attached."
+msgstr "Belum ada gambar terpasang."
+
+msgid "Choose image"
+msgstr "Pilih gambar"
+
+msgid "Remove image"
+msgstr "Lepas gambar"
