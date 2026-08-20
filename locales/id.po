@@ -4008,3 +4008,18 @@ msgstr "Diterima: {types}. Maksimum {max} kB."
 
 msgid "Upload"
 msgstr "Unggah"
+
+msgid "Search & social (optional)"
+msgstr "Pencarian & media sosial (opsional)"
+
+msgid "Meta description"
+msgstr "Deskripsi meta"
+
+msgid "Canonical URL"
+msgstr "URL kanonik"
+
+msgid "Falls back to the article title when empty."
+msgstr "Memakai judul artikel bila dikosongkan."
+
+msgid "Set this only when this article is a copy of one that lives elsewhere."
+msgstr "Isi hanya bila artikel ini salinan dari artikel yang aslinya berada di tempat lain."

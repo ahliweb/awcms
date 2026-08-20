@@ -37,16 +37,27 @@
  * with `contentText: ""`, `validateContentTextField` requires a non-empty
  * `contentText`, so every create from this screen was answered 400 and no
  * article could be published through the CMS at all. The repair is the missing
- * INPUT — a plain-paragraph `<textarea>` converted by `lib/ui/blog-body-editor`
- * — never a laxer validator: `content-quality-checklist.ts` has no
+ * INPUT — never a laxer validator: `content-quality-checklist.ts` has no
  * "body present" rule, so an empty body accepted at write time reaches
  * `publish` unchallenged.
  *
- * What that editor deliberately is NOT: rich text, SEO fields, terms or
- * featured media. It writes `paragraph` blocks only, and REFUSES to edit a
- * post whose stored document holds a gallery or a video embed — those blocks
- * have no authoring surface anywhere in this repo, and a textarea that rewrote
- * them as paragraphs would destroy them on the first save.
+ * The EDIT form now carries the Portable Text block editor
+ * (`lib/ui/portable-text-editor`, ADR-0100 / Issue #589), which is what lets a
+ * post holding a gallery or a video be edited at all — the plain-paragraph
+ * textarea it replaced refused to open one rather than rewrite those blocks as
+ * paragraphs and destroy them. The CREATE form stays a textarea on purpose: a
+ * new draft has no galleries or links to preserve.
+ *
+ * SEO fields ARRIVED in Issue #595 — `seoTitle`, `metaDescription` and
+ * `canonicalUrl` on both forms. Before that every article published with none
+ * of them, and `seo_distribution` faithfully rendered that absence into
+ * `<head>` and into every share card. `maxlength` comes from the validator's
+ * own exported constants rather than a hand-typed copy. On CREATE an empty
+ * field is OMITTED (absent means "none", and `seoTitle` rejects `""`); on
+ * PATCH it is sent as `null`, because absent means "leave unchanged" there and
+ * an editor deleting a wrong meta description has to be able to make it gone.
+ *
+ * Still NOT here: terms and featured media.
  *
  * Terms are still unassignable from here. `POST`/`PATCH` accept `termIds`, but
  * a picker needs the taxonomy catalogue, and reading it under this screen's
@@ -121,6 +132,10 @@ import {
   MAX_EXCERPT_LENGTH,
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
+import {
+  MAX_META_DESCRIPTION_LENGTH,
+  MAX_SEO_TITLE_LENGTH
+} from "../../modules/blog-content/domain/seo-validation";
 import {
   blockToEditableHtml,
   describeOpaqueNode,
@@ -942,6 +957,56 @@ const selectedPost = selectedPostId
             </div>
           </div>
 
+          {/* Issue #595 — same three fields as the create form, prefilled.
+              Clearing one sends `null` rather than omitting it: the PATCH
+              validator reads absent as "leave unchanged" and `null` as
+              "clear", so an omitted empty field would make these
+              write-once. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Search & social (optional)")}</legend>
+
+            <label for="edit-seo-title">
+              {t("SEO title")}
+              <input
+                type="text"
+                id="edit-seo-title"
+                name="seoTitle"
+                maxlength={MAX_SEO_TITLE_LENGTH}
+                value={editingPost.seoTitle ?? ""}
+              />
+              <span class="form-hint">
+                {t("Falls back to the article title when empty.")}
+              </span>
+            </label>
+
+            <label for="edit-meta-description">
+              {t("Meta description")}
+              <textarea
+                id="edit-meta-description"
+                name="metaDescription"
+                rows="2"
+                maxlength={MAX_META_DESCRIPTION_LENGTH}
+                set:text={editingPost.metaDescription ?? ""}
+              />
+            </label>
+
+            <label for="edit-canonical-url">
+              {t("Canonical URL")}
+              <input
+                type="url"
+                id="edit-canonical-url"
+                name="canonicalUrl"
+                placeholder="https://"
+                value={editingPost.canonicalUrl ?? ""}
+              />
+              <span class="form-hint">
+                {t(
+                  "Set this only when this article is a copy of one that lives elsewhere."
+                )}
+              </span>
+            </label>
+          </fieldset>
+
           <button type="submit" id="post-edit-submit">
             {t("Save post")}
           </button>
@@ -1037,6 +1102,53 @@ const selectedPost = selectedPostId
             <textarea id="create-body" name="body" rows="14" required />
           </label>
 
+          {/* Issue #595 — every article used to publish with no meta
+              description and no canonical, and `seo_distribution` faithfully
+              rendered that absence into `<head>` and into every share card.
+              `maxlength` mirrors the validator's own bounds so the browser
+              refuses what the server would refuse. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Search & social (optional)")}</legend>
+
+            <label for="create-seo-title">
+              {t("SEO title")}
+              <input
+                type="text"
+                id="create-seo-title"
+                name="seoTitle"
+                maxlength={MAX_SEO_TITLE_LENGTH}
+              />
+              <span class="form-hint">
+                {t("Falls back to the article title when empty.")}
+              </span>
+            </label>
+
+            <label for="create-meta-description">
+              {t("Meta description")}
+              <textarea
+                id="create-meta-description"
+                name="metaDescription"
+                rows="2"
+                maxlength={MAX_META_DESCRIPTION_LENGTH}
+              />
+            </label>
+
+            <label for="create-canonical-url">
+              {t("Canonical URL")}
+              <input
+                type="url"
+                id="create-canonical-url"
+                name="canonicalUrl"
+                placeholder="https://"
+              />
+              <span class="form-hint">
+                {t(
+                  "Set this only when this article is a copy of one that lives elsewhere."
+                )}
+              </span>
+            </label>
+          </fieldset>
+
           <button type="submit" id="post-create-submit">
             {t("Create draft")}
           </button>
@@ -1082,7 +1194,13 @@ const selectedPost = selectedPostId
     visibility: "Visibility",
     contentJson: "Body",
     contentText: "Body",
-    bodyPortableText: "Body"
+    bodyPortableText: "Body",
+    // Without these a server-side rejection of an SEO field would surface
+    // under its raw API name, which is not what the label above the input
+    // says — the operator would be told a field they cannot find is wrong.
+    seoTitle: "SEO title",
+    metaDescription: "Meta description",
+    canonicalUrl: "Canonical URL"
   };
 
   /** Publish/schedule/archive/restore/purge/revision-restore all require the header. */
@@ -1488,6 +1606,15 @@ const selectedPost = selectedPostId
     // validator treats absent as "no excerpt".
     if (excerpt !== "") body.excerpt = excerpt;
 
+    // Same rule for the SEO trio on CREATE: absent means "none". (On edit they
+    // are sent as `null` to clear — see the edit handler.) `seoTitle` rejects
+    // an empty string outright, so sending "" would 400 a form the operator
+    // simply left blank.
+    for (const name of ["seoTitle", "metaDescription", "canonicalUrl"]) {
+      const value = field(data, name);
+      if (value !== "") body[name] = value;
+    }
+
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
@@ -1519,7 +1646,14 @@ const selectedPost = selectedPostId
       visibility: String(data.get("visibility") ?? "public"),
       // `null` clears it — the API distinguishes that from absent, which is
       // "leave the excerpt alone".
-      excerpt: field(data, "excerpt") || null
+      excerpt: field(data, "excerpt") || null,
+      // Issue #595. `null` rather than omitted, for the same reason: these are
+      // rendered into `<head>` and into every share card, so an editor who
+      // deletes a wrong meta description has to be able to make it GONE. Omit
+      // on empty and the fields would be write-once.
+      seoTitle: field(data, "seoTitle") || null,
+      metaDescription: field(data, "metaDescription") || null,
+      canonicalUrl: field(data, "canonicalUrl") || null
     };
 
     // ADR-0100 — the body is Portable Text read back out of the block editor.

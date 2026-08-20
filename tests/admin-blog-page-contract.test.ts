@@ -303,6 +303,59 @@ describe("/admin/blog permission gates", () => {
     );
     expect(validation).toContain("export const MAX_TITLE_LENGTH");
     expect(validation).toContain("export const MAX_EXCERPT_LENGTH");
+
+    // Issue #595 — the SEO bounds are exported for the same reason, so the
+    // form cannot accept a 90-character SEO title the server then refuses.
+    expect(page).toContain("MAX_SEO_TITLE_LENGTH");
+    expect(page).toContain("MAX_META_DESCRIPTION_LENGTH");
+
+    const seoValidation = await readFile(
+      "src/modules/blog-content/domain/seo-validation.ts",
+      "utf8"
+    );
+    expect(seoValidation).toContain("export const MAX_SEO_TITLE_LENGTH");
+    expect(seoValidation).toContain("export const MAX_META_DESCRIPTION_LENGTH");
+  });
+
+  test("the SEO fields exist on BOTH forms, or an article can only ever get them once", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    for (const id of [
+      "create-seo-title",
+      "create-meta-description",
+      "create-canonical-url",
+      "edit-seo-title",
+      "edit-meta-description",
+      "edit-canonical-url"
+    ]) {
+      expect(page).toContain(id);
+    }
+  });
+
+  test("create OMITS an empty SEO field while edit sends null — the asymmetry is the point", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // Absent and `null` mean different things to these two endpoints. On
+    // create, absent is "none" and `seoTitle: ""` is refused outright, so a
+    // blank field must not be sent. On PATCH, absent is "leave unchanged", so
+    // a blank field MUST be sent as `null` or the fields become write-once and
+    // a wrong meta description can never be deleted.
+    expect(page).toContain('if (value !== "") body[name] = value;');
+    expect(page).toContain('seoTitle: field(data, "seoTitle") || null');
+    expect(page).toContain(
+      'metaDescription: field(data, "metaDescription") || null'
+    );
+    expect(page).toContain('canonicalUrl: field(data, "canonicalUrl") || null');
+  });
+
+  test("a server-side SEO field error maps to the label above the input", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // Without these the operator is told `metaDescription` is wrong, which is
+    // not what any label on the page says.
+    expect(page).toContain('seoTitle: "SEO title"');
+    expect(page).toContain('metaDescription: "Meta description"');
+    expect(page).toContain('canonicalUrl: "Canonical URL"');
   });
 
   test("Restore is gated on the bin view, not on archived status", async () => {

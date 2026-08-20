@@ -13,8 +13,15 @@ export type SeoValidationResult =
   | { valid: true; value: SeoFieldsInput }
   | { valid: false; errors: ValidationError[] };
 
-const MAX_SEO_TITLE_LENGTH = 70;
-const MAX_META_DESCRIPTION_LENGTH = 160;
+/**
+ * Exported so `/admin/blog` can set `maxlength` from the SAME value the
+ * validator enforces (Issue #595). A hand-typed 70 in the template would be
+ * the two-copies-of-one-value shape this repo has been bitten by: the two
+ * agree until one is edited, and the failure surfaces as a form that accepts
+ * what the server then refuses.
+ */
+export const MAX_SEO_TITLE_LENGTH = 70;
+export const MAX_META_DESCRIPTION_LENGTH = 160;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
