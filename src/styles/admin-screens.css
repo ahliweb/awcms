@@ -602,3 +602,23 @@
   border-radius: var(--radius-sm, 0.25rem);
   background: var(--color-surface-muted, #f4f4f5);
 }
+
+/* Term picker (Issue #595) — four vocabularies, kept visually separate so
+   "which channel" and "which topic" stay different questions. */
+.term-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3, 0.75rem);
+}
+
+.term-group-title {
+  font-weight: 600;
+  margin: 0 0 var(--space-1, 0.25rem);
+}
+
+.term-option {
+  display: flex;
+  gap: var(--space-1, 0.25rem);
+  align-items: center;
+  padding: 0.125rem 0;
+}
