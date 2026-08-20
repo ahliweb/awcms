@@ -379,6 +379,32 @@ describe("/admin/blog permission gates", () => {
     expect(occurrences?.length).toBe(2);
   });
 
+  test("the term picker adds NO server-side gate either", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // Same resolution as the media picker: the vocabulary is read from the
+    // browser against an endpoint that enforces `taxonomies.read` itself, so
+    // this screen never borrows it. `fetchPostTermIds` IS a server read, but
+    // it touches only the join table for the post already being edited under
+    // `posts.update` — it reads no taxonomy the editor could not already see.
+    expect(page).not.toContain('activityCode: "taxonomies"');
+    expect(page).toContain("fetchPickableTerms");
+  });
+
+  test("termIds is omitted when the vocabulary failed to load, never sent as []", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // The defect this prevents is silent: absent means "leave assignments
+    // alone", `[]` means "remove them all". A failed fetch that sent `[]`
+    // would strip every category on the next save with no error anywhere.
+    expect(page).toContain('host.dataset.failed = "true"');
+    expect(page).toContain(
+      'if (host.dataset.failed === "true") return undefined'
+    );
+    expect(page).toContain("if (createTermIds !== undefined) body.termIds");
+    expect(page).toContain("if (editTermIds !== undefined) body.termIds");
+  });
+
   test("a server-side SEO field error maps to the label above the input", async () => {
     const page = await readFile(PAGE, "utf8");
 

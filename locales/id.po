@@ -4038,3 +4038,9 @@ msgstr "Pilih gambar"
 
 msgid "Remove image"
 msgstr "Lepas gambar"
+
+msgid "Categories, channels and topics"
+msgstr "Kategori, kanal, dan topik"
+
+msgid "Loading vocabularies…"
+msgstr "Memuat kosakata…"

@@ -66,14 +66,23 @@
  * ones `isPubliclyReferenceable` admits, and attaching anything else would let
  * an author publish a story pointing at bytes that may not exist.
  *
- * Still NOT here: terms.
+ * TERMS arrived in the same issue, and the blocker recorded here turned out to
+ * have an answer that did not cost the contract. The objection was: "a picker
+ * needs the taxonomy catalogue, and reading it under this screen's `posts.*`
+ * gates would be a read with no permission of its own". True of a SERVER-side
+ * read — and not true of a browser fetch against `GET /api/v1/blog/terms`,
+ * which enforces `blog_content.taxonomies.read` itself. So the eleven-key
+ * contract stands, unborrowed, and the picker still works.
  *
- * Terms are still unassignable from here. `POST`/`PATCH` accept `termIds`, but
- * a picker needs the taxonomy catalogue, and reading it under this screen's
- * `posts.*` gates would be a read with no permission of its own —
- * `blog_content.taxonomies.read` belongs to `/admin/blog-taxonomy`, and
- * `tests/admin-blog-page-contract.test.ts` pins this screen to exactly eleven
- * keys so that borrowing one is a decision somebody edits that file for.
+ * Two things about it are load-bearing:
+ *
+ * - `termIds` is sent ONLY when the vocabulary actually loaded. Absent means
+ *   "leave the assignments alone" and `[]` means "remove them all", so a
+ *   failed fetch that sent `[]` would silently strip every category the post
+ *   already had on the next save.
+ * - The four vocabularies render as four groups, including EMPTY ones. An
+ *   absent group reads as "this build has no channel picker", which is a
+ *   different and wrong conclusion from "no channels defined yet".
  *
  * ## Reads
  *
@@ -127,6 +136,7 @@ import {
   listBlogPostsForAdmin,
   type ListBlogPostsForAdminResult
 } from "../../modules/blog-content/application/blog-post-directory";
+import { fetchPostTermIds } from "../../modules/blog-content/application/blog-taxonomy-directory";
 import {
   listBlogRevisions,
   type BlogRevisionSummary
@@ -276,6 +286,14 @@ const screen = await loadAdminScreen({
       canUpdate,
       // The list summary carries no body, so the editor needs the WHOLE row.
       // One extra query for the one post being edited, never for the list.
+      // ONE extra query, for the ONE post being edited — not the list, where
+      // per-post terms would be the N+1 `listBlogPostsForAdmin` avoids on
+      // purpose. Awaited sequentially like everything else here: concurrent
+      // queries on a single transaction connection leak it.
+      editingPostTermIds:
+        editingPostId && canUpdate
+          ? await fetchPostTermIds(tx, ssr.tenantId, editingPostId)
+          : [],
       editingPost:
         editingPostId && canUpdate
           ? await fetchBlogPostById(tx, ssr.tenantId, editingPostId)
@@ -340,6 +358,8 @@ const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const editingPost = screen.state === "allowed" ? screen.data.editingPost : null;
+const editingPostTermIds =
+  screen.state === "allowed" ? screen.data.editingPostTermIds : [];
 
 /**
  * ADR-0100 / Issue #589 — the block editor's rows.
@@ -966,6 +986,22 @@ const selectedPost = selectedPostId
             </div>
           </div>
 
+          {/* Issue #595 — terms. The vocabulary is read from the BROWSER
+              against `GET /api/v1/blog/terms`, which enforces
+              `blog_content.taxonomies.read` itself, so this screen still gates
+              on `posts.*` only. Grouped by vocabulary because sql/131 made
+              category/tag/channel/topic four different questions. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Categories, channels and topics")}</legend>
+            <div
+              class="term-picker"
+              id="edit-term-picker"
+              data-selected={editingPostTermIds.join(",")}
+            >
+              <p class="form-hint">{t("Loading vocabularies…")}</p>
+            </div>
+          </fieldset>
+
           {/* Issue #595 — the featured image. The catalogue is read from the
               BROWSER against `GET /api/v1/media/objects/list`, which enforces
               `media_library.media.read` itself: this screen holds
@@ -1156,6 +1192,18 @@ const selectedPost = selectedPostId
             <textarea id="create-body" name="body" rows="14" required />
           </label>
 
+          {/* Issue #595 — terms. The vocabulary is read from the BROWSER
+              against `GET /api/v1/blog/terms`, which enforces
+              `blog_content.taxonomies.read` itself, so this screen still gates
+              on `posts.*` only. Grouped by vocabulary because sql/131 made
+              category/tag/channel/topic four different questions. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Categories, channels and topics")}</legend>
+            <div class="term-picker" id="create-term-picker" data-selected="">
+              <p class="form-hint">{t("Loading vocabularies…")}</p>
+            </div>
+          </fieldset>
+
           {/* Issue #595 — the same picker as the edit form, driven by the same
               generic client wiring (`data-target`/`data-label`). */}
           <fieldset class="admin-fieldset">
@@ -1272,6 +1320,10 @@ const selectedPost = selectedPostId
     describePickableMedia,
     fetchPickableMedia
   } from "../../lib/ui/media-picker-client";
+  import {
+    fetchPickableTerms,
+    type TermGroup
+  } from "../../lib/ui/term-picker-client";
 
   const actionError = messageBox("blog-action-error");
   const createError = messageBox("post-create-error");
@@ -1395,6 +1447,116 @@ const selectedPost = selectedPostId
   }
 
   wireMediaPickers();
+
+  /**
+   * Issue #595 — the term pickers. Rendered from the browser because the
+   * vocabulary lives behind `blog_content.taxonomies.read`, which this screen
+   * does not hold and deliberately does not borrow.
+   */
+  const TAXONOMY_LEGENDS: Record<string, string> = {
+    category: "Categories",
+    tag: "Tags",
+    channel: "Channels",
+    topic: "Topics"
+  };
+
+  function renderTermGroups(host: HTMLElement, groups: TermGroup[]): void {
+    const selected = new Set(
+      (host.dataset.selected ?? "").split(",").filter((id) => id !== "")
+    );
+
+    host.replaceChildren();
+
+    for (const group of groups) {
+      const block = document.createElement("div");
+      block.className = "term-group";
+
+      const heading = document.createElement("p");
+      heading.className = "term-group-title";
+      heading.textContent =
+        TAXONOMY_LEGENDS[group.taxonomyType] ?? group.taxonomyType;
+      block.append(heading);
+
+      if (group.terms.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "form-hint";
+        // Says the vocabulary is EMPTY, not that this build has no picker
+        // for it — the second is what an absent group would imply.
+        empty.textContent = "None defined yet.";
+        block.append(empty);
+        host.append(block);
+        continue;
+      }
+
+      for (const term of group.terms) {
+        const label = document.createElement("label");
+        label.className = "term-option";
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "termIds";
+        input.value = term.id;
+        input.checked = selected.has(term.id);
+
+        const text = document.createElement("span");
+        // `textContent`, never `innerHTML`: a term name is editor-supplied.
+        text.textContent = term.name;
+
+        label.append(input, text);
+        block.append(label);
+      }
+
+      host.append(block);
+    }
+  }
+
+  async function wireTermPickers(): Promise<void> {
+    const hosts = [...document.querySelectorAll(".term-picker")].filter(
+      (host): host is HTMLElement => host instanceof HTMLElement
+    );
+
+    if (hosts.length === 0) return;
+
+    const result = await fetchPickableTerms();
+
+    for (const host of hosts) {
+      if (!result.ok) {
+        host.textContent =
+          result.reason === "forbidden"
+            ? "You do not have permission to read the taxonomy, so terms cannot be assigned here."
+            : "The taxonomy could not be loaded. Terms were left unchanged.";
+        // Marked so the submit handler can tell "no terms chosen" apart from
+        // "the vocabulary never loaded" — sending [] on the second would
+        // silently strip every term the post already has.
+        host.dataset.failed = "true";
+        continue;
+      }
+
+      renderTermGroups(host, result.groups);
+    }
+  }
+
+  void wireTermPickers();
+
+  /**
+   * Reads the chosen term ids, or `undefined` when the picker never loaded.
+   *
+   * `undefined` matters: the API treats an absent `termIds` as "leave the
+   * assignments alone" and `[]` as "remove them all". A failed fetch that sent
+   * `[]` would quietly unassign every category on the next save.
+   */
+  function readTermIds(hostId: string): string[] | undefined {
+    const host = document.getElementById(hostId);
+    if (!(host instanceof HTMLElement)) return undefined;
+    if (host.dataset.failed === "true") return undefined;
+
+    return [...host.querySelectorAll('input[name="termIds"]')]
+      .filter(
+        (input): input is HTMLInputElement =>
+          input instanceof HTMLInputElement && input.checked
+      )
+      .map((input) => input.value);
+  }
 
   /** Wires a row button to one endpoint, with an optional confirm and body. */
   function wireLifecycle(
@@ -1808,6 +1970,9 @@ const selectedPost = selectedPostId
     // omitted field would leave the reader of this payload guessing.
     body.featuredMediaId = field(data, "featuredMediaId") || null;
 
+    const createTermIds = readTermIds("create-term-picker");
+    if (createTermIds !== undefined) body.termIds = createTermIds;
+
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
@@ -1851,6 +2016,11 @@ const selectedPost = selectedPostId
       // SEO fields do — otherwise the wrong photo could never be detached.
       featuredMediaId: field(data, "featuredMediaId") || null
     };
+
+    // Absent means "leave the assignments alone"; `[]` means "remove them
+    // all". Only sent when the picker actually loaded — see `readTermIds`.
+    const editTermIds = readTermIds("edit-term-picker");
+    if (editTermIds !== undefined) body.termIds = editTermIds;
 
     // ADR-0100 — the body is Portable Text read back out of the block editor.
     // Opaque rows (a gallery, a video) come back byte-identical, which is what
