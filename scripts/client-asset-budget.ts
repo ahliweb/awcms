@@ -196,7 +196,33 @@ export const READER_BUDGET_BYTES = 24_000;
  * once page scripts are counted. Both numbers were guesses at a split nobody
  * had measured; the two budgets below are measured.
  */
-export const APP_BUDGET_BYTES = 172_000;
+/**
+ * **Raised to 178,000 on 20 August 2026 for the Issue #595 authoring surface,
+ * and the gate's own question was answered first.**
+ *
+ * The failure message asks whether the growth is per-screen duplication, the
+ * way Issue #552's was — 43 screens hand-copying one lifecycle, which a shared
+ * module recovered 22,700 B from. It is not. Three features bought it, each
+ * shipping behaviour that did not exist:
+ *
+ * ```
+ * after ADR-0101                     165,274 B
+ * + media upload UI      (#610)      169,128 B   (+3,854)
+ * + article SEO fields   (#611)      169,417 B   (+  289)
+ * + featured-image picker(#612)      173,050 B   (+3,633)
+ * ```
+ *
+ * The picker is a shared module (`lib/ui/media-picker-client.ts`) imported by
+ * one screen today and by ad inventory (#594) next, so its bytes are paid once
+ * rather than per screen — the shape #552 established, applied before the
+ * second consumer exists rather than after.
+ *
+ * 178,000 is measured + ~2.9%. Deliberately not the ~4% the previous value
+ * carried: the reader budget is where the tight constraint belongs, but the
+ * admin surface has now grown three times in one working day, and a wider
+ * margin here would buy silence rather than room.
+ */
+export const APP_BUDGET_BYTES = 178_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -4036,3 +4036,18 @@ msgstr ""
 
 msgid "Set this only when this article is a copy of one that lives elsewhere."
 msgstr ""
+
+msgid "Featured image"
+msgstr ""
+
+msgid "An image is attached."
+msgstr ""
+
+msgid "No image attached."
+msgstr ""
+
+msgid "Choose image"
+msgstr ""
+
+msgid "Remove image"
+msgstr ""

@@ -541,3 +541,64 @@
   font-weight: var(--fw-semibold);
   font-size: var(--fs-sm);
 }
+
+/*
+ * Media picker (Issue #595) — the featured-image chooser on /admin/blog, and
+ * the same markup wherever else a picker is wired.
+ *
+ * The panel is a plain grid of buttons rather than a `<dialog>`: it opens
+ * inline under the control that owns it, so the form's own scroll position is
+ * kept and nothing has to restore focus across a modal boundary.
+ */
+.media-choice-actions {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  flex-wrap: wrap;
+}
+
+.media-picker-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-2, 0.5rem);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--space-2, 0.5rem);
+  border: 1px solid var(--color-border, #d4d4d8);
+  border-radius: var(--radius-md, 0.375rem);
+}
+
+/* `[hidden]` loses to a `display` rule, and this repo has shipped that defect
+   before — four auth pages had an inert `form.hidden`. Stated explicitly so a
+   hidden panel is actually hidden. */
+.media-picker-panel[hidden] {
+  display: none;
+}
+
+.media-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 0.25rem);
+  align-items: stretch;
+  padding: var(--space-1, 0.25rem);
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #d4d4d8);
+  border-radius: var(--radius-sm, 0.25rem);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.media-option:hover,
+.media-option:focus-visible {
+  border-color: var(--color-primary, #2563eb);
+}
+
+.media-option-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--color-surface-muted, #f4f4f5);
+}

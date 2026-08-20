@@ -348,6 +348,37 @@ describe("/admin/blog permission gates", () => {
     expect(page).toContain('canonicalUrl: field(data, "canonicalUrl") || null');
   });
 
+  test("the featured-image picker adds NO server-side gate to this screen", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // The catalogue is read from the browser against a guarded endpoint, so
+    // this screen still holds `blog_content.posts.*` and nothing else. If a
+    // `can({ moduleKey: "media_library" ... })` ever appears here, the
+    // eleven-key contract above fails too — this names the reason.
+    expect(page).not.toContain('moduleKey: "media_library"');
+    expect(page).toContain("fetchPickableMedia");
+  });
+
+  test("the picker offers only verified, undeleted objects", async () => {
+    const picker = await readFile("src/lib/ui/media-picker-client.ts", "utf8");
+
+    // Both halves. `verified` is the set that passed the finalize pipeline;
+    // `deletion=live` because a soft-deleted object can still be verified
+    // while every reference to it has stopped resolving.
+    expect(picker).toContain("status=verified");
+    expect(picker).toContain("deletion=live");
+  });
+
+  test("featuredMediaId is sent as null on BOTH forms, so a wrong photo can be detached", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    const occurrences = page.match(
+      /featuredMediaId = field\(data, "featuredMediaId"\) \|\| null|featuredMediaId: field\(data, "featuredMediaId"\) \|\| null/g
+    );
+
+    expect(occurrences?.length).toBe(2);
+  });
+
   test("a server-side SEO field error maps to the label above the input", async () => {
     const page = await readFile(PAGE, "utf8");
 
