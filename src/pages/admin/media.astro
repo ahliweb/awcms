@@ -16,15 +16,31 @@
  * All four remaining reachable permissions are driven here:
  * `media.read`, `media.delete`, `media.restore`, `media.purge`.
  *
- * ## Three deliberate absences
+ * ## Upload arrived in Issue #595, and the old objection is what it answers
  *
- * - **`media.create`/`media.verify`/`media.cancel`** — the presigned upload
- *   flow. Uploading is a three-step browser dance (create session → PUT the
- *   bytes straight to R2 → finalize) with real file input, progress, and
- *   client-side failure modes. A button that starts a session this page cannot
- *   finish would leave `pending_upload` rows behind on every misclick, which is
- *   precisely the litter the reconciliation job exists to clean up. Upload
- *   belongs to whatever composer surface needs it.
+ * ADR-0056 kept `media.create` off this screen for a stated reason: uploading
+ * is a three-step browser dance (create session → PUT the bytes straight to R2
+ * → finalize), and "a button that starts a session this page cannot finish
+ * would leave `pending_upload` rows behind on every misclick".
+ *
+ * That objection was about an UNFINISHED flow, not about this screen. The
+ * uploader here finishes it, and every failure path cancels the session it
+ * created — a failed transfer cancels, a failed finalize cancels, and a cancel
+ * that itself fails does not replace the error the operator can act on.
+ * `tests/media-upload-client.test.ts` pins each of those, because "it cancelled"
+ * is the property the objection was about.
+ *
+ * It renders only where it can work: `POST .../upload-sessions` answers
+ * `502 PROVIDER_ERROR` with R2 unconfigured (the LAN/offline default), so the
+ * same config the endpoint checks decides whether the panel exists, and the
+ * `accept` attribute comes from the same allow-list the server validates
+ * against.
+ *
+ * `media.verify`/`media.cancel` remain absent as PAGE gates: `cancel` is driven
+ * by the uploader's own failure handling rather than by an operator clicking
+ * it, and nothing here verifies.
+ *
+ * ## Two further deliberate absences
  * - **`enforcement.read`/`enforcement.enable`** — a tenant-wide, ONE-WAY
  *   content policy switch, not an object action. It is on `/admin/security`
  *   with the other policy controls; offering it beside a row of thumbnails
@@ -61,6 +77,7 @@ import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
 import { getTranslatorFor } from "../../lib/i18n";
+import { resolveNewsMediaR2Config } from "../../modules/media-library/domain/media-r2-config";
 import {
   listMediaObjects,
   MEDIA_OBJECT_LIST_LIMIT,
@@ -149,6 +166,14 @@ const screen = await loadAdminScreen({
       moduleKey: "media_library",
       activityCode: "media",
       action: "purge"
+    }),
+    // The same guard `POST .../upload-sessions` enforces. Resolved here so the
+    // uploader is not rendered to someone the endpoint would refuse — a form
+    // that always 403s is worse than no form.
+    canCreate: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "create"
     })
   }),
   onError: (error) => {
@@ -171,6 +196,23 @@ const nextCursor: string | null =
 const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+
+/**
+ * The uploader is rendered only where it can actually work.
+ *
+ * `POST .../upload-sessions` answers `502 PROVIDER_ERROR` when R2 is
+ * unconfigured — the LAN/offline default. Showing a file picker there gives a
+ * journalist a control that fails every time for a reason they cannot fix, so
+ * the same config the endpoint checks decides whether the panel exists at all.
+ * The `accept` attribute is derived from the SAME allow-list the server
+ * validates against, so the picker cannot offer a type the server refuses.
+ */
+const uploadConfig = resolveNewsMediaR2Config();
+const uploadEnabled =
+  canCreate && uploadConfig.enabled && uploadConfig.allowedMimeTypes.length > 0;
+const uploadAccept = uploadConfig.allowedMimeTypes.join(",");
+const uploadMaxBytes = uploadConfig.maxUploadBytes;
 
 /**
  * `verified`/`attached` are the two statuses safe to reference publicly
@@ -260,6 +302,64 @@ const columnCount = canActOnAny ? 8 : 7;
         role="alert"
         hidden
       />
+    )
+  }
+
+  {
+    uploadEnabled && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="media-upload-title"
+      >
+        <h2 class="admin-section-title" id="media-upload-title">
+          {t("Upload an image")}
+        </h2>
+        <p class="admin-section-hint">
+          {t(
+            "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
+          )}
+        </p>
+        <form id="media-upload-form" class="admin-form media-upload-form">
+          <div class="form-field">
+            <label class="form-label" for="media-upload-file">
+              {t("Image file")}
+            </label>
+            <input
+              class="form-input"
+              type="file"
+              id="media-upload-file"
+              name="file"
+              accept={uploadAccept}
+              required
+            />
+            <p class="form-hint">
+              {t("Accepted: {types}. Maximum {max} kB.", {
+                types: uploadConfig.allowedMimeTypes.join(", "),
+                max: Math.floor(uploadMaxBytes / 1024)
+              })}
+            </p>
+          </div>
+          <p
+            id="media-upload-progress"
+            class="form-hint"
+            role="status"
+            hidden
+          />
+          <p
+            id="media-upload-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+          <button
+            type="submit"
+            class="btn btn-primary"
+            id="media-upload-submit"
+          >
+            {t("Upload")}
+          </button>
+        </form>
+      </section>
     )
   }
 
@@ -513,8 +613,86 @@ const columnCount = canActOnAny ? 8 : 7;
     sendJson
   } from "../../lib/ui/admin-form-client";
   import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+  import {
+    describeUploadFailure,
+    formatProgress,
+    uploadMediaBytes
+  } from "../../lib/ui/media-upload-client";
+  import { browserUploadTransport } from "../../lib/ui/media-upload-transport";
 
   const actionError = messageBox("media-action-error");
+
+  /**
+   * The uploader. Present only when the server rendered it — an unconfigured
+   * deployment has no form, so this whole block is inert there rather than
+   * guarding at every step.
+   */
+  const uploadForm = document.getElementById("media-upload-form");
+
+  if (uploadForm instanceof HTMLFormElement) {
+    const fileInput = document.getElementById("media-upload-file");
+    const submit = document.getElementById("media-upload-submit");
+    const progress = document.getElementById("media-upload-progress");
+    const uploadError = messageBox("media-upload-error");
+
+    uploadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      if (!(fileInput instanceof HTMLInputElement)) return;
+      const file = fileInput.files?.[0];
+
+      if (!file) {
+        uploadError.show("Choose a file to upload.");
+        return;
+      }
+
+      uploadError.clear();
+
+      // Locked for the whole flow: a second submit would create a second
+      // session for the same file and leave one of them orphaned.
+      if (submit instanceof HTMLButtonElement) submit.disabled = true;
+      fileInput.disabled = true;
+
+      const showProgress = (text: string) => {
+        if (!(progress instanceof HTMLElement)) return;
+        progress.hidden = false;
+        progress.textContent = text;
+      };
+
+      showProgress("Reading the file…");
+
+      try {
+        // Read once: the same buffer is hashed and uploaded, so the two can
+        // never disagree about what was sent.
+        const bytes = await file.arrayBuffer();
+
+        showProgress("Uploading… 0%");
+
+        const outcome = await uploadMediaBytes(
+          { name: file.name, type: file.type, bytes },
+          browserUploadTransport(),
+          (reading) => showProgress(`Uploading… ${formatProgress(reading)}`)
+        );
+
+        if (outcome.ok) {
+          showProgress("Uploaded. Reloading…");
+          window.location.reload();
+          return;
+        }
+
+        uploadError.show(describeUploadFailure(outcome));
+        if (progress instanceof HTMLElement) progress.hidden = true;
+      } catch {
+        uploadError.show(
+          "The file could not be read from disk. Nothing was uploaded."
+        );
+        if (progress instanceof HTMLElement) progress.hidden = true;
+      } finally {
+        if (submit instanceof HTMLButtonElement) submit.disabled = false;
+        fileInput.disabled = false;
+      }
+    });
+  }
 
   /**
    * Every endpoint on this screen requires `Idempotency-Key` — unlike

@@ -3993,3 +3993,18 @@ msgstr "Dipertahankan apa adanya — sunting di pustaka media."
 
 msgid "Unlink"
 msgstr "Lepas tautan"
+
+msgid "Upload an image"
+msgstr "Unggah gambar"
+
+msgid "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
+msgstr "Berkas dikirim langsung ke penyimpanan dari peramban ini. Server memeriksa byte sebenarnya saat tiba — tipenya dibaca dari isi berkas, bukan dari namanya."
+
+msgid "Image file"
+msgstr "Berkas gambar"
+
+msgid "Accepted: {types}. Maximum {max} kB."
+msgstr "Diterima: {types}. Maksimum {max} kB."
+
+msgid "Upload"
+msgstr "Unggah"
