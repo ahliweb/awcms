@@ -605,7 +605,8 @@
 
 /* Term picker (Issue #595) — four vocabularies, kept visually separate so
    "which channel" and "which topic" stay different questions. */
-.term-picker {
+.term-picker,
+.institution-picker {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: var(--space-3, 0.75rem);

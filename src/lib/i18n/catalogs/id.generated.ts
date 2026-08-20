@@ -507,6 +507,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Listing": ["Daftar"],
   "Live theme": ["Tema aktif"],
   "Live version": ["Versi aktif"],
+  "Loading institutions…": ["Memuat institusi…"],
   "Loading vocabularies…": ["Memuat kosakata…"],
   "Locale": ["Locale"],
   "Log out": ["Keluar"],

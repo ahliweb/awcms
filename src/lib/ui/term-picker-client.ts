@@ -122,3 +122,72 @@ export function groupTerms(terms: Array<PickableTerm | null>): TermGroup[] {
       .sort((a, b) => a.name.localeCompare(b.name))
   }));
 }
+
+/**
+ * Institutions (Issue #595) — the fourth classification dimension.
+ *
+ * A SEPARATE fetch from the terms one, because `sql/131` deliberately made
+ * institution a table rather than a taxonomy type: it carries a branch, a
+ * region code and its own landing SEO, and it is guarded by
+ * `blog_content.institutions.read` rather than `taxonomies.read`. An editor can
+ * hold one permission and not the other, so the two surfaces have to fail
+ * independently — folding them into one request would hide half the form
+ * whenever either was refused.
+ */
+export type PickableInstitution = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+export type InstitutionPickerResult =
+  | { ok: true; institutions: PickableInstitution[] }
+  | { ok: false; reason: "forbidden" | "unavailable" };
+
+export const INSTITUTION_LIST_URL = "/api/v1/blog/institutions";
+
+export async function fetchPickableInstitutions(
+  fetchImpl: typeof fetch = fetch
+): Promise<InstitutionPickerResult> {
+  let response: Response;
+
+  try {
+    response = await fetchImpl(INSTITUTION_LIST_URL, {
+      credentials: "same-origin"
+    });
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+
+  if (response.status === 403) return { ok: false, reason: "forbidden" };
+  if (!response.ok) return { ok: false, reason: "unavailable" };
+
+  const payload = (await response.json().catch(() => null)) as {
+    success?: boolean;
+    data?: { institutions?: unknown };
+  } | null;
+
+  if (payload?.success !== true || !Array.isArray(payload.data?.institutions)) {
+    return { ok: false, reason: "unavailable" };
+  }
+
+  const institutions = payload.data.institutions
+    .map((raw) => {
+      const record = (raw ?? {}) as Record<string, unknown>;
+
+      if (
+        typeof record.id !== "string" ||
+        record.id === "" ||
+        typeof record.name !== "string" ||
+        typeof record.slug !== "string"
+      ) {
+        return null;
+      }
+
+      return { id: record.id, name: record.name, slug: record.slug };
+    })
+    .filter((item): item is PickableInstitution => item !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { ok: true, institutions };
+}

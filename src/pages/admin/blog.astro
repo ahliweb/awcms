@@ -137,6 +137,7 @@ import {
   type ListBlogPostsForAdminResult
 } from "../../modules/blog-content/application/blog-post-directory";
 import { fetchPostTermIds } from "../../modules/blog-content/application/blog-taxonomy-directory";
+import { fetchPostInstitutionIds } from "../../modules/blog-content/application/institution-directory";
 import {
   listBlogRevisions,
   type BlogRevisionSummary
@@ -294,6 +295,10 @@ const screen = await loadAdminScreen({
         editingPostId && canUpdate
           ? await fetchPostTermIds(tx, ssr.tenantId, editingPostId)
           : [],
+      editingPostInstitutionIds:
+        editingPostId && canUpdate
+          ? await fetchPostInstitutionIds(tx, ssr.tenantId, editingPostId)
+          : [],
       editingPost:
         editingPostId && canUpdate
           ? await fetchBlogPostById(tx, ssr.tenantId, editingPostId)
@@ -360,6 +365,8 @@ const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const editingPost = screen.state === "allowed" ? screen.data.editingPost : null;
 const editingPostTermIds =
   screen.state === "allowed" ? screen.data.editingPostTermIds : [];
+const editingPostInstitutionIds =
+  screen.state === "allowed" ? screen.data.editingPostInstitutionIds : [];
 
 /**
  * ADR-0100 / Issue #589 — the block editor's rows.
@@ -1002,6 +1009,22 @@ const selectedPost = selectedPostId
             </div>
           </fieldset>
 
+          {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
+              sql/131 made institution a table, not a taxonomy type, and it is
+              guarded by `institutions.read` rather than `taxonomies.read`, so
+              an editor can hold one permission and not the other and the two
+              surfaces must fail independently. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Institutions")}</legend>
+            <div
+              class="institution-picker"
+              id="edit-institution-picker"
+              data-selected={editingPostInstitutionIds.join(",")}
+            >
+              <p class="form-hint">{t("Loading institutions…")}</p>
+            </div>
+          </fieldset>
+
           {/* Issue #595 — the featured image. The catalogue is read from the
               BROWSER against `GET /api/v1/media/objects/list`, which enforces
               `media_library.media.read` itself: this screen holds
@@ -1204,6 +1227,22 @@ const selectedPost = selectedPostId
             </div>
           </fieldset>
 
+          {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
+              sql/131 made institution a table, not a taxonomy type, and it is
+              guarded by `institutions.read` rather than `taxonomies.read`, so
+              an editor can hold one permission and not the other and the two
+              surfaces must fail independently. */}
+          <fieldset class="admin-fieldset">
+            <legend>{t("Institutions")}</legend>
+            <div
+              class="institution-picker"
+              id="create-institution-picker"
+              data-selected=""
+            >
+              <p class="form-hint">{t("Loading institutions…")}</p>
+            </div>
+          </fieldset>
+
           {/* Issue #595 — the same picker as the edit form, driven by the same
               generic client wiring (`data-target`/`data-label`). */}
           <fieldset class="admin-fieldset">
@@ -1321,6 +1360,7 @@ const selectedPost = selectedPostId
     fetchPickableMedia
   } from "../../lib/ui/media-picker-client";
   import {
+    fetchPickableInstitutions,
     fetchPickableTerms,
     type TermGroup
   } from "../../lib/ui/term-picker-client";
@@ -1537,6 +1577,81 @@ const selectedPost = selectedPostId
   }
 
   void wireTermPickers();
+
+  /**
+   * Institutions — its own fetch and its own failure state, because it is its
+   * own permission (`institutions.read`). Folding it into `wireTermPickers`
+   * would make one refusal blank both halves of the form.
+   */
+  async function wireInstitutionPickers(): Promise<void> {
+    const hosts = [...document.querySelectorAll(".institution-picker")].filter(
+      (host): host is HTMLElement => host instanceof HTMLElement
+    );
+
+    if (hosts.length === 0) return;
+
+    const result = await fetchPickableInstitutions();
+
+    for (const host of hosts) {
+      if (!result.ok) {
+        host.textContent =
+          result.reason === "forbidden"
+            ? "You do not have permission to read institutions, so they cannot be assigned here."
+            : "Institutions could not be loaded. They were left unchanged.";
+        host.dataset.failed = "true";
+        continue;
+      }
+
+      const selected = new Set(
+        (host.dataset.selected ?? "").split(",").filter((id) => id !== "")
+      );
+
+      host.replaceChildren();
+
+      if (result.institutions.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "form-hint";
+        empty.textContent = "None defined yet.";
+        host.append(empty);
+        continue;
+      }
+
+      for (const institution of result.institutions) {
+        const label = document.createElement("label");
+        label.className = "term-option";
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "institutionIds";
+        input.value = institution.id;
+        input.checked = selected.has(institution.id);
+
+        const text = document.createElement("span");
+        // `textContent`, never `innerHTML`: an institution name is
+        // editor-supplied.
+        text.textContent = institution.name;
+
+        label.append(input, text);
+        host.append(label);
+      }
+    }
+  }
+
+  void wireInstitutionPickers();
+
+  /** As `readTermIds`, for institutions — same absent-vs-`[]` rule. */
+  function readInstitutionIds(hostId: string): string[] | undefined {
+    const host = document.getElementById(hostId);
+    if (!(host instanceof HTMLElement)) return undefined;
+    if (host.dataset.failed === "true") return undefined;
+
+    return [...host.querySelectorAll('input[name="institutionIds"]')]
+      .filter(
+        (input): input is HTMLInputElement =>
+          input instanceof HTMLInputElement && input.checked
+      )
+      .map((input) => input.value);
+  }
 
   /**
    * Reads the chosen term ids, or `undefined` when the picker never loaded.
@@ -1973,6 +2088,13 @@ const selectedPost = selectedPostId
     const createTermIds = readTermIds("create-term-picker");
     if (createTermIds !== undefined) body.termIds = createTermIds;
 
+    const createInstitutionIds = readInstitutionIds(
+      "create-institution-picker"
+    );
+    if (createInstitutionIds !== undefined) {
+      body.institutionIds = createInstitutionIds;
+    }
+
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
@@ -2021,6 +2143,11 @@ const selectedPost = selectedPostId
     // all". Only sent when the picker actually loaded — see `readTermIds`.
     const editTermIds = readTermIds("edit-term-picker");
     if (editTermIds !== undefined) body.termIds = editTermIds;
+
+    const editInstitutionIds = readInstitutionIds("edit-institution-picker");
+    if (editInstitutionIds !== undefined) {
+      body.institutionIds = editInstitutionIds;
+    }
 
     // ADR-0100 — the body is Portable Text read back out of the block editor.
     // Opaque rows (a gallery, a video) come back byte-identical, which is what

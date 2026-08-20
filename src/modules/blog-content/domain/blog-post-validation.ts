@@ -38,6 +38,8 @@ export type CreateBlogPostInput = {
   metaDescription: string | null;
   canonicalUrl: string | null;
   termIds: string[] | undefined;
+  /** Issue #595 — the fourth classification dimension of `sql/131`. Same shape as `termIds`; existence is checked by `countExistingInstitutions` at the application layer. */
+  institutionIds: string[] | undefined;
   translationGroupId: string | null;
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. Defaults `false` (linking behaves exactly as before this issue unless an editor explicitly opts a post out). */
   autoInternalTagLinksDisabled: boolean;
@@ -82,8 +84,16 @@ function validateTranslationGroupId(
  * caller's tenant is checked at the application layer
  * (`countExistingTerms`) since that requires a database round-trip a pure
  * validator cannot do.
+ *
+ * `institutionIds` (Issue #595) uses this SAME function, deliberately.
+ * `sql/131` made institution a table rather than a taxonomy type because it
+ * carries a branch, a region code and its own landing SEO — but on the post
+ * payload it is the same shape as `termIds`, and
+ * `syncPostInstitutionAssignments` already documents that it is "exactly like
+ * `syncPostTermAssignments` ... giving the two relations different shapes would
+ * make the post endpoint's contract arbitrary".
  */
-function validateTermIds(
+function validateUuidIdList(
   value: unknown
 ): { valid: true; value: string[] | undefined } | { valid: false } {
   if (value === undefined) {
@@ -153,11 +163,19 @@ export function validateCreateBlogPostInput(
     });
   }
 
-  const termIdsResult = validateTermIds(record.termIds);
+  const termIdsResult = validateUuidIdList(record.termIds);
   if (!termIdsResult.valid) {
     errors.push({
       field: "termIds",
       message: "termIds must be an array of UUIDs when provided."
+    });
+  }
+
+  const institutionIdsResult = validateUuidIdList(record.institutionIds);
+  if (!institutionIdsResult.valid) {
+    errors.push({
+      field: "institutionIds",
+      message: "institutionIds must be an array of UUIDs when provided."
     });
   }
 
@@ -191,6 +209,7 @@ export function validateCreateBlogPostInput(
     !featuredMediaIdResult.valid ||
     !seoImageMediaIdResult.valid ||
     !termIdsResult.valid ||
+    !institutionIdsResult.valid ||
     !translationGroupIdResult.valid
   ) {
     return { valid: false, errors };
@@ -208,6 +227,7 @@ export function validateCreateBlogPostInput(
       metaDescription: seoResult.value.metaDescription ?? null,
       canonicalUrl: seoResult.value.canonicalUrl ?? null,
       termIds: termIdsResult.value,
+      institutionIds: institutionIdsResult.value,
       translationGroupId: translationGroupIdResult.value,
       autoInternalTagLinksDisabled
     }
@@ -228,6 +248,8 @@ export type UpdateBlogPostInput = {
   metaDescription?: string | null;
   canonicalUrl?: string | null;
   termIds?: string[];
+  /** Issue #595 — see `CreateBlogPostInput.institutionIds`. */
+  institutionIds?: string[];
   translationGroupId?: string | null;
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. */
   autoInternalTagLinksDisabled?: boolean;
@@ -368,8 +390,20 @@ export function validateUpdateBlogPostInput(
     }
   }
 
+  if (record.institutionIds !== undefined) {
+    const institutionIdsResult = validateUuidIdList(record.institutionIds);
+    if (!institutionIdsResult.valid) {
+      errors.push({
+        field: "institutionIds",
+        message: "institutionIds must be an array of UUIDs when provided."
+      });
+    } else {
+      value.institutionIds = institutionIdsResult.value;
+    }
+  }
+
   if (record.termIds !== undefined) {
-    const termIdsResult = validateTermIds(record.termIds);
+    const termIdsResult = validateUuidIdList(record.termIds);
     if (!termIdsResult.valid) {
       errors.push({
         field: "termIds",

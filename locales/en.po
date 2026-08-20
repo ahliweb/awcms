@@ -4057,3 +4057,6 @@ msgstr ""
 
 msgid "Loading vocabularies…"
 msgstr ""
+
+msgid "Loading institutions…"
+msgstr ""
