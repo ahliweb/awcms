@@ -4021,3 +4021,18 @@ msgstr ""
 
 msgid "Upload"
 msgstr ""
+
+msgid "Search & social (optional)"
+msgstr ""
+
+msgid "Meta description"
+msgstr ""
+
+msgid "Canonical URL"
+msgstr ""
+
+msgid "Falls back to the article title when empty."
+msgstr ""
+
+msgid "Set this only when this article is a copy of one that lives elsewhere."
+msgstr ""
