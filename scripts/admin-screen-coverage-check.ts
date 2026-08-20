@@ -75,11 +75,18 @@ const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
   "workflow.definition.delete":
     "no graph editor; see /admin/approvals contract test",
 
-  // Upload is a three-step browser flow (create -> PUT to R2 -> verify). A
+  // Upload is a three-step browser flow (create -> PUT to R2 -> verify).
+  //
+  // `media_library.media.create` USED to sit here, on the objection that "a
   // button that STARTS a session but cannot finish it leaves a `pending_upload`
-  // row on every misclick, so `/admin/media` browses and disposes only.
-  "media_library.media.create":
-    "three-step upload; a start-only button leaks pending_upload rows",
+  // row on every misclick". Issue #595 built the flow that finishes, and every
+  // failure path cancels the session it created — so the objection stopped
+  // applying and the entry was removed rather than left to read as a reviewed
+  // judgement about code that had moved on.
+  //
+  // The other two stay: `cancel` is driven by the uploader's own failure
+  // handling rather than by an operator clicking it, and nothing screens
+  // verification.
   "media_library.media.verify":
     "three-step upload; finalisation belongs to the uploading client",
   "media_library.media.cancel":

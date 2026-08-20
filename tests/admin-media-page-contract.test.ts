@@ -7,8 +7,12 @@
  *
  * What is specific here is that this page could not have existed before its
  * three ADR-0056 steps landed. So the assertions run in both directions: the
- * page drives exactly the four permissions that are now enforced, and the three
- * it skips are skipped for a stated reason rather than missed.
+ * page drives exactly the permissions that are now enforced, and the ones it
+ * skips are skipped for a stated reason rather than missed.
+ *
+ * Issue #595 moved `media.create` from the second set to the first — see the
+ * note on `DELIBERATE_ABSENCES` for why that is a reversal with a reason and
+ * not an erosion of the contract.
  *
  * Three traps specific to this module:
  *
@@ -38,20 +42,43 @@ const LIST_ROUTE = "src/pages/api/v1/media/objects/list.ts";
 const DELETE_ROUTE = "src/pages/api/v1/media/objects/[id].ts";
 const RESTORE_ROUTE = "src/pages/api/v1/media/objects/[id]/restore.ts";
 const PURGE_ROUTE = "src/pages/api/v1/media/objects/[id]/purge.ts";
+/** Issue #595 — the uploader's first step, which enforces `media.create`. */
+const UPLOAD_SESSION_ROUTE =
+  "src/pages/api/v1/media/news-images/upload-sessions/index.ts";
 
-const ROUTES = [LIST_ROUTE, DELETE_ROUTE, RESTORE_ROUTE, PURGE_ROUTE];
+const ROUTES = [
+  LIST_ROUTE,
+  DELETE_ROUTE,
+  RESTORE_ROUTE,
+  PURGE_ROUTE,
+  UPLOAD_SESSION_ROUTE
+];
 
 /** Exactly what the page gates on, enumerated so an addition is loud. */
 const PAGE_KEYS = [
+  "media_library.media.create",
   "media_library.media.delete",
   "media_library.media.purge",
   "media_library.media.read",
   "media_library.media.restore"
 ] as const;
 
-/** Declared and enforced, deliberately not on this page — see the header. */
+/**
+ * Declared and enforced, deliberately not on this page — see the header.
+ *
+ * `media.create` LEFT this list in Issue #595. ADR-0056 excluded it on a
+ * specific objection — "a button that starts a session this page cannot finish
+ * would leave `pending_upload` rows behind on every misclick" — and the
+ * uploader is built to answer exactly that: every failure path cancels the
+ * session it created, which `tests/media-upload-client.test.ts` pins per step.
+ * The objection was about an unfinished flow, not about the screen, so it stops
+ * applying once the flow finishes.
+ *
+ * `verify`/`cancel` stay absent as page gates: `cancel` is driven by the
+ * uploader's own failure handling rather than by an operator clicking it, and
+ * nothing on this screen verifies.
+ */
 const DELIBERATE_ABSENCES = [
-  "media_library.media.create",
   "media_library.media.verify",
   "media_library.media.cancel",
   "media_library.enforcement.read",
@@ -121,7 +148,7 @@ describe("/admin/media permission gates", () => {
 
     // Non-vacuous: an empty `enforced` would make the subset check pass while
     // proving nothing, the shape of gate this repo has been burned by.
-    expect(enforced.size).toBe(4);
+    expect(enforced.size).toBe(5);
 
     expect([...pageKeys].filter((key) => !enforced.has(key))).toEqual([]);
   });
@@ -170,8 +197,12 @@ describe("/admin/media permission gates", () => {
     }
 
     // And the page says why, so the split survives the next reader.
-    expect(page).toContain("presigned upload");
     expect(page).toContain("ONE-WAY");
+
+    // The reversal is explained too: `media.create` left this list only
+    // because the objection behind it — sessions this page cannot finish —
+    // was answered, and the page has to keep saying so.
+    expect(page).toContain("every failure path cancels the session");
   });
 
   test("there is no enforcement.disable to gate on, and never may be", () => {

@@ -4006,3 +4006,18 @@ msgstr ""
 
 msgid "Unlink"
 msgstr ""
+
+msgid "Upload an image"
+msgstr ""
+
+msgid "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
+msgstr ""
+
+msgid "Image file"
+msgstr ""
+
+msgid "Accepted: {types}. Maximum {max} kB."
+msgstr ""
+
+msgid "Upload"
+msgstr ""
