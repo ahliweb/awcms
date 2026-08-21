@@ -1,0 +1,513 @@
+import {
+  isAllowedPortableTextHref,
+  type PortableTextAnnotation,
+  type PortableTextBlock,
+  type PortableTextBlockStyle,
+  type PortableTextDocument,
+  type PortableTextSpan
+} from "./portable-text";
+
+/**
+ * Legacy CKEditor HTML -> canonical Portable Text (Issue #599, ADR-0100).
+ *
+ * ## Why this exists at all
+ *
+ * PRD §41 imports 23,906 SeputarBorneo articles whose bodies are raw CKEditor
+ * HTML. `content_json` cannot hold that, and write-time validation correctly
+ * REFUSES `<script>`/`<iframe>`/`<embed>`/`<object>`. So an import needs a
+ * converter — and it must target the canonical body, not the projection being
+ * replaced, or 23,906 rows land in the lossy shape and the marks are gone
+ * before anyone reads them.
+ *
+ * ## Rejection, not sanitization — the whole point
+ *
+ * A sanitizer is a guess about what an attacker meant. A rejection is a
+ * statement about what this system stores. `content-validation.ts` already
+ * takes that position, and softening it for a bulk import would be the worst
+ * possible place to soften it: nobody reads 23,906 articles, so whatever a
+ * silent sanitizer swallows is what goes live.
+ *
+ * So this converter answers with a REPORT. Constructs outside the grammar are
+ * listed with what was found and where, the article is marked unconvertible,
+ * and an operator decides. `bun run blog:legacy:import` (when it lands) prints
+ * that report per article and refuses to write a rejected one.
+ *
+ * ## What "outside the grammar" means here
+ *
+ * Not "unknown tag". An unknown INLINE tag whose content is text — `<span>`,
+ * `<font>` — is unwrapped, because CKEditor emits those by the thousand for
+ * styling and dropping the wrapper loses nothing a reader can see. What is
+ * REJECTED is anything that can execute, embed, or fetch: script, iframe,
+ * object, embed, form, and any attribute that is an event handler or a
+ * `javascript:` URL. Those are not formatting a converter could reasonably
+ * reinterpret; they are the reason the write validator exists.
+ *
+ * `<img>` is rejected too, deliberately, and NOT because it is dangerous: a
+ * managed-media deployment stores images as media-object references, and an
+ * import that silently kept a raw `src` would smuggle unmanaged media past the
+ * enforcement `media_library` exists to apply. The report names each one with
+ * its `src` so the importer can resolve it to an uploaded object first.
+ *
+ * Pure module: no database, no network, no DOM. The parser is deliberately
+ * small and total — it never throws, because a converter that throws on article
+ * 14,002 of 23,906 tells the operator nothing about the other 9,904.
+ */
+
+/** Inline tags carried into marks. */
+const DECORATOR_TAGS: Readonly<Record<string, string>> = {
+  strong: "strong",
+  b: "strong",
+  em: "em",
+  i: "em",
+  code: "code"
+};
+
+/** Block tags mapped to a Portable Text style. */
+const BLOCK_STYLE_TAGS: Readonly<Record<string, PortableTextBlockStyle>> = {
+  p: "normal",
+  div: "normal",
+  h1: "h1",
+  h2: "h2",
+  h3: "h3",
+  h4: "h4",
+  h5: "h5",
+  h6: "h6",
+  blockquote: "blockquote"
+};
+
+/**
+ * Tags whose presence makes an article unconvertible.
+ *
+ * `img` is here for a different reason than the rest — see the header. Keeping
+ * it in one list would blur "this can execute" with "this needs resolving
+ * first", so the reason travels with the finding rather than with the list.
+ */
+const REJECTED_TAGS: readonly string[] = [
+  "script",
+  "iframe",
+  "object",
+  "embed",
+  "form",
+  "input",
+  "button",
+  "style",
+  "link",
+  "meta",
+  "base",
+  "img"
+];
+
+/**
+ * Tags dropped WITH their content.
+ *
+ * `script` and `style` are BOTH rejected (above) and discarded (here), and the
+ * pair is deliberate: the rejection is what tells the operator the article
+ * cannot be imported, and the discard is what keeps `steal()` from appearing in
+ * the preview as though it were a paragraph the journalist wrote. Recording the
+ * finding and keeping the payload would be the worst of both.
+ */
+const DISCARDED_TAGS: readonly string[] = [
+  "head",
+  "title",
+  "noscript",
+  "script",
+  "style"
+];
+
+export type LegacyConversionRejection = {
+  reason:
+    "executable_markup" | "unmanaged_image" | "unsafe_href" | "event_handler";
+  /** The tag or attribute that caused it — never the full payload. */
+  found: string;
+  /** Approximate character offset in the source, so an operator can find it. */
+  offset: number;
+  /** Present for `unmanaged_image`: the `src` an importer must resolve to a media object. */
+  detail?: string;
+};
+
+export type LegacyConversionResult = {
+  /** `false` when anything was rejected — the caller must not write the body. */
+  ok: boolean;
+  /** The converted body. Present even when `ok` is false, for a preview; never for writing. */
+  document: PortableTextDocument;
+  rejections: LegacyConversionRejection[];
+  /** Plain text of the converted body, for `content_text`. */
+  plainText: string;
+};
+
+type Token =
+  | { kind: "text"; value: string; offset: number }
+  | {
+      kind: "open" | "close" | "selfclose";
+      name: string;
+      attrs: Record<string, string>;
+      offset: number;
+    };
+
+const TAG_PATTERN =
+  /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+const ATTR_PATTERN =
+  /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
+
+/**
+ * Decodes the entity set CKEditor actually emits.
+ *
+ * Deliberately not exhaustive: an unrecognised entity is left as written rather
+ * than guessed at, which shows up as literal text a proofreader can see instead
+ * of a wrong character nobody notices.
+ */
+function decodeEntities(value: string): string {
+  return (
+    value
+      // A REGULAR space, deliberately, not U+00A0. CKEditor emits `&nbsp;` as
+      // filler by the thousand, and a non-breaking space survives into
+      // `content_text` — where it is not a word separator, so "Menteri Ani"
+      // becomes one token and stops matching a search for either name.
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&#(\d+);/g, (match, code: string) => {
+        const point = Number(code);
+        return Number.isInteger(point) && point > 0 && point < 0x110000
+          ? String.fromCodePoint(point)
+          : match;
+      })
+  );
+}
+
+function parseAttributes(raw: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  ATTR_PATTERN.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = ATTR_PATTERN.exec(raw)) !== null) {
+    const name = match[1]!.toLowerCase();
+    attrs[name] = decodeEntities(match[3] ?? match[4] ?? match[5] ?? "");
+  }
+
+  return attrs;
+}
+
+/**
+ * Tokenizes into tags and text.
+ *
+ * A regex rather than a parser, and the limit is stated rather than hidden: it
+ * does not understand `<` inside an attribute value beyond the quoting the
+ * pattern handles, and it does not track implicit closes. Both are acceptable
+ * because malformed input degrades to text or to an unbalanced tag, and an
+ * unbalanced tag is reported rather than silently accepted. Whatever it fails to
+ * recognise as a tag stays TEXT and gets escaped downstream — the failure
+ * direction that cannot produce markup.
+ */
+function tokenize(html: string): Token[] {
+  const tokens: Token[] = [];
+  TAG_PATTERN.lastIndex = 0;
+
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = TAG_PATTERN.exec(html)) !== null) {
+    if (match.index > cursor) {
+      tokens.push({
+        kind: "text",
+        value: html.slice(cursor, match.index),
+        offset: cursor
+      });
+    }
+
+    const raw = match[0]!;
+    const name = match[1]!.toLowerCase();
+    const attrsRaw = match[2] ?? "";
+
+    tokens.push({
+      kind: raw.startsWith("</")
+        ? "close"
+        : attrsRaw.trimEnd().endsWith("/")
+          ? "selfclose"
+          : "open",
+      name,
+      attrs: raw.startsWith("</") ? {} : parseAttributes(attrsRaw),
+      offset: match.index
+    });
+
+    cursor = match.index + raw.length;
+  }
+
+  if (cursor < html.length) {
+    tokens.push({ kind: "text", value: html.slice(cursor), offset: cursor });
+  }
+
+  return tokens;
+}
+
+/** Deterministic keys — position-derived, no clock and no randomness, so a re-run after a crash produces the same document. */
+function nodeKey(index: number): string {
+  return `n${index}`;
+}
+
+function spanKey(blockIndex: number, spanIndex: number): string {
+  return `n${blockIndex}s${spanIndex}`;
+}
+
+type OpenBlock = {
+  style: PortableTextBlockStyle;
+  listItem?: "bullet" | "number";
+  spans: { text: string; marks: string[] }[];
+  markDefs: PortableTextAnnotation[];
+};
+
+/**
+ * Converts one legacy HTML body.
+ *
+ * Never throws. A body it cannot make sense of yields rejections and whatever
+ * it did understand, because an importer walking 23,906 articles needs a report
+ * per article rather than a stack trace on one of them.
+ */
+export function convertLegacyHtmlToPortableText(
+  html: unknown
+): LegacyConversionResult {
+  if (typeof html !== "string" || html.trim().length === 0) {
+    return { ok: true, document: [], rejections: [], plainText: "" };
+  }
+
+  const rejections: LegacyConversionRejection[] = [];
+  const document: PortableTextDocument = [];
+
+  const listStack: ("bullet" | "number")[] = [];
+  const markStack: string[] = [];
+  let discardDepth = 0;
+  let current: OpenBlock | null = null;
+  let annotationCounter = 0;
+
+  const flush = (): void => {
+    if (!current) return;
+
+    const hasText = current.spans.some((span) => span.text.trim().length > 0);
+
+    if (hasText) {
+      const index = document.length;
+      const block: PortableTextBlock = {
+        _type: "block",
+        _key: nodeKey(index),
+        style: current.style,
+        children: current.spans
+          .filter((span) => span.text.length > 0)
+          .map((span, spanIndex): PortableTextSpan => ({
+            _type: "span",
+            _key: spanKey(index, spanIndex),
+            text: span.text,
+            marks: [...span.marks]
+          })),
+        markDefs: current.markDefs
+      };
+
+      if (current.listItem) {
+        block.listItem = current.listItem;
+        block.level = 1;
+      }
+
+      document.push(block);
+    }
+
+    current = null;
+  };
+
+  const open = (style: PortableTextBlockStyle): void => {
+    flush();
+    current = {
+      style,
+      ...(listStack.length > 0
+        ? { listItem: listStack[listStack.length - 1] }
+        : {}),
+      spans: [],
+      markDefs: []
+    };
+  };
+
+  const push = (text: string): void => {
+    if (text.length === 0) return;
+    if (!current) open("normal");
+    current!.spans.push({ text, marks: [...markStack] });
+  };
+
+  for (const token of tokenize(html)) {
+    if (token.kind === "text") {
+      if (discardDepth === 0) push(decodeEntities(token.value));
+      continue;
+    }
+
+    const { name } = token;
+
+    if (DISCARDED_TAGS.includes(name)) {
+      // Rejected AND discarded when it is also executable — see DISCARDED_TAGS.
+      if (token.kind === "open" && REJECTED_TAGS.includes(name)) {
+        rejections.push({
+          reason: "executable_markup",
+          found: name,
+          offset: token.offset
+        });
+      }
+
+      if (token.kind === "open") discardDepth += 1;
+      else if (token.kind === "close" && discardDepth > 0) discardDepth -= 1;
+      continue;
+    }
+
+    if (discardDepth > 0) continue;
+
+    if (token.kind !== "close") {
+      // Event handlers are rejected wherever they appear, including on a tag
+      // that is otherwise fine — `<p onclick=…>` is not a paragraph with a
+      // decoration, it is script.
+      for (const attr of Object.keys(token.attrs)) {
+        if (attr.startsWith("on")) {
+          rejections.push({
+            reason: "event_handler",
+            found: `${name}[${attr}]`,
+            offset: token.offset
+          });
+        }
+      }
+    }
+
+    if (REJECTED_TAGS.includes(name)) {
+      if (token.kind !== "close") {
+        rejections.push(
+          name === "img"
+            ? {
+                reason: "unmanaged_image",
+                found: "img",
+                offset: token.offset,
+                detail: token.attrs.src ?? ""
+              }
+            : {
+                reason: "executable_markup",
+                found: name,
+                offset: token.offset
+              }
+        );
+      }
+      continue;
+    }
+
+    if (name === "br") {
+      push("\n");
+      continue;
+    }
+
+    if (name === "ul" || name === "ol") {
+      if (token.kind === "open") {
+        flush();
+        listStack.push(name === "ol" ? "number" : "bullet");
+      } else if (token.kind === "close") {
+        flush();
+        listStack.pop();
+      }
+      continue;
+    }
+
+    if (name === "li") {
+      if (token.kind === "open") {
+        open("normal");
+      } else if (token.kind === "close") {
+        flush();
+      }
+      continue;
+    }
+
+    const style = BLOCK_STYLE_TAGS[name];
+    if (style) {
+      if (token.kind === "open") open(style);
+      else if (token.kind === "close") flush();
+      continue;
+    }
+
+    const decorator = DECORATOR_TAGS[name];
+    if (decorator) {
+      if (token.kind === "open") markStack.push(decorator);
+      else if (token.kind === "close") {
+        const at = markStack.lastIndexOf(decorator);
+        if (at >= 0) markStack.splice(at, 1);
+      }
+      continue;
+    }
+
+    if (name === "a") {
+      if (token.kind === "open") {
+        const href = token.attrs.href ?? "";
+
+        if (!isAllowedPortableTextHref(href)) {
+          // Rejected rather than unwrapped: an import that quietly dropped a
+          // `javascript:` link would also quietly drop the evidence that the
+          // legacy body contained one.
+          rejections.push({
+            reason: "unsafe_href",
+            found: "a[href]",
+            offset: token.offset
+          });
+          continue;
+        }
+
+        if (!current) open("normal");
+        annotationCounter += 1;
+        const key = `l${annotationCounter}`;
+        current!.markDefs.push({ _type: "link", _key: key, href });
+        markStack.push(key);
+      } else if (token.kind === "close") {
+        // Pop the most recent link mark, whichever it is: nesting anchors is
+        // invalid HTML, so the innermost open link is always the one closing.
+        for (let i = markStack.length - 1; i >= 0; i -= 1) {
+          if (markStack[i]!.startsWith("l")) {
+            markStack.splice(i, 1);
+            break;
+          }
+        }
+      }
+      continue;
+    }
+
+    // Everything else — `<span>`, `<font>`, `<table>`, an unknown wrapper — is
+    // UNWRAPPED: its text is kept, the tag is dropped. CKEditor emits these by
+    // the thousand for styling, and losing a wrapper loses nothing a reader can
+    // see. Rejecting them would fail almost every article for no safety gain.
+  }
+
+  flush();
+
+  const plainText = document
+    .map((node) =>
+      node._type === "block"
+        ? node.children.map((span) => span.text).join("")
+        : ""
+    )
+    .filter((line) => line.length > 0)
+    .join("\n\n");
+
+  return {
+    ok: rejections.length === 0,
+    document,
+    rejections,
+    plainText
+  };
+}
+
+/** One line per rejection, for an importer's per-article report. */
+export function formatConversionRejection(
+  rejection: LegacyConversionRejection
+): string {
+  const where = `at offset ${rejection.offset}`;
+
+  switch (rejection.reason) {
+    case "unmanaged_image":
+      return `unmanaged image ${where}: ${rejection.detail || "(no src)"} — upload it to the media library and reference the object id`;
+    case "unsafe_href":
+      return `link with a disallowed scheme ${where}`;
+    case "event_handler":
+      return `inline event handler ${where}: ${rejection.found}`;
+    case "executable_markup":
+      return `executable markup ${where}: <${rejection.found}>`;
+  }
+}
