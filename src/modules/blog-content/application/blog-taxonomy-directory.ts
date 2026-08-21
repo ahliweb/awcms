@@ -3,6 +3,11 @@ import type {
   CreateBlogTermInput,
   UpdateBlogTermInput
 } from "../domain/blog-term-validation";
+import { boundedPageSize } from "../../_shared/offset-pagination";
+import {
+  encodeKeysetCursor,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 
 /**
  * Read/write query module for `awcms_blog_terms` and
@@ -95,14 +100,32 @@ export async function fetchBlogTermById(
 
 export type ListBlogTermsFilter = {
   taxonomyType?: TaxonomyType;
+  limit?: number;
 };
 
-/** `LIMIT 100`, name ascending — terms are low-cardinality config, same bounded-list convention as email templates. */
+export const DEFAULT_TERM_LIST_LIMIT = 100;
+export const MAX_TERM_LIST_LIMIT = 200;
+
+/**
+ * The admin taxonomy screen's list: name ascending, bounded, no cursor.
+ *
+ * Alphabetical order is what a human scanning a table wants, and it is
+ * precisely what makes this unsuitable for a caller that needs EVERY term —
+ * a name is editable, so it cannot key a cursor, and the bound then truncates
+ * in the one direction nobody notices. {@link listBlogTermsPage} is the
+ * traversal; this stays as it was for the screens that only ever want a page.
+ */
 export async function listBlogTerms(
   tx: Bun.SQL,
   tenantId: string,
   filter: ListBlogTermsFilter = {}
 ): Promise<BlogTermView[]> {
+  const limit = boundedPageSize(
+    filter.limit,
+    DEFAULT_TERM_LIST_LIMIT,
+    MAX_TERM_LIST_LIMIT
+  );
+
   const rows = (await tx`
     SELECT id, tenant_id, taxonomy_type, parent_id, name, slug, description,
       created_at, updated_at, deleted_at, deleted_by, delete_reason
@@ -110,10 +133,72 @@ export async function listBlogTerms(
     WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
       AND (${filter.taxonomyType ?? null}::text IS NULL OR taxonomy_type = ${filter.taxonomyType ?? null})
     ORDER BY name ASC
-    LIMIT 100
+    LIMIT ${limit}
   `) as BlogTermRow[];
 
   return rows.map(toView);
+}
+
+/**
+ * The same list as a stable traversal — `created_at DESC, id DESC`, with a
+ * cursor, so a caller can walk to the end and know it got there.
+ *
+ * ## Why the alphabetical list was not enough
+ *
+ * `listBlogTerms` answers a tenant with three thousand tags by returning the
+ * alphabetically-first hundred and saying nothing about the rest. Nothing
+ * fails: the caller gets `200`, a well-formed array, and a vocabulary that is
+ * silently missing everything past roughly the letter B. A static build that
+ * generates one archive page per tag then generates a hundred pages, and every
+ * article filed under a later tag links to a page that was never built.
+ *
+ * Ordering by `created_at` rather than `name` is not a preference. A term can
+ * be renamed at any time, and a rename moves it across a page boundary — so a
+ * cursor over `name` skips or repeats terms and neither side can tell.
+ * `created_at` is immutable, which is the whole reason it is the key here and
+ * in `listBlogPostsPage`.
+ */
+export async function listBlogTermsPage(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: {
+    taxonomyType?: TaxonomyType;
+    limit?: number;
+    cursor?: KeysetCursor | null;
+  } = {}
+): Promise<{ items: BlogTermView[]; nextCursor: string | null }> {
+  const limit = boundedPageSize(
+    options.limit,
+    DEFAULT_TERM_LIST_LIMIT,
+    MAX_TERM_LIST_LIMIT
+  );
+
+  const cursorCreatedAt = options.cursor?.createdAt ?? null;
+  const cursorId = options.cursor?.id ?? null;
+  const taxonomyType = options.taxonomyType ?? null;
+
+  const rows = (await tx`
+    SELECT id, tenant_id, taxonomy_type, parent_id, name, slug, description,
+      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+    FROM awcms_blog_terms
+    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+      AND (${taxonomyType}::text IS NULL OR taxonomy_type = ${taxonomyType})
+      AND (
+        ${cursorCreatedAt}::timestamptz IS NULL
+        OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}
+  `) as (BlogTermRow & { created_at_cursor: string })[];
+
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    rows.length === limit && last
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
+      : null;
+
+  return { items: rows.map(toView), nextCursor };
 }
 
 /** Thin convenience wrapper kept for the pre-#539 call shape (Issue #537). */

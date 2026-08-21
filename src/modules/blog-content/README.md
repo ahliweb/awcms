@@ -172,6 +172,12 @@ DELETE /api/v1/blog/terms/{id}     -> blog_content.taxonomies.configure
 
 One permission (`configure`) gates create/update/delete at once — just as `sync_storage.conflict_resolution.approve` gates the whole of `POST /sync/conflicts/{id}/resolve` whatever the outcome (the permission is the capability "manage taxonomies", not a separate per-action one). There is no restore/purge — the issue #537 doc's permission seed has no `taxonomies.restore`/`.purge`, so a term soft-delete is one-way through this code (the row stays in the DB for audit, but no API path brings it back).
 
+### `?order=created_at` — reading the WHOLE vocabulary (Issue #597)
+
+The list defaults to `name ASC` with a bounded `LIMIT` (100, max 200 via `?limit=`), which is what the admin taxonomy screen wants and what made the endpoint unusable for anything else. A bare array carries no field that could say "there are more", so a caller that needed every term received the alphabetically-first hundred and had no way to find out. For `category` or `channel` that is harmless — a newsroom has a dozen of each. For `tag` on the 23,906-article archive of Issue #599 it means a static build generating a hundred tag pages out of thousands, `200 OK`, with every article filed under a later tag linking into a page nobody generated.
+
+`?order=created_at` selects the stable traversal and the response gains `nextCursor`; follow it until it is null. `?cursor=` without `?order=created_at` is a `400`, because `name` is editable and a rename moves a term across a page boundary — the identical reasoning `GET /api/v1/blog/posts` records for `updated_at`. `listBlogTermsPage` (`application/blog-taxonomy-directory.ts`) is the query; `domain/blog-term-list-query.ts` is the refusal surface, and `tests/integration/blog-term-cursor.integration.test.ts` asserts both the traversal and the default list's silent truncation against a real PostgreSQL.
+
 A `PATCH` that changes `taxonomyType` to `tag` while the old `parentId` is still there (not cleared in the same request) is rejected with `400` — the endpoint merges the submitted fields with the existing row before calling `validateTermParent` again, exactly as recorded in `blog-term-validation.ts`'s docblock.
 
 ## Post-term relation handling (Issue #539)

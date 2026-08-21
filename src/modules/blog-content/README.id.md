@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:103b468786721f3b27d5d9863ea7a8cae52d4fc9b622051b63119c074d753812 -->
+<!-- i18n-source-hash: sha256:433ad79d259b1ac49e5bffde87cd6b63de489bd869af9518468fdafbca7252a2 -->
 
 # Blog Content
 
@@ -173,6 +173,12 @@ DELETE /api/v1/blog/terms/{id}     -> blog_content.taxonomies.configure
 ```
 
 Satu permission (`configure`) menggerbangi create/update/delete sekaligus — sama seperti `sync_storage.conflict_resolution.approve` menggerbangi seluruh `POST /sync/conflicts/{id}/resolve` apa pun hasilnya (permission = kapabilitas "mengelola taksonomi", bukan per-aksi terpisah). Tidak ada restore/purge — doc issue #537's permission seed tidak punya `taxonomies.restore`/`.purge`, jadi soft-delete term bersifat satu arah lewat kode ini (baris tetap ada di DB untuk audit, tapi tidak ada jalur API mengembalikannya).
+
+### `?order=created_at` — membaca SELURUH kosakata (Issue #597)
+
+List default-nya `name ASC` dengan `LIMIT` berbatas (100, maks 200 lewat `?limit=`) — persis yang diinginkan layar taksonomi admin, dan persis yang membuat endpoint ini tak terpakai untuk hal lain. Sebuah array telanjang tidak membawa field apa pun yang bisa berkata "masih ada lagi", jadi pemanggil yang butuh setiap term menerima seratus pertama menurut abjad dan tidak punya cara mengetahuinya. Untuk `category` atau `channel` itu tak berbahaya — sebuah redaksi punya belasan. Untuk `tag` pada arsip 23.906 artikel di Issue #599 artinya build statis membangkitkan seratus halaman tag dari ribuan, `200 OK`, dan setiap artikel yang berada di tag berabjad belakang menaut ke halaman yang tak pernah dibangkitkan siapa pun.
+
+`?order=created_at` memilih traversal stabil dan responsnya mendapat `nextCursor`; ikuti sampai `null`. `?cursor=` tanpa `?order=created_at` adalah `400`, karena `name` dapat disunting dan penggantian nama memindahkan term melintasi batas halaman — penalaran yang sama persis dicatat `GET /api/v1/blog/posts` untuk `updated_at`. `listBlogTermsPage` (`application/blog-taxonomy-directory.ts`) adalah query-nya; `domain/blog-term-list-query.ts` permukaan penolakannya, dan `tests/integration/blog-term-cursor.integration.test.ts` menegakkan traversal MAUPUN pemotongan senyap list default terhadap PostgreSQL nyata.
 
 `PATCH` yang mengubah `taxonomyType` ke `tag` sambil `parentId` lama masih ada (tidak ikut dikosongkan di request yang sama) ditolak `400` — endpoint menggabungkan field yang dikirim dengan baris existing sebelum memanggil ulang `validateTermParent`, persis dicatat di `blog-term-validation.ts`'s docblock.
 
