@@ -269,3 +269,24 @@ describe("it survives whatever the archive holds", () => {
     );
   });
 });
+
+describe("entities decode exactly once", () => {
+  test("an escaped entity stays escaped — no double-unescaping", () => {
+    // `&amp;lt;` is an author writing the literal characters `&lt;`. A chain of
+    // `.replace()` calls turns it into `<`, because the `&` the first
+    // replacement produced is still there when the second runs. CodeQL flags
+    // the shape (`js/double-escaping`); this pins the behaviour.
+    const result = convertLegacyHtmlToPortableText(
+      "<p>&amp;lt;script&amp;gt; and &amp;amp;</p>"
+    );
+
+    const text = (
+      result.document[0] as { children: { text: string }[] }
+    ).children
+      .map((span) => span.text)
+      .join("");
+
+    expect(text).toBe("&lt;script&gt; and &amp;");
+    expect(text).not.toContain("<script>");
+  });
+});

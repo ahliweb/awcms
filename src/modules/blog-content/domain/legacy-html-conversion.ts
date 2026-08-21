@@ -29,7 +29,7 @@ import {
  *
  * So this converter answers with a REPORT. Constructs outside the grammar are
  * listed with what was found and where, the article is marked unconvertible,
- * and an operator decides. `bun run blog:legacy:import` (when it lands) prints
+ * and an operator decides. The import job (when it lands) prints
  * that report per article and refuses to write a rejected one.
  *
  * ## What "outside the grammar" means here
@@ -150,31 +150,50 @@ const ATTR_PATTERN =
   /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
 
 /**
- * Decodes the entity set CKEditor actually emits.
+ * The named entities CKEditor actually emits.
+ *
+ * `nbsp` maps to a REGULAR space, deliberately, not U+00A0. CKEditor emits it as
+ * filler by the thousand, and a non-breaking space survives into `content_text`
+ * — where it is not a word separator, so "Menteri Ani" becomes one token and
+ * stops matching a search for either name.
+ */
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  "#39": "'"
+};
+
+/**
+ * Decodes the entity set CKEditor actually emits, in ONE pass.
+ *
+ * The pass count is the security property, not a performance note. A chain of
+ * `.replace()` calls decodes `&amp;lt;` to `&lt;` and then to `<`, because the
+ * `&` the first replacement produced is still in the string when the second one
+ * runs — double-unescaping, which CodeQL's `js/double-escaping` flags and which
+ * turns text an author wrote as the literal characters `&lt;` into markup. A
+ * single regex never re-scans its own output.
  *
  * Deliberately not exhaustive: an unrecognised entity is left as written rather
  * than guessed at, which shows up as literal text a proofreader can see instead
  * of a wrong character nobody notices.
  */
 function decodeEntities(value: string): string {
-  return (
-    value
-      // A REGULAR space, deliberately, not U+00A0. CKEditor emits `&nbsp;` as
-      // filler by the thousand, and a non-breaking space survives into
-      // `content_text` — where it is not a word separator, so "Menteri Ani"
-      // becomes one token and stops matching a search for either name.
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;|&apos;/g, "'")
-      .replace(/&#(\d+);/g, (match, code: string) => {
-        const point = Number(code);
+  return value.replace(
+    /&(nbsp|amp|lt|gt|quot|apos|#39|#\d+);/g,
+    (match, entity: string) => {
+      if (entity.startsWith("#")) {
+        const point = Number(entity.slice(1));
         return Number.isInteger(point) && point > 0 && point < 0x110000
           ? String.fromCodePoint(point)
           : match;
-      })
+      }
+
+      return NAMED_ENTITIES[entity] ?? match;
+    }
   );
 }
 
