@@ -1,0 +1,42 @@
+-- Issue #625 — a static page can be found by searching for it.
+--
+-- Since Issue #617 `awcms_blog_pages` has a public route
+-- (`/blog/{tenantCode}/pages/{slug}`) and appears in `sitemap-blog.xml`. It is
+-- still absent from the unified `site_search` index, and the reason is this
+-- file: `sql/035` granted `awcms_worker` exactly what `blog:publish:scheduled`
+-- needed — `SELECT, UPDATE` on posts, `SELECT` on post-terms and settings — and
+-- deliberately nothing on pages, because at the time nothing read them.
+--
+-- `bun run site-search:reconcile` runs as `awcms_worker` and issues one SELECT
+-- per registered search-source descriptor against the table that descriptor
+-- names. So registering a descriptor for pages without this grant produces a
+-- job that passes every gate in the repository — `site-search:sources:check` is
+-- pure, it validates descriptor SHAPE and never opens a database — and then
+-- fails at 03:00 in a job nobody is watching, with `permission denied for table
+-- awcms_blog_pages`. That failure shape is recorded in this repo more than once.
+--
+-- ## SELECT only
+--
+-- The index engine reads sources and writes only its own `awcms_site_search_*`
+-- tables. A page is never written by the indexer, so UPDATE and DELETE would be
+-- privileges no statement uses — and an unused privilege on a table holding the
+-- Pedoman Media Siber is not a harmless extra.
+--
+-- ## RLS is unaffected, and still does the isolating
+--
+-- `awcms_blog_pages` is `ENABLE` + `FORCE ROW LEVEL SECURITY` with the same
+-- `tenant_id = current_setting('app.current_tenant_id')::uuid` policy the posts
+-- table has (sql/035). A GRANT does not weaken that: the worker sets the tenant
+-- context per tenant exactly as it already does when reading posts, and reads
+-- one tenant's rows at a time. This grants the table privilege the policy then
+-- narrows, which is the same two-layer posture every other worker read here has.
+--
+-- ## After applying
+--
+-- Existing tenants have no page documents in the index until
+-- `bun run site-search:reconcile` runs. The reconcile is idempotent and finds
+-- them on its next scheduled pass; an operator who wants them sooner runs it by
+-- hand. No DML here on purpose — the table is FORCE RLS, and a migration that
+-- writes to one is green on an empty CI database and breaks in production.
+
+GRANT SELECT ON awcms_blog_pages TO awcms_worker;
