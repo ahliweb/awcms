@@ -103,7 +103,12 @@ async function upsertDocument(
     VALUES (${tenantId}, ${doc.sourceKey}, ${doc.resourceType}, ${doc.resourceId},
        ${doc.locale}, ${doc.url}, ${doc.title}, ${doc.summary}, ${doc.bodyText},
        ${tx.array(doc.tags, "text")}, ${doc.tagsText},
-       ${JSON.stringify(doc.termFacets)}::jsonb, 'public', ${doc.weight},
+       -- The ARRAY, not \`JSON.stringify\` of it. Bun JSON-encodes a string
+       -- parameter bound to a jsonb slot, so \`\${JSON.stringify(x)}::jsonb\`
+       -- stores the jsonb SCALAR STRING \`"[]"\` rather than the empty array —
+       -- which the sql/140 \`jsonb_typeof = 'array'\` CHECK refuses, and which
+       -- would otherwise have been stored silently and read back as text.
+       ${doc.termFacets}::jsonb, 'public', ${doc.weight},
        ${doc.sourceUpdatedAt}, ${doc.sourceChecksum}, now(), now())
     ON CONFLICT (tenant_id, source_key, resource_id, locale)
     DO UPDATE SET

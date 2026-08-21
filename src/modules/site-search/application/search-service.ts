@@ -59,14 +59,28 @@ export type SearchQueryOptions = {
  * which is precisely the AND semantics above — no per-filter subquery, no join,
  * and one bound parameter no matter how many filters there are.
  *
+ * ## It returns the ARRAY, not `JSON.stringify` of it
+ *
+ * Bun JSON-ENCODES a string parameter bound to a jsonb slot, so
+ * `${JSON.stringify(x)}::jsonb` compares against the jsonb SCALAR STRING
+ * `"[{...}]"` rather than the array. Nothing errors — `@>` against a scalar
+ * string simply matches nothing — so the filter silently returns an empty
+ * result set and the facet counts beside it quietly go to zero. Passing the JS
+ * value itself is what produces a real jsonb array. The same rule governs how
+ * `search-index-engine.ts` WRITES the column; there the `sql/140` CHECK turns
+ * the mistake into an error instead of a silence.
+ *
  * Returns `null` when there is nothing to filter by, so every caller can pass
  * the result straight into the same `IS NULL OR` shape the other optional
- * predicates use.
+ * predicates use — and so an empty filter set never becomes `@> '[]'`, which is
+ * true for every row and costs an index probe to learn nothing.
  */
+export type TermFilterOperand = readonly { facet: string; value: string }[];
+
 export function buildTermFilterOperand(
   termFilters: Readonly<Record<string, string>> | null | undefined,
   exclude?: string
-): string | null {
+): TermFilterOperand | null {
   const entries = Object.entries(termFilters ?? {}).filter(
     ([facet, value]) =>
       facet !== exclude && typeof value === "string" && value.length > 0
@@ -76,7 +90,7 @@ export function buildTermFilterOperand(
     return null;
   }
 
-  return JSON.stringify(entries.map(([facet, value]) => ({ facet, value })));
+  return entries.map(([facet, value]) => ({ facet, value }));
 }
 
 export function encodeSearchCursor(cursor: SearchCursor): string {

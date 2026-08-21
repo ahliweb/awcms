@@ -426,6 +426,22 @@ describe("the registry gate grows with the contract", () => {
   });
 });
 
+describe("the column is written as jsonb, not as a jsonb string", () => {
+  test("the upsert binds the array itself", async () => {
+    const source = await Bun.file(
+      "src/modules/site-search/application/search-index-engine.ts"
+    ).text();
+
+    // Bun JSON-ENCODES a string parameter bound to a jsonb slot, so
+    // `${JSON.stringify(x)}::jsonb` stores the jsonb SCALAR STRING `"[]"`.
+    // `sql/140`'s `jsonb_typeof = 'array'` CHECK is what turns that into an
+    // error instead of a silence — but the write should be right in the first
+    // place, and this is what keeps it that way.
+    expect(source).toContain("${doc.termFacets}::jsonb");
+    expect(source).not.toContain("JSON.stringify(doc.termFacets)");
+  });
+});
+
 describe("the grants gate walks joined tables too", () => {
   test("a join facet contributes its link and value tables", () => {
     // This is the #625 failure one layer deeper: a descriptor whose facet joins
@@ -497,16 +513,29 @@ describe("the filter operand", () => {
   test("several filters become ONE containment operand", () => {
     expect(
       buildTermFilterOperand({ channel: "politik", topic: "pemilu" })
-    ).toBe(
-      '[{"facet":"channel","value":"politik"},{"facet":"topic","value":"pemilu"}]'
-    );
+    ).toEqual([
+      { facet: "channel", value: "politik" },
+      { facet: "topic", value: "pemilu" }
+    ]);
+  });
+
+  test("the operand is an ARRAY, never a JSON string", () => {
+    // Bun JSON-ENCODES a string parameter bound to a jsonb slot, so a
+    // stringified operand compares against the jsonb SCALAR STRING and matches
+    // nothing — silently, because `@>` against a scalar is false rather than an
+    // error. The filter would return zero results and the facet counts beside
+    // it would quietly go to zero, which looks exactly like "no matches".
+    const operand = buildTermFilterOperand({ channel: "politik" });
+
+    expect(Array.isArray(operand)).toBe(true);
+    expect(typeof operand).not.toBe("string");
   });
 
   test("excluding a facet removes only that one", () => {
     // This is the entire mechanism behind "a facet does not narrow itself".
     expect(
       buildTermFilterOperand({ channel: "politik", topic: "pemilu" }, "channel")
-    ).toBe('[{"facet":"topic","value":"pemilu"}]');
+    ).toEqual([{ facet: "topic", value: "pemilu" }]);
   });
 
   test("excluding the only filter yields null", () => {
