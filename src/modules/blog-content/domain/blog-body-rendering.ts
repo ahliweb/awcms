@@ -4,7 +4,10 @@ import {
   collectRenderableVideoNewsThumbnailMediaObjectIds,
   renderContentJsonToHtml
 } from "./content-block-rendering";
-import { renderPortableTextToHtml } from "./portable-text-rendering";
+import {
+  renderPortableTextToHtml,
+  type PortableTextRenderOptions
+} from "./portable-text-rendering";
 
 /**
  * The ONE place that decides which stored body a reader actually sees
@@ -80,13 +83,28 @@ export function hasCanonicalPortableTextBody(body: BlogBodySource): boolean {
  * Both branches escape every character of author-supplied content and emit tags
  * only from closed mappings — the safety property does not depend on which one
  * runs.
+ *
+ * `options` reaches ONLY the canonical branch, and that is a statement about
+ * the feature rather than an oversight: `editableBlockIndexes` exists so an
+ * overlay can splice an edited block back into a Portable Text ARRAY (Issue
+ * #592), and the projection is not that array. Stamping the fallback would
+ * offer an editor a click that could not be saved — the preview lying about
+ * what it can do, which is the failure this issue is about. The caller decides
+ * whether to offer editing at all by asking `hasCanonicalPortableTextBody`
+ * first; #624's single-decision-point rule is untouched, because this is still
+ * the only function that chooses a body.
  */
 export function renderBlogBodyHtml(
   body: BlogBodySource,
-  resolvedMediaUrls?: ResolvedGalleryMediaUrls
+  resolvedMediaUrls?: ResolvedGalleryMediaUrls,
+  options?: PortableTextRenderOptions
 ): string {
   return hasCanonicalPortableTextBody(body)
-    ? renderPortableTextToHtml(body.bodyPortableText, resolvedMediaUrls)
+    ? renderPortableTextToHtml(
+        body.bodyPortableText,
+        resolvedMediaUrls,
+        options
+      )
     : renderContentJsonToHtml(body.contentJson, resolvedMediaUrls);
 }
 

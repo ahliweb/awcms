@@ -12,7 +12,11 @@
  *    published article by accident, and the never-cacheable probe is what keeps
  *    a shared cache from holding one.
  * 3. **That it reads, and only reads.** A preview that could publish would be a
- *    publish button wearing a different name.
+ *    publish button wearing a different name. The editing overlay (Issue #592's
+ *    second half) did not change that: it saves through the existing
+ *    `PATCH /api/v1/blog/posts/{id}`, so this file still has no write path and
+ *    no second authorization decision. The overlay's own behaviour is covered
+ *    in `tests/blog-preview-overlay.test.ts`.
  *
  * Pure — no database.
  */
@@ -103,6 +107,44 @@ describe("a draft cannot escape through this URL", () => {
     // must never be crawled in the first place.
     expect(preview).toContain("canonicalUrl: null");
     expect(preview).toContain("structuredDataJsonLd: null");
+  });
+});
+
+describe("the editing overlay does not change what this route is", () => {
+  test("editing is offered only when the CANONICAL body is what rendered", async () => {
+    const preview = stripComments(await readFile(ROUTE, "utf8"));
+
+    // `renderBlogBodyHtml` falls back to the lossy projection on a row that has
+    // not been through `blog:portable-text:backfill`, and the projection is not
+    // the array the overlay splices an edited block into. Stamping it anyway
+    // would offer a click that cannot be saved — a preview lying about what it
+    // can do, which is the failure this whole issue is about.
+    expect(preview).toContain("hasCanonicalPortableTextBody(post)");
+    expect(preview).toMatch(/editableBlockIndexes:\s*editable/);
+    expect(preview).toMatch(/editable\s*\?\s*renderPreviewOverlayHtml\(/);
+  });
+
+  test("the route still writes nothing — the save goes to the existing API", async () => {
+    const preview = stripComments(await readFile(ROUTE, "utf8"));
+
+    // The overlay saves through `PATCH /api/v1/blog/posts/{id}`, which has its
+    // own guard, its own validation and its own revision/purge behaviour. This
+    // file gained a script tag, not a write path and not a second
+    // authorization decision.
+    expect(preview).not.toContain("updateBlogPost");
+    expect(preview).not.toContain("fetch(");
+  });
+
+  test("the overlay's client code is not written here", async () => {
+    const preview = stripComments(await readFile(ROUTE, "utf8"));
+
+    // An inline `<script>` on this page is refused by the CSP
+    // (`default-src 'self'`, no `'unsafe-inline'`), and `build:inline-scripts:check`
+    // reads the Astro manifest, which an `APIRoute`'s hand-built HTML never
+    // enters. So this is the gate for that.
+    expect(preview).not.toContain("<script>");
+    expect(preview).not.toContain("addEventListener");
+    expect(preview).not.toContain("contentEditable");
   });
 });
 

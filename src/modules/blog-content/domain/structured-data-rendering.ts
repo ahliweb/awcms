@@ -1,3 +1,5 @@
+import { serializeJsonForScriptElement } from "../../../lib/html/escape";
+
 /**
  * `NewsArticle` (schema.org) JSON-LD structured data for public post detail
  * pages (Issue #649, epic `news_portal`). Pure — takes already-resolved
@@ -107,8 +109,14 @@ export function buildNewsArticleJsonLd(
  * just the exact `</script>` substring) closes this structurally — same
  * "escape the whole class, not a denylist of exact strings" principle this
  * repo's `escapeHtml` already uses for regular HTML text.
+ *
+ * The escaping itself now lives in `lib/html/escape.ts` as
+ * `serializeJsonForScriptElement`, because Issue #592 gave it a SECOND caller:
+ * the editor preview embeds the canonical body as an `application/json` data
+ * block for its editing overlay. Two hand-copies of one escaping rule is how
+ * the second one ends up subtly weaker. This stays the only place a JSON-LD
+ * object becomes a tag.
  */
 export function renderJsonLdScriptTag(data: Record<string, unknown>): string {
-  const json = JSON.stringify(data).replace(/</g, "\\u003c");
-  return `<script type="application/ld+json">${json}</script>`;
+  return `<script type="application/ld+json">${serializeJsonForScriptElement(data)}</script>`;
 }

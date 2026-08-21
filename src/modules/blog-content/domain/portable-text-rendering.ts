@@ -139,26 +139,60 @@ function annotationMap(
   return map;
 }
 
-function renderProseBlock(block: PortableTextBlock): string {
+function renderProseBlock(
+  block: PortableTextBlock,
+  attributes: string
+): string {
   const inner = renderBlockChildren(block, annotationMap(block));
 
   if (block.style === "blockquote") {
-    return `<blockquote>${inner}</blockquote>`;
+    return `<blockquote${attributes}>${inner}</blockquote>`;
   }
 
   if (block.style && block.style !== "normal") {
     // Tag name comes from the enumerated style, never from the payload.
     const level = Number(String(block.style).slice(1));
     if (Number.isInteger(level) && level >= 1 && level <= 6) {
-      return `<h${level}>${inner}</h${level}>`;
+      return `<h${level}${attributes}>${inner}</h${level}>`;
     }
-    return `<p>${inner}</p>`;
+    return `<p${attributes}>${inner}</p>`;
   }
 
-  return `<p>${inner}</p>`;
+  return `<p${attributes}>${inner}</p>`;
 }
 
 const EMPTY_RESOLVED_MEDIA_URLS: ResolvedGalleryMediaUrls = new Map();
+
+/**
+ * The attribute the editing overlay finds a block by (Issue #592).
+ *
+ * Exported so the overlay reads the same string this renderer writes. A
+ * selector hand-copied into client code is a rename away from an overlay that
+ * silently stops finding anything — and "nothing is clickable" is a failure
+ * mode nobody reports as a bug.
+ */
+export const EDITABLE_BLOCK_INDEX_ATTRIBUTE = "data-pt-index";
+
+export type PortableTextRenderOptions = {
+  /**
+   * Issue #592 — stamp every editable block with its index in the document,
+   * as `data-pt-index="N"`, so the editing overlay can map a clicked element
+   * back to the node it came from.
+   *
+   * OFF by default and passed by exactly one caller (the authenticated editor
+   * preview). Public output is byte-identical without it, which is what keeps
+   * this from being a change to what a reader downloads — asserted in
+   * `tests/blog-content-canonical-body-rendering.test.ts` rather than promised
+   * here.
+   *
+   * The index is the position in the document ARRAY, not a count of rendered
+   * elements: the overlay splices the edited block back into that array, so an
+   * index that skipped the opaque nodes would write the edit to the wrong
+   * place. Opaque nodes are therefore not stamped but still consume their
+   * index.
+   */
+  editableBlockIndexes?: boolean;
+};
 
 /**
  * Renders a whole Portable Text body.
@@ -174,26 +208,39 @@ const EMPTY_RESOLVED_MEDIA_URLS: ResolvedGalleryMediaUrls = new Map();
  */
 export function renderPortableTextToHtml(
   document: unknown,
-  resolvedMediaUrls: ResolvedGalleryMediaUrls = EMPTY_RESOLVED_MEDIA_URLS
+  resolvedMediaUrls: ResolvedGalleryMediaUrls = EMPTY_RESOLVED_MEDIA_URLS,
+  options: PortableTextRenderOptions = {}
 ): string {
   if (!Array.isArray(document)) {
     return "";
   }
 
+  // A number formatted by this module, never a value from the payload — so it
+  // needs no escaping and cannot become an attribute an author chose.
+  const stamp = (index: number): string =>
+    options.editableBlockIndexes
+      ? ` ${EDITABLE_BLOCK_INDEX_ATTRIBUTE}="${index}"`
+      : "";
+
   const out: string[] = [];
-  let openList: { tag: "ul" | "ol"; items: string[] } | null = null;
+  let openList: {
+    tag: "ul" | "ol";
+    items: { html: string; index: number }[];
+  } | null = null;
 
   const flushList = (): void => {
     if (!openList) {
       return;
     }
     out.push(
-      `<${openList.tag}>${openList.items.map((item) => `<li>${item}</li>`).join("")}</${openList.tag}>`
+      `<${openList.tag}>${openList.items
+        .map((item) => `<li${stamp(item.index)}>${item.html}</li>`)
+        .join("")}</${openList.tag}>`
     );
     openList = null;
   };
 
-  for (const node of document as PortableTextDocument) {
+  for (const [index, node] of (document as PortableTextDocument).entries()) {
     if (!isRecord(node)) {
       continue;
     }
@@ -206,16 +253,16 @@ export function renderPortableTextToHtml(
         const inner = renderBlockChildren(block, annotationMap(block));
 
         if (openList && openList.tag === tag) {
-          openList.items.push(inner);
+          openList.items.push({ html: inner, index });
         } else {
           flushList();
-          openList = { tag, items: [inner] };
+          openList = { tag, items: [{ html: inner, index }] };
         }
         continue;
       }
 
       flushList();
-      out.push(renderProseBlock(block));
+      out.push(renderProseBlock(block, stamp(index)));
       continue;
     }
 

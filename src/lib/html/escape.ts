@@ -14,6 +14,31 @@ export function escapeHtml(value: string): string {
 }
 
 /**
+ * JSON destined for the body of a `<script>` DATA BLOCK — `application/ld+json`
+ * (`structured-data-rendering.ts`) or `application/json` (the editor preview's
+ * embedded document, Issue #592).
+ *
+ * `JSON.stringify` already produces a valid JSON string; the ONE additional risk
+ * specific to embedding JSON inside an HTML `<script>` element is a literal
+ * `</script` sequence inside a string value closing the element early. That is
+ * not a JSON-escaping gap but an HTML-parser one: the tokenizer looks for
+ * `</script` before any JSON parsing begins. Escaping EVERY `<` closes it
+ * structurally — the same "escape the whole class, not a denylist of exact
+ * strings" principle `escapeHtml` above uses.
+ *
+ * `escapeHtml` is NOT the right tool here and must not be substituted: its
+ * `&amp;`/`&quot;` entities are not JSON escapes, and a data block is not parsed
+ * as HTML text, so it would corrupt every string it touched.
+ *
+ * It lives here, beside the other escapers, because it now has two callers. It
+ * had one, with the reasoning written in that caller — and reasoning that lives
+ * with one of two callers is how the second one gets it subtly wrong.
+ */
+export function serializeJsonForScriptElement(value: unknown): string {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
+/**
  * C0 control characters that XML 1.0 forbids ANYWHERE in a document — even as a
  * numeric character reference (`&#x1;` is itself not well-formed). The only C0
  * chars XML 1.0 permits are TAB (U+0009), LF (U+000A), and CR (U+000D); every
