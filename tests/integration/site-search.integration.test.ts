@@ -44,6 +44,7 @@ import {
   reconcileTenantSearchIndex,
   reindexSearchResource
 } from "../../src/modules/site-search/application/search-index-engine";
+import { countSearchFacets } from "../../src/modules/site-search/application/search-service";
 import {
   decodeSearchCursor,
   searchSiteContent,
@@ -586,5 +587,119 @@ suite("site_search module (integration, ADR-0040)", () => {
     expect(runs[0]!.runType).toBe("reconcile");
     expect(runs[0]!.documentsIndexed).toBe(1);
     expect(runs[0]!.finishedAt).not.toBeNull();
+  });
+
+  describe("facet counts (Issue #607)", () => {
+    test("count the whole matching set, and are NOT narrowed by the type filter", async () => {
+      await insertPost(TENANT_A, {
+        title: "Kalteng flood one",
+        body: "banjir kalteng",
+        slug: "flood-1"
+      });
+      await insertPost(TENANT_A, {
+        title: "Kalteng flood two",
+        body: "banjir kalteng",
+        slug: "flood-2"
+      });
+      await insertPost(TENANT_A, {
+        title: "Unrelated aardvark",
+        body: "nothing to do with it",
+        slug: "other"
+      });
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "kalteng", locale: "en" })
+      );
+
+      expect(facets.resourceTypes).toEqual([{ value: "blog_post", count: 2 }]);
+    });
+
+    test("a query matching nothing yields no facet values, not a zero row", async () => {
+      await insertPost(TENANT_A, {
+        title: "Something",
+        body: "body",
+        slug: "s"
+      });
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, {
+          query: "zzzzunmatchable",
+          locale: "en"
+        })
+      );
+
+      expect(facets.resourceTypes).toEqual([]);
+    });
+
+    test("a facet count NEVER includes another tenant's rows", async () => {
+      // The negative assertion Issue #607 asks for by name. A COUNT leaks the
+      // existence of content without displaying it, so a facet that escaped its
+      // tenant would be a disclosure with nothing on screen to notice it by.
+      await insertPost(TENANT_A, {
+        title: "Shared keyword aardvark",
+        body: "a body",
+        slug: "a"
+      });
+      await insertPost(TENANT_B, {
+        title: "Shared keyword aardvark",
+        body: "b body",
+        slug: "b1"
+      });
+      await insertPost(TENANT_B, {
+        title: "Shared keyword aardvark again",
+        body: "b body",
+        slug: "b2"
+      });
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_B, SOURCES)
+      );
+
+      const aFacets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "aardvark", locale: "en" })
+      );
+      const bFacets = await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        countSearchFacets(tx, TENANT_B, { query: "aardvark", locale: "en" })
+      );
+
+      // Non-vacuous in both directions: B really does hold more than A, so a
+      // count that leaked would be visibly wrong rather than coincidentally
+      // equal.
+      expect(aFacets.resourceTypes).toEqual([{ value: "blog_post", count: 1 }]);
+      expect(bFacets.resourceTypes).toEqual([{ value: "blog_post", count: 2 }]);
+    });
+
+    test("the admitted-type allow-list bounds the facets too", async () => {
+      await insertPost(TENANT_A, {
+        title: "Allowed aardvark",
+        body: "body",
+        slug: "a"
+      });
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+
+      // A type the tenant has not admitted must not be counted — otherwise the
+      // facet advertises a document the result query would refuse to return.
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, {
+          query: "aardvark",
+          locale: "en",
+          enabledResourceTypes: ["blog_page"]
+        })
+      );
+
+      expect(facets.resourceTypes).toEqual([]);
+    });
   });
 });

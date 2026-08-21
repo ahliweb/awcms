@@ -144,6 +144,77 @@ export async function searchSiteContent(
   };
 }
 
+export type SearchFacetValue = {
+  /** The `resource_type` as stored — `blog_post`, `blog_page`, and whatever a future module contributes. */
+  value: string;
+  count: number;
+};
+
+export type SearchFacets = {
+  resourceTypes: SearchFacetValue[];
+};
+
+/**
+ * How many facet VALUES may be returned. A facet list is a public, anonymous
+ * response body; without a ceiling its size is decided by however many resource
+ * types the registry grows to.
+ */
+const MAX_FACET_VALUES = 20;
+
+/**
+ * Counts per resource type for one query (Issue #607).
+ *
+ * ## Why the type filter is deliberately NOT applied
+ *
+ * A facet count answers "what else is there", so it must be computed over the
+ * result set BEFORE the facet's own filter narrows it. Applying `resourceType`
+ * here would make every other count zero the moment a reader picks one — and a
+ * reader looking at a list of zeroes has no way back to the results they can
+ * see, because the interface has stopped telling them those results exist.
+ *
+ * Every OTHER predicate is shared with `searchSiteContent`, character for
+ * character: same tenant, same locale, same `websearch_to_tsquery`, same
+ * admitted-type allow-list. A facet count derived from a wider predicate than
+ * the results would advertise documents the reader cannot reach.
+ *
+ * ## Why this cannot become a cross-tenant oracle
+ *
+ * The explicit `tenant_id` predicate and RLS FORCE both bind it, the same
+ * defence in depth every query in this repo carries. That matters more here than
+ * for a result list: a COUNT leaks the existence of content without displaying
+ * it, so a facet that escaped its tenant would be a disclosure with nothing on
+ * screen to notice it by. `tests/integration/site-search.integration.test.ts`
+ * asserts it negatively against a real database.
+ */
+export async function countSearchFacets(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: Omit<SearchQueryOptions, "limit" | "cursor" | "resourceType">
+): Promise<SearchFacets> {
+  const allowedTypes = options.enabledResourceTypes ?? null;
+  const allowedTypesParam =
+    allowedTypes === null ? null : tx.array(allowedTypes, "text");
+
+  const rows = (await tx`
+    SELECT d.resource_type AS value, count(*)::int AS count
+    FROM awcms_site_search_documents d
+    WHERE d.tenant_id = ${tenantId}
+      AND d.locale = ${options.locale}
+      AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
+      AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
+    GROUP BY d.resource_type
+    ORDER BY count DESC, value ASC
+    LIMIT ${MAX_FACET_VALUES}
+  `) as { value: string; count: number }[];
+
+  return {
+    resourceTypes: rows.map((row) => ({
+      value: row.value,
+      count: Number(row.count)
+    }))
+  };
+}
+
 export type SuggestionItem = {
   resourceType: string;
   resourceId: string;
