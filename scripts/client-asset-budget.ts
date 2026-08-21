@@ -222,7 +222,28 @@ export const READER_BUDGET_BYTES = 24_000;
  * admin surface has now grown three times in one working day, and a wider
  * margin here would buy silence rather than room.
  */
-export const APP_BUDGET_BYTES = 178_000;
+/**
+ * **Raised to 185,000 on 21 August 2026 for `/admin/site-profile` (Issue #596,
+ * ADR-0102), and the gate's question was answered with a change rather than an
+ * argument.**
+ *
+ * It fired at 181,626 B and asked whether the growth was per-screen
+ * duplication. **Part of it was.** `/admin/site-profile` is the second screen
+ * to need the media picker, and its wiring had been hand-copied from
+ * `/admin/blog` — the exact Issue #552 shape, caught this time BEFORE it
+ * landed rather than 43 screens later. Extracting `wireMediaPickers` into
+ * `lib/ui/media-picker-client.ts` gave back 1,444 B:
+ *
+ * ```
+ * with the copy                      181,626 B
+ * after extracting wireMediaPickers  180,182 B   (-1,444)
+ * ```
+ *
+ * What remains is a genuinely new screen — a form with nine fields, a
+ * repeating social-links builder, and two media choosers — shipping behaviour
+ * that did not exist. 185,000 is measured + ~2.7%.
+ */
+export const APP_BUDGET_BYTES = 185_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

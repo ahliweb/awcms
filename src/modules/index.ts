@@ -18,6 +18,7 @@ import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
 import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
+import { siteProfileModule } from "./site-profile/module";
 import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 import { pushDeliveryModule } from "./push-delivery/module";
@@ -118,6 +119,12 @@ const baseModules: ModuleDescriptor[] = [
   // capability `provides`, precisely because many providers are expected. See
   // src/modules/site-search/module.ts's `description`.
   siteSearchModule,
+  // Issue #596 / ADR-0102 — per-tenant SITE CHROME (masthead, footer,
+  // editorial address, contact details, social links). Listed after
+  // `site_search` because it depends on `seo_distribution` and
+  // `media_library`, both of which appear above it; the DAG check enforces
+  // that ordering rather than trusting this comment.
+  siteProfileModule,
   // Ported from awcms-micro (Issue #271, ADR-0041), Gelombang-1 of
   // docs/awcms/absorb-awcms-micro-roadmap.md: moderation-first commenting over
   // PUBLISHED, PUBLIC resources. Depends only on tenant_admin/identity_access

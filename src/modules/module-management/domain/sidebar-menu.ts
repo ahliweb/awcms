@@ -96,6 +96,9 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   theming: "system",
   seo_distribution: "system",
   site_search: "system",
+  // Issue #596 — site identity is tenant-wide configuration, so it sits with
+  // the other `system` posture/config screens rather than under content.
+  site_profile: "system",
   email: "system",
   form_drafts: "system",
   logging: "system",
@@ -208,6 +211,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_sidebar_menu": "Sidebar menu",
   "admin.layout.nav_form_drafts": "Form drafts",
   "admin.layout.nav_site_search": "Site search",
+  "admin.layout.nav_site_profile": "Site profile",
   "admin.layout.nav_theming": "Theming",
   "admin.layout.nav_email_templates": "Email templates",
   "admin.layout.nav_email_suppression": "Email suppression",

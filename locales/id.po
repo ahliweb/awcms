@@ -4047,3 +4047,72 @@ msgstr "Memuat kosakata…"
 
 msgid "Loading institutions…"
 msgstr "Memuat institusi…"
+
+msgid "Site profile"
+msgstr "Profil situs"
+
+msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
+msgstr "Siapa situs ini di mata pembaca: kepala halaman, footer, alamat redaksi, dan detail kontak."
+
+msgid "You do not have permission to view the site profile."
+msgstr "Anda tidak punya izin untuk melihat profil situs."
+
+msgid "The site profile could not be loaded. Please try again."
+msgstr "Profil situs tidak dapat dimuat. Silakan coba lagi."
+
+msgid "The site name, organisation name and default social image are edited on the SEO screen — they are what search engines and share cards read, and they are set by whoever owns index impact."
+msgstr "Nama situs, nama organisasi, dan gambar sosial bawaan disunting di layar SEO — ketiganya yang dibaca mesin pencari dan kartu berbagi, dan diatur oleh pihak yang memahami dampak indeks."
+
+msgid "Masthead and footer"
+msgstr "Kepala halaman dan footer"
+
+msgid "Tagline"
+msgstr "Tagline"
+
+msgid "Copyright notice"
+msgstr "Keterangan hak cipta"
+
+msgid "Logo and favicon"
+msgstr "Logo dan favicon"
+
+msgid "A favicon is attached."
+msgstr "Sebuah favicon terpasang."
+
+msgid "No favicon attached."
+msgstr "Belum ada favicon terpasang."
+
+msgid "Choose favicon"
+msgstr "Pilih favicon"
+
+msgid "Remove favicon"
+msgstr "Lepas favicon"
+
+msgid "Editorial and contact"
+msgstr "Redaksi dan kontak"
+
+msgid "Editorial address"
+msgstr "Alamat redaksi"
+
+msgid "Contact email"
+msgstr "Email kontak"
+
+msgid "Contact phone"
+msgstr "Telepon kontak"
+
+msgid "WhatsApp number"
+msgstr "Nomor WhatsApp"
+
+msgid "Kept separate from the contact phone: a tip line is often not the switchboard."
+msgstr "Dipisahkan dari telepon kontak: saluran aduan sering kali bukan nomor sentral."
+
+msgid "Social profiles"
+msgstr "Profil media sosial"
+
+msgid "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page."
+msgstr "Satu baris per platform, maksimum {max}. Tautan wajib berupa URL http(s) absolut — ia dirender di setiap halaman publik."
+
+msgid "Add a social profile"
+msgstr "Tambah profil media sosial"
+
+msgid "Save site profile"
+msgstr "Simpan profil situs"

@@ -1,0 +1,443 @@
+---
+/**
+ * Site profile console — a tenant states who it is (Issue #596, ADR-0102).
+ *
+ * Drives both of this module's permissions: `site_profile.profile.read` gates
+ * entry, `.update` gates the form. Separately grantable on `sql/058`'s
+ * reasoning — changing what every public page's contact block says is a
+ * different power from reading it — so a reader without `.update` gets the
+ * values and no form rather than a form that 403s on submit.
+ *
+ * ## What is NOT here, and where it is instead
+ *
+ * `siteName`, `organizationName`, the Organization logo and the default social
+ * image live on `/admin/seo`. That is not an oversight: ADR-0102 puts what
+ * CRAWLERS see under `seo_distribution` and what PEOPLE read here, and the two
+ * are edited by different people for different reasons. The screen says so
+ * rather than leaving an operator to wonder why the site name is missing from
+ * the site identity page.
+ *
+ * A build client is not asked to know that split —
+ * `GET /api/v1/site-profile/composed` merges both halves.
+ *
+ * ## Media
+ *
+ * The logo and favicon are media object ids chosen through the shared picker
+ * from Issue #595, not URL fields. A URL box here would be a second path to the
+ * bytes that managed-media enforcement does not govern.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  fetchSiteProfile,
+  type SiteProfileView
+} from "../../modules/site-profile/application/site-profile-directory";
+import { SITE_PROFILE_LIMITS } from "../../modules/site-profile/domain/site-profile-validation";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "site_profile",
+    activityCode: "profile",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    profile: await fetchSiteProfile(tx, ssr.tenantId),
+    canUpdate: await can({
+      moduleKey: "site_profile",
+      activityCode: "profile",
+      action: "update"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/site-profile.astro: failed to load the site profile",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const profile: SiteProfileView | null =
+  screen.state === "allowed" ? screen.data.profile : null;
+---
+
+<AdminLayout title={t("Site profile")}>
+  <header class="page-header fade-in-up">
+    <h1>{t("Site profile")}</h1>
+    <p class="page-subtitle">
+      {
+        t(
+          "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="admin-empty">
+        {t("You do not have permission to view the site profile.")}
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="admin-empty">
+        {t("The site profile could not be loaded. Please try again.")}
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && profile && (
+      <>
+        <p
+          id="site-profile-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <section class="admin-section fade-in-up">
+          <p class="admin-section-hint">
+            {t(
+              "The site name, organisation name and default social image are edited on the SEO screen — they are what search engines and share cards read, and they are set by whoever owns index impact."
+            )}
+          </p>
+        </section>
+
+        <form id="site-profile-form" class="admin-create-form">
+          <fieldset class="admin-fieldset" disabled={!canUpdate}>
+            <legend>{t("Masthead and footer")}</legend>
+
+            <label for="profile-tagline">
+              {t("Tagline")}
+              <input
+                type="text"
+                id="profile-tagline"
+                name="tagline"
+                maxlength={SITE_PROFILE_LIMITS.tagline}
+                value={profile.tagline ?? ""}
+              />
+            </label>
+
+            <label for="profile-copyright">
+              {t("Copyright notice")}
+              <input
+                type="text"
+                id="profile-copyright"
+                name="copyrightNotice"
+                maxlength={SITE_PROFILE_LIMITS.copyrightNotice}
+                value={profile.copyrightNotice ?? ""}
+              />
+            </label>
+          </fieldset>
+
+          <fieldset class="admin-fieldset" disabled={!canUpdate}>
+            <legend>{t("Logo and favicon")}</legend>
+
+            <input
+              type="hidden"
+              id="profile-logo-media-id"
+              name="logoMediaId"
+              value={profile.logoMediaId ?? ""}
+            />
+            <div class="media-choice" id="profile-logo-choice">
+              <p class="form-hint" id="profile-logo-label">
+                {profile.logoMediaId
+                  ? t("An image is attached.")
+                  : t("No image attached.")}
+              </p>
+              <div class="media-choice-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary media-pick-btn"
+                  data-target="profile-logo-media-id"
+                  data-label="profile-logo-label"
+                >
+                  {t("Choose image")}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary media-clear-btn"
+                  data-target="profile-logo-media-id"
+                  data-label="profile-logo-label"
+                >
+                  {t("Remove image")}
+                </button>
+              </div>
+              <div class="media-picker-panel" hidden />
+            </div>
+
+            <input
+              type="hidden"
+              id="profile-favicon-media-id"
+              name="faviconMediaId"
+              value={profile.faviconMediaId ?? ""}
+            />
+            <div class="media-choice" id="profile-favicon-choice">
+              <p class="form-hint" id="profile-favicon-label">
+                {profile.faviconMediaId
+                  ? t("A favicon is attached.")
+                  : t("No favicon attached.")}
+              </p>
+              <div class="media-choice-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary media-pick-btn"
+                  data-target="profile-favicon-media-id"
+                  data-label="profile-favicon-label"
+                >
+                  {t("Choose favicon")}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary media-clear-btn"
+                  data-target="profile-favicon-media-id"
+                  data-label="profile-favicon-label"
+                >
+                  {t("Remove favicon")}
+                </button>
+              </div>
+              <div class="media-picker-panel" hidden />
+            </div>
+          </fieldset>
+
+          <fieldset class="admin-fieldset" disabled={!canUpdate}>
+            <legend>{t("Editorial and contact")}</legend>
+
+            <label for="profile-address">
+              {t("Editorial address")}
+              <textarea
+                id="profile-address"
+                name="editorialAddress"
+                rows="3"
+                maxlength={SITE_PROFILE_LIMITS.editorialAddress}
+                set:text={profile.editorialAddress ?? ""}
+              />
+            </label>
+
+            <label for="profile-email">
+              {t("Contact email")}
+              <input
+                type="email"
+                id="profile-email"
+                name="contactEmail"
+                maxlength={SITE_PROFILE_LIMITS.contactEmail}
+                value={profile.contactEmail ?? ""}
+              />
+            </label>
+
+            <label for="profile-phone">
+              {t("Contact phone")}
+              <input
+                type="text"
+                id="profile-phone"
+                name="contactPhone"
+                maxlength={SITE_PROFILE_LIMITS.contactPhone}
+                value={profile.contactPhone ?? ""}
+              />
+            </label>
+
+            <label for="profile-whatsapp">
+              {t("WhatsApp number")}
+              <input
+                type="text"
+                id="profile-whatsapp"
+                name="whatsappNumber"
+                maxlength={SITE_PROFILE_LIMITS.whatsappNumber}
+                value={profile.whatsappNumber ?? ""}
+              />
+              <span class="form-hint">
+                {t(
+                  "Kept separate from the contact phone: a tip line is often not the switchboard."
+                )}
+              </span>
+            </label>
+          </fieldset>
+
+          <fieldset class="admin-fieldset" disabled={!canUpdate}>
+            <legend>{t("Social profiles")}</legend>
+            <p class="form-hint">
+              {t(
+                "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page.",
+                { max: SITE_PROFILE_LIMITS.socialLinks }
+              )}
+            </p>
+            <div
+              id="profile-social-links"
+              data-links={JSON.stringify(profile.socialLinks)}
+            />
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="profile-add-social"
+            >
+              {t("Add a social profile")}
+            </button>
+          </fieldset>
+
+          {canUpdate && (
+            <button type="submit" id="site-profile-submit">
+              {t("Save site profile")}
+            </button>
+          )}
+        </form>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'`.
+  import { field, messageBox, onSubmit } from "../../lib/ui/admin-form-client";
+  import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
+  import { wireMediaPickers } from "../../lib/ui/media-picker-client";
+
+  const formError = messageBox("site-profile-error");
+
+  wireMediaPickers("Nothing attached.");
+
+  /**
+   * Social links are a repeating row, built in the DOM rather than posted as
+   * `name="socialLinks[0].url"` — the endpoint takes a JSON array, and encoding
+   * an array into form-field names only to decode it again is a second format
+   * to get wrong.
+   */
+  const socialHost = document.getElementById("profile-social-links");
+
+  function addSocialRow(platform = "", url = ""): void {
+    if (!(socialHost instanceof HTMLElement)) return;
+
+    const row = document.createElement("div");
+    row.className = "social-link-row";
+
+    const platformInput = document.createElement("input");
+    platformInput.type = "text";
+    platformInput.className = "social-platform";
+    platformInput.placeholder = "facebook";
+    platformInput.value = platform;
+
+    const urlInput = document.createElement("input");
+    urlInput.type = "url";
+    urlInput.className = "social-url";
+    urlInput.placeholder = "https://";
+    urlInput.value = url;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn btn-secondary";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => row.remove());
+
+    row.append(platformInput, urlInput, remove);
+    socialHost.append(row);
+  }
+
+  if (socialHost instanceof HTMLElement) {
+    // Parsed defensively: this attribute is server-rendered from stored data,
+    // and a row written before a future validator change must not blank the
+    // whole screen.
+    let existing: Array<{ platform?: unknown; url?: unknown }> = [];
+    try {
+      const parsed = JSON.parse(socialHost.dataset.links ?? "[]");
+      if (Array.isArray(parsed)) existing = parsed;
+    } catch {
+      existing = [];
+    }
+
+    for (const link of existing) {
+      addSocialRow(
+        typeof link.platform === "string" ? link.platform : "",
+        typeof link.url === "string" ? link.url : ""
+      );
+    }
+  }
+
+  document
+    .getElementById("profile-add-social")
+    ?.addEventListener("click", () => addSocialRow());
+
+  function readSocialLinks(): Array<{ platform: string; url: string }> {
+    return (
+      [...document.querySelectorAll(".social-link-row")]
+        .map((row) => {
+          const platform = row.querySelector(".social-platform");
+          const url = row.querySelector(".social-url");
+
+          return {
+            platform:
+              platform instanceof HTMLInputElement ? platform.value.trim() : "",
+            url: url instanceof HTMLInputElement ? url.value.trim() : ""
+          };
+        })
+        // A row the operator added and left blank is not an error — it is a row
+        // they changed their mind about, and refusing the whole save for it
+        // would be hostile.
+        .filter((link) => link.platform !== "" || link.url !== "")
+    );
+  }
+
+  const FIELD_LABELS: Record<string, string> = {
+    tagline: "Tagline",
+    copyrightNotice: "Copyright notice",
+    logoMediaId: "Logo",
+    faviconMediaId: "Favicon",
+    editorialAddress: "Editorial address",
+    contactEmail: "Contact email",
+    contactPhone: "Contact phone",
+    whatsappNumber: "WhatsApp number",
+    socialLinks: "Social profiles"
+  };
+
+  onSubmit("site-profile-form", async ({ data, submit }) => {
+    // A full replace: every field is sent, and an empty one is sent as `null`.
+    // The endpoint has no "leave this alone" — a form that submits its whole
+    // state cannot express that, and pretending it could would make clearing a
+    // wrong phone number impossible.
+    const body = {
+      tagline: field(data, "tagline") || null,
+      copyrightNotice: field(data, "copyrightNotice") || null,
+      logoMediaId: field(data, "logoMediaId") || null,
+      faviconMediaId: field(data, "faviconMediaId") || null,
+      editorialAddress: field(data, "editorialAddress") || null,
+      contactEmail: field(data, "contactEmail") || null,
+      contactPhone: field(data, "contactPhone") || null,
+      whatsappNumber: field(data, "whatsappNumber") || null,
+      socialLinks: readSocialLinks()
+    };
+
+    await submitWithFieldErrors(
+      submit,
+      formError,
+      "PUT",
+      "/api/v1/site-profile",
+      body,
+      {
+        labels: FIELD_LABELS,
+        busyLabel: "Saving…",
+        idempotent: true,
+        // `PUT` on one row per tenant: there is no slug and no unique index to
+        // collide with, so a conflict here can only be an idempotency-key
+        // replay with a different body.
+        conflict:
+          "This save was already submitted with different values. Reload and try again.",
+        failure: "Could not save the site profile. Please try again."
+      }
+    );
+  });
+</script>

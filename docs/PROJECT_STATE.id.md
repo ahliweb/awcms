@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:198b9b72d7472b7e1c8ee6bec67dbe43ff66642c3bd017d029f229580bff0ea4 -->
+<!-- i18n-source-hash: sha256:acdc2ac9019ad84ca9159f70cd58673995aa2e6ac96ebfca19802865cb5c4749 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **134** (`sql/001`–`134`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **135** (`sql/001`–`135`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **56** (30.144 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -193,7 +193,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **22 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
+- **23 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection

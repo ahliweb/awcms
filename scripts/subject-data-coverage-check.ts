@@ -69,6 +69,11 @@ const MIGRATIONS_DIR = "sql";
  */
 export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
   {
+    table: "awcms_site_profile",
+    reason:
+      "ADR-0102. One row per TENANT holding the PUBLISHER's own published identity — masthead tagline, footer copyright, editorial address, and the contact channels the newsroom prints on its own contact page. It records nothing the tenant holds ABOUT a third party, which is what a subject-access request asks for; a reader exercising their rights against this site is not asking for the site's own address. The honest edge case, stated rather than skipped: a small newsroom may type a person's address into `contact_email` or `whatsapp_number`. That value is still the publisher's own, published deliberately by the person who typed it, and erasing it is editing the field on `/admin/site-profile` — not a subject-rights workflow, which would have no way to distinguish it from the masthead it sits beside. It is also why the audit row for a change records WHICH FIELDS are set and never their values: the values do not need a second copy in a store more people read."
+  },
+  {
     table: "awcms_permissions",
     reason:
       "The global catalogue of permission NAMES, written only by migrations. Every row is a string an author chose; no column can be traced to a person, and none is scoped to a tenant."

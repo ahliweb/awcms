@@ -138,3 +138,102 @@ export function describePickableMedia(item: PickableMediaObject): string {
 
   return filename !== "" ? filename : "Untitled image";
 }
+
+/**
+ * Wires every `.media-choice` block on the page (Issue #596).
+ *
+ * Extracted from `/admin/blog` when `/admin/site-profile` became the second
+ * screen to need it — and the asset budget caught the copy before it landed,
+ * which is the Issue #552 shape working as designed: two screens hand-writing
+ * one lifecycle is how 43 of them once shared 1,039 bytes between 98,379.
+ *
+ * Driven entirely by `data-target` (the hidden input to fill) and `data-label`
+ * (the element describing the current choice), so a caller adds markup rather
+ * than code.
+ */
+export function wireMediaPickers(
+  /** Shown after clearing. Differs per surface ("No image attached." vs a favicon). */
+  clearedLabel = "Nothing attached."
+): void {
+  for (const button of document.querySelectorAll(".media-pick-btn")) {
+    if (!(button instanceof HTMLButtonElement)) continue;
+
+    button.addEventListener("click", async () => {
+      const choice = button.closest(".media-choice");
+      const panel = choice?.querySelector(".media-picker-panel");
+      if (!(panel instanceof HTMLElement)) return;
+
+      // A second click closes it, so the picker cannot strand a half-open
+      // panel over the rest of the form.
+      if (!panel.hidden) {
+        panel.hidden = true;
+        return;
+      }
+
+      panel.hidden = false;
+      panel.textContent = "Loading images…";
+
+      const result = await fetchPickableMedia();
+
+      if (!result.ok) {
+        panel.textContent =
+          result.reason === "forbidden"
+            ? "You do not have permission to browse the media library."
+            : "The media library could not be reached. Try again.";
+        return;
+      }
+
+      if (result.items.length === 0) {
+        // Says WHICH library is empty: only verified, undeleted objects are
+        // offered, so "no images" does not mean nothing was uploaded.
+        panel.textContent =
+          "No verified images yet. Upload one from Media, then reopen this.";
+        return;
+      }
+
+      panel.replaceChildren();
+
+      for (const item of result.items) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "media-option";
+
+        const thumb = document.createElement("img");
+        thumb.src = item.publicUrl;
+        thumb.alt = "";
+        thumb.loading = "lazy";
+        thumb.className = "media-option-thumb";
+
+        const label = document.createElement("span");
+        // `textContent`, never `innerHTML`: alt text and filenames arrive from
+        // whoever uploaded the file.
+        label.textContent = describePickableMedia(item);
+
+        option.append(thumb, label);
+        option.addEventListener("click", () => {
+          const target = document.getElementById(button.dataset.target ?? "");
+          const labelEl = document.getElementById(button.dataset.label ?? "");
+
+          if (target instanceof HTMLInputElement) target.value = item.id;
+          if (labelEl) labelEl.textContent = describePickableMedia(item);
+
+          panel.hidden = true;
+        });
+
+        panel.append(option);
+      }
+    });
+  }
+
+  for (const button of document.querySelectorAll(".media-clear-btn")) {
+    if (!(button instanceof HTMLButtonElement)) continue;
+
+    button.addEventListener("click", () => {
+      const target = document.getElementById(button.dataset.target ?? "");
+      const labelEl = document.getElementById(button.dataset.label ?? "");
+
+      if (target instanceof HTMLInputElement) target.value = "";
+      if (labelEl) labelEl.textContent = clearedLabel;
+    });
+  }
+}

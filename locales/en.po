@@ -4060,3 +4060,72 @@ msgstr ""
 
 msgid "Loading institutions…"
 msgstr ""
+
+msgid "Site profile"
+msgstr ""
+
+msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
+msgstr ""
+
+msgid "You do not have permission to view the site profile."
+msgstr ""
+
+msgid "The site profile could not be loaded. Please try again."
+msgstr ""
+
+msgid "The site name, organisation name and default social image are edited on the SEO screen — they are what search engines and share cards read, and they are set by whoever owns index impact."
+msgstr ""
+
+msgid "Masthead and footer"
+msgstr ""
+
+msgid "Tagline"
+msgstr ""
+
+msgid "Copyright notice"
+msgstr ""
+
+msgid "Logo and favicon"
+msgstr ""
+
+msgid "A favicon is attached."
+msgstr ""
+
+msgid "No favicon attached."
+msgstr ""
+
+msgid "Choose favicon"
+msgstr ""
+
+msgid "Remove favicon"
+msgstr ""
+
+msgid "Editorial and contact"
+msgstr ""
+
+msgid "Editorial address"
+msgstr ""
+
+msgid "Contact email"
+msgstr ""
+
+msgid "Contact phone"
+msgstr ""
+
+msgid "WhatsApp number"
+msgstr ""
+
+msgid "Kept separate from the contact phone: a tip line is often not the switchboard."
+msgstr ""
+
+msgid "Social profiles"
+msgstr ""
+
+msgid "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page."
+msgstr ""
+
+msgid "Add a social profile"
+msgstr ""
+
+msgid "Save site profile"
+msgstr ""
