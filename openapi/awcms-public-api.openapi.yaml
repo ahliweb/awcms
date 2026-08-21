@@ -23194,6 +23194,32 @@ components:
           maxItems: 20
           items:
             $ref: "#/components/schemas/SocialProfileLink"
+    SiteSearchFacets:
+      type: object
+      description: |
+        Counts per facet value for the whole result set (Issue #607), computed on every page — they describe the result set rather than the page, so omitting them after the first page would make them look like they had changed.
+
+        The `type` filter is deliberately NOT applied to these counts: a facet answers "what else is there", and applying it would zero every other value the moment a reader picks one, leaving no way back to results that still exist.
+
+        Every other predicate is shared with the result query character for character, so a count can never advertise a document the reader cannot reach. Bounded to 20 values.
+      properties:
+        resourceTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchFacetValue"
+      required:
+        - resourceTypes
+    SiteSearchFacetValue:
+      type: object
+      properties:
+        value:
+          type: string
+          description: A `resourceType` as stored — `blog_post`, `blog_page`, and whatever a future module contributes.
+        count:
+          type: integer
+      required:
+        - value
+        - count
     SiteSearchIndexFailure:
       type: object
       properties:
@@ -23364,6 +23390,8 @@ components:
         nextCursor:
           type: string
           nullable: true
+        facets:
+          $ref: "#/components/schemas/SiteSearchFacets"
         query:
           type: string
           description: The NORMALIZED query actually executed (empty when nothing ran).
@@ -23379,6 +23407,7 @@ components:
       required:
         - items
         - nextCursor
+        - facets
         - query
         - locale
     SiteSearchResultItem:

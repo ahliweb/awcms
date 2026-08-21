@@ -14,6 +14,7 @@ import { ok, fail } from "../../../../modules/_shared/api-response";
 import { withSiteSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
 import { recordSearchQuery } from "../../../../modules/site-search/application/search-query-log";
 import {
+  countSearchFacets,
   decodeSearchCursor,
   searchSiteContent
 } from "../../../../modules/site-search/application/search-service";
@@ -96,6 +97,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
         return {
           items: [],
           nextCursor: null,
+          facets: { resourceTypes: [] },
           query: "",
           locale,
           reason: normalized.reason
@@ -120,6 +122,19 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
         cursor
       });
 
+      // Issue #607 — awaited SEQUENTIALLY, not with `Promise.all`. Both run on
+      // the same transaction connection, and concurrent queries on one leak it
+      // (the rule every admin screen in this repo already follows).
+      //
+      // Computed on every page, including a cursor page: the counts describe
+      // the whole result set rather than the page, so omitting them after the
+      // first page would make them look like they had changed.
+      const facets = await countSearchFacets(tx, tenant.tenantId, {
+        query: normalized.value,
+        locale,
+        enabledResourceTypes: settings.enabledResourceTypes
+      });
+
       if (settings.analyticsEnabled) {
         await recordSearchQuery(tx, tenant.tenantId, {
           queryHash: hashSearchQuery(normalized.value),
@@ -137,6 +152,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
       return {
         items: search.items,
         nextCursor: search.nextCursor,
+        facets,
         query: normalized.value,
         locale
       };
@@ -154,7 +170,16 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
     });
     // Neutral empty payload — indistinguishable from "no results", so an
     // unresolved host / disabled search never leaks its state.
-    return ok({ items: [], nextCursor: null, query: "", locale: "" });
+    return ok({
+      items: [],
+      nextCursor: null,
+      // Same SHAPE as a real answer: a payload that omitted `facets` here would
+      // distinguish "search is off for this host" from "no results", which is
+      // exactly what the neutral payload exists to prevent.
+      facets: { resourceTypes: [] },
+      query: "",
+      locale: ""
+    });
   }
   return ok(result);
 };
