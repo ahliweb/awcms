@@ -5081,7 +5081,9 @@ paths:
         - name: view
           in: query
           description: |
-            Response projection. `summary` (default) returns `BlogPostSummary`; `full` returns `BlogPost` — every column the detail endpoint returns except `termIds`, which would cost one extra query per post.
+            Response projection. `summary` (default) returns `BlogPostSummary`; `full` returns `BlogPost` — every column the detail endpoint returns, `termIds` and `institutionIds` included.
+
+            Those two were originally left out because fetching them per post would have been one extra query each. A page fetches them for the whole page in one query instead, so the cost is three round trips per page rather than one per post — and without them no consumer could build a category or tag archive at all, which is the state Issue #597 item 1 describes.
 
             `full` requires `order=created_at`: a full traversal is only sound over the immutable ordering, and the ordering is demanded rather than silently substituted. An unrecognised value is a 400, never a silent fallback to `summary`.
           schema:
@@ -20040,12 +20042,13 @@ components:
         version:
           type: integer
         termIds:
+          description: "Category/tag/channel/topic assignments. Returned by `GET /api/v1/blog/posts/{id}`, by `PATCH` on the same path, and — since Issue #597 — by the `?view=full` traversal that a static site is built from. `[]` means the post has none; the field being ABSENT means the response shape does not carry it (the lifecycle actions), which is a different fact."
           type: array
           items:
             type: string
             format: uuid
         institutionIds:
-          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them."
+          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`, and it is returned in the same places for the same reasons."
           type: array
           items:
             type: string

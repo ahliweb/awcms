@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:433ad79d259b1ac49e5bffde87cd6b63de489bd869af9518468fdafbca7252a2 -->
+<!-- i18n-source-hash: sha256:6e5f7bd8a7d1c82301bcdc787426333b61e78b5d80290ea95bf3a86f0dd7dc44 -->
 
 # Blog Content
 
@@ -189,7 +189,9 @@ Doc issue #539 §Scope menyebut "Post-term relation handling" tapi **tidak** men
 - `POST`/`PATCH /api/v1/blog/posts(/{id})` menerima `termIds?: string[]` opsional.
 - Kalau dikirim, `countExistingTerms` mengecek dulu semua id ada & milik tenant yang sama (`400 VALIDATION_ERROR` kalau tidak) — dijalankan **sebelum** post ditulis, supaya tidak ada post "setengah jadi" saat `termIds` invalid.
 - `syncPostTermAssignments` men-**replace** seluruh assignment (`DELETE` semua baris `awcms_blog_post_terms` milik post itu, lalu `INSERT` ulang set yang dikirim) — bukan diff/merge, karena caller selalu mengirim daftar lengkap yang diinginkan.
-- Response `GET`/`POST`/`PATCH /api/v1/blog/posts(/{id})` menyertakan `termIds` (di-assemble di route handler lewat `fetchPostTermIds`, **bukan** field pada `BlogPostView` dari `blog-post-directory.ts` — directory tetap murni soal tabel `awcms_blog_posts` saja). `GET /api/v1/blog/posts` (list) **tidak** menyertakan `termIds` per item (query tambahan per baris tidak sepadan untuk daftar).
+- Response `GET`/`POST`/`PATCH /api/v1/blog/posts(/{id})` menyertakan `termIds` (di-assemble di route handler lewat `fetchPostTermIds`, **bukan** field pada `BlogPostView` dari `blog-post-directory.ts` — directory tetap murni soal tabel `awcms_blog_posts` saja).
+- List default `GET /api/v1/blog/posts` tetap **tidak** membawanya, dan itu benar: tabel admin tidak membutuhkannya dan list adalah bentuk yang murah.
+- **`?view=full` MEMBAWANYA, sejak Issue #597** — `termIds` dan `institutionIds` sekaligus, pada `BlogPostFeedView`. Keduanya diambil untuk SATU HALAMAN penuh dalam satu query masing-masing (`fetchPostTermIdsForPosts` / `fetchPostInstitutionIdsForPosts`), jadi halaman berisi lima puluh post berbiaya tiga perjalanan pulang-pergi, bukan lima puluh satu. Catatan lama di sini menyatakan query tambahan per baris tidak sepadan untuk daftar — benar untuk pengambilan per-post, dan tidak berlaku untuk satu halaman. Yang sebenarnya hilang bukan performa: feed build yang dipakai membangun situs statis tidak pernah menyebut kategori sebuah artikel, jadi tidak ada konsumen yang bisa membangun arsip kategori atau tag sama sekali — Issue #597 butir 1. Post tanpa penugasan mendapat `[]`, tidak pernah `undefined`, karena konsumen yang tidak bisa membedakan "tidak ada" dari "tidak dibawa" akan membuang artikel itu dari setiap arsip alih-alih melaporkan kekosongan.
 
 ## Search (Issue #539)
 

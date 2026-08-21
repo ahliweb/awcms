@@ -21,6 +21,8 @@ import {
 import type { PortableTextDocument } from "../domain/portable-text";
 import { isSupportedLocale } from "../../../lib/i18n/locales";
 import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
+import { fetchPostTermIdsForPosts } from "./blog-taxonomy-directory";
+import { fetchPostInstitutionIdsForPosts } from "./institution-directory";
 
 /**
  * Read/write query module for `awcms_blog_posts` (Issue #537 scaffolded
@@ -113,6 +115,24 @@ export type BlogPostView = {
    * unrelated post.
    */
   translationGroupId: string | null;
+};
+
+/**
+ * A post as the BUILD FEED returns it — every column of `BlogPostView` plus the
+ * classifications the detail endpoint has always returned alongside the row.
+ *
+ * Kept as its own type rather than widening `BlogPostView` with two optional
+ * fields: optional would let a caller read `termIds` as `undefined` from any of
+ * the several functions that do not fetch them and conclude the article has no
+ * categories. `[]` and "not asked for" must not be spellable the same way — the
+ * exact confusion that made the list endpoint's documented shape a lie about
+ * `contentJson` (see `listBlogPostsFullPage`).
+ */
+export type BlogPostFeedView = BlogPostView & {
+  /** Category/tag/channel/topic assignments. `[]` means none, never "not fetched". */
+  termIds: string[];
+  /** Institution assignments (Issue #595). `[]` means none, never "not fetched". */
+  institutionIds: string[];
 };
 
 type BlogPostRow = {
@@ -371,9 +391,29 @@ export async function listBlogPostsPage(
  * the defect this closes, and the reason the summary shape is now spelled out
  * in the contract as its own schema instead of being left to be inferred.
  *
- * The projection is deliberately identical to `fetchBlogPostById`'s, minus the
- * per-post `termIds` — those are a second query each, which would put the N+1
- * straight back.
+ * The projection is identical to `fetchBlogPostById`'s, `termIds` and
+ * `institutionIds` included.
+ *
+ * ## Why the classifications are here now (Issue #597 item 1)
+ *
+ * They were left out, and the reason recorded here was that they are "a second
+ * query each, which would put the N+1 straight back". The premise was right —
+ * `fetchPostTermIds` takes one post — and the conclusion did not follow: a page
+ * of fifty posts needs ONE query holding fifty ids, which is what
+ * `fetchPostTermIdsForPosts` is. Three round trips per page, not fifty-one.
+ *
+ * What the omission cost was not performance. `awcms-astro` builds its sections
+ * from a key inside `contentJson`, because the classification a newsroom
+ * actually files an article under was the one thing this feed did not carry —
+ * so no consumer could build a category or tag archive at all, which is exactly
+ * the first item Issue #597 lists. Every write path has accepted `termIds`
+ * since Issue #539 and the detail endpoint has returned them the whole time;
+ * only the traversal that a static site is built from could not see them.
+ *
+ * A post with no assignments gets `[]`, never `undefined`. "This article has no
+ * categories" and "this payload does not carry categories" are different facts,
+ * and a consumer that cannot tell them apart silently drops the article from
+ * every archive rather than reporting a gap.
  */
 export async function listBlogPostsFullPage(
   tx: Bun.SQL,
@@ -384,7 +424,7 @@ export async function listBlogPostsFullPage(
     limit?: number;
     cursor?: KeysetCursor | null;
   } = {}
-): Promise<{ items: BlogPostView[]; nextCursor: string | null }> {
+): Promise<{ items: BlogPostFeedView[]; nextCursor: string | null }> {
   const limit = boundedPageSize(
     options.limit,
     DEFAULT_FULL_LIST_LIMIT,
@@ -423,7 +463,21 @@ export async function listBlogPostsFullPage(
       ? encodeKeysetCursor(last.created_at_cursor, last.id)
       : null;
 
-  return { items: rows.map(toView), nextCursor };
+  const postIds = rows.map((row) => row.id);
+  const termIdsByPost = await fetchPostTermIdsForPosts(tx, tenantId, postIds);
+  const institutionIdsByPost = await fetchPostInstitutionIdsForPosts(
+    tx,
+    tenantId,
+    postIds
+  );
+
+  const items = rows.map((row) => ({
+    ...toView(row),
+    termIds: termIdsByPost.get(row.id) ?? [],
+    institutionIds: institutionIdsByPost.get(row.id) ?? []
+  }));
+
+  return { items, nextCursor };
 }
 
 export async function listBlogPosts(

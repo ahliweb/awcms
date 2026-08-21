@@ -364,7 +364,13 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       );
     }
 
+    // Both classifications, because both are WRITABLE here. `institutionIds`
+    // was accepted, synced, and then left out of the response — so a client
+    // that re-renders from what it got back (which is what the admin screen
+    // does) watched the institutions it had just saved disappear, and a second
+    // PATCH built from that render would have unassigned them for real.
     const termIds = await fetchPostTermIds(tx, tenantId, postId);
+    const institutionIds = await fetchPostInstitutionIds(tx, tenantId, postId);
 
     if (isSignificantContentChange(input)) {
       await createBlogRevision(
@@ -419,7 +425,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       slug: updated.slug
     });
 
-    return ok({ ...updated, termIds });
+    return ok({ ...updated, termIds, institutionIds });
   });
 };
 
