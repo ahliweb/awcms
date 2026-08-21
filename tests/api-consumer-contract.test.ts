@@ -186,7 +186,7 @@ describe("the live contract", () => {
  * a fourth consumed surface here has to be a deliberate edit in both places.
  */
 describe("consumed vs committed", () => {
-  test("exactly four surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+  test("exactly five surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
     // If this fails, one of two things happened, and they need opposite fixes:
     //   - awcms-astro started (or stopped) calling a surface -> update both
     //     this list and the marker block in that repo, in the same change;
@@ -199,11 +199,16 @@ describe("consumed vs committed", () => {
     // `ahliweb/awcms-astro#61` made the call real. A promise and a dependency
     // both deserve stability and fail differently, and the distinction only
     // survives if entries actually move.
+    //
+    // `/api/v1/blog/terms` is the fifth and took the identical path: COMMITTED
+    // in #650 with ADR-0104, moved here when `ahliweb/awcms-astro#66` built the
+    // category and tag archives on it.
     expect(Object.keys(CONSUMED_PATHS)).toEqual([
       "/api/v1/blog/posts",
       "/api/v1/media/objects",
       "/api/v1/media/public-origin",
-      "/api/v1/site-profile/composed"
+      "/api/v1/site-profile/composed",
+      "/api/v1/blog/terms"
     ]);
   });
 
