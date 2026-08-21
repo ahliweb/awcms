@@ -131,7 +131,7 @@ export async function createBlogRevision(
         0
       ) + 1,
       ${snapshot.title}, ${snapshot.contentJson}, ${snapshot.contentText},
-      ${JSON.stringify(snapshot.bodyPortableText)}::jsonb,
+      ${snapshot.bodyPortableText}::jsonb,
       ${snapshot.excerpt}, ${snapshot.seoTitle}, ${snapshot.metaDescription},
       ${snapshot.canonicalUrl}, ${snapshot.status}, ${changeNote},
       ${createdByTenantUserId}

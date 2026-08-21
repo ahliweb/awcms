@@ -39,6 +39,14 @@ import type {
   BlogContentVisibility
 } from "../domain/post-status";
 
+/**
+ * The lossy projection every write path stores alongside the canonical body
+ * (ADR-0100). Bound as a VALUE, not `JSON.stringify` of one: Bun JSON-encodes a
+ * string parameter bound to a jsonb slot, which stores the scalar string
+ * `"{\"blocks\":[]}"` instead of the object (Issue #641).
+ */
+const EMPTY_CONTENT_JSON = { blocks: [] as unknown[] };
+
 export type LegacyPostImportInput = {
   /** The id the legacy system used — what makes the redirect map derivable. */
   legacyId: string;
@@ -86,9 +94,9 @@ export async function importLegacyBlogPost(
     VALUES (
       ${tenantId}, ${authorTenantUserId}, ${input.title}, ${input.slug},
       ${input.excerpt},
-      ${JSON.stringify({ blocks: [] })}::jsonb,
+      ${EMPTY_CONTENT_JSON}::jsonb,
       ${portableTextToPlainText(input.bodyPortableText)},
-      ${JSON.stringify(input.bodyPortableText)}::jsonb,
+      ${input.bodyPortableText}::jsonb,
       ${input.status}, ${input.visibility}, ${input.locale},
       ${input.seoTitle}, ${input.metaDescription}, ${input.publishedAt},
       ${system}, ${input.legacyId}
