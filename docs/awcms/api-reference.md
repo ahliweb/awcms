@@ -5376,6 +5376,42 @@ Batch rather than one-per-id because a build feed resolves every image on a page
 | 401    | Missing or invalid session.                             | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                             | [`ApiError`](#standard-error-envelope) |
 
+### `PATCH /api/v1/media/objects/{id}` — Edit a media object's usage-rights metadata.
+
+- **operationId**: `mediaObjectRightsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `media_library.media.update` (Issue #615, `sql/137`) — the eighth media permission, added together with this endpoint rather than ahead of it. Requires `Idempotency-Key`: `update` is not a high-risk action, but a rights adjudication replayed by a retrying client would write a second audit entry claiming a second decision.
+
+**Rights, not accessibility, and not the byte check.** This endpoint deliberately cannot edit `altText` (an accessibility obligation) or `caption` (editorial copy). It is also not `media.verify`: that permission and a `verified` object status mean the BYTES passed a MIME-sniff and checksum. Whether a licence permits publication is a person reading a contract, and one word for both would make the legal half read as done whenever a file sniffed clean.
+
+Every field is optional but the body may not be empty. `null` clears a field; omitting it leaves the stored value alone. A request that changes nothing is refused, because an audit row for a no-op is indistinguishable from one for a decision.
+
+Changing `rightsVerificationStatus` stamps `rightsVerifiedBy` from the AUTHENTICATED actor and `rightsVerifiedAt` from the transaction clock — never from the body. Returning to `unverified` clears both, so the record never names a verifier for a verification that no longer stands.
+
+A soft-deleted object and an unknown id both answer 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`MediaRightsUpdateRequest`](#schema-mediarightsupdaterequest)
+
+**Responses**
+
+| Status | Description                                                                       | Schema                                 |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated media object.                                                         | object                                 |
+| 400    | Validation error.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`). | [`ApiError`](#standard-error-envelope) |
+
 ### `DELETE /api/v1/media/objects/{id}` — Soft delete one media object.
 
 - **operationId**: `mediaObjectSoftDelete`
@@ -10079,6 +10115,30 @@ Unparseable entries are refused at issuance. At request time an unreadable entry
 {
   "clientKey": "string",
   "redirectUri": "string"
+}
+```
+
+### Schema: MediaRightsUpdateRequest
+
+At least one field. `null` clears; an omitted field is left alone.
+
+| Field                      | Type                                                                                    | Required | Nullable | Description                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------- |
+| `creditLine`               | string                                                                                  | no       | yes      | What gets printed beside the image. Not the alt text and not the caption.                 |
+| `sourceName`               | string                                                                                  | no       | yes      | Where the file came from, which is often not who is credited.                             |
+| `rightsNotes`              | string                                                                                  | no       | yes      |                                                                                           |
+| `copyrightStatus`          | enum(`unknown`, `owned`, `licensed`, `public_domain`, `permission_granted`, `fair_use`) | no       | no       | `unknown` is a real answer, not a missing one — most of a legacy archive is exactly that. |
+| `rightsVerificationStatus` | enum(`unverified`, `verified`, `rejected`)                                              | no       | no       | A HUMAN judgement about a licence. Changing it is audited at `warning` severity.          |
+
+**Example**
+
+```json
+{
+  "creditLine": "string",
+  "sourceName": "string",
+  "rightsNotes": "string",
+  "copyrightStatus": "unknown",
+  "rightsVerificationStatus": "unverified"
 }
 ```
 

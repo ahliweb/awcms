@@ -242,8 +242,32 @@ export const READER_BUDGET_BYTES = 24_000;
  * What remains is a genuinely new screen — a form with nine fields, a
  * repeating social-links builder, and two media choosers — shipping behaviour
  * that did not exist. 185,000 is measured + ~2.7%.
+ *
+ * **Raised to 186,000 on 21 August 2026 for the usage-rights editor on
+ * `/admin/media` (Issue #615), after asking the gate's question and getting a
+ * different answer this time.**
+ *
+ * It fired at 185,095 B — 95 over. The growth is 649 B, all of it in
+ * `media.astro`'s own island:
+ *
+ * ```
+ * media.astro island, before   5,360 B
+ * media.astro island, after    6,009 B   (+649)
+ * ```
+ *
+ * Checked for the Issue #552 shape and it is not there: the editor reuses
+ * `messageBox`, `mutateAndReload`, `sendJson` and `inputValue` from
+ * `lib/ui/admin-form-client.ts`, and its own code is one submit handler. The
+ * form itself is SERVER-rendered from `?rights=<id>` precisely so the page
+ * ships no client code for populating fields from row data — the cheaper of the
+ * two designs was already taken.
+ *
+ * So this is a genuine addition: a newsroom could not record who took a
+ * photograph at all, and now can. 186,000 is measured + ~0.5%, deliberately
+ * tight — a wider margin here would buy silence rather than room, which is the
+ * reason the previous raise gave for staying close to the measurement.
  */
-export const APP_BUDGET_BYTES = 185_000;
+export const APP_BUDGET_BYTES = 186_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

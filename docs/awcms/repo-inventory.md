@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 23    |
-| Migrations                          | 136   |
+| Migrations                          | 137   |
 | `awcms_*` tables                    | 151   |
 | Tables with `FORCE` RLS             | 133   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 416   |
+| Test files                          | 417   |
 | Route files                         | 376   |
 | ADR                                 | 206   |
 
@@ -184,6 +184,7 @@
 | 134 | `sql/134_awcms_blog_portable_text_body.sql`                        |
 | 135 | `sql/135_awcms_site_profile_schema.sql`                            |
 | 136 | `sql/136_awcms_blog_pages_worker_select.sql`                       |
+| 137 | `sql/137_awcms_media_rights_metadata.sql`                          |
 
 ### Tables & Row-Level Security
 
@@ -345,7 +346,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 360        |
+| `(root)`      | 361        |
 | `e2e`         | 12         |
 | `integration` | 43         |
 | `unit`        | 1          |

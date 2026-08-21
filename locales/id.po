@@ -4347,3 +4347,44 @@ msgstr "Templat situs ini sendiri tidak merender slot ini. Pemesanan di sini han
 
 msgid "Not rendered here"
 msgstr "Tidak dirender di sini"
+
+# Issue #615 — photo usage-rights metadata on /admin/media.
+
+msgid "Usage rights"
+msgstr "Hak penggunaan"
+
+msgid "Rights"
+msgstr "Hak"
+
+msgid "Credit line"
+msgstr "Baris kredit"
+
+msgid "Copyright status"
+msgstr "Status hak cipta"
+
+msgid "Rights verification"
+msgstr "Verifikasi hak"
+
+msgid "Licence notes"
+msgstr "Catatan lisensi"
+
+msgid "Edit rights"
+msgstr "Sunting hak"
+
+msgid "Save rights"
+msgstr "Simpan hak"
+
+msgid "No credit recorded"
+msgstr "Belum ada kredit"
+
+msgid "Who took this photograph, where it came from, and whether anyone has checked that it may be published. This is not the same as the object status above — that says the FILE passed a format check; this says a person read the licence."
+msgstr "Siapa yang memotret, dari mana asalnya, dan apakah sudah ada yang memeriksa bahwa foto ini boleh diterbitkan. Ini BUKAN status objek di atas — status itu menyatakan BERKASnya lolos pemeriksaan format; ini menyatakan seseorang membaca lisensinya."
+
+msgid "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene."
+msgstr "Dicetak di samping gambar. Bukan alt text, yang menggambarkan foto untuk pembaca layar, dan bukan takarir, yang menceritakan adegannya kepada pembaca."
+
+msgid "Where the file came from, which is often not who is credited — a takedown request names the agency, not the stringer."
+msgstr "Dari mana berkas ini berasal, yang sering berbeda dari siapa yang dikreditkan — permintaan takedown menyebut kantor beritanya, bukan stringernya."
+
+msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
+msgstr "Mengubahnya mencatat siapa yang memutuskan dan kapan, serta menulis entri audit. Mengembalikannya ke unverified menghapus keduanya."

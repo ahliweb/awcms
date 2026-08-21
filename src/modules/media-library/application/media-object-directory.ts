@@ -6,6 +6,12 @@ import {
 } from "../../_shared/keyset-pagination";
 import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import {
+  changesRightsAdjudication,
+  type CopyrightStatus,
+  type MediaRightsUpdateInput,
+  type RightsVerificationStatus
+} from "../domain/media-rights-policy";
+import {
   buildNewsMediaObjectKey,
   buildNewsMediaPublicUrl
 } from "../domain/media-object-key";
@@ -93,6 +99,15 @@ export type NewsMediaObjectView = {
   height: number | null;
   altText: string | null;
   caption: string | null;
+  /** Issue #615 — usage rights. Distinct from `altText` (accessibility) and `caption` (editorial); see `domain/media-rights-policy.ts`. */
+  creditLine: string | null;
+  sourceName: string | null;
+  rightsNotes: string | null;
+  copyrightStatus: CopyrightStatus;
+  /** A HUMAN judgement about a licence — never `status: "verified"`, which means the BYTES passed a MIME/checksum check. */
+  rightsVerificationStatus: RightsVerificationStatus;
+  rightsVerifiedBy: string | null;
+  rightsVerifiedAt: Date | null;
   status: NewsMediaObjectStatus;
   createdByTenantUserId: string;
   createdAt: Date;
@@ -122,6 +137,13 @@ type NewsMediaObjectRow = {
   height: number | null;
   alt_text: string | null;
   caption: string | null;
+  credit_line: string | null;
+  source_name: string | null;
+  rights_notes: string | null;
+  copyright_status: CopyrightStatus;
+  rights_verification_status: RightsVerificationStatus;
+  rights_verified_by: string | null;
+  rights_verified_at: Date | null;
   status: NewsMediaObjectStatus;
   created_by_tenant_user_id: string;
   created_at: Date;
@@ -152,6 +174,16 @@ function toView(row: NewsMediaObjectRow): NewsMediaObjectView {
     height: row.height,
     altText: row.alt_text,
     caption: row.caption,
+    creditLine: row.credit_line,
+    sourceName: row.source_name,
+    rightsNotes: row.rights_notes,
+    // A row written before `sql/137` reads as `unknown`/`unverified` rather
+    // than as null: the columns are NOT NULL with those defaults, and "nobody
+    // has established it" is a truthful answer for a legacy archive.
+    copyrightStatus: row.copyright_status,
+    rightsVerificationStatus: row.rights_verification_status,
+    rightsVerifiedBy: row.rights_verified_by,
+    rightsVerifiedAt: row.rights_verified_at,
     status: row.status,
     createdByTenantUserId: row.created_by_tenant_user_id,
     createdAt: row.created_at,
@@ -223,6 +255,8 @@ export async function createPendingNewsMediaObject(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -260,6 +294,11 @@ const SELECT_COLUMNS =
   "id, tenant_id, module_key, owner_resource_type, owner_resource_id, " +
   "storage_driver, bucket_name, object_key, original_filename, public_url, " +
   "mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption, " +
+  // Issue #615 — usage rights. Listed here rather than only on the point
+  // lookups because the browse screen shows a credit beside each thumbnail, and
+  // an editor picking an image needs to see who it belongs to BEFORE choosing.
+  "credit_line, source_name, rights_notes, copyright_status, " +
+  "rights_verification_status, rights_verified_by, rights_verified_at, " +
   "status, created_by_tenant_user_id, created_at, updated_at, " +
   "deleted_at, deleted_by, delete_reason, restored_at, restored_by";
 
@@ -374,6 +413,8 @@ export async function fetchNewsMediaObjectById(
         SELECT id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
         FROM awcms_news_media_objects
@@ -383,6 +424,8 @@ export async function fetchNewsMediaObjectById(
         SELECT id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
         FROM awcms_news_media_objects
@@ -421,6 +464,8 @@ export async function fetchNewsMediaObjectsByIds(
         SELECT id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
         FROM awcms_news_media_objects
@@ -430,6 +475,8 @@ export async function fetchNewsMediaObjectsByIds(
         SELECT id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
         FROM awcms_news_media_objects
@@ -485,6 +532,8 @@ export async function markNewsMediaObjectUploaded(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -531,6 +580,8 @@ export async function markNewsMediaObjectVerified(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -602,6 +653,8 @@ export async function markNewsMediaObjectOrphaned(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -652,6 +705,8 @@ export async function markNewsMediaObjectFailed(
         RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
       `
@@ -663,6 +718,8 @@ export async function markNewsMediaObjectFailed(
         RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
           storage_driver, bucket_name, object_key, original_filename, public_url,
           mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
           status, created_by_tenant_user_id, created_at, updated_at,
           deleted_at, deleted_by, delete_reason, restored_at, restored_by
       `
@@ -907,6 +964,8 @@ export async function revertNewsMediaObjectUploadClaim(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -968,6 +1027,8 @@ export async function restoreNewsMediaObject(
     RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
       storage_driver, bucket_name, object_key, original_filename, public_url,
       mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
+          credit_line, source_name, rights_notes, copyright_status,
+          rights_verification_status, rights_verified_by, rights_verified_at,
       status, created_by_tenant_user_id, created_at, updated_at,
       deleted_at, deleted_by, delete_reason, restored_at, restored_by
   `) as NewsMediaObjectRow[];
@@ -1100,4 +1161,131 @@ export async function purgeNewsMediaObject(
   });
 
   return { ok: true, objectKey };
+}
+
+/**
+ * Edit usage-rights metadata (Issue #615).
+ *
+ * ## Why a dedicated function rather than a general `updateMediaObject`
+ *
+ * Because most of this row must not be editable. `object_key`, `bucket_name`,
+ * `checksum_sha256`, `mime_type` and `public_url` describe a file that exists in
+ * R2; letting a PATCH touch them would let a browser make the registry disagree
+ * with storage, and the reconciliation job would then "fix" the wrong side. This
+ * function names the seven columns it may write and can never widen by accident.
+ *
+ * ## The adjudication is stamped here, not sent by the client
+ *
+ * `rights_verified_by` is the authenticated actor and `rights_verified_at` is
+ * the transaction clock. A client-supplied verifier is a client-supplied
+ * signature on a legal decision, and this row is what a takedown dispute is
+ * argued from. Moving BACK to `unverified` clears both, so the record never
+ * carries a verifier for a verification that no longer stands — which the
+ * `rights_adjudication_check` CHECK also enforces from below.
+ *
+ * ## Audit severity follows the decision, not the edit
+ *
+ * Fixing a typo in a credit line is `info`. Declaring an image cleared for
+ * publication — or refusing it — is `warning`, because that is the entry someone
+ * reconstructing a takedown will search for.
+ */
+export async function updateMediaObjectRights(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  id: string,
+  input: MediaRightsUpdateInput,
+  correlationId?: string
+): Promise<NewsMediaObjectView | null> {
+  const existing = await fetchNewsMediaObjectById(tx, tenantId, id);
+
+  // Matched on `deleted_at IS NULL` below too. A soft-deleted object is not
+  // editable: its rights record is evidence about something already withdrawn.
+  if (!existing || existing.deletedAt !== null) {
+    return null;
+  }
+
+  const adjudicationChanged = changesRightsAdjudication(
+    input,
+    existing.rightsVerificationStatus
+  );
+  const nextStatus =
+    input.rightsVerificationStatus ?? existing.rightsVerificationStatus;
+  const becomesUnverified = nextStatus === "unverified";
+
+  // The adjudication columns are stamped from the AUTHENTICATED actor and the
+  // transaction clock, never from the request body: a client-supplied verifier
+  // is a client-supplied signature on a legal decision. They are cleared when
+  // the status returns to unverified, so the row never names a verifier for a
+  // verification that no longer stands — the CHECK enforces the same from below.
+
+  // `CASE WHEN <flag> THEN <value> ELSE column END` rather than a bare
+  // assignment: on a PATCH, `undefined` means "leave alone" and `null` means
+  // "clear", and a plain `SET credit_line = $n` collapses the two — a form that
+  // submits only the copyright status would erase a credit somebody else typed.
+  const rows = (await tx`
+    UPDATE awcms_news_media_objects
+    SET
+      credit_line = CASE
+        WHEN ${input.creditLine !== undefined} THEN ${input.creditLine ?? null}
+        ELSE credit_line
+      END,
+      source_name = CASE
+        WHEN ${input.sourceName !== undefined} THEN ${input.sourceName ?? null}
+        ELSE source_name
+      END,
+      rights_notes = CASE
+        WHEN ${input.rightsNotes !== undefined} THEN ${input.rightsNotes ?? null}
+        ELSE rights_notes
+      END,
+      copyright_status = CASE
+        WHEN ${input.copyrightStatus !== undefined}
+          THEN ${input.copyrightStatus ?? null}
+        ELSE copyright_status
+      END,
+      rights_verification_status = ${nextStatus},
+      rights_verified_by = CASE
+        WHEN ${adjudicationChanged}
+          THEN ${becomesUnverified ? null : actorTenantUserId}
+        ELSE rights_verified_by
+      END,
+      rights_verified_at = CASE
+        WHEN ${adjudicationChanged}
+          THEN (CASE WHEN ${becomesUnverified} THEN NULL ELSE now() END)
+        ELSE rights_verified_at
+      END,
+      updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
+    RETURNING ${tx.unsafe(SELECT_COLUMNS)}
+  `) as NewsMediaObjectRow[];
+
+  const row = rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: adjudicationChanged
+      ? "news_media.object.rights_adjudicated"
+      : "news_media.object.rights_updated",
+    resourceType: AUDIT_RESOURCE_TYPE,
+    resourceId: id,
+    severity: adjudicationChanged ? "warning" : "info",
+    message: adjudicationChanged
+      ? `Media rights ${nextStatus}: ${existing.objectKey}.`
+      : `Media rights metadata updated: ${existing.objectKey}.`,
+    attributes: {
+      objectKey: existing.objectKey,
+      previousRightsVerificationStatus: existing.rightsVerificationStatus,
+      rightsVerificationStatus: nextStatus,
+      copyrightStatus: input.copyrightStatus ?? existing.copyrightStatus
+    },
+    correlationId
+  });
+
+  return toView(row);
 }

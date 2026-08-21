@@ -10534,6 +10534,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: mediaObjectRightsUpdate
+      tags:
+        - News Media
+      summary: Edit a media object's usage-rights metadata.
+      description: |
+        Gated on `media_library.media.update` (Issue #615, `sql/137`) — the eighth media permission, added together with this endpoint rather than ahead of it. Requires `Idempotency-Key`: `update` is not a high-risk action, but a rights adjudication replayed by a retrying client would write a second audit entry claiming a second decision.
+
+        **Rights, not accessibility, and not the byte check.** This endpoint deliberately cannot edit `altText` (an accessibility obligation) or `caption` (editorial copy). It is also not `media.verify`: that permission and a `verified` object status mean the BYTES passed a MIME-sniff and checksum. Whether a licence permits publication is a person reading a contract, and one word for both would make the legal half read as done whenever a file sniffed clean.
+
+        Every field is optional but the body may not be empty. `null` clears a field; omitting it leaves the stored value alone. A request that changes nothing is refused, because an audit row for a no-op is indistinguishable from one for a decision.
+
+        Changing `rightsVerificationStatus` stamps `rightsVerifiedBy` from the AUTHENTICATED actor and `rightsVerifiedAt` from the transaction clock — never from the body. Returning to `unverified` clears both, so the record never names a verifier for a verification that no longer stands.
+
+        A soft-deleted object and an unknown id both answer 404.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaRightsUpdateRequest"
+      responses:
+        "200":
+          description: The updated media object.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/MediaObjectRights"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/media/objects/{id}/purge:
     post:
       operationId: mediaObjectPurge
@@ -21573,6 +21635,81 @@ components:
           type: string
           format: date-time
           nullable: true
+    MediaObjectRights:
+      type: object
+      description: A media object as returned by the rights endpoint. Includes the full registry row; the rights fields are listed here.
+      properties:
+        id:
+          type: string
+          format: uuid
+        creditLine:
+          type: string
+          nullable: true
+        sourceName:
+          type: string
+          nullable: true
+        rightsNotes:
+          type: string
+          nullable: true
+        copyrightStatus:
+          type: string
+          enum:
+            - unknown
+            - owned
+            - licensed
+            - public_domain
+            - permission_granted
+            - fair_use
+        rightsVerificationStatus:
+          type: string
+          enum:
+            - unverified
+            - verified
+            - rejected
+        rightsVerifiedBy:
+          type: string
+          format: uuid
+          nullable: true
+        rightsVerifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+    MediaRightsUpdateRequest:
+      type: object
+      minProperties: 1
+      description: At least one field. `null` clears; an omitted field is left alone.
+      properties:
+        creditLine:
+          type: string
+          nullable: true
+          maxLength: 300
+          description: What gets printed beside the image. Not the alt text and not the caption.
+        sourceName:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: Where the file came from, which is often not who is credited.
+        rightsNotes:
+          type: string
+          nullable: true
+          maxLength: 2000
+        copyrightStatus:
+          type: string
+          enum:
+            - unknown
+            - owned
+            - licensed
+            - public_domain
+            - permission_granted
+            - fair_use
+          description: "`unknown` is a real answer, not a missing one — most of a legacy archive is exactly that."
+        rightsVerificationStatus:
+          type: string
+          enum:
+            - unverified
+            - verified
+            - rejected
+          description: A HUMAN judgement about a licence. Changing it is audited at `warning` severity.
     ModerationQueueItem:
       type: object
       properties:
