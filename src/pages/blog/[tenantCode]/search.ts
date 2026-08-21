@@ -12,6 +12,8 @@ import {
 import { log } from "../../../lib/logging/logger";
 import { searchPublicBlogContent } from "../../../modules/blog-content/application/blog-search";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
+import { composeAdSlots } from "../../../modules/blog-content/application/ad-slot-composition";
+import { AD_SLOT_AVAILABLE_LABEL } from "../../../modules/blog-content/domain/ad-slot-labels";
 import {
   renderPostSummaryListHtmlAtBasePath,
   renderPublicPageShell
@@ -75,7 +77,16 @@ export const GET: APIRoute = async ({ locals, params, url }) => {
         locals.locale
       );
 
-      const bodyHtml = `<h1>Search ${escapeHtml(tenant.tenantName)} Blog</h1>
+      // Issue #594 — one slot above the results.
+      const ads = await composeAdSlots(
+        tx,
+        tenant.tenantId,
+        ["search_result_top"],
+        { placeholderLabel: AD_SLOT_AVAILABLE_LABEL }
+      );
+
+      const bodyHtml = `${ads.get("search_result_top") ?? ""}
+<h1>Search ${escapeHtml(tenant.tenantName)} Blog</h1>
 <form method="get" action="/blog/${escapeHtml(tenantCode)}/search">
   <input type="text" name="q" value="${escapeHtml(query)}" aria-label="Search" />
   <button type="submit">Search</button>
