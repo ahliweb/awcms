@@ -101,9 +101,15 @@ describe("/admin/blog-homepage permission gates", () => {
     expect(NOT_YET_SCREENED).not.toContain(
       "blog_content.homepage_sections.configure"
     );
-    // Still there — the ad inventory screen is the next PR, and this asserts the
-    // shrink was exactly the two keys this screen earned.
-    expect(NOT_YET_SCREENED).toContain("blog_content.ad_placements.read");
+    // The ad-placement keys left in the very next PR, so what remains of
+    // `blog_content` on this list is the internal-link policy alone.
+    expect(
+      NOT_YET_SCREENED.filter((key) => key.startsWith("blog_content.")).sort()
+    ).toEqual([
+      "blog_content.internal_links.configure",
+      "blog_content.internal_links.preview",
+      "blog_content.internal_links.read"
+    ]);
   });
 
   test("the sidebar entry points at this page and is gated on read", () => {
@@ -199,9 +205,8 @@ describe("the polymorphic form covers every declared section type", () => {
     // Without this the endpoint parses a zone-less `2026-08-21T09:00` in the
     // SERVER's timezone, so a section scheduled from Palangka Raya starts at
     // the wrong hour and nothing reports an error.
-    expect(page).toContain("toISOString()");
-    expect(page).toContain('instantOrNull("section-starts-at")');
-    expect(page).toContain('instantOrNull("section-ends-at")');
+    expect(page).toContain('localDateTimeToInstant("section-starts-at")');
+    expect(page).toContain('localDateTimeToInstant("section-ends-at")');
   });
 
   test("the type is immutable in edit mode and still reaches the script", async () => {

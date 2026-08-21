@@ -238,6 +238,51 @@ export function blankToNull(value: string): string | null {
   return value === "" ? null : value;
 }
 
+/**
+ * A `datetime-local` control's value as an ABSOLUTE instant, or `null` when it
+ * is blank or unparseable.
+ *
+ * This is not a convenience. `datetime-local` yields `2026-08-21T09:00` with no
+ * zone, and every endpoint in this repo that accepts a schedule hands the string
+ * to `new Date(...)` on the SERVER — which reads it in the server's timezone,
+ * not the operator's. A campaign scheduled from Palangka Raya would start at the
+ * wrong hour and nothing would report an error, because both sides parsed
+ * successfully.
+ *
+ * Converting in the browser is the only place the operator's own offset is
+ * known, so every screen with a schedule field must go through here.
+ */
+export function localDateTimeToInstant(id: string): string | null {
+  const raw = inputValue(id);
+
+  if (!raw) return null;
+
+  const parsed = new Date(raw);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * A checkbox's state by element ID.
+ *
+ * Read from the ELEMENT, never from `FormData`: an unchecked checkbox is absent
+ * from `FormData` entirely, so `field(data, "isActive")` cannot tell "unchecked"
+ * apart from "the control was never rendered" — and those two must produce
+ * different requests on a permission-gated screen.
+ */
+export function checkboxChecked(id: string, fallback = false): boolean {
+  const element = document.getElementById(id);
+
+  return element instanceof HTMLInputElement ? element.checked : fallback;
+}
+
+/** An integer control by element ID, falling back when blank or not a number. */
+export function integerValue(id: string, fallback: number): number {
+  const parsed = Number(inputValue(id));
+
+  return Number.isInteger(parsed) ? parsed : fallback;
+}
+
 /** What {@link onSubmit} hands its handler. */
 export type SubmitContext = {
   form: HTMLFormElement;

@@ -137,9 +137,19 @@ export const blogContentModule = defineModule({
       requiredPermission: "blog_content.homepage_sections.read"
     },
     {
+      // Issue #594. Not a tab on `/admin/blog-homepage` even though both are
+      // "what appears on the front page": advertising is booked by whoever
+      // sells it, and `ad_placements.*` is a separate activity precisely so
+      // that person needs no authority over editorial curation.
+      labelKey: "admin.layout.nav_blog_ads",
+      path: "/admin/blog-ads",
+      order: 41,
+      requiredPermission: "blog_content.ad_placements.read"
+    },
+    {
       labelKey: "admin.layout.nav_blog_presentation",
       path: "/admin/blog-presentation",
-      order: 41,
+      order: 42,
       requiredPermission: "blog_content.templates.read"
     },
     {
@@ -149,7 +159,7 @@ export const blogContentModule = defineModule({
       // and sitemap are served at all.
       labelKey: "admin.layout.nav_blog_settings",
       path: "/admin/blog-settings",
-      order: 42,
+      order: 43,
       requiredPermission: "blog_content.settings.read"
     }
   ],
