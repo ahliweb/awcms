@@ -89,3 +89,56 @@ export function normalizeSearchLocale(raw: unknown, fallback: string): string {
 export function hashSearchQuery(normalizedQuery: string): string {
   return new Bun.CryptoHasher("sha256").update(normalizedQuery).digest("hex");
 }
+
+/**
+ * Longest term-filter value accepted from a request (Issue #633). Mirrors
+ * `MAX_TERM_FACET_TEXT_LENGTH` in `search-document.ts` — a value longer than
+ * anything that could have been indexed cannot match, so accepting it only
+ * widens what an anonymous caller can push into a query parameter.
+ */
+export const MAX_TERM_FILTER_LENGTH = 200;
+
+/**
+ * Parses term filters (`?channel=politik&topic=pemilu`) from a request against
+ * the facet names the search-source registry actually declares (Issue #633).
+ *
+ * ## The allow-list is the point
+ *
+ * `allowedFacetKeys` comes from `collectTermFacetKeys(listModules())`, so an
+ * unknown parameter is IGNORED rather than passed through. Without that, every
+ * query-string key would reach the jsonb containment operand, and an anonymous
+ * caller could ask "does any document carry facet X" about facets nobody
+ * declared — a probe of the index's shape, answered by the result count.
+ *
+ * Ignoring beats rejecting: a page's own tracking parameters (`utm_source`,
+ * `fbclid`) ride along on every shared link, and a search that 400s because
+ * somebody arrived from Facebook is a search that looks broken.
+ *
+ * Only the FIRST value of a repeated key is used. `?channel=a&channel=b` is
+ * ambiguous between "either" and "both", and picking one silently would make
+ * the count and the result list disagree with each other on some future day.
+ */
+export function parseTermFilters(
+  params: URLSearchParams,
+  allowedFacetKeys: readonly string[]
+): Record<string, string> {
+  const filters: Record<string, string> = {};
+
+  for (const key of allowedFacetKeys) {
+    const raw = params.get(key);
+
+    if (typeof raw !== "string") {
+      continue;
+    }
+
+    const value = stripControlCharacters(raw).trim();
+
+    if (value.length === 0 || value.length > MAX_TERM_FILTER_LENGTH) {
+      continue;
+    }
+
+    filters[key] = value;
+  }
+
+  return filters;
+}

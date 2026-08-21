@@ -77,6 +77,31 @@ export function collectSearchSourceDescriptors(
   return modules.flatMap((module) => module.searchSources ?? []);
 }
 
+/**
+ * Every facet name the registry declares, deduplicated and sorted (Issue #633).
+ *
+ * This is the allow-list the public query endpoint parses request parameters
+ * against. Deriving it from the descriptors rather than writing it down keeps
+ * the endpoint honest: a module that adds a facet gets its query parameter
+ * automatically, and a facet nobody declares is a parameter nobody can use to
+ * probe the index.
+ */
+export function collectTermFacetKeys(
+  modules: readonly ModuleDescriptor[]
+): string[] {
+  const keys = new Set<string>();
+
+  for (const descriptor of collectSearchSourceDescriptors(modules)) {
+    for (const facet of descriptor.termFacets ?? []) {
+      if (typeof facet?.facetKey === "string" && facet.facetKey.length > 0) {
+        keys.add(facet.facetKey);
+      }
+    }
+  }
+
+  return [...keys].sort();
+}
+
 function checkColumn(
   push: (message: string) => void,
   value: string | undefined | null,
@@ -92,6 +117,104 @@ function checkColumn(
       `${label} must be a valid column name (got ${JSON.stringify(value)}).`
     );
   }
+}
+
+/**
+ * Validates the `termFacets` shape (Issue #633).
+ *
+ * The gate grows WITH the contract rather than after it, because every name in
+ * a term facet is interpolated into SQL by `buildExtractionQuery`. That is the
+ * whole reason `assertSafeIdentifier` exists, and the engine calls it again at
+ * interpolation time — but a descriptor that reaches the engine with a bad
+ * identifier is already a review failure, and this is where a reviewer finds
+ * out instead of a worker crashing mid-index.
+ *
+ * `facetKey` gets the same snake_case rule as a column even though it is never
+ * an identifier: it appears verbatim in a public response body and in a query
+ * string, and one vocabulary for "what a machine-readable name looks like" is
+ * cheaper than two.
+ */
+function validateTermFacets(
+  push: (message: string) => void,
+  descriptor: SearchSourceDescriptor
+): void {
+  const facets = descriptor.termFacets;
+
+  if (facets === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(facets)) {
+    push("termFacets must be an array when declared.");
+    return;
+  }
+
+  const seen = new Set<string>();
+
+  facets.forEach((facet, index) => {
+    const at = `termFacets[${index}]`;
+
+    if (!facet || typeof facet !== "object") {
+      push(`${at} must be an object.`);
+      return;
+    }
+
+    if (!facet.facetKey || !COLUMN_NAME_PATTERN.test(facet.facetKey)) {
+      push(
+        `${at}.facetKey must be snake_case (got ${JSON.stringify(facet.facetKey)}).`
+      );
+    } else if (seen.has(facet.facetKey)) {
+      // Two facets under one name would silently merge in the response, and
+      // the reader would see one list built from two vocabularies.
+      push(`${at}.facetKey "${facet.facetKey}" is declared more than once.`);
+    } else {
+      seen.add(facet.facetKey);
+    }
+
+    if (facet.kind === "column") {
+      checkColumn(push, facet.valueColumn, `${at}.valueColumn`, true);
+      checkColumn(push, facet.labelColumn, `${at}.labelColumn`, false);
+      return;
+    }
+
+    if (facet.kind !== "join") {
+      push(
+        `${at}.kind must be "column" or "join" (got ${JSON.stringify((facet as { kind?: unknown }).kind)}).`
+      );
+      return;
+    }
+
+    for (const [label, value] of [
+      ["linkTable", facet.linkTable],
+      ["valueTable", facet.valueTable]
+    ] as const) {
+      if (!value || !TABLE_NAME_PATTERN.test(value)) {
+        push(
+          `${at}.${label} must start with "awcms_" and be snake_case (got ${JSON.stringify(value)}).`
+        );
+      }
+    }
+
+    checkColumn(push, facet.linkSourceColumn, `${at}.linkSourceColumn`, true);
+    checkColumn(push, facet.linkValueColumn, `${at}.linkValueColumn`, true);
+    checkColumn(push, facet.valueIdColumn, `${at}.valueIdColumn`, true);
+    checkColumn(push, facet.valueColumn, `${at}.valueColumn`, true);
+    checkColumn(push, facet.labelColumn, `${at}.labelColumn`, true);
+    checkColumn(
+      push,
+      facet.tenantColumn ?? "tenant_id",
+      `${at}.tenantColumn`,
+      true
+    );
+
+    for (const key of Object.keys(facet.valueEquals ?? {})) {
+      checkColumn(push, key, `${at}.valueEquals["${key}"]`, true);
+    }
+
+    (facet.valueNullColumns ?? []).forEach((col: string, i: number) =>
+      checkColumn(push, col, `${at}.valueNullColumns[${i}]`, true)
+    );
+  });
 }
 
 function validateSingleDescriptor(
@@ -142,6 +265,8 @@ function validateSingleDescriptor(
   checkColumn(push, descriptor.summaryColumn, "summaryColumn", false);
   checkColumn(push, descriptor.tagsColumn, "tagsColumn", false);
   checkColumn(push, descriptor.slugColumn, "slugColumn", false);
+
+  validateTermFacets(push, descriptor);
 
   if (
     !Array.isArray(descriptor.bodyColumns) ||

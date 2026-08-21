@@ -1342,6 +1342,18 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // `site-search:sources:check` derives this requirement from the descriptor
   // rather than trusting this list to be remembered.
   awcms_blog_pages: ["SELECT"],
+  // blog_content — site-search:reconcile again, one layer deeper (sql/140,
+  // Issue #633). The term facets a search source declares are JOINS, so the
+  // index engine now reads the vocabulary tables and their link tables in the
+  // same statement as the source. SELECT-only for exactly the reason above.
+  // These four are here because `site-search:sources:check` walks every table a
+  // descriptor names — including the ones it reaches only through a facet join
+  // — and would have gone red without them, which is the point: #625 was this
+  // same gap one table shallower, and it was found in CI at night rather than
+  // in review.
+  awcms_blog_terms: ["SELECT"],
+  awcms_blog_institutions: ["SELECT"],
+  awcms_blog_post_institutions: ["SELECT"],
   // blog_content — blog:ads:ingest (sql/079, ADR-0044 §4 Fase 2). SELECT-only
   // on both legacy ad tables: the job reads them and never edits or deletes
   // them, because retiring them is the NEXT step's decision, taken by a human

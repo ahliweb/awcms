@@ -11,7 +11,10 @@
  * `assertSafeTableName` immediately before interpolation — the exact discipline
  * `data_lifecycle`'s generic executionMode uses.
  */
-import type { SearchSourceDescriptor } from "../../_shared/module-contract";
+import type {
+  SearchSourceDescriptor,
+  SearchSourceTermFacet
+} from "../../_shared/module-contract";
 import { stripControlCharacters } from "./search-query";
 import {
   assertSafeIdentifier,
@@ -22,6 +25,31 @@ import {
 export const MAX_TITLE_LENGTH = 500;
 export const MAX_SUMMARY_LENGTH = 2000;
 export const MAX_BODY_LENGTH = 16000;
+
+/**
+ * Bounds on the term facets one document may carry (Issue #633).
+ *
+ * A facet list is read back into a PUBLIC, anonymous response, and its size is
+ * decided by the source data rather than by anything this module controls — a
+ * post filed under two hundred topics would otherwise put two hundred entries
+ * into every document row and every facet count. The cap is per document, so
+ * one over-tagged article is bounded without capping the vocabulary itself.
+ */
+export const MAX_TERM_FACETS_PER_DOCUMENT = 50;
+/** Per-entry bound, applied to the value and the label independently. */
+export const MAX_TERM_FACET_TEXT_LENGTH = 200;
+
+/**
+ * One facetable term a document carries: `channel` = `politik` labelled
+ * "Politik". `value` is what a filter matches and what a URL carries; `label`
+ * is what a reader sees. See `SearchSourceTermFacet` for why they are not one
+ * field.
+ */
+export type SearchDocumentTermFacet = {
+  facet: string;
+  value: string;
+  label: string;
+};
 
 export type SearchDocumentInput = {
   sourceKey: string;
@@ -34,6 +62,8 @@ export type SearchDocumentInput = {
   bodyText: string | null;
   tags: string[];
   tagsText: string | null;
+  /** Facetable terms (Issue #633) — deliberately NOT folded into `tags`, which feeds the weighted `search_vector`. */
+  termFacets: SearchDocumentTermFacet[];
   weight: number;
   sourceUpdatedAt: Date;
   sourceChecksum: string;
@@ -48,6 +78,7 @@ export type ExtractionRow = {
   body: unknown;
   tags: unknown;
   slug: unknown;
+  term_facets?: unknown;
 };
 
 export type BuiltQuery = { text: string; values: unknown[] };
@@ -63,6 +94,124 @@ export type ExtractionOptions =
  * sweep). The publication predicate is enforced HERE (source→index boundary) so
  * a non-public row is never even read into the index.
  */
+/**
+ * Builds the jsonb expression that yields ONE document's term facets (Issue
+ * #633), as a `[{facet,value,label}, ...]` array.
+ *
+ * ## Why a correlated subquery and not a LEFT JOIN
+ *
+ * A join against a many-to-many link table multiplies the source rows, and the
+ * extraction query is keyset-paginated on the source id — a duplicated id would
+ * make the cursor skip or repeat. An aggregate subquery per facet keeps the
+ * outer query exactly one row per source row, which is the property the whole
+ * batch walk rests on.
+ *
+ * ## The tenant is bound TWICE on purpose
+ *
+ * `$1` is applied to the link table AND the value table, on top of RLS. A join
+ * is the one place where a row from another tenant could be reached without the
+ * outer predicate noticing, and "RLS would have caught it" is not a reason to
+ * leave the predicate out — the facet surface is public and anonymous, and a
+ * count that escaped its tenant discloses content without showing it.
+ *
+ * Only identifiers are interpolated, each through `assertSafeIdentifier` /
+ * `assertSafeTableName`; `facetKey` and every `valueEquals` value are bound.
+ */
+function buildTermFacetExpression(
+  facet: SearchSourceTermFacet,
+  outerTable: string,
+  outerIdCol: string,
+  values: unknown[],
+  param: { next: number }
+): string {
+  const bind = (value: unknown): string => {
+    values.push(value);
+    const placeholder = `$${param.next}`;
+    param.next += 1;
+    return placeholder;
+  };
+
+  const facetKeyParam = bind(facet.facetKey);
+
+  if (facet.kind === "column") {
+    const valueCol = assertSafeIdentifier(
+      facet.valueColumn,
+      "termFacets.valueColumn"
+    );
+    const labelCol = facet.labelColumn
+      ? assertSafeIdentifier(facet.labelColumn, "termFacets.labelColumn")
+      : valueCol;
+
+    // An empty string is as absent as NULL for a facet: it would produce a
+    // clickable filter that matches nothing and a blank entry in the list.
+    return `CASE
+        WHEN ${outerTable}.${valueCol} IS NULL
+          OR btrim(${outerTable}.${valueCol}::text) = '' THEN '[]'::jsonb
+        ELSE jsonb_build_array(jsonb_build_object(
+          'facet', ${facetKeyParam}::text,
+          'value', ${outerTable}.${valueCol}::text,
+          'label', ${outerTable}.${labelCol}::text))
+      END`;
+  }
+
+  const linkTable = assertSafeTableName(facet.linkTable);
+  const valueTable = assertSafeTableName(facet.valueTable);
+  const linkSourceCol = assertSafeIdentifier(
+    facet.linkSourceColumn,
+    "termFacets.linkSourceColumn"
+  );
+  const linkValueCol = assertSafeIdentifier(
+    facet.linkValueColumn,
+    "termFacets.linkValueColumn"
+  );
+  const valueIdCol = assertSafeIdentifier(
+    facet.valueIdColumn,
+    "termFacets.valueIdColumn"
+  );
+  const valueCol = assertSafeIdentifier(
+    facet.valueColumn,
+    "termFacets.valueColumn"
+  );
+  const labelCol = assertSafeIdentifier(
+    facet.labelColumn,
+    "termFacets.labelColumn"
+  );
+  const tenantCol = assertSafeIdentifier(
+    facet.tenantColumn ?? "tenant_id",
+    "termFacets.tenantColumn"
+  );
+
+  const predicates: string[] = [];
+
+  for (const [col, value] of Object.entries(facet.valueEquals ?? {})) {
+    predicates.push(
+      `v.${assertSafeIdentifier(col, "termFacets.valueEquals")} = ${bind(value)}`
+    );
+  }
+
+  for (const col of facet.valueNullColumns ?? []) {
+    predicates.push(
+      `v.${assertSafeIdentifier(col, "termFacets.valueNullColumns")} IS NULL`
+    );
+  }
+
+  return `COALESCE((
+        SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                 'facet', ${facetKeyParam}::text,
+                 'value', v.${valueCol}::text,
+                 'label', v.${labelCol}::text))
+        FROM ${linkTable} l
+        JOIN ${valueTable} v
+          ON v.${valueIdCol} = l.${linkValueCol}
+         AND v.${tenantCol} = $1
+        WHERE l.${tenantCol} = $1
+          AND l.${linkSourceCol} = ${outerTable}.${outerIdCol}
+          AND v.${valueCol} IS NOT NULL
+          AND btrim(v.${valueCol}::text) <> ''
+          ${predicates.map((c) => `AND ${c}`).join("\n          ")}
+      ), '[]'::jsonb)`;
+}
+
 export function buildExtractionQuery(
   tenantId: string,
   descriptor: SearchSourceDescriptor,
@@ -119,6 +268,21 @@ export function buildExtractionQuery(
     predicates.push(`${assertSafeIdentifier(col, "timeReached")} <= now()`);
   }
 
+  // Facet expressions are built here — after the publication predicates and
+  // before the scope/cursor params — so every `$n` they bind lines up with the
+  // order this function pushes into `values`.
+  const facetParam = { next: p };
+  const facetExpressions = (descriptor.termFacets ?? []).map((facet) =>
+    buildTermFacetExpression(facet, table, idCol, values, facetParam)
+  );
+  p = facetParam.next;
+  // `||` concatenates jsonb arrays, so a source with no facets yields `[]` and
+  // the column is never NULL — one shape for the mapper to read.
+  const termFacetsExpr =
+    facetExpressions.length === 0
+      ? "'[]'::jsonb"
+      : facetExpressions.join("\n           || ");
+
   let scope = "";
   let tail = "";
   if (options.mode === "single") {
@@ -144,7 +308,8 @@ export function buildExtractionQuery(
            ${summaryExpr} AS summary,
            ${bodyExpr} AS body,
            ${tagsExpr} AS tags,
-           ${slugExpr} AS slug
+           ${slugExpr} AS slug,
+           ${termFacetsExpr} AS term_facets
     FROM ${table}
     WHERE ${tenantCol} = $1
       ${predicates.map((c) => `AND ${c}`).join("\n      ")}
@@ -315,8 +480,16 @@ export function computeDocumentChecksum(fields: {
   summary: string | null;
   bodyText: string | null;
   tags: string[];
+  /**
+   * Optional so every existing caller compiles unchanged — and appended LAST in
+   * the canonical array so a document with no facets hashes exactly as it did
+   * before Issue #633. Without that, the first reconcile after deploying this
+   * would rewrite every document in every tenant to store an identical row.
+   */
+  termFacets?: readonly SearchDocumentTermFacet[];
   weight: number;
 }): string {
+  const facets = fields.termFacets ?? [];
   const canonical = JSON.stringify([
     fields.resourceType,
     fields.resourceId,
@@ -326,12 +499,74 @@ export function computeDocumentChecksum(fields: {
     fields.summary,
     fields.bodyText,
     fields.tags,
-    fields.weight
+    fields.weight,
+    ...(facets.length > 0
+      ? [facets.map((f) => [f.facet, f.value, f.label])]
+      : [])
   ]);
   return new Bun.CryptoHasher("sha256").update(canonical).digest("hex");
 }
 
 /** Map a raw extraction row to the neutral `SearchDocumentInput`. */
+/**
+ * Normalizes whatever the `term_facets` jsonb column produced into the bounded,
+ * clean shape stored on the document (Issue #633).
+ *
+ * Every entry is re-validated here rather than trusted from the query, because
+ * the values come from a content module's own tables — an editor typed them —
+ * and the array is read back into a public response body. Bounds are applied per
+ * entry AND to the list, control characters are stripped as everywhere else in
+ * this file, and duplicates are collapsed: two source rows can legitimately
+ * carry the same term, and a facet list that repeats a value would produce two
+ * identical filter chips.
+ */
+function normalizeTermFacets(value: unknown): SearchDocumentTermFacet[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const facets: SearchDocumentTermFacet[] = [];
+
+  for (const entry of value) {
+    if (facets.length >= MAX_TERM_FACETS_PER_DOCUMENT) {
+      break;
+    }
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const facet = cleanText(record.facet, MAX_TERM_FACET_TEXT_LENGTH);
+    const facetValue = cleanText(record.value, MAX_TERM_FACET_TEXT_LENGTH);
+
+    if (facet.length === 0 || facetValue.length === 0) {
+      continue;
+    }
+
+    const dedupeKey = `${facet}\u0000${facetValue}`;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+
+    // A missing label is not an error — a `kind: "column"` facet may have no
+    // separate label column, and the value is then the honest display text.
+    const label =
+      cleanText(record.label, MAX_TERM_FACET_TEXT_LENGTH) || facetValue;
+
+    facets.push({ facet, value: facetValue, label });
+  }
+
+  // Stable order so the checksum below does not change just because Postgres
+  // aggregated the same set differently between two runs.
+  return facets.sort((a, b) =>
+    a.facet === b.facet
+      ? a.value.localeCompare(b.value)
+      : a.facet.localeCompare(b.facet)
+  );
+}
+
 export function mapRowToDocument(
   descriptor: SearchSourceDescriptor,
   row: ExtractionRow,
@@ -354,6 +589,7 @@ export function mapRowToDocument(
         .filter((t) => t.length > 0)
     : [];
   const tagsText = tags.length > 0 ? tags.join(" ") : null;
+  const termFacets = normalizeTermFacets(row.term_facets);
   const slug =
     row.slug === null || row.slug === undefined ? null : String(row.slug);
   const url = buildDocumentUrl(descriptor, {
@@ -374,6 +610,12 @@ export function mapRowToDocument(
     summary,
     bodyText,
     tags,
+    // In the checksum, because the checksum is the ONLY thing that decides
+    // whether an upsert rewrites a row. A post moved from one channel to
+    // another changes nothing else about its document — without this, the
+    // reconcile sweep would report "unchanged" and the facet would keep
+    // counting it under the old channel forever.
+    termFacets,
     weight: descriptor.weight
   });
 
@@ -388,6 +630,7 @@ export function mapRowToDocument(
     bodyText,
     tags,
     tagsText,
+    termFacets,
     weight: descriptor.weight,
     sourceUpdatedAt,
     sourceChecksum
