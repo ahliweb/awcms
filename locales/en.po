@@ -4405,4 +4405,44 @@ msgstr ""
 # Issue #592 — the editor preview link on /admin/blog.
 
 msgid "Preview"
+
+# Issue #598 — the newsletter subscriber screen.
+
+msgid "Newsletter"
+msgstr ""
+
+msgid "Subscribers"
+msgstr ""
+
+msgid "Suppress"
+msgstr ""
+
+msgid "Consent"
+msgstr ""
+
+msgid "Ended"
+msgstr ""
+
+msgid "Newsletter subscribers."
+msgstr ""
+
+msgid "No subscribers match this filter."
+msgstr ""
+
+msgid "per page."
+msgstr ""
+
+msgid "Up to"
+msgstr ""
+
+msgid "You do not have permission to read the subscriber list."
+msgstr ""
+
+msgid "The subscriber list could not be loaded. Please try again."
+msgstr ""
+
+msgid "Submitted and never confirmed. A number that only grows usually means this tenant has no active confirmation email template."
+msgstr ""
+
+msgid "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
 msgstr ""

@@ -107,6 +107,9 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   media_library: "content",
   // Audience engagement.
   comments: "engagement",
+  // Issue #598 — a subscriber list is audience engagement, not content: it is
+  // about who is reached, not about what is published.
+  newsletter: "engagement",
   // Operations / observability. `workflow` (the `workflow-approval` directory)
   // has no counterpart in awcms-micro, so it is absent from the map this was
   // ported from — the completeness assertion in
@@ -211,6 +214,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_sidebar_menu": "Sidebar menu",
   "admin.layout.nav_form_drafts": "Form drafts",
   "admin.layout.nav_site_search": "Site search",
+  "admin.layout.nav_newsletter": "Newsletter",
   "admin.layout.nav_site_profile": "Site profile",
   "admin.layout.nav_theming": "Theming",
   "admin.layout.nav_email_templates": "Email templates",

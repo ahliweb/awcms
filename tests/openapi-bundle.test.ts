@@ -311,6 +311,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",
+      // ADR-0103 — `newsletter`, whose three subscription operations are
+      // anonymous by design and individually justified in
+      // ALLOWED_PUBLIC_OPERATIONS. Sorts AFTER the "News Portal" pair because
+      // a space sorts before a letter.
+      "Newsletter",
       // "Push Delivery" (push_delivery, ADR-0074, Issue #466) — the device
       // registration/revocation self-service plus the operator's queue
       // diagnostics, cancel and delivery probe. Genuinely new surface, unlike

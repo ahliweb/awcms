@@ -8718,6 +8718,101 @@ PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale
 | 200    | Title suggestions (possibly empty).            | object                                 |
 | 429    | Too many suggestion requests from this source. | [`ApiError`](#standard-error-envelope) |
 
+## Newsletter
+
+Per-tenant newsletter subscriber list (newsletter module, Issue #598, ADR-0103, PRD §22/§30). The email module could already SEND mail; there was no list a reader could JOIN. All three operations are anonymous — a reader has no account, and PRD §30 forbids making them get one to stop receiving mail — with the tenant resolved from the request HOST rather than a header, so a caller cannot choose whose list they are writing to. Every one answers the SAME neutral body for every outcome, because a distinguishing response turns a public endpoint into a way to ask whether a named person subscribes to a particular newsroom. Double opt-in: consent is recorded when the confirmation link is FOLLOWED, never at submission. Both tokens are stored hashed because both are bearer credentials, and the unsubscribe token is stable for the row's lifetime because it appears in the footer of every message the subscriber receives.
+
+### `POST /api/v1/newsletter/confirm` — Confirm a pending subscription
+
+- **operationId**: `newsletterConfirm`
+- **Security**: none (public endpoint)
+
+Anonymous and per-IP rate-limited. The moment consent is recorded: `consent_at` and `consent_ip_hash` are written here, because what happened is that somebody followed a link from an inbox.
+
+The token is SPENT on use — keeping a used bearer credential is keeping a credential. A token that matches nothing, one already spent, and a row in the wrong state all answer the same body as success; distinguishing them would let somebody holding a guessed token learn whether it was ever valid.
+
+**Request body** (required): [`NewsletterTokenRequest`](#schema-newslettertokenrequest)
+
+**Responses**
+
+| Status | Description                                          | Schema                                                       |
+| ------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| 200    | Accepted. Says nothing about the token.              | [`NewsletterNeutralResult`](#schema-newsletterneutralresult) |
+| 400    | Validation error.                                    | [`ApiError`](#standard-error-envelope)                       |
+| 429    | Too many requests from this source (`RATE_LIMITED`). | [`ApiError`](#standard-error-envelope)                       |
+
+### `POST /api/v1/newsletter/subscribe` — Subscribe an address to this tenant's newsletter
+
+- **operationId**: `newsletterSubscribe`
+- **Security**: none (public endpoint)
+
+Anonymous and per-IP rate-limited. Idempotent (FR-NWL-005): a second POST for the same address does not create a second row — the unique index over `(tenant_id, email_normalized)` and one `ON CONFLICT` statement do that, not a read-then-write two concurrent submissions could interleave with.
+
+Answers `200` with the SAME message for every outcome: a new address, an address already active, one that is suppressed, and a host that resolves to no tenant. It never says which. A malformed body still answers `400` — that is a statement about the REQUEST, not about any address, so it leaks nothing.
+
+Writes a `pending` row and sends a confirmation mail. Consent is NOT recorded here: `consent_at` is written when the link is followed, so the record says what happened rather than what was asked for. A tenant with no active `derived.newsletter_confirmation` template sends no mail and the row stays `pending` — the correct failure, since silently activating without confirmation would be the wrong one.
+
+**Request body** (required): [`NewsletterSubscribeRequest`](#schema-newslettersubscriberequest)
+
+**Responses**
+
+| Status | Description                                                       | Schema                                                       |
+| ------ | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| 200    | Accepted. Says nothing about the address.                         | [`NewsletterNeutralResult`](#schema-newsletterneutralresult) |
+| 400    | Validation error.                                                 | [`ApiError`](#standard-error-envelope)                       |
+| 429    | Too many subscription requests from this source (`RATE_LIMITED`). | [`ApiError`](#standard-error-envelope)                       |
+
+### `POST /api/v1/newsletter/subscribers/{id}/suppress` — Suppress a subscriber
+
+- **operationId**: `newsletterSubscriberSuppress`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `newsletter.subscribers.configure`. The only authenticated write in this module, and the only one that needs to be — everything else a subscriber's state can do, the subscriber does.
+
+`unsubscribed` is the SUBSCRIBER's decision and they may reverse it by signing up again. `suppressed` is the OPERATOR's or the provider's — a hard bounce, an abuse report, a legal instruction — and re-subscribing must not clear it. That is why they are two states rather than one `inactive`, and why this endpoint exists rather than an admin-side call to the public unsubscribe.
+
+`reason` is REQUIRED: this is the one state a subscriber cannot leave, so it is the one somebody will later ask about. It goes on the audit row, which records the MASKED address so the trail does not become a second copy of the list.
+
+No `Idempotency-Key`: suppressing an already-suppressed row writes the same state, and requiring a key for a naturally idempotent transition would be ceremony.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The subscriber is suppressed. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/newsletter/unsubscribe` — End a subscription
+
+- **operationId**: `newsletterUnsubscribe`
+- **Security**: none (public endpoint)
+
+Anonymous, and that is a REQUIREMENT rather than a convenience (PRD §30): unsubscribing must be easy and must not require a login. Takes the token and nothing else — no session, no tenant header, no email address. Requiring any of those would mean a person who wants out has to prove who they are first, and the token already proves they hold the link.
+
+The row is KEPT. "This person asked to stop, on this date" is what answers a later complaint, and deleting it leaves nothing to answer with. A SUPPRESSED row is not touched: suppression is the operator's decision, and an old link must not move a row out of the one state it cannot leave.
+
+**Request body** (required): [`NewsletterTokenRequest`](#schema-newslettertokenrequest)
+
+**Responses**
+
+| Status | Description                                          | Schema                                                       |
+| ------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| 200    | Accepted. Says nothing about the token.              | [`NewsletterNeutralResult`](#schema-newsletterneutralresult) |
+| 400    | Validation error.                                    | [`ApiError`](#standard-error-envelope)                       |
+| 429    | Too many requests from this source (`RATE_LIMITED`). | [`ApiError`](#standard-error-envelope)                       |
+
 ## Site Profile
 
 Per-tenant SITE CHROME (site_profile module, Issue #596, ADR-0102) — the masthead tagline, footer copyright line, logo and favicon, editorial address, contact email/phone/WhatsApp, and social profile links that every public page renders. Before it, a footer, masthead, contact page and Organization JSON-LD node all had to hard-code the publisher's identity in frontend source, which made a second tenant impossible without a fork. The boundary against seo_distribution is deliberate: awcms_seo_tenant_settings keeps what CRAWLERS see (og:site_name, the JSON-LD Organization node, the default og:image) because each is an SEO output consumed by a meta-tag renderer, while this module owns what PEOPLE read. Nothing is duplicated across the two, so no value can drift, and consumers are never asked to know the split — GET /api/v1/site-profile/composed merges both halves for build clients. Social link URLs are REFUSED rather than sanitized unless absolute http(s), because they are rendered as <a href> on every public page. read and update are separately grantable: changing what every page's contact block says is a different power from reading it. Nothing here is anonymous — 'public read' means the public site's BUILDER can read it, not that anyone can.
@@ -10139,6 +10234,56 @@ At least one field. `null` clears; an omitted field is left alone.
   "rightsNotes": "string",
   "copyrightStatus": "unknown",
   "rightsVerificationStatus": "unverified"
+}
+```
+
+### Schema: NewsletterNeutralResult
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "string"
+  }
+}
+```
+
+### Schema: NewsletterSubscribeRequest
+
+There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, and having no field at all is stronger than defaulting one to false — consent is recorded when the confirmation link is followed, so it cannot be defaulted, pre-ticked, or inferred from a submission.
+
+| Field    | Type   | Required | Nullable | Description                                                                                                                                                                                                                                                                     |
+| -------- | ------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `email`  | string | yes      | no       | Shape-checked only — something, an `@`, something with a dot, no spaces. A stricter regex would reject valid addresses and buy nothing, because the actual proof that an address exists and belongs to the person who typed it is the confirmation link nobody else can follow. |
+| `locale` | string | no       | yes      | Language for the confirmation mail. Falls back to `en`.                                                                                                                                                                                                                         |
+
+**Example**
+
+```json
+{
+  "email": "user@example.com",
+  "locale": "string"
+}
+```
+
+### Schema: NewsletterTokenRequest
+
+| Field   | Type   | Required | Nullable | Description                                                                                                                                                                                              |
+| ------- | ------ | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token` | string | yes      | no       | The base64url token from the emailed link. Bounded and shape-checked BEFORE it is hashed: an anonymous endpoint that will hash whatever it is handed is an anonymous endpoint that will hash a megabyte. |
+
+**Example**
+
+```json
+{
+  "token": "string"
 }
 ```
 

@@ -48,6 +48,16 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // the tenant from a public tenant code, records only privacy-preserving,
   // anonymized, public-area page views, and is fire-and-forget (always 202).
   "analyticsCollect",
+  // newsletter (Issue #598, ADR-0103) — all three subscription endpoints are
+  // anonymous by design, and the anonymity is the requirement rather than a
+  // shortcut: a reader has no account, and PRD §30 forbids making them get one
+  // to stop receiving mail. Each resolves the tenant from the request HOST (so a
+  // caller cannot choose whose list they write to), is per-IP rate-limited, and
+  // answers the SAME neutral body for every outcome — which is what stops a
+  // public endpoint being a way to ask whether a named person subscribes here.
+  "newsletterSubscribe",
+  "newsletterConfirm",
+  "newsletterUnsubscribe",
   // site_search (ADR-0040, ported from awcms-micro Issue #270) — the public
   // search + typeahead endpoints are anonymous by design: a site visitor has no
   // session. Both resolve the tenant from the request HOST (never a

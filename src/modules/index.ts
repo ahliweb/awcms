@@ -18,6 +18,7 @@ import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
 import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
+import { newsletterModule } from "./newsletter/module";
 import { siteProfileModule } from "./site-profile/module";
 import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
@@ -124,6 +125,7 @@ const baseModules: ModuleDescriptor[] = [
   // `site_search` because it depends on `seo_distribution` and
   // `media_library`, both of which appear above it; the DAG check enforces
   // that ordering rather than trusting this comment.
+  newsletterModule,
   siteProfileModule,
   // Ported from awcms-micro (Issue #271, ADR-0041), Gelombang-1 of
   // docs/awcms/absorb-awcms-micro-roadmap.md: moderation-first commenting over
