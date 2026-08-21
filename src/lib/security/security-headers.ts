@@ -335,10 +335,18 @@ export function buildSecurityHeaders(
     //
     // This repo serves a different surface, and it has no such resource:
     //   - HTML pages are NAVIGATIONS, which CORP does not govern at all;
-    //   - the JSON API is already unreachable cross-origin from a browser —
-    //     nothing here emits `Access-Control-Allow-Origin` (verified: zero
-    //     occurrences in `src/`), so `same-origin` removes no capability that
-    //     any browser client has today;
+    //   - the JSON API is unreachable cross-origin from a browser with ONE
+    //     deliberate exception. This bullet used to read "nothing here emits
+    //     `Access-Control-Allow-Origin` (verified: zero occurrences in
+    //     `src/`)", and Issue #637 ended that: the public visit-ingest beacon
+    //     (`api/v1/analytics/collect.ts`) now answers a preflight and echoes
+    //     the grant, for `Origin`s that are active tenant domains and never for
+    //     `*`. CORP is unaffected either way — it governs `no-cors` subresource
+    //     embedding, and a CORS-mode `fetch` is not a `no-cors` request — so
+    //     `same-origin` still removes no capability any browser client has;
+    //     what changed is that the reason is now "CORP does not apply to CORS"
+    //     rather than "there is no CORS here". If a SECOND endpoint ever opts
+    //     in, re-read this bullet before assuming it still holds;
     //   - `public/` holds `js/news-share.js`, `css/public-content.css` and
     //     `push-sw.js`, and `_astro/*` is hashed output — all of it loaded by
     //     this origin's own pages, and all of it now actually CARRYING these

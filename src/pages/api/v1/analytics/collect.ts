@@ -11,7 +11,16 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-resolver";
+import { resolvePublicTenantByHost } from "../../../../lib/tenant/public-host-tenant-resolver";
 import { collectVisitorTelemetry } from "../../../../modules/visitor-analytics/application/collector";
+import {
+  beaconCorsDeniedHeaders,
+  beaconCorsResponseHeaders,
+  beaconPreflightHeaders,
+  isCrossOriginBeacon,
+  parseBeaconOrigin,
+  resolveVisitorCookieSameSite
+} from "../../../../modules/visitor-analytics/domain/beacon-cors";
 import { resolveVisitorAnalyticsConfig } from "../../../../modules/visitor-analytics/domain/visitor-analytics-config";
 import { resolveAnalyticsClientIp } from "../../../../modules/visitor-analytics/domain/client-ip";
 import { resolveGeoEnrichment } from "../../../../modules/visitor-analytics/domain/geo-enrichment";
@@ -82,6 +91,27 @@ const COLLECT_RATE_LIMIT_WINDOW_SEC = Number(
  * actually recorded (module disabled, unknown/inactive tenant, non-public or
  * non-trackable path) — fire-and-forget beacon semantics that never leak
  * tenant existence. `collectVisitorTelemetry` is itself fail-open.
+ *
+ * CROSS-ORIGIN (Issue #637): a static `awcms-astro` build on its own domain can
+ * call this, but ONLY as JSON — `security.checkOrigin` still answers 403 to a
+ * `text/plain` body, which is what `navigator.sendBeacon` sends. The supported
+ * call is therefore:
+ *
+ * ```js
+ * fetch("https://cms.example/api/v1/analytics/collect", {
+ *   method: "POST",
+ *   headers: { "content-type": "application/json" },
+ *   credentials: "include",           // the anonymous visitor-key cookie
+ *   keepalive: true,
+ *   body: JSON.stringify({ tenantCode, path: location.pathname })
+ * });
+ * ```
+ *
+ * `credentials: "include"` is what makes repeat visits from one reader count as
+ * one visitor; see `resolveVisitorCookieSameSite` for what it can and cannot
+ * promise. The `Origin` must be an active domain in `awcms_tenant_domains` —
+ * see `domain/beacon-cors.ts` for why that check is not, and does not replace,
+ * the `tenantCode` validation below.
  */
 export const POST: APIRoute = async ({
   request,
@@ -91,6 +121,81 @@ export const POST: APIRoute = async ({
 }) => {
   const config = resolveVisitorAnalyticsConfig();
   const existingVisitorKey = cookies.get(VISITOR_KEY_COOKIE_NAME)?.value;
+  const parsedOrigin = parseBeaconOrigin(request.headers.get("origin"));
+  const crossOrigin = isCrossOriginBeacon(parsedOrigin, request.url);
+
+  /**
+   * The per-IP limiter, consumed AT MOST ONCE per request no matter how many
+   * call sites reach for it.
+   *
+   * The binding rule this preserves is the one the constant above states: the
+   * limiter runs before ANY database work. Issue #637 added a second piece of
+   * database work (the cross-origin allow-list lookup) that happens earlier
+   * than the tenant lookup, so the check had to move ahead of it — without
+   * charging a cross-origin beacon twice for one request, and without charging
+   * a same-origin beacon that never reaches the database at all.
+   */
+  let rateLimitDecision: Awaited<
+    ReturnType<typeof checkSharedRateLimit>
+  > | null = null;
+  const consumeRateLimit = async () => {
+    rateLimitDecision ??= await checkSharedRateLimit(
+      `analytics-collect:${resolveClientIp(request, clientAddress)}`,
+      {
+        maxAttempts:
+          Number.isFinite(COLLECT_RATE_LIMIT_MAX) && COLLECT_RATE_LIMIT_MAX > 0
+            ? COLLECT_RATE_LIMIT_MAX
+            : 120,
+        windowMs:
+          (Number.isFinite(COLLECT_RATE_LIMIT_WINDOW_SEC) &&
+          COLLECT_RATE_LIMIT_WINDOW_SEC > 0
+            ? COLLECT_RATE_LIMIT_WINDOW_SEC
+            : 60) * 1000
+      }
+    );
+    return rateLimitDecision;
+  };
+
+  // Refused cross-origin, and every same-origin request, carry `Vary: Origin`
+  // and no grant. Only a verified tenant domain upgrades this.
+  let corsHeaders = beaconCorsDeniedHeaders();
+
+  /**
+   * Stamps the decision above onto a response that was built without knowing
+   * about it. EVERY exit from this handler goes through here — including the
+   * ones that refuse — because a response whose headers vary by `Origin` has to
+   * say so whichever way the decision went.
+   */
+  const withCors = (response: Response): Response => {
+    for (const [name, value] of Object.entries(corsHeaders)) {
+      response.headers.set(name, value);
+    }
+    return response;
+  };
+
+  if (crossOrigin && parsedOrigin) {
+    const preflightBudget = await consumeRateLimit();
+
+    if (!preflightBudget.allowed) {
+      return fail(
+        429,
+        "RATE_LIMITED",
+        "Too many analytics beacons from this source. Try again later.",
+        {},
+        undefined,
+        { ...corsHeaders, "retry-after": String(preflightBudget.retryAfterSec) }
+      );
+    }
+
+    const originTenant = await resolvePublicTenantByHost(
+      getDatabaseClient(),
+      parsedOrigin.hostname
+    );
+
+    if (originTenant) {
+      corsHeaders = beaconCorsResponseHeaders(parsedOrigin.origin);
+    }
+  }
 
   // Revoke a lingering anonymous identifier when the module is disabled —
   // before doing anything else, on every request, regardless of body shape.
@@ -103,7 +208,7 @@ export const POST: APIRoute = async ({
   const bodyRead = await readJsonBody(request);
 
   if (bodyRead.tooLarge) {
-    return bodyTooLargeResponse(bodyRead.limitBytes);
+    return withCors(bodyTooLargeResponse(bodyRead.limitBytes));
   }
 
   const body = bodyRead.value as Record<string, unknown> | null;
@@ -118,27 +223,32 @@ export const POST: APIRoute = async ({
     !path.startsWith("/") ||
     path.length > MAX_PATH_LENGTH
   ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "tenantCode (non-empty, <=128 chars) and path (must start with '/', <=2048 chars) are required."
+    return withCors(
+      fail(
+        400,
+        "VALIDATION_ERROR",
+        "tenantCode (non-empty, <=128 chars) and path (must start with '/', <=2048 chars) are required."
+      )
     );
   }
 
-  const accepted = jsonResponse(
-    { success: true, data: { accepted: true }, meta: {} },
-    { status: 202 }
-  );
+  const accepted = () =>
+    withCors(
+      jsonResponse(
+        { success: true, data: { accepted: true }, meta: {} },
+        { status: 202 }
+      )
+    );
 
   // Nothing to record: module off, non-public area, or a non-trackable path.
   // Still 202 (accepted) — never distinguish these cases to the caller.
   if (!config.enabled) {
-    return accepted;
+    return accepted();
   }
 
   const area = determineArea(path.split("?")[0] ?? path);
   if (area !== "public" || !config.collectPublic || !isTrackablePath(path)) {
-    return accepted;
+    return accepted();
   }
 
   // Per-IP rate-limit backstop — checked here, AFTER the free (no-DB) filters
@@ -146,30 +256,18 @@ export const POST: APIRoute = async ({
   // write below). Keyed on the client IP only, so it can never distinguish an
   // existing tenant from an unknown one (no enumeration oracle); a source that
   // exceeds the window is refused with 429 before it can touch the database.
-  const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `analytics-collect:${clientIp}`,
-    {
-      maxAttempts:
-        Number.isFinite(COLLECT_RATE_LIMIT_MAX) && COLLECT_RATE_LIMIT_MAX > 0
-          ? COLLECT_RATE_LIMIT_MAX
-          : 120,
-      windowMs:
-        (Number.isFinite(COLLECT_RATE_LIMIT_WINDOW_SEC) &&
-        COLLECT_RATE_LIMIT_WINDOW_SEC > 0
-          ? COLLECT_RATE_LIMIT_WINDOW_SEC
-          : 60) * 1000
-    }
-  );
+  const rateLimit = await consumeRateLimit();
 
   if (!rateLimit.allowed) {
-    return fail(
-      429,
-      "RATE_LIMITED",
-      "Too many analytics beacons from this source. Try again later.",
-      {},
-      undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+    return withCors(
+      fail(
+        429,
+        "RATE_LIMITED",
+        "Too many analytics beacons from this source. Try again later.",
+        {},
+        undefined,
+        { "retry-after": String(rateLimit.retryAfterSec) }
+      )
     );
   }
 
@@ -177,11 +275,15 @@ export const POST: APIRoute = async ({
   const tenant = await resolvePublicTenantByCode(sql, tenantCode);
 
   if (!tenant) {
-    return accepted;
+    return accepted();
   }
 
   // Anonymous visitor key: reuse a valid existing cookie or mint a fresh one,
-  // and (re)set the cookie so it persists for dedup.
+  // and (re)set the cookie so it persists for dedup. A cross-origin beacon
+  // needs `SameSite=None` for the browser to keep it at all — and that is only
+  // legal alongside `Secure`, so a plain-http deployment keeps `Lax` and keeps
+  // minting fresh keys. `resolveVisitorCookieSameSite` carries the reasoning.
+  const cookieSecure = process.env.AUTH_COOKIE_SECURE === "true";
   const cookiePlan = planVisitorKeyCookie({
     config,
     existingValue: existingVisitorKey
@@ -190,8 +292,11 @@ export const POST: APIRoute = async ({
   if (cookiePlan.shouldSetCookie) {
     cookies.set(VISITOR_KEY_COOKIE_NAME, cookiePlan.value, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.AUTH_COOKIE_SECURE === "true",
+      sameSite: resolveVisitorCookieSameSite({
+        crossOrigin,
+        secure: cookieSecure
+      }),
+      secure: cookieSecure,
       path: "/",
       maxAge: cookiePlan.maxAgeSeconds
     });
@@ -224,5 +329,79 @@ export const POST: APIRoute = async ({
     geo
   });
 
-  return accepted;
+  return accepted();
+};
+
+/**
+ * `OPTIONS /api/v1/analytics/collect` — the CORS preflight (Issue #637).
+ *
+ * A preflight carries NO BODY, so this handler cannot know which `tenantCode`
+ * the POST that follows will name. It answers the only question it can: is this
+ * `Origin` an active, verified domain of SOME tenant on this deployment
+ * (`awcms_tenant_domains`, via the same SECURITY DEFINER lookup the public host
+ * router uses)? The POST then validates `tenantCode` exactly as it always has.
+ * CORS is not authorization — see `domain/beacon-cors.ts`.
+ *
+ * Every outcome is `204`. What differs is whether the response carries the
+ * grant headers, because that is the one thing CORS cannot hide: a browser
+ * proceeds only when it sees `Access-Control-Allow-Origin`. That is not a new
+ * disclosure — visiting the hostname already serves that tenant's site, so
+ * "this host belongs to a tenant here" is public by construction.
+ *
+ * `OPTIONS` is in Astro's `SAFE_METHODS`, so `security.checkOrigin` lets the
+ * preflight through untouched; only the POST it authorizes is subject to the
+ * form-like content-type rule.
+ */
+export const OPTIONS: APIRoute = async ({ request, clientAddress }) => {
+  const parsedOrigin = parseBeaconOrigin(request.headers.get("origin"));
+
+  // No `Origin`, an opaque one, or our own: nothing to preflight. `Vary` still
+  // goes out — this response WOULD have differed for a different origin.
+  if (!isCrossOriginBeacon(parsedOrigin, request.url) || !parsedOrigin) {
+    return new Response(null, {
+      status: 204,
+      headers: beaconCorsDeniedHeaders()
+    });
+  }
+
+  // The allow-list lookup is a database read on an anonymous, unauthenticated
+  // request, so it sits behind the same per-IP limiter the POST uses — same
+  // key, so a preflight and the POST it precedes share one budget rather than
+  // doubling it. `Access-Control-Max-Age` keeps that from mattering in practice.
+  const preflightBudget = await checkSharedRateLimit(
+    `analytics-collect:${resolveClientIp(request, clientAddress)}`,
+    {
+      maxAttempts:
+        Number.isFinite(COLLECT_RATE_LIMIT_MAX) && COLLECT_RATE_LIMIT_MAX > 0
+          ? COLLECT_RATE_LIMIT_MAX
+          : 120,
+      windowMs:
+        (Number.isFinite(COLLECT_RATE_LIMIT_WINDOW_SEC) &&
+        COLLECT_RATE_LIMIT_WINDOW_SEC > 0
+          ? COLLECT_RATE_LIMIT_WINDOW_SEC
+          : 60) * 1000
+    }
+  );
+
+  if (!preflightBudget.allowed) {
+    return new Response(null, {
+      status: 429,
+      headers: {
+        ...beaconCorsDeniedHeaders(),
+        "retry-after": String(preflightBudget.retryAfterSec)
+      }
+    });
+  }
+
+  const originTenant = await resolvePublicTenantByHost(
+    getDatabaseClient(),
+    parsedOrigin.hostname
+  );
+
+  return new Response(null, {
+    status: 204,
+    headers: originTenant
+      ? beaconPreflightHeaders(parsedOrigin.origin)
+      : beaconCorsDeniedHeaders()
+  });
 };
