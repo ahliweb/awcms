@@ -440,6 +440,18 @@ export type PublicBlogPageDetail = {
   visibility: BlogContentVisibility;
   featuredMediaId: string | null;
   pageType: string;
+  /**
+   * The CANONICAL body (ADR-0100). Selected even though this repo's own public
+   * page route renders `contentJson` instead: `sql/134` defaults this column to
+   * `'[]'` until `bun run blog:portable-text:backfill` runs, so switching the
+   * HTML renderer to it would blank every page on a deployment that has not.
+   *
+   * A build client reading `GET /api/v1/blog/pages/public/{slug}` gets both and
+   * chooses — which is what lets `ahliweb/awcms-astro` move to the canonical
+   * column, and gain the marks the projection is lossy about, on its own
+   * schedule rather than on this repo's.
+   */
+  bodyPortableText: unknown;
 };
 
 type PublicBlogPageDetailRow = {
@@ -458,6 +470,7 @@ type PublicBlogPageDetailRow = {
   visibility: BlogContentVisibility;
   featured_media_id: string | null;
   page_type: string;
+  body_portable_text: unknown;
 };
 
 function toPageDetail(row: PublicBlogPageDetailRow): PublicBlogPageDetail {
@@ -476,7 +489,8 @@ function toPageDetail(row: PublicBlogPageDetailRow): PublicBlogPageDetail {
     updatedAt: row.updated_at,
     visibility: row.visibility,
     featuredMediaId: row.featured_media_id,
-    pageType: row.page_type
+    pageType: row.page_type,
+    bodyPortableText: row.body_portable_text
   };
 }
 
@@ -499,7 +513,7 @@ export async function fetchPublicBlogPageBySlug(
   const rows = (await tx`
     SELECT id, title, slug, excerpt, content_json, content_text, seo_title,
       meta_description, canonical_url, locale, published_at, updated_at,
-      visibility, featured_media_id, page_type
+      visibility, featured_media_id, page_type, body_portable_text
     FROM awcms_blog_pages
     WHERE tenant_id = ${tenantId} AND slug = ${slug}
       AND status = 'published' AND visibility IN ('public', 'unlisted')

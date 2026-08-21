@@ -4959,6 +4959,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/pages/public:
+    get:
+      tags:
+        - Blog Content
+      summary: The static pages a reader can actually reach
+      description: "Gated by blog_content.pages.read. NOT the same answer as `/api/v1/blog/pages?status=published`: the admin list is an editor's view and returns private and unlisted pages too, so a consumer reaching for it with a status filter would publish every private page the newsroom has and nothing would report an error. The predicate here is the one the public route enforces, shared with sitemap-blog.xml so the two cannot disagree. Metadata only — a body is fetched per page from /{slug}, because a tenant's legal pages are few but long."
+      operationId: blogPagesPublicList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Reachable static pages, in menu order.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      pages:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PublicBlogPageSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/pages/public/{slug}:
+    get:
+      tags:
+        - Blog Content
+      summary: One reachable static page, body included
+      description: Gated by blog_content.pages.read. The predicate is shared byte-for-byte with the public route /blog/{tenantCode}/pages/{slug}, so a draft cannot be read here for the same reason it cannot be read there. An unreachable slug answers 404 without distinguishing "no such page" from "that page is a draft" — not an information-disclosure boundary (the caller is authenticated) but consistency, so a consumer cannot depend on a distinction the browser-facing surface does not make. The body ships as BOTH `contentJson` (the projection this repo renders today) and `bodyPortableText` (the canonical column, ADR-0100), which is what lets a consumer move to the canonical shape on its own schedule.
+      operationId: blogPagesPublicDetail
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The page, with every referenced media object resolved in one call.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/PublicBlogPageDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/blog/posts:
     get:
       tags:
@@ -11177,6 +11245,60 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/news-portal/ad-placements/active:
+    get:
+      tags:
+        - News Portal Ad Placements
+      summary: Currently-runnable creatives per slot, already rotated and capped
+      description: Gated by blog_content.ad_placements.read. Returns all twelve slots, including the three this repo's own templates do not render — the sidebar exists in the consuming front end, and an endpoint shaped around what this repo draws would withhold inventory the consumer exists to show. Rotation and the per-slot item cap are applied HERE so four rotation modes are not re-implemented elsewhere; random_safe and weighted make the response deliberately not byte-stable, so it is not cacheable and does not try to be. An invalid targetType is refused rather than falling back to global, because silently widening an ad query is how a placement booked against one article appears on all of them.
+      operationId: newsPortalAdPlacementsActive
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: targetType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - global
+              - widget
+              - post
+              - page
+          description: The kind of page being rendered. Omit for the global inventory.
+        - name: targetId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Required when targetType is not global, and refused when it is.
+      responses:
+        "200":
+          description: Selected creatives per placement key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      slots:
+                        type: object
+                        additionalProperties:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/PublicAdPlacement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/news-portal/homepage-sections:
     get:
       tags:
@@ -11359,6 +11481,41 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/news-portal/homepage-sections/composed:
+    get:
+      tags:
+        - News Portal Homepage Sections
+      summary: The RESOLVED homepage, for a build client that renders its own templates
+      description: "Gated by blog_content.homepage_sections.read. Returns what the front page actually shows, not its configuration: every reference resolved against live public content, the deterministic fallback applied to a curated slot whose articles have all gone, and the render caps already enforced. A consumer must not resolve the configuration itself — that would re-implement the publication predicate in a second repository on a second deploy cadence, and the first disagreement is a draft article on somebody's front page. Media arrive as resolved public URLs here (unlike /api/v1/site-profile/composed, which returns ids) because a homepage is many short-lived images rather than one long-lived logo."
+      operationId: newsPortalHomepageComposed
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The composed homepage.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      isEmpty:
+                        type: boolean
+                        description: True when the tenant has composed nothing; the caller renders its own chronological listing.
+                      sections:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ComposedHomepageSection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/offices:
     get:
       operationId: listOffices
@@ -20040,6 +20197,83 @@ components:
           type: boolean
         notifyOnReply:
           type: boolean
+    ComposedHomepageGroup:
+      type: object
+      properties:
+        heading:
+          type: string
+          nullable: true
+          description: Category name for a grid column; null for one ungrouped list.
+        slug:
+          type: string
+          nullable: true
+          description: Category slug, so the consumer can link the column to its archive.
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComposedHomepagePostCard"
+    ComposedHomepageImage:
+      type: object
+      properties:
+        url:
+          type: string
+        altText:
+          type: string
+          nullable: true
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+    ComposedHomepagePostCard:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+        image:
+          allOf:
+            - $ref: "#/components/schemas/ComposedHomepageImage"
+          nullable: true
+    ComposedHomepageSection:
+      type: object
+      properties:
+        sectionKey:
+          type: string
+        sectionType:
+          type: string
+          enum:
+            - headline
+            - latest_posts
+            - featured_posts
+            - editor_picks
+            - category_grid
+            - gallery_block
+        title:
+          type: string
+          nullable: true
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComposedHomepageGroup"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComposedHomepageImage"
+        caption:
+          type: string
+          nullable: true
+        fellBackToLatest:
+          type: boolean
+          description: True when curation resolved to nothing and the latest eligible articles were substituted.
     ComposedSiteIdentity:
       description: Both halves of site identity in one answer. The four SEO-owned fields are named exactly as seo_distribution names them, so this is visibly a passthrough rather than a second definition that could drift.
       allOf:
@@ -21933,6 +22167,103 @@ components:
           type: string
           format: date-time
           nullable: true
+    PublicAdPlacement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Internal label. A consumer renders it as alt text only when the media object carries none.
+        linkUrl:
+          type: string
+          nullable: true
+        mediaPublicUrl:
+          type: string
+          description: The media registry's own server-generated URL. There is no client-supplied URL column on this table.
+        mediaAltText:
+          type: string
+          nullable: true
+    PublicBlogPageDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        contentJson:
+          $ref: "#/components/schemas/BlogContentJson"
+          description: The derived block projection this repo's own renderer reads (ADR-0100).
+        bodyPortableText:
+          description: The canonical body. Empty until `bun run blog:portable-text:backfill` has run for this deployment.
+        contentText:
+          type: string
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        locale:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        visibility:
+          type: string
+          enum:
+            - public
+            - unlisted
+        featuredMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        pageType:
+          type: string
+        resolvedMedia:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              publicUrl:
+                type: string
+              altText:
+                type: string
+                nullable: true
+              mimeType:
+                type: string
+              width:
+                type: integer
+                nullable: true
+              height:
+                type: integer
+                nullable: true
+          description: Every media object the body references, resolved in one call. An id that no longer resolves is simply absent.
+    PublicBlogPageSummary:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        locale:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     PublicComment:
       type: object
       description: A single publicly visible comment. Deliberately carries NO moderation metadata and no author contact data — `bodyHtml` is the escaped render of stored plain text, containing only `<br>` and safe http(s) `<a>` elements this server emitted.

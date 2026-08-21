@@ -307,6 +307,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/blog/pages/public.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/pages/public/[slug].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/blog/posts/[id].ts",
       "workClass": "interactive",
       "source": "default"
@@ -772,6 +782,11 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/news-portal/ad-placements/active.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/news-portal/ad-placements/index.ts",
       "workClass": "interactive",
       "source": "default"
@@ -780,6 +795,11 @@
       "path": "src/pages/api/v1/news-portal/homepage-sections/[id].ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/news-portal/homepage-sections/composed.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/news-portal/homepage-sections/index.ts",
