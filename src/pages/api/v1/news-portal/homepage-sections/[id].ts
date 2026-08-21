@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -143,6 +144,15 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       sectionId: id
     });
 
+    // ADR-0042 §Rule 21 (Issue #628) — same surface as creation: the composed
+    // homepage at `/blog/{code}`.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "news_portal.homepage_section.updated"
+    );
+
     return ok(updated);
   });
 };
@@ -239,6 +249,15 @@ export const DELETE: APIRoute = async ({
       moduleKey: "blog_content",
       sectionId: id
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — a removed section keeps appearing on the
+    // cached front page until TTL, which is the removal not having happened.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "news_portal.homepage_section.deleted"
+    );
 
     return ok({ id, deleted: true });
   });

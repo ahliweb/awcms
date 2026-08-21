@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -180,6 +181,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       moduleKey: "blog_content",
       adPlacementId: placement.id
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — since Issue #621 ad slots render on five
+    // public routes. A booked placement that does not appear until TTL is
+    // impressions an advertiser paid for and did not get.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "news_portal.ad_placement.created"
+    );
 
     return ok(placement);
   });

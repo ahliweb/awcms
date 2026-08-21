@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -199,6 +200,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       termId: term.id,
       slug: term.slug
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — `/blog/{code}/category/{slug}` and
+    // `/tag/{slug}` resolve the term through `fetchPublicTermBySlug`, and a post
+    // detail page lists its terms. A new term is a new archive URL.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.term.created"
+    );
 
     return ok(term);
   });

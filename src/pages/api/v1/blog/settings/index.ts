@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -134,6 +135,17 @@ export const PATCH: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       moduleKey: "blog_content"
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — `rssEnabled`/`sitemapEnabled` decide
+    // whether `feed.xml` and `sitemap-blog.xml` answer AT ALL, and both are the
+    // `blog-discovery` surface. Turning one off while the edge keeps serving it
+    // is the decision not having taken effect.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.settings.updated"
+    );
 
     return ok(settings);
   });
