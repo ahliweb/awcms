@@ -201,7 +201,7 @@ export async function createBlogPost(
       ${input.excerpt},
       ${withProjectedBlocks(input.contentJson, input.bodyPortableText)},
       ${portableTextToPlainText(input.bodyPortableText)},
-      ${JSON.stringify(input.bodyPortableText)}::jsonb, 'draft',
+      ${input.bodyPortableText}::jsonb, 'draft',
       ${input.visibility}, ${input.featuredMediaId}, ${input.seoImageMediaId},
       ${input.seoTitle}, ${input.metaDescription}, ${input.canonicalUrl}, ${input.locale},
       ${input.autoInternalTagLinksDisabled}
@@ -496,7 +496,7 @@ export async function updateBlogPost(
         END,
         body_portable_text = CASE
           WHEN ${input.bodyPortableText !== undefined}
-            THEN ${input.bodyPortableText === undefined ? null : JSON.stringify(input.bodyPortableText)}::jsonb
+            THEN ${input.bodyPortableText ?? null}::jsonb
           ELSE body_portable_text
         END,
         locale = COALESCE(${input.locale ?? null}, locale),

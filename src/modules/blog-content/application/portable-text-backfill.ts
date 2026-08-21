@@ -120,14 +120,14 @@ async function backfillOneTable(
       if (table === "awcms_blog_posts") {
         await tx`
           UPDATE awcms_blog_posts
-          SET body_portable_text = ${JSON.stringify(document)}::jsonb,
+          SET body_portable_text = ${document}::jsonb,
               content_text = ${plainText}
           WHERE tenant_id = ${tenantId} AND id = ${row.id}
         `;
       } else {
         await tx`
           UPDATE awcms_blog_pages
-          SET body_portable_text = ${JSON.stringify(document)}::jsonb,
+          SET body_portable_text = ${document}::jsonb,
               content_text = ${plainText}
           WHERE tenant_id = ${tenantId} AND id = ${row.id}
         `;

@@ -95,7 +95,7 @@ export async function enqueueDirectAddressEmail(
     VALUES
       (${tenantId}, ${correlationId}, ${templateKey}, ${templateKey},
        ${normalized}, ${addressHash}, ${maskIdentifierValue(normalized)},
-       ${rendered.subject}, ${JSON.stringify(variables)}::jsonb, 'high')
+       ${rendered.subject}, ${variables}::jsonb, 'high')
   `;
 
   return { enqueued: true };
