@@ -52,9 +52,18 @@ const FIXTURE_PATH =
  * Surfaces `ahliweb/awcms-astro` CALLS today.
  *
  * The neighbour repo is the authority for this list, and it has a gate for it:
- * `tests/kontrak-awcms.test.mjs` there asserts "the source calls exactly three
- * surfaces", derived from `src/` **with comments stripped first**, and bound
- * two-ways to a marker block in its own skill.
+ * `tests/kontrak-awcms.test.mjs` there asserts an exact set of surfaces,
+ * derived from `src/` **with comments stripped first**, and bound two-ways to a
+ * marker block in its own skill. That count is written as a literal there, so a
+ * new surface reddens it even when the author remembered the skill.
+ *
+ * ## The order this list is edited in is load-bearing
+ *
+ * That repo's Definition of Done says a new call "reddens it until `awcms`
+ * freezes its response shape" — so an entry lands HERE first, and the neighbour
+ * starts calling it second. Reversing the two would put a build in that repo on
+ * a shape this repo has not agreed to keep, which is precisely the failure this
+ * fixture exists to move back to where it can be fixed.
  *
  * ## Why this list used to hold six, and why that was wrong
  *
@@ -101,6 +110,8 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
+  "/api/v1/site-profile/composed":
+    "ADR-0102 — who the site IS: masthead, footer, editorial address, contact details, social links, plus the `seo_distribution` half this endpoint merges in (#596). The neighbour's Definition of Done requires this repo to freeze the shape BEFORE it starts calling, so the entry is a promise today and moves to CONSUMED the moment `awcms-astro` renders from it.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":

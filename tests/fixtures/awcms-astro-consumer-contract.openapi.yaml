@@ -372,6 +372,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/site-profile/composed:
+    get:
+      operationId: siteProfileComposedRead
+      tags:
+        - Site Profile
+      summary: Site identity for a build client, both halves in one answer
+      description: "Gated by `site_profile.profile.read`. ADR-0102 splits OWNERSHIP — `awcms_seo_tenant_settings` keeps what crawlers see (og:site_name, the JSON-LD Organization node, the default og:image) and `awcms_site_profile` owns what people read. That boundary is right for ownership and wrong for consumers, so the composition happens here, once, rather than in every build template that would otherwise have to call two endpoints and merge them — and drift when one of them forgot. `logoMediaId`/`faviconMediaId` are media object IDS, not URLs: a consumer resolves them through media_library exactly as it resolves an article image, which is what keeps managed-media enforcement meaningful."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Composed site identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ComposedSiteIdentity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
   parameters:
     CorrelationId:
@@ -680,6 +709,12 @@ components:
           items:
             type: string
             format: uuid
+        institutionIds:
+          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them."
+          type: array
+          items:
+            type: string
+            format: uuid
     BlogPostSummary:
       type: object
       description: |
@@ -781,6 +816,12 @@ components:
           items:
             type: string
             format: uuid
+        institutionIds:
+          description: "Issue #595 — the fourth classification dimension (sql/131). Institution is a TABLE rather than a taxonomy type because it carries a branch, a region code and its own landing SEO, but on this payload it is the same shape as `termIds`. Full-replace semantics: absent leaves the assignments alone, `[]` removes them."
+          type: array
+          items:
+            type: string
+            format: uuid
         translationGroupId:
           type: string
           format: uuid
@@ -788,6 +829,26 @@ components:
         autoInternalTagLinksDisabled:
           type: boolean
           description: Per-post opt-out of automatic internal tag linking.
+    ComposedSiteIdentity:
+      description: Both halves of site identity in one answer. The four SEO-owned fields are named exactly as seo_distribution names them, so this is visibly a passthrough rather than a second definition that could drift.
+      allOf:
+        - $ref: "#/components/schemas/SiteProfile"
+        - type: object
+          properties:
+            siteName:
+              type: string
+              nullable: true
+            organizationName:
+              type: string
+              nullable: true
+            organizationLogoMediaId:
+              type: string
+              format: uuid
+              nullable: true
+            defaultSocialMediaId:
+              type: string
+              format: uuid
+              nullable: true
     IssueMachineCredentialRequest:
       type: object
       required:
@@ -1045,3 +1106,64 @@ components:
               scopeId:
                 type: string
                 format: uuid
+    SiteProfile:
+      type: object
+      properties:
+        tagline:
+          type: string
+          nullable: true
+          maxLength: 200
+        copyrightNotice:
+          type: string
+          nullable: true
+          maxLength: 300
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        faviconMediaId:
+          description: "Separate from the logo on purpose: a favicon is square, tiny and usually a different crop, and one field for both would force every tenant to accept whichever compromise the renderer picked."
+          type: string
+          format: uuid
+          nullable: true
+        editorialAddress:
+          description: Free text and multi-line on purpose — Indonesian addresses do not decompose into street/city/postcode reliably, and forcing them to would produce a form nobody can fill in correctly.
+          type: string
+          nullable: true
+          maxLength: 1000
+        contactEmail:
+          type: string
+          nullable: true
+          maxLength: 320
+        contactPhone:
+          type: string
+          nullable: true
+          maxLength: 50
+        whatsappNumber:
+          description: "Kept separate from contactPhone: a newsroom's WhatsApp tip line is frequently not its switchboard number."
+          type: string
+          nullable: true
+          maxLength: 50
+        socialLinks:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SocialProfileLink"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SocialProfileLink:
+      type: object
+      required:
+        - platform
+        - url
+      properties:
+        platform:
+          description: A label, deliberately NOT an enumeration. Closing the set would mean a migration every time a newsroom joins a new network, and unlike a content block type nothing renders differently per value — an unknown platform degrades to a plain link.
+          type: string
+          maxLength: 40
+        url:
+          description: "Absolute http(s) only. REFUSED rather than sanitized otherwise: this is rendered as an <a href> on every public page, so a javascript:/data: value would be stored XSS with a very long reach."
+          type: string
+          maxLength: 500
