@@ -11,7 +11,11 @@ import { logAdminPageError } from "../../../../lib/logging/error-log";
 import { fetchBlogPostById } from "../../../../modules/blog-content/application/blog-post-directory";
 import { fetchBlogSettings } from "../../../../modules/blog-content/application/blog-settings-directory";
 import { buildNewsArticleSeoMetadata } from "../../../../modules/blog-content/application/news-article-seo-metadata";
-import { renderBlogBodyHtml } from "../../../../modules/blog-content/domain/blog-body-rendering";
+import {
+  hasCanonicalPortableTextBody,
+  renderBlogBodyHtml
+} from "../../../../modules/blog-content/domain/blog-body-rendering";
+import { renderPreviewOverlayHtml } from "../../../../modules/blog-content/domain/preview-overlay";
 import { renderPublicPageShell } from "../../../../modules/blog-content/domain/public-page-rendering";
 import {
   resolveMetaDescription,
@@ -64,6 +68,25 @@ import { mediaLibraryPortAdapter } from "../../../../modules/media-library/appli
  * from the publication predicate, which a draft does not satisfy. The gate for
  * the whole page is `blog_content.posts.update` through `loadAdminScreen`: the
  * person who may change the article is the person who may see it unpublished.
+ *
+ * ## The editing overlay, and why it changes none of the above
+ *
+ * The second half of the issue's scope — click a block, fix it here — is
+ * `src/lib/ui/blog-preview-overlay.ts`, served as a bundled module from
+ * `public/`. This route contributes exactly two things to it: the renderer
+ * stamps each editable block with its index in the document
+ * (`editableBlockIndexes`, off everywhere else so public output is
+ * byte-identical), and the body carries the canonical document as an
+ * `application/json` data block for the overlay to splice into.
+ *
+ * The save goes to `PATCH /api/v1/blog/posts/{id}` — the endpoint the editor
+ * screen already uses, with its own authorization, its own validation and its
+ * own revision and cache-purge behaviour. So this file still writes nothing,
+ * and there is still no second authorization path: a principal who reaches this
+ * page holds `posts.update`, and the API asks again anyway.
+ *
+ * The overlay is offered ONLY when the canonical body is what got rendered.
+ * See `editable` below.
  */
 export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const ssr = locals.ssrContext;
@@ -127,9 +150,18 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         }
       );
 
+      // The editing overlay is offered only when the CANONICAL body is what
+      // this page is about to render. On a row that has not been through
+      // `blog:portable-text:backfill`, `renderBlogBodyHtml` falls back to the
+      // lossy projection — and the projection is not the array the overlay
+      // splices an edited block into, so a click could not be saved. Offering
+      // one anyway would be the preview lying about what it can do.
+      const editable = hasCanonicalPortableTextBody(post);
+
       const contentHtml = renderBlogBodyHtml(
         post,
-        seoMetadata.resolvedGalleryUrls
+        seoMetadata.resolvedGalleryUrls,
+        { editableBlockIndexes: editable }
       );
 
       // No ad slots and no share buttons. Both are things a READER gets, and
@@ -142,7 +174,7 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
   <h1>${escapeHtml(post.title)}</h1>
   <p><time datetime="${previewInstant.toISOString()}">${escapeHtml(previewInstant.toDateString())}</time></p>
   ${contentHtml}
-</article>`;
+</article>${editable ? renderPreviewOverlayHtml(postId, post.bodyPortableText) : ""}`;
 
       return {
         post,
