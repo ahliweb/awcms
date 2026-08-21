@@ -94,7 +94,9 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/media/public-origin":
     "the media origin the build must name in `img-src` BEFORE pulling a single object (#370). `scripts/asal-media.mjs`.",
   "/api/v1/site-profile/composed":
-    "who the site IS — masthead, favicon, footer, editorial address, contact details, social links, and the `Organization` node, plus the `seo_distribution` half this endpoint merges in (#596, ADR-0102). `src/lib/awcms/profil.ts` there. Promised as COMMITTED in #645 and moved here when `ahliweb/awcms-astro#61` made the call real."
+    "who the site IS — masthead, favicon, footer, editorial address, contact details, social links, and the `Organization` node, plus the `seo_distribution` half this endpoint merges in (#596, ADR-0102). `src/lib/awcms/profil.ts` there. Promised as COMMITTED in #645 and moved here when `ahliweb/awcms-astro#61` made the call real.",
+  "/api/v1/blog/terms":
+    "the tenant's vocabulary, read at build time so a category or tag archive can exist at all (#597 item 1, ADR-0104). `src/lib/awcms/taksonomi.ts` there. The consumer uses the `?order=created_at` TRAVERSAL and never the default alphabetical list — that list returns some of the terms and says nothing about the rest (#647), and a site built from it would generate a hundred archive pages out of thousands. Promised as COMMITTED in #650 and moved here when `ahliweb/awcms-astro#66` made the call real."
 };
 
 /**
@@ -112,8 +114,6 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
-  "/api/v1/blog/terms":
-    "ADR-0104 — the tenant's vocabulary, read at build time so a category or tag archive can exist at all (#597 item 1). The consumer uses the `?order=created_at` TRAVERSAL, never the default alphabetical list, which returns some of the terms and says nothing about the rest (#647). Frozen here first; it moves to CONSUMED when `ahliweb/awcms-astro` calls it.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
