@@ -6829,14 +6829,21 @@ Gated by blog_content.templates.configure.
 - **operationId**: `blogListTerms`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.taxonomies.read. Optional ?taxonomyType= filter.
+Gated by blog_content.taxonomies.read. Optional ?taxonomyType= filter, ?limit= bounded (default 100, max 200).
+
+Ordering defaults to `name ASC` — right for the admin taxonomy screen, and unsound as a keyset key because renaming a term moves it, so a row can cross a page boundary between requests and be skipped or repeated. A caller that needs EVERY term passes `?order=created_at`, which is immutable, and follows `nextCursor` until it is null. `?cursor=` without `?order=created_at` is refused with 400 rather than quietly honoured.
+
+**The default list is bounded and says nothing about what it left out.** For `category` or `channel` that is harmless — a newsroom has a dozen of each. For `tag` it is not: a vocabulary grown over tens of thousands of articles runs to thousands of entries, and a caller that generated one archive page per tag from the default list would build a hundred pages, `200 OK`, with every article filed under a later tag pointing at a page nobody generated. That is what `order=created_at` exists for.
 
 **Parameters**
 
-| Name               | In     | Required | Type                                        | Description |
-| ------------------ | ------ | -------- | ------------------------------------------- | ----------- |
-| `taxonomyType`     | query  | no       | enum(`category`, `tag`, `channel`, `topic`) |             |
-| `X-Correlation-ID` | header | no       | string                                      |             |
+| Name               | In     | Required | Type                                        | Description                                                                                                                                          |
+| ------------------ | ------ | -------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `taxonomyType`     | query  | no       | enum(`category`, `tag`, `channel`, `topic`) |                                                                                                                                                      |
+| `limit`            | query  | no       | integer                                     |                                                                                                                                                      |
+| `order`            | query  | no       | enum(`created_at`, `name`)                  | Sort key. `created_at` selects the STABLE, cursor-capable traversal; `name` (default) is the admin ordering and rejects `cursor`.                    |
+| `cursor`           | query  | no       | string                                      | Opaque keyset cursor from a previous response's `nextCursor`. Requires `order=created_at`. A malformed value is a 400, never treated as "no cursor". |
+| `X-Correlation-ID` | header | no       | string                                      |                                                                                                                                                      |
 
 **Responses**
 

@@ -17,13 +17,11 @@ import { log } from "../../../../../lib/logging/logger";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import {
   createBlogTerm,
-  listBlogTerms
+  listBlogTerms,
+  listBlogTermsPage
 } from "../../../../../modules/blog-content/application/blog-taxonomy-directory";
 import { validateCreateBlogTermInput } from "../../../../../modules/blog-content/domain/blog-term-validation";
-import {
-  isTaxonomyType,
-  TAXONOMY_TYPE_LIST
-} from "../../../../../modules/blog-content/domain/taxonomy-policy";
+import { parseBlogTermListQuery } from "../../../../../modules/blog-content/domain/blog-term-list-query";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -37,7 +35,28 @@ const CONFIGURE_GUARD = {
   action: "configure" as const
 };
 
-/** `GET /api/v1/blog/terms` (Issue #539) — list this tenant's non-deleted categories/tags, `?taxonomyType=` optional filter. */
+/**
+ * `GET /api/v1/blog/terms` (Issue #539) — list this tenant's non-deleted
+ * vocabularies. `?taxonomyType=` optional filter, `?limit=` bounded
+ * (default 100, max 200).
+ *
+ * ## `?order=created_at` and `?cursor=` — a stable traversal (Issue #597)
+ *
+ * The default ordering is `name ASC`: right for the admin taxonomy screen,
+ * and unsound as a keyset key, because renaming a term moves it and a row can
+ * cross the page boundary between two requests — skipped, or returned twice,
+ * with nothing able to detect it.
+ *
+ * Until this existed there was no second option, so a caller that needed EVERY
+ * term got the alphabetically-first hundred and no signal that more existed.
+ * For `category` that is harmless; for `tag` on the 23,906-article archive of
+ * Issue #599 it means a site that builds a hundred tag pages out of thousands,
+ * green, with every article filed under a later tag linking into a 404.
+ *
+ * So a caller that needs the whole vocabulary asks for `?order=created_at`,
+ * which is immutable, and follows `nextCursor`. Passing `?cursor=` without it
+ * is refused rather than quietly honoured — see `blog-term-list-query.ts`.
+ */
 export const GET: APIRoute = async ({ request, cookies, url }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
 
@@ -49,15 +68,13 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
   }
 
-  const taxonomyTypeParam = url.searchParams.get("taxonomyType");
+  const query = parseBlogTermListQuery(url.searchParams);
 
-  if (taxonomyTypeParam !== null && !isTaxonomyType(taxonomyTypeParam)) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `taxonomyType must be one of ${TAXONOMY_TYPE_LIST}.`
-    );
+  if (!query.valid) {
+    return fail(400, "VALIDATION_ERROR", query.message);
   }
+
+  const { taxonomyType, limit, stableOrder, cursor } = query.value;
 
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -76,9 +93,17 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
       return auth.denied;
     }
 
-    const terms = await listBlogTerms(tx, tenantId, {
-      taxonomyType: taxonomyTypeParam ?? undefined
-    });
+    if (stableOrder) {
+      const page = await listBlogTermsPage(tx, tenantId, {
+        taxonomyType,
+        limit,
+        cursor
+      });
+
+      return ok({ terms: page.items, nextCursor: page.nextCursor });
+    }
+
+    const terms = await listBlogTerms(tx, tenantId, { taxonomyType, limit });
 
     return ok({ terms });
   });
