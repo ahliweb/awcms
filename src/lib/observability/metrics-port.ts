@@ -505,6 +505,16 @@ export const METRIC_DEFINITIONS = {
       "At most 8 — 2 code-defined outcomes (accepted, rejected) x 4 code-defined policy modes.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
+  newsletter_subscribe_total: {
+    name: "newsletter_subscribe_total",
+    type: "counter",
+    description:
+      "Count of public newsletter subscription attempts by outcome — the abuse-pressure signal for an anonymous endpoint that sends mail on somebody else's behalf. `accepted` deliberately covers a new subscription, a re-subscription, an already-active address and a suppressed one alike: the endpoint answers the same body for all four (ADR-0103), and a metric that separated them would rebuild the enumeration oracle the response refuses to be.",
+    allowedLabelKeys: ["outcome"],
+    approxCardinality:
+      "3 — code-defined outcomes (accepted, invalid, rate_limited).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
   comments_abuse_blocks_total: {
     name: "comments_abuse_blocks_total",
     type: "counter",

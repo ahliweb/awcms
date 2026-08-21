@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](13_final_master_index_traceability.md)
 
-<!-- i18n-source-hash: sha256:231749280c567111bc521e1f9ba733372607a11d1869faed7256a8f664748c15 -->
+<!-- i18n-source-hash: sha256:f5bde5afbf4c00f21aad7ac9139ddf823cd114a872e2161bb6cecb6b98af728e -->
 
 # Bagian 13 — Final Master Index dan Traceability Matrix
 
@@ -144,13 +144,13 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 diproduksi `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) dari
 registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`, dan
 `bun run repo:inventory:check` ada di rantai `bun run check`. **79 file migration nyata** di
-`sql/` (`001`..`081`), dipetakan ke **23 modul terdaftar** (urutan
+`sql/` (`001`..`081`), dipetakan ke **24 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`,
 `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`,
-`comments` — **23 modul**; `news-portal` dilebur ke `blog-content` oleh
+`comments` — **24 modul**; `news-portal` dilebur ke `blog-content` oleh
 [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,

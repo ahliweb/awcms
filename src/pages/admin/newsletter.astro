@@ -1,0 +1,376 @@
+---
+/**
+ * Newsletter subscribers (Issue #598, ADR-0103).
+ *
+ * ## What this screen is for, and what it deliberately cannot do
+ *
+ * The three PUBLIC endpoints answer the same neutral body for every outcome, so
+ * nobody can use them to ask whether a named person subscribes here. This screen
+ * is where the real state IS visible — behind `newsletter.subscribers.read` —
+ * because somebody has to be able to see it, and an operator with a guard is the
+ * right somebody.
+ *
+ * It cannot ADD a subscriber. There is no form, and that is the point: a
+ * subscription is a person's decision, and an admin-side "add" would be a way to
+ * put an address on a list without consent — the exact thing double opt-in
+ * exists to prevent. Importing a legacy list is a job with its own audit trail,
+ * not a button.
+ *
+ * It cannot see either token. `listSubscribers` does not select them; both are
+ * bearer credentials, and a screen that displayed one would let anyone reading
+ * over a shoulder end somebody's subscription.
+ *
+ * ## Suppress is the one write
+ *
+ * And it requires a reason, because a suppression is the one state a subscriber
+ * cannot leave by re-subscribing — so it is the one somebody will later ask
+ * about, and "suppressed via admin" answers nothing.
+ *
+ * The pending count in the summary is load-bearing, not decoration: a tenant
+ * with no active confirmation template collects `pending` rows that never
+ * advance, and this is where that becomes visible instead of silent.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  countSubscribersByStatus,
+  listSubscribers,
+  SUBSCRIBER_LIST_LIMIT,
+  type NewsletterSubscriberView
+} from "../../modules/newsletter/application/subscriber-directory";
+import {
+  NEWSLETTER_SUBSCRIBER_STATUSES,
+  type NewsletterSubscriberStatus
+} from "../../modules/newsletter/domain/subscriber-status";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const statusRaw = readParam("status");
+const statusFilter = (
+  NEWSLETTER_SUBSCRIBER_STATUSES as readonly string[]
+).includes(statusRaw)
+  ? (statusRaw as NewsletterSubscriberStatus)
+  : undefined;
+
+const cursorParam = readParam("cursor");
+// A malformed cursor is dropped rather than forwarded — a hand-edited query
+// string must not turn this screen into an error page.
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "newsletter",
+    activityCode: "subscribers",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time — concurrent queries on a
+    // single transaction connection leak it.
+    page: await listSubscribers(
+      tx,
+      ssr.tenantId,
+      { status: statusFilter },
+      cursor ?? undefined
+    ),
+    counts: await countSubscribersByStatus(tx, ssr.tenantId),
+    canConfigure: await can({
+      moduleKey: "newsletter",
+      activityCode: "subscribers",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/newsletter.astro: failed to load the subscriber list",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const subscribers: NewsletterSubscriberView[] =
+  screen.state === "allowed" ? screen.data.page.items : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.page.nextCursor : null;
+const counts: Record<string, number> =
+  screen.state === "allowed" ? screen.data.counts : {};
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+
+const STATUS_VARIANT: Record<string, string> = {
+  pending: "info",
+  active: "success",
+  unsubscribed: "warning",
+  suppressed: "danger"
+};
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString().replace("T", " ").slice(0, 19) : "—";
+}
+
+/** Rebuilds the current query string with one key replaced — keeps the filter across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null || value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/newsletter?${query}` : "/admin/newsletter";
+}
+
+const columnCount = canConfigure ? 6 : 5;
+---
+
+<AdminLayout title="Newsletter">
+  <header class="page-header fade-in-up">
+    <h1 id="newsletter-heading">{t("Newsletter")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="newsletter-denied">
+        {t("You do not have permission to read the subscriber list.")}
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="newsletter-error">
+        {t("The subscriber list could not be loaded. Please try again.")}
+      </p>
+    )
+  }
+
+  <p class="form-error" id="newsletter-action-error" hidden></p>
+
+  {
+    canRead && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="Subscriber summary">
+        <div class="stat-grid stagger-children">
+          {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
+            <div class="stat-card">
+              <span class="stat-label">{status}</span>
+              <span class="stat-value">{counts[status] ?? 0}</span>
+              {status === "pending" && (
+                <span class="stat-hint">
+                  {t(
+                    "Submitted and never confirmed. A number that only grows usually means this tenant has no active confirmation email template."
+                  )}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="newsletter-filter-title"
+      >
+        <h2 class="admin-section-title" id="newsletter-filter-title">
+          {t("Filter")}
+        </h2>
+        <form method="get" action="/admin/newsletter" class="admin-filter-form">
+          <label class="field">
+            <span class="field-label">{t("Status")}</span>
+            <select name="status" class="field-input">
+              <option value="">{t("All")}</option>
+              {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
+                <option value={status} selected={status === statusFilter}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div class="admin-toolbar">
+            <button type="submit" class="btn-primary">
+              {t("Apply")}
+            </button>
+            <a class="quick-link" href="/admin/newsletter">
+              {t("Reset")}
+            </a>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="newsletter-list-title"
+      >
+        <h2 class="admin-section-title" id="newsletter-list-title">
+          {t("Subscribers")}
+          <span class="count-pill">{subscribers.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">{t("Newsletter subscribers.")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Address")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Source")}</th>
+                <th scope="col">{t("Consent")}</th>
+                <th scope="col">{t("Ended")}</th>
+                {canConfigure && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {subscribers.length === 0 ? (
+                <tr>
+                  <td colspan={columnCount} class="cell-muted">
+                    {t("No subscribers match this filter.")}
+                  </td>
+                </tr>
+              ) : (
+                subscribers.map((item) => (
+                  <tr>
+                    {/* `set:text`, never parsed — an address is caller-supplied
+                        and reaches this table verbatim. */}
+                    <td data-label="Address">
+                      <span class="cell-strong" set:text={item.email} />
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {item.status}
+                      </span>
+                    </td>
+                    <td data-label="Source" set:text={item.source} />
+                    <td data-label="Consent">
+                      <span class="cell-muted">
+                        {formatTimestamp(item.consentAt)}
+                      </span>
+                    </td>
+                    <td data-label="Ended">
+                      {item.suppressedAt ? (
+                        <>
+                          <span class="cell-muted">
+                            {formatTimestamp(item.suppressedAt)}
+                          </span>
+                          <span
+                            class="cell-muted"
+                            set:text={item.suppressionReason ?? ""}
+                          />
+                        </>
+                      ) : (
+                        <span class="cell-muted">
+                          {formatTimestamp(item.unsubscribedAt)}
+                        </span>
+                      )}
+                    </td>
+                    {canConfigure && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {item.status !== "suppressed" && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger newsletter-suppress-btn"
+                              data-subscriber-id={item.id}
+                            >
+                              {t("Suppress")}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+        <p class="form-hint">
+          {t("Up to")} {SUBSCRIBER_LIST_LIMIT} {t("per page.")}
+        </p>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'` with
+  // no `'unsafe-inline'` — an inlined script is blocked and the page's behaviour
+  // dies silently. Importing forces an external `/_astro/*.js`.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("newsletter-action-error");
+
+  onAction(".newsletter-suppress-btn", async (button) => {
+    const id = button.dataset.subscriberId;
+    if (!id) return;
+
+    // A reason is required by the endpoint and recorded on the audit row, which
+    // outlives the subscriber. Suppression is the one state a person cannot
+    // leave by re-subscribing, so it is the one somebody will later ask about.
+    const reason = window.prompt(
+      "Why is this address being suppressed? A suppressed address cannot be re-subscribed, including by the person who owns it."
+    );
+    if (reason === null) return;
+
+    if (reason.trim() === "") {
+      actionError.show("A reason is required to suppress a subscriber.");
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `/api/v1/newsletter/subscribers/${id}/suppress`, {
+          reason: reason.trim()
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not suppress the subscriber. Please try again.",
+      "Suppressing…"
+    );
+  });
+</script>

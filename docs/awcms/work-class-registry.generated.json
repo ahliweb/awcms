@@ -807,6 +807,11 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/newsletter/subscribers/[id]/suppress.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/offices/[id].ts",
       "workClass": "interactive",
       "source": "default"

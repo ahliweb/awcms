@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 23    |
-| Migrations                          | 138   |
-| `awcms_*` tables                    | 151   |
-| Tables with `FORCE` RLS             | 133   |
+| Registered modules                  | 24    |
+| Migrations                          | 139   |
+| `awcms_*` tables                    | 152   |
+| Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 421   |
-| Route files                         | 377   |
-| ADR                                 | 206   |
+| Test files                          | 422   |
+| Route files                         | 382   |
+| ADR                                 | 208   |
 
 ### Modules
 
@@ -39,6 +39,7 @@
 | `seo_distribution`     | 0.2.0   | active | domain | no   | `tenant_admin`, `identity_access`, `module_management`                                             |
 | `form_drafts`          | 0.1.0   | active | system | no   | `identity_access`                                                                                  |
 | `site_search`          | 0.1.0   | active | domain | no   | `tenant_admin`, `identity_access`, `module_management`                                             |
+| `newsletter`           | 0.1.0   | active | domain | no   | `tenant_admin`, `identity_access`, `module_management`, `email`, `profile_identity`                |
 | `site_profile`         | 0.1.0   | active | domain | no   | `tenant_admin`, `identity_access`, `media_library`, `seo_distribution`                             |
 | `comments`             | 0.1.0   | active | domain | no   | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime` |
 | `idn_admin_regions`    | 0.1.0   | active | system | no   | `tenant_admin`, `identity_access`                                                                  |
@@ -186,6 +187,7 @@
 | 136 | `sql/136_awcms_blog_pages_worker_select.sql`                       |
 | 137 | `sql/137_awcms_media_rights_metadata.sql`                          |
 | 138 | `sql/138_awcms_blog_legacy_provenance.sql`                         |
+| 139 | `sql/139_awcms_newsletter_schema.sql`                              |
 
 ### Tables & Row-Level Security
 
@@ -264,6 +266,7 @@
 | `awcms_news_media_objects`               | `sql/041_awcms_news_media_object_registry_schema.sql`      | yes | yes   |
 | `awcms_news_portal_ad_placements`        | `sql/045_awcms_news_portal_ad_placements_schema.sql`       | yes | yes   |
 | `awcms_news_portal_homepage_sections`    | `sql/044_awcms_news_portal_homepage_sections_schema.sql`   | yes | yes   |
+| `awcms_newsletter_subscribers`           | `sql/139_awcms_newsletter_schema.sql`                      | yes | yes   |
 | `awcms_object_sync_queue`                | `sql/012_awcms_object_sync_queue_schema.sql`               | yes | yes   |
 | `awcms_offices`                          | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
 | `awcms_oidc_auth_requests`               | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
@@ -347,7 +350,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 365        |
+| `(root)`      | 366        |
 | `e2e`         | 12         |
 | `integration` | 43         |
 | `unit`        | 1          |
@@ -356,8 +359,8 @@
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 304   |
-| `/admin/**`     | 48    |
+| `/api/v1/**`    | 308   |
+| `/admin/**`     | 49    |
 | publik / anonim | 25    |
 
 <!-- END GENERATED: repo-inventory -->

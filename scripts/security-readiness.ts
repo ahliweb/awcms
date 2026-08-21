@@ -1427,6 +1427,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_comments_moderation_events: ["SELECT", "INSERT"],
   awcms_comments_abuse_events: ["SELECT", "DELETE"],
   awcms_comments_reply_subscriptions: ["SELECT", "DELETE"],
+  // ADR-0103 — data-lifecycle:archive-purge (sql/139): the retention sweep for
+  // `pending` rows nobody ever confirmed. SELECT to find them, DELETE to remove
+  // them. No UPDATE: the job never changes a subscriber's STATE, and an
+  // `active`, `unsubscribed` or `suppressed` row is never touched by it at all —
+  // an unsubscribe record is what answers a later complaint.
+  awcms_newsletter_subscribers: ["SELECT", "DELETE"],
   // ADR-0042 — edge-cache:purge (sql/068): SELECT claimable rows, UPDATE to
   // take the lease and record the outcome, DELETE to prune rows that completed
   // outside the retention window (the job really does prune — this is not a

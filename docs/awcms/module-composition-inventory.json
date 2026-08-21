@@ -1,5 +1,5 @@
 {
-  "moduleCount": 23,
+  "moduleCount": 24,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -208,6 +208,28 @@
       "permissionCount": 13,
       "navigationCount": 2,
       "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "newsletter",
+      "name": "Newsletter",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "module_management",
+        "email",
+        "profile_identity"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 2,
+      "navigationCount": 1,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

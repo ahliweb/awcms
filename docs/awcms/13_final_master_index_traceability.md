@@ -142,13 +142,13 @@ Source: `docs/awcms/repo-inventory.md` §Migrations and
 is produced by `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) from
 the module registry, `sql/`, `tests/`, `src/pages/`, and `docs/adr/`, and
 `bun run repo:inventory:check` is in the `bun run check` chain. **79 real migration files** in
-`sql/` (`001`..`081`), mapped onto **23 registered modules** (order of
+`sql/` (`001`..`081`), mapped onto **24 registered modules** (order of
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`,
 `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`,
-`comments` — **23 modules**; `news-portal` was merged into `blog-content` by
+`comments` — **24 modules**; `news-portal` was merged into `blog-content` by
 [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). This table
 replaces the previous version, which quoted fictional file names (e.g.
 `003_awcms_catalog_inventory_schema.sql`,
