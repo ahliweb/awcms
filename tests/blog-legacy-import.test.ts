@@ -189,10 +189,19 @@ describe("the importer preserves what makes the archive worth moving", () => {
 describe("the import script refuses rather than repairs", () => {
   test("a body with rejections is skipped, not stored sanitized", async () => {
     const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
-    const block = source.slice(
-      source.indexOf("convertLegacyHtmlToPortableText(record.value.bodyHtml)"),
-      source.indexOf("accepted.push(")
+    // No closing paren in the anchor: the call now carries a second argument
+    // (`resolveImage`, Issue #599). The `not.toBe(-1)` is the lesson from that
+    // — a missing anchor makes `slice` return something a `toContain` can still
+    // be run against, so the assertion has to prove it found the code first.
+    const start = source.indexOf(
+      "convertLegacyHtmlToPortableText(record.value.bodyHtml"
     );
+    const end = source.indexOf("accepted.push(");
+
+    expect(start).not.toBe(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const block = source.slice(start, end);
 
     // The `continue` is the whole assertion: a rejected body never reaches
     // `accepted`, so it is never written with its images dropped.

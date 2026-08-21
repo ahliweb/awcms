@@ -42,6 +42,29 @@
  *    in one query, so a collision is a line in the report rather than a
  *    constraint error 12,000 rows into a run.
  *
+ * ## The images, and the two flags that make the archive importable at all
+ *
+ * Gate 2 above meant that in practice EVERY row of a real CKEditor archive was
+ * residue: `<img>` is refused because a managed-media deployment stores images
+ * as registry references, and nothing here can turn a legacy URL into one.
+ * That is not a gap to close by fetching the file — see
+ * `legacy-media-map.ts` and `legacy-ad-ingest.ts` for why the server must not.
+ * It is a handoff, and it now has both halves:
+ *
+ *   `--images=<path>`     writes the upload set (every distinct `<img src>` in
+ *                         the archive, most-used first) and stops. Upload those
+ *                         through `/admin/media`.
+ *   `--media-map=<path>`  takes the result back as `{ "<src>": "<uuid>" }`.
+ *                         Every id is checked against THIS tenant's registry
+ *                         before a single article is converted, and one that is
+ *                         not verified media aborts the run — an unresolvable
+ *                         media reference renders as nothing, so importing past
+ *                         it would produce articles that look fine and have
+ *                         lost their photographs.
+ *
+ * A mapped image becomes a one-item `gallery` node in the position it occupied
+ * in the article; an unmapped one is refused exactly as before.
+ *
  * ## Roles and transactions
  *
  * Runs as the APP role, not `awcms_worker`. This creates content, which is an
@@ -59,9 +82,17 @@
 import { getDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { safeErrorDetail } from "../src/lib/logging/error-sanitizer";
 import { convertLegacyHtmlToPortableText } from "../src/modules/blog-content/domain/legacy-html-conversion";
 import { parseLegacyImportRecord } from "../src/modules/blog-content/domain/legacy-import-record";
 import type { LegacyImportRecord } from "../src/modules/blog-content/domain/legacy-import-record";
+import {
+  mediaObjectIdsIn,
+  parseLegacyMediaMap,
+  summariseLegacyImageUsage
+} from "../src/modules/blog-content/domain/legacy-media-map";
+import type { LegacyImageUsage } from "../src/modules/blog-content/domain/legacy-media-map";
+import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
 import {
   findTakenSlugs,
   importLegacyBlogPost
@@ -89,9 +120,40 @@ function usage(message: string): void {
       "  --author=<uuid>      awcms_tenant_users.id recorded as the author (required)\n" +
       "  --system=<name>      legacy_source_system value, e.g. seputarborneo (required)\n" +
       "  --locale=<tag>       default locale for lines that carry none (default: id)\n" +
+      "  --images=<path>      write the upload set — every <img src> the archive\n" +
+      "                       references, most-used first — and stop there\n" +
+      '  --media-map=<path>   JSON { "<img src>": "<media object uuid>" }; every id is\n' +
+      "                       checked against this tenant's registry before anything is written\n" +
       "  --commit             write. Without it, nothing is written and you get the report.\n"
   );
   process.exitCode = 1;
+}
+
+/**
+ * The upload set, written for the operator and nothing else.
+ *
+ * This is the first half of the handoff `legacy-media-map.ts` describes: the
+ * converter refuses a raw `<img>` and names its `src`, and an archive of 23,906
+ * articles turns that into a refusal log nobody can act on. The same
+ * information, deduplicated and ordered, is a work list.
+ */
+async function writeImageInventory(
+  path: string,
+  usage_: readonly LegacyImageUsage[]
+): Promise<void> {
+  await Bun.write(path, `${JSON.stringify(usage_, null, 2)}\n`);
+
+  console.log(
+    `\nblog:legacy:import — wrote the upload set to ${path}\n` +
+      `  distinct images  ${usage_.length}\n\n` +
+      "  Upload these through the media library (`/admin/media`), which is the\n" +
+      "  one path with upload validation, MIME sniffing and size caps. This job\n" +
+      "  deliberately does not fetch them: pulling third-party bytes from the\n" +
+      "  server at an address somebody else chose is a request-forgery\n" +
+      "  primitive, and minting a `verified` registry row for bytes nothing\n" +
+      "  inspected is the assertion the upload pipeline exists to make.\n\n" +
+      "  Then hand the result back as --media-map=<path>.\n"
+  );
 }
 
 async function main(): Promise<void> {
@@ -101,6 +163,8 @@ async function main(): Promise<void> {
   const authorId = flag("author");
   const system = flag("system");
   const defaultLocale = flag("locale") ?? "id";
+  const imagesPath = flag("images");
+  const mediaMapPath = flag("media-map");
 
   if (!file) return usage("`--file=<path>` is required.");
   if (!tenantId) return usage("`--tenant=<uuid>` is required.");
@@ -117,76 +181,168 @@ async function main(): Promise<void> {
   >();
   const refusals: Refusal[] = [];
   const seenLegacyIds = new Set<string>();
-
-  for (const [index, raw] of lines.entries()) {
-    const lineNumber = index + 1;
-    const trimmed = raw.trim();
-
-    if (trimmed.length === 0) continue;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      refusals.push({
-        line: lineNumber,
-        legacyId: "(unparseable)",
-        reasons: ["line is not valid JSON"]
-      });
-      continue;
-    }
-
-    const record = parseLegacyImportRecord(parsed, { locale: defaultLocale });
-
-    if (!record.ok) {
-      refusals.push({
-        line: lineNumber,
-        legacyId:
-          typeof (parsed as { legacyId?: unknown })?.legacyId === "string"
-            ? String((parsed as { legacyId: string }).legacyId)
-            : "(missing)",
-        reasons: record.errors
-      });
-      continue;
-    }
-
-    // A duplicate inside ONE file is the export script's bug, and the database
-    // would answer it with a silent `DO NOTHING` — which reads in the report as
-    // "already imported" and hides the real problem.
-    if (seenLegacyIds.has(record.value.legacyId)) {
-      refusals.push({
-        line: lineNumber,
-        legacyId: record.value.legacyId,
-        reasons: ["legacyId appears more than once in this file"]
-      });
-      continue;
-    }
-    seenLegacyIds.add(record.value.legacyId);
-
-    const body = convertLegacyHtmlToPortableText(record.value.bodyHtml);
-
-    if (!body.ok) {
-      refusals.push({
-        line: lineNumber,
-        legacyId: record.value.legacyId,
-        reasons: body.rejections.map(
-          (rejection) =>
-            `${rejection.reason} at offset ${rejection.offset}: ${rejection.found}` +
-            (rejection.detail ? ` (${rejection.detail})` : "")
-        )
-      });
-      continue;
-    }
-
-    accepted.push(record.value);
-    acceptedBodies.set(record.value.legacyId, body);
-  }
+  /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
+  const imageSrcsPerArticle: string[][] = [];
 
   const sql = getDatabaseClient();
   let imported = 0;
   let alreadyPresent = 0;
 
   try {
+    let mediaMap: ReadonlyMap<string, string> = new Map();
+
+    if (mediaMapPath) {
+      let rawMap: unknown;
+      try {
+        rawMap = JSON.parse(await Bun.file(mediaMapPath).text());
+      } catch (error) {
+        console.error(
+          `blog:legacy:import — ${mediaMapPath} is not valid JSON: ${safeErrorDetail(error)}`
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      const parsedMap = parseLegacyMediaMap(rawMap);
+
+      if (!parsedMap.ok) {
+        console.error(
+          `blog:legacy:import — ${mediaMapPath} is not a usable media map:\n` +
+            parsedMap.errors.map((line) => `  - ${line}`).join("\n")
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      // Every id, against the registry, BEFORE a single article is converted.
+      // `renderGalleryBlockHtml` silently drops an item whose media object does
+      // not resolve, so an id this tenant does not own produces an article that
+      // imported cleanly and has lost its photographs — visible only to a
+      // reader. That cannot be a per-row refusal either: a map is one artefact,
+      // and a wrong id in it is a wrong artefact.
+      const ids = mediaObjectIdsIn(parsedMap.value);
+      const unsafe = await withTenantOrThrow(sql, tenantId, async (tx) => {
+        const found: string[] = [];
+        for (const id of ids) {
+          const safe = await mediaLibraryPortAdapter.isMediaReferenceSafe(
+            tx,
+            tenantId,
+            id
+          );
+          if (!safe) found.push(id);
+        }
+        return found;
+      });
+
+      if (unsafe.length > 0) {
+        console.error(
+          `blog:legacy:import — ${unsafe.length} of ${ids.length} media object id(s) in ` +
+            `${mediaMapPath} are not verified media of this tenant:\n` +
+            unsafe.map((id) => `  - ${id}`).join("\n") +
+            "\n\n  Nothing was written. An id the registry does not vouch for renders\n" +
+            "  as NOTHING, so importing past this would produce articles that look\n" +
+            "  fine and have lost their photographs.\n"
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(
+        `blog:legacy:import — ${ids.length} media object id(s) verified against this tenant's registry.`
+      );
+
+      mediaMap = parsedMap.value;
+    }
+
+    const resolveImage = mediaMapPath
+      ? (src: string): string | null => mediaMap.get(src) ?? null
+      : undefined;
+
+    for (const [index, raw] of lines.entries()) {
+      const lineNumber = index + 1;
+      const trimmed = raw.trim();
+
+      if (trimmed.length === 0) continue;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        refusals.push({
+          line: lineNumber,
+          legacyId: "(unparseable)",
+          reasons: ["line is not valid JSON"]
+        });
+        continue;
+      }
+
+      const record = parseLegacyImportRecord(parsed, { locale: defaultLocale });
+
+      if (!record.ok) {
+        refusals.push({
+          line: lineNumber,
+          legacyId:
+            typeof (parsed as { legacyId?: unknown })?.legacyId === "string"
+              ? String((parsed as { legacyId: string }).legacyId)
+              : "(missing)",
+          reasons: record.errors
+        });
+        continue;
+      }
+
+      // A duplicate inside ONE file is the export script's bug, and the database
+      // would answer it with a silent `DO NOTHING` — which reads in the report as
+      // "already imported" and hides the real problem.
+      if (seenLegacyIds.has(record.value.legacyId)) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: ["legacyId appears more than once in this file"]
+        });
+        continue;
+      }
+      seenLegacyIds.add(record.value.legacyId);
+
+      const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
+        resolveImage
+      });
+
+      // Collected from the converter's own findings, for every article, whether
+      // or not it is importable — the upload set is the whole archive's, and an
+      // article refused for a bad slug still needs its photographs uploaded.
+      imageSrcsPerArticle.push(
+        body.rejections
+          .filter((rejection) => rejection.reason === "unmanaged_image")
+          .map((rejection) => rejection.detail ?? "")
+      );
+
+      if (!body.ok) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: body.rejections.map(
+            (rejection) =>
+              `${rejection.reason} at offset ${rejection.offset}: ${rejection.found}` +
+              (rejection.detail ? ` (${rejection.detail})` : "")
+          )
+        });
+        continue;
+      }
+
+      accepted.push(record.value);
+      acceptedBodies.set(record.value.legacyId, body);
+    }
+
+    if (imagesPath) {
+      // A report, not a run. Writing the upload set and then importing would
+      // invite reading the summary and skipping the list it just produced.
+      await writeImageInventory(
+        imagesPath,
+        summariseLegacyImageUsage(imageSrcsPerArticle)
+      );
+      return;
+    }
+
     // One query for every slug in the file, before anything is written.
     const taken = await withTenantOrThrow(sql, tenantId, (tx) =>
       findTakenSlugs(

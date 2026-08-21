@@ -16,6 +16,8 @@
  *      and an import that re-dated the archive would look completely normal.
  *   3. The redirect map comes back LOCALE-PREFIXED (ADR-0098) and covers only
  *      published, non-deleted rows.
+ *   4. A mapped image is a REGISTRY question, not a uuid-shape one — see the
+ *      second suite at the bottom of this file.
  *
  * WORLD 1 (harness.ts) — the ephemeral migrated database, driven through the
  * application layer inside `withTenantOrThrow`.
@@ -43,6 +45,8 @@ import {
   importLegacyBlogPost
 } from "../../src/modules/blog-content/application/legacy-import-directory";
 import { listLegacyRedirectMappings } from "../../src/modules/blog-content/application/blog-post-directory";
+import { convertLegacyHtmlToPortableText } from "../../src/modules/blog-content/domain/legacy-html-conversion";
+import { mediaLibraryPortAdapter } from "../../src/modules/media-library/application/media-library-port-adapter";
 import type { LegacyPostImportInput } from "../../src/modules/blog-content/application/legacy-import-directory";
 
 const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -306,5 +310,160 @@ suite("legacy article import (integration, Issue #599)", () => {
 
     expect(map).toHaveLength(1);
     expect(map[0]!.targetPath).toBe("/id/blog/seputar/banjir-melanda-kobar");
+  });
+});
+
+/**
+ * The image handoff (Issue #599) — the half only a real database can answer.
+ *
+ * The pure half is in `tests/legacy-media-map.test.ts`. What matters here is
+ * that "verified media of THIS tenant" is decided by the registry and not by
+ * the map: an id that exists but belongs to somebody else, or exists and was
+ * never verified, must fail the same way a made-up one does. The consequence of
+ * getting that wrong is an article that imports cleanly and renders without its
+ * photographs, because `renderGalleryBlockHtml` drops what it cannot resolve.
+ */
+suite("legacy image mapping (integration, Issue #599)", () => {
+  const UPLOADER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const OTHER_UPLOADER = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+  beforeAll(async () => {
+    await setupIntegrationDatabase();
+  });
+  afterAll(async () => {
+    await teardownIntegrationDatabase();
+  });
+  beforeEach(async () => {
+    await resetDatabase();
+    await seedTenants();
+  });
+
+  async function seedUploader(
+    tenantId: string,
+    userId: string,
+    label: string
+  ): Promise<void> {
+    const admin = getAdminSql();
+    const profile = (await admin`
+      INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+      VALUES (${tenantId}, 'person', 'Uploader')
+      RETURNING id
+    `) as { id: string }[];
+    const identity = (await admin`
+      INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+      VALUES (${tenantId}, ${profile[0]!.id}, ${`${label}@example.test`}, 'x')
+      RETURNING id
+    `) as { id: string }[];
+    await admin`
+      INSERT INTO awcms_tenant_users (id, tenant_id, identity_id)
+      VALUES (${userId}, ${tenantId}, ${identity[0]!.id})
+    `;
+  }
+
+  /**
+   * `module_key='news_portal'` and `storage_driver='cloudflare_r2'` are CHECK
+   * constraints (`sql/041`), and `object_key` is CHECK-constrained to
+   * `news-media/<tenant_id>/YYYY/MM/<uuid>.<ext>` against the row's OWN
+   * tenant_id — so a fixture cannot take a shortcut here, and a cross-tenant
+   * key is refused by the database rather than by application code.
+   */
+  async function seedMedia(
+    tenantId: string,
+    userId: string,
+    status: string
+  ): Promise<string> {
+    const objectKey = `news-media/${tenantId}/2026/08/${crypto.randomUUID()}.png`;
+    const rows = (await getAdminSql()`
+      INSERT INTO awcms_news_media_objects
+        (tenant_id, module_key, storage_driver, bucket_name, object_key,
+         public_url, mime_type, status, created_by_tenant_user_id)
+      VALUES (
+        ${tenantId}, 'news_portal', 'cloudflare_r2', 'bucket', ${objectKey},
+        'https://cdn.example.test/photo.png', 'image/png', ${status}, ${userId}
+      )
+      RETURNING id
+    `) as { id: string }[];
+
+    return rows[0]!.id;
+  }
+
+  test("a mapped image is stored as a gallery node the reader can resolve", async () => {
+    await seedUploader(TENANT, UPLOADER, "lentera");
+    const mediaId = await seedMedia(TENANT, UPLOADER, "verified");
+
+    const converted = convertLegacyHtmlToPortableText(
+      '<p>Air naik.</p><img src="http://legacy.example/banjir.jpg">',
+      { resolveImage: (src) => (src.endsWith("banjir.jpg") ? mediaId : null) }
+    );
+    expect(converted.ok).toBe(true);
+
+    await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      importLegacyBlogPost(tx, TENANT, AUTHOR, SYSTEM, {
+        ...input(),
+        bodyPortableText: converted.document
+      })
+    );
+
+    const rows = (await getAdminSql()`
+      SELECT body_portable_text FROM awcms_blog_posts WHERE tenant_id = ${TENANT}
+    `) as { body_portable_text: unknown }[];
+
+    // An ARRAY, not the jsonb string Issue #641 was about — a gallery node that
+    // came back as text would make `hasCanonicalPortableTextBody` false and the
+    // article would render from the lossy projection, without the image.
+    const stored = rows[0]!.body_portable_text as unknown[];
+    expect(Array.isArray(stored)).toBe(true);
+    expect(stored[1]).toEqual({
+      _type: "gallery",
+      _key: "n1",
+      items: [{ mediaType: "image", mediaObjectId: mediaId }]
+    });
+
+    const safe = await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      mediaLibraryPortAdapter.isMediaReferenceSafe(tx, TENANT, mediaId)
+    );
+    expect(safe).toBe(true);
+  });
+
+  test("the registry refuses another tenant's media, and unverified media", async () => {
+    await seedUploader(TENANT, UPLOADER, "lentera");
+    await seedUploader(OTHER_TENANT, OTHER_UPLOADER, "seputar");
+
+    const foreign = await seedMedia(OTHER_TENANT, OTHER_UPLOADER, "verified");
+    const unverified = await seedMedia(TENANT, UPLOADER, "uploaded");
+
+    const verdicts = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT,
+      async (tx) => ({
+        // Exists, is verified, and belongs to somebody else. This is the check
+        // the importer makes before writing anything, and the reason it is a
+        // registry question rather than a "is it a uuid" question.
+        foreign: await mediaLibraryPortAdapter.isMediaReferenceSafe(
+          tx,
+          TENANT,
+          foreign
+        ),
+        // Exists, is ours, and stopped at `uploaded` — the bytes arrived and
+        // nothing has vouched for them, which is exactly the state
+        // `isMediaReferenceSafe` exists to distinguish from `verified`.
+        unverified: await mediaLibraryPortAdapter.isMediaReferenceSafe(
+          tx,
+          TENANT,
+          unverified
+        ),
+        invented: await mediaLibraryPortAdapter.isMediaReferenceSafe(
+          tx,
+          TENANT,
+          "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        )
+      })
+    );
+
+    expect(verdicts).toEqual({
+      foreign: false,
+      unverified: false,
+      invented: false
+    });
   });
 });

@@ -290,3 +290,124 @@ describe("entities decode exactly once", () => {
     expect(text).not.toContain("<script>");
   });
 });
+
+describe("a resolved image becomes a real image (Issue #599)", () => {
+  const MEDIA_ID = "11111111-1111-4111-8111-111111111111";
+  const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+
+  const resolveImage = (src: string): string | null =>
+    src === "http://legacy.example/a.jpg"
+      ? MEDIA_ID
+      : src === "http://legacy.example/b.jpg"
+        ? OTHER_ID
+        : null;
+
+  test("without a resolver, nothing about `<img>` changed", () => {
+    // The default is the whole existing contract: an import that predates
+    // managed-media enforcement must not be able to walk past it.
+    const result = convertLegacyHtmlToPortableText(
+      '<p>Teks</p><img src="http://legacy.example/a.jpg">'
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.rejections[0]!.reason).toBe("unmanaged_image");
+    expect(result.rejections[0]!.detail).toBe("http://legacy.example/a.jpg");
+  });
+
+  test("a mapped `src` lands as a gallery node, in position", () => {
+    const result = convertLegacyHtmlToPortableText(
+      '<p>Sebelum</p><img src="http://legacy.example/a.jpg"><p>Sesudah</p>',
+      { resolveImage }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.rejections).toEqual([]);
+    expect(result.document).toHaveLength(3);
+    expect(result.document[1]).toEqual({
+      _type: "gallery",
+      _key: "n1",
+      items: [{ mediaType: "image", mediaObjectId: MEDIA_ID }]
+    });
+    // The order is the article's order. A gallery collected at the end would
+    // read as a photo dump under an article that had photographs in it.
+    expect(textOf(result.document[0])).toContain("Sebelum");
+    expect(textOf(result.document[2])).toContain("Sesudah");
+  });
+
+  test("no caption is invented from `alt`", () => {
+    // `caption` renders as a VISIBLE `<figcaption>`, and a legacy alt is very
+    // often the file name — carrying it across would edit every article.
+    const result = convertLegacyHtmlToPortableText(
+      '<img src="http://legacy.example/a.jpg" alt="a.jpg">',
+      { resolveImage }
+    );
+
+    expect(result.document[0]).toEqual({
+      _type: "gallery",
+      _key: "n0",
+      items: [{ mediaType: "image", mediaObjectId: MEDIA_ID }]
+    });
+  });
+
+  test("consecutive images join ONE gallery, separated ones do not", () => {
+    const together = convertLegacyHtmlToPortableText(
+      '<img src="http://legacy.example/a.jpg"><img src="http://legacy.example/b.jpg">',
+      { resolveImage }
+    );
+
+    expect(together.document).toHaveLength(1);
+    expect((together.document[0] as { items: unknown[] }).items).toHaveLength(
+      2
+    );
+
+    const apart = convertLegacyHtmlToPortableText(
+      '<img src="http://legacy.example/a.jpg"><p>Antara</p><img src="http://legacy.example/b.jpg">',
+      { resolveImage }
+    );
+
+    expect(apart.document).toHaveLength(3);
+  });
+
+  test("an UNMAPPED image is still refused, alongside mapped ones", () => {
+    // Partial coverage must not import the article with a hole in it — that is
+    // the "looks imported, lost its photographs" outcome, arrived at from the
+    // other direction.
+    const result = convertLegacyHtmlToPortableText(
+      '<img src="http://legacy.example/a.jpg"><img src="http://legacy.example/missing.jpg">',
+      { resolveImage }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.rejections).toHaveLength(1);
+    expect(result.rejections[0]!.detail).toBe(
+      "http://legacy.example/missing.jpg"
+    );
+  });
+
+  test("a resolver cannot smuggle anything else past the gates", () => {
+    // The resolver answers ONE question. A `<script>` next to a mapped image is
+    // still a refusal, and the image is still converted for the preview.
+    const result = convertLegacyHtmlToPortableText(
+      '<img src="http://legacy.example/a.jpg"><script>steal()</script>',
+      { resolveImage }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.rejections.map((r) => r.reason)).toContain(
+      "executable_markup"
+    );
+    expect(textOf(result.document)).not.toContain("steal");
+  });
+
+  test("the result is a VALID Portable Text document", () => {
+    // A gallery node this converter invents has to satisfy the same write-time
+    // validator the API applies, or the import fails one row at a time in a
+    // batch that already reported itself importable.
+    const result = convertLegacyHtmlToPortableText(
+      '<p>Teks</p><img src="http://legacy.example/a.jpg">',
+      { resolveImage }
+    );
+
+    expect(validatePortableTextDocument(result.document).valid).toBe(true);
+  });
+});
