@@ -28,6 +28,9 @@ import {
 } from "../../../modules/blog-content/domain/seo-rendering";
 import { renderPublicPageShell } from "../../../modules/blog-content/domain/public-page-rendering";
 import { renderSocialShareButtonsHtml } from "../../../modules/blog-content/domain/social-share-links";
+import { composeAdSlots } from "../../../modules/blog-content/application/ad-slot-composition";
+import { AD_SLOT_AVAILABLE_LABEL } from "../../../modules/blog-content/domain/ad-slot-labels";
+import { insertMidArticleSlotHtml } from "../../../modules/blog-content/domain/ad-slot-rendering";
 
 const NEWS_SHARE_CLIENT_SCRIPT_SRC = "/js/news-share.js";
 
@@ -133,12 +136,29 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
           )
         : "";
 
-      const bodyHtml = `<article>
+      // Issue #594 — four slots on an article, and the target is THIS article:
+      // `listActiveAdPlacementsForRendering` unions the placements scoped to it
+      // with every global placement for the same slot, so a site-wide banner
+      // still appears here without the editor booking it twice.
+      const ads = await composeAdSlots(
+        tx,
+        tenant.tenantId,
+        ["header_banner", "article_top", "article_middle", "article_bottom"],
+        {
+          target: { targetType: "post", targetId: post.id },
+          placeholderLabel: AD_SLOT_AVAILABLE_LABEL
+        }
+      );
+
+      const bodyHtml = `${ads.get("header_banner") ?? ""}
+<article>
   <h1>${escapeHtml(post.title)}</h1>
   <p><time datetime="${post.publishedAt.toISOString()}">${escapeHtml(post.publishedAt.toDateString())}</time></p>
-  ${contentHtml}
+  ${ads.get("article_top") ?? ""}
+  ${insertMidArticleSlotHtml(contentHtml, ads.get("article_middle") ?? "")}
 </article>
 ${shareButtonsHtml}
+${ads.get("article_bottom") ?? ""}
 <p><a href="${escapeHtml(blogRootPath)}">Back to blog</a></p>`;
 
       const html = renderPublicPageShell({

@@ -4339,3 +4339,11 @@ msgstr "Artikel yang memenuhi syarat penargetan, terbaru lebih dulu."
 
 msgid "Every slot can still run a global placement."
 msgstr "Setiap slot tetap dapat menayangkan penempatan global."
+
+# Issue #594 — slots this repo's own public templates do not render.
+
+msgid "This site's own templates do not render this slot. A booking here is shown only by a front end that reads the inventory itself."
+msgstr "Templat situs ini sendiri tidak merender slot ini. Pemesanan di sini hanya ditampilkan oleh front end yang membaca inventarisnya sendiri."
+
+msgid "Not rendered here"
+msgstr "Tidak dirender di sini"

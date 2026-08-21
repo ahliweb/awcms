@@ -19,6 +19,8 @@ import {
   listPublicBlogPostsByTermId
 } from "../../../../modules/blog-content/application/public-blog-directory";
 import { isLegacyTenantRouteEnabled } from "../../../../modules/blog-content/application/public-route-settings";
+import { composeAdSlots } from "../../../../modules/blog-content/application/ad-slot-composition";
+import { AD_SLOT_AVAILABLE_LABEL } from "../../../../modules/blog-content/domain/ad-slot-labels";
 import {
   renderPaginationNavHtml,
   renderPostSummaryListHtmlAtBasePath,
@@ -85,7 +87,20 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
       ).basePath;
 
-      const bodyHtml = `<h1>Category: ${escapeHtml(term.name)}</h1>
+      // Issue #594 — one slot above an archive listing. `target: null` returns
+      // global placements only: a scoped placement names one article, page or
+      // widget, and an archive is none of them.
+      const ads = await composeAdSlots(
+        tx,
+        tenant.tenantId,
+        ["category_archive_top"],
+        {
+          placeholderLabel: AD_SLOT_AVAILABLE_LABEL
+        }
+      );
+
+      const bodyHtml = `${ads.get("category_archive_top") ?? ""}
+<h1>Category: ${escapeHtml(term.name)}</h1>
 <div class="posts">${renderPostSummaryListHtmlAtBasePath(postsBasePath, result.items, "No posts in this category yet.")}</div>
 ${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
 

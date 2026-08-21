@@ -55,6 +55,7 @@ import {
   AD_ROTATION_MODES,
   AD_TARGET_TYPES
 } from "../../modules/blog-content/domain/ad-placement-policy";
+import { isAdSlotRenderedHere } from "../../modules/blog-content/domain/ad-slot-rendering";
 import { listPublicBlogPosts } from "../../modules/blog-content/application/public-blog-directory";
 
 const ssr = Astro.locals.ssrContext!;
@@ -117,6 +118,11 @@ const editing = editingId
 const bySlot = AD_PLACEMENT_KEYS.map((key) => ({
   key,
   preset: AD_PLACEMENT_PRESETS[key],
+  // Issue #594 — three slots are bookable and this repo's own templates draw
+  // none of them, because `/blog/{tenantCode}` has no sidebar. Saying so on the
+  // booking screen is the difference between an advertiser finding out here and
+  // finding out from the invoice.
+  renderedHere: isAdSlotRenderedHere(key),
   placements: placements.filter((placement) => placement.placementKey === key)
 }));
 
@@ -206,7 +212,11 @@ function formatWindow(placement: AdPlacementView): string {
                       </span>
                     </td>
                     <td class="cell-muted" colspan={canConfigure ? 6 : 5}>
-                      {t("Available — nothing booked into this slot.")}
+                      {slot.renderedHere
+                        ? t("Available — nothing booked into this slot.")
+                        : t(
+                            "This site's own templates do not render this slot. A booking here is shown only by a front end that reads the inventory itself."
+                          )}
                     </td>
                   </tr>
                 ) : (
@@ -219,6 +229,12 @@ function formatWindow(placement: AdPlacementView): string {
                           · {slot.preset.recommendedSize} · {t("shows")}{" "}
                           {slot.preset.maxItems}
                         </span>
+                        {!slot.renderedHere && (
+                          <span class="status-badge" data-variant="warning">
+                            <span class="status-dot" aria-hidden="true" />
+                            {t("Not rendered here")}
+                          </span>
+                        )}
                       </td>
                       <td data-label="Creative">
                         <span set:text={placement.name} />

@@ -20,6 +20,8 @@ import {
 } from "../../../modules/blog-content/application/public-blog-directory";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import { composeHomepage } from "../../../modules/blog-content/application/homepage-composition";
+import { composeAdSlots } from "../../../modules/blog-content/application/ad-slot-composition";
+import { AD_SLOT_AVAILABLE_LABEL } from "../../../modules/blog-content/domain/ad-slot-labels";
 import { renderComposedHomepageHtml } from "../../../modules/blog-content/domain/homepage-section-rendering";
 import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 import {
@@ -86,6 +88,22 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         pageSize: settings.postsPerPage
       });
 
+      // Issue #594 — four slots on the index. `target: null` means global ads
+      // only, which is the whole inventory a listing page can carry: a scoped
+      // placement names one article, page or widget, and this page is none of
+      // them.
+      const ads = await composeAdSlots(
+        tx,
+        tenant.tenantId,
+        [
+          "header_banner",
+          "below_headline",
+          "homepage_middle",
+          "homepage_bottom"
+        ],
+        { placeholderLabel: AD_SLOT_AVAILABLE_LABEL }
+      );
+
       // ADR-0098 — every in-page link is built from the PREFIXED base path, so
       // a reader who arrived on `/id/…` stays there. Building them from
       // `/blog/{code}` instead would drop each reader back onto the bare alias
@@ -107,10 +125,14 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         ? renderComposedHomepageHtml(urls.basePath, composed)
         : "";
 
-      const bodyHtml = `<h1>${escapeHtml(tenant.tenantName)} Blog</h1>
+      const bodyHtml = `${ads.get("header_banner") ?? ""}
+<h1>${escapeHtml(tenant.tenantName)} Blog</h1>
+${ads.get("below_headline") ?? ""}
 ${composedHtml}
+${ads.get("homepage_middle") ?? ""}
 <div class="posts">${renderPostSummaryListHtmlAtBasePath(urls.basePath, result.items, "No posts yet.")}</div>
-${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
+${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}
+${ads.get("homepage_bottom") ?? ""}`;
 
       const html = renderPublicPageShell({
         title: settings.seoDefaultTitle ?? `${tenant.tenantName} Blog`,
