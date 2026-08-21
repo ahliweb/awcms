@@ -4388,3 +4388,8 @@ msgstr "Dari mana berkas ini berasal, yang sering berbeda dari siapa yang dikred
 
 msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
 msgstr "Mengubahnya mencatat siapa yang memutuskan dan kapan, serta menulis entri audit. Mengembalikannya ke unverified menghapus keduanya."
+
+# Issue #592 — the editor preview link on /admin/blog.
+
+msgid "Preview"
+msgstr "Pratinjau"

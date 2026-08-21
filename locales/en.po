@@ -4401,3 +4401,8 @@ msgstr ""
 
 msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
 msgstr ""
+
+# Issue #592 — the editor preview link on /admin/blog.
+
+msgid "Preview"
+msgstr ""

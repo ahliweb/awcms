@@ -785,6 +785,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Presentation settings could not be loaded right now. This is a problem reading them, not an empty configuration — please try again later.": ["Pengaturan presentasi tidak dapat dimuat saat ini. Ini masalah membacanya, bukan konfigurasi yang kosong — silakan coba lagi nanti."],
   "Preserve query string": ["Pertahankan query string"],
   "Preserved as-is — edit it in the media library.": ["Dipertahankan apa adanya — sunting di pustaka media."],
+  "Preview": ["Pratinjau"],
   "Preview mints a short-lived, non-indexable link to the saved draft. Publish promotes the saved draft to a new immutable version and makes it the live look. Retire clears the live pointer so the site falls back to the default theme; published versions stay intact and can be rolled back to.": ["Pratinjau mencetak tautan berumur pendek dan tak-terindeks ke draf tersimpan. Terbitkan mempromosikan draf tersimpan menjadi versi tak-berubah yang baru dan menjadikannya tampilan aktif. Pensiunkan mengosongkan penunjuk aktif sehingga situs kembali ke tema bawaan; versi terbit tetap utuh dan bisa di-rollback."],
   "Primary": ["Primer"],
   "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene.": ["Dicetak di samping gambar. Bukan alt text, yang menggambarkan foto untuk pembaca layar, dan bukan takarir, yang menceritakan adegannya kepada pembaca."],

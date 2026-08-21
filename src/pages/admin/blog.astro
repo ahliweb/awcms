@@ -625,6 +625,24 @@ const selectedPost = selectedPostId
                               </span>
                             </a>
                           )}
+                          {/* Issue #592 — the article through the SAME public
+                              template, so an editor stops guessing. Same guard
+                              as Edit: the person who may change it is the person
+                              who may see it unpublished. Opens in a new tab
+                              because it is a whole page, not a panel. */}
+                          {canUpdate && !showsBin && (
+                            <a
+                              class="quick-link"
+                              href={`/admin/blog/${post.id}/preview`}
+                              target="_blank"
+                              rel="noopener"
+                            >
+                              {t("Preview")}
+                              <span class="quick-link-arrow" aria-hidden="true">
+                                →
+                              </span>
+                            </a>
+                          )}
                           {canUpdate &&
                             !showsBin &&
                             post.status === "draft" && (

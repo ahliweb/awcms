@@ -117,6 +117,10 @@ export const MUST_NEVER_MATCH = [
   "/admin/",
   "/admin/users",
   "/admin/comments",
+  // Issue #592 — the editor preview. Four segments, and it renders an
+  // UNPUBLISHED article through the public template, so a shared cache holding
+  // one would serve a draft to whoever asked next.
+  "/admin/blog/11111111-1111-4111-8111-111111111111/preview",
   "/api/v1/health",
   "/api/v1/comments",
   "/api/v1/tenant/domains",
