@@ -19,6 +19,8 @@ import {
   withProjectedBlocks
 } from "../domain/portable-text-conversion";
 import type { PortableTextDocument } from "../domain/portable-text";
+import { isSupportedLocale } from "../../../lib/i18n/locales";
+import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
 
 /**
  * Read/write query module for `awcms_blog_posts` (Issue #537 scaffolded
@@ -821,9 +823,11 @@ export async function recordLegacyProvenance(
 export type LegacyRedirectMapping = {
   legacyId: string;
   slug: string;
+  /** The post's stored locale — what decides the target's prefix (ADR-0098). */
+  locale: string;
   /** The path the legacy site served. */
   sourcePath: string;
-  /** The path this repo serves now. */
+  /** The path this repo serves now, LOCALE-PREFIXED so the hop is the last one. */
   targetPath: string;
 };
 
@@ -844,6 +848,20 @@ export const LEGACY_REDIRECT_MAP_LIMIT = 500;
  *
  * Only PUBLISHED, non-deleted posts: a redirect pointing at a draft sends a
  * search engine to a 404, which is worse than the 404 it already had.
+ *
+ * ## The target carries a LOCALE prefix (Issue #599 follow-up)
+ *
+ * ADR-0098 made `/blog/{code}/{slug}` a locale-prefixed surface. This function
+ * originally emitted the bare path, which a reader would have been redirected
+ * to and then redirected AGAIN onto the prefixed canonical — a two-hop chain,
+ * which is exactly what this issue's own acceptance criterion forbids (PRD
+ * §9.2). The prefix comes from the POST's own locale, because a legacy article
+ * was written in one language and the redirect knows which.
+ *
+ * A post whose stored locale is not one this deployment supports falls back to
+ * the bare path rather than inventing a prefix for a language that has no
+ * routes: a one-hop redirect to a path that then normalizes is still better
+ * than a confident redirect into nothing.
  */
 export async function listLegacyRedirectMappings(
   tx: Bun.SQL,
@@ -859,7 +877,7 @@ export async function listLegacyRedirectMappings(
   const after = options.afterLegacyId ?? null;
 
   const rows = (await tx`
-    SELECT legacy_source_id, slug
+    SELECT legacy_source_id, slug, locale
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId}
       AND legacy_source_system = ${options.system}
@@ -869,14 +887,21 @@ export async function listLegacyRedirectMappings(
       AND (${after}::text IS NULL OR legacy_source_id > ${after})
     ORDER BY legacy_source_id ASC
     LIMIT ${LEGACY_REDIRECT_MAP_LIMIT}
-  `) as { legacy_source_id: string; slug: string }[];
+  `) as { legacy_source_id: string; slug: string; locale: string }[];
 
-  return rows.map((row) => ({
-    legacyId: row.legacy_source_id,
-    slug: row.slug,
-    sourcePath: options.pathTemplate
-      .replace("{legacyId}", row.legacy_source_id)
-      .replace("{slug}", row.slug),
-    targetPath: `/blog/${options.tenantCode}/${row.slug}`
-  }));
+  return rows.map((row) => {
+    const barePath = `/blog/${options.tenantCode}/${row.slug}`;
+
+    return {
+      legacyId: row.legacy_source_id,
+      slug: row.slug,
+      locale: row.locale,
+      sourcePath: options.pathTemplate
+        .replace("{legacyId}", row.legacy_source_id)
+        .replace("{slug}", row.slug),
+      targetPath: isSupportedLocale(row.locale)
+        ? withPublicLocalePrefix(barePath, row.locale)
+        : barePath
+    };
+  });
 }
