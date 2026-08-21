@@ -50,6 +50,16 @@ export const MEDIA_PERMISSIONS = {
   read: "media_library.media.read",
   /** Mark an uploaded object verified (MIME/checksum/dimension check passed) — also gates the finalize endpoint, Issue #634. */
   verify: "media_library.media.verify",
+  /**
+   * Edit media object METADATA — the rights fields of Issue #615 (`sql/137`).
+   *
+   * The eighth key, and its surface landed in the same change, as the note
+   * above requires. Deliberately not `verify`: that word already means the
+   * BYTES passed a MIME/checksum check, and a licence decision is a person
+   * answering a question about a contract. One word for both would make the
+   * legal half read as done whenever a file sniffed clean.
+   */
+  update: "media_library.media.update",
   /** Soft delete media object metadata. */
   delete: "media_library.media.delete",
   /** Restore a soft-deleted media object. */

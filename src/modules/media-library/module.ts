@@ -108,6 +108,12 @@ export const mediaLibraryModule = defineModule({
       action: "verify",
       description: "Finalize/verify an uploaded media object"
     },
+    {
+      activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
+      action: "update",
+      description:
+        "Edit media object metadata — credit line, source, copyright status, and the rights verification decision"
+    },
     // No `attach`/`detach` — REVOKED by ADR-0056 §A (`sql/087`). They wrote a
     // relation this module stopped owning at ADR-0036: media attachment is the
     // consumer's FK (`awcms_blog_posts.featured_media_id`), changed under the

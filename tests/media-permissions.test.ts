@@ -26,6 +26,10 @@ describe("MEDIA_PERMISSIONS", () => {
         "purge",
         "read",
         "restore",
+        // Issue #615 — the eighth, for the usage-rights metadata `sql/137`
+        // adds. Its endpoint (`PATCH /api/v1/media/objects/{id}`) landed in the
+        // same change, which is the rule this file's own header states.
+        "update",
         "verify"
       ].sort()
     );

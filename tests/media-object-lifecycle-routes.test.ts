@@ -73,13 +73,20 @@ describe("ADR-0056 §B — the three ungated permissions now have guards", () =>
 
     // Non-vacuous: if the descriptor stopped declaring `media.*` entirely, the
     // subset assertions below would all pass while proving nothing.
-    expect(declared.size).toBe(7);
+    expect(declared.size).toBe(8);
 
     for (const { file, action } of ROUTES) {
       const actions = guardActionsFrom(await readFile(file, "utf8"));
 
-      expect(actions).toEqual(new Set([action]));
-      expect(declared.has(action)).toBe(true);
+      // `objects/[id].ts` carries TWO methods since Issue #615 — DELETE and the
+      // rights PATCH — so the assertion is that this route's action is present
+      // and that every action it gates on is declared, not that the file holds
+      // exactly one. Anything stricter would forbid a second method on a file
+      // for no reason connected to what this test is about.
+      expect(actions.has(action)).toBe(true);
+      for (const found of actions) {
+        expect(declared.has(found)).toBe(true);
+      }
     }
   });
 

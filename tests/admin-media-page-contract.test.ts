@@ -60,7 +60,12 @@ const PAGE_KEYS = [
   "media_library.media.delete",
   "media_library.media.purge",
   "media_library.media.read",
-  "media_library.media.restore"
+  "media_library.media.restore",
+  // Issue #615 — the rights editor. Its surface (`PATCH .../objects/{id}`) and
+  // its permission (`sql/137`) landed in the same change as this key, which is
+  // the rule `media-permissions.ts` records after two keys survived three
+  // reviews by being declared ahead of any code that checked them.
+  "media_library.media.update"
 ] as const;
 
 /**
@@ -148,14 +153,14 @@ describe("/admin/media permission gates", () => {
 
     // Non-vacuous: an empty `enforced` would make the subset check pass while
     // proving nothing, the shape of gate this repo has been burned by.
-    expect(enforced.size).toBe(5);
+    expect(enforced.size).toBe(6);
 
     expect([...pageKeys].filter((key) => !enforced.has(key))).toEqual([]);
   });
 
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
-    expect(declared.size).toBe(9);
+    expect(declared.size).toBe(10);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
@@ -164,10 +169,10 @@ describe("/admin/media permission gates", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the page claims exactly the lifecycle four", async () => {
+  test("the page claims exactly the lifecycle five plus read", async () => {
     const pageKeys = pageTriplesFrom(await readFile(PAGE, "utf8"));
 
-    expect([...pageKeys].sort()).toEqual([...PAGE_KEYS]);
+    expect([...pageKeys].sort()).toEqual([...PAGE_KEYS].sort());
   });
 
   test("the revoked attach/detach appear nowhere on the page", async () => {
@@ -242,8 +247,9 @@ describe("/admin/media behaviour", () => {
     expect(page).toContain('"Idempotency-Key": crypto.randomUUID()');
     expect(page).not.toContain("idempotent: false");
 
-    // Three call sites plus the helper declaration.
-    expect([...page.matchAll(/(?<!function )idempotency\(\)/g)].length).toBe(3);
+    // Four call sites plus the helper declaration — delete, restore, purge,
+    // and Issue #615's rights PATCH.
+    expect([...page.matchAll(/(?<!function )idempotency\(\)/g)].length).toBe(4);
   });
 
   test("no <img> renders registry bytes", async () => {

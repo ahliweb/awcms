@@ -85,6 +85,13 @@ import {
   type NewsMediaObjectStatus,
   type NewsMediaObjectView
 } from "../../modules/media-library/application/media-object-directory";
+import {
+  COPYRIGHT_STATUSES,
+  MAX_CREDIT_LINE_LENGTH,
+  MAX_RIGHTS_NOTES_LENGTH,
+  MAX_SOURCE_NAME_LENGTH,
+  RIGHTS_VERIFICATION_STATUSES
+} from "../../modules/media-library/domain/media-rights-policy";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
@@ -167,6 +174,14 @@ const screen = await loadAdminScreen({
       activityCode: "media",
       action: "purge"
     }),
+    // Issue #615 — `media.update` gates the rights editor below. Resolved here
+    // rather than from `ssr.permissions` so the decision is the chokepoint's,
+    // like every other flag on this screen.
+    canUpdate: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "update"
+    }),
     // The same guard `POST .../upload-sessions` enforces. Resolved here so the
     // uploader is not rendered to someone the endpoint would refuse — a form
     // that always 403s is worse than no form.
@@ -197,6 +212,39 @@ const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+
+/**
+ * The rights editor opens through the QUERY STRING (`?rights=<id>`), the same
+ * way `/admin/blog-ads` opens its edit form.
+ *
+ * Server-rendered and pre-filled, so the page ships no client code for
+ * populating a form from row data — this screen's bundle is already the largest
+ * on the admin side, and a reveal-and-fill widget buys nothing a link does not.
+ * It also means an editor can send somebody the URL of the exact photo whose
+ * credit is wrong.
+ *
+ * Confined to the CURRENT page of results on purpose: the id comes from a row
+ * that was rendered, so an id that is not here is simply not opened rather than
+ * fetched separately.
+ */
+const rightsEditingId = readParam("rights");
+const rightsEditing =
+  canUpdate && rightsEditingId
+    ? (objects.find((item) => item.id === rightsEditingId) ?? null)
+    : null;
+
+/**
+ * `verified` is a HUMAN judgement about a licence and shares no vocabulary with
+ * `status: "verified"`, which means the BYTES passed a MIME/checksum check.
+ * Different colours would help; the same word in two columns would not, so the
+ * rights badge is labelled with its own prefix wherever it appears.
+ */
+const RIGHTS_VARIANT: Record<string, string> = {
+  unverified: "info",
+  verified: "success",
+  rejected: "danger"
+};
 
 /**
  * The uploader is rendered only where it can actually work.
@@ -260,8 +308,8 @@ const unsafeCount = objects.filter(
   (item) => item.status !== "verified" && item.status !== "attached"
 ).length;
 const deletedCount = objects.filter((item) => item.deletedAt !== null).length;
-const canActOnAny = canDelete || canRestore || canPurge;
-const columnCount = canActOnAny ? 8 : 7;
+const canActOnAny = canDelete || canRestore || canPurge || canUpdate;
+const columnCount = canActOnAny ? 9 : 8;
 ---
 
 <AdminLayout title="Media library">
@@ -480,6 +528,7 @@ const columnCount = canActOnAny ? 8 : 7;
                 <th scope="col">{t("Status")}</th>
                 <th scope="col">{t("Created")}</th>
                 <th scope="col">{t("Deleted")}</th>
+                <th scope="col">{t("Rights")}</th>
                 {canActOnAny && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
@@ -534,9 +583,39 @@ const columnCount = canActOnAny ? 8 : 7;
                         </>
                       )}
                     </td>
+                    <td data-label="Rights">
+                      {/* `set:text` for both — a credit line is caller-supplied
+                          and reaches this table verbatim. */}
+                      {item.creditLine ? (
+                        <span class="cell-strong" set:text={item.creditLine} />
+                      ) : (
+                        <span class="cell-muted">
+                          {t("No credit recorded")}
+                        </span>
+                      )}
+                      <span
+                        class={`status-badge status-badge--${RIGHTS_VARIANT[item.rightsVerificationStatus] ?? "info"}`}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {t("Rights")}: {item.rightsVerificationStatus}
+                      </span>
+                    </td>
                     {canActOnAny && (
                       <td data-label="Actions">
                         <div class="row-actions">
+                          {/* Issue #615 — a link, not a button: the editor is
+                              server-rendered from `?rights=<id>`, so the URL of
+                              a specific photo's credit can be shared. Offered
+                              only for a live object; a soft-deleted one's rights
+                              record is evidence about something withdrawn. */}
+                          {canUpdate && item.deletedAt === null && (
+                            <a
+                              class="btn-inline"
+                              href={`${linkWith({ rights: item.id })}#media-rights-form`}
+                            >
+                              {t("Edit rights")}
+                            </a>
+                          )}
                           {item.deletedAt === null
                             ? canDelete && (
                                 <button
@@ -599,6 +678,131 @@ const columnCount = canActOnAny ? 8 : 7;
       </section>
     )
   }
+
+  {
+    rightsEditing && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="media-rights-title"
+        id="media-rights-form"
+      >
+        <h2 class="admin-section-title" id="media-rights-title">
+          {t("Usage rights")}
+        </h2>
+        <p class="admin-section-hint">
+          {t(
+            "Who took this photograph, where it came from, and whether anyone has checked that it may be published. This is not the same as the object status above \u2014 that says the FILE passed a format check; this says a person read the licence."
+          )}
+        </p>
+        <p class="cell-muted" set:text={rightsEditing.objectKey} />
+
+        <p class="form-error" id="media-rights-error" hidden />
+
+        <form class="admin-form" id="media-rights-fields">
+          <input type="hidden" id="media-rights-id" value={rightsEditing.id} />
+
+          <div class="form-field">
+            <label class="form-label" for="media-rights-credit">
+              {t("Credit line")}
+            </label>
+            <input
+              class="form-input"
+              id="media-rights-credit"
+              type="text"
+              maxlength={MAX_CREDIT_LINE_LENGTH}
+              value={rightsEditing.creditLine ?? ""}
+            />
+            <p class="form-hint">
+              {t(
+                "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene."
+              )}
+            </p>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="media-rights-source">
+              {t("Source")}
+            </label>
+            <input
+              class="form-input"
+              id="media-rights-source"
+              type="text"
+              maxlength={MAX_SOURCE_NAME_LENGTH}
+              value={rightsEditing.sourceName ?? ""}
+            />
+            <p class="form-hint">
+              {t(
+                "Where the file came from, which is often not who is credited \u2014 a takedown request names the agency, not the stringer."
+              )}
+            </p>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="media-rights-copyright">
+              {t("Copyright status")}
+            </label>
+            <select class="form-input" id="media-rights-copyright">
+              {COPYRIGHT_STATUSES.map((status) => (
+                <option
+                  value={status}
+                  selected={status === rightsEditing.copyrightStatus}
+                >
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="media-rights-status">
+              {t("Rights verification")}
+            </label>
+            <select class="form-input" id="media-rights-status">
+              {RIGHTS_VERIFICATION_STATUSES.map((status) => (
+                <option
+                  value={status}
+                  selected={status === rightsEditing.rightsVerificationStatus}
+                >
+                  {status}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">
+              {t(
+                "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
+              )}
+            </p>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="media-rights-notes">
+              {t("Licence notes")}
+            </label>
+            <textarea
+              class="form-input"
+              id="media-rights-notes"
+              rows="3"
+              maxlength={MAX_RIGHTS_NOTES_LENGTH}
+              set:text={rightsEditing.rightsNotes ?? ""}
+            />
+          </div>
+
+          <div class="admin-toolbar">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              id="media-rights-submit"
+            >
+              {t("Save rights")}
+            </button>
+            <a class="quick-link" href={linkWith({ rights: null })}>
+              {t("Cancel")}
+            </a>
+          </div>
+        </form>
+      </section>
+    )
+  }
 </AdminLayout>
 
 <script>
@@ -607,6 +811,7 @@ const columnCount = canActOnAny ? 8 : 7;
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   import {
+    inputValue,
     messageBox,
     mutateAndReload,
     onAction,
@@ -798,4 +1003,52 @@ const columnCount = canActOnAny ? 8 : 7;
       "Purging…"
     );
   });
+
+  /**
+   * Issue #615 — the rights editor. Present only when the server rendered it
+   * (`?rights=<id>` plus `media.update`), so this block is inert everywhere
+   * else rather than guarding at every step.
+   */
+  const rightsForm = document.getElementById("media-rights-fields");
+
+  if (rightsForm instanceof HTMLFormElement) {
+    const rightsError = messageBox("media-rights-error");
+
+    rightsForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const id = inputValue("media-rights-id");
+      if (!id) return;
+
+      const submit = document.getElementById("media-rights-submit");
+      if (!(submit instanceof HTMLButtonElement)) return;
+
+      rightsError.clear();
+
+      // Every field is sent every time, blanks included: this form shows the
+      // whole record, so an emptied box means "remove this", which the endpoint
+      // reads as `null`. Sending only the changed ones would need the page to
+      // track what changed, and the failure mode of getting that wrong is a
+      // credit silently surviving its own deletion.
+      await mutateAndReload(
+        submit,
+        rightsError,
+        () =>
+          sendJson(
+            "PATCH",
+            `/api/v1/media/objects/${id}`,
+            {
+              creditLine: inputValue("media-rights-credit"),
+              sourceName: inputValue("media-rights-source"),
+              rightsNotes: inputValue("media-rights-notes"),
+              copyrightStatus: inputValue("media-rights-copyright"),
+              rightsVerificationStatus: inputValue("media-rights-status")
+            },
+            idempotency()
+          ),
+        "Could not save the usage rights. Please try again.",
+        "Saving\u2026"
+      );
+    });
+  }
 </script>

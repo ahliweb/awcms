@@ -4360,3 +4360,44 @@ msgstr ""
 
 msgid "Not rendered here"
 msgstr ""
+
+# Issue #615 — photo usage-rights metadata on /admin/media.
+
+msgid "Usage rights"
+msgstr ""
+
+msgid "Rights"
+msgstr ""
+
+msgid "Credit line"
+msgstr ""
+
+msgid "Copyright status"
+msgstr ""
+
+msgid "Rights verification"
+msgstr ""
+
+msgid "Licence notes"
+msgstr ""
+
+msgid "Edit rights"
+msgstr ""
+
+msgid "Save rights"
+msgstr ""
+
+msgid "No credit recorded"
+msgstr ""
+
+msgid "Who took this photograph, where it came from, and whether anyone has checked that it may be published. This is not the same as the object status above — that says the FILE passed a format check; this says a person read the licence."
+msgstr ""
+
+msgid "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene."
+msgstr ""
+
+msgid "Where the file came from, which is often not who is credited — a takedown request names the agency, not the stringer."
+msgstr ""
+
+msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
+msgstr ""

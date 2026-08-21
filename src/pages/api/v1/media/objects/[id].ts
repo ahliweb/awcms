@@ -15,7 +15,14 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { MEDIA_PERMISSION_ACTIVITY_CODE } from "../../../../../modules/media-library/domain/media-permissions";
 import { validateSoftDeleteMediaObjectInput } from "../../../../../modules/media-library/domain/media-lifecycle-validation";
-import { softDeleteNewsMediaObject } from "../../../../../modules/media-library/application/media-object-directory";
+import {
+  softDeleteNewsMediaObject,
+  updateMediaObjectRights
+} from "../../../../../modules/media-library/application/media-object-directory";
+import {
+  type MediaRightsUpdateInput,
+  validateMediaRightsUpdateInput
+} from "../../../../../modules/media-library/domain/media-rights-policy";
 import { isMediaObjectId } from "../../../../../modules/media-library/domain/media-object-id";
 import { log } from "../../../../../lib/logging/logger";
 
@@ -157,6 +164,161 @@ export const DELETE = defineTenantRoute<Prepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      200,
+      body
+    );
+
+    return response;
+  }
+});
+
+/**
+ * `PATCH /api/v1/media/objects/{id}` (Issue #615) — edit usage-rights metadata.
+ *
+ * ## Why this endpoint had to exist
+ *
+ * `awcms_news_media_objects` has carried `alt_text` and `caption` since
+ * `sql/041`, and NOTHING could edit either. The nine media permissions were
+ * create, read, verify, delete, restore, purge, cancel and the two
+ * `enforcement.*` — not one of them permitted changing metadata, and the only
+ * method on this file was `DELETE`. So a newsroom could upload a wire photo and
+ * had nowhere to record who took it.
+ *
+ * `sql/137` adds the rights columns and the eighth permission,
+ * `media_library.media.update`, in the same change as this route — the rule
+ * `media-permissions.ts` states after two keys survived three reviews by being
+ * declared ahead of their surface.
+ *
+ * ## Rights, not accessibility, and not the byte check
+ *
+ * This endpoint deliberately does NOT edit `alt_text` or `caption`. Alt text is
+ * an accessibility obligation and a caption is editorial copy; a credit line is
+ * a licence obligation. One form for all three would make "required" ambiguous,
+ * and the field that would quietly become optional is the legal one.
+ *
+ * It is also not `media.verify`: that permission and a `verified` status mean
+ * the BYTES passed a MIME-sniff and checksum. Whether a licence permits
+ * publication is a person reading a contract.
+ *
+ * `update` is not in `HIGH_RISK_ACTIONS`, but `Idempotency-Key` is required
+ * anyway — every write on this surface takes one, and a rights adjudication
+ * replayed by a retrying client would write a second audit entry claiming a
+ * second decision.
+ */
+const RIGHTS_IDEMPOTENCY_SCOPE = "media_object_rights_update";
+
+type RightsPrepared = {
+  idempotencyKey: string;
+  input: MediaRightsUpdateInput;
+};
+
+export const PATCH = defineTenantRoute<RightsPrepared>({
+  workClass: "interactive",
+  prepare: async ({ request }) => {
+    const idempotencyKey = request.headers.get("idempotency-key");
+
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    const bodyRead = await readJsonBody(request);
+
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    const validation = validateMediaRightsUpdateInput(bodyRead.value);
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Media rights metadata is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    return { idempotencyKey, input: validation.value };
+  },
+  authorize: {
+    moduleKey: "media_library",
+    activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
+    action: "update"
+  },
+  handler: async ({ tx, auth, prepared, params, tenantId, locals }) => {
+    const objectId = params.id;
+
+    if (!isMediaObjectId(objectId)) {
+      return fail(400, "VALIDATION_ERROR", "Media object id must be a uuid.");
+    }
+
+    // The whole patch is in the hash: replaying a key with a different credit
+    // line is a different request, and the audit row records which one was
+    // actually written.
+    const requestHash = computeRequestHash({
+      objectId,
+      input: prepared.input,
+      action: "rights_update"
+    });
+
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      RIGHTS_IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
+
+    if (existing) {
+      if (existing.requestHash !== requestHash) {
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
+      }
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
+    }
+
+    // A soft-deleted object answers 404, same as an unknown id — its rights
+    // record is evidence about something already withdrawn, and distinguishing
+    // the two would let a caller probe which ids exist.
+    const updated = await updateMediaObjectRights(
+      tx,
+      tenantId,
+      auth.context.tenantUserId,
+      objectId,
+      prepared.input,
+      locals.correlationId
+    );
+
+    if (!updated) {
+      return fail(404, "RESOURCE_NOT_FOUND", "Media object not found.");
+    }
+
+    log("info", "media-library.object.rights_updated", {
+      correlationId: locals.correlationId,
+      tenantId,
+      moduleKey: "media_library",
+      objectId,
+      rightsVerificationStatus: updated.rightsVerificationStatus
+    });
+
+    const response = ok(updated);
+    const body = await response.clone().json();
+
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      RIGHTS_IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
       requestHash,
       200,
