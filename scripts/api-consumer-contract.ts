@@ -92,7 +92,9 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/media/objects":
     "batch image resolution for a built page (#318). `src/lib/awcms/media.ts`, `src/lib/article-images.ts`.",
   "/api/v1/media/public-origin":
-    "the media origin the build must name in `img-src` BEFORE pulling a single object (#370). `scripts/asal-media.mjs`."
+    "the media origin the build must name in `img-src` BEFORE pulling a single object (#370). `scripts/asal-media.mjs`.",
+  "/api/v1/site-profile/composed":
+    "who the site IS — masthead, favicon, footer, editorial address, contact details, social links, and the `Organization` node, plus the `seo_distribution` half this endpoint merges in (#596, ADR-0102). `src/lib/awcms/profil.ts` there. Promised as COMMITTED in #645 and moved here when `ahliweb/awcms-astro#61` made the call real."
 };
 
 /**
@@ -110,8 +112,6 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
-  "/api/v1/site-profile/composed":
-    "ADR-0102 — who the site IS: masthead, footer, editorial address, contact details, social links, plus the `seo_distribution` half this endpoint merges in (#596). The neighbour's Definition of Done requires this repo to freeze the shape BEFORE it starts calling, so the entry is a promise today and moves to CONSUMED the moment `awcms-astro` renders from it.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
