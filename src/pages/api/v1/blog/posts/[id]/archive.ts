@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -144,6 +145,17 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       postId,
       slug: updated.slug
     });
+
+    // ADR-0042 §Rule 21 (Issue #623) — the serious direction. Archiving is how a
+    // newsroom WITHDRAWS an article; an article still served from the edge is
+    // the withdrawal not having happened, and unlike a late publish that is not
+    // something a five-minute TTL makes acceptable.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.archived"
+    );
 
     const successResponse = ok(updated);
     const successBody = await successResponse.clone().json();

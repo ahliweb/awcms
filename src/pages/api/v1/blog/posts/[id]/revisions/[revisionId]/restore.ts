@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../../../../lib/edge-cache/content-purge";
 import {
   contentBlocksToPortableText,
   readLegacyBlocks
@@ -280,6 +281,18 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       attributes: { revisionId, revisionNumber: revision.revisionNumber },
       correlationId
     });
+
+    // ADR-0042 §Rule 21 (Issue #623). Not in that issue's enumeration — it
+    // listed the `[id]/` directory and this route lives one level down — but it
+    // is the same defect on the same resource, and a worse one: restoring a
+    // revision rewrites the BODY of a post that may be published right now, so
+    // the edge would keep serving the text an editor just replaced.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.revision_restored"
+    );
 
     const successResponse = ok(updated);
     const successBody = await successResponse.clone().json();
