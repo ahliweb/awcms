@@ -15,6 +15,7 @@ import {
 import type { SqlExecutor } from "../src/lib/edge-cache/purge-queue";
 import { PUBLIC_CACHE_SURFACES } from "../src/lib/edge-cache/surface-registry";
 import { listModules } from "../src/modules";
+import { stripComments } from "../scripts/access-chokepoint-check";
 import {
   collectClaims,
   resolveOwner,
@@ -234,7 +235,21 @@ describe("content write paths emit a purge", () => {
     // ADR-0061 §B, so its own config write must purge them: the tenant-wide
     // `noindex` switch alone rewrites `/robots.txt`, and serving a stale crawl
     // policy to crawlers is the one staleness here with a lasting consequence.
-    ["src/pages/api/v1/seo/config.ts", 1]
+    ["src/pages/api/v1/seo/config.ts", 1],
+    // Issue #628 — the eleven the derived population found once the obligation
+    // stopped being a list somebody maintained. Each renders onto a surface
+    // Issue #594's work created or extended: ads on five public routes, the
+    // composed homepage on `/blog/{code}`, the archives on terms, and
+    // `feed.xml`/`sitemap-blog.xml` on the two settings flags that decide
+    // whether they answer at all.
+    ["src/pages/api/v1/blog/terms/index.ts", 1],
+    ["src/pages/api/v1/blog/terms/[id].ts", 2],
+    ["src/pages/api/v1/blog/settings/index.ts", 1],
+    ["src/pages/api/v1/blog/internal-tag-links/settings.ts", 1],
+    ["src/pages/api/v1/news-portal/homepage-sections/index.ts", 1],
+    ["src/pages/api/v1/news-portal/homepage-sections/[id].ts", 2],
+    ["src/pages/api/v1/news-portal/ad-placements/index.ts", 1],
+    ["src/pages/api/v1/news-portal/ad-placements/[id].ts", 2]
   ])(
     "%s calls enqueueModuleContentPurge %i time(s)",
     async (path, expected) => {
@@ -292,54 +307,103 @@ const PURGE_NOT_REQUIRED: Readonly<Record<string, string>> = {
   "src/pages/api/v1/theming/validate.ts":
     "Validation only — no INSERT/UPDATE/DELETE anywhere in the file.",
   "src/pages/api/v1/seo/redirects/validate.ts":
-    "Validation only — no INSERT/UPDATE/DELETE anywhere in the file."
+    "Validation only — no INSERT/UPDATE/DELETE anywhere in the file.",
+
+  // ── Issue #628, group 1: nothing in the public route closure reads them ──
+  //
+  // Checked rather than asserted: `NO_PUBLIC_READER_MODULES` below names the
+  // directory each of these writes through, and a test walks the transitive
+  // import closure of every file under `src/pages/blog/` to prove none is
+  // reachable. The day a public surface starts rendering menus — or
+  // institutions, which #614 stored and no reader shows — that test goes red
+  // and this exemption has to be revisited. An exemption whose reason can go
+  // stale in silence is the shape this whole gate exists to avoid.
+  "src/pages/api/v1/blog/menus/index.ts":
+    "No public surface renders a menu — `menu-directory` is unreachable from the public route closure.",
+  "src/pages/api/v1/blog/menus/[id].ts":
+    "As `menus/index.ts` — nothing public renders a menu.",
+  "src/pages/api/v1/blog/widgets/index.ts":
+    "No public surface renders a widget — `widget-directory` is unreachable from the public route closure.",
+  "src/pages/api/v1/blog/widgets/[id].ts":
+    "As `widgets/index.ts` — nothing public renders a widget.",
+  "src/pages/api/v1/blog/templates/index.ts":
+    "No public surface renders a template — `template-directory` is unreachable from the public route closure. `renderPublicPageShell` is a code-level shell, not a stored template.",
+  "src/pages/api/v1/blog/templates/[id].ts":
+    "As `templates/index.ts` — nothing public renders a template.",
+  "src/pages/api/v1/blog/theme/index.ts":
+    "`blog_content`'s own theme row is not the `theming-tokens` surface (that is `theming`'s, and its publish route purges). `theme-settings-directory` is unreachable from the public route closure.",
+  "src/pages/api/v1/blog/institutions/index.ts":
+    "Issue #614 stores an article's institution and no public surface renders it yet — `institution-directory` is unreachable from the public route closure.",
+  "src/pages/api/v1/blog/institutions/[id].ts": "As `institutions/index.ts`.",
+  "src/pages/api/v1/blog/institutions/[id]/restore.ts":
+    "As `institutions/index.ts`.",
+  "src/pages/api/v1/blog/institutions/[id]/purge.ts":
+    "As `institutions/index.ts`.",
+  "src/pages/api/v1/blog/ads/index.ts":
+    "The LEGACY ad tables (ADR-0044 §4 Fase 2, pending drop). `composeAdSlots` reads `awcms_news_portal_ad_placements` only, so `ads-directory` is unreachable from the public route closure — the successor routes are the ones that purge.",
+  "src/pages/api/v1/blog/ads/[id].ts": "As `ads/index.ts` — the legacy tables.",
+
+  // ── Issue #628, group 2: seo_distribution's cached bodies do not read them ──
+  //
+  // `buildRobotsPayload`, `buildSitemapPagePayload` and `buildFeedPayload` are
+  // the only producers of the three `seo-*` surfaces, and none of them reads a
+  // redirect or a not-found record at all. So none of these handlers changes a
+  // cached body belonging to this module.
+  //
+  // KNOWN RESIDUAL RISK, stated rather than hidden: a redirect whose SOURCE
+  // path is itself a cacheable surface — a `blog-post` URL, say — is inert
+  // until that object's TTL expires, because Varnish answers a cached hit
+  // without ever reaching the middleware that would redirect. A purge here
+  // cannot fix that: `enqueueModuleContentPurge` bans a MODULE scope, the
+  // stale object is tagged `m:blog_content`, and a `m:seo_distribution` ban
+  // matches nothing. Expressing it needs a path-scoped ban, which is a
+  // different mechanism and a different change. The common case is already
+  // covered from the other side — a slug change purges through the post's own
+  // PATCH before `capture-url-change` records the redirect.
+  "src/pages/api/v1/seo/redirects/index.ts":
+    "No `seo-*` payload builder reads a redirect. See the residual-risk note above.",
+  "src/pages/api/v1/seo/redirects/[id].ts": "As `redirects/index.ts`.",
+  "src/pages/api/v1/seo/redirects/[id]/lifecycle.ts":
+    "As `redirects/index.ts`.",
+  "src/pages/api/v1/seo/redirects/capture-url-change.ts":
+    "As `redirects/index.ts` — and the content change that triggers it purges through its own handler.",
+  "src/pages/api/v1/seo/redirects/import.ts": "As `redirects/index.ts`.",
+  "src/pages/api/v1/seo/redirects/settings.ts":
+    "Redirect POLICY. No `seo-*` payload builder reads it either.",
+  "src/pages/api/v1/seo/not-found/[id].ts":
+    "A 404 observation record, read by the admin report only — no public surface renders it."
 };
 
 /**
- * Handlers whose purge obligation has NOT been decided yet — the ledger.
+ * The application directories whose writes reach no reader.
  *
- * Every one of these mutates something owned by a module that owns a cacheable
- * surface, and several of them look like real staleness on inspection: ads and
- * homepage sections are rendered onto `/blog/{code}` by Issue #594's work, blog
- * settings gate whether `feed.xml` and `sitemap-blog.xml` answer at all, and
- * terms are what the category and tag archives are built from.
- *
- * They are listed rather than fixed because deciding each one needs the same
- * per-route reasoning the five above got, and doing twenty-eight of them inside
- * a five-route bug fix would bury the fix. The list may only SHRINK: an entry
- * removed from it must have gained a purge or a reason, and a NEW mutating
- * handler is not in it, so it fails the test below on arrival.
+ * Each backs one or more exemptions above, and the assertion is transitive: the
+ * import closure of every file under `src/pages/blog/` is walked, and none of
+ * these may appear in it. That turns "nothing public reads it" from a claim
+ * someone checked once into one the suite re-checks every run.
  */
-const PURGE_OBLIGATION_UNREVIEWED: readonly string[] = [
-  "src/pages/api/v1/blog/ads/[id].ts",
-  "src/pages/api/v1/blog/ads/index.ts",
-  "src/pages/api/v1/blog/institutions/[id].ts",
-  "src/pages/api/v1/blog/institutions/[id]/purge.ts",
-  "src/pages/api/v1/blog/institutions/[id]/restore.ts",
-  "src/pages/api/v1/blog/institutions/index.ts",
-  "src/pages/api/v1/blog/internal-tag-links/settings.ts",
-  "src/pages/api/v1/blog/menus/[id].ts",
-  "src/pages/api/v1/blog/menus/index.ts",
-  "src/pages/api/v1/blog/settings/index.ts",
-  "src/pages/api/v1/blog/templates/[id].ts",
-  "src/pages/api/v1/blog/templates/index.ts",
-  "src/pages/api/v1/blog/terms/[id].ts",
-  "src/pages/api/v1/blog/terms/index.ts",
-  "src/pages/api/v1/blog/theme/index.ts",
-  "src/pages/api/v1/blog/widgets/[id].ts",
-  "src/pages/api/v1/blog/widgets/index.ts",
-  "src/pages/api/v1/news-portal/ad-placements/[id].ts",
-  "src/pages/api/v1/news-portal/ad-placements/index.ts",
-  "src/pages/api/v1/news-portal/homepage-sections/[id].ts",
-  "src/pages/api/v1/news-portal/homepage-sections/index.ts",
-  "src/pages/api/v1/seo/not-found/[id].ts",
-  "src/pages/api/v1/seo/redirects/[id].ts",
-  "src/pages/api/v1/seo/redirects/[id]/lifecycle.ts",
-  "src/pages/api/v1/seo/redirects/capture-url-change.ts",
-  "src/pages/api/v1/seo/redirects/import.ts",
-  "src/pages/api/v1/seo/redirects/index.ts",
-  "src/pages/api/v1/seo/redirects/settings.ts"
+const NO_PUBLIC_READER_MODULES: readonly string[] = [
+  "menu-directory",
+  "widget-directory",
+  "template-directory",
+  "theme-settings-directory",
+  "institution-directory",
+  "ads-directory"
 ];
+
+/**
+ * The ledger, now EMPTY (Issue #628).
+ *
+ * It held twenty-eight entries when Issue #623 derived this population and
+ * declined to decide them inside a five-route bug fix. Eleven of them were real
+ * staleness and now purge; the other twenty moved up into `PURGE_NOT_REQUIRED`
+ * with a reason a reader can check.
+ *
+ * An empty list is worth more than a short one: the next entry is the only
+ * entry, so it cannot be added quietly. Keep it that way — a handler belongs in
+ * `PURGE_NOT_REQUIRED` with a reason, or it purges.
+ */
+const PURGE_OBLIGATION_UNREVIEWED: readonly string[] = [];
 
 type PurgeObligation = { file: string; owner: string; purges: boolean };
 
@@ -422,6 +486,92 @@ describe("every mutating handler of a surface-owning module is accounted for", (
       "src/pages/api/v1/blog/posts/[id]/revisions/[revisionId]/restore.ts"
     ]) {
       expect(purging.has(file)).toBe(true);
+    }
+  });
+
+  test("the ledger is empty, and that is the point", () => {
+    // A short ledger hides its next entry among the others. An empty one makes
+    // the next entry the only entry.
+    expect(PURGE_OBLIGATION_UNREVIEWED).toEqual([]);
+  });
+});
+
+/**
+ * Every module file a public route can reach, following relative imports.
+ *
+ * Transitive on purpose: a route rarely imports a directory itself, it imports a
+ * composer that does. Stopping at direct imports would let "no public reader"
+ * stay true-looking while a reader sat one hop away.
+ */
+async function publicRouteImportClosure(): Promise<Set<string>> {
+  const seen = new Set<string>();
+  const queue: string[] = [];
+
+  for await (const file of new Bun.Glob("src/pages/blog/**/*.ts").scan({
+    cwd: process.cwd()
+  })) {
+    queue.push(file);
+  }
+
+  // Proves the crawl found the public routes at all. An empty frontier would
+  // make every assertion below pass while walking nothing.
+  expect(queue.length).toBeGreaterThan(5);
+
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+
+    const source = stripComments(await Bun.file(file).text());
+
+    for (const match of source.matchAll(/from "(\.[^"]+)"/g)) {
+      const specifier = match[1]!;
+      const base = `${file.slice(0, file.lastIndexOf("/"))}/${specifier}`;
+      const resolved = new URL(base, "file:///").pathname.slice(1);
+
+      for (const candidate of [`${resolved}.ts`, `${resolved}/index.ts`]) {
+        if (await Bun.file(candidate).exists()) {
+          queue.push(candidate);
+          break;
+        }
+      }
+    }
+  }
+
+  return seen;
+}
+
+describe('"no public reader" is checked, not asserted', () => {
+  test("the public route closure reaches none of the exempted directories", async () => {
+    const closure = await publicRouteImportClosure();
+
+    // Sanity: the closure must contain something a public route obviously does
+    // read, or the walker is broken and every exemption below is vacuous.
+    expect(
+      [...closure].some((file) => file.includes("public-blog-directory"))
+    ).toBe(true);
+
+    for (const moduleName of NO_PUBLIC_READER_MODULES) {
+      const readers = [...closure].filter((file) =>
+        file.includes(`/${moduleName}.ts`)
+      );
+
+      // If this fails, a public surface has started rendering something whose
+      // write handler is exempted from purging on the grounds that nothing
+      // renders it. The exemption is now false; give that handler a purge.
+      expect(readers).toEqual([]);
+    }
+  });
+
+  test("every exempted directory actually exists", async () => {
+    // Otherwise a rename turns the assertion above into a check that a
+    // non-existent file is not imported, which is true of everything.
+    for (const moduleName of NO_PUBLIC_READER_MODULES) {
+      expect(
+        await Bun.file(
+          `src/modules/blog-content/application/${moduleName}.ts`
+        ).exists()
+      ).toBe(true);
     }
   });
 });
