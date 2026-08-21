@@ -231,6 +231,51 @@ export async function fetchPublicTermBySlug(
   };
 }
 
+/**
+ * The bulk form of `fetchPublicTermBySlug` (Issue #594).
+ *
+ * The homepage composer needs every category slug named anywhere on the page,
+ * and resolving them one at a time would make the query count a function of how
+ * many sections an editor happened to configure — on an anonymous page, that is
+ * a cost a stranger chooses. A slug that resolves to nothing is simply absent
+ * from the result; the caller decides what an unresolvable reference means, and
+ * for a homepage section it means the section renders empty rather than
+ * silently widening to every category.
+ */
+export async function fetchPublicTermsBySlugs(
+  tx: Bun.SQL,
+  tenantId: string,
+  taxonomyType: string,
+  slugs: readonly string[]
+): Promise<PublicTermSummary[]> {
+  if (slugs.length === 0) {
+    return [];
+  }
+
+  const rows = (await tx`
+    SELECT id, taxonomy_type, name, slug, description
+    FROM awcms_blog_terms
+    WHERE tenant_id = ${tenantId} AND taxonomy_type = ${taxonomyType}
+      AND slug = ANY(${tx.array([...new Set(slugs)], "text")})
+      AND deleted_at IS NULL
+    ORDER BY name ASC
+  `) as {
+    id: string;
+    taxonomy_type: string;
+    name: string;
+    slug: string;
+    description: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    taxonomyType: row.taxonomy_type,
+    name: row.name,
+    slug: row.slug,
+    description: row.description
+  }));
+}
+
 export type PublicPostTaxonomyTerm = {
   taxonomyType: string;
   name: string;
