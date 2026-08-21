@@ -19,6 +19,9 @@ import {
   listPublicBlogPosts
 } from "../../../modules/blog-content/application/public-blog-directory";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
+import { composeHomepage } from "../../../modules/blog-content/application/homepage-composition";
+import { renderComposedHomepageHtml } from "../../../modules/blog-content/domain/homepage-section-rendering";
+import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 import {
   renderPaginationNavHtml,
   renderPostSummaryListHtmlAtBasePath,
@@ -68,6 +71,16 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
       }
 
       const settings = await fetchPublicBlogSettings(tx, tenant.tenantId);
+
+      // Issue #594 — the editorial composition, if the tenant has one. Only on
+      // page 1: pages 2..n are the chronological archive, and repeating a
+      // curated front page above every one of them would make the same articles
+      // appear on every page of the archive.
+      const composed =
+        page === 1
+          ? await composeHomepage(tx, tenant.tenantId, mediaLibraryPortAdapter)
+          : null;
+
       const result = await listPublicBlogPosts(tx, tenant.tenantId, {
         page,
         pageSize: settings.postsPerPage
@@ -86,7 +99,16 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
       );
 
+      // An empty string here means one of two things and the answer is the same
+      // for both: the tenant has composed nothing, or everything it composed
+      // resolved to nothing. Either way the chronological listing below is what
+      // a reader gets, so a front page can never come out blank.
+      const composedHtml = composed
+        ? renderComposedHomepageHtml(urls.basePath, composed)
+        : "";
+
       const bodyHtml = `<h1>${escapeHtml(tenant.tenantName)} Blog</h1>
+${composedHtml}
 <div class="posts">${renderPostSummaryListHtmlAtBasePath(urls.basePath, result.items, "No posts yet.")}</div>
 ${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
 
