@@ -38,9 +38,13 @@
  * boundary matters here, because "the grant exists in a migration" is exactly
  * the kind of statement that gets mistaken for "the job can run".
  */
-import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { listModules } from "../src/modules";
+import {
+  confers,
+  loadMigrations,
+  parsePrivilegeStatements
+} from "./sql-grants";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKER_ROLE = "awcms_worker";
@@ -102,78 +106,37 @@ export function deriveRequiredGrants(
 }
 
 /**
- * Remove `--` line comments and `/* *​/` block comments.
- *
- * Deliberately not comment-aware of string literals: a GRANT statement never
- * contains a quoted `--`, and erring toward removing too much would only make
- * this gate quieter, never wrongly green — a missing grant stays missing.
- */
-export function stripSqlComments(sql: string): string {
-  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
-}
-
-/**
  * Does any migration grant `privilege` on `table` to the worker?
  *
- * Matches `GRANT <privs> ON [TABLE] <table> TO <role>` allowing the multi-privilege
- * and multi-role forms, and tolerating newlines inside the statement.
+ * The parse itself lives in `sql-grants.ts` — one scanner, because
+ * `data-lifecycle:table-coverage:check` asks the same text a different question
+ * ("does ANY role hold INSERT") and a second regex is a second place for the
+ * comment-swallowing bug that scanner's comment records.
  */
 export function grantsPrivilege(
   sql: string,
   tableName: string,
   privilege: string
 ): boolean {
-  // Comments FIRST. Without this the scan is worse than useless: a `--` line
-  // that merely mentions GRANT has no `;`, so `GRANT[\s\S]*?;` starts there and
-  // swallows everything up to the NEXT semicolon — consuming the real statement
-  // that follows and reporting a granted privilege as missing. That is not
-  // hypothetical: this file's own header comments quote GRANT statements, and
-  // the first version of this gate produced four false positives that way, on
-  // grants sitting in plain sight in sql/060, sql/074 and sql/091.
-  //
-  // Which is the `js/bad-tag-filter` mistake in a different costume — the one
-  // this gate's own doc comment warns about. A pattern that is lazy about where
-  // a construct ENDS eats the thing after it.
-  const statements = stripSqlComments(sql).match(/GRANT[\s\S]*?;/gi) ?? [];
+  const wanted = tableName.toLowerCase();
 
-  for (const statement of statements) {
-    const flat = statement.replace(/\s+/g, " ");
-    const match = /^GRANT (.+?) ON (?:TABLE )?(.+?) TO (.+?);$/i.exec(flat);
-    if (!match) continue;
-
-    const [, privList, tableList, roleList] = match;
-    if (!privList || !tableList || !roleList) continue;
-
-    const roles = roleList.split(",").map((r) => r.trim().toLowerCase());
-    if (!roles.includes(WORKER_ROLE)) continue;
-
-    const tables = tableList.split(",").map((t) => t.trim().toLowerCase());
-    if (!tables.includes(tableName.toLowerCase())) continue;
-
-    const privileges = privList.split(",").map((p) => p.trim().toUpperCase());
-    if (
-      privileges.includes(privilege.toUpperCase()) ||
-      privileges.includes("ALL") ||
-      privileges.includes("ALL PRIVILEGES")
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return parsePrivilegeStatements(sql).some(
+    (statement) =>
+      statement.kind === "grant" &&
+      statement.roles.includes(WORKER_ROLE) &&
+      statement.tables.includes(wanted) &&
+      confers(statement.privileges, privilege)
+  );
 }
 
-function loadMigrations(): string {
-  const dir = path.join(ROOT, "sql");
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort()
-    .map((name) => readFileSync(path.join(dir, name), "utf8"))
+function loadMigrationText(): string {
+  return loadMigrations(path.join(ROOT, "sql"))
+    .map((migration) => migration.sql)
     .join("\n");
 }
 
 if (import.meta.main) {
-  const sql = loadMigrations();
+  const sql = loadMigrationText();
   const required = deriveRequiredGrants(listModules());
 
   const missing: string[] = [];

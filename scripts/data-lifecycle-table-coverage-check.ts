@@ -36,18 +36,29 @@
  * function `repo:inventory` uses, deliberately, so there is one answer to "what
  * tables are there" and not two that can drift.
  *
- * A table passes three ways, and a NEW table has only two of them:
+ * A table passes four ways, and a NEW table has only three of them:
  *
  * - a `dataLifecycle` descriptor — declared by the owning module, or (ADR-0076)
  *   in `INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS` when the table is owned by
  *   `src/lib/` and has no module to declare it. `data-lifecycle:registry:check`
  *   validates the contents of both and proves the second kind really is
  *   infrastructure-owned; this gate only asks whether one exists;
+ * - SEALED AGAINST GROWTH — derived, not written down: no role holds INSERT on
+ *   it anywhere in `sql/`, so its row count cannot grow at runtime. See
+ *   `deriveSealedTables`. This is the one answer nobody has to remember to give,
+ *   and the one a reviewer can check by running a query instead of by trusting
+ *   a sentence;
  * - `BOUNDED_BY_DESIGN` — a reasoned refusal. **Starts empty.** A new bounded
  *   table joins it with a sentence a reviewer can disagree with;
- * - `TABLES_PREDATING_THE_RULE` — the 114 tables that already existed. It may
+ * - `TABLES_PREDATING_THE_RULE` — the tables that already existed. It may
  *   only SHRINK, and an entry that has since gained a descriptor is an error,
  *   not a tolerated duplicate.
+ *
+ * The derived pass arrived last and PAID for itself on the way in: it retired
+ * three `BOUNDED_BY_DESIGN` entries whose prose argued exactly what it derives
+ * (`awcms_entitlements`, `awcms_plans`, `awcms_plan_entitlements`) and five
+ * ledger entries besides. A hand-written answer that the database already
+ * enforces is not a second opinion — it is a copy that can go stale.
  *
  * The ledger carries no per-entry reason on purpose. One reason covers all of
  * them — they predate the rule — and inventing 114 individual justifications
@@ -68,6 +79,7 @@ import path from "node:path";
 import { listModules } from "../src/modules";
 import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
 import { deriveTableRlsStates } from "./repo-inventory";
+import { deriveSealedTables, loadMigrations } from "./sql-grants";
 
 const MIGRATIONS_DIR = "sql";
 
@@ -130,21 +142,6 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0087, and bounded by the table above rather than independently: exactly `RECOVERY_CODE_COUNT` (10) rows are written per factor, and every path that issues a new set deletes the old one first (`disable`, `regenerate`, administrative reset). A spent code is UPDATEd with `used_at`, never appended to, so the ceiling is 10 x live factors and does not move with traffic. An age-based purge would delete unused codes from a live set — silently shrinking the recovery path of somebody who has not needed it yet, which is precisely the person it exists for."
   },
   {
-    table: "awcms_entitlements",
-    reason:
-      "ADR-0084. The catalogue of entitlement NAMES, written only by a migration — `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` denies `awcms_app` every write verb on it, so no request path can add a row at all. Its ceiling is the number of names an operator has authored, and the same argument the `awcms_permissions` row makes for itself: a catalogue that grows with deployments rather than with traffic."
-  },
-  {
-    table: "awcms_plans",
-    reason:
-      "ADR-0084, and bounded for the same reason as the row above — migration-only writes, one row per package an operator sells. An age-based purge would be actively wrong twice over: it would delete the plan rows that `awcms_tenant_subscriptions.plan_code` references (the FK would abort the purge, so retention would silently never run — the failure `sql/108` records), and the `is_default` row is what PR 5.3's backfill lands every tenant on."
-  },
-  {
-    table: "awcms_plan_entitlements",
-    reason:
-      "ADR-0084, and bounded by the two above rather than independently: at most one row per (plan, entitlement) by primary key, so its ceiling is plans x entitlements, both migration-authored. Deleting a row by age would silently revoke a feature from every tenant on that plan — retention as an outage."
-  },
-  {
     table: "awcms_tenant_subscriptions",
     reason:
       "ADR-0084. At most ONE row per tenant, enforced by `awcms_tenant_subscriptions_tenant_key`, so the ceiling is the tenant count — and a subscription HISTORY was deliberately not built for exactly this reason (it would be an unbounded table pretending to be configuration). The history that matters — who moved this tenant to which plan, and when — is an audit event with its own retention. An age-based purge here would delete a LIVE subscription and drop the tenant to unentitled, which is the same class of wrongness `awcms_access_policies` states one entry up."
@@ -180,7 +177,6 @@ export const BOUNDED_BY_DESIGN: readonly {
  */
 export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_abac_policies",
-  "awcms_access_assignments",
   "awcms_auth_providers",
   "awcms_bff_clients",
   "awcms_blog_ad_placements",
@@ -217,8 +213,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_external_identities",
   "awcms_idempotency_keys",
   "awcms_identities",
-  "awcms_identity_mfa_factors",
-  "awcms_identity_mfa_recovery_codes",
   "awcms_idn_admin_regions",
   "awcms_idn_region_datasets",
   "awcms_machine_credentials",
@@ -235,7 +229,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_news_portal_homepage_sections",
   "awcms_offices",
   "awcms_oidc_auth_requests",
-  "awcms_permissions",
   "awcms_profile_entity_links",
   "awcms_profile_identifiers",
   "awcms_profiles",
@@ -248,7 +241,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_reporting_scheduled_exports",
   "awcms_role_permissions",
   "awcms_roles",
-  "awcms_schema_migrations",
   "awcms_seo_redirect_settings",
   "awcms_seo_redirects",
   "awcms_seo_tenant_settings",
@@ -294,6 +286,8 @@ export type CoverageInput = {
   described: readonly string[];
   boundedByDesign: readonly { table: string; reason: string }[];
   ledger: readonly string[];
+  /** Derived by `deriveSealedTables` — no role holds INSERT in `sql/`. */
+  sealed: readonly string[];
 };
 
 export type CoverageProblem = { table: string; message: string };
@@ -307,13 +301,19 @@ export function findCoverageProblems(input: CoverageInput): CoverageProblem[] {
   const tables = new Set(input.tables);
   const described = new Set(input.described);
   const ledger = new Set(input.ledger);
+  const sealed = new Set(input.sealed);
   const bounded = new Map(
     input.boundedByDesign.map((entry) => [entry.table, entry.reason])
   );
   const problems: CoverageProblem[] = [];
 
   for (const table of input.tables) {
-    if (described.has(table) || bounded.has(table) || ledger.has(table)) {
+    if (
+      described.has(table) ||
+      sealed.has(table) ||
+      bounded.has(table) ||
+      ledger.has(table)
+    ) {
       continue;
     }
 
@@ -349,6 +349,19 @@ export function findCoverageProblems(input: CoverageInput): CoverageProblem[] {
           "ledger ini hanya boleh MENYUSUT, dan utang yang sudah dibayar tetapi " +
           "masih tercatat membuat angkanya bohong."
       });
+      continue;
+    }
+
+    if (sealed.has(table)) {
+      problems.push({
+        table,
+        message:
+          `\`${table}\` kini TERSEGEL — tidak ada satu pun role yang memegang INSERT ` +
+          "atasnya di `sql/`, sehingga barisnya tidak bisa bertambah saat runtime — " +
+          "DAN masih tercatat di `TABLES_PREDATING_THE_RULE`. Hapus entri ledger-nya " +
+          "di PR yang sama: utang yang sudah dibayar tetapi masih tercatat membuat " +
+          "angkanya bohong, persis seperti entri yang sudah punya deskriptor."
+      });
     }
   }
 
@@ -375,6 +388,18 @@ export function findCoverageProblems(input: CoverageInput): CoverageProblem[] {
         message:
           `\`${table}\` ada di \`BOUNDED_BY_DESIGN\` DAN di \`TABLES_PREDATING_THE_RULE\`. ` +
           "Dua jawaban untuk satu pertanyaan — pilih satu."
+      });
+    }
+
+    if (sealed.has(table)) {
+      problems.push({
+        table,
+        message:
+          `\`${table}\` dikecualikan lewat \`BOUNDED_BY_DESIGN\`, padahal \`sql/\` SUDAH ` +
+          "menjawabnya: tidak ada role yang memegang INSERT atasnya, jadi barisnya tidak " +
+          "bisa bertambah saat runtime. Hapus entri prosanya — sebuah kalimat yang " +
+          "mengulang apa yang sudah ditegakkan database bukan pendapat kedua, melainkan " +
+          "salinan yang bisa basi ketika grant-nya berubah dan kalimatnya tidak."
       });
     }
   }
@@ -415,21 +440,49 @@ export function collectDescribedTables(): string[] {
   ];
 }
 
+/**
+ * The derived pass, against the real `sql/` tree.
+ *
+ * Exported so the tests can assert the DERIVATION rather than a copy of its
+ * output — including the counter-example (`awcms_idn_admin_regions`) that made
+ * an earlier, `awcms_app`-only version of this idea unsound.
+ */
+export function collectSealedTables(
+  tables: readonly string[]
+): ReturnType<typeof deriveSealedTables> {
+  return deriveSealedTables({
+    migrations: loadMigrations(MIGRATIONS_DIR),
+    tables
+  });
+}
+
 function main(): void {
   const tables = collectTables();
   const described = collectDescribedTables();
+  const { sealed, refusal } = collectSealedTables(tables);
   const problems = findCoverageProblems({
     tables,
     described,
     boundedByDesign: BOUNDED_BY_DESIGN,
-    ledger: TABLES_PREDATING_THE_RULE
+    ledger: TABLES_PREDATING_THE_RULE,
+    sealed
   });
+
+  // Printed before the findings, because it CAUSES them: a refused derivation
+  // reports every sealed table as unanswered, and the list of names would send
+  // a reader looking for a retention bug that is not there.
+  if (refusal) {
+    console.error(
+      `data-lifecycle:table-coverage:check — derivasi ditolak: ${refusal}`
+    );
+  }
 
   if (problems.length === 0) {
     console.log(
       `data-lifecycle:table-coverage:check OK — ${tables.length} tabel: ` +
-        `${described.length} berdeskriptor, ${BOUNDED_BY_DESIGN.length} dikecualikan ` +
-        `beralasan, ${TABLES_PREDATING_THE_RULE.length} utang warisan (hanya boleh menyusut).`
+        `${described.length} berdeskriptor, ${sealed.length} tersegel (tak ada role ` +
+        `pemegang INSERT), ${BOUNDED_BY_DESIGN.length} dikecualikan beralasan, ` +
+        `${TABLES_PREDATING_THE_RULE.length} utang warisan (hanya boleh menyusut).`
     );
     return;
   }

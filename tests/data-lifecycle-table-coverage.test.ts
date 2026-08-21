@@ -14,15 +14,18 @@ import {
   BOUNDED_BY_DESIGN,
   TABLES_PREDATING_THE_RULE,
   collectDescribedTables,
+  collectSealedTables,
   collectTables,
   findCoverageProblems
 } from "../scripts/data-lifecycle-table-coverage-check";
+import { deriveSealedTables } from "../scripts/sql-grants";
 
 const BASE = {
   tables: ["awcms_a", "awcms_b"],
   described: ["awcms_a"],
   boundedByDesign: [] as { table: string; reason: string }[],
-  ledger: ["awcms_b"]
+  ledger: ["awcms_b"],
+  sealed: [] as string[]
 };
 
 describe("the failure the gate exists for", () => {
@@ -57,6 +60,67 @@ describe("the failure the gate exists for", () => {
         ]
       })
     ).toEqual([]);
+  });
+
+  test("and so does a table no role may INSERT into", () => {
+    // The one answer nobody has to remember to give. A table the database
+    // will not let anybody add a row to cannot grow at runtime, so the
+    // retention question is answered before it is asked.
+    expect(
+      findCoverageProblems({
+        ...BASE,
+        tables: [...BASE.tables, "awcms_usage_records"],
+        sealed: ["awcms_usage_records"]
+      })
+    ).toEqual([]);
+  });
+});
+
+describe("a derived answer retires the hand-written one", () => {
+  // Both directions are errors rather than tolerated duplicates, for the reason
+  // the ledger's own stale-entry rule exists: a second answer that nobody has
+  // to maintain is a copy, and a copy goes stale the day the grants change and
+  // the prose does not.
+
+  test("a sealed table may not also be argued in BOUNDED_BY_DESIGN", () => {
+    const problems = findCoverageProblems({
+      ...BASE,
+      tables: [...BASE.tables, "awcms_plans"],
+      sealed: ["awcms_plans"],
+      boundedByDesign: [
+        { table: "awcms_plans", reason: "ditulis hanya oleh migrasi" }
+      ]
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.table).toBe("awcms_plans");
+    expect(problems[0]!.message).toContain("Hapus entri prosanya");
+  });
+
+  test("a sealed table may not stay on the debt ledger either", () => {
+    const problems = findCoverageProblems({
+      ...BASE,
+      sealed: ["awcms_b"]
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.table).toBe("awcms_b");
+    expect(problems[0]!.message).toContain("TERSEGEL");
+  });
+
+  test("a descriptor still wins over the ledger, and reports once", () => {
+    // A table that is both described AND sealed is not a conflict — a
+    // descriptor is an active mechanism and sealing is a passive fact, and
+    // there is nothing to reconcile. What must not happen is the same ledger
+    // entry being reported twice for two different reasons.
+    const problems = findCoverageProblems({
+      ...BASE,
+      described: ["awcms_a", "awcms_b"],
+      sealed: ["awcms_b"]
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("hanya boleh MENYUSUT");
   });
 });
 
@@ -119,12 +183,15 @@ describe("an exemption must be an argument, not a parking space", () => {
 
 describe("the real repository", () => {
   test("is clean today", () => {
+    const tables = collectTables();
+
     expect(
       findCoverageProblems({
-        tables: collectTables(),
+        tables,
         described: collectDescribedTables(),
         boundedByDesign: BOUNDED_BY_DESIGN,
-        ledger: TABLES_PREDATING_THE_RULE
+        ledger: TABLES_PREDATING_THE_RULE,
+        sealed: collectSealedTables(tables).sealed
       })
     ).toEqual([]);
   });
@@ -134,7 +201,121 @@ describe("the real repository", () => {
     // comfortable place to hide a 115th, and the stale-entry rule above cannot
     // see that: a NEW table added to the ledger is indistinguishable from an
     // old one. Lowering this number is the only edit this line should ever get.
-    expect(TABLES_PREDATING_THE_RULE.length).toBeLessThanOrEqual(114);
+    //
+    // 103 since ADR-0102: five entries were retired by the derived pass, which
+    // found that no role holds INSERT on them — two catalogues
+    // (`awcms_permissions`, `awcms_schema_migrations`) and three tables whose
+    // writer MOVED and whose INSERT was revoked behind it
+    // (`awcms_access_assignments` after ADR-0079, the two
+    // `awcms_identity_mfa_*` tables after ADR-0087).
+    expect(TABLES_PREDATING_THE_RULE.length).toBeLessThanOrEqual(103);
+  });
+
+  describe("the derived pass", () => {
+    const tables = collectTables();
+
+    test("does NOT seal the table that made this derivation look unsound", () => {
+      // The counter-example, kept as the load-bearing assertion it became.
+      // `awcms_idn_admin_regions` denies `awcms_app` every write verb and holds
+      // ~91,000 rows, because `bun run idn-regions:import` runs as
+      // `awcms_worker`. An `awcms_app`-only derivation would have exempted the
+      // largest table in the schema; this one reads every role, so the worker's
+      // INSERT keeps it unsealed and answerable elsewhere.
+      //
+      // If this ever flips to true, the derivation has stopped reading some
+      // role's grants and every sealed table below is suspect.
+      expect(collectSealedTables(tables).sealed).not.toContain(
+        "awcms_idn_admin_regions"
+      );
+    });
+
+    test("refuses to seal anything when the baseline grant is missing", () => {
+      // The failure that would exempt the whole schema in one silent step: with
+      // no blanket/default INSERT grant found, every table reads as sealed. So
+      // it fails CLOSED — nothing sealed, and a reason. The gate then reports
+      // the affected tables as unanswered, which is loud and self-correcting.
+      const result = deriveSealedTables({
+        migrations: [
+          { name: "001_x.sql", sql: "CREATE TABLE awcms_a (id uuid);" }
+        ],
+        tables: ["awcms_a"]
+      });
+
+      expect(result.sealed).toEqual([]);
+      expect(result.refusal).toContain("baseline");
+    });
+
+    test("a per-table GRANT to any role unseals it", () => {
+      // The property the whole derivation rests on, planted rather than
+      // inferred: it is not "the request path cannot write it" but "NOBODY
+      // can". A grant to a role this test invents is enough.
+      const baseline =
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO awcms_app;";
+      const migrations = [
+        { name: "001_x.sql", sql: baseline },
+        { name: "002_x.sql", sql: "REVOKE ALL ON awcms_a FROM awcms_app;" }
+      ];
+
+      expect(
+        deriveSealedTables({ migrations, tables: ["awcms_a"] }).sealed
+      ).toEqual(["awcms_a"]);
+
+      expect(
+        deriveSealedTables({
+          migrations: [
+            ...migrations,
+            { name: "003_x.sql", sql: "GRANT INSERT ON awcms_a TO awcms_job;" }
+          ],
+          tables: ["awcms_a"]
+        }).sealed
+      ).toEqual([]);
+    });
+
+    test("order matters — a later REVOKE seals, a later GRANT does not", () => {
+      // Privileges are a running total, not a set. Reading the migrations as an
+      // unordered bag would answer "was INSERT ever granted", which is a
+      // different and useless question.
+      const grant = { name: "002_x.sql", sql: "GRANT INSERT ON awcms_a TO r;" };
+      const revoke = {
+        name: "003_x.sql",
+        sql: "REVOKE INSERT ON awcms_a FROM r;"
+      };
+      const baseline = {
+        name: "001_x.sql",
+        sql: "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO awcms_app;\nREVOKE ALL ON awcms_a FROM awcms_app;"
+      };
+
+      expect(
+        deriveSealedTables({
+          migrations: [baseline, grant, revoke],
+          tables: ["awcms_a"]
+        }).sealed
+      ).toEqual(["awcms_a"]);
+
+      expect(
+        deriveSealedTables({
+          migrations: [baseline, revoke, grant],
+          tables: ["awcms_a"]
+        }).sealed
+      ).toEqual([]);
+    });
+
+    test("a column-scoped INSERT still counts as INSERT", () => {
+      // `GRANT INSERT (col)` compared for equality against "INSERT" reads as no
+      // grant at all — which would seal a table a role can write. The one
+      // direction this derivation must never err in.
+      expect(
+        deriveSealedTables({
+          migrations: [
+            {
+              name: "001_x.sql",
+              sql: "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO awcms_app;\nREVOKE ALL ON awcms_a FROM awcms_app;\nGRANT INSERT (tenant_id) ON awcms_a TO awcms_worker;"
+            }
+          ],
+          tables: ["awcms_a"]
+        }).sealed
+      ).toEqual([]);
+    });
   });
 
   test("the ledger has no duplicates", () => {
@@ -298,7 +479,38 @@ describe("the real repository", () => {
       // classes are now enumerated, a fifth is unlikely to be real, and "I found a
       // new way to say bounded" is the failure mode a list of arguments attracts
       // once it has enough of them to pattern-match against.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(16);
+      //
+      // ## 14 since ADR-0102 — the bar was met, and by the branch it demanded
+      //
+      // `awcms_site_profile` (Issue #596) arrived as a seventeenth entry whose
+      // argument was entry 2's almost word for word: one row per key, upserted,
+      // ceiling is another table. Exactly the pattern-match the bar predicted.
+      // So the shrink was taken instead: three entries left this list because
+      // `sql/` already answers for them, and the count fell to fourteen.
+      //
+      // The three are `awcms_entitlements`, `awcms_plans` and
+      // `awcms_plan_entitlements`, and the derivation that retired them is the
+      // one the comment ABOVE recorded as unsound. That objection was right
+      // about the version it was aimed at and does not reach this one, which is
+      // the whole reason the idea was written down rather than dropped:
+      //
+      // - it read `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`, which constrains
+      //   `awcms_app` alone, so `awcms_idn_admin_regions` — 91,000 rows written
+      //   by a job running as `awcms_worker` — would have been exempted.
+      //   `deriveSealedTables` reads EVERY role, and the test below pins that
+      //   table as unsealed, so the counter-example now proves the rule instead
+      //   of refuting it;
+      // - and it called the parse too expensive for "a question five sentences
+      //   answer better". The parser landed anyway for
+      //   `data-lifecycle:worker-grants:check`, and five sentences had become
+      //   seventeen entries.
+      //
+      // The bar for the next raise, unchanged in force and now with a precedent
+      // behind it: **a net shrink, not an argument.** A hand-written entry that
+      // repeats what the database already enforces is not a second opinion — it
+      // is a copy, and it goes stale the day the grant changes and the sentence
+      // does not.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(14);
     });
 
     test("every entry names a table that really exists in sql/", () => {

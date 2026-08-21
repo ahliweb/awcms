@@ -17,9 +17,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   deriveRequiredGrants,
-  grantsPrivilege,
-  stripSqlComments
+  grantsPrivilege
 } from "../scripts/data-lifecycle-worker-grants-check";
+// The scanner moved to `sql-grants.ts` when `data-lifecycle:table-coverage:check`
+// began asking the same text a different question. The lesson pinned below moved
+// with it — one parser, one place for this bug to be fixed.
+import { stripSqlComments } from "../scripts/sql-grants";
 import { listModules } from "../src/modules";
 
 const GRANT =
