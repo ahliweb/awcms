@@ -112,6 +112,8 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
+  "/api/v1/blog/terms":
+    "ADR-0104 — the tenant's vocabulary, read at build time so a category or tag archive can exist at all (#597 item 1). The consumer uses the `?order=created_at` TRAVERSAL, never the default alphabetical list, which returns some of the terms and says nothing about the rest (#647). Frozen here first; it moves to CONSUMED when `ahliweb/awcms-astro` calls it.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
