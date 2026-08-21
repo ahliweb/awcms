@@ -66,7 +66,7 @@ export function splitBodyTextIntoParagraphs(bodyText: string): string[] {
     .filter((paragraph) => paragraph.length > 0);
 }
 
-/** The `contentJson` half of the payload: `{ blocks: [...] }`, the shape `renderContentJsonToHtml` reads and everything downstream of it expects. */
+/** The `contentJson` half of the payload: `{ blocks: [...] }`, the lossy projection kept for consumers of the old vocabulary. Since Issue #624 a reader is served the canonical Portable Text half whenever it holds content — see `blog-body-rendering.ts`. */
 export function buildContentJsonFromBodyText(
   bodyText: string
 ): ParagraphBodyDocument {

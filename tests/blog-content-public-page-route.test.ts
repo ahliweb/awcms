@@ -113,7 +113,10 @@ describe("the route is gated like every other public blog route", () => {
   test("the body is rendered through the whitelist renderer, never raw", async () => {
     const route = await source(ROUTE);
 
-    expect(route).toContain("renderContentJsonToHtml(");
+    // Issue #624 — `renderBlogBodyHtml` chooses between the canonical Portable
+    // Text body and the `content_json` projection; both branches escape every
+    // character and emit tags only from closed mappings.
+    expect(route).toContain("renderBlogBodyHtml(");
     expect(route).not.toContain("set:html");
     expect(route).not.toContain("page.contentText}");
   });

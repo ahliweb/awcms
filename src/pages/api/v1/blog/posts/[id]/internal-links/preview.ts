@@ -9,7 +9,7 @@ import {
 } from "../../../../../../../modules/identity-access/application/access-guard";
 import { hashSessionToken } from "../../../../../../../lib/auth/session-token";
 import { fetchBlogPostById } from "../../../../../../../modules/blog-content/application/blog-post-directory";
-import { renderContentJsonToHtml } from "../../../../../../../modules/blog-content/domain/content-block-rendering";
+import { renderBlogBodyHtml } from "../../../../../../../modules/blog-content/domain/blog-body-rendering";
 import { previewInternalTagLinksForContent } from "../../../../../../../modules/blog-content/application/internal-tag-link-rendering";
 import { resolveBlogAutoInternalTagLinksConfig } from "../../../../../../../modules/blog-content/domain/internal-tag-linking-config";
 
@@ -26,8 +26,9 @@ const PREVIEW_GUARD = {
  * endpoint/UI shows which terms will be linked before publish"). Runs the
  * exact same `applyInternalTagLinksToHtml` engine the public `/news`/
  * `/blog/{tenantCode}` routes use at render time (via
- * `previewInternalTagLinksForContent`), against the post's CURRENT
- * `content_json` regardless of its `status` (draft/review/scheduled all
+ * `previewInternalTagLinksForContent`), against the post's CURRENT body —
+ * whichever of the two stored shapes the public route would render (Issue
+ * #624) — regardless of its `status` (draft/review/scheduled all
  * previewable — that's the point) — gallery/video media is rendered
  * without R2 resolution (media verification is `content-quality-checklist`'s
  * concern, Issue #640; this endpoint only cares about which text terms
@@ -88,7 +89,11 @@ export const GET: APIRoute = async ({ request, cookies, params }) => {
       SELECT tenant_code FROM awcms_tenants WHERE id = ${tenantId}
     `) as TenantCodeRow[];
     const basePath = `/blog/${tenantRows[0]?.tenant_code ?? ""}`;
-    const contentHtml = renderContentJsonToHtml(post.contentJson);
+    // Issue #624 — the same body-source decision the public route makes. A
+    // preview rendered from the other shape would answer a question the editor
+    // did not ask: the projection flattens inline links, and an already-linked
+    // phrase is exactly what the linking engine skips.
+    const contentHtml = renderBlogBodyHtml(post);
 
     const preview = await previewInternalTagLinksForContent(
       tx,
