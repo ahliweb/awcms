@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -184,6 +185,15 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       slug: updated.slug
     });
 
+    // ADR-0042 §Rule 21 (Issue #628) — renaming a term changes every archive
+    // heading and every tag label rendered on a post that carries it.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.term.updated"
+    );
+
     return ok(updated);
   });
 };
@@ -271,6 +281,15 @@ export const DELETE: APIRoute = async ({
       attributes: { reason },
       correlationId
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — the archive URL stops resolving. Left
+    // cached, a deleted category keeps answering 200 from the edge.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.term.deleted"
+    );
 
     return ok({ id: termId, deleted: true });
   });

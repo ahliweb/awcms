@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -157,6 +158,15 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       adPlacementId: id
     });
 
+    // ADR-0042 §Rule 21 (Issue #628) — a creative or schedule change reaches the
+    // reader only once the cached pages carrying that slot are evicted.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "news_portal.ad_placement.updated"
+    );
+
     return ok(updated);
   });
 };
@@ -241,6 +251,15 @@ export const DELETE: APIRoute = async ({
       moduleKey: "blog_content",
       adPlacementId: id
     });
+
+    // ADR-0042 §Rule 21 (Issue #628) — the serious direction: a withdrawn ad
+    // still being served is a campaign running past its end date.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "news_portal.ad_placement.deleted"
+    );
 
     return ok({ id, deleted: true });
   });
