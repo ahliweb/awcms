@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -131,6 +132,15 @@ export const POST = defineTenantRoute<Prepared>({
       pageId,
       adPlacementsNowInert: result.adPlacementsNowInert
     });
+
+    // ADR-0042 — the row is gone for good; an edge object outliving it would be
+    // the only copy left, which is the opposite of what a purge is for.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.purged"
+    );
 
     const response = ok({
       id: pageId,

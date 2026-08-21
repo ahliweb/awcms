@@ -339,6 +339,9 @@ export async function fetchPublicBlogPostSummariesByIds(
 
 const FEED_ITEM_LIMIT = 50;
 
+/** See `listPublicBlogPagesForSitemap` for why this is lower than `FEED_ITEM_LIMIT`. */
+const SITEMAP_PAGE_LIMIT = 200;
+
 /** RSS/sitemap source — flat, unpaginated (feeds/sitemaps are consumed by machines, not paged by a visitor), bounded to the latest 50 published public posts. */
 export async function listPublicBlogPostsForFeed(
   tx: Bun.SQL,
@@ -358,6 +361,157 @@ export async function listPublicBlogPostsForFeed(
   `) as PublicBlogPostDetailRow[];
 
   return rows.map(toDetail);
+}
+
+/**
+ * A static page as a reader sees it (Issue #594).
+ *
+ * Deliberately the same shape as `PublicBlogPostDetail` minus the fields a page
+ * does not have: no `seoImageMediaId` and no `autoInternalTagLinksDisabled`
+ * (neither column exists on `awcms_blog_pages`), and no `unpublishAt` — `sql/133`
+ * withheld that column from pages on purpose, because Redaksi and Pedoman Media
+ * Siber are the surface a press council expects to find and must not disappear
+ * on a timer.
+ *
+ * `pageType` is carried but NOT used as a visibility gate. It is a classification
+ * label with no behaviour anywhere in this repo — nothing reads it at render
+ * time, and `status`/`visibility` are the publication model. Filtering on it here
+ * would invent a second, undocumented publication rule whose only symptom would
+ * be a page an editor published and cannot see.
+ */
+export type PublicBlogPageDetail = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  contentJson: Record<string, unknown>;
+  contentText: string;
+  seoTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  locale: string;
+  publishedAt: Date;
+  updatedAt: Date;
+  visibility: BlogContentVisibility;
+  featuredMediaId: string | null;
+  pageType: string;
+};
+
+type PublicBlogPageDetailRow = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content_json: Record<string, unknown>;
+  content_text: string;
+  seo_title: string | null;
+  meta_description: string | null;
+  canonical_url: string | null;
+  locale: string;
+  published_at: Date;
+  updated_at: Date;
+  visibility: BlogContentVisibility;
+  featured_media_id: string | null;
+  page_type: string;
+};
+
+function toPageDetail(row: PublicBlogPageDetailRow): PublicBlogPageDetail {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    excerpt: row.excerpt,
+    contentJson: row.content_json,
+    contentText: row.content_text,
+    seoTitle: row.seo_title,
+    metaDescription: row.meta_description,
+    canonicalUrl: row.canonical_url,
+    locale: row.locale,
+    publishedAt: row.published_at,
+    updatedAt: row.updated_at,
+    visibility: row.visibility,
+    featuredMediaId: row.featured_media_id,
+    pageType: row.page_type
+  };
+}
+
+/**
+ * DETAIL predicate — the same one `fetchPublicBlogPostBySlug` uses, including
+ * `visibility IN ('public', 'unlisted')`. A page is one of the two content
+ * shapes this module publishes and there is no reason for its unlisted tier to
+ * mean something different from a post's: reachable by direct link, absent from
+ * every listing.
+ *
+ * A `draft`/`review`/`scheduled`/`archived`/soft-deleted/future-dated page is
+ * unreachable here by construction, which is the "drafts never leak" half of
+ * Issue #594's Definition of Done.
+ */
+export async function fetchPublicBlogPageBySlug(
+  tx: Bun.SQL,
+  tenantId: string,
+  slug: string
+): Promise<PublicBlogPageDetail | null> {
+  const rows = (await tx`
+    SELECT id, title, slug, excerpt, content_json, content_text, seo_title,
+      meta_description, canonical_url, locale, published_at, updated_at,
+      visibility, featured_media_id, page_type
+    FROM awcms_blog_pages
+    WHERE tenant_id = ${tenantId} AND slug = ${slug}
+      AND status = 'published' AND visibility IN ('public', 'unlisted')
+      AND deleted_at IS NULL AND published_at IS NOT NULL AND published_at <= now()
+    ORDER BY published_at DESC
+    LIMIT 1
+  `) as PublicBlogPageDetailRow[];
+
+  const row = rows[0];
+  return row ? toPageDetail(row) : null;
+}
+
+export type PublicBlogPageSummary = {
+  title: string;
+  slug: string;
+  locale: string;
+  updatedAt: Date;
+};
+
+/**
+ * LISTING predicate (strict `visibility = 'public'`), for the sitemap.
+ *
+ * Bounded like `listPublicBlogPostsForFeed` and for the same reason. The ceiling
+ * is deliberately far above the real population — a tenant's static pages are
+ * Redaksi, the Pedoman Media Siber, a disclaimer and a privacy policy, a set
+ * measured in tens — so it never truncates a real site, and still stops one
+ * crawl from becoming an unbounded scan.
+ *
+ * Ordered by `menu_order` then `slug` so the sitemap is byte-stable between
+ * requests, which is what makes the edge-cached copy of it worth having.
+ */
+export async function listPublicBlogPagesForSitemap(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<PublicBlogPageSummary[]> {
+  const rows = (await tx`
+    SELECT title, slug, locale, updated_at
+    FROM awcms_blog_pages
+    WHERE tenant_id = ${tenantId}
+      AND status = 'published' AND visibility = 'public'
+      AND deleted_at IS NULL
+      AND published_at IS NOT NULL AND published_at <= now()
+    ORDER BY menu_order ASC, slug ASC
+    LIMIT ${SITEMAP_PAGE_LIMIT}
+  `) as {
+    title: string;
+    slug: string;
+    locale: string;
+    updated_at: Date;
+  }[];
+
+  return rows.map((row) => ({
+    title: row.title,
+    slug: row.slug,
+    locale: row.locale,
+    updatedAt: row.updated_at
+  }));
 }
 
 export type PublicBlogSettings = {

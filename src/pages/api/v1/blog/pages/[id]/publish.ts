@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -194,6 +195,16 @@ export const POST = defineTenantRoute<Prepared>({
       pageId,
       slug: updated.slug
     });
+
+    // ADR-0042 — the transition that makes this page reachable is the one a
+    // stale cache would hide, so the purge belongs here and not only on the
+    // PATCH path. Same transaction, no-op when the cache is off.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.published"
+    );
 
     const response = ok({ ...updated, qualityChecklist: checklist });
     const body = await response.clone().json();

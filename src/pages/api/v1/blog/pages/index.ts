@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../lib/database/client";
 import { withTenant } from "../../../../../lib/database/tenant-context";
@@ -283,6 +284,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       message: `Blog page created: ${page.slug}.`,
       correlationId
     });
+
+    // ADR-0042: same transaction as the content change, so the invalidation
+    // cannot be lost or left behind by a rollback. No-op when the edge cache is
+    // disabled. Obligatory since Issue #594 gave `blog_content` the `blog-page`
+    // surface — before that a page write changed nothing any cache held.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.created"
+    );
 
     return ok(page);
   });

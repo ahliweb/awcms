@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -135,6 +136,15 @@ export const POST = defineTenantRoute<Prepared>({
       pageId,
       slug: restored.slug
     });
+
+    // ADR-0042 — a restore can put a page back under a slug the edge is still
+    // holding a 404 for.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.restored"
+    );
 
     const response = ok(restored);
     const body = await response.clone().json();

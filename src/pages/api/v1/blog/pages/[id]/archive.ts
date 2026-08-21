@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -133,6 +134,16 @@ export const POST = defineTenantRoute<Prepared>({
       pageId,
       slug: updated.slug
     });
+
+    // ADR-0042 — archiving withdraws the page from the public route. A withdrawn
+    // page still being served from the edge is the withdrawal not having
+    // happened.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.archived"
+    );
 
     const response = ok(updated);
     const body = await response.clone().json();

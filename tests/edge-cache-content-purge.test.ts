@@ -182,6 +182,17 @@ describe("content write paths emit a purge", () => {
   test.each([
     ["src/pages/api/v1/blog/posts/[id].ts", 2],
     ["src/pages/api/v1/blog/posts/index.ts", 1],
+    // Issue #594 gave `blog_content` the `blog-page` surface, so every handler
+    // that changes a page now has the obligation posts already had. The four
+    // lifecycle routes matter more than the two CRUD ones: `publish` is how a
+    // page becomes reachable at all and `archive` is how it stops being, and
+    // neither goes through the PATCH path that would otherwise have covered it.
+    ["src/pages/api/v1/blog/pages/[id].ts", 2],
+    ["src/pages/api/v1/blog/pages/index.ts", 1],
+    ["src/pages/api/v1/blog/pages/[id]/publish.ts", 1],
+    ["src/pages/api/v1/blog/pages/[id]/archive.ts", 1],
+    ["src/pages/api/v1/blog/pages/[id]/restore.ts", 1],
+    ["src/pages/api/v1/blog/pages/[id]/purge.ts", 1],
     // 2 since Issue #591: the publish sweep and the unpublish sweep each emit
     // one. The second matters MORE than the first — a withdrawn article still
     // sitting in the edge cache is the withdrawal not having happened, which is

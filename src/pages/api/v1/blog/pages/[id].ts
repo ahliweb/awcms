@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../lib/database/client";
 import { withTenant } from "../../../../../lib/database/tenant-context";
@@ -345,6 +346,16 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       correlationId
     });
 
+    // ADR-0042 — see the identical call in `pages/index.ts`. An edit to the
+    // Pedoman Media Siber that a reader keeps not seeing is the exact failure
+    // the surface was declared for.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.updated"
+    );
+
     return ok(updated);
   });
 };
@@ -432,6 +443,13 @@ export const DELETE: APIRoute = async ({
       attributes: { reason },
       correlationId
     });
+
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.page.deleted"
+    );
 
     return ok({ id: pageId, deleted: true });
   });
