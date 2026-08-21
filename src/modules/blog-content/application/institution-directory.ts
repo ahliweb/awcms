@@ -378,6 +378,44 @@ export async function fetchPostInstitutionIds(
 }
 
 /**
+ * The same assignments for a WHOLE page of posts — one query, not one per post.
+ * The institution twin of `fetchPostTermIdsForPosts`, and the same reasoning:
+ * see that function's note on why the build feed carries these at all.
+ *
+ * `tx.array(...)` rather than interpolating the array, for the reason recorded
+ * on `countExistingInstitutions` below.
+ */
+export async function fetchPostInstitutionIdsForPosts(
+  tx: Bun.SQL,
+  tenantId: string,
+  postIds: readonly string[]
+): Promise<Map<string, string[]>> {
+  const byPost = new Map<string, string[]>();
+
+  if (postIds.length === 0) {
+    return byPost;
+  }
+
+  const rows = (await tx`
+    SELECT post_id, institution_id FROM awcms_blog_post_institutions
+    WHERE tenant_id = ${tenantId}
+      AND post_id = ANY(${tx.array([...postIds], "uuid")})
+  `) as { post_id: string; institution_id: string }[];
+
+  for (const row of rows) {
+    const existing = byPost.get(row.post_id);
+
+    if (existing) {
+      existing.push(row.institution_id);
+    } else {
+      byPost.set(row.post_id, [row.institution_id]);
+    }
+  }
+
+  return byPost;
+}
+
+/**
  * Used before `syncPostInstitutionAssignments` to reject an `institutionIds`
  * list naming an id that does not exist, belongs to another tenant, or is
  * soft-deleted — a bare FK violation would otherwise surface as a raw 500.

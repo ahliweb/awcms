@@ -301,6 +301,55 @@ export async function fetchPostTermIds(
   return rows.map((row) => row.term_id);
 }
 
+/**
+ * The same assignments for a WHOLE page of posts — one query, not one per post.
+ *
+ * `listBlogPostsFullPage` left `termIds` out of the build feed precisely
+ * because the per-post fetch above "would cost one extra query per post". That
+ * reasoning was right about the per-post fetch and wrong about the conclusion:
+ * a page of fifty posts needs one query with fifty ids in it, which is what
+ * this is. The alternative it produced — a feed that never says which category
+ * an article is in — meant no consumer could build a category archive at all.
+ *
+ * `tx.array(...)` rather than interpolating the array: Bun's tagged template
+ * delivers a plain JS array as a comma-joined string, which PostgreSQL rejects
+ * as `22P02` against a `uuid[]`.
+ *
+ * Posts with no assignments are simply absent from the map; callers default
+ * them to `[]` rather than `undefined`, because "this article has no
+ * categories" and "this payload does not carry categories" are different facts
+ * and a consumer cannot act on the second if it looks like the first.
+ */
+export async function fetchPostTermIdsForPosts(
+  tx: Bun.SQL,
+  tenantId: string,
+  postIds: readonly string[]
+): Promise<Map<string, string[]>> {
+  const byPost = new Map<string, string[]>();
+
+  if (postIds.length === 0) {
+    return byPost;
+  }
+
+  const rows = (await tx`
+    SELECT post_id, term_id FROM awcms_blog_post_terms
+    WHERE tenant_id = ${tenantId}
+      AND post_id = ANY(${tx.array([...postIds], "uuid")})
+  `) as { post_id: string; term_id: string }[];
+
+  for (const row of rows) {
+    const existing = byPost.get(row.post_id);
+
+    if (existing) {
+      existing.push(row.term_id);
+    } else {
+      byPost.set(row.post_id, [row.term_id]);
+    }
+  }
+
+  return byPost;
+}
+
 /** Used before `syncPostTermAssignments` to reject a `termIds` list containing an id that doesn't exist (or belongs to another tenant, or is soft-deleted) — a bare FK violation would otherwise surface as a raw 500. */
 export async function countExistingTerms(
   tx: Bun.SQL,
