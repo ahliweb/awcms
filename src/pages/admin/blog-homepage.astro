@@ -1,0 +1,887 @@
+---
+/**
+ * `/admin/blog-homepage` — the editorial homepage composer (Issue #594,
+ * PRD LenteraKalteng §10).
+ *
+ * `awcms_news_portal_homepage_sections` has existed since `sql/044` with a full
+ * write API, six strictly-typed section shapes and a reference validator that
+ * refuses a stale post id. Nobody could reach any of it: there was no screen, so
+ * the newsroom could not compose a homepage, and `homepage_sections.read` and
+ * `.configure` sat on the unscreened-permission ledger.
+ *
+ * ## One form, not two
+ *
+ * Create and edit share a single form. The alternative — the create/edit pair
+ * every other screen here uses — would mean writing the six type-specific
+ * config field groups twice, and two copies of a polymorphic form is how the
+ * copies drift. `?edit=<id>` prefills it; the presence of the hidden id decides
+ * `POST` against `PATCH`.
+ *
+ * `sectionType` is immutable after creation (`validateUpdateHomepageSectionInput`
+ * rejects a change), so in edit mode it is rendered as text plus a hidden input
+ * rather than a disabled `<select>`: a disabled control is omitted from
+ * `FormData` entirely, and the script needs the type to know which config shape
+ * to build.
+ *
+ * ## Why post and media ids are typed, not picked
+ *
+ * `featured_posts`/`editor_picks` carry an ORDERED list of post ids, and
+ * `gallery_block` an ordered list of media object ids. An ordered multi-select
+ * is not a control the platform has: `<select multiple>` does not preserve the
+ * order a reader chose, and `wireMediaPickers` binds one hidden input to one
+ * object. Building an add/reorder/remove widget is a real piece of client work
+ * with a real client-asset cost, and bundling it into the PR that makes the
+ * capability reachable at all would put the two on one review.
+ *
+ * So those two fields are one id per line, and the screen renders the eligible
+ * posts beside the field with their ids — the reference table is what makes
+ * typing an id a lookup rather than a memory test. `headline`, `latest_posts`
+ * and `category_grid` reference nothing ordered, so they get real `<select>`s.
+ *
+ * The posts offered are the ones `fetchPublicBlogPostSummariesByIds` would
+ * actually render — published, `visibility = 'public'`, not future-dated. A
+ * picker that offered drafts would let an editor curate a homepage slot that
+ * silently renders nothing.
+ *
+ * ## Idempotency
+ *
+ * No request from this screen carries an `Idempotency-Key`, and the endpoints do
+ * not ask for one. Create is protected by the `(tenant_id, section_key)` unique
+ * index — a replay is a 409, not a duplicate section — and update and delete are
+ * idempotent by construction. Sending the header would imply a replay contract
+ * `/api/v1/news-portal/homepage-sections` never offered.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes is
+ * the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  listHomepageSections,
+  type HomepageSectionView
+} from "../../modules/blog-content/application/homepage-section-directory";
+import { HOMEPAGE_SECTION_TYPES } from "../../modules/blog-content/domain/homepage-section-policy";
+import { listBlogTerms } from "../../modules/blog-content/application/blog-taxonomy-directory";
+import { listPublicBlogPosts } from "../../modules/blog-content/application/public-blog-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+/** `?edit=<id>` prefills the one form with an existing section. */
+const editingId = (Astro.url.searchParams.get("edit") ?? "").trim();
+
+/** How many eligible posts the reference table offers. `listPublicBlogPosts` caps at 50. */
+const REFERENCE_POST_PAGE_SIZE = 50;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "homepage_sections",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    sections: await listHomepageSections(tx, ssr.tenantId),
+    categories: await listBlogTerms(tx, ssr.tenantId, {
+      taxonomyType: "category"
+    }),
+    eligiblePosts: (
+      await listPublicBlogPosts(tx, ssr.tenantId, {
+        page: 1,
+        pageSize: REFERENCE_POST_PAGE_SIZE
+      })
+    ).items,
+    canConfigure: await can({
+      moduleKey: "blog_content",
+      activityCode: "homepage_sections",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has composed no homepage".
+    logAdminPageError(
+      "admin/blog-homepage.astro: failed to load homepage sections",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const sections: HomepageSectionView[] =
+  screen.state === "allowed" ? screen.data.sections : [];
+const categories = screen.state === "allowed" ? screen.data.categories : [];
+const eligiblePosts =
+  screen.state === "allowed" ? screen.data.eligiblePosts : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+
+const editing = editingId
+  ? (sections.find((section) => section.id === editingId) ?? null)
+  : null;
+
+/** Reads one key out of a section's opaque `config_json` without trusting its shape. */
+function configString(
+  section: HomepageSectionView | null,
+  key: string
+): string {
+  const value = section?.config?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function configNumber(
+  section: HomepageSectionView | null,
+  key: string,
+  fallback: number
+): number {
+  const value = section?.config?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Ordered id lists render one per line, which is also how they are typed back in. */
+function configLines(section: HomepageSectionView | null, key: string): string {
+  const value = section?.config?.[key];
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .join("\n")
+    : "";
+}
+
+function configSlugs(section: HomepageSectionView | null): string[] {
+  const value = section?.config?.categorySlugs;
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+/** `datetime-local` wants `YYYY-MM-DDTHH:mm`; the column is `timestamptz`. */
+function toLocalInputValue(value: Date | null): string {
+  return value ? value.toISOString().slice(0, 16) : "";
+}
+
+function formatWindow(section: HomepageSectionView): string {
+  if (!section.startsAt && !section.endsAt) return "—";
+  const from = section.startsAt ? section.startsAt.toISOString() : "…";
+  const to = section.endsAt ? section.endsAt.toISOString() : "…";
+  return `${from} → ${to}`;
+}
+
+const selectedSlugs = configSlugs(editing);
+const columnCount = 6 + (canConfigure ? 1 : 0);
+---
+
+<AdminLayout title="Homepage composition">
+  <header class="page-header fade-in-up">
+    <h1 id="homepage-heading">{t("Homepage composition")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    screen.state === "denied" && (
+      <p class="state-notice" id="homepage-denied">
+        {t("You do not have permission to view the homepage composition.")}
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice" id="homepage-error">
+        {t("Could not load homepage sections. Please try again.")}
+      </p>
+    )
+  }
+
+  <p class="form-error" id="homepage-action-error" hidden></p>
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="homepage-list-title"
+      >
+        <h2 class="admin-section-title" id="homepage-list-title">
+          {t("Sections")}
+          <span class="count-pill">{sections.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="homepage-sections-table"
+          >
+            <caption class="sr-only">
+              {t("Homepage sections, in display order.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Order")}</th>
+                <th scope="col">{t("Key")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Enabled")}</th>
+                <th scope="col">{t("Schedule")}</th>
+                {canConfigure && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {sections.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={columnCount}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▤
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No sections yet")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Until one exists the homepage falls back to the most recent eligible articles."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                sections.map((section) => (
+                  <tr data-section-row={section.id}>
+                    <td data-label="Order">{section.sortOrder}</td>
+                    <td data-label="Key">
+                      <span class="cell-code" set:text={section.sectionKey} />
+                    </td>
+                    <td data-label="Type">
+                      <span class="status-badge" data-variant="neutral">
+                        <span class="status-dot" aria-hidden="true" />
+                        {section.sectionType}
+                      </span>
+                    </td>
+                    <td data-label="Title">
+                      {section.title ? (
+                        <span set:text={section.title} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Enabled">
+                      <span
+                        class="status-badge"
+                        data-variant={section.isEnabled ? "success" : "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {section.isEnabled ? t("Enabled") : t("Disabled")}
+                      </span>
+                    </td>
+                    <td data-label="Schedule">
+                      <span class="cell-muted">{formatWindow(section)}</span>
+                    </td>
+                    {canConfigure && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <a
+                            class="quick-link"
+                            href={`/admin/blog-homepage?edit=${section.id}`}
+                          >
+                            {t("Edit")}
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
+                          <button
+                            type="button"
+                            class="btn-inline section-delete-btn"
+                            data-section-id={section.id}
+                            data-section-key={section.sectionKey}
+                          >
+                            {t("Delete")}
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canConfigure && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="homepage-form-title"
+      >
+        <h2 class="admin-section-title" id="homepage-form-title">
+          {editing ? t("Edit section") : t("Add section")}
+        </h2>
+
+        <p class="form-error" id="homepage-form-error" hidden />
+
+        <form id="homepage-section-form" class="admin-form">
+          <input
+            type="hidden"
+            id="section-id"
+            value={editing ? editing.id : ""}
+          />
+
+          <div class="form-row">
+            <label for="section-key">{t("Key")}</label>
+            {editing ? (
+              <p class="form-hint">
+                <span class="cell-code" set:text={editing.sectionKey} />
+              </p>
+            ) : (
+              <input
+                id="section-key"
+                name="sectionKey"
+                type="text"
+                required
+                maxlength="64"
+                pattern="[a-z0-9][a-z0-9_-]*"
+              />
+            )}
+            <p class="form-hint">
+              {t(
+                "Lowercase letters, digits, hyphen and underscore. Unique per tenant, and fixed once created."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="section-type">{t("Type")}</label>
+            {editing ? (
+              <>
+                <p class="form-hint">
+                  <span set:text={editing.sectionType} />
+                </p>
+                <input
+                  type="hidden"
+                  id="section-type"
+                  name="sectionType"
+                  value={editing.sectionType}
+                />
+                <p class="form-hint">
+                  {t("The type cannot be changed after a section is created.")}
+                </p>
+              </>
+            ) : (
+              <select id="section-type" name="sectionType" required>
+                {HOMEPAGE_SECTION_TYPES.map((type) => (
+                  <option value={type}>{type}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div class="form-row">
+            <label for="section-title">{t("Title")}</label>
+            <input
+              id="section-title"
+              name="title"
+              type="text"
+              value={editing?.title ?? ""}
+            />
+            <p class="form-hint">
+              {t("Shown above the section. Leave blank for no heading.")}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="section-sort-order">{t("Order")}</label>
+            <input
+              id="section-sort-order"
+              name="sortOrder"
+              type="number"
+              step="1"
+              value={editing ? String(editing.sortOrder) : "0"}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="section-enabled">{t("Enabled")}</label>
+            <input
+              id="section-enabled"
+              name="isEnabled"
+              type="checkbox"
+              checked={editing ? editing.isEnabled : true}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="section-starts-at">{t("Starts at")}</label>
+            <input
+              id="section-starts-at"
+              name="startsAt"
+              type="datetime-local"
+              value={toLocalInputValue(editing?.startsAt ?? null)}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="section-ends-at">{t("Ends at")}</label>
+            <input
+              id="section-ends-at"
+              name="endsAt"
+              type="datetime-local"
+              value={toLocalInputValue(editing?.endsAt ?? null)}
+            />
+            <p class="form-hint">
+              {t(
+                "Leave both blank for a section that is always on. Times are entered in your own timezone and stored as absolute instants."
+              )}
+            </p>
+          </div>
+
+          {/* One group per type; the script unhides exactly the one that
+              matches the selected type and reads only that group's fields. */}
+          <fieldset
+            class="admin-fieldset section-config"
+            data-config-for="headline"
+            hidden
+          >
+            <legend>{t("Headline")}</legend>
+            <div class="form-row">
+              <label for="config-headline-post">{t("Article")}</label>
+              <select id="config-headline-post" name="headlinePostId">
+                <option value="">{t("Choose an article")}</option>
+                {eligiblePosts.map((post) => (
+                  <option
+                    value={post.id}
+                    selected={configString(editing, "postId") === post.id}
+                  >
+                    {post.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset
+            class="admin-fieldset section-config"
+            data-config-for="latest_posts"
+            hidden
+          >
+            <legend>{t("Latest articles")}</legend>
+            <div class="form-row">
+              <label for="config-latest-limit">{t("How many")}</label>
+              <input
+                id="config-latest-limit"
+                name="latestLimit"
+                type="number"
+                min="1"
+                max="20"
+                value={String(configNumber(editing, "limit", 5))}
+              />
+            </div>
+            <div class="form-row">
+              <label for="config-latest-category">{t("Category")}</label>
+              <select id="config-latest-category" name="latestCategorySlug">
+                <option value="">{t("Every category")}</option>
+                {categories.map((term) => (
+                  <option
+                    value={term.slug}
+                    selected={
+                      configString(editing, "categorySlug") === term.slug
+                    }
+                  >
+                    {term.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset
+            class="admin-fieldset section-config"
+            data-config-for="curated"
+            hidden
+          >
+            <legend>{t("Curated articles")}</legend>
+            <div class="form-row">
+              <label for="config-curated-post-ids">{t("Article ids")}</label>
+              <textarea
+                id="config-curated-post-ids"
+                name="curatedPostIds"
+                rows="6"
+                set:text={configLines(editing, "postIds")}
+              />
+              <p class="form-hint">
+                {t(
+                  "One id per line, in the order they should appear. Between 1 and 20. Copy them from the table below."
+                )}
+              </p>
+            </div>
+          </fieldset>
+
+          <fieldset
+            class="admin-fieldset section-config"
+            data-config-for="category_grid"
+            hidden
+          >
+            <legend>{t("Category grid")}</legend>
+            <div class="form-row">
+              <label for="config-grid-categories">{t("Categories")}</label>
+              <select
+                id="config-grid-categories"
+                name="gridCategorySlugs"
+                multiple
+                size="6"
+              >
+                {categories.map((term) => (
+                  <option
+                    value={term.slug}
+                    selected={selectedSlugs.includes(term.slug)}
+                  >
+                    {term.name}
+                  </option>
+                ))}
+              </select>
+              <p class="form-hint">{t("Between 1 and 8 categories.")}</p>
+            </div>
+            <div class="form-row">
+              <label for="config-grid-per-category">
+                {t("Articles per category")}
+              </label>
+              <input
+                id="config-grid-per-category"
+                name="gridPostsPerCategory"
+                type="number"
+                min="1"
+                max="6"
+                value={String(configNumber(editing, "postsPerCategory", 3))}
+              />
+            </div>
+          </fieldset>
+
+          <fieldset
+            class="admin-fieldset section-config"
+            data-config-for="gallery_block"
+            hidden
+          >
+            <legend>{t("Gallery")}</legend>
+            <div class="form-row">
+              <label for="config-gallery-media-ids">{t("Media ids")}</label>
+              <textarea
+                id="config-gallery-media-ids"
+                name="galleryMediaObjectIds"
+                rows="6"
+                set:text={configLines(editing, "mediaObjectIds")}
+              />
+              <p class="form-hint">
+                {t(
+                  "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen."
+                )}
+              </p>
+            </div>
+            <div class="form-row">
+              <label for="config-gallery-caption">{t("Caption")}</label>
+              <input
+                id="config-gallery-caption"
+                name="galleryCaption"
+                type="text"
+                value={configString(editing, "caption")}
+              />
+            </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <button type="submit">
+              {editing ? t("Save section") : t("Create section")}
+            </button>
+            {editing && (
+              <a class="btn-inline" href="/admin/blog-homepage">
+                {t("Cancel")}
+              </a>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="homepage-eligible-title"
+      >
+        <h2 class="admin-section-title" id="homepage-eligible-title">
+          {t("Articles you can curate")}
+          <span class="count-pill">{eligiblePosts.length}</span>
+        </h2>
+        <p class="form-hint">
+          {t(
+            "The most recent published, publicly visible articles — the only ones a curated slot will render. Drafts, unlisted and scheduled articles are deliberately absent."
+          )}
+        </p>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="homepage-eligible-table"
+          >
+            <caption class="sr-only">
+              {t("Articles eligible for curation, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Slug")}</th>
+                <th scope="col">{t("Id")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eligiblePosts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={3}>
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No published articles yet")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Publish an article before curating a homepage slot for it."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                eligiblePosts.map((post) => (
+                  <tr>
+                    <td data-label="Title">
+                      <span set:text={post.title} />
+                    </td>
+                    <td data-label="Slug">
+                      <span class="cell-code" set:text={post.slug} />
+                    </td>
+                    <td data-label="Id">
+                      <span class="cell-code" set:text={post.id} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("homepage-action-error");
+  const formError = messageBox("homepage-form-error");
+
+  const BASE = "/api/v1/news-portal/homepage-sections";
+
+  /** Which config group a section type reads. The two curated types share one. */
+  function groupFor(sectionType: string): string {
+    return sectionType === "featured_posts" || sectionType === "editor_picks"
+      ? "curated"
+      : sectionType;
+  }
+
+  function selectedType(): string {
+    const control = document.getElementById("section-type") as
+      HTMLSelectElement | HTMLInputElement | null;
+
+    return control?.value ?? "";
+  }
+
+  function showConfigGroup(): void {
+    const wanted = groupFor(selectedType());
+
+    for (const group of document.querySelectorAll<HTMLElement>(
+      ".section-config"
+    )) {
+      group.hidden = group.dataset.configFor !== wanted;
+    }
+  }
+
+  /** One id per line, blanks dropped. Order is preserved because order is the point. */
+  function lines(raw: string): string[] {
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+
+  function numberField(id: string, fallback: number): number {
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    const parsed = Number(input?.value);
+
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function textField(id: string): string {
+    const element = document.getElementById(id) as
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+
+    return element?.value ?? "";
+  }
+
+  /**
+   * `datetime-local` yields `2026-08-21T09:00` with no zone, and the endpoint
+   * parses whatever string it receives — which would be read in the SERVER's
+   * timezone, not the editor's. Converting here means the instant the editor
+   * picked is the instant that gets stored.
+   */
+  function instantOrNull(id: string): string | null {
+    const raw = textField(id).trim();
+
+    if (!raw) return null;
+
+    const parsed = new Date(raw);
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+
+  function buildConfig(sectionType: string): Record<string, unknown> {
+    switch (groupFor(sectionType)) {
+      case "headline":
+        return { postId: textField("config-headline-post") };
+      case "latest_posts":
+        return {
+          limit: numberField("config-latest-limit", 5),
+          categorySlug: textField("config-latest-category") || null
+        };
+      case "curated":
+        return { postIds: lines(textField("config-curated-post-ids")) };
+      case "category_grid": {
+        const select = document.getElementById(
+          "config-grid-categories"
+        ) as HTMLSelectElement | null;
+
+        return {
+          categorySlugs: select
+            ? [...select.selectedOptions].map((option) => option.value)
+            : [],
+          postsPerCategory: numberField("config-grid-per-category", 3)
+        };
+      }
+      case "gallery_block":
+        return {
+          mediaObjectIds: lines(textField("config-gallery-media-ids")),
+          caption: textField("config-gallery-caption").trim() || null
+        };
+      default:
+        return {};
+    }
+  }
+
+  document.getElementById("section-type")?.addEventListener("change", () => {
+    showConfigGroup();
+  });
+  showConfigGroup();
+
+  onAction(".section-delete-btn", async (button) => {
+    const id = button.dataset.sectionId;
+    if (!id) return;
+
+    const key = button.dataset.sectionKey ?? "this section";
+    if (
+      !window.confirm(
+        `Delete the "${key}" section? The articles it points at are untouched; ` +
+          `only its place on the homepage goes away.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // `reason` is required by the endpoint, same convention as posts, pages
+        // and terms. The screen supplies a constant rather than prompting: the
+        // operator already confirmed, and a second modal asking for prose
+        // produces "asdf" in the audit trail.
+        sendJson("DELETE", `${BASE}/${id}`, {
+          reason: "Removed from the homepage composer."
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not delete the section. Please try again.",
+      "Deleting…"
+    );
+  });
+
+  onSubmit("homepage-section-form", async ({ data, submit }) => {
+    const idField = document.getElementById(
+      "section-id"
+    ) as HTMLInputElement | null;
+    const sectionId = idField?.value ?? "";
+    const sectionType = selectedType();
+
+    const shared = {
+      title: field(data, "title").trim() || null,
+      config: buildConfig(sectionType),
+      sortOrder: numberField("section-sort-order", 0),
+      // A checkbox absent from `FormData` is an unchecked checkbox, which is
+      // the whole point of reading the element rather than the entry.
+      isEnabled:
+        (document.getElementById("section-enabled") as HTMLInputElement | null)
+          ?.checked ?? true,
+      startsAt: instantOrNull("section-starts-at"),
+      endsAt: instantOrNull("section-ends-at")
+    };
+
+    await mutateAndReload(
+      submit,
+      formError,
+      () =>
+        sectionId
+          ? sendJson("PATCH", `${BASE}/${sectionId}`, shared)
+          : sendJson("POST", BASE, {
+              ...shared,
+              sectionKey: field(data, "sectionKey").trim(),
+              sectionType
+            }),
+      (errorCode) => {
+        if (errorCode === "HOMEPAGE_SECTION_KEY_CONFLICT") {
+          return "A section already uses that key. Pick another one.";
+        }
+
+        if (errorCode === "HOMEPAGE_SECTION_REFERENCE_INVALID") {
+          // Worth naming: this is the failure an editor can actually fix, and
+          // generic copy would send them looking for a server fault instead of
+          // an article that has since been unpublished.
+          return "One of the articles, categories or images this section points at is no longer public. Check the ids and try again.";
+        }
+
+        return "Could not save the section. Check the fields and try again.";
+      },
+      sectionId ? "Saving…" : "Creating…"
+    );
+  });
+</script>

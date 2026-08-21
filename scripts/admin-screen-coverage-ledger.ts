@@ -41,11 +41,10 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "tenant_admin.tenant_lifecycle.disable",
   "tenant_admin.tenant_lifecycle.restore",
 
-  // blog_content (7)
+  // blog_content (5) — `homepage_sections.read`/`.configure` left this list in
+  // Issue #594 when `/admin/blog-homepage` landed.
   "blog_content.ad_placements.configure",
   "blog_content.ad_placements.read",
-  "blog_content.homepage_sections.configure",
-  "blog_content.homepage_sections.read",
   "blog_content.internal_links.configure",
   "blog_content.internal_links.preview",
   "blog_content.internal_links.read",

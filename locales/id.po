@@ -4116,3 +4116,128 @@ msgstr "Tambah profil media sosial"
 
 msgid "Save site profile"
 msgstr "Simpan profil situs"
+
+# Issue #594 — /admin/blog-homepage, the editorial homepage composer.
+
+msgid "Homepage composition"
+msgstr "Komposisi beranda"
+
+msgid "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
+msgstr "Bagian berurutan yang dilihat pembaca di beranda. Bagian yang merujuk konten yang tidak lagi publik merender nihil, bukan galat."
+
+msgid "You do not have permission to view the homepage composition."
+msgstr "Anda tidak memiliki izin untuk melihat komposisi beranda."
+
+msgid "Could not load homepage sections. Please try again."
+msgstr "Tidak dapat memuat bagian beranda. Silakan coba lagi."
+
+msgid "Homepage sections, in display order."
+msgstr "Bagian beranda, dalam urutan tampil."
+
+msgid "No sections yet"
+msgstr "Belum ada bagian"
+
+msgid "Until one exists the homepage falls back to the most recent eligible articles."
+msgstr "Selama belum ada, beranda jatuh kembali ke artikel terbaru yang memenuhi syarat."
+
+msgid "Disabled"
+msgstr "Nonaktif"
+
+msgid "Edit section"
+msgstr "Sunting bagian"
+
+msgid "Add section"
+msgstr "Tambah bagian"
+
+msgid "Lowercase letters, digits, hyphen and underscore. Unique per tenant, and fixed once created."
+msgstr "Huruf kecil, angka, tanda hubung dan garis bawah. Unik per tenant, dan tetap setelah dibuat."
+
+msgid "The type cannot be changed after a section is created."
+msgstr "Tipe tidak dapat diubah setelah bagian dibuat."
+
+msgid "Shown above the section. Leave blank for no heading."
+msgstr "Ditampilkan di atas bagian. Kosongkan bila tanpa judul."
+
+msgid "Starts at"
+msgstr "Mulai pada"
+
+msgid "Ends at"
+msgstr "Berakhir pada"
+
+msgid "Leave both blank for a section that is always on. Times are entered in your own timezone and stored as absolute instants."
+msgstr "Kosongkan keduanya untuk bagian yang selalu aktif. Waktu dimasukkan dalam zona waktu Anda dan disimpan sebagai instan absolut."
+
+msgid "Headline"
+msgstr "Berita utama"
+
+msgid "Article"
+msgstr "Artikel"
+
+msgid "Choose an article"
+msgstr "Pilih satu artikel"
+
+msgid "Latest articles"
+msgstr "Artikel terbaru"
+
+msgid "How many"
+msgstr "Berapa banyak"
+
+msgid "Every category"
+msgstr "Semua kategori"
+
+msgid "Curated articles"
+msgstr "Artikel kurasi"
+
+msgid "Article ids"
+msgstr "ID artikel"
+
+msgid "One id per line, in the order they should appear. Between 1 and 20. Copy them from the table below."
+msgstr "Satu ID per baris, dalam urutan tampilnya. Antara 1 dan 20. Salin dari tabel di bawah."
+
+msgid "Category grid"
+msgstr "Grid kategori"
+
+msgid "Categories"
+msgstr "Kategori"
+
+msgid "Between 1 and 8 categories."
+msgstr "Antara 1 dan 8 kategori."
+
+msgid "Articles per category"
+msgstr "Artikel per kategori"
+
+msgid "Gallery"
+msgstr "Galeri"
+
+msgid "Media ids"
+msgstr "ID media"
+
+msgid "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen."
+msgstr "Satu ID objek media terverifikasi per baris, dalam urutan tampil. Antara 1 dan 20. ID tercantum di layar pustaka media."
+
+msgid "Caption"
+msgstr "Keterangan"
+
+msgid "Save section"
+msgstr "Simpan bagian"
+
+msgid "Create section"
+msgstr "Buat bagian"
+
+msgid "Articles you can curate"
+msgstr "Artikel yang dapat dikurasi"
+
+msgid "The most recent published, publicly visible articles — the only ones a curated slot will render. Drafts, unlisted and scheduled articles are deliberately absent."
+msgstr "Artikel terbit terbaru yang terlihat publik — satu-satunya yang akan dirender slot kurasi. Draf, artikel tak terdaftar dan terjadwal sengaja tidak ada."
+
+msgid "Articles eligible for curation, newest first."
+msgstr "Artikel yang memenuhi syarat kurasi, terbaru lebih dulu."
+
+msgid "Id"
+msgstr "ID"
+
+msgid "No published articles yet"
+msgstr "Belum ada artikel terbit"
+
+msgid "Publish an article before curating a homepage slot for it."
+msgstr "Terbitkan artikel lebih dulu sebelum mengurasinya ke slot beranda."
