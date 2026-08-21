@@ -783,3 +783,100 @@ export async function purgeBlogPost(
 
   return rows.length > 0;
 }
+
+/**
+ * Legacy provenance (Issue #599, `sql/138`).
+ *
+ * ## Why a separate function and not a field on create/update
+ *
+ * Provenance is an IMPORT-TIME fact, not editorial content. Putting
+ * `legacySourceId` on `CreateBlogPostInput` would put it in the admin API body,
+ * where any caller holding `posts.create` could claim an article came from
+ * somewhere it did not — and the 301 map is derived from exactly that claim.
+ * A dedicated writer keeps the surface where the fact actually originates.
+ *
+ * Idempotent by construction: the partial unique index
+ * `awcms_blog_posts_legacy_source_dedup` refuses a second post claiming the same
+ * (system, id) in one tenant, which is the failure that produces two live URLs
+ * for one document and splits the ranking this work exists to preserve.
+ */
+export async function recordLegacyProvenance(
+  tx: Bun.SQL,
+  tenantId: string,
+  postId: string,
+  provenance: { system: string; legacyId: string }
+): Promise<boolean> {
+  const rows = (await tx`
+    UPDATE awcms_blog_posts
+    SET legacy_source_system = ${provenance.system},
+        legacy_source_id = ${provenance.legacyId},
+        updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${postId} AND deleted_at IS NULL
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows.length > 0;
+}
+
+export type LegacyRedirectMapping = {
+  legacyId: string;
+  slug: string;
+  /** The path the legacy site served. */
+  sourcePath: string;
+  /** The path this repo serves now. */
+  targetPath: string;
+};
+
+/** Bounded per call — a cutover map is built in pages, never as one 23,906-row result set. */
+export const LEGACY_REDIRECT_MAP_LIMIT = 500;
+
+/**
+ * The 301 map, DERIVED from stored provenance rather than guessed from slugs.
+ *
+ * The guess is what this replaces and why `sql/138` exists: a slug moves when an
+ * editor fixes a headline, so a map built from slugs is wrong precisely for the
+ * URLs that have the inbound links worth preserving.
+ *
+ * `pathTemplate` carries `{legacyId}` and `{slug}` because the legacy URL shape
+ * belongs to the system being migrated FROM — SeputarBorneo served
+ * `/news/{id_ber}_{slug}.html`, the next archive will serve something else, and
+ * hard-coding one of them here would make the second migration a code change.
+ *
+ * Only PUBLISHED, non-deleted posts: a redirect pointing at a draft sends a
+ * search engine to a 404, which is worse than the 404 it already had.
+ */
+export async function listLegacyRedirectMappings(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: {
+    system: string;
+    tenantCode: string;
+    /** e.g. `/news/{legacyId}_{slug}.html` */
+    pathTemplate: string;
+    afterLegacyId?: string | null;
+  }
+): Promise<LegacyRedirectMapping[]> {
+  const after = options.afterLegacyId ?? null;
+
+  const rows = (await tx`
+    SELECT legacy_source_id, slug
+    FROM awcms_blog_posts
+    WHERE tenant_id = ${tenantId}
+      AND legacy_source_system = ${options.system}
+      AND legacy_source_id IS NOT NULL
+      AND status = 'published'
+      AND deleted_at IS NULL
+      AND (${after}::text IS NULL OR legacy_source_id > ${after})
+    ORDER BY legacy_source_id ASC
+    LIMIT ${LEGACY_REDIRECT_MAP_LIMIT}
+  `) as { legacy_source_id: string; slug: string }[];
+
+  return rows.map((row) => ({
+    legacyId: row.legacy_source_id,
+    slug: row.slug,
+    sourcePath: options.pathTemplate
+      .replace("{legacyId}", row.legacy_source_id)
+      .replace("{slug}", row.slug),
+    targetPath: `/blog/${options.tenantCode}/${row.slug}`
+  }));
+}

@@ -41,7 +41,7 @@ Project-level Claude Code skills for AWCMS. Each skill encodes the standards fro
 > The family today is two repos, `awcms` + [`awcms-astro`](https://github.com/ahliweb/awcms-astro)
 > (public pages + the USER admin surface, ADR-0070). **CORRECTION:** the previous version claimed this
 > implementation was "only the Sprint 1–2 foundation" with four modules — that has **not
-> been true for a long time**. This repo has **23 registered modules** and `sql/001`–`sql/137`;
+> been true for a long time**. This repo has **23 registered modules** and `sql/001`–`sql/138`;
 > see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) for the real list.
 > A skill whose body still marks itself "READ-ONLY" stays that way — that is
 > per-skill, not a statement about the repo as a whole.
