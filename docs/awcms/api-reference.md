@@ -6171,6 +6171,51 @@ Gated by blog_content.pages.restore (ADR-0057). High-risk, requires Idempotency-
 | 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/blog/pages/public` — The static pages a reader can actually reach
+
+- **operationId**: `blogPagesPublicList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.read. NOT the same answer as `/api/v1/blog/pages?status=published`: the admin list is an editor's view and returns private and unlisted pages too, so a consumer reaching for it with a status filter would publish every private page the newsroom has and nothing would report an error. The predicate here is the one the public route enforces, shared with sitemap-blog.xml so the two cannot disagree. Metadata only — a body is fetched per page from /{slug}, because a tenant's legal pages are few but long.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | Reachable static pages, in menu order. | object                                 |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/pages/public/{slug}` — One reachable static page, body included
+
+- **operationId**: `blogPagesPublicDetail`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.read. The predicate is shared byte-for-byte with the public route /blog/{tenantCode}/pages/{slug}, so a draft cannot be read here for the same reason it cannot be read there. An unreachable slug answers 404 without distinguishing "no such page" from "that page is a draft" — not an information-disclosure boundary (the caller is authenticated) but consistency, so a consumer cannot depend on a distinction the browser-facing surface does not make. The body ships as BOTH `contentJson` (the projection this repo renders today) and `bodyPortableText` (the canonical column, ADR-0100), which is what lets a consumer move to the canonical shape on its own schedule.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+| `slug`             | path   | yes      | string |             |
+
+**Responses**
+
+| Status | Description                                                        | Schema                                 |
+| ------ | ------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The page, with every referenced media object resolved in one call. | object                                 |
+| 400    | Validation error.                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/blog/posts` — List this tenant's non-deleted blog posts
 
 - **operationId**: `blogListPosts`
@@ -7084,6 +7129,27 @@ Gated by news_portal.homepage_sections.configure.
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/news-portal/homepage-sections/composed` — The RESOLVED homepage, for a build client that renders its own templates
+
+- **operationId**: `newsPortalHomepageComposed`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.homepage_sections.read. Returns what the front page actually shows, not its configuration: every reference resolved against live public content, the deterministic fallback applied to a curated slot whose articles have all gone, and the render caps already enforced. A consumer must not resolve the configuration itself — that would re-implement the publication predicate in a second repository on a second deploy cadence, and the first disagreement is a draft article on somebody's front page. Media arrive as resolved public URLs here (unlike /api/v1/site-profile/composed, which returns ids) because a homepage is many short-lived images rather than one long-lived logo.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The composed homepage.      | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ## News Portal Ad Placements
 
 R2-only advertisement placement presets for the news portal (blog_content module — absorbed from the retired news_portal module by ADR-0044, which moved ownership without renaming the paths or this tag) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
@@ -7187,6 +7253,30 @@ Gated by news_portal.ad_placements.configure.
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/news-portal/ad-placements/active` — Currently-runnable creatives per slot, already rotated and capped
+
+- **operationId**: `newsPortalAdPlacementsActive`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.ad_placements.read. Returns all twelve slots, including the three this repo's own templates do not render — the sidebar exists in the consuming front end, and an endpoint shaped around what this repo draws would withhold inventory the consumer exists to show. Rotation and the per-slot item cap are applied HERE so four rotation modes are not re-implemented elsewhere; random_safe and weighted make the response deliberately not byte-stable, so it is not cacheable and does not try to be. An invalid targetType is refused rather than falling back to global, because silently widening an ad query is how a placement booked against one article appears on all of them.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                     | Description                                                     |
+| ------------------ | ------ | -------- | ---------------------------------------- | --------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string                                   |                                                                 |
+| `targetType`       | query  | no       | enum(`global`, `widget`, `post`, `page`) | The kind of page being rendered. Omit for the global inventory. |
+| `targetId`         | query  | no       | string (uuid)                            | Required when targetType is not global, and refused when it is. |
+
+**Responses**
+
+| Status | Description                           | Schema                                 |
+| ------ | ------------------------------------- | -------------------------------------- |
+| 200    | Selected creatives per placement key. | object                                 |
+| 400    | Validation error.                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.           | [`ApiError`](#standard-error-envelope) |
 
 ## Visitor Analytics
 
