@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -144,6 +145,19 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       moduleKey: "blog_content",
       postId
     });
+
+    // ADR-0042 §Rule 21 (Issue #623), same call the page purge route already
+    // makes. A purgeable post is archived or soft-deleted, so the transition
+    // that removed it from the public predicate has usually purged already —
+    // this is the last opportunity to evict anything derived from a row that is
+    // about to stop existing, and a hard delete is not the place to rely on
+    // "usually".
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.purged"
+    );
 
     const successResponse = ok({ id: postId, status: "purged" });
     const successBody = await successResponse.clone().json();

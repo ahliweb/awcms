@@ -54,6 +54,18 @@ const IDEMPOTENCY_SCOPE = "blog_post_schedule";
  * the idempotency request hash alongside `scheduledAt`, so re-sending the same
  * key with a DIFFERENT withdrawal date is a 409 rather than a silent no-op —
  * two different windows are two different requests.
+ *
+ * ## No edge-cache purge here, deliberately (Issue #623)
+ *
+ * The other four lifecycle routes gained one; this one did not, and the reason
+ * is `ALLOWED_STATUS_TRANSITIONS`: only `draft` and `review` may become
+ * `scheduled`, and a published post cannot. So nothing this route commits is
+ * ever visible on a public surface — before or after — and the transition that
+ * DOES make it visible is `blog-scheduled-publish.ts`'s sweep, which purges.
+ *
+ * Adding one anyway would append a ban that matches no cached object while the
+ * queue reports success: the same "ceremony that reads as coverage" this repo
+ * already refuses for surfaceless module keys in `resolveDerivedSurfaceModuleKeys`.
  */
 export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);

@@ -13,6 +13,13 @@ import {
   resolveDerivedSurfaceModuleKeys
 } from "../src/lib/edge-cache/content-purge";
 import type { SqlExecutor } from "../src/lib/edge-cache/purge-queue";
+import { PUBLIC_CACHE_SURFACES } from "../src/lib/edge-cache/surface-registry";
+import { listModules } from "../src/modules";
+import {
+  collectClaims,
+  resolveOwner,
+  routeOf
+} from "../scripts/validate-module-routes";
 
 /** Records the parameter arrays passed to the tagged-template executor. */
 function recordingTx(): { tx: SqlExecutor; calls: unknown[][] } {
@@ -182,6 +189,22 @@ describe("content write paths emit a purge", () => {
   test.each([
     ["src/pages/api/v1/blog/posts/[id].ts", 2],
     ["src/pages/api/v1/blog/posts/index.ts", 1],
+    // Issue #623 — these five predate the page work below and were missed by
+    // it, because a list of files cannot report the file it does not contain.
+    // `publish` is the button `/admin/blog` calls: with the edge cache on, the
+    // whole newsroom publish path emitted no purge at all. `archive` is the
+    // direction that matters more — a withdrawn article still served from the
+    // edge is the withdrawal not having happened. `revisions/{id}/restore`
+    // rewrites the body of a post that may be published right now.
+    //
+    // `posts/[id]/schedule.ts` is deliberately ABSENT: only `draft` and
+    // `review` may become `scheduled`, so it changes nothing a reader can see,
+    // and the sweep that does publish it purges. See its own header.
+    ["src/pages/api/v1/blog/posts/[id]/publish.ts", 1],
+    ["src/pages/api/v1/blog/posts/[id]/archive.ts", 1],
+    ["src/pages/api/v1/blog/posts/[id]/restore.ts", 1],
+    ["src/pages/api/v1/blog/posts/[id]/purge.ts", 1],
+    ["src/pages/api/v1/blog/posts/[id]/revisions/[revisionId]/restore.ts", 1],
     // Issue #594 gave `blog_content` the `blog-page` surface, so every handler
     // that changes a page now has the obligation posts already had. The four
     // lifecycle routes matter more than the two CRUD ones: `publish` is how a
@@ -226,4 +249,179 @@ describe("content write paths emit a purge", () => {
       expect(occurrences).toBe(expected);
     }
   );
+});
+
+/**
+ * The obligation, DERIVED rather than remembered (Issue #623).
+ *
+ * The list above pins how many times each enumerated file purges. Its weakness
+ * is structural and its own comment admitted it: a file that is not in the list
+ * is not checked, so a new mutating handler that forgets the enqueue turns
+ * nothing red. That is precisely how the five post lifecycle routes went a year
+ * without one while a gate named `edge-cache:surfaces:check` reported green —
+ * that gate asks whether the MODULE purges anywhere, and `blog_content` did.
+ *
+ * So the population is computed here instead: every mutating API route owned by
+ * a module that owns a cacheable surface. Each one either purges, or is named
+ * below with a reason it cannot change what a reader sees.
+ */
+const SURFACE_OWNING_MODULES = new Set(
+  PUBLIC_CACHE_SURFACES.map((surface) => surface.moduleKey).filter(
+    (key): key is string => Boolean(key)
+  )
+);
+
+/** `export const POST|PATCH|PUT|DELETE` — the handlers that can change content. */
+const MUTATING_HANDLER = /export const (?:POST|PATCH|PUT|DELETE)\b/;
+
+/**
+ * Verified exempt: the handler cannot change any cached public surface.
+ *
+ * A reason here must be checkable, not plausible. "Probably not public" is how
+ * an exemption list becomes the place obligations go to be forgotten.
+ */
+const PURGE_NOT_REQUIRED: Readonly<Record<string, string>> = {
+  "src/pages/api/v1/blog/posts/[id]/schedule.ts":
+    "Only `draft` and `review` may become `scheduled` (ALLOWED_STATUS_TRANSITIONS); a published post cannot. Nothing it commits is ever on a public surface, and the sweep that does publish it purges.",
+  "src/pages/api/v1/blog/posts/[id]/submit-review.ts":
+    "`review` is reachable from `draft` only — `published` transitions to `archived` or `draft`, never to `review`. So this never withdraws a live article.",
+  "src/pages/api/v1/theming/draft.ts":
+    "Writes a theme DRAFT. The live tokens change at `theming/publish.ts`, which purges.",
+  "src/pages/api/v1/theming/preview.ts":
+    "Creates a preview session, which is served to its holder rather than cached publicly.",
+  "src/pages/api/v1/theming/validate.ts":
+    "Validation only — no INSERT/UPDATE/DELETE anywhere in the file.",
+  "src/pages/api/v1/seo/redirects/validate.ts":
+    "Validation only — no INSERT/UPDATE/DELETE anywhere in the file."
+};
+
+/**
+ * Handlers whose purge obligation has NOT been decided yet — the ledger.
+ *
+ * Every one of these mutates something owned by a module that owns a cacheable
+ * surface, and several of them look like real staleness on inspection: ads and
+ * homepage sections are rendered onto `/blog/{code}` by Issue #594's work, blog
+ * settings gate whether `feed.xml` and `sitemap-blog.xml` answer at all, and
+ * terms are what the category and tag archives are built from.
+ *
+ * They are listed rather than fixed because deciding each one needs the same
+ * per-route reasoning the five above got, and doing twenty-eight of them inside
+ * a five-route bug fix would bury the fix. The list may only SHRINK: an entry
+ * removed from it must have gained a purge or a reason, and a NEW mutating
+ * handler is not in it, so it fails the test below on arrival.
+ */
+const PURGE_OBLIGATION_UNREVIEWED: readonly string[] = [
+  "src/pages/api/v1/blog/ads/[id].ts",
+  "src/pages/api/v1/blog/ads/index.ts",
+  "src/pages/api/v1/blog/institutions/[id].ts",
+  "src/pages/api/v1/blog/institutions/[id]/purge.ts",
+  "src/pages/api/v1/blog/institutions/[id]/restore.ts",
+  "src/pages/api/v1/blog/institutions/index.ts",
+  "src/pages/api/v1/blog/internal-tag-links/settings.ts",
+  "src/pages/api/v1/blog/menus/[id].ts",
+  "src/pages/api/v1/blog/menus/index.ts",
+  "src/pages/api/v1/blog/settings/index.ts",
+  "src/pages/api/v1/blog/templates/[id].ts",
+  "src/pages/api/v1/blog/templates/index.ts",
+  "src/pages/api/v1/blog/terms/[id].ts",
+  "src/pages/api/v1/blog/terms/index.ts",
+  "src/pages/api/v1/blog/theme/index.ts",
+  "src/pages/api/v1/blog/widgets/[id].ts",
+  "src/pages/api/v1/blog/widgets/index.ts",
+  "src/pages/api/v1/news-portal/ad-placements/[id].ts",
+  "src/pages/api/v1/news-portal/ad-placements/index.ts",
+  "src/pages/api/v1/news-portal/homepage-sections/[id].ts",
+  "src/pages/api/v1/news-portal/homepage-sections/index.ts",
+  "src/pages/api/v1/seo/not-found/[id].ts",
+  "src/pages/api/v1/seo/redirects/[id].ts",
+  "src/pages/api/v1/seo/redirects/[id]/lifecycle.ts",
+  "src/pages/api/v1/seo/redirects/capture-url-change.ts",
+  "src/pages/api/v1/seo/redirects/import.ts",
+  "src/pages/api/v1/seo/redirects/index.ts",
+  "src/pages/api/v1/seo/redirects/settings.ts"
+];
+
+type PurgeObligation = { file: string; owner: string; purges: boolean };
+
+async function collectPurgeObligations(): Promise<PurgeObligation[]> {
+  const { claims } = collectClaims(listModules());
+  const obligations: PurgeObligation[] = [];
+
+  for await (const file of new Bun.Glob("src/pages/api/**/*.ts").scan({
+    cwd: process.cwd()
+  })) {
+    const source = await Bun.file(file).text();
+
+    if (!MUTATING_HANDLER.test(source)) {
+      continue;
+    }
+
+    const owner = resolveOwner(routeOf(file), claims);
+
+    // An UNCLAIMED route resolves to no owner and is skipped here. That is not
+    // a hole: `modules:routes:check` already refuses a route no module declares,
+    // so a handler cannot reach main without an owner for this to read.
+    if (!owner || !SURFACE_OWNING_MODULES.has(owner)) {
+      continue;
+    }
+
+    obligations.push({
+      file,
+      owner,
+      purges: source.includes("enqueueModuleContentPurge(")
+    });
+  }
+
+  return obligations.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+describe("every mutating handler of a surface-owning module is accounted for", () => {
+  test("a handler either purges or carries a reason it need not", async () => {
+    const obligations = await collectPurgeObligations();
+
+    // Proves the population is real. An empty scan would make every assertion
+    // below pass while checking nothing — the failure mode a derived gate has
+    // and an enumerated list does not.
+    expect(obligations.length).toBeGreaterThan(40);
+
+    const unaccounted = obligations
+      .filter((entry) => !entry.purges)
+      .map((entry) => entry.file)
+      .filter((file) => !(file in PURGE_NOT_REQUIRED));
+
+    expect(unaccounted).toEqual([...PURGE_OBLIGATION_UNREVIEWED].sort());
+  });
+
+  test("no exemption or ledger entry names a route that no longer exists", async () => {
+    const population = new Set(
+      (await collectPurgeObligations()).map((entry) => entry.file)
+    );
+
+    // An entry pointing at a deleted or renamed file forgives nothing while
+    // reading as a decision — the shape that lets a ledger look shorter than
+    // the problem.
+    for (const file of [
+      ...Object.keys(PURGE_NOT_REQUIRED),
+      ...PURGE_OBLIGATION_UNREVIEWED
+    ]) {
+      expect(population.has(file)).toBe(true);
+    }
+  });
+
+  test("the five routes Issue #623 named are no longer among the unaccounted", async () => {
+    const obligations = await collectPurgeObligations();
+    const purging = new Set(
+      obligations.filter((entry) => entry.purges).map((entry) => entry.file)
+    );
+
+    for (const file of [
+      "src/pages/api/v1/blog/posts/[id]/publish.ts",
+      "src/pages/api/v1/blog/posts/[id]/archive.ts",
+      "src/pages/api/v1/blog/posts/[id]/restore.ts",
+      "src/pages/api/v1/blog/posts/[id]/purge.ts",
+      "src/pages/api/v1/blog/posts/[id]/revisions/[revisionId]/restore.ts"
+    ]) {
+      expect(purging.has(file)).toBe(true);
+    }
+  });
 });

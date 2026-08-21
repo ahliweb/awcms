@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -215,6 +216,19 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       postId,
       slug: updated.slug
     });
+
+    // ADR-0042 §Rule 21 (Issue #623) — this is the button `/admin/blog` calls,
+    // and the transition it performs is the one a stale cache hides. The PATCH
+    // path purged and this did not, so with the edge cache on, publishing an
+    // article emitted nothing and the newsroom waited out a 120-second TTL
+    // wondering whether the publish had worked. Same transaction as the status
+    // change, no-op when the cache is off.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.published"
+    );
 
     await socialPublishingPort.onArticlePublished(
       tx,

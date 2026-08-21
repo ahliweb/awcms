@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { enqueueModuleContentPurge } from "../../../../../../lib/edge-cache/content-purge";
 import {
   fail,
   jsonResponse,
@@ -142,6 +143,17 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       postId,
       slug: updated.slug
     });
+
+    // ADR-0042 §Rule 21 (Issue #623) — restoring clears `deleted_at`, and the
+    // public predicate excludes only on that column, not on status. So a post
+    // that was published when it was soft-deleted becomes publicly reachable
+    // again the moment this commits, which is a content change like any other.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.restored"
+    );
 
     const successResponse = ok(updated);
     const successBody = await successResponse.clone().json();
