@@ -98,11 +98,17 @@ async function upsertDocument(
   const rows = (await tx`
     INSERT INTO awcms_site_search_documents
       (tenant_id, source_key, resource_type, resource_id, locale, url, title,
-       summary, body_text, tags, tags_text, privacy_classification, weight,
-       source_updated_at, source_checksum, indexed_at, updated_at)
+       summary, body_text, tags, tags_text, term_facets, privacy_classification,
+       weight, source_updated_at, source_checksum, indexed_at, updated_at)
     VALUES (${tenantId}, ${doc.sourceKey}, ${doc.resourceType}, ${doc.resourceId},
        ${doc.locale}, ${doc.url}, ${doc.title}, ${doc.summary}, ${doc.bodyText},
-       ${tx.array(doc.tags, "text")}, ${doc.tagsText}, 'public', ${doc.weight},
+       ${tx.array(doc.tags, "text")}, ${doc.tagsText},
+       -- The ARRAY, not \`JSON.stringify\` of it. Bun JSON-encodes a string
+       -- parameter bound to a jsonb slot, so \`\${JSON.stringify(x)}::jsonb\`
+       -- stores the jsonb SCALAR STRING \`"[]"\` rather than the empty array —
+       -- which the sql/140 \`jsonb_typeof = 'array'\` CHECK refuses, and which
+       -- would otherwise have been stored silently and read back as text.
+       ${doc.termFacets}::jsonb, 'public', ${doc.weight},
        ${doc.sourceUpdatedAt}, ${doc.sourceChecksum}, now(), now())
     ON CONFLICT (tenant_id, source_key, resource_id, locale)
     DO UPDATE SET
@@ -113,6 +119,7 @@ async function upsertDocument(
       body_text = EXCLUDED.body_text,
       tags = EXCLUDED.tags,
       tags_text = EXCLUDED.tags_text,
+      term_facets = EXCLUDED.term_facets,
       weight = EXCLUDED.weight,
       source_updated_at = EXCLUDED.source_updated_at,
       source_checksum = EXCLUDED.source_checksum,

@@ -15271,6 +15271,34 @@ paths:
           description: Restrict results to one resource type. Honored only when the tenant's `enabledResourceTypes` admits it; otherwise silently ignored.
           schema:
             type: string
+        - name: channel
+          in: query
+          required: false
+          description: "Term filter (Issue #633). One query parameter per facet name declared by the search-source registry — `channel`, `topic`, `institution`, `region` today. Filters are ANDed with each other and with `type`. The value is a slug or code (never a label), bounded to 200 characters. An unknown facet name is IGNORED rather than rejected, so the tracking parameters that ride along on a shared link do not turn a search into a 400."
+          schema:
+            type: string
+            maxLength: 200
+        - name: topic
+          in: query
+          required: false
+          description: See `channel`.
+          schema:
+            type: string
+            maxLength: 200
+        - name: institution
+          in: query
+          required: false
+          description: See `channel`.
+          schema:
+            type: string
+            maxLength: 200
+        - name: region
+          in: query
+          required: false
+          description: See `channel`. The value is a dotted `idn_admin_regions` code (`62`, `62.71`, `62.71.01`), because that is what an article stores.
+          schema:
+            type: string
+            maxLength: 200
         - name: locale
           in: query
           required: false
@@ -23537,18 +23565,29 @@ components:
     SiteSearchFacets:
       type: object
       description: |
-        Counts per facet value for the whole result set (Issue #607), computed on every page — they describe the result set rather than the page, so omitting them after the first page would make them look like they had changed.
+        Counts per facet value for the whole result set (Issue #607 for content type, #633 for terms), computed on every page — they describe the result set rather than the page, so omitting them after the first page would make them look like they had changed.
 
-        The `type` filter is deliberately NOT applied to these counts: a facet answers "what else is there", and applying it would zero every other value the moment a reader picks one, leaving no way back to results that still exist.
+        A facet's OWN filter is never applied to its own count: a facet answers "what else is there", and applying it would zero every other value the moment a reader picks one, leaving no way back to results that still exist. Every OTHER filter is applied — so the `type` counts reflect the active term filters, and each term facet reflects `type` and the other term filters.
 
-        Every other predicate is shared with the result query character for character, so a count can never advertise a document the reader cannot reach. Bounded to 20 values.
+        Every remaining predicate is shared with the result query character for character, so a count can never advertise a document the reader cannot reach. Bounded to 20 values PER facet.
       properties:
         resourceTypes:
           type: array
           items:
             $ref: "#/components/schemas/SiteSearchFacetValue"
+        terms:
+          type: object
+          description: |
+            Term facets keyed by facet name — `channel`, `topic`, `institution`, `region`, and whatever a future module's search-source descriptor contributes. A facet with no matching documents is ABSENT rather than present-and-empty: the reader is being told what else is there, and an empty list is not something else.
+
+            Filter by one with a query parameter of the same name (`?channel=politik`). Filters are ANDed. Match is on `value` (a slug or code), never `label` — a label is display text an editor may rewrite, and a filter that broke when somebody fixed a capital letter would be a filter nobody trusts.
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/SiteSearchTermFacetValue"
       required:
         - resourceTypes
+        - terms
     SiteSearchFacetValue:
       type: object
       properties:
@@ -23906,6 +23945,21 @@ components:
         - items
         - query
         - locale
+    SiteSearchTermFacetValue:
+      type: object
+      properties:
+        value:
+          type: string
+          description: The stable value a filter matches and a URL carries — a slug (`politik`) or a code (`62.71`).
+        label:
+          type: string
+          description: Display text for `value`. Falls back to the value itself where the source stored no separate label (the `region` facet, whose human name lives in a dataset-versioned table this does not join).
+        count:
+          type: integer
+      required:
+        - value
+        - label
+        - count
     SocialProfileLink:
       type: object
       required:

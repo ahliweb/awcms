@@ -98,6 +98,69 @@ async function insertPost(tenantId: string, seed: PostSeed): Promise<string> {
   return id;
 }
 
+/**
+ * Issue #633 — the vocabulary rows a term facet joins. Inserted through the
+ * ADMIN connection like every other fixture here, so the descriptor's own join
+ * (which runs as the app/worker role) is the thing under test rather than the
+ * seeding.
+ */
+async function insertTerm(
+  tenantId: string,
+  taxonomyType: string,
+  slug: string,
+  name: string
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await getAdminSql()`
+    INSERT INTO awcms_blog_terms
+      (id, tenant_id, taxonomy_type, name, slug, created_at, updated_at)
+    VALUES (${id}, ${tenantId}, ${taxonomyType}, ${name}, ${slug}, now(), now())
+  `;
+  return id;
+}
+
+async function linkPostTerm(
+  tenantId: string,
+  postId: string,
+  termId: string
+): Promise<void> {
+  await getAdminSql()`
+    INSERT INTO awcms_blog_post_terms (tenant_id, post_id, term_id)
+    VALUES (${tenantId}, ${postId}, ${termId})
+  `;
+}
+
+async function insertInstitution(
+  tenantId: string,
+  slug: string,
+  name: string
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await getAdminSql()`
+    INSERT INTO awcms_blog_institutions
+      (id, tenant_id, branch, name, slug, created_at, updated_at)
+    VALUES (${id}, ${tenantId}, 'legislative', ${name}, ${slug}, now(), now())
+  `;
+  return id;
+}
+
+async function linkPostInstitution(
+  tenantId: string,
+  postId: string,
+  institutionId: string
+): Promise<void> {
+  await getAdminSql()`
+    INSERT INTO awcms_blog_post_institutions (tenant_id, post_id, institution_id)
+    VALUES (${tenantId}, ${postId}, ${institutionId})
+  `;
+}
+
+async function setRegion(postId: string, regionCode: string): Promise<void> {
+  await getAdminSql()`
+    UPDATE awcms_blog_posts SET region_code = ${regionCode} WHERE id = ${postId}
+  `;
+}
+
 async function docCount(tenantId: string): Promise<number> {
   return withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
     const rows = (await tx`
@@ -700,6 +763,231 @@ suite("site_search module (integration, ADR-0040)", () => {
       );
 
       expect(facets.resourceTypes).toEqual([]);
+    });
+  });
+
+  describe("term facets (Issue #633)", () => {
+    /**
+     * Seeds one tenant with a shape that exercises all three facet mechanisms
+     * at once: a shared vocabulary table split by `taxonomy_type` (channel vs
+     * topic), a separate entity table reached through its own link table
+     * (institution), and a plain column on the source row (region).
+     */
+    async function seedFacetedPosts(tenantId: string): Promise<void> {
+      const politik = await insertTerm(
+        tenantId,
+        "channel",
+        "politik",
+        "Politik"
+      );
+      const ekonomi = await insertTerm(
+        tenantId,
+        "channel",
+        "ekonomi",
+        "Ekonomi"
+      );
+      const pemilu = await insertTerm(tenantId, "topic", "pemilu", "Pemilu");
+      const dprd = await insertInstitution(
+        tenantId,
+        "dprd-kobar",
+        "DPRD Kobar"
+      );
+
+      const first = await insertPost(tenantId, {
+        title: "Banjir kalteng satu",
+        body: "kalteng banjir",
+        slug: "banjir-1"
+      });
+      const second = await insertPost(tenantId, {
+        title: "Banjir kalteng dua",
+        body: "kalteng banjir",
+        slug: "banjir-2"
+      });
+      const third = await insertPost(tenantId, {
+        title: "Anggaran kalteng",
+        body: "kalteng anggaran",
+        slug: "anggaran"
+      });
+
+      await linkPostTerm(tenantId, first, politik);
+      await linkPostTerm(tenantId, first, pemilu);
+      await linkPostTerm(tenantId, second, politik);
+      await linkPostTerm(tenantId, third, ekonomi);
+      await linkPostInstitution(tenantId, first, dprd);
+      await setRegion(first, "62.71");
+      await setRegion(second, "62.71");
+      await setRegion(third, "62.02");
+
+      await withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
+        reconcileTenantSearchIndex(tx, tenantId, SOURCES)
+      );
+    }
+
+    test("channel, topic, institution and region are all counted", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "kalteng", locale: "en" })
+      );
+
+      expect(facets.terms.channel).toEqual([
+        { value: "politik", label: "Politik", count: 2 },
+        { value: "ekonomi", label: "Ekonomi", count: 1 }
+      ]);
+      expect(facets.terms.topic).toEqual([
+        { value: "pemilu", label: "Pemilu", count: 1 }
+      ]);
+      expect(facets.terms.institution).toEqual([
+        { value: "dprd-kobar", label: "DPRD Kobar", count: 1 }
+      ]);
+      // A column facet with no label column: the code is its own label, which
+      // is honest about what the source actually stored.
+      expect(facets.terms.region).toEqual([
+        { value: "62.71", label: "62.71", count: 2 },
+        { value: "62.02", label: "62.02", count: 1 }
+      ]);
+    });
+
+    test("a facet is NOT narrowed by its own filter, but IS by the others", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, {
+          query: "kalteng",
+          locale: "en",
+          termFilters: { channel: "politik" }
+        })
+      );
+
+      // The channel list is unchanged — this is the whole rule. A reader who
+      // picked "Politik" must still be able to see that "Ekonomi" exists and
+      // click back to it; a list showing only their current selection is a
+      // one-way door.
+      expect(facets.terms.channel).toEqual([
+        { value: "politik", label: "Politik", count: 2 },
+        { value: "ekonomi", label: "Ekonomi", count: 1 }
+      ]);
+
+      // Region IS narrowed by the channel filter: both `politik` posts are in
+      // 62.71, and 62.02 (the `ekonomi` post) has dropped out. That is the
+      // other half of the rule, and it is what makes the remaining counts true
+      // of the list the reader is actually looking at.
+      expect(facets.terms.region).toEqual([
+        { value: "62.71", label: "62.71", count: 2 }
+      ]);
+    });
+
+    test("filtering by a term actually narrows the RESULTS, not just the counts", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      const filtered = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          searchSiteContent(tx, TENANT_A, {
+            query: "kalteng",
+            locale: "en",
+            termFilters: { channel: "ekonomi" },
+            limit: 10
+          })
+      );
+
+      expect(filtered.items.map((i) => i.url)).toEqual([
+        "/blog/tenant-a/anggaran"
+      ]);
+    });
+
+    test("two filters mean BOTH, not either", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      const both = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        searchSiteContent(tx, TENANT_A, {
+          query: "kalteng",
+          locale: "en",
+          termFilters: { channel: "politik", topic: "pemilu" },
+          limit: 10
+        })
+      );
+
+      // Only the first post carries both. If containment were ever swapped for
+      // an OR, this would return two — and a reader narrowing twice would watch
+      // the list grow.
+      expect(both.items).toHaveLength(1);
+      expect(both.items[0]!.url).toBe("/blog/tenant-a/banjir-1");
+    });
+
+    test("a soft-deleted term disappears from the facet on the next reconcile", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_terms SET deleted_at = now() WHERE slug = 'politik'
+      `;
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "kalteng", locale: "en" })
+      );
+
+      // Proves two things at once: `valueNullColumns` is really applied, and
+      // the checksum notices a change that touched no column of the post
+      // itself. Without the facets in the checksum this reconcile would report
+      // "unchanged" and the deleted channel would keep being offered.
+      expect(facets.terms.channel).toEqual([
+        { value: "ekonomi", label: "Ekonomi", count: 1 }
+      ]);
+    });
+
+    test("a term facet NEVER counts another tenant's rows", async () => {
+      // The term facets get their OWN negative rather than inheriting the type
+      // facet's. A join is the one place a row from another tenant can be
+      // reached without the outer predicate noticing, and a COUNT discloses the
+      // existence of content with nothing on screen to notice it by.
+      await seedFacetedPosts(TENANT_A);
+
+      const shared = await insertTerm(
+        TENANT_B,
+        "channel",
+        "politik",
+        "Politik"
+      );
+      const bPost = await insertPost(TENANT_B, {
+        title: "Kalteng tenant b",
+        body: "kalteng lain",
+        slug: "b-post"
+      });
+      await linkPostTerm(TENANT_B, bPost, shared);
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_B, SOURCES)
+      );
+
+      const aFacets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "kalteng", locale: "en" })
+      );
+      const bFacets = await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        countSearchFacets(tx, TENANT_B, { query: "kalteng", locale: "en" })
+      );
+
+      // Both tenants use the slug `politik`. If either count included the
+      // other's rows it would read 3 here.
+      expect(aFacets.terms.channel).toEqual([
+        { value: "politik", label: "Politik", count: 2 },
+        { value: "ekonomi", label: "Ekonomi", count: 1 }
+      ]);
+      expect(bFacets.terms.channel).toEqual([
+        { value: "politik", label: "Politik", count: 1 }
+      ]);
+    });
+
+    test("a facet with nothing matching is absent, not present-and-empty", async () => {
+      await seedFacetedPosts(TENANT_A);
+
+      const facets = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        countSearchFacets(tx, TENANT_A, { query: "aardvark", locale: "en" })
+      );
+
+      expect(facets.terms).toEqual({});
     });
   });
 });

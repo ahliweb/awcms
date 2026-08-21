@@ -828,6 +828,79 @@ export const blogContentModule = defineModule({
       summaryColumn: "excerpt",
       bodyColumns: ["content_text"],
       tagsColumn: null,
+      /**
+       * Facetable dimensions (Issue #633). These are what PRD FR-DSC-002 asks
+       * for, and until the descriptor could express a JOIN there was no value
+       * `tagsColumn` could have been given that was correct: since `sql/131`,
+       * channel and topic are `awcms_blog_terms` rows reached through
+       * `awcms_blog_post_terms`, and institution is `awcms_blog_institutions`
+       * reached through `awcms_blog_post_institutions`.
+       *
+       * `taxonomy_type` is what splits ONE vocabulary table into two facets. A
+       * `category`/`tag` facet is deliberately NOT declared here: those two are
+       * the pre-#131 vocabulary and already have their own archive routes, and
+       * a facet list is a place to narrow a search rather than a mirror of every
+       * taxonomy that exists.
+       *
+       * The values are SLUGS, not names. A slug is what a filter matches and
+       * what a URL carries; renaming a channel from "Politik" to "Politik &
+       * Pemerintahan" must not break every saved link, and it does not, because
+       * the name travels as the label instead.
+       *
+       * `region` is a plain column, because PRD §8.5 gives an article exactly
+       * one region — declaring it through a join it does not have would be a
+       * fiction the query builder would then have to honour. It has no label
+       * column: `awcms_blog_posts.region_code` is a dotted code whose human name
+       * lives in the dataset-versioned `awcms_idn_admin_regions`, which is not a
+       * tenant table and is deliberately not joined here (see that column's own
+       * COMMENT — an unresolvable code degrades to "no region label"). The code
+       * is therefore its own label, which is honest about what was stored.
+       */
+      termFacets: [
+        {
+          facetKey: "channel",
+          kind: "join",
+          linkTable: "awcms_blog_post_terms",
+          linkSourceColumn: "post_id",
+          linkValueColumn: "term_id",
+          valueTable: "awcms_blog_terms",
+          valueIdColumn: "id",
+          valueColumn: "slug",
+          labelColumn: "name",
+          valueEquals: { taxonomy_type: "channel" },
+          valueNullColumns: ["deleted_at"]
+        },
+        {
+          facetKey: "topic",
+          kind: "join",
+          linkTable: "awcms_blog_post_terms",
+          linkSourceColumn: "post_id",
+          linkValueColumn: "term_id",
+          valueTable: "awcms_blog_terms",
+          valueIdColumn: "id",
+          valueColumn: "slug",
+          labelColumn: "name",
+          valueEquals: { taxonomy_type: "topic" },
+          valueNullColumns: ["deleted_at"]
+        },
+        {
+          facetKey: "institution",
+          kind: "join",
+          linkTable: "awcms_blog_post_institutions",
+          linkSourceColumn: "post_id",
+          linkValueColumn: "institution_id",
+          valueTable: "awcms_blog_institutions",
+          valueIdColumn: "id",
+          valueColumn: "slug",
+          labelColumn: "name",
+          valueNullColumns: ["deleted_at"]
+        },
+        {
+          facetKey: "region",
+          kind: "column",
+          valueColumn: "region_code"
+        }
+      ],
       urlTemplate: "/blog/:tenantCode/:slug",
       slugColumn: "slug",
       publicationFilter: {

@@ -21,8 +21,27 @@ import {
 import {
   hashSearchQuery,
   normalizeSearchLocale,
-  normalizeSearchQuery
+  normalizeSearchQuery,
+  parseTermFilters
 } from "../../../../modules/site-search/domain/search-query";
+import { collectTermFacetKeys } from "../../../../modules/site-search/domain/search-source-registry";
+import { listModules } from "../../../../modules";
+
+/**
+ * The facet names a request may filter on (Issue #633), derived from the
+ * search-source registry rather than written down here. Computed ONCE: the
+ * module list is a static code registry, so recomputing it per request would
+ * only spend CPU to reach the same answer.
+ */
+const TERM_FACET_KEYS = collectTermFacetKeys(listModules());
+
+/**
+ * The neutral empty facet payload. Shared by every early return so the "search
+ * is off for this host" answer and the "no results" answer stay identical in
+ * SHAPE as well as content — a missing `terms` key on one of them would be the
+ * distinguishing signal the neutral payload exists to prevent.
+ */
+const EMPTY_FACETS = { resourceTypes: [], terms: {} };
 
 /**
  * `GET /api/v1/site-search/query` (ADR-0040 §5) — the PUBLIC, anonymous JSON
@@ -79,6 +98,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   const typeParam = url.searchParams.get("type");
   const cursorParam = url.searchParams.get("cursor");
   const localeParam = url.searchParams.get("locale");
+  const termFilters = parseTermFilters(url.searchParams, TERM_FACET_KEYS);
 
   const result = await withSiteSearchTenant(
     sql,
@@ -97,7 +117,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
         return {
           items: [],
           nextCursor: null,
-          facets: { resourceTypes: [] },
+          facets: EMPTY_FACETS,
           query: "",
           locale,
           reason: normalized.reason
@@ -118,6 +138,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
         locale,
         resourceType: typeFilter,
         enabledResourceTypes: settings.enabledResourceTypes,
+        termFilters,
         limit: settings.resultLimit,
         cursor
       });
@@ -129,10 +150,17 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
       // Computed on every page, including a cursor page: the counts describe
       // the whole result set rather than the page, so omitting them after the
       // first page would make them look like they had changed.
+      // `resourceType` and `termFilters` ARE passed now (Issue #633): a facet
+      // applies every filter except its OWN, so it has to be told about the
+      // ones it will leave out. The old signature omitted `resourceType`
+      // entirely, which encoded "never apply it" — right with one facet, wrong
+      // with several.
       const facets = await countSearchFacets(tx, tenant.tenantId, {
         query: normalized.value,
         locale,
-        enabledResourceTypes: settings.enabledResourceTypes
+        resourceType: typeFilter,
+        enabledResourceTypes: settings.enabledResourceTypes,
+        termFilters
       });
 
       if (settings.analyticsEnabled) {
@@ -176,7 +204,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
       // Same SHAPE as a real answer: a payload that omitted `facets` here would
       // distinguish "search is off for this host" from "no results", which is
       // exactly what the neutral payload exists to prevent.
-      facets: { resourceTypes: [] },
+      facets: EMPTY_FACETS,
       query: "",
       locale: ""
     });

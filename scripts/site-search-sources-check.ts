@@ -32,6 +32,7 @@
  */
 import path from "node:path";
 
+import type { SearchSourceTermFacet } from "../src/modules/_shared/module-contract";
 import { listModules } from "../src/modules";
 import {
   formatSearchSourceRegistryIssue,
@@ -56,24 +57,55 @@ export type MissingSourceGrant = {
  * work being done correctly, which is how a gate teaches people to ignore it.
  */
 export function findMissingSourceGrants(
-  descriptors: readonly { key: string; tableName: string }[],
+  descriptors: readonly {
+    key: string;
+    tableName: string;
+    termFacets?: readonly SearchSourceTermFacet[];
+  }[],
   migrationSql: string
 ): MissingSourceGrant[] {
-  return descriptors
-    .filter(
-      (descriptor) =>
-        !grantsPrivilegeToRole(
-          migrationSql,
-          descriptor.tableName,
-          "SELECT",
-          WORKER_ROLE
-        )
-    )
-    .map((descriptor) => ({
-      descriptorKey: descriptor.key,
-      tableName: descriptor.tableName
-    }))
-    .sort((a, b) => a.tableName.localeCompare(b.tableName));
+  const missing: MissingSourceGrant[] = [];
+
+  for (const descriptor of descriptors) {
+    for (const tableName of collectDescriptorTables(descriptor)) {
+      if (
+        !grantsPrivilegeToRole(migrationSql, tableName, "SELECT", WORKER_ROLE)
+      ) {
+        missing.push({ descriptorKey: descriptor.key, tableName });
+      }
+    }
+  }
+
+  return missing.sort((a, b) => a.tableName.localeCompare(b.tableName));
+}
+
+/**
+ * Every table the indexer will actually READ for one descriptor (Issue #633).
+ *
+ * The source table was the whole answer while a descriptor could only name one
+ * table. A `kind: "join"` term facet names two more, and the indexer reads them
+ * in the same statement — so a descriptor whose facet joins a table the worker
+ * cannot SELECT is the #625 failure again, one layer deeper: green here, red at
+ * 03:00.
+ *
+ * This is why the gate grows in the SAME change as the contract. A join added
+ * later would otherwise be checked by nothing, and the person adding it would
+ * have no reason to suspect there was a grant to add.
+ */
+export function collectDescriptorTables(descriptor: {
+  tableName: string;
+  termFacets?: readonly SearchSourceTermFacet[];
+}): string[] {
+  const tables = new Set<string>([descriptor.tableName]);
+
+  for (const facet of descriptor.termFacets ?? []) {
+    if (facet.kind === "join") {
+      tables.add(facet.linkTable);
+      tables.add(facet.valueTable);
+    }
+  }
+
+  return [...tables].sort();
 }
 
 function loadMigrationText(): string {

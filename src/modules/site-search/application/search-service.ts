@@ -37,9 +37,61 @@ export type SearchQueryOptions = {
   resourceType?: string | null;
   /** The tenant's admitted-type allow-list (`null` = all). */
   enabledResourceTypes?: string[] | null;
+  /**
+   * Term filters from the request (Issue #633), `{ channel: "politik" }`.
+   *
+   * ANDed with each other and with everything else: picking a channel and a
+   * topic means "both", which is what a reader narrowing a list expects.
+   * Matching is on the facet VALUE (the slug/code), never the label — a label
+   * is display text that an editor may rewrite, and a filter that broke when
+   * somebody fixed a capital letter would be a filter nobody trusts.
+   */
+  termFilters?: Readonly<Record<string, string>> | null;
   limit: number;
   cursor?: SearchCursor | null;
 };
+
+/**
+ * Builds the jsonb containment operand for a set of term filters (Issue #633).
+ *
+ * `term_facets @> '[{"facet":"channel","value":"politik"},{"facet":"topic",...}]'`
+ * is a single GIN-index-backed predicate that means "carries ALL of these",
+ * which is precisely the AND semantics above — no per-filter subquery, no join,
+ * and one bound parameter no matter how many filters there are.
+ *
+ * ## It returns the ARRAY, not `JSON.stringify` of it
+ *
+ * Bun JSON-ENCODES a string parameter bound to a jsonb slot, so
+ * `${JSON.stringify(x)}::jsonb` compares against the jsonb SCALAR STRING
+ * `"[{...}]"` rather than the array. Nothing errors — `@>` against a scalar
+ * string simply matches nothing — so the filter silently returns an empty
+ * result set and the facet counts beside it quietly go to zero. Passing the JS
+ * value itself is what produces a real jsonb array. The same rule governs how
+ * `search-index-engine.ts` WRITES the column; there the `sql/140` CHECK turns
+ * the mistake into an error instead of a silence.
+ *
+ * Returns `null` when there is nothing to filter by, so every caller can pass
+ * the result straight into the same `IS NULL OR` shape the other optional
+ * predicates use — and so an empty filter set never becomes `@> '[]'`, which is
+ * true for every row and costs an index probe to learn nothing.
+ */
+export type TermFilterOperand = readonly { facet: string; value: string }[];
+
+export function buildTermFilterOperand(
+  termFilters: Readonly<Record<string, string>> | null | undefined,
+  exclude?: string
+): TermFilterOperand | null {
+  const entries = Object.entries(termFilters ?? {}).filter(
+    ([facet, value]) =>
+      facet !== exclude && typeof value === "string" && value.length > 0
+  );
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return entries.map(([facet, value]) => ({ facet, value }));
+}
 
 export function encodeSearchCursor(cursor: SearchCursor): string {
   return Buffer.from(`${cursor.rank}|${cursor.id}`, "utf8").toString(
@@ -92,6 +144,7 @@ export async function searchSiteContent(
     allowedTypes === null ? null : tx.array(allowedTypes, "text");
   const cursorRank = options.cursor?.rank ?? null;
   const cursorId = options.cursor?.id ?? null;
+  const termFilter = buildTermFilterOperand(options.termFilters);
 
   const rows = (await tx`
     SELECT ranked.resource_type, ranked.resource_id, ranked.url, ranked.title,
@@ -113,6 +166,7 @@ export async function searchSiteContent(
         AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
         AND (${typeFilter}::text IS NULL OR d.resource_type = ${typeFilter})
         AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
+        AND (${termFilter}::jsonb IS NULL OR d.term_facets @> ${termFilter}::jsonb)
     ) ranked
     WHERE (
       ${cursorRank}::float8 IS NULL
@@ -150,8 +204,37 @@ export type SearchFacetValue = {
   count: number;
 };
 
+type TermFacetRow = {
+  facet: string;
+  value: string;
+  label: string | null;
+  count: number;
+};
+
+/**
+ * What a facet count needs to know. `resourceType` and `termFilters` ARE part
+ * of it — a facet applies every filter except its own, so the function has to
+ * be told about the ones it is going to leave out. The previous signature
+ * omitted `resourceType` entirely, which encoded "never apply it" in the type;
+ * that was right while there was one facet and wrong as soon as there were two.
+ */
+export type FacetCountOptions = Omit<SearchQueryOptions, "limit" | "cursor">;
+
+export type SearchTermFacetValue = SearchFacetValue & {
+  /** Display text for `value`, as stored on the documents that carry it. */
+  label: string;
+};
+
 export type SearchFacets = {
   resourceTypes: SearchFacetValue[];
+  /**
+   * Term facets (Issue #633), keyed by facet name — `channel`, `topic`,
+   * `institution`, `region`, and whatever a future module's descriptor
+   * contributes. A facet with no matching documents is absent rather than
+   * present-and-empty: the reader is being told what else is there, and an
+   * empty list is not something else.
+   */
+  terms: Record<string, SearchTermFacetValue[]>;
 };
 
 /**
@@ -162,17 +245,68 @@ export type SearchFacets = {
 const MAX_FACET_VALUES = 20;
 
 /**
- * Counts per resource type for one query (Issue #607).
+ * Counts one term facet's values over the current result set (Issue #633).
  *
- * ## Why the type filter is deliberately NOT applied
+ * `exclude` is the facet being counted: its own filter is left out while every
+ * OTHER filter — type, and the remaining term filters — is applied. Pass `null`
+ * to apply all of them, which is the correct predicate for every facet the
+ * reader has not filtered on.
+ */
+async function countTermFacetRows(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: FacetCountOptions,
+  allowedTypesParam: unknown,
+  exclude: string | null
+): Promise<TermFacetRow[]> {
+  const typeFilter = options.resourceType ?? null;
+  const termFilter = buildTermFilterOperand(
+    options.termFilters,
+    exclude ?? undefined
+  );
+
+  return (await tx`
+    SELECT f.value ->> 'facet' AS facet,
+           f.value ->> 'value' AS value,
+           max(f.value ->> 'label') AS label,
+           count(DISTINCT d.id)::int AS count
+    FROM awcms_site_search_documents d
+    CROSS JOIN LATERAL jsonb_array_elements(d.term_facets) AS f(value)
+    WHERE d.tenant_id = ${tenantId}
+      AND d.locale = ${options.locale}
+      AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
+      AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
+      AND (${typeFilter}::text IS NULL OR d.resource_type = ${typeFilter})
+      AND (${termFilter}::jsonb IS NULL OR d.term_facets @> ${termFilter}::jsonb)
+      AND f.value ->> 'facet' IS NOT NULL
+      AND f.value ->> 'value' IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 ASC, count DESC, 2 ASC
+  `) as TermFacetRow[];
+}
+
+/**
+ * Counts the facets for one query (Issue #607 for content type, #633 for terms).
  *
- * A facet count answers "what else is there", so it must be computed over the
- * result set BEFORE the facet's own filter narrows it. Applying `resourceType`
- * here would make every other count zero the moment a reader picks one — and a
+ * ## A facet's own filter is never applied to its own count
+ *
+ * A facet count answers "what ELSE is there", so it must be computed over the
+ * result set BEFORE that facet narrows it. Applying `resourceType` to the type
+ * counts would make every other count zero the moment a reader picks one — and a
  * reader looking at a list of zeroes has no way back to the results they can
- * see, because the interface has stopped telling them those results exist.
+ * still see, because the interface has stopped telling them those results exist.
  *
- * Every OTHER predicate is shared with `searchSiteContent`, character for
+ * The rule generalizes once there is more than one facet, and generalizing it is
+ * what makes this function longer than a single query:
+ *
+ *   - the TYPE counts apply every term filter but not `resourceType`;
+ *   - a term facet the reader has NOT filtered on applies everything, so all
+ *     such facets share one query;
+ *   - a term facet the reader HAS filtered on needs its own pass with only its
+ *     own filter removed — which is why there is one extra query per active term
+ *     filter, and no way to fold them into the first.
+ *
+ * Every other predicate is shared with `searchSiteContent`, character for
  * character: same tenant, same locale, same `websearch_to_tsquery`, same
  * admitted-type allow-list. A facet count derived from a wider predicate than
  * the results would advertise documents the reader cannot reach.
@@ -184,16 +318,19 @@ const MAX_FACET_VALUES = 20;
  * for a result list: a COUNT leaks the existence of content without displaying
  * it, so a facet that escaped its tenant would be a disclosure with nothing on
  * screen to notice it by. `tests/integration/site-search.integration.test.ts`
- * asserts it negatively against a real database.
+ * asserts it negatively against a real database, for term facets as well as
+ * type — the term facets get their OWN negative test rather than inheriting the
+ * type facet's assumption.
  */
 export async function countSearchFacets(
   tx: Bun.SQL,
   tenantId: string,
-  options: Omit<SearchQueryOptions, "limit" | "cursor" | "resourceType">
+  options: FacetCountOptions
 ): Promise<SearchFacets> {
   const allowedTypes = options.enabledResourceTypes ?? null;
   const allowedTypesParam =
     allowedTypes === null ? null : tx.array(allowedTypes, "text");
+  const typeFacetTermFilter = buildTermFilterOperand(options.termFilters);
 
   const rows = (await tx`
     SELECT d.resource_type AS value, count(*)::int AS count
@@ -202,16 +339,64 @@ export async function countSearchFacets(
       AND d.locale = ${options.locale}
       AND d.search_vector @@ websearch_to_tsquery('simple', ${options.query})
       AND (${allowedTypesParam}::text[] IS NULL OR d.resource_type = ANY(${allowedTypesParam}::text[]))
+      AND (${typeFacetTermFilter}::jsonb IS NULL OR d.term_facets @> ${typeFacetTermFilter}::jsonb)
     GROUP BY d.resource_type
     ORDER BY count DESC, value ASC
     LIMIT ${MAX_FACET_VALUES}
   `) as { value: string; count: number }[];
 
+  const terms: Record<string, SearchTermFacetValue[]> = {};
+
+  const collect = (termRows: TermFacetRow[], only: string | null): void => {
+    for (const row of termRows) {
+      if (only !== null && row.facet !== only) {
+        continue;
+      }
+      const bucket = (terms[row.facet] ??= []);
+      // The cap is per FACET, not per response: twenty channels and twenty
+      // topics are two bounded lists, and truncating them jointly would
+      // silently drop a whole dimension because another one was long.
+      if (bucket.length >= MAX_FACET_VALUES) {
+        continue;
+      }
+      bucket.push({
+        value: row.value,
+        label: row.label ?? row.value,
+        count: Number(row.count)
+      });
+    }
+  };
+
+  const activeTermFacets = Object.keys(options.termFilters ?? {});
+
+  // One pass with every filter applied. Correct for every facet the reader is
+  // NOT filtering on; the facets they ARE filtering on are dropped from it
+  // below and recomputed, each without its own filter.
+  const baseRows = await countTermFacetRows(
+    tx,
+    tenantId,
+    options,
+    allowedTypesParam,
+    null
+  );
+  collect(
+    baseRows.filter((row) => !activeTermFacets.includes(row.facet)),
+    null
+  );
+
+  for (const facet of activeTermFacets) {
+    collect(
+      await countTermFacetRows(tx, tenantId, options, allowedTypesParam, facet),
+      facet
+    );
+  }
+
   return {
     resourceTypes: rows.map((row) => ({
       value: row.value,
       count: Number(row.count)
-    }))
+    })),
+    terms
   };
 }
 

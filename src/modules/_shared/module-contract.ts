@@ -551,6 +551,90 @@ export type SearchSourcePublicationFilter = {
   timeReachedColumns?: readonly string[];
 };
 
+/**
+ * ONE allow-listed way for a search source to declare a facetable term
+ * dimension (Issue #633).
+ *
+ * ## Why a name alone could not express this
+ *
+ * `tagsColumn` names a single COLUMN on the source table, and since `sql/131`
+ * channel/topic live in `awcms_blog_terms` reached through
+ * `awcms_blog_post_terms`, while institution lives in `awcms_blog_institutions`
+ * reached through `awcms_blog_post_institutions`. A column name cannot say
+ * "join". So the facets PRD FR-DSC-002 asks for were not merely unimplemented;
+ * there was no way to declare them.
+ *
+ * Two shapes, because the data really has two shapes. `region` is a plain
+ * column on `awcms_blog_posts` (PRD §8.5 gives an article ONE region), and
+ * declaring it through a join it does not have would be a fiction the query
+ * builder would then have to honour.
+ *
+ * ## Every name here is interpolated into SQL
+ *
+ * Which is exactly why `assertSafeIdentifier`/`assertSafeTableName` exist and
+ * why `site-search:sources:check` validates this shape in the same PR that
+ * introduced it, rather than after. A descriptor is reviewed, code-only DATA —
+ * never a function, never a fragment of SQL, never a value that reached the
+ * process from a request. `valueEquals` VALUES are bound parameters; only
+ * identifiers are interpolated.
+ *
+ * ## `value` and `label` are not the same field
+ *
+ * `value` is what a filter matches on and what a URL carries — a slug, a code,
+ * something stable. `label` is what a reader sees. Collapsing them would either
+ * put display text in a query string or slugs on screen, and renaming a channel
+ * would silently break every saved filter.
+ */
+export type SearchSourceTermFacet =
+  | {
+      /** The facet name reported to clients, e.g. `"channel"`. Unique per descriptor. */
+      facetKey: string;
+      /** The value lives in a column on the SOURCE table itself — no join. */
+      kind: "column";
+      /** Column carrying the stable value (e.g. `region_code`). */
+      valueColumn: string;
+      /**
+       * Column carrying the display label. Omit when the source has none and
+       * the value is all there is — the value is then used for both, which is
+       * honest about the fact that no label was stored.
+       */
+      labelColumn?: string | null;
+    }
+  | {
+      facetKey: string;
+      /** The value lives in another table, reached through a link table. */
+      kind: "join";
+      /** Link table (`awcms_`-prefixed), e.g. `awcms_blog_post_terms`. */
+      linkTable: string;
+      /** Column on the link table referencing the SOURCE row's id. */
+      linkSourceColumn: string;
+      /** Column on the link table referencing the VALUE row's id. */
+      linkValueColumn: string;
+      /** Value table (`awcms_`-prefixed), e.g. `awcms_blog_terms`. */
+      valueTable: string;
+      /** Primary-key column on the value table that `linkValueColumn` points at. */
+      valueIdColumn: string;
+      /** Column on the value table carrying the stable value (a slug or code). */
+      valueColumn: string;
+      /** Column on the value table carrying the display label. */
+      labelColumn: string;
+      /**
+       * Literal equality predicates on the VALUE table — how one shared
+       * vocabulary table is split into several facets (`taxonomy_type =
+       * 'channel'` vs `'topic'`). Values are bound parameters.
+       */
+      valueEquals?: Readonly<Record<string, string>>;
+      /** Columns on the value table that must be `IS NULL` — the soft-delete gate. */
+      valueNullColumns?: readonly string[];
+      /**
+       * Tenant column present on BOTH the link and value tables; defaults to
+       * `tenant_id`. It is applied to both and bound to the tenant being
+       * indexed, so a join can never reach across tenants even if RLS were
+       * somehow not in force on one of them.
+       */
+      tenantColumn?: string;
+    };
+
 export type SearchSourceDescriptor = {
   /** Stable, unique across the whole registry, `"<module_key>.<short>"` (e.g. `"blog_content.post"`). */
   key: string;
@@ -576,6 +660,18 @@ export type SearchSourceDescriptor = {
   bodyColumns: readonly string[];
   /** `text[]` column mapped to the index document's `tags` (tsvector weight C); `null`/omit when the source has none. */
   tagsColumn?: string | null;
+  /**
+   * Facetable term dimensions (Issue #633) — channel, topic, institution,
+   * region, and whatever a future module contributes. Omit when the source has
+   * none; every existing descriptor stays valid unchanged.
+   *
+   * These are kept OUT of `tags`/`tags_text` on purpose. `tags` feeds the
+   * weighted `search_vector`, so folding facet values into it would change
+   * relevance ranking as a side effect of adding a facet — and a
+   * `channel:politik` token in the tsvector is a term readers can accidentally
+   * match on.
+   */
+  termFacets?: readonly SearchSourceTermFacet[];
   /**
    * Public URL template resolved at index time. Placeholders: `:slug` and `:id`
    * (from `slugColumn`/`idColumn`) plus `:tenantCode` — an AWCMS-SPECIFIC
