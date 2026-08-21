@@ -17,10 +17,9 @@ import { fetchPublicBlogPageBySlug } from "../../../../modules/blog-content/appl
 import { isLegacyTenantRouteEnabled } from "../../../../modules/blog-content/application/public-route-settings";
 import { mediaLibraryPortAdapter } from "../../../../modules/media-library/application/media-library-port-adapter";
 import {
-  collectRenderableGalleryMediaObjectIds,
-  collectRenderableVideoNewsThumbnailMediaObjectIds,
-  renderContentJsonToHtml
-} from "../../../../modules/blog-content/domain/content-block-rendering";
+  collectBlogBodyMediaObjectIds,
+  renderBlogBodyHtml
+} from "../../../../modules/blog-content/domain/blog-body-rendering";
 import {
   resolveCanonicalUrl,
   resolveMetaDescription,
@@ -56,17 +55,15 @@ import { renderPublicPageShell } from "../../../../modules/blog-content/domain/p
  * already is. That is a pre-existing property of the route family, not something
  * this route introduces.
  *
- * ## Why the body renders from `content_json` and not `body_portable_text`
+ * ## Which stored body renders (Issue #624)
  *
- * ADR-0100 makes Portable Text the canonical body, and `content_json.blocks` a
- * derived (lossy) projection of it — so rendering the projection is the WRONG
- * source on its face. It is nonetheless what this route does, and what
- * `[slug].ts` does for posts, for one reason: `sql/134` gives
- * `body_portable_text` a `'[]'` default and leaves the conversion to
- * `bun run blog:portable-text:backfill`, a deployment job. Reading the canonical
- * column on a deployment that has not run that job yet renders EVERY page blank,
- * and blank is indistinguishable from "the editor wrote nothing". Both routes
- * move together, after the backfill, or not at all.
+ * Neither column unconditionally: `renderBlogBodyHtml` reads the canonical
+ * Portable Text body (ADR-0100) when it holds something and the lossy
+ * `content_json` projection when it does not, because `sql/134` leaves the
+ * canonical column `'[]'` until `bun run blog:portable-text:backfill` runs and
+ * an unconditional switch would blank every page on a deployment that has not.
+ * The decision lives in that one function, and this route and the post route
+ * moved together — as the earlier version of this comment said they had to.
  *
  * Mirrors the post detail route in every other respect: anonymous, tenant
  * resolved from the path segment (ADR-0009), `isLegacyTenantRouteEnabled` as the
@@ -120,11 +117,13 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
 
       // One bulk resolution for both embed kinds, same as the post route —
       // an id that does not resolve to a verified media object renders nothing
-      // rather than a broken `<img>`.
+      // rather than a broken `<img>`. Issue #624: collected from both stored
+      // body shapes, so the ids follow whichever one renders below.
+      const bodyMedia = collectBlogBodyMediaObjectIds(page);
       const mediaObjectIds = [
         ...new Set([
-          ...collectRenderableGalleryMediaObjectIds(page.contentJson),
-          ...collectRenderableVideoNewsThumbnailMediaObjectIds(page.contentJson)
+          ...bodyMedia.galleryImageMediaObjectIds,
+          ...bodyMedia.videoThumbnailMediaObjectIds
         ])
       ];
       const resolvedMedia =
@@ -137,10 +136,7 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         [...resolvedMedia].map(([id, media]) => [id, media.publicUrl])
       );
 
-      const contentHtml = renderContentJsonToHtml(
-        page.contentJson,
-        resolvedMediaUrls
-      );
+      const contentHtml = renderBlogBodyHtml(page, resolvedMediaUrls);
 
       // No share buttons and no `NewsArticle` JSON-LD: a privacy policy is not
       // an article, and stamping one with `datePublished`/`author` would tell a

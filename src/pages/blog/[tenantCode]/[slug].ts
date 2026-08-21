@@ -19,7 +19,7 @@ import { fetchBlogSettings } from "../../../modules/blog-content/application/blo
 import { buildNewsArticleSeoMetadata } from "../../../modules/blog-content/application/news-article-seo-metadata";
 import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 import { resolveBlogShareConfig } from "../../../modules/blog-content/domain/social-share-config";
-import { renderContentJsonToHtml } from "../../../modules/blog-content/domain/content-block-rendering";
+import { renderBlogBodyHtml } from "../../../modules/blog-content/domain/blog-body-rendering";
 import { renderContentHtmlWithInternalTagLinks } from "../../../modules/blog-content/application/internal-tag-link-rendering";
 import {
   resolveCanonicalUrl,
@@ -110,8 +110,12 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
         }
       );
 
-      const renderedContentHtml = renderContentJsonToHtml(
-        post.contentJson,
+      // Issue #624 — the CANONICAL body (ADR-0100) when it holds something,
+      // the lossy `content_json` projection when it does not. Before this, a
+      // phrase an editor bolded reached the reader plain, because nothing in
+      // production called the Portable Text renderer at all.
+      const renderedContentHtml = renderBlogBodyHtml(
+        post,
         seoMetadata.resolvedGalleryUrls
       );
 

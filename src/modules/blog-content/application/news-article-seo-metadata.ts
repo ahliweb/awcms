@@ -17,10 +17,7 @@ import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 import type { PublicBlogPostDetail } from "./public-blog-directory";
 import { fetchPublicPostTaxonomyTerms } from "./public-blog-directory";
 import type { BlogSettingsView } from "./blog-settings-directory";
-import {
-  collectRenderableGalleryMediaObjectIds,
-  collectRenderableVideoNewsThumbnailMediaObjectIds
-} from "../domain/content-block-rendering";
+import { collectBlogBodyMediaObjectIds } from "../domain/blog-body-rendering";
 import {
   resolveSocialPreviewImageSourceId,
   type SocialPreviewImageCandidates
@@ -44,7 +41,7 @@ export type NewsArticleSeoMetadataInput = {
 };
 
 export type NewsArticleSeoMetadata = {
-  /** `mediaObjectId -> publicUrl`, for `renderContentJsonToHtml`'s gallery/video-thumbnail rendering — same map shape every existing caller already builds, now built once here instead of per-route. */
+  /** `mediaObjectId -> publicUrl`, for `renderBlogBodyHtml`'s gallery/video-thumbnail rendering — same map shape every existing caller already builds, now built once here instead of per-route. */
   resolvedGalleryUrls: ReadonlyMap<string, string>;
   ogImageUrl: string | null;
   ogImageAlt: string | null;
@@ -65,11 +62,14 @@ export async function buildNewsArticleSeoMetadata(
   blogSettings: BlogSettingsView,
   input: NewsArticleSeoMetadataInput
 ): Promise<NewsArticleSeoMetadata> {
-  const galleryMediaObjectIds = collectRenderableGalleryMediaObjectIds(
-    input.post.contentJson
-  );
-  const videoThumbnailMediaObjectIds =
-    collectRenderableVideoNewsThumbnailMediaObjectIds(input.post.contentJson);
+  // Issue #624 — collected from BOTH body shapes, ordered by the one that will
+  // actually render. Reading `contentJson` alone would drop an image that exists
+  // only in the canonical Portable Text body, and would order the social-preview
+  // "first image in content" fallback by a body the reader never sees.
+  const {
+    galleryImageMediaObjectIds: galleryMediaObjectIds,
+    videoThumbnailMediaObjectIds
+  } = collectBlogBodyMediaObjectIds(input.post);
 
   const candidateIds = new Set<string>();
   if (input.post.featuredMediaId) {
@@ -207,9 +207,8 @@ export async function resolveNewsArticlePreviewImage(
   blogSettings: BlogSettingsView,
   post: PublicBlogPostDetail
 ): Promise<ResolvedNewsArticlePreviewImage | null> {
-  const galleryMediaObjectIds = collectRenderableGalleryMediaObjectIds(
-    post.contentJson
-  );
+  const { galleryImageMediaObjectIds: galleryMediaObjectIds } =
+    collectBlogBodyMediaObjectIds(post);
 
   const candidateIds = new Set<string>();
   if (post.featuredMediaId) {

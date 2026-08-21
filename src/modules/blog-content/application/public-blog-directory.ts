@@ -46,6 +46,17 @@ export type PublicBlogPostDetail = {
   autoInternalTagLinksDisabled: boolean;
   /** Issue #649 — explicit "use this image for social/SEO preview" override; highest priority source in `social-preview-image-resolution.ts`'s chain, ahead of `featuredMediaId`. */
   seoImageMediaId: string | null;
+  /**
+   * The CANONICAL body (ADR-0100), and since Issue #624 the one the public post
+   * route actually renders — through `renderBlogBodyHtml`, which falls back to
+   * `contentJson` when this is empty because `sql/134` leaves the column `'[]'`
+   * until `bun run blog:portable-text:backfill` runs.
+   *
+   * `unknown` rather than `PortableTextDocument`: a row written before that
+   * backfill can hold anything, and the renderer's job is to degrade rather than
+   * to trust the type.
+   */
+  bodyPortableText: unknown;
 };
 
 type PublicBlogPostDetailRow = {
@@ -65,6 +76,7 @@ type PublicBlogPostDetailRow = {
   featured_media_id: string | null;
   auto_internal_tag_links_disabled: boolean;
   seo_image_media_id: string | null;
+  body_portable_text: unknown;
 };
 
 function toDetail(row: PublicBlogPostDetailRow): PublicBlogPostDetail {
@@ -84,7 +96,8 @@ function toDetail(row: PublicBlogPostDetailRow): PublicBlogPostDetail {
     visibility: row.visibility,
     featuredMediaId: row.featured_media_id,
     autoInternalTagLinksDisabled: row.auto_internal_tag_links_disabled,
-    seoImageMediaId: row.seo_image_media_id
+    seoImageMediaId: row.seo_image_media_id,
+    bodyPortableText: row.body_portable_text
   };
 }
 
@@ -97,7 +110,7 @@ export async function fetchPublicBlogPostBySlug(
     SELECT id, title, slug, excerpt, content_json, content_text, seo_title,
       meta_description, canonical_url, locale, published_at, updated_at,
       visibility, featured_media_id, auto_internal_tag_links_disabled,
-      seo_image_media_id
+      seo_image_media_id, body_portable_text
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId} AND slug = ${slug}
       AND status = 'published' AND visibility IN ('public', 'unlisted')
@@ -387,7 +400,18 @@ const FEED_ITEM_LIMIT = 50;
 /** See `listPublicBlogPagesForSitemap` for why this is lower than `FEED_ITEM_LIMIT`. */
 const SITEMAP_PAGE_LIMIT = 200;
 
-/** RSS/sitemap source — flat, unpaginated (feeds/sitemaps are consumed by machines, not paged by a visitor), bounded to the latest 50 published public posts. */
+/**
+ * RSS/sitemap source — flat, unpaginated (feeds/sitemaps are consumed by
+ * machines, not paged by a visitor), bounded to the latest 50 published public
+ * posts.
+ *
+ * `body_portable_text` is selected even though no feed element renders a body:
+ * `resolveNewsArticlePreviewImage` collects the enclosure image from whichever
+ * body shape is live (Issue #624), and omitting the column here would leave the
+ * detail shape half-populated — a trap for the next caller, which would silently
+ * read the lossy projection instead. Fifty rows already carry `content_json`;
+ * this is the same order of bytes, once, for a bounded query.
+ */
 export async function listPublicBlogPostsForFeed(
   tx: Bun.SQL,
   tenantId: string
@@ -395,7 +419,7 @@ export async function listPublicBlogPostsForFeed(
   const rows = (await tx`
     SELECT id, title, slug, excerpt, content_json, content_text, seo_title,
       meta_description, canonical_url, locale, published_at, updated_at,
-      visibility, featured_media_id, seo_image_media_id
+      visibility, featured_media_id, seo_image_media_id, body_portable_text
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId}
       AND status = 'published' AND visibility = 'public'
