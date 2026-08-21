@@ -113,8 +113,8 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Base modules                      | **23** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **135** (`sql/001`–`135`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0102** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
-| Admin screens                     | **45** `.astro` files in `src/pages/admin/`; **0 of 23** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **58** (32.383 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| Admin screens                     | **46** `.astro` files in `src/pages/admin/`; **0 of 23** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| `.astro` files                    | **59** (33.270 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **52** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

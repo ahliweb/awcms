@@ -125,9 +125,21 @@ export const blogContentModule = defineModule({
       requiredPermission: "blog_content.institutions.read"
     },
     {
+      // Issue #594. Separate from `/admin/blog-presentation` even though both
+      // are "how the site looks": presentation is templates, menus, widgets and
+      // theme — tenant-wide chrome gated on `templates.read` — while this is
+      // TODAY's front page, edited by whoever is on shift. An operator holding
+      // `homepage_sections.*` and nothing else must not be handed a screen whose
+      // every other control 403s, and the reverse holds just as strongly.
+      labelKey: "admin.layout.nav_blog_homepage",
+      path: "/admin/blog-homepage",
+      order: 40,
+      requiredPermission: "blog_content.homepage_sections.read"
+    },
+    {
       labelKey: "admin.layout.nav_blog_presentation",
       path: "/admin/blog-presentation",
-      order: 40,
+      order: 41,
       requiredPermission: "blog_content.templates.read"
     },
     {
@@ -137,7 +149,7 @@ export const blogContentModule = defineModule({
       // and sitemap are served at all.
       labelKey: "admin.layout.nav_blog_settings",
       path: "/admin/blog-settings",
-      order: 41,
+      order: 42,
       requiredPermission: "blog_content.settings.read"
     }
   ],

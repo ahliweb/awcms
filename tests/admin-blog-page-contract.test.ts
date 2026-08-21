@@ -488,22 +488,23 @@ describe("/admin/blog permission gates", () => {
     expect(nav!.requiredPermission).toBe("blog_content.posts.read");
     expect(declaredTriples().has(nav!.requiredPermission as Triple)).toBe(true);
 
-    // FIVE entries: the post lifecycle, the page lifecycle (ADR-0057),
-    // taxonomy, presentation (templates/menus/widgets/theme), and — arriving
-    // 8 August 2026 — settings. Homepage composition still brings its own
-    // entry when its page lands; the count stays pinned so each arrival is a
-    // line someone edits deliberately, which is exactly what this assertion
-    // forced when `/admin/blog-settings` landed. An entry appearing here
-    // without a page is what `admin-navigation-registry.test.ts` catches.
+    // The count is pinned so each arrival is a line somebody edits
+    // deliberately, which is what this assertion forced when
+    // `/admin/blog-settings` landed and again when `/admin/blog-institutions`
+    // did. An entry appearing here without a page is what
+    // `admin-navigation-registry.test.ts` catches.
     const navigation = listModules().find(
       (module) => module.key === "blog_content"
     )?.navigation;
 
-    // 6 since sql/131: `/admin/blog-institutions` joined posts, pages,
-    // taxonomy, presentation and settings.
-    expect(navigation).toHaveLength(6);
+    // 7 since Issue #594: `/admin/blog-homepage` joined posts, pages, taxonomy,
+    // institutions, presentation and settings. That comment used to predict
+    // this arrival ("homepage composition still brings its own entry when its
+    // page lands"); it has landed, and ad inventory is the next one due.
+    expect(navigation).toHaveLength(7);
     expect(navigation?.map((entry) => entry.path).sort()).toEqual([
       "/admin/blog",
+      "/admin/blog-homepage",
       "/admin/blog-institutions",
       "/admin/blog-pages",
       "/admin/blog-presentation",

@@ -4129,3 +4129,128 @@ msgstr ""
 
 msgid "Save site profile"
 msgstr ""
+
+# Issue #594 — /admin/blog-homepage, the editorial homepage composer.
+
+msgid "Homepage composition"
+msgstr ""
+
+msgid "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
+msgstr ""
+
+msgid "You do not have permission to view the homepage composition."
+msgstr ""
+
+msgid "Could not load homepage sections. Please try again."
+msgstr ""
+
+msgid "Homepage sections, in display order."
+msgstr ""
+
+msgid "No sections yet"
+msgstr ""
+
+msgid "Until one exists the homepage falls back to the most recent eligible articles."
+msgstr ""
+
+msgid "Disabled"
+msgstr ""
+
+msgid "Edit section"
+msgstr ""
+
+msgid "Add section"
+msgstr ""
+
+msgid "Lowercase letters, digits, hyphen and underscore. Unique per tenant, and fixed once created."
+msgstr ""
+
+msgid "The type cannot be changed after a section is created."
+msgstr ""
+
+msgid "Shown above the section. Leave blank for no heading."
+msgstr ""
+
+msgid "Starts at"
+msgstr ""
+
+msgid "Ends at"
+msgstr ""
+
+msgid "Leave both blank for a section that is always on. Times are entered in your own timezone and stored as absolute instants."
+msgstr ""
+
+msgid "Headline"
+msgstr ""
+
+msgid "Article"
+msgstr ""
+
+msgid "Choose an article"
+msgstr ""
+
+msgid "Latest articles"
+msgstr ""
+
+msgid "How many"
+msgstr ""
+
+msgid "Every category"
+msgstr ""
+
+msgid "Curated articles"
+msgstr ""
+
+msgid "Article ids"
+msgstr ""
+
+msgid "One id per line, in the order they should appear. Between 1 and 20. Copy them from the table below."
+msgstr ""
+
+msgid "Category grid"
+msgstr ""
+
+msgid "Categories"
+msgstr ""
+
+msgid "Between 1 and 8 categories."
+msgstr ""
+
+msgid "Articles per category"
+msgstr ""
+
+msgid "Gallery"
+msgstr ""
+
+msgid "Media ids"
+msgstr ""
+
+msgid "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen."
+msgstr ""
+
+msgid "Caption"
+msgstr ""
+
+msgid "Save section"
+msgstr ""
+
+msgid "Create section"
+msgstr ""
+
+msgid "Articles you can curate"
+msgstr ""
+
+msgid "The most recent published, publicly visible articles — the only ones a curated slot will render. Drafts, unlisted and scheduled articles are deliberately absent."
+msgstr ""
+
+msgid "Articles eligible for curation, newest first."
+msgstr ""
+
+msgid "Id"
+msgstr ""
+
+msgid "No published articles yet"
+msgstr ""
+
+msgid "Publish an article before curating a homepage slot for it."
+msgstr ""
