@@ -124,6 +124,36 @@ export function confers(
   );
 }
 
+/**
+ * Does any migration in `sql` grant `privilege` on `tableName` to `role`?
+ *
+ * Lives here rather than in a caller because two gates now ask it —
+ * `data-lifecycle:worker-grants:check` for the retention engine and
+ * `site-search:sources:check` for the reconcile job (Issue #625) — and a second
+ * copy of this predicate is a second place for the comment-swallowing bug
+ * `stripSqlComments` exists to prevent.
+ *
+ * Answers about what a migration WROTE, never about what a database has
+ * applied. That boundary matters, because "the grant exists in a migration" is
+ * exactly the sentence that gets read as "the job can run".
+ */
+export function grantsPrivilegeToRole(
+  sql: string,
+  tableName: string,
+  privilege: string,
+  role: string
+): boolean {
+  const wanted = tableName.toLowerCase();
+
+  return parsePrivilegeStatements(sql).some(
+    (statement) =>
+      statement.kind === "grant" &&
+      statement.roles.includes(role) &&
+      statement.tables.includes(wanted) &&
+      confers(statement.privileges, privilege)
+  );
+}
+
 export type SealedTablesInput = {
   /** Migrations in APPLY order — privileges are a running total, not a set. */
   migrations: readonly { name: string; sql: string }[];

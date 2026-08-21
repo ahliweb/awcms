@@ -40,11 +40,7 @@
  */
 import path from "node:path";
 import { listModules } from "../src/modules";
-import {
-  confers,
-  loadMigrations,
-  parsePrivilegeStatements
-} from "./sql-grants";
+import { grantsPrivilegeToRole, loadMigrations } from "./sql-grants";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKER_ROLE = "awcms_worker";
@@ -118,15 +114,7 @@ export function grantsPrivilege(
   tableName: string,
   privilege: string
 ): boolean {
-  const wanted = tableName.toLowerCase();
-
-  return parsePrivilegeStatements(sql).some(
-    (statement) =>
-      statement.kind === "grant" &&
-      statement.roles.includes(WORKER_ROLE) &&
-      statement.tables.includes(wanted) &&
-      confers(statement.privileges, privilege)
-  );
+  return grantsPrivilegeToRole(sql, tableName, privilege, WORKER_ROLE);
 }
 
 function loadMigrationText(): string {

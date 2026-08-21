@@ -120,8 +120,49 @@ suite("site_search module (integration, ADR-0040)", () => {
     await seedTenants();
   });
 
-  test("the base registry contributes exactly the blog_content.post source", () => {
-    expect(SOURCES.map((s) => s.key)).toEqual(["blog_content.post"]);
+  test("the base registry contributes exactly the two blog_content sources", () => {
+    // Pages joined in Issue #625, once `sql/136` gave `awcms_worker` the SELECT
+    // the reconcile job needs. Pinned as an exact list on purpose: a source
+    // appearing here without anyone noticing means a table is being read by a
+    // 03:00 job, and the shape of that mistake is a `permission denied` nobody
+    // is awake for.
+    expect(SOURCES.map((s) => s.key)).toEqual([
+      "blog_content.post",
+      "blog_content.page"
+    ]);
+  });
+
+  test("awcms_worker can actually SELECT every table those sources name", async () => {
+    // `site-search:sources:check` proves the GRANT was WRITTEN. This proves it
+    // was APPLIED — against a real Postgres with the real migrations, which is
+    // the difference between a green gate and a job that runs at 03:00.
+    const sql = getAdminSql();
+    const tables = [...new Set(SOURCES.map((source) => source.tableName))];
+
+    const grants = (await sql.unsafe(`
+      SELECT table_name, privilege_type
+      FROM information_schema.role_table_grants
+      WHERE grantee = 'awcms_worker'
+        AND table_name IN (${tables.map((table) => `'${table}'`).join(", ")})
+    `)) as { table_name: string; privilege_type: string }[];
+
+    for (const table of tables) {
+      expect(
+        grants.some(
+          (grant) =>
+            grant.table_name === table && grant.privilege_type === "SELECT"
+        )
+      ).toBe(true);
+    }
+
+    // And SELECT only on pages: the indexer never writes a source, and an
+    // unused UPDATE on the table holding the Pedoman Media Siber is not a
+    // harmless extra.
+    expect(
+      grants
+        .filter((grant) => grant.table_name === "awcms_blog_pages")
+        .map((grant) => grant.privilege_type)
+    ).toEqual(["SELECT"]);
   });
 
   test("reconcile indexes ONLY published-public posts (publication filter at the source boundary)", async () => {

@@ -1335,6 +1335,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_blog_posts: ["SELECT", "UPDATE"],
   awcms_blog_post_terms: ["SELECT"],
   awcms_blog_settings: ["SELECT"],
+  // blog_content — site-search:reconcile (sql/136, Issue #625). SELECT-only:
+  // the index engine reads each registered search source and writes exclusively
+  // to its own awcms_site_search_* tables, so an UPDATE here would be a
+  // privilege no statement uses on the table holding the Pedoman Media Siber.
+  // `site-search:sources:check` derives this requirement from the descriptor
+  // rather than trusting this list to be remembered.
+  awcms_blog_pages: ["SELECT"],
   // blog_content — blog:ads:ingest (sql/079, ADR-0044 §4 Fase 2). SELECT-only
   // on both legacy ad tables: the job reads them and never edits or deletes
   // them, because retiring them is the NEXT step's decision, taken by a human

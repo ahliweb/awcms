@@ -459,17 +459,15 @@ export const blogContentModule = defineModule({
   // `urlTemplate` carries `:tenantCode` because this base's public post route is
   // path-tenant-scoped (`/blog/{tenantCode}/{slug}`, ADR-0009) — awcms-micro's
   // descriptor used host-resolved `/news/:slug`, a route family that is NOT
-  // ported here (see this module's `description`). Blog PAGES are still NOT
-  // contributed, but Issue #594 changed the reason and the reason is worth
-  // keeping accurate. The old one — "they have no public route, so an indexed
-  // page would produce a search hit that 404s" — stopped being true the moment
-  // `/blog/{tenantCode}/pages/{slug}` shipped. What blocks it now is a GRANT: the
-  // index is built by `bun run site-search:reconcile` running as `awcms_worker`,
-  // and `sql/035` gives that role SELECT on `awcms_blog_posts` and nothing else
-  // in this module. A descriptor added without that grant passes every gate here
-  // — the registry check is pure, no test touches a database — and then fails at
-  // 03:00 in a job nobody is watching. Contributing pages therefore needs a
-  // migration first, which is its own change.
+  // ported here (see this module's `description`). Blog PAGES are contributed
+  // too since Issue #625, and it took two changes rather than one: Issue #617
+  // gave them a public route, so a hit no longer 404s, and `sql/136` gave
+  // `awcms_worker` the SELECT the reconcile job needs. Registering the
+  // descriptor without that grant would have passed every gate here — the
+  // registry check is pure, no test touches a database — and failed at 03:00 in
+  // a job nobody is watching. `site-search:sources:check` now derives that
+  // requirement from the descriptors themselves, so the next contributor cannot
+  // repeat it.
   //
   // This declaration adds NO dependency edge to `site_search`: the arrow points
   // inward (ADR-0040 §2) — content declares, the aggregator discovers.
@@ -840,6 +838,52 @@ export const blogContentModule = defineModule({
       },
       weight: 1.0,
       privacyClassification: "public"
+    },
+    /**
+     * Static pages (Issue #625). Reachable at `/blog/{tenantCode}/pages/{slug}`
+     * since Issue #617 and listed in `sitemap-blog.xml`, so a reader can be sent
+     * here and arrive at a real document — which is the precondition for
+     * indexing something, and the reason this descriptor could not exist before.
+     *
+     * The publication filter is the LISTING predicate — strict
+     * `visibility = 'public'`, matching `listPublicBlogPagesForSitemap` rather
+     * than `fetchPublicBlogPageBySlug`. The detail route also serves `unlisted`,
+     * and that difference is the whole point of the unlisted tier: reachable by
+     * direct link, absent from every listing. A search result IS a listing.
+     *
+     * `weight: 0.6` — a page and an article are not equally relevant to the same
+     * query. Someone searching a news site is usually looking for coverage, and
+     * ranking the disclaimer alongside it would be a worse index, not a fairer
+     * one. The page still wins when the query is actually about it, because the
+     * weight scales a score rather than capping it.
+     *
+     * Requires `GRANT SELECT ON awcms_blog_pages TO awcms_worker` (`sql/136`) —
+     * the reconcile job runs as that role, and this descriptor without that
+     * grant is a job that passes every gate here and fails at 03:00.
+     */
+    {
+      key: "blog_content.page",
+      ownerModuleKey: "blog_content",
+      resourceType: "blog_page",
+      tableName: "awcms_blog_pages",
+      tenantColumn: "tenant_id",
+      idColumn: "id",
+      localeColumn: "locale",
+      updatedAtColumn: "updated_at",
+      titleColumn: "title",
+      summaryColumn: "excerpt",
+      bodyColumns: ["content_text"],
+      tagsColumn: null,
+      urlTemplate: "/blog/:tenantCode/pages/:slug",
+      slugColumn: "slug",
+      publicationFilter: {
+        equals: { status: "published", visibility: "public" },
+        nullColumns: ["deleted_at"],
+        notNullColumns: ["published_at"],
+        timeReachedColumns: ["published_at"]
+      },
+      weight: 0.6,
+      privacyClassification: "public"
     }
   ],
   /**
@@ -849,6 +893,20 @@ export const blogContentModule = defineModule({
    * them drift would mean a post is searchable but not commentable (or worse,
    * commentable while unpublished). `comments` reads this through
    * `listModules()`; nothing here imports `comments`.
+   *
+   * ## Why PAGES are searchable (Issue #625) but not commentable
+   *
+   * The two lists are deliberately asymmetric, and the asymmetry is the
+   * decision rather than an omission. A reader looking for the Pedoman Media
+   * Siber should find it — that is what an index is for. A comment thread under
+   * the Pedoman Media Siber, the disclaimer or the privacy policy is a different
+   * thing: those pages exist because a press council expects to find them
+   * stated, and a discussion appended to a published standard reads as
+   * qualifying it. Nothing is lost by leaving it off — a page can be given a
+   * thread the day a tenant asks for one, and adding it then is one descriptor.
+   *
+   * So the "filters must be identical" rule above binds POST to POST. It says
+   * nothing about which resource types appear in both lists.
    */
   commentableResources: [
     {
