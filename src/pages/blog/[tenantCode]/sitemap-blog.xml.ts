@@ -16,7 +16,10 @@ import {
   serverErrorXmlResponse
 } from "../../../lib/html/error-responses";
 import { log } from "../../../lib/logging/logger";
-import { listPublicBlogPostsForFeed } from "../../../modules/blog-content/application/public-blog-directory";
+import {
+  listPublicBlogPagesForSitemap,
+  listPublicBlogPostsForFeed
+} from "../../../modules/blog-content/application/public-blog-directory";
 import { fetchBlogSettings } from "../../../modules/blog-content/application/blog-settings-directory";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import { resolveNewsArticlePreviewImage } from "../../../modules/blog-content/application/news-article-seo-metadata";
@@ -105,6 +108,25 @@ export const GET: APIRoute = async ({ params, request, url }) => {
 ${alternatesXml(postPath)}
 <lastmod>${post.publishedAt.toISOString()}</lastmod>
 ${imageTag}
+</url>`);
+      }
+
+      // Issue #594 — static pages became publicly reachable in the same change
+      // that added them here. A sitemap that omitted them would leave the one
+      // surface a press council is expected to FIND (Pedoman Media Siber,
+      // Redaksi) discoverable only by someone who already knew its URL.
+      //
+      // No `<image:image>`: pages carry no `seoImageMediaId`, so there is no
+      // preview-image chain to resolve and nothing to emit.
+      const pages = await listPublicBlogPagesForSitemap(tx, tenant.tenantId);
+
+      for (const page of pages) {
+        const pagePath = `${channelPath}/pages/${page.slug}`;
+
+        urlParts.push(`<url>
+<loc>${escapeHtml(localisedUrl(pagePath))}</loc>
+${alternatesXml(pagePath)}
+<lastmod>${page.updatedAt.toISOString()}</lastmod>
 </url>`);
       }
 

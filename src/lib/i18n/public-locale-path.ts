@@ -50,7 +50,8 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from "./locales";
  *
  * Anchored, and `[^/]+` rather than `.*`, for the reason the surface registry
  * gives: a path must not be able to smuggle itself into a more permissive
- * pattern. These mirror `blog-index`, `blog-post` and `blog-taxonomy`.
+ * pattern. These mirror `blog-index`, `blog-post`, `blog-taxonomy` and
+ * `blog-page`.
  *
  * `blog-post` deliberately does NOT match `/blog/{tenant}/search`, `feed.xml`
  * or `sitemap-blog.xml`; those are excluded explicitly below rather than left
@@ -60,6 +61,11 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from "./locales";
 const LOCALE_PREFIXED_PATH_PATTERNS: readonly RegExp[] = [
   /^\/blog\/[^/]+\/?$/,
   /^\/blog\/[^/]+\/(category|tag)\/[^/]+$/,
+  // Issue #594 — a static page is interface prose a human reads (Redaksi, the
+  // Pedoman Media Siber), so its canonical URL carries a locale for the same
+  // reason a post's does. It needs its own entry because the `blog-post`
+  // pattern below is two segments and this one is three.
+  /^\/blog\/[^/]+\/pages\/[^/]+$/,
   /^\/blog\/[^/]+\/[^/]+$/
 ];
 

@@ -200,6 +200,7 @@ export const LOCALE_PREFIX_PROBES = [
   "/blog/acme/my-post",
   "/blog/acme/category/news",
   "/blog/acme/tag/launch",
+  "/blog/acme/pages/pedoman-media-siber",
   "/blog/acme/feed.xml",
   "/blog/acme/sitemap-blog.xml",
   "/robots.txt",

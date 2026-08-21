@@ -183,6 +183,17 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
       "Published-post listing filtered by a taxonomy term; same reasoning as the index."
   },
   {
+    key: "blog-page",
+    moduleKey: "blog_content",
+    pattern: /^\/blog\/[^/]+\/pages\/[^/]+$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    localePrefixed: true,
+    rationale:
+      "A single published static page — Redaksi, Pedoman Media Siber, disclaimer, privacy policy (Issue #594). The most stable content this module serves and the most frequently re-fetched, since every article footer links to it; the module purge on any page write is what makes the TTL a fallback rather than the only bound."
+  },
+  {
     key: "blog-discovery",
     moduleKey: "blog_content",
     pattern: /^\/blog\/[^/]+\/(feed\.xml|sitemap-blog\.xml)$/,

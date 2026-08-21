@@ -437,9 +437,17 @@ export const blogContentModule = defineModule({
   // `urlTemplate` carries `:tenantCode` because this base's public post route is
   // path-tenant-scoped (`/blog/{tenantCode}/{slug}`, ADR-0009) — awcms-micro's
   // descriptor used host-resolved `/news/:slug`, a route family that is NOT
-  // ported here (see this module's `description`). Blog PAGES are deliberately
-  // NOT contributed: they have no public route in this base, so an indexed page
-  // would produce a search hit that 404s.
+  // ported here (see this module's `description`). Blog PAGES are still NOT
+  // contributed, but Issue #594 changed the reason and the reason is worth
+  // keeping accurate. The old one — "they have no public route, so an indexed
+  // page would produce a search hit that 404s" — stopped being true the moment
+  // `/blog/{tenantCode}/pages/{slug}` shipped. What blocks it now is a GRANT: the
+  // index is built by `bun run site-search:reconcile` running as `awcms_worker`,
+  // and `sql/035` gives that role SELECT on `awcms_blog_posts` and nothing else
+  // in this module. A descriptor added without that grant passes every gate here
+  // — the registry check is pure, no test touches a database — and then fails at
+  // 03:00 in a job nobody is watching. Contributing pages therefore needs a
+  // migration first, which is its own change.
   //
   // This declaration adds NO dependency edge to `site_search`: the arrow points
   // inward (ADR-0040 §2) — content declares, the aggregator discovers.

@@ -321,6 +321,9 @@ describe("the surface registry and the path patterns agree", () => {
 
     expect(prefixed.sort()).toEqual([
       "blog-index",
+      // Issue #594 — a static page is interface prose (Redaksi, Pedoman Media
+      // Siber), so it joins the HTML surfaces rather than the machine ones.
+      "blog-page",
       "blog-post",
       "blog-taxonomy"
     ]);
