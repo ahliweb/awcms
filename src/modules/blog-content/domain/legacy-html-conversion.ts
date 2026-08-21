@@ -48,6 +48,19 @@ import {
  * enforcement `media_library` exists to apply. The report names each one with
  * its `src` so the importer can resolve it to an uploaded object first.
  *
+ * That "first" now has a second half. Pass `resolveImage` and a `src` the
+ * caller has ALREADY resolved to a verified media object becomes a real image
+ * in the body — a one-item `gallery` node — instead of residue. Everything else
+ * is unchanged: no resolver, or a `src` the resolver does not know, and the
+ * image is refused exactly as before.
+ *
+ * What this module still refuses to do is resolve one itself. Turning an
+ * arbitrary legacy URL into a managed object means fetching third-party bytes
+ * from the server at an address somebody else chose, which is a server-side
+ * request forgery primitive; `legacy-ad-ingest.ts` faced the same question for
+ * `awcms_blog_ads.image_url` and answered it the same way, at length. Bytes get
+ * vouched for by the upload pipeline or not at all.
+ *
  * Pure module: no database, no network, no DOM. The parser is deliberately
  * small and total — it never throws, because a converter that throws on article
  * 14,002 of 23,906 tells the operator nothing about the other 9,904.
@@ -78,9 +91,12 @@ const BLOCK_STYLE_TAGS: Readonly<Record<string, PortableTextBlockStyle>> = {
 /**
  * Tags whose presence makes an article unconvertible.
  *
- * `img` is here for a different reason than the rest — see the header. Keeping
- * it in one list would blur "this can execute" with "this needs resolving
- * first", so the reason travels with the finding rather than with the list.
+ * `img` is NO LONGER one of them: it is handled before this list is consulted,
+ * because whether it makes the article unconvertible now depends on the
+ * caller's resolver. Everything left here is unconditional — it can execute,
+ * embed or fetch, and no option makes it acceptable. That is the distinction
+ * the old comment here was making in prose and the code can now make
+ * structurally.
  */
 const REJECTED_TAGS: readonly string[] = [
   "script",
@@ -93,8 +109,7 @@ const REJECTED_TAGS: readonly string[] = [
   "style",
   "link",
   "meta",
-  "base",
-  "img"
+  "base"
 ];
 
 /**
@@ -123,6 +138,29 @@ export type LegacyConversionRejection = {
   offset: number;
   /** Present for `unmanaged_image`: the `src` an importer must resolve to a media object. */
   detail?: string;
+};
+
+/**
+ * Answers "which managed media object is this legacy `src`?", or `null`.
+ *
+ * The converter never decides this itself, and cannot: the answer needs the
+ * media registry, and this module is pure. What it CAN do is refuse to guess —
+ * a resolver that returns an id the registry does not vouch for produces a
+ * gallery item `renderGalleryBlockHtml` silently drops, i.e. an article that
+ * looks imported and has lost its photographs. So the caller's contract is that
+ * a returned id has already been checked (`isMediaReferenceSafe`), and
+ * `blog:legacy:import` refuses the whole run rather than pass one through
+ * unverified.
+ */
+export type LegacyImageResolver = (src: string) => string | null;
+
+export type LegacyConversionOptions = {
+  /**
+   * Turns `<img src=…>` into a managed media reference instead of a rejection
+   * (Issue #599). Absent — the default — keeps the original behaviour: every
+   * image is `unmanaged_image` residue with its `src` named.
+   */
+  resolveImage?: LegacyImageResolver;
 };
 
 export type LegacyConversionResult = {
@@ -286,7 +324,8 @@ type OpenBlock = {
  * per article rather than a stack trace on one of them.
  */
 export function convertLegacyHtmlToPortableText(
-  html: unknown
+  html: unknown,
+  options: LegacyConversionOptions = {}
 ): LegacyConversionResult {
   if (typeof html !== "string" || html.trim().length === 0) {
     return { ok: true, document: [], rejections: [], plainText: "" };
@@ -332,6 +371,48 @@ export function convertLegacyHtmlToPortableText(
     }
 
     current = null;
+  };
+
+  /**
+   * Places a resolved image in the document, in the position it occupied in the
+   * article (Issue #599).
+   *
+   * `gallery` is the ONLY node in ADR-0100's closed vocabulary that carries an
+   * image, so a lone photograph is a one-item gallery. That is not a workaround:
+   * the alternative is a new `_type`, and the vocabulary is closed precisely so
+   * that adding one is a deliberate act with its own validation, not something
+   * an import script invents.
+   *
+   * CONSECUTIVE images join the gallery already at the end of the document
+   * rather than each starting one, which is the common CKEditor photo-row shape.
+   * `flush()` first is what makes that test correct: it pushes any pending text,
+   * so a gallery can only still be last when nothing was written between the two
+   * images.
+   *
+   * No `caption`, and that is a decision rather than an omission.
+   * `renderGalleryBlockHtml` prints `caption` as a VISIBLE `<figcaption>` (and
+   * reuses it as the `alt`), while a legacy `alt` is very often the file name.
+   * Carrying it across would print a filename under 23,906 photographs — a
+   * silent edit to every article in the archive, made by an import script. An
+   * uncaptioned image is the honest result; a caption is something an editor
+   * adds on purpose.
+   */
+  const appendGalleryImage = (mediaObjectId: string): void => {
+    flush();
+
+    const last = document[document.length - 1];
+
+    if (last && last._type === "gallery") {
+      last.items.push({ mediaType: "image", mediaObjectId });
+      return;
+    }
+
+    const index = document.length;
+    document.push({
+      _type: "gallery",
+      _key: nodeKey(index),
+      items: [{ mediaType: "image", mediaObjectId }]
+    });
   };
 
   const open = (style: PortableTextBlockStyle): void => {
@@ -392,22 +473,30 @@ export function convertLegacyHtmlToPortableText(
       }
     }
 
+    if (name === "img" && token.kind !== "close") {
+      const src = token.attrs.src ?? "";
+      const mediaObjectId = src ? (options.resolveImage?.(src) ?? null) : null;
+
+      if (mediaObjectId) {
+        appendGalleryImage(mediaObjectId);
+      } else {
+        rejections.push({
+          reason: "unmanaged_image",
+          found: "img",
+          offset: token.offset,
+          detail: src
+        });
+      }
+      continue;
+    }
+
     if (REJECTED_TAGS.includes(name)) {
       if (token.kind !== "close") {
-        rejections.push(
-          name === "img"
-            ? {
-                reason: "unmanaged_image",
-                found: "img",
-                offset: token.offset,
-                detail: token.attrs.src ?? ""
-              }
-            : {
-                reason: "executable_markup",
-                found: name,
-                offset: token.offset
-              }
-        );
+        rejections.push({
+          reason: "executable_markup",
+          found: name,
+          offset: token.offset
+        });
       }
       continue;
     }
