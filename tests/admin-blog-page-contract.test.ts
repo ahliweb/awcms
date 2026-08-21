@@ -497,13 +497,14 @@ describe("/admin/blog permission gates", () => {
       (module) => module.key === "blog_content"
     )?.navigation;
 
-    // 7 since Issue #594: `/admin/blog-homepage` joined posts, pages, taxonomy,
-    // institutions, presentation and settings. That comment used to predict
-    // this arrival ("homepage composition still brings its own entry when its
-    // page lands"); it has landed, and ad inventory is the next one due.
-    expect(navigation).toHaveLength(7);
+    // 8 since Issue #594, which brought both entries this list once predicted:
+    // `/admin/blog-homepage` and now `/admin/blog-ads`. Nothing further is
+    // pending — every `blog_content` permission except the internal-link policy
+    // (which rides along with presentation) now has a screen.
+    expect(navigation).toHaveLength(8);
     expect(navigation?.map((entry) => entry.path).sort()).toEqual([
       "/admin/blog",
+      "/admin/blog-ads",
       "/admin/blog-homepage",
       "/admin/blog-institutions",
       "/admin/blog-pages",

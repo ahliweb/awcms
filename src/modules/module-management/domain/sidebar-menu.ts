@@ -226,6 +226,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_blog_taxonomy": "Blog taxonomy",
   "admin.layout.nav_blog_institutions": "Institutions",
   "admin.layout.nav_blog_homepage": "Homepage composition",
+  "admin.layout.nav_blog_ads": "Advertisement inventory",
   "admin.layout.nav_blog_presentation": "Blog presentation",
   "admin.layout.nav_blog_settings": "Blog settings",
   "admin.layout.nav_media": "Media library",

@@ -1,0 +1,691 @@
+---
+/**
+ * `/admin/blog-ads` — the advertisement inventory console (Issue #594,
+ * PRD LenteraKalteng §21.1).
+ *
+ * `awcms_news_portal_ad_placements` is the most complete subsystem in this repo
+ * that nobody could operate: twelve slots, four rotation modes, `global`/
+ * `widget`/`post`/`page` targeting with the pairing rule enforced as a database
+ * CHECK, scheduling, and every creative holding a real foreign key to a
+ * VERIFIED media object. All of it reachable only through `curl`, with
+ * `ad_placements.read` and `.configure` sitting on the unscreened-permission
+ * ledger.
+ *
+ * ## Grouped by slot, because the slot is the question
+ *
+ * The table is ordered by `placement_key` and each group states its
+ * `recommendedSize` and `maxItems` from `AD_PLACEMENT_PRESETS`. `maxItems` is a
+ * RENDER-time cap, not a write-time one (migration 045's header says why), so a
+ * slot holding more creatives than it can show is legal and the screen says so
+ * rather than refusing the save. An operator who cannot see that number will
+ * eventually load six banners into a one-banner slot and conclude the rotation
+ * is broken.
+ *
+ * ## The creative is picked, never typed
+ *
+ * `media_object_id` is a hard FK to a verified object, so it uses the shared
+ * `wireMediaPickers` — the same one picker the article editor uses (Issue #595
+ * is explicit: "satu pemilih, bukan dua"). `target_id` is polymorphic across
+ * three tables and cannot be, so it stays a typed id with the eligible articles
+ * listed beside it, exactly as `/admin/blog-homepage` does for the same reason.
+ *
+ * ## Idempotency
+ *
+ * No request from this screen carries an `Idempotency-Key`, and the endpoints do
+ * not ask for one — the same conclusion `/admin/blog-homepage` reaches. Nothing
+ * here is a high-risk irreversible mutation: a replayed create makes a second
+ * inactive-until-scheduled placement an operator can delete, and update and
+ * delete are idempotent by construction.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes is
+ * the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  listAdPlacements,
+  type AdPlacementView
+} from "../../modules/blog-content/application/ad-placement-directory";
+import {
+  AD_PLACEMENT_KEYS,
+  AD_PLACEMENT_PRESETS,
+  AD_ROTATION_MODES,
+  AD_TARGET_TYPES
+} from "../../modules/blog-content/domain/ad-placement-policy";
+import { listPublicBlogPosts } from "../../modules/blog-content/application/public-blog-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+/** `?edit=<id>` prefills the one form with an existing placement. */
+const editingId = (Astro.url.searchParams.get("edit") ?? "").trim();
+
+/** How many articles the `target_id` reference table offers. `listPublicBlogPosts` caps at 50. */
+const REFERENCE_POST_PAGE_SIZE = 50;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "ad_placements",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    placements: await listAdPlacements(tx, ssr.tenantId),
+    eligiblePosts: (
+      await listPublicBlogPosts(tx, ssr.tenantId, {
+        page: 1,
+        pageSize: REFERENCE_POST_PAGE_SIZE
+      })
+    ).items,
+    canConfigure: await can({
+      moduleKey: "blog_content",
+      activityCode: "ad_placements",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant sells no advertising".
+    logAdminPageError(
+      "admin/blog-ads.astro: failed to load ad placements",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const placements: AdPlacementView[] =
+  screen.state === "allowed" ? screen.data.placements : [];
+const eligiblePosts =
+  screen.state === "allowed" ? screen.data.eligiblePosts : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+
+const editing = editingId
+  ? (placements.find((placement) => placement.id === editingId) ?? null)
+  : null;
+
+/** One row per SLOT, so an empty slot is visible as an empty slot rather than as an absence. */
+const bySlot = AD_PLACEMENT_KEYS.map((key) => ({
+  key,
+  preset: AD_PLACEMENT_PRESETS[key],
+  placements: placements.filter((placement) => placement.placementKey === key)
+}));
+
+const filledSlots = bySlot.filter((slot) => slot.placements.length > 0).length;
+
+/** `datetime-local` wants `YYYY-MM-DDTHH:mm`; the column is `timestamptz`. */
+function toLocalInputValue(value: Date | null): string {
+  return value ? value.toISOString().slice(0, 16) : "";
+}
+
+function formatWindow(placement: AdPlacementView): string {
+  if (!placement.startsAt && !placement.endsAt) return "—";
+  const from = placement.startsAt ? placement.startsAt.toISOString() : "…";
+  const to = placement.endsAt ? placement.endsAt.toISOString() : "…";
+  return `${from} → ${to}`;
+}
+---
+
+<AdminLayout title="Advertisement inventory">
+  <header class="page-header fade-in-up">
+    <h1 id="ads-heading">{t("Advertisement inventory")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "Every slot the public pages offer, and the creatives booked into them. A slot with nothing scheduled renders an availability notice, not a gap in the layout."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    screen.state === "denied" && (
+      <p class="state-notice" id="ads-denied">
+        {t("You do not have permission to view the advertisement inventory.")}
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice" id="ads-error">
+        {t("Could not load ad placements. Please try again.")}
+      </p>
+    )
+  }
+
+  <p class="form-error" id="ad-action-error" hidden></p>
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="ads-list-title"
+      >
+        <h2 class="admin-section-title" id="ads-list-title">
+          {t("Slots")}
+          <span class="count-pill">
+            {filledSlots}/{AD_PLACEMENT_KEYS.length}
+          </span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-ads-table">
+            <caption class="sr-only">
+              {t("Advertisement slots and the creatives booked into them.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Slot")}</th>
+                <th scope="col">{t("Creative")}</th>
+                <th scope="col">{t("Rotation")}</th>
+                <th scope="col">{t("Target")}</th>
+                <th scope="col">{t("Active")}</th>
+                <th scope="col">{t("Schedule")}</th>
+                {canConfigure && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {bySlot.map((slot) =>
+                slot.placements.length === 0 ? (
+                  <tr data-slot-empty={slot.key}>
+                    <td data-label="Slot">
+                      <span class="cell-code" set:text={slot.key} />
+                      <span class="cell-muted">
+                        {" "}
+                        · {slot.preset.recommendedSize}
+                      </span>
+                    </td>
+                    <td class="cell-muted" colspan={canConfigure ? 6 : 5}>
+                      {t("Available — nothing booked into this slot.")}
+                    </td>
+                  </tr>
+                ) : (
+                  slot.placements.map((placement) => (
+                    <tr data-ad-row={placement.id}>
+                      <td data-label="Slot">
+                        <span class="cell-code" set:text={slot.key} />
+                        <span class="cell-muted">
+                          {" "}
+                          · {slot.preset.recommendedSize} · {t("shows")}{" "}
+                          {slot.preset.maxItems}
+                        </span>
+                      </td>
+                      <td data-label="Creative">
+                        <span set:text={placement.name} />
+                      </td>
+                      <td data-label="Rotation">
+                        <span class="status-badge" data-variant="neutral">
+                          <span class="status-dot" aria-hidden="true" />
+                          {placement.rotationMode}
+                        </span>
+                        <span class="cell-muted">
+                          {" "}
+                          · {t("priority")} {placement.priority}
+                        </span>
+                      </td>
+                      <td data-label="Target">
+                        <span
+                          class="cell-code"
+                          set:text={placement.targetType}
+                        />
+                        {placement.targetId && (
+                          <span class="cell-muted">
+                            {" "}
+                            ·{" "}
+                            <span
+                              class="cell-code"
+                              set:text={placement.targetId}
+                            />
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Active">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            placement.isActive ? "success" : "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {placement.isActive ? t("Active") : t("Paused")}
+                        </span>
+                      </td>
+                      <td data-label="Schedule">
+                        <span class="cell-muted">
+                          {formatWindow(placement)}
+                        </span>
+                      </td>
+                      {canConfigure && (
+                        <td data-label="Actions">
+                          <div class="row-actions">
+                            <a
+                              class="quick-link"
+                              href={`/admin/blog-ads?edit=${placement.id}`}
+                            >
+                              {t("Edit")}
+                              <span class="quick-link-arrow" aria-hidden="true">
+                                →
+                              </span>
+                            </a>
+                            <button
+                              type="button"
+                              class="btn-inline ad-delete-btn"
+                              data-ad-id={placement.id}
+                              data-ad-name={placement.name}
+                            >
+                              {t("Delete")}
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canConfigure && (
+      <section class="admin-section fade-in-up" aria-labelledby="ad-form-title">
+        <h2 class="admin-section-title" id="ad-form-title">
+          {editing ? t("Edit placement") : t("Book a placement")}
+        </h2>
+
+        <p class="form-error" id="ad-form-error" hidden />
+
+        <form id="ad-placement-form" class="admin-form">
+          <input type="hidden" id="ad-id" value={editing ? editing.id : ""} />
+
+          <div class="form-row">
+            <label for="ad-placement-key">{t("Slot")}</label>
+            <select
+              id="ad-placement-key"
+              name="placementKey"
+              required
+              disabled={editing !== null}
+            >
+              {AD_PLACEMENT_KEYS.map((key) => (
+                <option value={key} selected={editing?.placementKey === key}>
+                  {key} · {AD_PLACEMENT_PRESETS[key].recommendedSize}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">
+              {t(
+                "The recommended size is guidance, not a rule: a differently-cropped image is still accepted."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-name">{t("Name")}</label>
+            <input
+              id="ad-name"
+              name="name"
+              type="text"
+              required
+              maxlength="200"
+              value={editing?.name ?? ""}
+            />
+            <p class="form-hint">
+              {t("Internal only — the reader never sees it.")}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-media-object-id">{t("Creative")}</label>
+            {/* The shared picker (Issue #595 — "satu pemilih, bukan dua"):
+                hidden input outside the choice, `data-target`/`data-label` on
+                the buttons, exactly as `/admin/site-profile` wires it. */}
+            <input
+              type="hidden"
+              id="ad-media-object-id"
+              name="mediaObjectId"
+              value={editing?.mediaObjectId ?? ""}
+            />
+            <div class="media-choice" id="ad-media-choice">
+              <p class="form-hint" id="ad-media-label">
+                {editing?.mediaObjectId
+                  ? t("An image is attached.")
+                  : t("No image attached.")}
+              </p>
+              <div class="media-choice-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary media-pick-btn"
+                  data-target="ad-media-object-id"
+                  data-label="ad-media-label"
+                >
+                  {t("Choose image")}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary media-clear-btn"
+                  data-target="ad-media-object-id"
+                  data-label="ad-media-label"
+                >
+                  {t("Remove image")}
+                </button>
+              </div>
+              <div class="media-picker-panel" hidden />
+            </div>
+            <p class="form-hint">
+              {t(
+                "Only verified images are offered. A creative always references a managed media object, never a remote URL."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-link-url">{t("Click-through URL")}</label>
+            <input
+              id="ad-link-url"
+              name="linkUrl"
+              type="url"
+              value={editing?.linkUrl ?? ""}
+            />
+            <p class="form-hint">
+              {t(
+                "Absolute http(s) only. Anything else is refused rather than cleaned up."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-rotation-mode">{t("Rotation")}</label>
+            <select id="ad-rotation-mode" name="rotationMode">
+              {AD_ROTATION_MODES.map((mode) => (
+                <option
+                  value={mode}
+                  selected={(editing?.rotationMode ?? "latest") === mode}
+                >
+                  {mode}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">
+              {t(
+                "How the slot chooses between the creatives booked into it when there is more than one."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-priority">{t("Priority")}</label>
+            <input
+              id="ad-priority"
+              name="priority"
+              type="number"
+              min="0"
+              step="1"
+              value={String(editing?.priority ?? 0)}
+            />
+            <p class="form-hint">
+              {t(
+                "Higher wins under priority rotation, and weights the draw under weighted rotation. Ignored by the other two."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-target-type">{t("Target")}</label>
+            <select id="ad-target-type" name="targetType">
+              {AD_TARGET_TYPES.map((type) => (
+                <option
+                  value={type}
+                  selected={(editing?.targetType ?? "global") === type}
+                >
+                  {type}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">
+              {t(
+                "Global runs everywhere the slot appears. Any other target needs the id of the widget, article or page it belongs to."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-target-id">{t("Target id")}</label>
+            <input
+              id="ad-target-id"
+              name="targetId"
+              type="text"
+              value={editing?.targetId ?? ""}
+            />
+            <p class="form-hint">
+              {t(
+                "Required for every target except global, and refused for global. Article ids are listed below."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-active">{t("Active")}</label>
+            <input
+              id="ad-active"
+              name="isActive"
+              type="checkbox"
+              checked={editing ? editing.isActive : true}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="ad-starts-at">{t("Starts at")}</label>
+            <input
+              id="ad-starts-at"
+              name="startsAt"
+              type="datetime-local"
+              value={toLocalInputValue(editing?.startsAt ?? null)}
+            />
+          </div>
+
+          <div class="form-row">
+            <label for="ad-ends-at">{t("Ends at")}</label>
+            <input
+              id="ad-ends-at"
+              name="endsAt"
+              type="datetime-local"
+              value={toLocalInputValue(editing?.endsAt ?? null)}
+            />
+            <p class="form-hint">
+              {t(
+                "Leave both blank to run until paused. Times are entered in your own timezone and stored as absolute instants."
+              )}
+            </p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit">
+              {editing ? t("Save placement") : t("Create placement")}
+            </button>
+            {editing && (
+              <a class="btn-inline" href="/admin/blog-ads">
+                {t("Cancel")}
+              </a>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="ads-eligible-title"
+      >
+        <h2 class="admin-section-title" id="ads-eligible-title">
+          {t("Articles you can target")}
+          <span class="count-pill">{eligiblePosts.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="ads-eligible-table">
+            <caption class="sr-only">
+              {t("Articles eligible for targeting, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Id")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eligiblePosts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={2}>
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No published articles yet")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t("Every slot can still run a global placement.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                eligiblePosts.map((post) => (
+                  <tr>
+                    <td data-label="Title">
+                      <span set:text={post.title} />
+                    </td>
+                    <td data-label="Id">
+                      <span class="cell-code" set:text={post.id} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import {
+    blankToNull,
+    checkboxChecked,
+    field,
+    inputValue,
+    integerValue,
+    localDateTimeToInstant,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { wireMediaPickers } from "../../lib/ui/media-picker-client";
+
+  const actionError = messageBox("ad-action-error");
+  const formError = messageBox("ad-form-error");
+
+  const BASE = "/api/v1/news-portal/ad-placements";
+
+  wireMediaPickers("No image attached.");
+
+  onAction(".ad-delete-btn", async (button) => {
+    const id = button.dataset.adId;
+    if (!id) return;
+
+    const name = button.dataset.adName ?? "this placement";
+    if (
+      !window.confirm(
+        `Delete "${name}"? The slot goes back to showing its availability ` +
+          `notice, and the image itself stays in the media library.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // `reason` is required by the endpoint, same convention as posts, pages
+        // and terms. The screen supplies a constant rather than prompting: the
+        // operator already confirmed, and a second modal asking for prose
+        // produces "asdf" in the audit trail.
+        sendJson("DELETE", `${BASE}/${id}`, {
+          reason: "Removed from the advertisement inventory console."
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not delete the placement. Please try again.",
+      "Deleting…"
+    );
+  });
+
+  onSubmit("ad-placement-form", async ({ data, submit }) => {
+    const adId = inputValue("ad-id");
+    const targetType = inputValue("ad-target-type") || "global";
+
+    const shared = {
+      name: field(data, "name"),
+      mediaObjectId: inputValue("ad-media-object-id"),
+      linkUrl: blankToNull(field(data, "linkUrl")),
+      rotationMode: inputValue("ad-rotation-mode") || "latest",
+      priority: integerValue("ad-priority", 0),
+      isActive: checkboxChecked("ad-active", true),
+      startsAt: localDateTimeToInstant("ad-starts-at"),
+      endsAt: localDateTimeToInstant("ad-ends-at"),
+      targetType,
+      // The database CHECK is `global` XOR a target id, so sending an empty
+      // string for a global placement would be rejected by a constraint the
+      // operator never chose. `null` is the shape that satisfies it.
+      targetId: targetType === "global" ? null : inputValue("ad-target-id")
+    };
+
+    await mutateAndReload(
+      submit,
+      formError,
+      () =>
+        adId
+          ? sendJson("PATCH", `${BASE}/${adId}`, shared)
+          : sendJson("POST", BASE, {
+              ...shared,
+              // The slot is fixed after booking — the select is disabled in edit
+              // mode, so a disabled control's value is never read here.
+              placementKey: inputValue("ad-placement-key")
+            }),
+      (errorCode) => {
+        if (errorCode === "AD_PLACEMENT_REFERENCE_INVALID") {
+          // Worth naming: an operator can fix this, and generic copy would send
+          // them looking for a server fault instead of a deleted image.
+          return "That image is not a verified media object any more. Choose another one.";
+        }
+
+        if (errorCode === "AD_PLACEMENT_TARGET_INVALID") {
+          return "That target id does not name anything this tenant owns. Check it against the table below.";
+        }
+
+        return "Could not save the placement. Check the creative, link and target, then try again.";
+      },
+      adId ? "Saving…" : "Booking…"
+    );
+  });
+</script>

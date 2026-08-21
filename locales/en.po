@@ -4254,3 +4254,101 @@ msgstr ""
 
 msgid "Publish an article before curating a homepage slot for it."
 msgstr ""
+
+# Issue #594 — /admin/blog-ads, the advertisement inventory console.
+
+msgid "Advertisement inventory"
+msgstr ""
+
+msgid "Every slot the public pages offer, and the creatives booked into them. A slot with nothing scheduled renders an availability notice, not a gap in the layout."
+msgstr ""
+
+msgid "You do not have permission to view the advertisement inventory."
+msgstr ""
+
+msgid "Could not load ad placements. Please try again."
+msgstr ""
+
+msgid "Slots"
+msgstr ""
+
+msgid "Advertisement slots and the creatives booked into them."
+msgstr ""
+
+msgid "Slot"
+msgstr ""
+
+msgid "Creative"
+msgstr ""
+
+msgid "Rotation"
+msgstr ""
+
+msgid "Available — nothing booked into this slot."
+msgstr ""
+
+msgid "shows"
+msgstr ""
+
+msgid "priority"
+msgstr ""
+
+msgid "Paused"
+msgstr ""
+
+msgid "Edit placement"
+msgstr ""
+
+msgid "Book a placement"
+msgstr ""
+
+msgid "The recommended size is guidance, not a rule: a differently-cropped image is still accepted."
+msgstr ""
+
+msgid "Internal only — the reader never sees it."
+msgstr ""
+
+msgid "Only verified images are offered. A creative always references a managed media object, never a remote URL."
+msgstr ""
+
+msgid "Click-through URL"
+msgstr ""
+
+msgid "Absolute http(s) only. Anything else is refused rather than cleaned up."
+msgstr ""
+
+msgid "How the slot chooses between the creatives booked into it when there is more than one."
+msgstr ""
+
+msgid "Priority"
+msgstr ""
+
+msgid "Higher wins under priority rotation, and weights the draw under weighted rotation. Ignored by the other two."
+msgstr ""
+
+msgid "Global runs everywhere the slot appears. Any other target needs the id of the widget, article or page it belongs to."
+msgstr ""
+
+msgid "Target id"
+msgstr ""
+
+msgid "Required for every target except global, and refused for global. Article ids are listed below."
+msgstr ""
+
+msgid "Leave both blank to run until paused. Times are entered in your own timezone and stored as absolute instants."
+msgstr ""
+
+msgid "Save placement"
+msgstr ""
+
+msgid "Create placement"
+msgstr ""
+
+msgid "Articles you can target"
+msgstr ""
+
+msgid "Articles eligible for targeting, newest first."
+msgstr ""
+
+msgid "Every slot can still run a global placement."
+msgstr ""

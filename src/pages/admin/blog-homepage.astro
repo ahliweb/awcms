@@ -692,7 +692,11 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   import {
+    checkboxChecked,
     field,
+    inputValue,
+    integerValue,
+    localDateTimeToInstant,
     messageBox,
     mutateAndReload,
     onAction,
@@ -737,47 +741,17 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
       .filter((line) => line.length > 0);
   }
 
-  function numberField(id: string, fallback: number): number {
-    const input = document.getElementById(id) as HTMLInputElement | null;
-    const parsed = Number(input?.value);
-
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  function textField(id: string): string {
-    const element = document.getElementById(id) as
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
-
-    return element?.value ?? "";
-  }
-
-  /**
-   * `datetime-local` yields `2026-08-21T09:00` with no zone, and the endpoint
-   * parses whatever string it receives — which would be read in the SERVER's
-   * timezone, not the editor's. Converting here means the instant the editor
-   * picked is the instant that gets stored.
-   */
-  function instantOrNull(id: string): string | null {
-    const raw = textField(id).trim();
-
-    if (!raw) return null;
-
-    const parsed = new Date(raw);
-
-    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-  }
-
   function buildConfig(sectionType: string): Record<string, unknown> {
     switch (groupFor(sectionType)) {
       case "headline":
-        return { postId: textField("config-headline-post") };
+        return { postId: inputValue("config-headline-post") };
       case "latest_posts":
         return {
-          limit: numberField("config-latest-limit", 5),
-          categorySlug: textField("config-latest-category") || null
+          limit: integerValue("config-latest-limit", 5),
+          categorySlug: inputValue("config-latest-category") || null
         };
       case "curated":
-        return { postIds: lines(textField("config-curated-post-ids")) };
+        return { postIds: lines(inputValue("config-curated-post-ids")) };
       case "category_grid": {
         const select = document.getElementById(
           "config-grid-categories"
@@ -787,13 +761,13 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
           categorySlugs: select
             ? [...select.selectedOptions].map((option) => option.value)
             : [],
-          postsPerCategory: numberField("config-grid-per-category", 3)
+          postsPerCategory: integerValue("config-grid-per-category", 3)
         };
       }
       case "gallery_block":
         return {
-          mediaObjectIds: lines(textField("config-gallery-media-ids")),
-          caption: textField("config-gallery-caption").trim() || null
+          mediaObjectIds: lines(inputValue("config-gallery-media-ids")),
+          caption: inputValue("config-gallery-caption") || null
         };
       default:
         return {};
@@ -846,14 +820,10 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
     const shared = {
       title: field(data, "title").trim() || null,
       config: buildConfig(sectionType),
-      sortOrder: numberField("section-sort-order", 0),
-      // A checkbox absent from `FormData` is an unchecked checkbox, which is
-      // the whole point of reading the element rather than the entry.
-      isEnabled:
-        (document.getElementById("section-enabled") as HTMLInputElement | null)
-          ?.checked ?? true,
-      startsAt: instantOrNull("section-starts-at"),
-      endsAt: instantOrNull("section-ends-at")
+      sortOrder: integerValue("section-sort-order", 0),
+      isEnabled: checkboxChecked("section-enabled", true),
+      startsAt: localDateTimeToInstant("section-starts-at"),
+      endsAt: localDateTimeToInstant("section-ends-at")
     };
 
     await mutateAndReload(

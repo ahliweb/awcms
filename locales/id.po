@@ -4241,3 +4241,101 @@ msgstr "Belum ada artikel terbit"
 
 msgid "Publish an article before curating a homepage slot for it."
 msgstr "Terbitkan artikel lebih dulu sebelum mengurasinya ke slot beranda."
+
+# Issue #594 — /admin/blog-ads, the advertisement inventory console.
+
+msgid "Advertisement inventory"
+msgstr "Inventaris iklan"
+
+msgid "Every slot the public pages offer, and the creatives booked into them. A slot with nothing scheduled renders an availability notice, not a gap in the layout."
+msgstr "Setiap slot yang disediakan halaman publik, dan materi yang dipesan ke dalamnya. Slot tanpa jadwal merender pemberitahuan ketersediaan, bukan lubang di tata letak."
+
+msgid "You do not have permission to view the advertisement inventory."
+msgstr "Anda tidak memiliki izin untuk melihat inventaris iklan."
+
+msgid "Could not load ad placements. Please try again."
+msgstr "Tidak dapat memuat penempatan iklan. Silakan coba lagi."
+
+msgid "Slots"
+msgstr "Slot"
+
+msgid "Advertisement slots and the creatives booked into them."
+msgstr "Slot iklan dan materi yang dipesan ke dalamnya."
+
+msgid "Slot"
+msgstr "Slot"
+
+msgid "Creative"
+msgstr "Materi"
+
+msgid "Rotation"
+msgstr "Rotasi"
+
+msgid "Available — nothing booked into this slot."
+msgstr "Tersedia — belum ada yang dipesan ke slot ini."
+
+msgid "shows"
+msgstr "menampilkan"
+
+msgid "priority"
+msgstr "prioritas"
+
+msgid "Paused"
+msgstr "Dijeda"
+
+msgid "Edit placement"
+msgstr "Sunting penempatan"
+
+msgid "Book a placement"
+msgstr "Pesan penempatan"
+
+msgid "The recommended size is guidance, not a rule: a differently-cropped image is still accepted."
+msgstr "Ukuran yang disarankan adalah panduan, bukan aturan: gambar dengan potongan berbeda tetap diterima."
+
+msgid "Internal only — the reader never sees it."
+msgstr "Hanya internal — pembaca tidak pernah melihatnya."
+
+msgid "Only verified images are offered. A creative always references a managed media object, never a remote URL."
+msgstr "Hanya gambar terverifikasi yang ditawarkan. Materi selalu merujuk objek media terkelola, tidak pernah URL jauh."
+
+msgid "Click-through URL"
+msgstr "URL tujuan klik"
+
+msgid "Absolute http(s) only. Anything else is refused rather than cleaned up."
+msgstr "Hanya http(s) absolut. Selain itu ditolak, bukan dibersihkan."
+
+msgid "How the slot chooses between the creatives booked into it when there is more than one."
+msgstr "Bagaimana slot memilih di antara materi yang dipesan ke dalamnya bila lebih dari satu."
+
+msgid "Priority"
+msgstr "Prioritas"
+
+msgid "Higher wins under priority rotation, and weights the draw under weighted rotation. Ignored by the other two."
+msgstr "Angka lebih tinggi menang pada rotasi prioritas, dan membobot undian pada rotasi berbobot. Diabaikan oleh dua mode lainnya."
+
+msgid "Global runs everywhere the slot appears. Any other target needs the id of the widget, article or page it belongs to."
+msgstr "Global tayang di mana pun slot muncul. Target lain memerlukan ID widget, artikel atau halaman yang dituju."
+
+msgid "Target id"
+msgstr "ID target"
+
+msgid "Required for every target except global, and refused for global. Article ids are listed below."
+msgstr "Wajib untuk setiap target kecuali global, dan ditolak untuk global. ID artikel tercantum di bawah."
+
+msgid "Leave both blank to run until paused. Times are entered in your own timezone and stored as absolute instants."
+msgstr "Kosongkan keduanya agar tayang sampai dijeda. Waktu dimasukkan dalam zona waktu Anda dan disimpan sebagai instan absolut."
+
+msgid "Save placement"
+msgstr "Simpan penempatan"
+
+msgid "Create placement"
+msgstr "Buat penempatan"
+
+msgid "Articles you can target"
+msgstr "Artikel yang dapat ditarget"
+
+msgid "Articles eligible for targeting, newest first."
+msgstr "Artikel yang memenuhi syarat penargetan, terbaru lebih dulu."
+
+msgid "Every slot can still run a global placement."
+msgstr "Setiap slot tetap dapat menayangkan penempatan global."

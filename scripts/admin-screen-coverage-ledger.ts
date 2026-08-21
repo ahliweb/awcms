@@ -41,10 +41,10 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "tenant_admin.tenant_lifecycle.disable",
   "tenant_admin.tenant_lifecycle.restore",
 
-  // blog_content (5) — `homepage_sections.read`/`.configure` left this list in
-  // Issue #594 when `/admin/blog-homepage` landed.
-  "blog_content.ad_placements.configure",
-  "blog_content.ad_placements.read",
+  // blog_content (3) — `homepage_sections.*` and then `ad_placements.*` left
+  // this list in Issue #594, when `/admin/blog-homepage` and `/admin/blog-ads`
+  // landed. What remains is the internal-link policy surface, which rides along
+  // with `/admin/blog-presentation` and has never had controls of its own.
   "blog_content.internal_links.configure",
   "blog_content.internal_links.preview",
   "blog_content.internal_links.read",
