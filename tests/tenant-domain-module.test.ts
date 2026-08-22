@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { getModuleByKey, listModules } from "../src/modules";
 import { tenantDomainModule } from "../src/modules/tenant-domain/module";
+import { validateCreateTenantDomainInput } from "../src/modules/tenant-domain/domain/tenant-domain-validation";
 
 // The six permissions seeded by sql/047_awcms_tenant_domain_permissions.sql,
 // verbatim. The descriptor's `permissions` array must match this list exactly
@@ -94,29 +95,27 @@ describe("tenant_domain module descriptor (ported from awcms-micro)", () => {
     ]);
   });
 
-  test("settings.defaults only sets manual DNS verification mode", () => {
-    expect(tenantDomainModule.settings?.defaults).toEqual({
-      defaultVerificationMethod: "manual"
-    });
+  test("the module declares NO settings, and that is the decision (D7)", () => {
+    // It used to declare `defaults: { defaultVerificationMethod: "manual" }`
+    // that nothing read. The repair that suggests itself — apply it when a
+    // domain is created — is the one that must not be taken: `verify` performs
+    // no verification at all, so a NULL `verification_method` is currently the
+    // only step between "a tenant created a hostname row" and "that hostname is
+    // active" in host->tenant resolution. See the comment in `module.ts`.
+    expect(tenantDomainModule.settings).toBeUndefined();
   });
 
-  test("settings.defaults never contains a secret-shaped key or value", () => {
-    const defaults = tenantDomainModule.settings?.defaults ?? {};
-    const serialized = JSON.stringify(defaults).toLowerCase();
+  test("nothing applies a default verification method at creation", () => {
+    // The behavioural half of the above, and the half that would actually
+    // regress: a future edit that defaults the column on the create path leaves
+    // this test as the thing that says why not.
+    const validation = validateCreateTenantDomainInput({
+      hostname: "example.test",
+      domainType: "custom_domain"
+    });
 
-    for (const forbidden of [
-      "password",
-      "token",
-      "secret",
-      "credential",
-      "apikey",
-      "api_key"
-    ]) {
-      expect(serialized).not.toContain(forbidden);
-    }
-
-    expect(defaults).not.toHaveProperty("provider");
-    expect(defaults).not.toHaveProperty("cloudflareApiToken");
+    expect(validation.valid).toBe(true);
+    expect(validation.valid && validation.value.verificationMethod).toBeNull();
   });
 
   test("the DNS sync job is declared, with a schedule an operator can act on", () => {

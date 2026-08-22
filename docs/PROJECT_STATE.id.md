@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:398eacb9dee40847b543fa82a46d46329b41b95e9c8e6f428c681fb3eb68151e -->
+<!-- i18n-source-hash: sha256:5fa03b4ade425d540f26dc81faa5b124d4832320b55e44e81ea5cf64db3c71d7 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,38 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026 (sambil menutup D7): `POST
+/api/v1/tenant/domains/{id}/verify` TIDAK MEMVERIFIKASI APA PUN.** Ia membaca barisnya,
+  memeriksa `verification_method IS NOT NULL`, lalu menyetel `status = 'active'`. Tidak
+  ada lookup DNS, tidak ada fetch berkas HTTP, tidak ada perbandingan token di mana pun
+  pada jalur rutenya — adapter Cloudflare ada
+  (`tenant-domain/infrastructure/cloudflare-dns-adapter.ts`), dipilih lewat
+  `TENANT_DOMAIN_DNS_PROVIDER`, dan tidak dipanggil siapa pun. Kolom yang menyebut sebuah
+  metode adalah keseluruhan pemeriksaannya.
+
+  **Apa yang dibeli domain aktif.** `resolvePublicTenantByHost` memetakan `Host` sebuah
+  request ke tenant dari `awcms_tenant_domains`; `resolveTenantDomainSet`
+  memperlakukannya sebagai target redirect yang diizinkan; `resolveTenantPrimaryHost`
+  menaruhnya di URL kanonik, feed, dan sitemap. Jadi urutannya: tenant yang memegang
+  `tenant_domain.domains.create` + `.update` + `.verify` menambah sebuah hostname,
+  mem-PATCH `verificationMethod: "manual"`, memanggil verify, dan deployment itu kini akan
+  menjawab untuk hostname tersebut sebagai tenant itu.
+
+  **Dua hal membatasinya, dan tak satu pun adalah kontrolnya.** Pembuatan dan verifikasi
+  digerbangi ABAC, jadi ini jangkauan seorang admin tenant dan bukan jangkauan anonim; dan
+  ia hanya penting untuk hostname yang DNS-nya benar-benar bisa diarahkan seseorang ke
+  deployment ini. Yang kedua bukan properti kode ini — ia properti DNS milik orang lain.
+
+  **Tidak diperbaiki di sini, dengan sengaja.** Perbaikannya adalah langkah verifikasi
+  nyata (menerbitkan record `dns_txt` lalu memeriksanya, atau mengambil berkas well-known)
+  ditambah keputusan tentang apa yang boleh berarti `manual` — masuk akal bila "seorang
+  OPERATOR yang mengatestasi", yang akan menjadikannya aksi ber-scope platform, bukan
+  scope tenant. Itu perubahan keamanan yang mengandung ADR, bukan pembersihan settings,
+  dan melebur keduanya akan menjadi cara yang salah untuk mengambil keputusan itu.
+  Resolusi D7 sendiri dipilih supaya tidak MEMPERBURUK ini: `defaultVerificationMethod`
+  yang tak terbaca dihapus alih-alih diterapkan, karena menerapkannya akan menyerahkan ke
+  setiap domain yang baru dibuat satu-satunya prasyarat yang dimiliki `verify`.
 
 - **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026: `docs:i18n:stamp` bisa MEMBUNGKAM
   `check:docs:translation` pada mirror yang justru sudah SALAH.** Skrip stamp menghitung
@@ -1103,13 +1135,53 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       breaker ia bisa memberi tahu operator masalahnya yang MANA.
 
   28. **D7 — `defaultVerificationMethod: "manual"` yang dideklarasikan `tenant_domain` tidak
-      punya pembaca runtime.** `tenant-domain/module.ts:163`. Validatornya default `null` dan
+      punya pembaca runtime.** **SELESAI (22 Agustus 2026) — diselesaikan dengan MENGHAPUSNYA,
+      bukan dengan menyambungnya.**
+      `tenant-domain/module.ts:163`. Validatornya default `null` dan
       verifikasi menjawab `missing_verification_method` — keadaan `pending_verification` yang
       sudah diamati item 6 §4 di produksi, tanpa menyebut sebab ini.
+
+      **Perbaikan yang tampak jelas justru akan MENGHAPUS sebuah kontrol, jadi tidak
+      dilakukan.** Menerapkan default itu saat pembuatan adalah yang disiratkan bingkai
+      temuan, dan itu salah di sini: `verifyTenantDomain` TIDAK melakukan verifikasi apa
+      pun. Ia memeriksa `verification_method` tidak NULL lalu menyetel `status = 'active'`
+      — tidak ada lookup DNS di mana pun pada jalur rutenya (adapter Cloudflare dipilih
+      lewat `TENANT_DOMAIN_DNS_PROVIDER` dan tidak dipanggil siapa pun). Jadi
+      `verification_method` yang NULL saat ini adalah satu-satunya langkah antara "sebuah
+      tenant membuat baris hostname" dan "hostname itu aktif", dan domain aktif memberi
+      makan resolusi host→tenant, allow-list redirect, dan canonical host.
+
+      Seluruh blok `settings` hilang, dengan penalarannya di tempatnya, dan uji yang dulu
+      mengasersi default itu kini mengasersi ketiadaannya DITAMBAH perilaku yang tidak
+      boleh berubah (pembuatan tetap meninggalkan kolomnya NULL).
+
+      **DITEMUKAN SAAT BEKERJA, dan inilah item yang sebenarnya: `verify` tidak
+      memverifikasi apa pun.** Friksi di atas hanya berjarak satu `PATCH` dari dihapus oleh
+      tenant mana pun yang memegang `domains.update` — setel `verificationMethod:
+"manual"`, panggil verify, dan hostname itu aktif. Apakah itu penting bergantung pada
+      DNS yang tidak dikendalikan siapa pun di sini, dan justru karena itu ia butuh
+      keputusan beralasan, bukan perbaikan diam-diam di dalam pembersihan settings. Dicatat
+      sebagai item BARU di §4, bukan ditutup di sini.
+
   29. **D8 — `media_library.enforcement.*` diarsipkan sebagai KEPUTUSAN penyaringan yang
-      menyebut layar yang tidak mengimplementasikannya.** `admin-screen-coverage-check.ts:91,93`.
+      menyebut layar yang tidak mengimplementasikannya.** **SELESAI (22 Agustus 2026).**
+      `admin-screen-coverage-check.ts:91,93`.
       Relokasi yang tak pernah terjadi tercatat sebagai penilaian, sehingga ledger yang hanya
       boleh menyusut tidak menghitungnya.
+
+      Diverifikasi sebelum dipindahkan: `/admin/security` membawa level enforcement MFA dan
+      sama sekali tidak membawa apa pun soal media. Kedua kunci berpindah dari
+      `DELIBERATELY_UNSCREENED` ke `NOT_YET_SCREENED`, sehingga hitungannya berubah dari "15
+      deliberate, 34 menunggu layar" menjadi "13 deliberate, 36 menunggu layar" — ledger itu
+      seharusnya adalah angka jujur tentang seberapa banyak yang belum dibangun, dan dua
+      permukaan dijauhkan darinya oleh sebuah kalimat. Penalaran tentang DI MANA switch itu
+      seharusnya berada bertahan sebagai catatan pada baris ledger; ia tak pernah salah, ia
+      hanya belum benar.
+
+      `DELIBERATELY_UNSCREENED` kini diekspor, sehingga sebuah uji bisa mengasersi kedua
+      daftar itu tak pernah berbagi kunci. Versi uji yang mentoleransi ekspor yang hilang
+      akan lulus tanpa melakukan apa pun — bentuk yang sama dengan temuan yang dijaganya.
+
   30. **D9 — `ship-logs.sh` menamai berkas keluarannya saat attach dan tidak pernah
       merotasi.** **SELESAI (22 Agustus 2026).**
       `ops/ship-logs.sh:53-57`. `$(date)` diekspansi sekali saat tailer
@@ -1221,9 +1293,27 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       di satu dari tiga salinan `parseInventoryRows`. `scripts/lib/repo-files.ts` kini ada
       dan enam skrip sudah dipindah — ini menyelesaikan pekerjaan yang sudah dimulai.
   36. **D15 — node `notify` workflow diam-diam tidak melakukan apa pun, dan kedua composition
-      root membenarkannya dengan klaim palsu.** `workflow-notification-port-adapter.ts:18`
+      root membenarkannya dengan klaim palsu.** **SELESAI (22 Agustus 2026) — komentarnya,
+      yang memang disebut temuan itu sebagai cacat hidupnya.**
+      `workflow-notification-port-adapter.ts:18`
       nol pengimpor; dua rute menyebut modul `email` "belum di-port" — ia hidup dan memiliki
       adapternya.
+
+      Adapter dan komentar itu saling menjadi alibi: rutenya menjelaskan wiring yang hilang
+      dengan modul yang ada, dan kepala adapternya menyatakan "hanya composition root yang
+      boleh mengimpor berkas ini", yang terbaca seolah ada yang mengimpornya. Keduanya
+      dikoreksi, dan adapternya kini menyatakan tak ada yang mengimpornya.
+
+      **Port-nya sengaja MASIH tidak disuntikkan.** Dipastikan sambil bekerja bahwa jalurnya
+      tak terjangkau — `startWorkflowInstance` tak punya pemanggil dan tak ada rute yang
+      membuat instance (`instances/[id].ts` hanya GET, plus cancel) — jadi menyuntikkannya
+      akan menambah satu lagi hal yang dideklarasikan-dan-tak-pernah-jalan, dan akan
+      menaruh enqueue announcement di dalam transaksi keputusan tanpa cara menguji
+      kegagalannya. Pemicunya dinamai sebagai gantinya: suntikkan pada perubahan yang
+      memberi pembuatan instance seorang pemanggil, tempat node `notify` benar-benar bisa
+      diuji ujung ke ujung. Sebuah uji memaku ketiadaannya supaya perubahan itu harus
+      melepas pakunya dengan sengaja.
+
   37. **D16 — keadaan siklus hidup orphan media tak terjangkau.**
       `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` satu-satunya penulis
       `status='orphaned'` di repo dan punya nol pemanggil, sehingga sapuan stale-orphan,

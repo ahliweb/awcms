@@ -360,6 +360,35 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **FOUND WHILE WORKING, 22 August 2026 (while closing D7): `POST
+/api/v1/tenant/domains/{id}/verify` VERIFIES NOTHING.** It reads the row, checks
+  `verification_method IS NOT NULL`, and sets `status = 'active'`. There is no DNS
+  lookup, no HTTP file fetch, no token comparison anywhere on the route path — the
+  Cloudflare adapter exists (`tenant-domain/infrastructure/cloudflare-dns-adapter.ts`),
+  is selected by `TENANT_DOMAIN_DNS_PROVIDER`, and is called by nothing. The column that
+  names a method is the whole of the check.
+
+  **What an active domain buys.** `resolvePublicTenantByHost` maps a request `Host` to a
+  tenant from `awcms_tenant_domains`; `resolveTenantDomainSet` treats it as a permitted
+  redirect target; `resolveTenantPrimaryHost` puts it in canonical URLs, feeds and
+  sitemaps. So the sequence is: a tenant holding `tenant_domain.domains.create` +
+  `.update` + `.verify` adds a hostname, PATCHes `verificationMethod: "manual"`, calls
+  verify, and the deployment will now answer for that hostname as that tenant.
+
+  **Two things bound it, and neither is the control.** Creation and verification are
+  ABAC-guarded, so this is a tenant admin's reach and not an anonymous one; and it only
+  matters for a hostname whose DNS someone can actually point at this deployment. The
+  second is not a property of this code — it is a property of somebody else's DNS.
+
+  **Not fixed here, deliberately.** The fix is a real verification step (publish a
+  `dns_txt` record and check it, or fetch a well-known file) plus a decision about what
+  `manual` is allowed to mean — plausibly "an OPERATOR attests", which would make it a
+  platform-scoped action rather than a tenant one. That is a security change with an ADR
+  in it, not a settings cleanup, and bundling it into one would have been the wrong way
+  to make that decision. D7's own resolution was chosen to avoid making this WORSE: the
+  unread `defaultVerificationMethod` was deleted rather than applied, because applying it
+  would have handed every newly created domain the only precondition `verify` has.
+
 - **FOUND WHILE WORKING, 22 August 2026: `docs:i18n:stamp` can silence
   `check:docs:translation` on a mirror that is now WRONG.** The stamp script re-hashes
   every English source into its mirror's `i18n-source-hash` marker. Its own output warns
@@ -1104,13 +1133,50 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       operator WHICH problem it is.
 
   28. **D7 — `tenant_domain`'s declared `defaultVerificationMethod: "manual"` has no runtime
-      reader.** `tenant-domain/module.ts:163`. The validator defaults to `null` and
+      reader.** **DONE (22 August 2026) — resolved by DELETING it, not by wiring it.**
+      `tenant-domain/module.ts:163`. The validator defaults to `null` and
       verification answers `missing_verification_method` — the `pending_verification` state
       §4 item 6 already observes in production, without naming this cause.
+
+      **The obvious repair would have removed a control, so it was not made.**
+      Applying the default at creation is what the finding's framing suggests, and it is
+      wrong here: `verifyTenantDomain` performs NO verification of any kind. It checks
+      that `verification_method` is non-NULL and sets `status = 'active'` — no DNS lookup
+      exists anywhere on the route path (the Cloudflare adapter is selected by
+      `TENANT_DOMAIN_DNS_PROVIDER` and is called by nothing). So a NULL
+      `verification_method` is currently the only step between "a tenant created a
+      hostname row" and "that hostname is active", and an active domain feeds
+      host→tenant resolution, the redirect allow-list and the canonical host.
+
+      The whole `settings` block is gone, with the reasoning in its place, and the test
+      that used to assert the default now asserts its absence PLUS the behaviour that
+      must not change (creation still leaves the column NULL).
+
+      **FOUND WHILE WORKING, and it is the real item: `verify` verifies nothing.** The
+      friction above is one `PATCH` away from being removed by any tenant with
+      `domains.update` — set `verificationMethod: "manual"`, call verify, and the
+      hostname is active. Whether that matters depends on DNS nobody here controls, which
+      is exactly why it needs an argued decision rather than a quiet fix inside a
+      settings cleanup. Recorded as a NEW item below rather than closed here.
+
   29. **D8 — `media_library.enforcement.*` is filed as a screening DECISION naming a screen
-      that does not implement it.** `admin-screen-coverage-check.ts:91,93`. A relocation
+      that does not implement it.** **DONE (22 August 2026).**
+      `admin-screen-coverage-check.ts:91,93`. A relocation
       that never happened is recorded as judgement, so the shrink-only ledger does not
       count it.
+
+      Verified before moving: `/admin/security` carries the MFA enforcement level and
+      nothing about media at all. Both keys moved from `DELIBERATELY_UNSCREENED` to
+      `NOT_YET_SCREENED`, so the count went from "15 deliberate, 34 awaiting a screen" to
+      "13 deliberate, 36 awaiting a screen" — the ledger is supposed to be the honest
+      number for how much is unbuilt, and two surfaces were being kept off it by a
+      sentence. The reasoning about WHERE the switch belongs survives as a note on the
+      ledger line; it was never wrong, it was just not yet true.
+
+      `DELIBERATELY_UNSCREENED` is now exported, so a test can assert the two lists never
+      share a key. A version of that test which tolerated the missing export would have
+      passed by doing nothing — the same shape as the finding it guards.
+
   30. **D9 — `ship-logs.sh` names its output file at attach time and never rotates.**
       **DONE (22 August 2026).**
       `ops/ship-logs.sh:53-57`. `$(date)` is expanded once when the tailer is spawned and
@@ -1219,10 +1285,27 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       one of six migration loaders. `scripts/lib/repo-files.ts` now exists and six scripts
       are migrated — this is finishing a started job.
   36. **D15 — workflow `notify` nodes silently do nothing, and both composition roots
-      justify it with a false claim.** `workflow-notification-port-adapter.ts:18` has zero
+      justify it with a false claim.** **DONE (22 August 2026) — the comments, which is
+      what the finding said the live defect was.**
+      `workflow-notification-port-adapter.ts:18` has zero
       importers; two routes say the `email` module "has not been ported yet" — it is live
       and owns the adapter. Unreachable today (`startWorkflowInstance` has no caller), so
       the live defect is the two misleading comments.
+
+      The adapter and the comments were each other's alibi: the routes explained the
+      missing wiring with a module that exists, and the adapter's header said "only a
+      composition root may import this file", which reads as though one does. Both are
+      corrected, and the adapter now states that nothing imports it.
+
+      **The port is deliberately still NOT injected.** Confirmed while working that
+      nothing can reach the path — `startWorkflowInstance` has no caller and no route
+      creates an instance (`instances/[id].ts` is GET, plus a cancel) — so injecting it
+      would add a second declared-and-never-run thing, and would put an announcement
+      enqueue inside the decision transaction with no way to exercise its failure. The
+      trigger is named instead: inject it in the change that gives instance creation a
+      caller, where a `notify` node can actually be tested end to end. A test pins the
+      absence so that change has to remove the pin deliberately.
+
   37. **D16 — the media orphan lifecycle state is unreachable.**
       `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` is the repo's only
       writer of `status='orphaned'` and has zero callers, so the stale-orphan sweep, its
