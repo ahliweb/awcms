@@ -5386,6 +5386,28 @@ paths:
                         type: integer
                       maxPerTag:
                         type: integer
+                      vocabulary:
+                        type: object
+                        description: |
+                          How much of the tenant's tag vocabulary the matching engine could see (Issue #648).
+
+                          Only a bounded number of tags enter the engine at once, because it compiles one alternation regex from all of them. Which ones are chosen is by USAGE — the tags carried by the most posts — since those are the ones most likely to occur in prose. Until Issue #648 the selection was the alphabetically-first hundred, inherited from the admin list, so whether a tag was ever linked was decided by its first letter and nothing said so.
+
+                          `truncated: true` is the one reason a tag went unlinked that the editor cannot fix by editing.
+                        required:
+                          - total
+                          - limit
+                          - truncated
+                        properties:
+                          total:
+                            type: integer
+                            description: Non-deleted tags this tenant has.
+                          limit:
+                            type: integer
+                            description: The cap applied to the candidate list.
+                          truncated:
+                            type: boolean
+                            description: True when the vocabulary is larger than the cap, so some tags cannot be linked at all.
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

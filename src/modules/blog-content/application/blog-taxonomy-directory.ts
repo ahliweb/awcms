@@ -201,6 +201,86 @@ export async function listBlogTermsPage(
   return { items: rows.map(toView), nextCursor };
 }
 
+export type TagLinkCandidateRow = {
+  id: string;
+  name: string;
+  slug: string;
+  /** Assignments to non-deleted posts. The ordering key, not a reported figure. */
+  usageCount: number;
+};
+
+/**
+ * The tags most likely to appear in an article's prose, most-used first
+ * (Issue #648).
+ *
+ * ## Why automatic tag linking gets its own query
+ *
+ * It used to call `listBlogTerms(tx, tenantId, { taxonomyType: "tag" })`, whose
+ * bound was chosen for an admin table: `ORDER BY name ASC`, a hundred rows. On
+ * a tenant with more than a hundred tags that silently reduced the feature to
+ * the alphabetically-first hundred — so whether a tag ever got linked was
+ * decided by its first letter, and nothing anywhere said so. An editor asking
+ * "why was `Sepak Bola` not linked?" got no answer: the tag exists, it is
+ * enabled, it is spelled correctly, and it happens to start with S.
+ *
+ * ## Why a bound still exists
+ *
+ * `createInternalTagLinkEngine` compiles ONE alternation regex from every
+ * candidate. Handing it several thousand literals means a very large regex
+ * compiled on a public post render, so removing the bound is not the fix. The
+ * defect was that the bound was inherited by accident, degraded alphabetically,
+ * and was invisible.
+ *
+ * All three are addressed: the bound is named and lives with the feature
+ * (`MAX_INTERNAL_TAG_LINK_CANDIDATES`), the ordering is by how many posts
+ * actually carry the tag — the tags most likely to occur in prose — and the
+ * caller learns whether it was hit.
+ *
+ * Assignments to soft-deleted posts are excluded, so a tag left on five hundred
+ * deleted articles does not outrank one in daily use.
+ */
+export async function listTagLinkCandidates(
+  tx: Bun.SQL,
+  tenantId: string,
+  limit: number
+): Promise<TagLinkCandidateRow[]> {
+  const rows = (await tx`
+    SELECT t.id, t.name, t.slug, count(p.id)::int AS usage_count
+    FROM awcms_blog_terms t
+    LEFT JOIN awcms_blog_post_terms pt
+      ON pt.tenant_id = t.tenant_id AND pt.term_id = t.id
+    LEFT JOIN awcms_blog_posts p
+      ON p.tenant_id = pt.tenant_id AND p.id = pt.post_id AND p.deleted_at IS NULL
+    WHERE t.tenant_id = ${tenantId}
+      AND t.deleted_at IS NULL
+      AND t.taxonomy_type = 'tag'
+    GROUP BY t.id, t.name, t.slug
+    ORDER BY count(p.id) DESC, t.name ASC
+    LIMIT ${limit}
+  `) as { id: string; name: string; slug: string; usage_count: number }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    usageCount: row.usage_count
+  }));
+}
+
+/** How many non-deleted tags this tenant has. Answers "was the candidate list capped?". */
+export async function countTags(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<number> {
+  const rows = (await tx`
+    SELECT count(*)::int AS count
+    FROM awcms_blog_terms
+    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND taxonomy_type = 'tag'
+  `) as { count: number }[];
+
+  return rows[0]?.count ?? 0;
+}
+
 /** Thin convenience wrapper kept for the pre-#539 call shape (Issue #537). */
 export async function fetchBlogTermsByTaxonomyType(
   tx: Bun.SQL,

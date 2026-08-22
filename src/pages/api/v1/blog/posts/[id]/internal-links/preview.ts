@@ -112,7 +112,14 @@ export const GET: APIRoute = async ({ request, cookies, params }) => {
       matches: preview.result.matches,
       totalLinked: preview.result.matches.length,
       maxPerPost: deploymentConfig.maxPerPost,
-      maxPerTag: deploymentConfig.maxPerTag
+      maxPerTag: deploymentConfig.maxPerTag,
+      // Issue #648 — the one reason a tag went unlinked that is NOT the
+      // editor's doing. Without this field, "the tag is disabled", "the tag is
+      // shorter than minTermLength", "the tag does not appear in the body" and
+      // "the tag is past the candidate cap" are all the same empty `matches`
+      // list, and only the last of them is something an editor cannot fix by
+      // editing.
+      vocabulary: preview.vocabulary
     });
   });
 };
