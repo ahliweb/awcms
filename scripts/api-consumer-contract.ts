@@ -114,6 +114,10 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
+  "/api/v1/blog/menus":
+    "ADR-0105 — the tenant's navigation menus, rendered as a SECONDARY region so the localised tab bar is not replaced (#597 item 6). Frozen only after #652 gave the response a real schema: before that it was an array of bare `object`, and freezing it would have frozen a promise nothing could ever fail against.",
+  "/api/v1/blog/widgets":
+    "ADR-0105 — the tenant's widgets, rendered in their declared positions. `bodyText` is plain text and is escaped by the consumer, because the write path REFUSES markup rather than sanitizing it. Same #652 caveat as the menus above.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
