@@ -25,10 +25,70 @@ const LOG_LEVEL_SEVERITY: Record<LogLevel, number> = {
   error: 40
 };
 
-function currentThreshold(): number {
-  const configured = process.env.LOG_LEVEL as LogLevel | undefined;
+/**
+ * Spellings of a level that are accepted but are not the level's own name —
+ * finding D3 of the 17 August 2026 audit round.
+ *
+ * `config:validate` accepted `LOG_LEVEL=warn` and this logger implements
+ * `warning`, so `LOG_LEVEL_SEVERITY["warn"]` was `undefined`, the `?? info`
+ * fallback took over, and the firehose kept shipping while the operator
+ * believed they had quieted it. The value the logger DOES implement —
+ * `warning` — was rejected by the validator. There was no value that both
+ * passed the validated contract and worked.
+ *
+ * Fixed on both sides, and additively: the validator now accepts both, and this
+ * map makes `warn` mean what an operator writing it obviously meant. Rejecting
+ * `warn` outright would have been the tidier answer and would have turned a
+ * silent no-op into a failed `config:validate` on a deployment that is running
+ * right now, to punish a spelling.
+ */
+const LOG_LEVEL_ALIASES: Record<string, LogLevel> = {
+  warn: "warning"
+};
 
-  return LOG_LEVEL_SEVERITY[configured ?? "info"] ?? LOG_LEVEL_SEVERITY.info;
+let warnedAboutAlias = false;
+
+function currentThreshold(): number {
+  const configured = process.env.LOG_LEVEL?.trim();
+
+  if (configured === undefined || configured === "") {
+    return LOG_LEVEL_SEVERITY.info;
+  }
+
+  const alias = LOG_LEVEL_ALIASES[configured];
+
+  if (alias) {
+    if (!warnedAboutAlias) {
+      warnedAboutAlias = true;
+      // Written directly rather than through `log()`: this runs from inside the
+      // threshold check that `log()` itself calls, and routing it back through
+      // there is a recursion for a message about a spelling.
+      console.error(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "warning",
+          message: "logging.log_level.deprecated_spelling",
+          moduleKey: "logging",
+          configured,
+          canonical: alias,
+          impact:
+            "accepted as an alias; write LOG_LEVEL=warning — before this it was accepted by config:validate, matched no level, and silently fell back to info"
+        })
+      );
+    }
+
+    return LOG_LEVEL_SEVERITY[alias];
+  }
+
+  // An unrecognised value still falls back to `info`, which is the safe
+  // direction: the alternative is a deployment that logs nothing because
+  // somebody typed `infoo`.
+  return LOG_LEVEL_SEVERITY[configured as LogLevel] ?? LOG_LEVEL_SEVERITY.info;
+}
+
+/** Test-only: clears the alias warn-once memory so tests do not bleed. */
+export function resetLogLevelAliasWarningForTests(): void {
+  warnedAboutAlias = false;
 }
 
 /**

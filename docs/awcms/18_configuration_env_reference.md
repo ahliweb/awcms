@@ -87,13 +87,13 @@ logs/responses.
 
 ### Application core
 
-| Var                         | Required | Default                 | Sensitive | Purpose                                                                   |
-| --------------------------- | -------- | ----------------------- | --------- | ------------------------------------------------------------------------- |
-| `APP_ENV`                   | Yes      | `development`           | –         | development/test/production (`staging` REMOVED — ADR-0083)                |
-| `APP_URL`                   | Yes      | `http://localhost:4321` | –         | Application base URL                                                      |
-| `LOG_LEVEL`                 | –        | `info`                  | –         | debug/info/warn/error                                                     |
-| `AUDIT_LOG_RETENTION_DAYS`  | –        | `730`                   | –         | Retention of `awcms_audit_events` (days), used by the audit log purge job |
-| `FORM_DRAFT_RETENTION_DAYS` | –        | `30`                    | –         | Retention of `expired`/`abandoned` form drafts (days)                     |
+| Var                         | Required | Default                 | Sensitive | Purpose                                                                                                                                                                                        |
+| --------------------------- | -------- | ----------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`                   | Yes      | `development`           | –         | development/test/production (`staging` REMOVED — ADR-0083)                                                                                                                                     |
+| `APP_URL`                   | Yes      | `http://localhost:4321` | –         | Application base URL                                                                                                                                                                           |
+| `LOG_LEVEL`                 | –        | `info`                  | –         | `debug`/`info`/`warning`/`error`; `warn` is accepted as an alias for `warning` and logs a one-time notice (finding D3 — it used to validate, match no level, and silently fall back to `info`) |
+| `AUDIT_LOG_RETENTION_DAYS`  | –        | `730`                   | –         | Retention of `awcms_audit_events` (days), used by the audit log purge job                                                                                                                      |
+| `FORM_DRAFT_RETENTION_DAYS` | –        | `30`                    | –         | Retention of `expired`/`abandoned` form drafts (days)                                                                                                                                          |
 
 The default timezone/locale per tenant/entity is planned to come from data
 (`awcms_tenants`/`awcms_tenant_settings`), not env vars — following the

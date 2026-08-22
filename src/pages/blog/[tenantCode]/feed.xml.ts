@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { getDatabaseClient } from "../../../lib/database/client";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
-import { escapeHtml } from "../../../lib/html/escape";
+import { escapeXmlText } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
 import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
 import { coerceLocale } from "../../../lib/i18n/negotiate";
@@ -25,9 +25,19 @@ import { resolveMetaDescription } from "../../../modules/blog-content/domain/seo
  * `published`+`public` posts (same predicate as the index/sitemap, doc
  * issue #540 §RSS Requirements: excludes unlisted/private/archived/
  * scheduled-future/draft/review/deleted). Hand-built XML string (no RSS
- * library dependency — Bun-only, AGENTS.md rule 14), escaped through the
- * same `escapeHtml` used for HTML (XML and HTML share the same five
- * entity escapes). Issue #543 §Settings Page adds `rssEnabled` — a tenant
+ * library dependency — Bun-only, AGENTS.md rule 14), escaped through
+ * `escapeXmlText`.
+ *
+ * NOT `escapeHtml`, and the comment that used to sit here said otherwise: "XML
+ * and HTML share the same five entity escapes". They do — and that is not the
+ * whole difference. XML 1.0 forbids most C0 control characters ANYWHERE in a
+ * document, including as a numeric reference, while HTML merely discourages
+ * them. `validateTitleField` checks a post title's LENGTH and nothing else, and
+ * there is no write-side stripping, so one stray control character in a title
+ * made this entire channel non-well-formed and every reader rejected it — not
+ * the one item, the feed. ADR-0038 named `escapeXmlText` for exactly this; it
+ * was applied to the `seo_distribution` serializers, which answer 404 in
+ * production, and not to this route, which answers 200 (finding A6). Issue #543 §Settings Page adds `rssEnabled` — a tenant
  * that has turned the feed off gets the same 404 shape as an unknown
  * tenant/post (no distinguishable signal for a disabled vs. nonexistent
  * feed). Issue #564 adds the same generic 404 when the tenant's
@@ -81,15 +91,15 @@ export const GET: APIRoute = async ({ params, request, url }) => {
           post
         );
         const enclosure = previewImage
-          ? `<enclosure url="${escapeHtml(previewImage.url)}" length="${previewImage.sizeBytes ?? 0}" type="${escapeHtml(previewImage.mimeType)}" />`
+          ? `<enclosure url="${escapeXmlText(previewImage.url)}" length="${previewImage.sizeBytes ?? 0}" type="${escapeXmlText(previewImage.mimeType)}" />`
           : "";
 
         itemParts.push(`<item>
-<title>${escapeHtml(post.title)}</title>
-<link>${escapeHtml(link)}</link>
-<guid isPermaLink="true">${escapeHtml(link)}</guid>
+<title>${escapeXmlText(post.title)}</title>
+<link>${escapeXmlText(link)}</link>
+<guid isPermaLink="true">${escapeXmlText(link)}</guid>
 <pubDate>${post.publishedAt.toUTCString()}</pubDate>
-<description>${escapeHtml(description)}</description>
+<description>${escapeXmlText(description)}</description>
 ${enclosure}
 </item>`);
       }
@@ -99,10 +109,10 @@ ${enclosure}
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
 <channel>
-<title>${escapeHtml(tenant.tenantName)} Blog</title>
-<link>${escapeHtml(channelLink)}</link>
-<description>Latest posts from ${escapeHtml(tenant.tenantName)}.</description>
-<language>${escapeHtml(tenant.defaultLocale)}</language>
+<title>${escapeXmlText(tenant.tenantName)} Blog</title>
+<link>${escapeXmlText(channelLink)}</link>
+<description>Latest posts from ${escapeXmlText(tenant.tenantName)}.</description>
+<language>${escapeXmlText(tenant.defaultLocale)}</language>
 ${items}
 </channel>
 </rss>`;

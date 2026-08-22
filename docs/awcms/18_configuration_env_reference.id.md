@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:95a54cc8a66d41b67358ea98036fc67ca83ec21cbf9ca8ad98fe363f9a1ed5fa -->
+<!-- i18n-source-hash: sha256:39cbaff6b9cf8994e83fe70a3aed17f8398494df67bb630c148f397f450a7ad3 -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -87,13 +87,13 @@ Legenda: Wajib = perlu untuk boot; Sensitif = jangan bocor ke log/response.
 
 ### Inti aplikasi
 
-| Var                         | Wajib | Default                 | Sensitif | Fungsi                                                           |
-| --------------------------- | ----- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| `APP_ENV`                   | Ya    | `development`           | –        | development/test/production (`staging` DIHAPUS — ADR-0083)       |
-| `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                |
-| `LOG_LEVEL`                 | –     | `info`                  | –        | debug/info/warn/error                                            |
-| `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log |
-| `FORM_DRAFT_RETENTION_DAYS` | –     | `30`                    | –        | Retensi draft form `expired`/`abandoned` (hari)                  |
+| Var                         | Wajib | Default                 | Sensitif | Fungsi                                                                                                                                                                                                                  |
+| --------------------------- | ----- | ----------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`                   | Ya    | `development`           | –        | development/test/production (`staging` DIHAPUS — ADR-0083)                                                                                                                                                              |
+| `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                                                                                                                                                                       |
+| `LOG_LEVEL`                 | –     | `info`                  | –        | `debug`/`info`/`warning`/`error`; `warn` diterima sebagai alias untuk `warning` dan mencatat pemberitahuan sekali (temuan D3 — sebelumnya ia lolos validasi, tidak cocok level mana pun, dan diam-diam jatuh ke `info`) |
+| `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log                                                                                                                                                        |
+| `FORM_DRAFT_RETENTION_DAYS` | –     | `30`                    | –        | Retensi draft form `expired`/`abandoned` (hari)                                                                                                                                                                         |
 
 Timezone/locale default per tenant/entitas direncanakan dari data
 (`awcms_tenants`/`awcms_tenant_settings`), bukan env var — mengikuti pola

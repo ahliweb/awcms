@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3ffc6f4ffd74d2f490bc281db837e690662b3095fe53f22127b8550c026afcae -->
+<!-- i18n-source-hash: sha256:c9dd334cae256163bd3e5e2ca23bde515a7ad5ef9a7f4eb46414766fe5d22ef7 -->
 
 # AWCMS — Project State & Continuation
 
@@ -536,11 +536,18 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      tidak mencabut apa pun di B. "Keluarkan saya dari semua perangkat" punya batas yang
      sama, dan dua komentar dokumen menegaskan jaminan yang tidak lagi diberikan kodenya.
   6. **A6 — feed/sitemap blog meng-escape dengan `escapeHtml`, bukan `escapeXmlText`.**
+     **SELESAI (22 Agustus 2026).**
      `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`. Satu
      karakter kontrol C0 pada judul pos (`validateTitleField` hanya memeriksa panjang)
      membuat seluruh channel menjadi XML tidak well-formed dan setiap pembaca menolaknya.
      ADR-0038 menyebut `escapeXmlText`; itu diterapkan pada serializer `seo_distribution`
      yang 404 di produksi, dan tidak pada rute ini yang 200.
+     Kedua rute kini memakai `escapeXmlText` (16 titik panggil). Docblock rutenya sendiri
+     yang membuat fungsi salah itu terlihat benar — "escaped through the same `escapeHtml`
+     used for HTML (XML and HTML share the same five entity escapes)" — benar, dan bukan
+     seluruh perbedaannya. Ia DIKOREKSI alih-alih dihapus: komentar salah di samping kode
+     benar adalah instruksi bagi penulis berikutnya.
+
   7. **A7 — sync-storage memakai string dari node apa adanya sebagai jalur filesystem
      server dan sebagai kunci object-store.** `sync-storage/domain/object-queue.ts:40-58,91`;
      `object-storage-uploader.ts:110-129`. `localPath` tidak dikurung akar dan dispatcher
@@ -554,6 +561,18 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      **limiter-nya mati** pada endpoint full-text anonim sementara metrik `rate_limited`
      tetap nol dan meneguhkannya sebagai "tidak ada penyalahgunaan". Nilai kosong
      menghasilkan `0` dan mem-429 setiap pengunjung.
+
+     **SUDAH DIPERBAIKI saat diperiksa, 22 Agustus 2026 — entri ini sudah basi pada hari ia
+     ditulis.** Kedua setelan sudah melewati `parsePositiveIntSetting`
+     (`src/lib/security/env-thresholds.ts`), yang mengembalikan fallback untuk nilai
+     kosong/undefined DAN untuk apa pun yang non-finite, non-integer, atau ≤ 0, sambil
+     memperingatkan sekali. `suggest.ts` bahkan membawa komentar "See `query.ts` — same
+     defect, same fix". Ditutup oleh #601 bersama #593.
+
+     **Dibiarkan terlihat alih-alih dihapus.** Entri audit yang menggambarkan cacat yang
+     TIDAK ADA mengirim pembaca berikutnya mencarinya — bentuk kegagalan yang sama dengan
+     banner skill basi, yang repo ini punya memorinya. Diverifikasi dengan membaca kedua
+     titik panggil dan helper-nya, bukan dengan mempercayai komentarnya.
 
   ### B. Performa (jalur request + pengiriman)
   9. **B1 — tiap probe afordans `can()` menjalankan ULANG SELURUH pipeline otorisasi.**
@@ -717,9 +736,18 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       mudah dan tidak informatif.
 
   24. **D3 — `LOG_LEVEL=warn` lolos `config:validate` dan diabaikan diam-diam; `warning`,
-      nilai yang diimplementasikan logger, ditolak.** `validate-env.ts:51-56`;
+      nilai yang diimplementasikan logger, ditolak.** **SELESAI (22 Agustus 2026).** `validate-env.ts:51-56`;
       `logger.ts:12,21-26`. Tidak ada nilai yang sekaligus lolos kontrak tervalidasi dan
       bekerja, jadi firehose terus mengirim sementara operator percaya sudah diredam.
+
+      Diperbaiki di KEDUA sisi dan bersifat aditif: validator menerima `warning` (dan tetap
+      menerima `warn`), dan logger mengkanonikalkan `warn` → `warning` sambil mencatat
+      pemberitahuan sekali yang menyebut ejaan kanoniknya. Menolak `warn` mentah-mentah akan
+      lebih rapi dan akan mengubah no-op senyap menjadi `config:validate` yang GAGAL di
+      deployment yang sedang berjalan, demi menghukum sebuah ejaan. Nilai yang tidak dikenali
+      tetap jatuh ke `info` — arah yang aman, karena alternatifnya adalah deployment yang
+      tidak mencatat apa pun karena seseorang mengetik `infoo`.
+
   25. **D4 — dua job analitik bercabang pada `result instanceof Response` setelah
       `withTenantOrThrow` — kode mati yang menyembunyikan abort nyata.**
       `visitor-analytics-rollup.ts:97-106`. `tenantsSkipped` permanen 0, peringatan
