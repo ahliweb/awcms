@@ -111,7 +111,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **144** (`sql/001`–`144`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **145** (`sql/001`–`145`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.599 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
@@ -553,7 +553,7 @@ pioneered directly here after the ADR-0047 freeze.)
      hash, stamp it on sessions, reject stale-epoch sessions. Until then, correct the
      false comments.
 
-     DONE (22 August 2026), `sql/144`. The recommendation is implemented as written, plus
+     DONE (22 August 2026), `sql/145`. The recommendation is implemented as written, plus
      two things it did not say.
 
      First, WHY an epoch and not a wider revoke, written into the migration so the next
@@ -727,7 +727,7 @@ pioneered directly here after the ADR-0047 freeze.)
       - top-N sort, plus a second full scan for `count(*)`. `db:fk-index:check` cannot see
         it — `updated_at` is not a foreign key. Cost is O(tenant posts), not O(page size).
 
-      **MEASURED, which this round could not do.** `sql/144` adds three indexes; against
+      **MEASURED, which this round could not do.** `sql/145` adds three indexes; against
       24,000 seeded posts on PostgreSQL 18 the `/admin/blog` list went from a Seq Scan of
       24,000 rows plus a top-N heapsort (7.4 ms) to an Index Scan reading **50** (0.057
       ms), the keyset first page from 5.1 ms to 0.110 ms, and a keyset page resumed at row
@@ -737,7 +737,7 @@ pioneered directly here after the ADR-0047 freeze.)
       **One claim in this entry is wrong and is left visible rather than edited away:**
       "plus a second full scan for `count(*)`". The count beside the list already plans as
       an Index Only Scan on `awcms_blog_posts_tenant_deleted_idx` (1.8 ms, unchanged by
-      `sql/144`). It reads every index entry, which is why it does not get faster — but it
+      `sql/145`). It reads every index entry, which is why it does not get faster — but it
       is not a heap scan, and no index added here helps it. A cheap count is a different
       decision (an estimate, or a maintained counter) with its own trade-off.
 
@@ -756,6 +756,27 @@ pioneered directly here after the ADR-0047 freeze.)
   16. **C2 — `purgeVisitorAnalyticsData` is the only unbounded retention purge in the
       repo.** `retention-purge.ts:91-117`. Four statements with no batch limit, each using
       `RETURNING id` only to take a JS-side `.length`. Every sibling caps at 5000 and loops.
+
+      DONE (22 August 2026). All four statements are
+      `WHERE <pk> IN (SELECT … ORDER BY … LIMIT n)` and the function returns `hasMore`. The
+      scheduled job loops with a FRESH transaction per pass — looping inside one would hold
+      every lock and dead tuple for the duration, which is the thing the batching exists to
+      avoid — and names any tenant that hits the pass cap. The on-demand endpoint does ONE
+      bounded pass and returns `hasMore`, because the size of the work is unknown when the
+      caller presses the button.
+
+      A CORRECTION found by mutation, not by reading: the code comment claimed the ORDER BY
+      gave monotonic progress. It does not — a DELETE removes what it took, so termination
+      holds regardless. What it buys is OLDEST-FIRST, which matches the index the predicate
+      already uses and means an interrupted purge has removed the data furthest past
+      retention rather than an arbitrary slice. Removing the ORDER BY left every test green
+      until a test was written for the property that is actually true.
+
+      `awcms_visitor_daily_rollups` is bounded on `ctid` rather than a surrogate id: it is
+      keyed `(tenant_id, date, area)` and has no id column. `ctid` is not stable across an
+      UPDATE, which is exactly why it is only ever used inside the one statement that
+      selected it.
+
   17. **C3 — sync push does read-modify-write on `current_version` with no row lock.**
       `sync/push.ts:132-137`. Two concurrent batches both read 5, both pass the conflict
       check, both write the literal `6`: two conflicting events accepted, zero conflict
@@ -809,6 +830,27 @@ pioneered directly here after the ADR-0047 freeze.)
       `awcms_domain_events` twin have no index and are **not FK columns, so
       `db:fk-index:check` structurally cannot see them**. The route's own comment claims
       "a bounded set of rows".
+
+      DONE (22 August 2026), `sql/145`. Three partial indexes, and MEASURED on 60,000 rows:
+      the actor read went from a Seq Scan touching 858 buffers (2.5 ms) to an Index Scan
+      touching 33 (0.039 ms). The near-miss is worth recording — `awcms_audit_events` DOES
+      have `awcms_audit_events_actor_tenant_idx`, on `actor_tenant_id`: the delegated
+      actor's TENANT, a different column one character apart in reading.
+
+      The reads are row-capped at 10,000 with the cap REPORTED (`truncated` per table,
+      `truncatedTables` in the response beside the existing `unanswered` coverage
+      statement, and INCOMPLETE in the `critical` audit event's message). A cap on a
+      subject-access export is only acceptable because it is flagged: an export that
+      quietly returned the first N rows would answer a legal obligation with a number
+      dressed as an answer, which is worse than the unbounded read it replaced. No cursor,
+      deliberately — a "complete answer" assembled across pages has a boundary at every
+      request where a partial answer can be mistaken for the whole one.
+
+      One mutation taught something worth keeping: deleting the LIMIT entirely turned
+      NOTHING red, because with 12 rows and a cap of 10 the flag and the slice come out
+      identical and only the COST differs. That is the finding's own shape, so the suite
+      now carries an explicit assertion that the statement really contains the LIMIT.
+
   20. **C6 — `/admin/roles` is an N+1 plus an O(roles × catalogue) payload.**
       `roles.astro:88-94`. `listRolePermissions` awaited once per role (up to 100,
       sequential); the ~230-row catalogue rendered as `<option>` once per role.

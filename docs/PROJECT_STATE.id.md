@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ab261b9aa8ad7c3e352d3c6cded3e08094ec6ef59e507c1a25410f192e735f64 -->
+<!-- i18n-source-hash: sha256:a605ad70c9f559b56d18940d2356f79ad7e367c84de28b6daee479abacf6b6dc -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **144** (`sql/001`–`144`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **145** (`sql/001`–`145`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -538,7 +538,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      `credential_epoch` pada `awcms_principals`, naikkan di statement yang mengganti hash,
      stempelkan pada sesi, tolak sesi ber-epoch basi. Sebelum itu, perbaiki komentar palsunya.
 
-     SELESAI (22 Agustus 2026), `sql/144`. Rekomendasi diterapkan apa adanya, ditambah dua
+     SELESAI (22 Agustus 2026), `sql/145`. Rekomendasi diterapkan apa adanya, ditambah dua
      hal yang tidak disebutkannya.
 
      Pertama, MENGAPA epoch dan bukan pencabutan yang diperlebar — ditulis ke dalam migration
@@ -713,7 +713,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       untuk `count(*)`. `db:fk-index:check` tidak bisa melihatnya — `updated_at` bukan
       foreign key. Ongkosnya O(pos tenant), bukan O(ukuran halaman).
 
-      **DIUKUR, yang putaran ini tidak bisa lakukan.** `sql/144` menambah tiga indeks;
+      **DIUKUR, yang putaran ini tidak bisa lakukan.** `sql/145` menambah tiga indeks;
       terhadap 24.000 post ter-seed di PostgreSQL 18, daftar `/admin/blog` berubah dari Seq
       Scan 24.000 baris plus top-N heapsort (7,4 ms) menjadi Index Scan yang membaca **50**
       baris (0,057 ms), halaman keyset pertama dari 5,1 ms menjadi 0,110 ms, dan halaman
@@ -723,7 +723,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       **Satu klaim di entri ini SALAH dan dibiarkan terlihat alih-alih disunting hilang:**
       "plus scan penuh KEDUA untuk `count(*)`". Hitungan di samping daftar itu sudah
       terencana sebagai Index Only Scan pada `awcms_blog_posts_tenant_deleted_idx` (1,8 ms,
-      tidak berubah oleh `sql/144`). Ia membaca setiap entri indeks — itu sebabnya ia tidak
+      tidak berubah oleh `sql/145`). Ia membaca setiap entri indeks — itu sebabnya ia tidak
       menjadi lebih cepat — tetapi ia bukan heap scan, dan tidak ada indeks yang ditambahkan
       di sini yang menolongnya. Hitungan yang murah adalah keputusan lain (estimasi, atau
       penghitung terpelihara) dengan kompromnya sendiri.
@@ -745,6 +745,27 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       `retention-purge.ts:91-117`. Empat statement tanpa batas batch, tiap-tiap memakai
       `RETURNING id` hanya untuk mengambil `.length` di sisi JS. Setiap saudaranya membatasi
       di 5000 dan mengulang.
+
+      SELESAI (22 Agustus 2026). Keempat statement kini
+      `WHERE <pk> IN (SELECT … ORDER BY … LIMIT n)` dan fungsinya mengembalikan `hasMore`.
+      Job terjadwal mengulang dengan transaksi BARU tiap pass — mengulang di dalam satu
+      transaksi akan menahan setiap lock dan tuple mati selama durasinya, persis hal yang
+      hendak dihindari batching itu — dan menyebut nama tenant yang mentok di batas pass.
+      Endpoint on-demand melakukan SATU pass terbatas lalu mengembalikan `hasMore`, karena
+      besarnya pekerjaan tidak diketahui saat pemanggil menekan tombolnya.
+
+      Satu KOREKSI yang ditemukan lewat mutasi, bukan lewat membaca: komentar kodenya
+      mengklaim ORDER BY memberi kemajuan monotonik. Tidak — DELETE menghapus apa yang
+      diambilnya, jadi terminasi tetap berlaku tanpa itu. Yang dibelinya adalah
+      TERTUA-DULU, yang cocok dengan indeks yang sudah dipakai predikatnya dan berarti purge
+      yang terputus telah menghapus data yang paling jauh melewati retensinya, bukan
+      potongan sembarang. Menghapus ORDER BY membuat semua test tetap hijau sampai ditulis
+      test untuk properti yang memang benar.
+
+      `awcms_visitor_daily_rollups` dibatasi lewat `ctid`, bukan id surrogate: ia berkunci
+      `(tenant_id, date, area)` dan tak punya kolom id. `ctid` tidak stabil melintasi UPDATE
+      — justru itulah sebabnya ia hanya dipakai di dalam satu statement yang memilihnya.
+
   17. **C3 — sync push melakukan read-modify-write pada `current_version` tanpa row lock.**
       `sync/push.ts:132-137`. Dua batch bersamaan sama-sama membaca 5, sama-sama lolos
       pemeriksaan konflik, sama-sama menulis literal `6`: dua event berkonflik diterima, nol
@@ -800,6 +821,27 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       Tanpa LIMIT, tanpa cursor, semua baris di-buffer; `awcms_audit_events.actor_tenant_user_id`
       dan kembarannya di `awcms_domain_events` tidak berindeks dan **bukan kolom FK sehingga
       `db:fk-index:check` secara struktural tidak bisa melihatnya**.
+
+      SELESAI (22 Agustus 2026), `sql/145`. Tiga indeks parsial, dan DIUKUR pada 60.000
+      baris: baca aktor beralih dari Seq Scan menyentuh 858 buffer (2,5 ms) menjadi Index
+      Scan menyentuh 33 (0,039 ms). Nyaris-lolosnya layak dicatat — `awcms_audit_events`
+      MEMANG punya `awcms_audit_events_actor_tenant_idx`, pada `actor_tenant_id`: TENANT si
+      aktor terdelegasi, kolom berbeda yang hanya berjarak satu huruf saat dibaca.
+
+      Bacanya juga dibatasi 10.000 baris dengan batas itu DILAPORKAN (`truncated` per tabel,
+      `truncatedTables` di respons bersebelahan dengan pernyataan cakupan `unanswered` yang
+      sudah ada, dan kata INCOMPLETE di pesan audit event `critical`-nya). Batas pada ekspor
+      hak subjek hanya bisa diterima KARENA ditandai: ekspor yang diam-diam mengembalikan N
+      baris pertama akan menjawab kewajiban hukum dengan angka yang berpakaian jawaban —
+      lebih buruk daripada baca tak terbatas yang digantikannya. Tanpa cursor, dengan
+      sengaja — "jawaban lengkap" yang dirakit lintas halaman punya batas di setiap request,
+      tempat jawaban parsial bisa disalahartikan sebagai keseluruhannya.
+
+      Satu mutasi mengajarkan hal yang layak disimpan: menghapus LIMIT sepenuhnya TIDAK
+      memerahkan apa pun, karena dengan 12 baris dan batas 10 flag serta potongannya keluar
+      identik dan hanya BIAYA-nya yang berbeda. Itu persis bentuk temuannya sendiri, jadi
+      suite-nya kini membawa asersi eksplisit bahwa statement-nya benar-benar memuat LIMIT.
+
   20. **C6 — `/admin/roles` adalah N+1 plus payload O(peran × katalog).**
       `roles.astro:88-94`. `listRolePermissions` di-await sekali per peran (sampai 100,
       berurutan); katalog ~230 baris dirender sebagai `<option>` sekali per peran.

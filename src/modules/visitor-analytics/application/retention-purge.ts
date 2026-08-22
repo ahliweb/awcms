@@ -51,6 +51,33 @@ export type RetentionPurgeResult = {
   sessionsRawDetailCleared: number;
   sessionsDeleted: number;
   rollupsDeleted: number;
+  /**
+   * Finding C2 — at least one of the four statements filled its batch, so there
+   * is more to purge. The caller decides what to do with that: the scheduled
+   * job loops in a FRESH transaction per pass; the on-demand endpoint returns
+   * it, because an interactive request must not hold a purge of unknown size
+   * open.
+   */
+  hasMore: boolean;
+};
+
+/**
+ * Finding C2 — this was the only unbounded retention purge in the repo. Four
+ * statements with no limit, each using `RETURNING id` purely to take a JS-side
+ * `.length`, so a tenant with a year of unpurged analytics deleted every row in
+ * ONE transaction: one lock set held for the duration, one WAL burst, and a
+ * `statement_timeout` that turns the whole pass into a rollback rather than
+ * partial progress.
+ *
+ * 5000 is the number every sibling already uses
+ * (`AUDIT_EVENT_PURGE_BATCH_LIMIT`), and matching it matters more than the
+ * value: a purge cadence that differs per table for no stated reason is a
+ * cadence nobody can reason about.
+ */
+export const VISITOR_ANALYTICS_PURGE_BATCH_LIMIT = 5000;
+
+export type PurgeVisitorAnalyticsOptions = {
+  batchLimit?: number;
 };
 
 function daysAgo(now: Date, days: number): Date {
@@ -62,8 +89,10 @@ export async function purgeVisitorAnalyticsData(
   tenantId: string,
   config: VisitorAnalyticsConfig,
   now: Date,
-  legalHoldGuard: LegalHoldGuardPort
+  legalHoldGuard: LegalHoldGuardPort,
+  options: PurgeVisitorAnalyticsOptions = {}
 ): Promise<RetentionPurgeResult> {
+  const batchLimit = options.batchLimit ?? VISITOR_ANALYTICS_PURGE_BATCH_LIMIT;
   const eventCutoff = daysAgo(now, config.eventRetentionDays);
   const rawDetailCutoff = daysAgo(now, config.rawDetailRetentionDays);
   const rollupCutoff = daysAgo(now, config.rollupRetentionDays)
@@ -84,38 +113,82 @@ export async function purgeVisitorAnalyticsData(
       eventsDeleted: 0,
       sessionsRawDetailCleared: 0,
       sessionsDeleted: 0,
-      rollupsDeleted: 0
+      rollupsDeleted: 0,
+      // A hold is not "more to purge": looping would spin forever against a
+      // control whose whole purpose is to stop the purge.
+      hasMore: false
     };
   }
 
+  // Every statement is `WHERE <pk> IN (SELECT … ORDER BY … LIMIT n)` — the shape
+  // `audit-purge.ts` already established.
+  //
+  // What the ORDER BY buys, stated precisely: termination does NOT depend on it
+  // (a DELETE removes what it took, so any bounded slice shrinks the set and the
+  // loop ends regardless). It buys OLDEST-FIRST, which is worth having for two
+  // reasons — the ordering matches the index the predicate already uses, and a
+  // purge interrupted half way has removed the data furthest past retention
+  // rather than an arbitrary slice of it. On a retention control, "which half
+  // got deleted" is not a detail.
+  //
+  // `tenant_id` stays in the inner predicate even though FORCE RLS already
+  // scopes the table: it keeps the index usable.
   const deletedEvents = await tx`
     DELETE FROM awcms_visit_events
-    WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
+    WHERE id IN (
+      SELECT id FROM awcms_visit_events
+      WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
+      ORDER BY occurred_at ASC
+      LIMIT ${batchLimit}
+    )
     RETURNING id
   `;
 
   const clearedSessions = await tx`
     UPDATE awcms_visitor_sessions
     SET ip_address = NULL, login_identifier_snapshot = NULL, updated_at = now()
-    WHERE tenant_id = ${tenantId}
-      AND last_seen_at < ${rawDetailCutoff}
-      AND (ip_address IS NOT NULL OR login_identifier_snapshot IS NOT NULL)
+    WHERE id IN (
+      SELECT id FROM awcms_visitor_sessions
+      WHERE tenant_id = ${tenantId}
+        AND last_seen_at < ${rawDetailCutoff}
+        AND (ip_address IS NOT NULL OR login_identifier_snapshot IS NOT NULL)
+      ORDER BY last_seen_at ASC
+      LIMIT ${batchLimit}
+    )
     RETURNING id
   `;
 
+  // The `NOT EXISTS` guard stays exactly where it was and is why this statement
+  // is ordered by `last_seen_at` rather than deleted outright: a session whose
+  // events have not been purged yet is skipped THIS pass and caught by a later
+  // one, once step 1 has removed them.
   const deletedSessions = await tx`
-    DELETE FROM awcms_visitor_sessions s
-    WHERE s.tenant_id = ${tenantId} AND s.last_seen_at < ${eventCutoff}
-      AND NOT EXISTS (
-        SELECT 1 FROM awcms_visit_events e
-        WHERE e.visitor_session_id = s.id
-      )
+    DELETE FROM awcms_visitor_sessions
+    WHERE id IN (
+      SELECT s.id FROM awcms_visitor_sessions s
+      WHERE s.tenant_id = ${tenantId} AND s.last_seen_at < ${eventCutoff}
+        AND NOT EXISTS (
+          SELECT 1 FROM awcms_visit_events e
+          WHERE e.visitor_session_id = s.id
+        )
+      ORDER BY s.last_seen_at ASC
+      LIMIT ${batchLimit}
+    )
     RETURNING id
   `;
 
+  // `awcms_visitor_daily_rollups` is keyed on `(tenant_id, date, area)`, not a
+  // surrogate id, so the bound is `ctid` — the one identifier every Postgres
+  // row has. It is not stable across an UPDATE, which is exactly why it is
+  // only ever used inside the single statement that selected it.
   const deletedRollups = await tx`
     DELETE FROM awcms_visitor_daily_rollups
-    WHERE tenant_id = ${tenantId} AND date < ${rollupCutoff}
+    WHERE ctid IN (
+      SELECT ctid FROM awcms_visitor_daily_rollups
+      WHERE tenant_id = ${tenantId} AND date < ${rollupCutoff}
+      ORDER BY date ASC
+      LIMIT ${batchLimit}
+    )
     RETURNING tenant_id
   `;
 
@@ -123,6 +196,12 @@ export async function purgeVisitorAnalyticsData(
     eventsDeleted: deletedEvents.length,
     sessionsRawDetailCleared: clearedSessions.length,
     sessionsDeleted: deletedSessions.length,
-    rollupsDeleted: deletedRollups.length
+    rollupsDeleted: deletedRollups.length,
+    // Any statement that filled its batch means there is more behind it.
+    hasMore:
+      deletedEvents.length === batchLimit ||
+      clearedSessions.length === batchLimit ||
+      deletedSessions.length === batchLimit ||
+      deletedRollups.length === batchLimit
   };
 }

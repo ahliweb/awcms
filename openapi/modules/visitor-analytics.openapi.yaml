@@ -705,3 +705,12 @@ components:
           type: integer
         rollupsDeleted:
           type: integer
+        hasMore:
+          type: boolean
+          description: >-
+            True when at least one step filled its batch, so data past retention
+            remains. This endpoint performs ONE bounded pass on purpose — the
+            size of the work is unknown when the caller presses the button, and
+            an interactive request must not hold a purge of unbounded size open.
+            Call it again, or let the scheduled `analytics:purge` job (which
+            loops) finish the tenant.

@@ -7844,6 +7844,11 @@ paths:
                         description: What this answer does NOT cover, and why.
                         items:
                           $ref: "#/components/schemas/DataLifecycleSubjectUnanswered"
+                      truncatedTables:
+                        type: array
+                        description: Keys of tables that hit the per-table row cap, so the report is INCOMPLETE for them. Empty means complete — a claim worth being able to make explicitly rather than by the absence of a warning. The cap is a safety valve against a pathological subject (an automation account named as actor on a million audit rows), not a page size; there is deliberately no cursor, because a "complete answer" assembled across pages has a boundary at every request where a partial answer can be mistaken for the whole one.
+                        items:
+                          type: string
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -21275,6 +21280,9 @@ components:
           items:
             type: object
             additionalProperties: true
+        truncated:
+          type: boolean
+          description: "True when this table filled the per-table row cap, so the export is incomplete for it. Reported rather than swallowed: a subject-access export that quietly returned the first N rows would answer a legal obligation with a number dressed as an answer."
     DataLifecycleSubjectUnanswered:
       type: object
       properties:
@@ -23165,6 +23173,9 @@ components:
           type: integer
         rollupsDeleted:
           type: integer
+        hasMore:
+          type: boolean
+          description: True when at least one step filled its batch, so data past retention remains. This endpoint performs ONE bounded pass on purpose — the size of the work is unknown when the caller presses the button, and an interactive request must not hold a purge of unbounded size open. Call it again, or let the scheduled `analytics:purge` job (which loops) finish the tenant.
     Role:
       type: object
       properties:
