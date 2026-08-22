@@ -63,6 +63,14 @@ const STREAM_KEY = "probe_rows";
 const METRIC_KEY = "probe_row_count";
 const SEEDED_ROW_COUNT = 3;
 
+/**
+ * How far behind `now()` the seeded rows start — comfortably past the default
+ * 60-second projection lag (finding C4), with room for the three 1-second
+ * steps and for a slow CI run, so the boundary is never what decides this
+ * suite's result.
+ */
+const LAG_CLEAR_MS = 10 * 60_000;
+
 const STREAM: ProjectionCursorStream = {
   streamKey: STREAM_KEY,
   tableName: SOURCE_TABLE,
@@ -166,9 +174,15 @@ describeWithDatabase(
      * Postgres and would give every row the same cursor value, colliding
      * head-on with the documented cursor-tie limitation in
      * `projection-incremental-worker.ts`'s header.
+     *
+     * They are also seeded WELL BEHIND the lag window (finding C4): the
+     * incremental scan now stops at `now() - REPORTING_PROJECTION_LAG_SECONDS`,
+     * so rows timestamped in the last minute are deliberately not yet eligible.
+     * Seeding at `now - 60s` — which is what this used to do — put every row on
+     * or inside that boundary and turned the baseline test red, correctly.
      */
     async function seedSourceRows(): Promise<void> {
-      const base = Date.now() - 60_000;
+      const base = Date.now() - LAG_CLEAR_MS;
 
       for (let index = 0; index < SEEDED_ROW_COUNT; index += 1) {
         await sql.unsafe(
@@ -197,6 +211,47 @@ describeWithDatabase(
       expect(outcome.skippedRebuildInProgress).toBe(false);
       expect(outcome.rowsProcessed).toBe(SEEDED_ROW_COUNT);
       expect(await readMetric()).toBe(SEEDED_ROW_COUNT);
+    });
+
+    test("a row inside the lag window is NOT counted yet, and is counted once it leaves it (C4)", async () => {
+      // The cursor must not advance past a timestamp whose writers may still be
+      // in flight. `now()` is transaction START in Postgres, so a row written by
+      // a long transaction carries a timestamp from before it committed and can
+      // land BEHIND a cursor that has already moved past it — selected never.
+      await sql.unsafe(
+        `INSERT INTO ${SOURCE_TABLE} (tenant_id, created_at) VALUES ($1, now())`,
+        [tenantId]
+      );
+
+      const first = await runIncrementalUpdateForTenant(
+        sql,
+        DESCRIPTOR,
+        tenantId
+      );
+
+      // The three old rows, and NOT the one just written.
+      expect(first.rowsProcessed).toBe(SEEDED_ROW_COUNT);
+      expect(await readMetric()).toBe(SEEDED_ROW_COUNT);
+
+      // Age it past the window rather than sleeping a minute — the bound is on
+      // the row's timestamp, so moving the row is the same experiment as moving
+      // the clock and it does not make the suite take a minute.
+      await sql.unsafe(
+        `UPDATE ${SOURCE_TABLE} SET created_at = now() - interval '5 minutes'
+         WHERE tenant_id = $1 AND created_at > now() - interval '1 minute'`,
+        [tenantId]
+      );
+
+      const second = await runIncrementalUpdateForTenant(
+        sql,
+        DESCRIPTOR,
+        tenantId
+      );
+
+      // NON-VACUOUS: it was withheld, not lost. A bound that dropped the row
+      // permanently would pass every assertion above this line.
+      expect(second.rowsProcessed).toBe(1);
+      expect(await readMetric()).toBe(SEEDED_ROW_COUNT + 1);
     });
 
     /**
