@@ -21,11 +21,31 @@ import {
   type InternalTagLinkingPolicy,
   type InternalTagLinkingResult
 } from "../domain/internal-tag-linking";
-import { listBlogTerms } from "./blog-taxonomy-directory";
+import { countTags, listTagLinkCandidates } from "./blog-taxonomy-directory";
 import { fetchInternalTagLinkingSettings } from "./internal-tag-link-settings-directory";
 
 export type InternalTagLinkingDisabledReason =
   "deployment_disabled" | "tenant_disabled" | "post_disabled";
+
+/**
+ * How many tags may enter the matching engine at once (Issue #648).
+ *
+ * A REAL bound, and it lives here rather than being inherited from an admin
+ * list: `createInternalTagLinkEngine` compiles one alternation regex from every
+ * candidate, so an unbounded vocabulary means a very large regex compiled on a
+ * public post render.
+ *
+ * What it replaces is the accidental bound — `listBlogTerms`' hundred rows,
+ * `ORDER BY name ASC`, chosen for a table an administrator scrolls. That made
+ * whether a tag was ever linked a function of its FIRST LETTER, on any tenant
+ * with more than a hundred tags, with nothing anywhere saying so.
+ *
+ * 500 rather than 100 because the cost is a longer regex rather than a longer
+ * page, and because the tags past the first hundred on a real newsroom are
+ * ordinary topics — not a long tail nobody uses. It is deliberately not
+ * "unbounded with a warning": a bound that can be exceeded is a bound.
+ */
+export const MAX_INTERNAL_TAG_LINK_CANDIDATES = 500;
 
 export type InternalTagLinkingContext = {
   /** Final resolved enabled flag — env AND tenant AND (caller-supplied) per-post flag. */
@@ -33,6 +53,22 @@ export type InternalTagLinkingContext = {
   disabledReason: InternalTagLinkingDisabledReason | null;
   policy: InternalTagLinkingPolicy;
   candidates: InternalTagLinkCandidate[];
+  /**
+   * The tenant's whole tag vocabulary, and how much of it the engine saw.
+   *
+   * Reported rather than inferred from `candidates.length`, because that number
+   * has already had the tenant's disabled tags and short names removed from it
+   * — a caller comparing it against the cap would call a vocabulary truncated
+   * when it was merely filtered.
+   */
+  vocabulary: {
+    /** Non-deleted tags this tenant has. */
+    total: number;
+    /** The cap that was applied. */
+    limit: number;
+    /** True when the vocabulary is larger than the cap, so some tags cannot be linked. */
+    truncated: boolean;
+  };
 };
 
 function buildTagArchiveUrl(basePath: string, slug: string): string {
@@ -74,9 +110,16 @@ export async function resolveInternalTagLinkingContext(
 
   const enabled = disabledReason === null;
 
-  const allTags = await listBlogTerms(tx, tenantId, { taxonomyType: "tag" });
+  // Most-used first, bounded HERE rather than by whatever the admin list
+  // happens to return — see `MAX_INTERNAL_TAG_LINK_CANDIDATES`.
+  const tags = await listTagLinkCandidates(
+    tx,
+    tenantId,
+    MAX_INTERNAL_TAG_LINK_CANDIDATES
+  );
+  const totalTags = await countTags(tx, tenantId);
   const disabledTagIdSet = new Set(tenantSettings.disabledTagIds);
-  const candidates: InternalTagLinkCandidate[] = allTags
+  const candidates: InternalTagLinkCandidate[] = tags
     .filter((term) => !disabledTagIdSet.has(term.id))
     .map((term) => ({
       tagId: term.id,
@@ -94,7 +137,17 @@ export async function resolveInternalTagLinkingContext(
     caseInsensitive: tenantSettings.caseInsensitive
   };
 
-  return { enabled, disabledReason, policy, candidates };
+  return {
+    enabled,
+    disabledReason,
+    policy,
+    candidates,
+    vocabulary: {
+      total: totalTags,
+      limit: MAX_INTERNAL_TAG_LINK_CANDIDATES,
+      truncated: totalTags > MAX_INTERNAL_TAG_LINK_CANDIDATES
+    }
+  };
 }
 
 /**
@@ -138,6 +191,16 @@ export type InternalTagLinkingPreview = {
   enabled: boolean;
   disabledReason: InternalTagLinkingDisabledReason | null;
   result: InternalTagLinkingResult;
+  /**
+   * Carried through so the endpoint can tell an editor that the vocabulary was
+   * capped (Issue #648).
+   *
+   * Without it, the answer to "why was this tag not linked?" is the same empty
+   * `matches` list whether the tag is disabled, too short, absent from the
+   * body, or simply past the cap — and only the last of those is not the
+   * editor's doing.
+   */
+  vocabulary: InternalTagLinkingContext["vocabulary"];
 };
 
 /**
@@ -166,7 +229,8 @@ export async function previewInternalTagLinksForContent(
     return {
       enabled: false,
       disabledReason: context.disabledReason,
-      result: { html, matches: [] }
+      result: { html, matches: [] },
+      vocabulary: context.vocabulary
     };
   }
 
@@ -176,5 +240,10 @@ export async function previewInternalTagLinksForContent(
     context.policy
   );
 
-  return { enabled: true, disabledReason: null, result };
+  return {
+    enabled: true,
+    disabledReason: null,
+    result,
+    vocabulary: context.vocabulary
+  };
 }

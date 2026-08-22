@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:6e5f7bd8a7d1c82301bcdc787426333b61e78b5d80290ea95bf3a86f0dd7dc44 -->
+<!-- i18n-source-hash: sha256:88ca257fc6f41430c03be58a738354369006f4c9657dd5fb42f746c8828fe9f0 -->
 
 # Blog Content
 
@@ -58,6 +58,8 @@ Tidak ada tabel baru untuk galeri media — lihat §Presentation extensions §Me
 Sampai Issue #543, ke-36 permission ini ada di database tapi `module.ts`'s `permissions` array kosong — Module Management's permission-sync report (`fetchModulePermissionSyncReport`, dipakai `admin/modules/[moduleKey].astro`'s panel Permissions) karena itu tidak punya apa pun untuk dibandingkan terhadap DB. Issue #543 mendeklarasikan seluruh 36 permission di `module.ts` (persis mencerminkan migration 027+030, bukan menambah permission baru) supaya sync report itu akhirnya berfungsi untuk modul ini, dan menambahkan `navigation: [{ path: "/admin/blog", ... }]` supaya `/admin/blog` muncul di sidebar admin (lihat §Admin UI).
 
 Migration 052 (Issue #641, epic `news_portal`) menambah 3 permission lagi: `internal_links.{read,configure,preview}` — untuk fitur automatic internal tag linking (render-time transform yang me-link nama tag yang cocok di body post published ke halaman archive tag-nya, `domain/internal-tag-linking.ts`). Total permission modul ini sekarang **39** (26 + 10 + 3), seluruhnya dideklarasikan di `module.ts`'s `permissions` array. Endpoint nyata: `GET/PATCH /api/v1/blog/internal-tag-links/settings` (`internal_links.read`/`internal_links.configure`) dan `GET /api/v1/blog/posts/{id}/internal-links/preview` (`internal_links.preview`).
+
+**Tag mana yang dilihat engine (Issue #648).** `createInternalTagLinkEngine` menyusun satu regex alternasi dari seluruh kandidat, jadi daftar kandidatnya berbatas — `MAX_INTERNAL_TAG_LINK_CANDIDATES` di `application/internal-tag-link-rendering.ts`. Sampai Issue #648 batas itu diwarisi secara tidak sengaja dari `listBlogTerms`: seratus baris, `ORDER BY name ASC`, yang dipilih untuk tabel yang di-scroll administrator. Pada tenant mana pun dengan lebih dari seratus tag itu berarti apakah sebuah tag pernah di-link ditentukan oleh **huruf pertamanya**, diam-diam — variabel lokalnya bahkan bernama `allTags`. `listTagLinkCandidates` kini memilih berdasarkan berapa banyak post non-deleted yang membawa tag itu, sehingga batasnya merosot ke arah topik yang memang muncul dalam prosa, dan context yang diresolusi membawa `vocabulary: { total, limit, truncated }` yang dikembalikan endpoint preview. `truncated: true` adalah satu-satunya alasan sebuah tag tidak ter-link yang TIDAK bisa diperbaiki editor dengan menyunting.
 
 ## Domain validation (`domain/`)
 
