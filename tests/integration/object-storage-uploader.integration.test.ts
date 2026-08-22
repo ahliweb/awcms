@@ -57,12 +57,15 @@ describe("createNoopObjectUploader (ADR-0006: provider off must never fail a row
     const result = await uploader({
       objectKey: "does/not/matter",
       localPath: "/path/does/not/exist",
-      checksumSha256: "a".repeat(64)
+      checksumSha256: "a".repeat(64),
+      tenantId: TENANT
     });
 
     expect(result).toEqual({ ok: true });
   });
 });
+
+const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("createR2ObjectUploader (real PUT over loopback)", () => {
   let tmpDir: string;
@@ -74,6 +77,11 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
   beforeEach(async () => {
     resetProviderCircuitBreakersForTests();
     tmpDir = await mkdtemp(path.join(tmpdir(), "awcms-object-upload-"));
+    // Finding A7 — `localPath` is now confined to this root, so every fixture
+    // below is RELATIVE to it. The absolute temp paths these tests used to pass
+    // are exactly what the confinement refuses, which is why the change shows
+    // up here rather than only in the new assertions at the bottom.
+    process.env.OBJECT_SYNC_LOCAL_ROOT_PATH = tmpDir;
     requestCount = 0;
     lastRequest = undefined;
     serverBehavior = "ok";
@@ -108,6 +116,7 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
   afterEach(async () => {
     server.stop(true);
     await rm(tmpDir, { recursive: true, force: true });
+    delete process.env.OBJECT_SYNC_LOCAL_ROOT_PATH;
     resetProviderCircuitBreakersForTests();
   });
 
@@ -122,10 +131,10 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
     });
   }
 
+  /** Returns the path RELATIVE to the configured root, which is what a node sends. */
   async function writeFixture(name: string, content: string): Promise<string> {
-    const localPath = path.join(tmpDir, name);
-    await writeFile(localPath, content);
-    return localPath;
+    await writeFile(path.join(tmpDir, name), content);
+    return name;
   }
 
   test("uploads a file whose checksum matches, via a real PUT round trip to the right bucket/key", async () => {
@@ -135,13 +144,16 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
     const result = await makeUploader()({
       objectKey: "receipts/1.pdf",
       localPath,
-      checksumSha256: await sha256Hex(content)
+      checksumSha256: await sha256Hex(content),
+      tenantId: TENANT
     });
 
     expect(result).toEqual({ ok: true });
     expect(requestCount).toBe(1);
     expect(lastRequest?.method).toBe("PUT");
-    expect(lastRequest?.pathname).toBe("/test-bucket/receipts/1.pdf");
+    // Finding A7 — tenant-namespaced. Without the prefix, one node could name
+    // another tenant's key and an S3/R2 PUT to an existing key is an overwrite.
+    expect(lastRequest?.pathname).toBe(`/test-bucket/${TENANT}/receipts/1.pdf`);
   });
 
   test("checksum mismatch fails WITHOUT ever calling the network (local corruption must not burn an upload attempt)", async () => {
@@ -152,7 +164,8 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
       localPath,
       // Deliberately not the checksum of the bytes on disk — i.e. the file
       // drifted from what was recorded at enqueue time.
-      checksumSha256: "f".repeat(64)
+      checksumSha256: "f".repeat(64),
+      tenantId: TENANT
     });
 
     expect(result.ok).toBe(false);
@@ -164,12 +177,22 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
   test("a missing local file fails cleanly, also without a network call", async () => {
     const result = await makeUploader()({
       objectKey: "receipts/missing.pdf",
-      localPath: path.join(tmpDir, "does-not-exist.pdf"),
-      checksumSha256: "a".repeat(64)
+      localPath: "does-not-exist.pdf",
+      checksumSha256: "a".repeat(64),
+      tenantId: TENANT
     });
 
     expect(result.ok).toBe(false);
-    expect((result as { error: string }).error).toMatch(/not found/i);
+    // Finding A7 — the message must NOT contain the path. It travels to the
+    // node through `last_error` on `GET /sync/objects/status`, and a message
+    // that distinguishes "this path does not exist" from "this path could not
+    // be read" is an existence oracle for the host, one string at a time.
+    expect((result as { error: string }).error).toBe(
+      "Local object file is missing or unreadable."
+    );
+    expect((result as { error: string }).error).not.toContain(
+      "does-not-exist.pdf"
+    );
     expect(requestCount).toBe(0);
   });
 
@@ -181,7 +204,8 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
     const result = await makeUploader()({
       objectKey: "receipts/1.pdf",
       localPath,
-      checksumSha256: await sha256Hex(content)
+      checksumSha256: await sha256Hex(content),
+      tenantId: TENANT
     });
 
     expect(result.ok).toBe(false);
@@ -200,7 +224,8 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
     const result = await makeUploader(20)({
       objectKey: "receipts/1.pdf",
       localPath,
-      checksumSha256: await sha256Hex(content)
+      checksumSha256: await sha256Hex(content),
+      tenantId: TENANT
     });
 
     expect(result.ok).toBe(false);
@@ -218,7 +243,8 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
       uploader({
         objectKey: "receipts/1.pdf",
         localPath,
-        checksumSha256: checksum
+        checksumSha256: checksum,
+        tenantId: TENANT
       });
 
     // Default threshold is 5 consecutive failures (circuit-breaker.ts).
@@ -247,7 +273,8 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
       await uploader({
         objectKey: "receipts/1.pdf",
         localPath,
-        checksumSha256: await sha256Hex(content)
+        checksumSha256: await sha256Hex(content),
+        tenantId: TENANT
       });
     }
 
@@ -258,8 +285,70 @@ describe("createR2ObjectUploader (real PUT over loopback)", () => {
       await createNoopObjectUploader()({
         objectKey: "unrelated",
         localPath: "/nope",
-        checksumSha256: "a".repeat(64)
+        checksumSha256: "a".repeat(64),
+        tenantId: TENANT
       })
     ).toEqual({ ok: true });
+  });
+  test("an absolute localPath is refused, and the refusal names no rule", async () => {
+    // Finding A7. The node supplies this string and the cron dispatcher opens
+    // it on the SERVER, so an unconfined path is an arbitrary read whose error
+    // text travels back through `last_error`.
+    const result = await makeUploader()({
+      objectKey: "receipts/1.pdf",
+      localPath: "/etc/passwd",
+      checksumSha256: "a".repeat(64),
+      tenantId: TENANT
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toBe(
+      "localPath must be a relative path inside the configured object-sync root."
+    );
+    // Which RULE was broken is not in the message: naming the rule is most of
+    // what an oracle needs. It goes to the server log instead.
+    expect((result as { error: string }).error).not.toContain("absolute");
+    expect(requestCount).toBe(0);
+  });
+
+  test("a traversal that would escape the root is refused even though the file exists", async () => {
+    // NON-VACUOUS in the way that matters: the target is REAL and readable, so
+    // a passing result here would mean the confinement, not the filesystem, is
+    // what stopped it.
+    const outside = await mkdtemp(path.join(tmpdir(), "awcms-outside-"));
+    const secretName = "secret.txt";
+    await writeFile(path.join(outside, secretName), "hello world");
+
+    const escape = path.join("..", path.basename(outside), secretName);
+
+    const result = await makeUploader()({
+      objectKey: "receipts/1.pdf",
+      localPath: escape,
+      checksumSha256: await sha256Hex("hello world"),
+      tenantId: TENANT
+    });
+
+    await rm(outside, { recursive: true, force: true });
+
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toBe(
+      "localPath must be a relative path inside the configured object-sync root."
+    );
+    expect(requestCount).toBe(0);
+  });
+
+  test("an objectKey that is not a plain relative key never reaches the provider", async () => {
+    const content = "hello world";
+    const localPath = await writeFixture("receipt.pdf", content);
+
+    const result = await makeUploader()({
+      objectKey: "../other-tenant/receipt.pdf",
+      localPath,
+      checksumSha256: await sha256Hex(content),
+      tenantId: TENANT
+    });
+
+    expect(result.ok).toBe(false);
+    expect(requestCount).toBe(0);
   });
 });

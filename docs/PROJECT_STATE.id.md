@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ab90eb6ad17258fa4b67f07df2e6632d5175f7e312f76ccafcebae756dc20eb2 -->
+<!-- i18n-source-hash: sha256:f7fd44373ef7c0ca19fd5fb2fab69e61346136ac91ebcb6d2435e657eeffda86 -->
 
 # AWCMS — Project State & Continuation
 
@@ -586,6 +586,30 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      membedakan ke node lewat `last_error` — sebuah orakel jalur sembarang. `objectKey`
      tidak diberi prefix tenant, jadi satu node bisa menimpa objek tenant lain. Butuh node
      sah yang dikompromikan, itulah sebabnya tidak lebih tinggi.
+
+     SELESAI (22 Agustus 2026). `localPath` dikurung ke `OBJECT_SYNC_LOCAL_ROOT_PATH`
+     (default `./var/object-sync`) di batas enqueue DAN sekali lagi tepat di sebelah
+     syscall-nya — yang pertama supaya penolakan tak pernah jadi baris antrian permanen,
+     yang kedua karena baris yang di-enqueue SEBELUM perubahan ini masih ada di tabel.
+     Kunci tujuannya kini `<tenantId>/<objectKey>`, diterapkan saat PUT bukan disimpan,
+     jadi tak perlu migration dan kunci yang dibaca balik oleh node tetap kunci yang ia
+     kirim.
+
+     Tiga hal yang tidak disebut rekomendasinya. (a) ORAKEL-nya justru bagian yang lebih
+     besar: `Local file not found: ${path}` versus galat baca membedakan keberadaan jalur
+     APA PUN di host; kini setiap penolakan melaporkan satu kalimat yang sama dan alasannya
+     pergi ke log server. (b) `objectKey` juga butuh bentuk — S3 tak punya semantik jalur
+     di sisi server, jadi `../` bukan traversal DI provider, tapi `/` adalah delimiter untuk
+     listing, aturan lifecycle, dan setiap konsol yang menampilkan bucket sebagai pohon.
+     (c) Pengurungannya menolak `..` secara TEKSTUAL, sebelum resolve: pemeriksaan
+     resolve-lalu-`startsWith` menerima jalur yang keluar lalu kembali (`../object-sync/x`)
+     — bukan eksploit hari ini, dan satu refactor dari menjadi eksploit.
+
+     Env var wajib sempat dipertimbangkan lalu ditolak: ini mendarat di deployment yang
+     sudah punya baris terantri dan protokol node yang jalan, dan gerbang konfigurasi yang
+     menghentikan aplikasi saat upgrade adalah peristiwa yang lebih besar daripada temuan
+     yang butuh node terkompromi berbekal secret HMAC deployment untuk dijangkau.
+
   8. **A8 — konfigurasi rate-limit site-search publik tidak divalidasi dan tidak dijaga
      NaN.** `site-search/query.ts:34-37`; `suggest.ts:27-32`. Satu salah ketik menghasilkan
      `NaN`, dan baik `count > NaN` maupun `now - windowStart >= NaN` bernilai false —

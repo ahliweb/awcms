@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:39cbaff6b9cf8994e83fe70a3aed17f8398494df67bb630c148f397f450a7ad3 -->
+<!-- i18n-source-hash: sha256:e7b9e0177e6eb260502296ce20d75be172d2635fe90c1b042e947dd3df566842 -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -345,14 +345,15 @@ env var terpisah (mengikuti temuan awcms-mini yang men-deprecate
 
 ### Storage
 
-| Var                             | Wajib   | Default | Sensitif | Fungsi                                                                            |
-| ------------------------------- | ------- | ------- | -------- | --------------------------------------------------------------------------------- |
-| `R2_ENABLED`                    | –       | `false` | –        | Aktifkan object storage R2 (mis. lampiran dokumen finance, foto barang inventory) |
-| `R2_ACCOUNT_ID`                 | bila R2 | –       | –        | Akun R2 (identifier, bukan kredensial)                                            |
-| `R2_ACCESS_KEY_ID`              | bila R2 | –       | Ya       | Kredensial R2                                                                     |
-| `R2_SECRET_ACCESS_KEY`          | bila R2 | –       | Ya       | Kredensial R2                                                                     |
-| `R2_BUCKET`                     | bila R2 | –       | –        | Bucket                                                                            |
-| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –       | `10000` | –        | Timeout upload dispatcher                                                         |
+| Var                             | Wajib   | Default             | Sensitif | Fungsi                                                                                                                           |
+| ------------------------------- | ------- | ------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `R2_ENABLED`                    | –       | `false`             | –        | Aktifkan object storage R2 (mis. lampiran dokumen finance, foto barang inventory)                                                |
+| `R2_ACCOUNT_ID`                 | bila R2 | –                   | –        | Akun R2 (identifier, bukan kredensial)                                                                                           |
+| `R2_ACCESS_KEY_ID`              | bila R2 | –                   | Ya       | Kredensial R2                                                                                                                    |
+| `R2_SECRET_ACCESS_KEY`          | bila R2 | –                   | Ya       | Kredensial R2                                                                                                                    |
+| `R2_BUCKET`                     | bila R2 | –                   | –        | Bucket                                                                                                                           |
+| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –       | `10000`             | –        | Timeout upload dispatcher                                                                                                        |
+| `OBJECT_SYNC_LOCAL_ROOT_PATH`   | –       | `./var/object-sync` | –        | Satu-satunya direktori yang boleh dibaca dispatcher object-sync; `localPath` dari node relatif terhadapnya dan tidak bisa keluar |
 
 Storage lokal filesystem (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) sengaja
 tidak dijadikan env var terpisah — mengikuti temuan awcms-mini bahwa
@@ -501,6 +502,7 @@ SYNC_HMAC_ALLOW_LEGACY=true
 
 # Storage
 OBJECT_SYNC_UPLOAD_TIMEOUT_MS=10000
+OBJECT_SYNC_LOCAL_ROOT_PATH=./var/object-sync
 R2_ENABLED=false
 
 # Email (notifikasi)

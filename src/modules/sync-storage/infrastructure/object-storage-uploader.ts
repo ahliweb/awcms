@@ -25,12 +25,28 @@
  */
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
 import { withTimeout } from "../../../lib/integration/timeout";
-import { verifyObjectChecksum } from "../domain/object-queue";
+import {
+  confinedPathRefusalMessage,
+  resolveConfinedPath
+} from "../../../lib/security/confined-path";
+import {
+  isSafeObjectKey,
+  objectSyncStorageKey,
+  verifyObjectChecksum
+} from "../domain/object-queue";
+import { resolveObjectSyncConfig } from "../domain/object-sync-config";
 
 export type ObjectUploadInput = {
   objectKey: string;
   localPath: string;
   checksumSha256: string;
+  /**
+   * Finding A7 — the destination key is namespaced by tenant, so the uploader
+   * needs to know whose row it is holding. Required rather than optional: an
+   * optional tenant would let a caller silently opt out of the namespace, which
+   * is the property being added.
+   */
+  tenantId: string;
 };
 
 export type UploadResult = { ok: true } | { ok: false; error: string };
@@ -108,10 +124,35 @@ export function createR2ObjectUploader(
     }
 
     try {
-      const file = Bun.file(input.localPath);
+      // Finding A7, second line of defence. The enqueue route already refuses an
+      // unconfined `localPath`, but rows queued BEFORE that check exists are
+      // still in the table, and this is the process that actually opens the
+      // file. The check that matters is the one next to the syscall.
+      const confined = resolveConfinedPath(
+        resolveObjectSyncConfig().localRootPath,
+        input.localPath
+      );
+
+      if (!confined.ok) {
+        // The refusal reason is deliberately NOT in the message: this string is
+        // written to `last_error` and read back by the node through
+        // `GET /sync/objects/status`.
+        throw new Error(confinedPathRefusalMessage());
+      }
+
+      if (!isSafeObjectKey(input.objectKey)) {
+        throw new Error("objectKey is not a valid object storage key.");
+      }
+
+      const file = Bun.file(confined.absolutePath);
 
       if (!(await file.exists())) {
-        throw new Error(`Local file not found: ${input.localPath}`);
+        // The path is NOT interpolated. Before confinement this read
+        // `Local file not found: ${input.localPath}`, and the difference
+        // between that and a read error is an existence oracle for any path on
+        // the host — answerable one string at a time, through a status endpoint
+        // the node is entitled to poll.
+        throw new Error("Local object file is missing or unreadable.");
       }
 
       const bytes = await file.arrayBuffer();
@@ -125,10 +166,17 @@ export function createR2ObjectUploader(
         );
       }
 
+      // Tenant-namespaced at PUT time, not in the queue row: an S3/R2 PUT to an
+      // existing key is an overwrite, and without the prefix one node could
+      // name another tenant's key and replace its object. Applied here so no
+      // migration is needed and the key a node reads back from
+      // `GET /sync/objects/status` is still the one it sent.
+      const storageKey = objectSyncStorageKey(input.tenantId, input.objectKey);
+
       await withTimeout(
-        client.write(input.objectKey, bytes),
+        client.write(storageKey, bytes),
         timeoutMs,
-        `object-storage upload ${input.objectKey}`
+        `object-storage upload ${storageKey}`
       );
 
       breaker.recordSuccess(new Date());

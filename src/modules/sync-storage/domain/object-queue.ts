@@ -20,6 +20,53 @@ export type ObjectSyncEnqueueValidationResult =
 
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 
+/**
+ * Finding A7 — an `objectKey` reaches `Bun.S3Client.write` as the destination,
+ * and the node chose it. Two things follow.
+ *
+ * It must be a plain relative key: no leading `/`, no `..` segment, no
+ * backslash, no control character. S3 and R2 have no server-side path
+ * semantics, so `../` is not traversal AT the provider — but `/` IS a delimiter
+ * for listing, lifecycle rules and every console and CLI that presents a
+ * bucket as a tree, and those normalise. A key that reads as an escape in the
+ * one place a human looks at it is a key that will eventually be treated as
+ * one.
+ *
+ * And it must be namespaced per tenant, which `objectSyncStorageKey` does at
+ * PUT time rather than here. The queue row is already tenant-scoped by
+ * `UNIQUE (tenant_id, node_id, object_key)`; it was the destination that was
+ * not, so one node could PUT another tenant's key and an S3 PUT to an existing
+ * key is an overwrite.
+ */
+const OBJECT_KEY_SEGMENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const OBJECT_KEY_MAX_LENGTH = 512;
+
+export function isSafeObjectKey(value: string): boolean {
+  if (value.length === 0 || value.length > OBJECT_KEY_MAX_LENGTH) return false;
+
+  const segments = value.split("/");
+
+  // A trailing or doubled `/` yields an empty segment, which the pattern
+  // rejects — so `a//b` and `a/` are refused without a separate rule.
+  return segments.every((segment) => OBJECT_KEY_SEGMENT_PATTERN.test(segment));
+}
+
+/**
+ * The destination key actually written to object storage: the tenant's id, then
+ * the key the node asked for.
+ *
+ * Applied at the point of upload rather than stored, so no migration and no
+ * re-keying of rows already queued — and so the value a node reads back from
+ * `GET /sync/objects/status` is still the key it sent, which is the only key it
+ * knows about.
+ */
+export function objectSyncStorageKey(
+  tenantId: string,
+  objectKey: string
+): string {
+  return `${tenantId}/${objectKey}`;
+}
+
 export function validateObjectSyncEnqueueRequestBody(
   body: unknown
 ): ObjectSyncEnqueueValidationResult {
@@ -45,6 +92,12 @@ export function validateObjectSyncEnqueueRequestBody(
       errors.push({
         field: `objects[${index}].objectKey`,
         message: "objectKey is required."
+      });
+    } else if (!isSafeObjectKey(candidate.objectKey.trim())) {
+      errors.push({
+        field: `objects[${index}].objectKey`,
+        message:
+          "objectKey must be slash-separated segments of letters, digits, '.', '_' or '-', each starting with a letter or digit."
       });
     }
 

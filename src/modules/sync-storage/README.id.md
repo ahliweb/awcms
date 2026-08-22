@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4b28514bbccc1abf2f5d580cc9317a414e5256a35a0c9421055a3a3c34bc9390 -->
+<!-- i18n-source-hash: sha256:0bc5fc8505dd4d7b0296fa2c7ddc176c324629659a942e216e7e993a33dbf4ea -->
 
 # Sync Storage
 
@@ -170,6 +170,28 @@ alami, bukan request yang mengerjakan pekerjaan baru tiap panggilan.
 `tests/admin-sync-page-contract.test.ts`
 memakukan itu di kedua arah, sehingga endpoint yang belakangan mulai menuntut kunci
 membuat kontrak layar ini memerah alih-alih gagal senyap saat runtime.
+
+## Dua string yang dipasok node, dan batasnya
+
+`POST /api/v1/sync/objects` menerima `localPath` dan `objectKey` dari node.
+Keduanya dipakai SERVER — yang pertama di `Bun.file(...)` oleh dispatcher cron,
+yang kedua sebagai tujuan object storage — jadi keduanya dikurung (temuan A7).
+
+- **`localPath`** harus berupa jalur relatif di dalam
+  `OBJECT_SYNC_LOCAL_ROOT_PATH` (default `./var/object-sync`, doc 18). Diperiksa
+  di batas enqueue supaya penolakan tak pernah menjadi baris antrian, dan
+  diperiksa lagi di `infrastructure/object-storage-uploader.ts` tepat di sebelah
+  syscall-nya, karena baris yang di-enqueue sebelum pemeriksaan itu ada masih
+  tersimpan di tabel. Penolakan melaporkan satu kalimat ke node dan aturan
+  spesifiknya ke log server: memberi tahu klien aturan mana yang dilanggarnya
+  adalah sebagian besar dari yang dibutuhkan sebuah orakel keberadaan.
+- **`objectKey`** harus berupa segmen dipisah garis miring berisi
+  `[A-Za-z0-9._-]`, masing-masing diawali huruf atau angka. Tujuan yang ditulis
+  ke storage adalah `<tenantId>/<objectKey>`, diterapkan saat PUT bukan disimpan
+  — jadi tanpa migration, dan kunci yang dibaca balik node dari
+  `/sync/objects/status` tetap kunci yang ia kirim. Tanpa prefix itu satu node
+  bisa menyebut kunci tenant lain, dan PUT S3/R2 ke kunci yang sudah ada adalah
+  penimpaan.
 
 Protokol node HMAC (`push`/`pull`/`objects`/`status`) **tidak punya kendali di
 halaman ini dan tidak akan mendapatkannya** — protokol itu mengautentikasi node
