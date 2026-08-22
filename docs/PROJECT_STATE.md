@@ -111,7 +111,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **142** (`sql/001`–`142`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **143** (`sql/001`–`143`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.594 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
@@ -586,12 +586,39 @@ pioneered directly here after the ADR-0047 freeze.)
       failure mode is an OOM of the process holding every other cache.
 
   ### C. Algorithm / query cost
-  15. **C1 — no index supports the blog list ordering.** `blog-post-directory.ts:398,436`;
+  15. **C1 — no index supports the blog list ordering.** **DONE (22 August 2026).** `blog-post-directory.ts:398,436`;
       `sql/035:95-119,174-193`. Four list queries order by `updated_at DESC` (one keyset by
       `created_at DESC, id DESC`); none of the seven indexes leads with either column, so
       each `/admin/blog`, `/admin/pages` and `GET /api/v1/blog/posts` is a tenant-wide scan
       - top-N sort, plus a second full scan for `count(*)`. `db:fk-index:check` cannot see
         it — `updated_at` is not a foreign key. Cost is O(tenant posts), not O(page size).
+
+      **MEASURED, which this round could not do.** `sql/143` adds three indexes; against
+      24,000 seeded posts on PostgreSQL 18 the `/admin/blog` list went from a Seq Scan of
+      24,000 rows plus a top-N heapsort (7.4 ms) to an Index Scan reading **50** (0.057
+      ms), the keyset first page from 5.1 ms to 0.110 ms, and a keyset page resumed at row
+      10,000 reads 50 rows in 0.060 ms. The milliseconds are this machine's; `24,000 → 50`
+      is the finding.
+
+      **One claim in this entry is wrong and is left visible rather than edited away:**
+      "plus a second full scan for `count(*)`". The count beside the list already plans as
+      an Index Only Scan on `awcms_blog_posts_tenant_deleted_idx` (1.8 ms, unchanged by
+      `sql/143`). It reads every index entry, which is why it does not get faster — but it
+      is not a heap scan, and no index added here helps it. A cheap count is a different
+      decision (an estimate, or a maintained counter) with its own trade-off.
+
+      Posts get PARTIAL indexes on `deleted_at IS NULL`, which those queries write as a
+      literal. Pages do NOT: `listBlogPages` decides deleted-vs-live with a `CASE` over a
+      bound parameter, so a partial index is provable under a custom plan and not under a
+      generic one — an index the planner can only sometimes prove applicable is an index
+      that sometimes is not there.
+
+      Held by a PLAN assertion, not a timing threshold
+      (`tests/integration/blog-list-ordering-plan.integration.test.ts`): named index, no
+      `Seq Scan`, no sort node, ≤50 rows read. Its last case drops the index inside a
+      rolled-back transaction and asserts the scan returns — without that, every other
+      assertion also passes on a table too small to tell the plans apart.
+
   16. **C2 — `purgeVisitorAnalyticsData` is the only unbounded retention purge in the
       repo.** `retention-purge.ts:91-117`. Four statements with no batch limit, each using
       `RETURNING id` only to take a JS-side `.length`. Every sibling caps at 5000 and loops.

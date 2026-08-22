@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:32688066ef50e4534e6ecfddc54de2337fa15f867bcc32cc29925b7572c8a53f -->
+<!-- i18n-source-hash: sha256:a72c4416be697d31eba8f61ec85e57ec097cceb48e6b9b181076bab3fa8fd241 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **142** (`sql/001`–`142`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **143** (`sql/001`–`143`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -585,13 +585,42 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       tetapi mode gagalnya adalah OOM proses yang memegang setiap cache lain.
 
   ### C. Ongkos algoritma / query
-  15. **C1 — tidak ada indeks yang mendukung pengurutan daftar blog.**
+  15. **C1 — tidak ada indeks yang mendukung pengurutan daftar blog.** **SELESAI (22 Agustus 2026).**
       `blog-post-directory.ts:398,436`; `sql/035:95-119,174-193`. Empat query daftar
       mengurut `updated_at DESC` (satu keyset `created_at DESC, id DESC`); tidak satu pun
       dari tujuh indeks dipimpin kolom itu, jadi tiap `/admin/blog`, `/admin/pages`, dan
       `GET /api/v1/blog/posts` adalah scan se-tenant + sort top-N, plus scan penuh kedua
       untuk `count(*)`. `db:fk-index:check` tidak bisa melihatnya — `updated_at` bukan
       foreign key. Ongkosnya O(pos tenant), bukan O(ukuran halaman).
+
+      **DIUKUR, yang putaran ini tidak bisa lakukan.** `sql/143` menambah tiga indeks;
+      terhadap 24.000 post ter-seed di PostgreSQL 18, daftar `/admin/blog` berubah dari Seq
+      Scan 24.000 baris plus top-N heapsort (7,4 ms) menjadi Index Scan yang membaca **50**
+      baris (0,057 ms), halaman keyset pertama dari 5,1 ms menjadi 0,110 ms, dan halaman
+      keyset yang dilanjutkan di baris 10.000 membaca 50 baris dalam 0,060 ms. Milidetiknya
+      milik mesin ini; `24.000 → 50` itulah temuannya.
+
+      **Satu klaim di entri ini SALAH dan dibiarkan terlihat alih-alih disunting hilang:**
+      "plus scan penuh KEDUA untuk `count(*)`". Hitungan di samping daftar itu sudah
+      terencana sebagai Index Only Scan pada `awcms_blog_posts_tenant_deleted_idx` (1,8 ms,
+      tidak berubah oleh `sql/143`). Ia membaca setiap entri indeks — itu sebabnya ia tidak
+      menjadi lebih cepat — tetapi ia bukan heap scan, dan tidak ada indeks yang ditambahkan
+      di sini yang menolongnya. Hitungan yang murah adalah keputusan lain (estimasi, atau
+      penghitung terpelihara) dengan kompromnya sendiri.
+
+      Post mendapat indeks PARSIAL pada `deleted_at IS NULL`, yang ditulis literal oleh
+      query-nya. Page TIDAK: `listBlogPages` memutuskan terhapus-vs-hidup lewat `CASE` atas
+      parameter terikat, jadi indeks parsial dapat dibuktikan di custom plan dan tidak di
+      generic plan — indeks yang hanya kadang bisa dibuktikan planner adalah indeks yang
+      kadang tidak ada.
+
+      Dijaga oleh asersi RENCANA, bukan ambang waktu
+      (`tests/integration/blog-list-ordering-plan.integration.test.ts`): nama indeksnya,
+      tanpa `Seq Scan`, tanpa node sort, ≤50 baris dibaca. Kasus terakhirnya menjatuhkan
+      indeksnya di dalam transaksi yang di-rollback dan menuntut scan-nya kembali — tanpa
+      itu, setiap asersi lain juga lolos pada tabel yang terlalu kecil untuk membedakan
+      rencananya.
+
   16. **C2 — `purgeVisitorAnalyticsData` satu-satunya purge retensi tanpa batas di repo.**
       `retention-purge.ts:91-117`. Empat statement tanpa batas batch, tiap-tiap memakai
       `RETURNING id` hanya untuk mengambil `.length` di sisi JS. Setiap saudaranya membatasi
