@@ -28,7 +28,12 @@
  * not a sentence the server wrote.
  */
 
-import { mutateAndReload, type MessageBox } from "./admin-form-client";
+import {
+  mutateAndReload,
+  sendJsonRequest,
+  type JsonMutationMethod,
+  type MessageBox
+} from "./admin-form-client";
 
 /** One entry of the `ValidationError[]` that `fail(..., details)` carries for a `VALIDATION_ERROR`. */
 export type ApiFieldError = {
@@ -60,53 +65,35 @@ function readFieldErrors(details: unknown): ApiFieldError[] {
 }
 
 /**
- * Sends a JSON body with COOKIE auth (`credentials: "same-origin"`, so the
- * session and tenant cookies ride along and no `X-AWCMS-Tenant-ID` header is
- * needed) and returns the narrow result plus any field errors. Never throws.
+ * The narrow result plus any field errors. A PROJECTION of
+ * `sendJsonRequest` (finding D12) — this used to carry its own copy of the
+ * fetch, which is how it ended up without `extraHeaders` support until Issue
+ * #596 and without bodyless/`DELETE` support at all.
  *
- * No `Idempotency-Key` is sent or accepted: the endpoints behind admin FORMS —
- * `POST`/`PATCH` on posts and pages — require none by documented design, and
- * sending one would imply a replay contract they declined.
+ * `body` stays required and the method union stays wide: a form always sends
+ * one, and taking the shared core costs nothing to allow the rest.
+ *
+ * `extraHeaders` is in practice `Idempotency-Key`. Added for Issue #596: an
+ * endpoint can require an idempotency key AND return field-level errors, and
+ * before that a caller had to choose — the only way to have both was to drop to
+ * `sendJson` and lose the per-field mapping, which is why `/admin/seo` reported
+ * "invalid" without saying which field.
  */
 export async function sendJsonWithFieldErrors(
-  method: "POST" | "PATCH" | "PUT",
+  method: JsonMutationMethod,
   url: string,
   body: unknown,
-  /**
-   * Extra request headers — in practice `Idempotency-Key`.
-   *
-   * Added for Issue #596: an endpoint can require an idempotency key AND
-   * return field-level errors, and before this a caller had to choose. The
-   * only way to have both was to drop to `sendJson` and lose the per-field
-   * mapping, which is why `/admin/seo` reports "invalid" without saying which
-   * field — a worse screen for no reason anybody chose.
-   */
   extraHeaders?: Record<string, string>
 ): Promise<FieldErrorResult> {
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json", ...extraHeaders },
-      credentials: "same-origin",
-      body: JSON.stringify(body)
-    });
-    const payload = (await response.json().catch(() => null)) as {
-      success?: boolean;
-      error?: { code?: string; details?: unknown };
-    } | null;
+  const result = await sendJsonRequest(method, url, body, extraHeaders);
 
-    if (response.ok && payload?.success === true) {
-      return { ok: true, errorCode: null, fieldErrors: [] };
-    }
-
-    return {
-      ok: false,
-      errorCode: payload?.error?.code ?? null,
-      fieldErrors: readFieldErrors(payload?.error?.details)
-    };
-  } catch {
-    return { ok: false, errorCode: "NETWORK_ERROR", fieldErrors: [] };
-  }
+  return {
+    ok: result.ok,
+    errorCode: result.errorCode,
+    fieldErrors: result.ok
+      ? []
+      : readFieldErrors(result.payload?.error?.details)
+  };
 }
 
 /**

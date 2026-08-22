@@ -7,6 +7,7 @@
  */
 
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -144,7 +145,7 @@ export async function fetchObjectQueueEntries(
         FROM (
           SELECT id, node_id, object_key, status, retry_count, next_retry_at,
                  last_error, byte_size, requires_upload, uploaded_at, created_at,
-                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+                 ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
                  tenant_id
           FROM awcms_object_sync_queue
           WHERE tenant_id = ${tenantId} AND status = ${statusFilter}
@@ -165,7 +166,7 @@ export async function fetchObjectQueueEntries(
         FROM (
           SELECT id, node_id, object_key, status, retry_count, next_retry_at,
                  last_error, byte_size, requires_upload, uploaded_at, created_at,
-                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+                 ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
                  tenant_id
           FROM awcms_object_sync_queue
           WHERE tenant_id = ${tenantId}

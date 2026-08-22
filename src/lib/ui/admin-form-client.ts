@@ -56,66 +56,114 @@ export function lockElement(
   };
 }
 
+/** The methods every admin mutation helper here accepts. */
+export type JsonMutationMethod = "POST" | "PATCH" | "PUT" | "DELETE";
+
+/** The response envelope every endpoint in this app answers with. */
+type JsonEnvelope = {
+  success?: boolean;
+  data?: unknown;
+  error?: { code?: string; details?: unknown };
+};
+
 /**
- * Sends a JSON body to a same-origin admin API endpoint with the given HTTP
- * method, using COOKIE auth: the session + tenant cookies ride along
- * automatically (`credentials: "same-origin"`), and `resolveAuthInputs` reads
- * the tenant from the `awcms_tenant_id` cookie — so an admin-page form needs no
- * manual `X-AWCMS-Tenant-ID` header. Returns a narrow `{ ok, errorCode }` so
- * callers show a generic message keyed off `errorCode` and never surface
- * internal detail (Issue #540). Never throws.
+ * What {@link sendJsonRequest} answers: the narrow verdict every caller wants,
+ * plus the raw envelope for the two that want more.
+ */
+export type JsonRequestResult = {
+  ok: boolean;
+  errorCode: string | null;
+  payload: JsonEnvelope | null;
+};
+
+/**
+ * The ONE same-origin JSON mutation in this codebase (finding D12).
+ *
+ * There used to be three near-identical copies of this fetch — `sendJson`,
+ * `sendJsonForData` here, and `sendJsonWithFieldErrors` in
+ * `admin-field-errors-client.ts` — and they had already drifted: two supported
+ * `extraHeaders`, bodyless requests and `DELETE`; the third supported none of
+ * it, so `/admin/seo` reported "invalid" without saying which field for no
+ * reason anybody chose. Three copies of a fetch is also three copies of the
+ * bytes, on a client budget that is measured.
+ *
+ * The three survive as PROJECTIONS of this one. They are not merged into a
+ * single public function, because their differing return shapes are a real
+ * control: `sendJson`'s narrow `{ ok, errorCode }` is what stops thirty-odd
+ * call sites from painting internal detail onto the page (Issue #540), and
+ * widening it for everyone to serve two callers would remove that property
+ * from all of them.
+ *
+ * Uses COOKIE auth: the session + tenant cookies ride along automatically
+ * (`credentials: "same-origin"`), and `resolveAuthInputs` reads the tenant from
+ * the `awcms_tenant_id` cookie — so an admin-page form needs no manual
+ * `X-AWCMS-Tenant-ID` header.
  *
  * `body` is optional so a bodyless mutation (e.g. `DELETE /roles/{id}`, a
  * restore/toggle) can be sent without an empty-object payload; when omitted no
  * request body and no `Content-Type` header are attached.
  *
- * `extraHeaders` is optional and merged onto the request headers — used by
- * high-risk mutations that must carry an `Idempotency-Key` header (e.g. the
- * tenant-domain verify/set-primary buttons). It never overrides the
- * `Content-Type` a JSON body sets.
+ * `extraHeaders` is merged UNDER the `Content-Type` a JSON body sets, never
+ * over it — used by high-risk mutations that must carry an `Idempotency-Key`.
+ * (The field-errors copy merged them the other way round, so a caller could
+ * have overridden `Content-Type`; nothing did, and this order is the one both
+ * docblocks claimed.)
+ *
+ * Never throws.
  */
-export async function sendJson(
-  method: "POST" | "PATCH" | "PUT" | "DELETE",
+export async function sendJsonRequest(
+  method: JsonMutationMethod,
   url: string,
   body?: unknown,
   extraHeaders?: Record<string, string>
-): Promise<{ ok: boolean; errorCode: string | null }> {
+): Promise<JsonRequestResult> {
   try {
     const hasBody = body !== undefined;
     const headers: Record<string, string> = { ...extraHeaders };
+
     if (hasBody) {
       headers["Content-Type"] = "application/json";
     }
+
     const response = await fetch(url, {
       method,
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       credentials: "same-origin",
       body: hasBody ? JSON.stringify(body) : undefined
     });
-    const payload = (await response.json().catch(() => null)) as {
-      success?: boolean;
-      error?: { code?: string };
-    } | null;
+    const payload = (await response
+      .json()
+      .catch(() => null)) as JsonEnvelope | null;
 
     if (response.ok && payload?.success === true) {
-      return { ok: true, errorCode: null };
+      return { ok: true, errorCode: null, payload };
     }
-    return { ok: false, errorCode: payload?.error?.code ?? null };
+
+    return { ok: false, errorCode: payload?.error?.code ?? null, payload };
   } catch {
-    return { ok: false, errorCode: "NETWORK_ERROR" };
+    return { ok: false, errorCode: "NETWORK_ERROR", payload: null };
   }
 }
 
 /**
- * POSTs a JSON body to a same-origin admin API endpoint. Thin wrapper over
- * {@link sendJson} kept for the existing create-form call sites; new edit /
- * delete / toggle forms should call `sendJson` with the appropriate method.
+ * Sends a JSON body and returns ONLY `{ ok, errorCode }` — the shape callers
+ * show a generic message from, so no screen can surface internal detail by
+ * accident (Issue #540). What most admin buttons want.
  */
-export async function postJson(
+export async function sendJson(
+  method: JsonMutationMethod,
   url: string,
-  body: unknown
+  body?: unknown,
+  extraHeaders?: Record<string, string>
 ): Promise<{ ok: boolean; errorCode: string | null }> {
-  return sendJson("POST", url, body);
+  const { ok, errorCode } = await sendJsonRequest(
+    method,
+    url,
+    body,
+    extraHeaders
+  );
+
+  return { ok, errorCode };
 }
 
 /**
@@ -124,10 +172,8 @@ export async function postJson(
  *
  * ## Why this is separate, and should stay rare
  *
- * `sendJson`'s narrow `{ ok, errorCode }` shape is deliberate (Issue #540):
- * callers show a generic message keyed off `errorCode` and can never
- * accidentally paint internal detail onto the page. Widening it for everyone
- * would remove that property from 30-odd call sites to serve two.
+ * `sendJson`'s narrow shape is deliberate: widening it for everyone would
+ * remove that property from 30-odd call sites to serve two.
  *
  * The exception exists for responses like the delegated-access approval, which
  * returns a single-use code that appears EXACTLY ONCE and cannot be re-read.
@@ -138,39 +184,20 @@ export async function postJson(
  * same `errorCode`, so a failed call still cannot leak anything.
  */
 export async function sendJsonForData<TData>(
-  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  method: JsonMutationMethod,
   url: string,
   body?: unknown,
   extraHeaders?: Record<string, string>
 ): Promise<{ ok: boolean; errorCode: string | null; data: TData | null }> {
-  try {
-    const hasBody = body !== undefined;
-    const headers: Record<string, string> = { ...extraHeaders };
-    if (hasBody) {
-      headers["Content-Type"] = "application/json";
-    }
+  const result = await sendJsonRequest(method, url, body, extraHeaders);
 
-    const response = await fetch(url, {
-      method,
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-      body: hasBody ? JSON.stringify(body) : undefined,
-      credentials: "same-origin"
-    });
-
-    const payload = (await response.json().catch(() => null)) as {
-      success?: boolean;
-      data?: TData;
-      error?: { code?: string };
-    } | null;
-
-    if (response.ok && payload?.success === true) {
-      return { ok: true, errorCode: null, data: payload.data ?? null };
-    }
-
-    return { ok: false, errorCode: payload?.error?.code ?? null, data: null };
-  } catch {
-    return { ok: false, errorCode: "NETWORK_ERROR", data: null };
-  }
+  return {
+    ok: result.ok,
+    errorCode: result.errorCode,
+    data: result.ok
+      ? ((result.payload?.data as TData | undefined) ?? null)
+      : null
+  };
 }
 
 /** What {@link sendJson} answers — the half {@link mutateAndReload} reads. */

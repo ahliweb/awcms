@@ -19,19 +19,28 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
+  extractBlock,
+  parseInventoryRows,
+  replaceBlock,
+  type GeneratedBlockMarkers
+} from "../scripts/lib/markdown-table";
+import {
   BEGIN,
   END,
   collectInventory,
   countCheckGates,
   diffAgainstFresh,
-  extractBlock,
   formatRibuan,
   parseAdrStatus,
-  parseInventoryRows,
   renderInventoryBlock,
-  replaceBlock,
   type ProjectStateInventory
 } from "../scripts/project-state-inventory";
+
+const MARKERS: GeneratedBlockMarkers = {
+  begin: BEGIN,
+  end: END,
+  docPath: "docs/PROJECT_STATE.md"
+};
 
 const SAMPLE: ProjectStateInventory = {
   version: "6.4.0",
@@ -102,15 +111,17 @@ describe("render/parse round trip", () => {
 
   test("replaceBlock round-trips through extractBlock", () => {
     const block = renderInventoryBlock(SAMPLE);
-    const updated = replaceBlock(docWith("old"), block);
+    const updated = replaceBlock(docWith("old"), block, MARKERS);
 
-    expect(extractBlock(updated)).toBe(block);
+    expect(extractBlock(updated, MARKERS)).toBe(block);
     expect(updated).toContain("# Doc");
     expect(updated).toContain("tail");
   });
 
   test("replaceBlock refuses a document with no markers rather than appending", () => {
-    expect(() => replaceBlock("# no markers\n", "x")).toThrow(/markers/);
+    expect(() => replaceBlock("# no markers\n", "x", MARKERS)).toThrow(
+      /markers/
+    );
   });
 });
 

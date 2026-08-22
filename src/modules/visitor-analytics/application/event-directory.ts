@@ -4,13 +4,14 @@
  *
  * PORT ADAPTATION (this base's keyset convention, Issue #158): the cursor is
  * built HERE from the row's full-microsecond-precision `occurred_at`
- * (`KEYSET_CURSOR_CREATED_AT_SQL`-style `to_char`), never from a JS `Date`
+ * (`keysetCursorCreatedAtSql()`-style `to_char`), never from a JS `Date`
  * that has already floored the microseconds — a route that rebuilt the cursor
  * from `occurred_at.toISOString()` would silently skip every row sharing that
  * millisecond across the page boundary. `occurred_at_cursor` carries the
  * full-precision text and never leaves this function.
  */
 import {
+  utcMicrosecondTextSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -35,7 +36,7 @@ export async function listVisitEvents(
 
   const rows = (await tx`
     SELECT *,
-      to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS occurred_at_cursor
+      ${tx.unsafe(utcMicrosecondTextSql("occurred_at"))} AS occurred_at_cursor
     FROM awcms_visit_events
     WHERE tenant_id = ${tenantId}
       AND (

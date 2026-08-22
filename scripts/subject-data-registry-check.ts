@@ -21,13 +21,10 @@
  * So this gate resolves every descriptor against `sql/` and refuses anything it
  * cannot prove. Pure: reads `sql/` and the module registry, no database.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 
+import { loadMigrations } from "./lib/migrations";
 import { listModules } from "../src/modules";
 import type { SubjectDataDescriptor } from "../src/modules/_shared/module-contract";
-
-const MIGRATIONS_DIR = "sql";
 
 /**
  * The descriptor `severed_with_subject_row` depends on: anonymising THIS table
@@ -564,13 +561,7 @@ export function findSubjectRegistryProblems(
 }
 
 export function readMigrations(): { name: string; sql: string }[] {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({
-      name,
-      sql: readFileSync(path.join(MIGRATIONS_DIR, name), "utf8")
-    }));
+  return loadMigrations();
 }
 
 function main(): void {

@@ -1,7 +1,7 @@
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   encodeKeysetCursor,
-  KEYSET_CURSOR_CREATED_AT_SQL,
+  keysetCursorCreatedAtSql,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
 import type { NewsMediaR2Config } from "../domain/media-r2-config";
@@ -353,7 +353,7 @@ export type ListMediaObjectsFilter = {
  * for that.
  *
  * The cursor carries FULL-PRECISION `created_at` text
- * (`KEYSET_CURSOR_CREATED_AT_SQL`), never a JS `Date`, so a page boundary
+ * (`keysetCursorCreatedAtSql()`), never a JS `Date`, so a page boundary
  * cannot skip rows sharing a millisecond — the trap this repo already paid for
  * (Issue #158), and one a media registry walks straight into, since a batch
  * upload writes many rows inside the same millisecond.
@@ -372,7 +372,7 @@ export async function listMediaObjects(
 
   const rows = (await tx`
     SELECT ${tx.unsafe(SELECT_COLUMNS)},
-           ${tx.unsafe(KEYSET_CURSOR_CREATED_AT_SQL)} AS created_at_cursor
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_news_media_objects
     WHERE tenant_id = ${tenantId}
       AND (${statusParam}::text IS NULL OR status = ${statusParam})

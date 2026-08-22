@@ -9,6 +9,7 @@
  * `to_address_masked` (doc 04 §Alur perlindungan data sensitif).
  */
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -100,7 +101,7 @@ export async function fetchEmailMessageEntries(
       ? await tx`
         SELECT id, correlation_id, category, status, priority, to_address_masked,
                subject, retry_count, last_error, created_at,
-               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+               ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
                sent_at
         FROM awcms_email_messages
         WHERE tenant_id = ${tenantId} AND status = ${statusFilter}
@@ -114,7 +115,7 @@ export async function fetchEmailMessageEntries(
       : await tx`
         SELECT id, correlation_id, category, status, priority, to_address_masked,
                subject, retry_count, last_error, created_at,
-               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+               ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
                sent_at
         FROM awcms_email_messages
         WHERE tenant_id = ${tenantId}

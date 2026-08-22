@@ -22,6 +22,7 @@ import {
   type CommentStatus,
   type ModerationAction
 } from "../domain/comment-status";
+import { keysetCursorCreatedAtSql } from "../../_shared/keyset-pagination";
 import { COMMENT_APPROVED_EVENT_TYPE } from "../domain/comment-events";
 import { appendCommentEvent } from "./reply-notifications";
 
@@ -104,7 +105,7 @@ export async function listModerationQueue(
     SELECT c.id, c.thread_id, t.resource_type, t.url AS resource_url, c.parent_id,
            c.depth, c.body_text, c.status, c.author_kind, c.author_display_name,
            c.author_email_masked, c.moderation_reason_code, c.created_at,
-           to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+           ${tx.unsafe(keysetCursorCreatedAtSql("c"))} AS created_at_cursor,
            (SELECT count(*) FROM awcms_comments_reports r
               WHERE r.tenant_id = c.tenant_id AND r.comment_id = c.id
                 AND r.status = 'open')::int AS report_count

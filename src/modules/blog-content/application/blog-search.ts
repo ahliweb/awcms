@@ -1,4 +1,5 @@
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -110,7 +111,7 @@ export async function searchBlogContentAdmin(
     SELECT * FROM (
       SELECT 'post' AS resource_type, id, title, slug, excerpt, status, visibility,
              locale, published_at, created_at, updated_at,
-             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+             ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
       FROM awcms_blog_posts
       WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
         AND search_vector @@ websearch_to_tsquery('simple', ${filter.query})
@@ -118,7 +119,7 @@ export async function searchBlogContentAdmin(
       UNION ALL
       SELECT 'page' AS resource_type, id, title, slug, excerpt, status, visibility,
              locale, published_at, created_at, updated_at,
-             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+             ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
       FROM awcms_blog_pages
       WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
         AND search_vector @@ websearch_to_tsquery('simple', ${filter.query})
@@ -177,7 +178,7 @@ export async function searchPublicBlogContent(
     SELECT * FROM (
       SELECT 'post' AS resource_type, id, title, slug, excerpt, status, visibility,
              locale, published_at, created_at, updated_at,
-             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+             ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
       FROM awcms_blog_posts
       WHERE tenant_id = ${tenantId}
         AND status = 'published' AND visibility = 'public'
@@ -186,7 +187,7 @@ export async function searchPublicBlogContent(
       UNION ALL
       SELECT 'page' AS resource_type, id, title, slug, excerpt, status, visibility,
              locale, published_at, created_at, updated_at,
-             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+             ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
       FROM awcms_blog_pages
       WHERE tenant_id = ${tenantId}
         AND status = 'published' AND visibility = 'public'

@@ -21,7 +21,7 @@ import type {
 } from "../domain/redirect-rule";
 import {
   encodeKeysetCursor,
-  KEYSET_CURSOR_CREATED_AT_SQL,
+  keysetCursorCreatedAtSql,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
 
@@ -205,7 +205,7 @@ function escapeLike(value: string): string {
 /**
  * Admin list/search/filter — keyset paginated, newest first, non-deleted only. The
  * `next` cursor is minted from the last row's FULL-PRECISION `created_at` text
- * (`KEYSET_CURSOR_CREATED_AT_SQL`, microseconds preserved), never a JS `Date`, so a
+ * (`keysetCursorCreatedAtSql()`, microseconds preserved), never a JS `Date`, so a
  * page boundary can't skip a row that shares a millisecond (Issue #158 hazard).
  */
 export async function listRedirects(
@@ -225,7 +225,7 @@ export async function listRedirects(
 
   const rows = (await tx`
     SELECT ${tx.unsafe(SELECT_COLUMNS)},
-           ${tx.unsafe(KEYSET_CURSOR_CREATED_AT_SQL)} AS created_at_cursor
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_seo_redirects
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL

@@ -11,6 +11,7 @@ import {
   boundedPageSize
 } from "../../_shared/offset-pagination";
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -347,7 +348,7 @@ export async function listBlogPostsPage(
   const rows = (await tx`
     SELECT id, tenant_id, title, slug, status, visibility, locale, published_at,
            updated_at, created_at,
-           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL
@@ -443,7 +444,7 @@ export async function listBlogPostsFullPage(
       unpublish_at, created_at, updated_at, deleted_at, deleted_by, delete_reason,
       restored_at, restored_by, version, auto_internal_tag_links_disabled,
       translation_group_id,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+      ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL

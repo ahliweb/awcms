@@ -20,6 +20,8 @@
  * alongside), so rollback is a status flip rather than a re-import.
  */
 
+import { utcMicrosecondTextSql } from "../../_shared/keyset-pagination";
+
 export type DatasetStatus = "validated" | "active" | "superseded" | "rejected";
 
 export type DatasetSummary = {
@@ -77,8 +79,8 @@ const DATASET_COLUMNS = `
   source_license,
   source_reference,
   source_file_sha256,
-  to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
-  to_char(activated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS activated_at
+  ${utcMicrosecondTextSql("created_at", "Z")} AS created_at,
+  ${utcMicrosecondTextSql("activated_at", "Z")} AS activated_at
 `;
 
 function toSummary(row: DatasetRow): DatasetSummary {

@@ -73,15 +73,12 @@
  * Pure: reads `sql/`, `listModules()`, and the infrastructure registry. No
  * database, no network.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 
 import { listModules } from "../src/modules";
 import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
-import { deriveTableRlsStates } from "./repo-inventory";
-import { deriveSealedTables, loadMigrations } from "./sql-grants";
-
-const MIGRATIONS_DIR = "sql";
+import { loadMigrations } from "./lib/migrations";
+import { deriveTableRlsStates } from "./lib/table-rls-states";
+import { deriveSealedTables } from "./sql-grants";
 
 /**
  * A table whose row count is bounded by something other than time, declared
@@ -408,16 +405,7 @@ export function findCoverageProblems(input: CoverageInput): CoverageProblem[] {
 }
 
 export function collectTables(): string[] {
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-
-  return deriveTableRlsStates(
-    files.map((name) => ({
-      name,
-      sql: readFileSync(path.join(MIGRATIONS_DIR, name), "utf8")
-    }))
-  ).map((state) => state.table);
+  return deriveTableRlsStates(loadMigrations()).map((state) => state.table);
 }
 
 /**
@@ -451,7 +439,7 @@ export function collectSealedTables(
   tables: readonly string[]
 ): ReturnType<typeof deriveSealedTables> {
   return deriveSealedTables({
-    migrations: loadMigrations(MIGRATIONS_DIR),
+    migrations: loadMigrations(),
     tables
   });
 }

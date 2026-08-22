@@ -2,7 +2,7 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
 import {
   encodeKeysetCursor,
-  KEYSET_CURSOR_CREATED_AT_SQL,
+  keysetCursorCreatedAtSql,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
 import type { NewsletterSubscriberStatus } from "../domain/subscriber-status";
@@ -337,7 +337,7 @@ export async function listSubscribers(
 
   const rows = (await tx`
     SELECT ${tx.unsafe(SELECT_COLUMNS)},
-      ${tx.unsafe(KEYSET_CURSOR_CREATED_AT_SQL)}
+      ${tx.unsafe(keysetCursorCreatedAtSql())}
     FROM awcms_newsletter_subscribers
     WHERE tenant_id = ${tenantId}
       AND (${statusParam}::text IS NULL OR status = ${statusParam})

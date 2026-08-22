@@ -81,7 +81,7 @@ describe("the list is a separate route, not a mode on the resolver", () => {
     // Full-precision cursor text, never a JS `Date` — Issue #158. A batch
     // upload writes many rows inside one millisecond, so this module is one of
     // the likeliest places to resurrect it.
-    expect(listFn).toContain("KEYSET_CURSOR_CREATED_AT_SQL");
+    expect(listFn).toContain("keysetCursorCreatedAtSql()");
     expect(listFn).toContain("created_at_cursor");
     expect(listFn).not.toContain("toISOString");
     expect(listFn).not.toMatch(/\bOFFSET\b/);
