@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b8eb296f4ffb75a7e41e314556954c5c8f76fedd35aefbd52c4e040f5a45565f -->
+<!-- i18n-source-hash: sha256:07657b43ed9a49d169c58b9254f5ba8f9b75a838cf4da92a22748e5ed20301d9 -->
 
 # AWCMS — Project State & Continuation
 
@@ -361,36 +361,39 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 ## 4. Backlog / langkah berikutnya
 
 - **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026 (sambil menutup D7): `POST
-/api/v1/tenant/domains/{id}/verify` TIDAK MEMVERIFIKASI APA PUN.** Ia membaca barisnya,
-  memeriksa `verification_method IS NOT NULL`, lalu menyetel `status = 'active'`. Tidak
-  ada lookup DNS, tidak ada fetch berkas HTTP, tidak ada perbandingan token di mana pun
-  pada jalur rutenya — adapter Cloudflare ada
-  (`tenant-domain/infrastructure/cloudflare-dns-adapter.ts`), dipilih lewat
-  `TENANT_DOMAIN_DNS_PROVIDER`, dan tidak dipanggil siapa pun. Kolom yang menyebut sebuah
-  metode adalah keseluruhan pemeriksaannya.
+/api/v1/tenant/domains/{id}/verify` TIDAK MEMVERIFIKASI APA PUN.** **SELESAI (22 Agustus 2026) — [ADR-0106](adr/0106-domain-verification-proves-control-of-the-zone.id.md).** Ia
+  membaca baris, memeriksa `verification_method IS NOT NULL`, lalu menyetel
+  `status = 'active'`. Tanpa lookup DNS, tanpa pengambilan berkas HTTP, tanpa perbandingan
+  token di mana pun pada jalur rute itu. Domain `active` memberi makan
+  `resolvePublicTenantByHost`, daftar-izin redirect dan host kanonik, jadi admin tenant
+  yang memegang `domains.create` + `.update` + `.verify` bisa menambahkan hostname,
+  mem-PATCH `verificationMethod: "manual"`, memanggil verify, dan membuat deployment ini
+  menjawab untuk hostname itu sebagai tenant tersebut.
 
-  **Apa yang dibeli domain aktif.** `resolvePublicTenantByHost` memetakan `Host` sebuah
-  request ke tenant dari `awcms_tenant_domains`; `resolveTenantDomainSet`
-  memperlakukannya sebagai target redirect yang diizinkan; `resolveTenantPrimaryHost`
-  menaruhnya di URL kanonik, feed, dan sitemap. Jadi urutannya: tenant yang memegang
-  `tenant_domain.domains.create` + `.update` + `.verify` menambah sebuah hostname,
-  mem-PATCH `verificationMethod: "manual"`, memanggil verify, dan deployment itu kini akan
-  menjawab untuk hostname tersebut sebagai tenant itu.
+  **Membuat perbandingannya nyata baru setengah perbaikan.** API juga menerima NAMA dan
+  NILAI record dari pemanggil, dan pemeriksaan terhadap nama pilihan pemanggil dan nilai
+  pilihan pemanggil tidak membuktikan apa pun — keduanya bisa menunjuk record yang sudah
+  ada di zona yang tak dikuasai siapa pun. Kedua bagiannya kini dicetak server
+  (`_awcms-verify.<host>`, 32 bita acak per baris) dan mengirim salah satunya DITOLAK
+  dengan 400 yang menyebut nama field-nya, bukan diabaikan.
 
-  **Dua hal membatasinya, dan tak satu pun adalah kontrolnya.** Pembuatan dan verifikasi
-  digerbangi ABAC, jadi ini jangkauan seorang admin tenant dan bukan jangkauan anonim; dan
-  ia hanya penting untuk hostname yang DNS-nya benar-benar bisa diarahkan seseorang ke
-  deployment ini. Yang kedua bukan properti kode ini — ia properti DNS milik orang lain.
+  **`manual` dihapus, bukan diturunkan menjadi atestasi operator**, ke mana tebakan butir
+  ini sendiri mengarah. Permission ber-scope platform hanya boleh dijalankan tenant
+  platform (ADR-0053) dan RLS berarti ia tak bisa melihat baris tenant lain, jadi
+  mempertahankan jalur itu berarti membangun permukaan lintas-tenant — jenis paling
+  berbahaya yang dimiliki basis kode ini, dan reset MFA admin sengaja sendirian di sana.
+  `file` keluar karena berarti mengambil URL pilihan pemanggil; `dns_cname` karena butuh
+  target platform yang tidak ada. CHECK `sql/046` tidak disentuh.
 
-  **Tidak diperbaiki di sini, dengan sengaja.** Perbaikannya adalah langkah verifikasi
-  nyata (menerbitkan record `dns_txt` lalu memeriksanya, atau mengambil berkas well-known)
-  ditambah keputusan tentang apa yang boleh berarti `manual` — masuk akal bila "seorang
-  OPERATOR yang mengatestasi", yang akan menjadikannya aksi ber-scope platform, bukan
-  scope tenant. Itu perubahan keamanan yang mengandung ADR, bukan pembersihan settings,
-  dan melebur keduanya akan menjadi cara yang salah untuk mengambil keputusan itu.
-  Resolusi D7 sendiri dipilih supaya tidak MEMPERBURUK ini: `defaultVerificationMethod`
-  yang tak terbaca dihapus alih-alih diterapkan, karena menerapkannya akan menyerahkan ke
-  setiap domain yang baru dibuat satu-satunya prasyarat yang dimiliki `verify`.
+  Lookup-nya berjalan DI LUAR setiap transaksi (ADR-0006) di antara dua transaksi tenant;
+  yang kedua mengotorisasi ulang (ADR-0063) dan membawa nilai terbukti ke klausa
+  `WHERE`-nya. **Tidak ada bukan berarti tidak terjangkau** — NXDOMAIN fakta tentang
+  domain yang diklaim, SERVFAIL tentang resolver kita, dan hanya yang kedua memberi makan
+  breaker atau membiarkan statusnya utuh. Kegagalan mencatat `failed`, yang menjaga
+  keadaan itu tetap terjangkau. Baris pra-ADR dicetak tantangan secara malas pada verify
+  pertama alih-alih lewat migrasi ber-DML pada tabel FORCE RLS. Dibatasi laju per
+  PRINSIPAL, bukan per tenant — percobaan pertama mengunci pada header tenant dan
+  `tests/auth-source-rate-limit.test.ts` menolaknya, dengan benar (Issue #447).
 
 - **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026: `docs:i18n:stamp` bisa MEMBUNGKAM
   `check:docs:translation` pada mirror yang kini SALAH.** **SELESAI (22 Agustus 2026).**

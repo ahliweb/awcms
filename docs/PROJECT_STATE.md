@@ -361,33 +361,39 @@ pioneered directly here after the ADR-0047 freeze.)
 ## 4. Backlog / next steps
 
 - **FOUND WHILE WORKING, 22 August 2026 (while closing D7): `POST
-/api/v1/tenant/domains/{id}/verify` VERIFIES NOTHING.** It reads the row, checks
-  `verification_method IS NOT NULL`, and sets `status = 'active'`. There is no DNS
-  lookup, no HTTP file fetch, no token comparison anywhere on the route path — the
-  Cloudflare adapter exists (`tenant-domain/infrastructure/cloudflare-dns-adapter.ts`),
-  is selected by `TENANT_DOMAIN_DNS_PROVIDER`, and is called by nothing. The column that
-  names a method is the whole of the check.
+/api/v1/tenant/domains/{id}/verify` VERIFIES NOTHING.** **DONE (22 August 2026) —
+  [ADR-0106](adr/0106-domain-verification-proves-control-of-the-zone.md).** It read the
+  row, checked `verification_method IS NOT NULL`, and set `status = 'active'`. No DNS
+  lookup, no HTTP file fetch, no token comparison anywhere on the route path. An `active`
+  domain feeds `resolvePublicTenantByHost`, the redirect allow-list and the canonical
+  host, so a tenant admin holding `domains.create` + `.update` + `.verify` could add a
+  hostname, PATCH `verificationMethod: "manual"`, call verify, and have this deployment
+  answer for that hostname as that tenant.
 
-  **What an active domain buys.** `resolvePublicTenantByHost` maps a request `Host` to a
-  tenant from `awcms_tenant_domains`; `resolveTenantDomainSet` treats it as a permitted
-  redirect target; `resolveTenantPrimaryHost` puts it in canonical URLs, feeds and
-  sitemaps. So the sequence is: a tenant holding `tenant_domain.domains.create` +
-  `.update` + `.verify` adds a hostname, PATCHes `verificationMethod: "manual"`, calls
-  verify, and the deployment will now answer for that hostname as that tenant.
+  **Making the comparison real was only half the fix.** The API also accepted the record
+  NAME and VALUE from the caller, and a check against a caller-chosen name and a
+  caller-chosen value proves nothing — both can point at a record that already exists in
+  a zone nobody controls. Both halves are now server-minted
+  (`_awcms-verify.<host>`, 32 random bytes per row) and supplying either is REFUSED with
+  a 400 naming the field, not ignored.
 
-  **Two things bound it, and neither is the control.** Creation and verification are
-  ABAC-guarded, so this is a tenant admin's reach and not an anonymous one; and it only
-  matters for a hostname whose DNS someone can actually point at this deployment. The
-  second is not a property of this code — it is a property of somebody else's DNS.
+  **`manual` is removed rather than demoted to an operator attestation**, which is where
+  this item's own guess pointed. A platform-scoped permission may only be exercised by
+  the platform tenant (ADR-0053) and RLS means it cannot see another tenant's row, so
+  preserving that path would have meant building a cross-tenant surface — the most
+  dangerous kind this codebase has, and the MFA admin reset is deliberately alone in it.
+  `file` is out because it means fetching a caller-chosen URL; `dns_cname` because it
+  needs a platform target that does not exist. `sql/046`'s CHECK is untouched.
 
-  **Not fixed here, deliberately.** The fix is a real verification step (publish a
-  `dns_txt` record and check it, or fetch a well-known file) plus a decision about what
-  `manual` is allowed to mean — plausibly "an OPERATOR attests", which would make it a
-  platform-scoped action rather than a tenant one. That is a security change with an ADR
-  in it, not a settings cleanup, and bundling it into one would have been the wrong way
-  to make that decision. D7's own resolution was chosen to avoid making this WORSE: the
-  unread `defaultVerificationMethod` was deleted rather than applied, because applying it
-  would have handed every newly created domain the only precondition `verify` has.
+  The lookup runs OUTSIDE every transaction (ADR-0006) between two tenant transactions;
+  the second re-authorises (ADR-0063) and carries the proven value into its `WHERE`
+  clause. **Absent is not unavailable** — NXDOMAIN is a fact about the claimed domain,
+  SERVFAIL about our resolver, and only the second feeds the breaker or leaves the status
+  alone. A miss records `failed`, which keeps that state reachable. Pre-ADR rows are
+  minted a challenge lazily on first verify rather than by a DML migration against a
+  FORCE RLS table. Rate limited per PRINCIPAL, not per tenant — the first attempt keyed
+  it on the tenant header and `tests/auth-source-rate-limit.test.ts` refused it,
+  correctly (Issue #447).
 
 - **FOUND WHILE WORKING, 22 August 2026: `docs:i18n:stamp` can silence
   `check:docs:translation` on a mirror that is now WRONG.** **DONE (22 August 2026).**
