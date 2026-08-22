@@ -186,7 +186,7 @@ describe("the live contract", () => {
  * a fourth consumed surface here has to be a deliberate edit in both places.
  */
 describe("consumed vs committed", () => {
-  test("exactly five surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+  test("exactly seven surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
     // If this fails, one of two things happened, and they need opposite fixes:
     //   - awcms-astro started (or stopped) calling a surface -> update both
     //     this list and the marker block in that repo, in the same change;
@@ -203,12 +203,20 @@ describe("consumed vs committed", () => {
     // `/api/v1/blog/terms` is the fifth and took the identical path: COMMITTED
     // in #650 with ADR-0104, moved here when `ahliweb/awcms-astro#66` built the
     // category and tag archives on it.
+    //
+    // The sixth and seventh, `/blog/menus` and `/blog/widgets`, took the same
+    // path with one extra step in front of it: they could not be frozen at all
+    // until #652 gave their responses an actual schema. Freezing an array of
+    // bare `object` would have added a path to this list that no change could
+    // ever break — a contract entry with no contract in it.
     expect(Object.keys(CONSUMED_PATHS)).toEqual([
       "/api/v1/blog/posts",
       "/api/v1/media/objects",
       "/api/v1/media/public-origin",
       "/api/v1/site-profile/composed",
-      "/api/v1/blog/terms"
+      "/api/v1/blog/terms",
+      "/api/v1/blog/menus",
+      "/api/v1/blog/widgets"
     ]);
   });
 
