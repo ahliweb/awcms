@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1ae99f2a24cb338cd378b46e6b40e4139ae4323ef55e37236bb4c272a956b515 -->
+<!-- i18n-source-hash: sha256:b40ae00dfd60694e88244573f1c6e20e0a08bbfcd4156026f8aada80e5ad8574 -->
 
 # AWCMS — Project State & Continuation
 
@@ -392,6 +392,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   ### A. Keamanan
   1. **A1 — grant delegated-access yang sudah ditebus TIDAK PERNAH kedaluwarsa.**
+     **SEBAGIAN BESAR SELESAI (22 Agustus 2026)** — gerbangnya mendarat; sapuannya tidak,
+     lihat paragraf penutup.
      _(ditemukan independen oleh dua dimensi, dari sisi job dan dari sisi chokepoint)_
      `identity-access/application/auth-context.ts:63-70` dan `:101-108`;
      `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
@@ -408,6 +410,38 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      `isDelegatedPartnerRefused` yang sudah ada — tanpa jalur kode baru); teruskan
      `expiresAt` grant sebagai `effective_to`; lalu tambahkan job-nya supaya sesi
      benar-benar dicabut.
+
+     **Yang mendarat, dan dua tempat rencananya TIDAK diikuti.** Predikatnya kini ada di
+     `resolveDelegatedGrantState` (resolver yang diganti nama, menjawab kedaluwarsa dan
+     status partner dari SATU baris), dan penebusan menstempel `effective_to` **berpasangan
+     dengan `effective_from` eksplisit** — `sql/102` membandingkan kedua kolom itu dan
+     `effective_from` ber-DEFAULT `now()`, jadi mengirim hanya tanggal akhir berarti
+     membandingkan jam proses ini dengan jam PostgreSQL dan bisa menolak penebusan yang
+     sah. Kedaluwarsa TIDAK jatuh ke cabang `partner_suspended` seperti rencana: itu akan
+     menulis baris decision-log yang menyatakan penangguhan yang tidak pernah terjadi, jadi
+     ia mendapat cabangnya sendiri di atasnya (`403 DELEGATED_GRANT_EXPIRED`,
+     `matchedPolicy: "delegated_grant_expired"`). Resolver ATRIBUSI
+     (`resolveDelegatedGrantId`) sengaja dibiarkan tanpa saringan — pembacanya hanya
+     `awcms_abac_decision_logs` dan `awcms_audit_events` (terverifikasi), jadi id basi tak
+     bisa melebarkan keputusan apa pun dan justru itulah yang membuat penolakannya menyebut
+     keterlibatan mana.
+
+     **Masih terbuka: sapuannya.** Aktor yang kedaluwarsa ditolak setiap otorisasi tetapi
+     tetap memegang baris `active` di daftar pengguna pelanggan dan baris sesi hidup —
+     pembukuan, bukan akses. `expireDelegatedAccessGrants` masih nol pemanggil.
+     Penghalangnya keputusan HAK AKSES, bukan pekerjaan: sapuan itu mematikan keanggotaan
+     dan mencabut sesinya, sedangkan `awcms_worker` tidak memegang `UPDATE` pada
+     `awcms_tenant_users` maupun apa pun pada `awcms_sessions`. Memberikannya polos akan
+     membuat sebuah job terjadwal bisa mengembalikan anggota nonaktif menjadi `active` dan
+     mengembalikan `revoked_at` menjadi `NULL` pada sesi curian — lebih lebar dari yang
+     dibutuhkan sapuan, dan ke arah eskalasi. Tiga kandidatnya: (a) fungsi `SECURITY
+DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124`, hanya arah-tolak;
+     (b) grant ber-kolom plus risiko sisa yang diterima dan DITULIS; (c) menjalankan job
+     yang satu ini di koneksi `awcms_app`, yang sudah memegang persis hak ini karena
+     pencabutan jalur-request melakukan hal yang sama — dengan ongkos `db:work-class:check`
+     menemukan skrip worker lewat grep `getWorkerDatabaseClient(`, sehingga job itu jatuh
+     keluar dari model kapasitas.
+
   2. **A2 — penangguhan ADR-0073 tidak menjangkau factory rute self-service maupun
      client-credential.** `_shared/tenant-route.ts:247-301` dan `:342-379`;
      `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.

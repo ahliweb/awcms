@@ -33,6 +33,24 @@ export type GrantRolePolicyInput = {
   /** `null` for bootstrap, where no session exists yet to attribute it to. */
   grantedByTenantUserId: string | null;
   reason?: string;
+  /**
+   * An END DATE for the grant, for the callers that have one — today only the
+   * delegated-access redemption, whose grant carries `expires_at` (ADR-0090).
+   * Omitted means open-ended, which is what every other grant is.
+   *
+   * ## Pass BOTH or NEITHER
+   *
+   * `sql/102` constrains `effective_to > effective_from`, and `effective_from`
+   * DEFAULTs to `now()` — the TRANSACTION START instant, not the application's
+   * clock. Supplying only `effectiveTo` would compare a `Date` this process
+   * produced against an instant PostgreSQL produced, so a grant whose end date
+   * is genuinely in the future can still trip the CHECK whenever the two clocks
+   * disagree by more than the remaining life of the grant. Supplying both makes
+   * the constraint compare two values from the SAME clock — the one the caller
+   * already validated the pair against.
+   */
+  effectiveFrom?: Date;
+  effectiveTo?: Date;
 };
 
 export type GrantGroupRolePolicyInput = {
@@ -65,11 +83,13 @@ export async function grantRolePolicy(
   const rows = (await tx`
     INSERT INTO awcms_access_policies
       (tenant_id, subject_type, tenant_user_id, role_id, scope_type, scope_id,
-       granted_by_tenant_user_id, reason)
+       granted_by_tenant_user_id, reason, effective_from, effective_to)
     VALUES
       (${tenantId}, 'tenant_user', ${input.tenantUserId}, ${input.roleId},
        ${TENANT_WIDE_SCOPE_TYPE}, ${tenantId},
-       ${input.grantedByTenantUserId}, ${input.reason ?? null})
+       ${input.grantedByTenantUserId}, ${input.reason ?? null},
+       COALESCE(${input.effectiveFrom ?? null}::timestamptz, now()),
+       ${input.effectiveTo ?? null}::timestamptz)
     RETURNING id
   `) as { id: string }[];
 

@@ -36,7 +36,7 @@ import {
 import { listModules } from "../../index";
 import {
   fetchGrantedPermissionKeys,
-  resolveDelegatedPartnerRegistryStatus,
+  resolveDelegatedGrantState,
   resolveModuleAvailability,
   resolveTenantPrincipal,
   resolveTenantPrincipalForTenantUser
@@ -57,7 +57,10 @@ import {
 } from "../../../lib/auth/machine-credential-token";
 import { isPrincipalSelectionHash } from "../../../lib/auth/principal-selection-token";
 import { isDelegatedAccessCodeHash } from "../../../lib/auth/delegated-access-code";
-import { isDelegatedWriteForbidden } from "../domain/delegated-access";
+import {
+  isDelegatedGrantNotInForce,
+  isDelegatedWriteForbidden
+} from "../domain/delegated-access";
 
 /**
  * Resolves the tenant id + bearer token an endpoint should authenticate with,
@@ -542,20 +545,61 @@ export async function authorizeInTransaction(
   // anybody rewriting anything.
   //
   // The read costs one query, and only for a delegated actor — a support
-  // episode, not the hot path. `resolveDelegatedPartnerRegistryStatus` returns
-  // `null` for every ordinary member, and `isDelegatedPartnerRefused` answers
-  // `false` for them before it looks at the status at all.
-  const partnerRegistryStatus = await resolveDelegatedPartnerRegistryStatus(
+  // episode, not the hot path. `resolveDelegatedGrantState` short-circuits for
+  // every ordinary member, and both deny rules answer `false` for them before
+  // they look at either field at all.
+  const delegatedGrantState = await resolveDelegatedGrantState(
     tx,
     tenantId,
     context.tenantUserId,
     context.principalKind ?? "user"
   );
 
+  // ADR-0090 — a grant that is past its date confers nothing, from that instant.
+  //
+  // Above the partner check, and the ORDER is the point rather than an accident:
+  // an expired grant also reads as "no live row" to the partner resolver, so
+  // whichever branch runs first is the one that names the refusal. Recording an
+  // expiry as `partner_suspended` would put a false fact in the decision log and
+  // send a customer to ask a vendor about a suspension that never happened.
+  //
+  // Structural, and above `fetchGrantedPermissionKeys`, so no grant row can
+  // influence it — the redemption path also stamps `effective_to` on the role
+  // grant it writes, but that only covers grants redeemed since, and this covers
+  // every one of them.
+  if (
+    isDelegatedGrantNotInForce({
+      principalKind: context.principalKind ?? "user",
+      grantLive: delegatedGrantState.grantLive
+    })
+  ) {
+    const decision = {
+      allowed: false,
+      reason:
+        "The delegated access grant behind this session is no longer in force.",
+      matchedPolicy: "delegated_grant_expired"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id,
+      context.delegatedGrantId
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "DELEGATED_GRANT_EXPIRED", decision.reason)
+    };
+  }
+
   if (
     isDelegatedPartnerRefused({
       principalKind: context.principalKind ?? "user",
-      partnerRegistryStatus
+      partnerRegistryStatus: delegatedGrantState.partnerRegistryStatus
     })
   ) {
     const decision = {

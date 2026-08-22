@@ -198,7 +198,20 @@ export async function redeemDelegatedAccess(
     // dibuktikan lebih lanjut oleh email konfirmasi kedua.
     emailVerified: true,
     roleIds: [grant.role_id],
-    reason: `delegated_access:${grant.id}`
+    reason: `delegated_access:${grant.id}`,
+    // ADR-0090 — the role ends when the ENGAGEMENT does. Without this the grant
+    // row carried a date and the thing it granted did not, so `activeRoleGrants`
+    // (whose `effective_to IS NULL` branch means "in force forever") kept
+    // answering yes long after the partner was supposed to be gone.
+    //
+    // Both instants come from the pair this function has ALREADY compared four
+    // lines above: `now` is the caller's clock and `expires_at` was read on this
+    // row, so the `sql/102` CHECK re-checks exactly the assertion that let
+    // execution reach here. Re-parsing `expires_at` truncates PostgreSQL's
+    // microseconds to JavaScript milliseconds — up to 999µs EARLIER, which is
+    // the direction that can only end the grant sooner.
+    roleEffectiveFrom: now,
+    roleEffectiveTo: new Date(grant.expires_at)
   });
 
   if (membership.outcome !== "created") {

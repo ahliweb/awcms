@@ -51,6 +51,16 @@ export type ResolvedTenantPrincipal = {
  * fail-quiet by design: the id is an ATTRIBUTION, not an authorization input.
  * Nothing is permitted or refused because of it, so a missing one costs a
  * column in an audit row and never a decision.
+ *
+ * ## Deliberately NOT filtered on `expires_at`
+ *
+ * `resolveDelegatedGrantState` is; this is not, and the asymmetry is the point.
+ * A request refused BECAUSE the grant expired is exactly the row an
+ * investigation starts from, and dropping the id there would leave the decision
+ * log saying "some delegated actor was refused" without naming which engagement.
+ * The only readers are `awcms_abac_decision_logs` and `awcms_audit_events`
+ * (verified: no other caller), so a stale id can widen no decision — it can only
+ * make the refusal legible.
  */
 async function resolveDelegatedGrantId(
   tx: Bun.SQL,
@@ -71,12 +81,35 @@ async function resolveDelegatedGrantId(
 }
 
 /**
- * The registry status of the partner behind a delegated actor — ADR-0093.
+ * The two authorization facts about the grant behind a delegated actor: is the
+ * grant still IN FORCE, and is the partner it belongs to still registered —
+ * ADR-0090 (expiry) and ADR-0093 (suspension).
  *
  * A SEPARATE call from `resolveDelegatedGrantId`, and deliberately so: that one
  * resolves an ATTRIBUTION and is documented as fail-quiet, because nothing is
  * permitted or refused because of it. This one IS an authorization input, and
  * mixing the two would give a fail-quiet resolver a decision to make.
+ *
+ * ## `expires_at > now()` is the gate ADR-0090 promised
+ *
+ * ADR-0090 says revocation **and expiry** deactivate the membership in the same
+ * transaction. Revocation had an executor; expiry never did, so until this
+ * predicate existed a grant scoped "until 30 September" kept conferring its role
+ * for as long as nobody revoked it by hand. The sweep
+ * (`identity-access:delegated-access:expiry`) is CLEANUP — it ends the session
+ * and the membership — and this predicate is the gate: expiry takes effect at
+ * the instant on the row, not at the instant a timer next fires.
+ *
+ * `now()` is the transaction start instant, so every decision inside one request
+ * reads the same clock, and it is the DATABASE's clock — the same one that wrote
+ * `expires_at`. Comparing it against an application `Date` would make the gate
+ * depend on two clocks agreeing.
+ *
+ * ## Why one query for two facts
+ *
+ * They come off the same row. A second round trip would buy nothing, and the
+ * caller needs both before it can name the refusal correctly — an expired grant
+ * recorded as `partner_suspended` puts a false fact in the decision log.
  *
  * `awcms_partners` belongs to the PLATFORM tenant and is `FORCE ROW LEVEL
  * SECURITY`; this runs in the CUSTOMER's transaction and cannot read it. The
@@ -84,32 +117,50 @@ async function resolveDelegatedGrantId(
  * a `text`, never a row — with the four `sql/048` safeguards and the same
  * memberless NOLOGIN owner `sql/119` created.
  *
- * Returns `null` for a non-delegated actor (nothing to ask about) and for a
- * partner with no registry row. The caller must treat the SECOND `null` as
- * suspended; `isDelegatedPartnerRefused` does, and only ever looks at the
- * status for a delegated principal, so the two `null`s cannot be confused into
- * refusing an ordinary member.
+ * For a NON-delegated actor this returns `{ grantLive: true, status: null }`:
+ * there is no grant to be past its date and no partner to ask about, and the
+ * two deny rules both look at `principalKind` before they look at either field,
+ * so an ordinary member's decision is exactly where it was.
+ *
+ * For a delegated actor with no matching row BOTH fields say refuse. That is
+ * unreachable (`sql/120`'s foreign key keeps the partner registered, and
+ * `sql/117`'s pairing constraint keeps a redeemed grant's tenant user set), and
+ * it is because it is unreachable that fail-closed costs nothing.
  */
-export async function resolveDelegatedPartnerRegistryStatus(
+export type DelegatedGrantState = {
+  /** `false` once `expires_at` has passed, or when no live grant row matches. */
+  grantLive: boolean;
+  partnerRegistryStatus: PartnerRegistryStatus;
+};
+
+export async function resolveDelegatedGrantState(
   tx: Bun.SQL,
   tenantId: string,
   tenantUserId: string,
   principalKind: PrincipalKind
-): Promise<PartnerRegistryStatus> {
-  if (principalKind !== "delegated") return null;
+): Promise<DelegatedGrantState> {
+  if (principalKind !== "delegated") {
+    return { grantLive: true, partnerRegistryStatus: null };
+  }
 
   const rows = (await tx`
-    SELECT awcms_partner_registry_status(g.partner_tenant_id) AS status
+    SELECT awcms_partner_registry_status(g.partner_tenant_id) AS status,
+           (g.expires_at > now()) AS grant_live
     FROM awcms_delegated_access_grants g
     WHERE g.tenant_id = ${tenantId}
       AND g.granted_tenant_user_id = ${tenantUserId}
       AND g.revoked_at IS NULL
     LIMIT 1
-  `) as { status: string | null }[];
+  `) as { status: string | null; grant_live: boolean }[];
 
-  const status = rows[0]?.status ?? null;
+  const row = rows[0];
+  const status = row?.status ?? null;
 
-  return status === "active" || status === "suspended" ? status : null;
+  return {
+    grantLive: row?.grant_live === true,
+    partnerRegistryStatus:
+      status === "active" || status === "suspended" ? status : null
+  };
 }
 
 export async function resolveTenantContextForTenantUser(

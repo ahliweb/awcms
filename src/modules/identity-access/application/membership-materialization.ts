@@ -72,6 +72,17 @@ export type MaterializeMembershipInput = {
   roleIds: readonly string[];
   /** Recorded on each grant, so `awcms_access_policy_events` says WHY the role was held. */
   reason: string;
+  /**
+   * ADR-0090 — the instant the granted roles stop being in force, for the one
+   * caller whose offer carries an end date (delegated-access redemption).
+   * Omitted means open-ended: an invitation grants a membership, not an episode.
+   *
+   * Paired with `roleEffectiveFrom` for the reason `GrantRolePolicyInput`
+   * records — the two are compared by a CHECK, and only the caller knows which
+   * clock produced the end date.
+   */
+  roleEffectiveFrom?: Date;
+  roleEffectiveTo?: Date;
 };
 
 export type MaterializeMembershipResult =
@@ -185,7 +196,9 @@ export async function materializeMembership(
       // No actor: the invitee granted themselves nothing. The administrator who
       // decided this is named by the invitation, and by its audit row.
       grantedByTenantUserId: null,
-      reason: input.reason
+      reason: input.reason,
+      effectiveFrom: input.roleEffectiveFrom,
+      effectiveTo: input.roleEffectiveTo
     });
   }
 
