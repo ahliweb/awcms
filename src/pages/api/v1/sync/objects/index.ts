@@ -11,6 +11,12 @@ import {
   verifySyncHeaders
 } from "../../../../../modules/sync-storage/application/sync-auth";
 import { validateObjectSyncEnqueueRequestBody } from "../../../../../modules/sync-storage/domain/object-queue";
+import { resolveObjectSyncConfig } from "../../../../../modules/sync-storage/domain/object-sync-config";
+import {
+  confinedPathRefusalMessage,
+  resolveConfinedPath
+} from "../../../../../lib/security/confined-path";
+import { log } from "../../../../../lib/logging/logger";
 
 export const POST: APIRoute = async ({ request }) => {
   const tenantId = request.headers.get("x-awcms-tenant-id");
@@ -67,6 +73,49 @@ export const POST: APIRoute = async ({ request }) => {
       "Object sync enqueue body is invalid.",
       {},
       validation.errors
+    );
+  }
+
+  // Finding A7 — `localPath` is used by the cron dispatcher as a path on the
+  // SERVER (`Bun.file(...)`), so it is confined to a configured root HERE, at
+  // the boundary, and a refusal never becomes a queue row. Doing it only at
+  // upload time would leave the arbitrary path durably stored and answerable
+  // through `GET /sync/objects/status`.
+  //
+  // Every refusal reports the same sentence. Which rule was broken goes to the
+  // server log, not to the node: naming the rule is most of what an oracle
+  // needs, and an operator debugging a genuinely misconfigured node reads the
+  // log rather than the node's console.
+  const objectSyncConfig = resolveObjectSyncConfig();
+  const pathErrors = [];
+
+  for (const [index, object] of validation.value.objects.entries()) {
+    const confined = resolveConfinedPath(
+      objectSyncConfig.localRootPath,
+      object.localPath
+    );
+
+    if (confined.ok) continue;
+
+    log("warning", "sync_storage.object_enqueue.path_refused", {
+      moduleKey: "sync_storage",
+      tenantId,
+      nodeCode,
+      refusal: confined.refusal
+    });
+    pathErrors.push({
+      field: `objects[${index}].localPath`,
+      message: confinedPathRefusalMessage()
+    });
+  }
+
+  if (pathErrors.length > 0) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "Object sync enqueue body is invalid.",
+      {},
+      pathErrors
     );
   }
 

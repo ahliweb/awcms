@@ -161,6 +161,26 @@ rather than requests that do fresh work per call. `tests/admin-sync-page-contrac
 pins that in both directions, so an endpoint that later starts requiring a key
 turns the screen's contract red instead of failing silently at runtime.
 
+## The two strings a node supplies, and their boundaries
+
+`POST /api/v1/sync/objects` takes `localPath` and `objectKey` from the node. Both
+are used by the SERVER — the first in `Bun.file(...)` by the cron dispatcher, the
+second as the object-storage destination — so both are confined (finding A7).
+
+- **`localPath`** must be a relative path inside `OBJECT_SYNC_LOCAL_ROOT_PATH`
+  (default `./var/object-sync`, doc 18). Checked at the enqueue boundary so a
+  refusal never becomes a queue row, and again in
+  `infrastructure/object-storage-uploader.ts` beside the syscall, because rows
+  queued before that check exists are still in the table. A refusal reports one
+  sentence to the node and the specific rule to the server log: telling a client
+  which rule it broke is most of what an existence oracle needs.
+- **`objectKey`** must be slash-separated segments of `[A-Za-z0-9._-]`, each
+  starting with a letter or digit. The destination written to storage is
+  `<tenantId>/<objectKey>`, applied at PUT time rather than stored — so no
+  migration, and the key a node reads back from `/sync/objects/status` is the one
+  it sent. Without the prefix one node could name another tenant's key, and an
+  S3/R2 PUT to an existing key is an overwrite.
+
 The HMAC node protocol (`push`/`pull`/`objects`/`status`) has **no controls on
 this page and will not get any** — those authenticate a node by signature, not
 an administrator by session, so a button for them would be a control no browser

@@ -349,14 +349,15 @@ not a separate env var (following the awcms-mini finding that deprecated
 
 ### Storage
 
-| Var                             | Required | Default | Sensitive | Purpose                                                                             |
-| ------------------------------- | -------- | ------- | --------- | ----------------------------------------------------------------------------------- |
-| `R2_ENABLED`                    | –        | `false` | –         | Enable R2 object storage (e.g. finance document attachments, inventory item photos) |
-| `R2_ACCOUNT_ID`                 | if R2    | –       | –         | R2 account (an identifier, not a credential)                                        |
-| `R2_ACCESS_KEY_ID`              | if R2    | –       | Yes       | R2 credential                                                                       |
-| `R2_SECRET_ACCESS_KEY`          | if R2    | –       | Yes       | R2 credential                                                                       |
-| `R2_BUCKET`                     | if R2    | –       | –         | Bucket                                                                              |
-| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –        | `10000` | –         | Dispatcher upload timeout                                                           |
+| Var                             | Required | Default             | Sensitive | Purpose                                                                                                                                 |
+| ------------------------------- | -------- | ------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `R2_ENABLED`                    | –        | `false`             | –         | Enable R2 object storage (e.g. finance document attachments, inventory item photos)                                                     |
+| `R2_ACCOUNT_ID`                 | if R2    | –                   | –         | R2 account (an identifier, not a credential)                                                                                            |
+| `R2_ACCESS_KEY_ID`              | if R2    | –                   | Yes       | R2 credential                                                                                                                           |
+| `R2_SECRET_ACCESS_KEY`          | if R2    | –                   | Yes       | R2 credential                                                                                                                           |
+| `R2_BUCKET`                     | if R2    | –                   | –         | Bucket                                                                                                                                  |
+| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –        | `10000`             | –         | Dispatcher upload timeout                                                                                                               |
+| `OBJECT_SYNC_LOCAL_ROOT_PATH`   | –        | `./var/object-sync` | –         | The only directory the object-sync dispatcher may read a queued object from; a node's `localPath` is relative to it and cannot leave it |
 
 Local filesystem storage (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) is
 deliberately not made a separate env var — following the awcms-mini finding
@@ -508,6 +509,7 @@ SYNC_HMAC_ALLOW_LEGACY=true
 
 # Storage
 OBJECT_SYNC_UPLOAD_TIMEOUT_MS=10000
+OBJECT_SYNC_LOCAL_ROOT_PATH=./var/object-sync
 R2_ENABLED=false
 
 # Email (notifications)

@@ -248,7 +248,8 @@ export async function dispatchObjectSyncQueue(
       uploadResult = await uploader({
         objectKey: entry.object_key,
         localPath: entry.local_path,
-        checksumSha256: entry.checksum_sha256
+        checksumSha256: entry.checksum_sha256,
+        tenantId
       });
     } catch (error) {
       uploadResult = {

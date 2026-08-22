@@ -603,6 +603,29 @@ pioneered directly here after the ADR-0047 freeze.)
      `objectKey` gets no tenant prefix, so one node can overwrite another tenant's object.
      Requires a compromised legitimate node (`AWCMS_SYNC_ENABLED` + `R2_ENABLED` + the
      deployment HMAC secret), which is why it is not higher.
+
+     DONE (22 August 2026). `localPath` is confined to `OBJECT_SYNC_LOCAL_ROOT_PATH`
+     (default `./var/object-sync`) at the enqueue boundary AND again next to the syscall —
+     the first so a refusal never becomes a durable row, the second because rows queued
+     before this change are still in the table. The destination key is now
+     `<tenantId>/<objectKey>`, applied at PUT time rather than stored, so there is no
+     migration and the key a node reads back is still the one it sent.
+
+     Three things the recommendation did not name. (a) The ORACLE was the larger half:
+     `Local file not found: ${path}` versus a read error distinguishes existence for any
+     path on the host, and every refusal now reports one sentence with the reason going to
+     the server log instead. (b) `objectKey` needed a shape too — S3 has no server-side
+     path semantics, so `../` is not traversal AT the provider, but `/` is a delimiter for
+     listing, lifecycle rules and every console that renders a bucket as a tree. (c) The
+     confinement refuses `..` TEXTUALLY, before resolving: a resolve-then-`startsWith`
+     check accepts a path that escapes and returns (`../object-sync/x`), which is not an
+     exploit today and is one refactor from being one.
+
+     A required env var was considered and rejected: this ships into deployments that
+     already have queued rows and a working node protocol, and a config gate that stops the
+     app on upgrade is a larger event than a finding that needs a compromised node with the
+     deployment HMAC secret to reach.
+
   8. **A8 — public site-search rate-limit config is neither validated nor NaN-guarded.**
      **ALREADY FIXED when checked, 22 August 2026 — this entry was stale on the day it was
      written.**
