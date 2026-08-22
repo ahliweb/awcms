@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ed0d365bb7f6639c4f1eb8db4d6cbc0362b726c4926e73d9801cbbf47881bbd2 -->
+<!-- i18n-source-hash: sha256:163a10000ee02f9bc34710df9de9dbac0944b5d725047b96e59bf43964cfdf88 -->
 
 # AWCMS — Project State & Continuation
 
@@ -603,16 +603,41 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      TANPA cache, dan jawabannya berubah.
 
   10. **B2 — `isLegacyTenantRouteEnabled` membaca `awcms_blog_settings` lalu membuangnya.**
+      **SELESAI (22 Agustus 2026).**
       `public-route-settings.ts:68-87`; dipanggil ketujuh rute `/blog/[tenantCode]/*`. Satu
       round trip terbuang penuh pada setiap tampilan halaman anonim — 100% dari semuanya
       pada deployment default, tempat edge cache mati.
   11. **B3 — rute `/blog/*` tidak pernah menerbitkan `locals.edgeCacheTenantId`.** Rute
+      **SELESAI (22 Agustus 2026).**
       sudah meresolusi tenant lalu membuang id-nya, jadi middleware mengulang lookup
       `awcms_tenants` pada tiap MISS cache. Presedennya sudah bekerja di
       `seo-distribution/presentation/discovery-route.ts:145`.
   12. **B4 — `AdminLayout` membuka transaksi ketiga yang baca pertamanya adalah kolom yang
+      **SELESAI (22 Agustus 2026).**
       tak diambil siapa pun.** `AdminLayout.astro:184-206`. `tenant_name` diambil terpisah
       dari baris yang sama yang sudah dipilih `readTenantDisplayDefaults`.
+
+      **B2 lebih buruk dari yang tertulis: dua dari tujuh membayar DUA KALI.**
+      `feed.xml.ts` dan `sitemap-blog.xml.ts` memanggil `isLegacyTenantRouteEnabled` lalu
+      memanggil `fetchBlogSettings` sendiri, sehingga `awcms_blog_settings` dibaca, dibuang,
+      lalu dibaca lagi. Gerbangnya kini SATU query dan pembaca gabungannya tetap membaca
+      keduanya, karena ia memakai keduanya — dipatok terpisah supaya penghematannya tidak
+      berasal dari membuang field yang dipakai orang lain.
+
+      **Penempatan B3 adalah keseluruhannya.** `publish-tenant.ts` menyatakan aturannya —
+      resolve, gate, produksi, publish TERAKHIR — karena 404 adalah status yang bisa
+      di-cache: mem-publish sebelum cabang sumber-daya-tidak-ada membuat 404 "post tidak
+      ada" beranotasi beda dari 404 "tenant tidak dikenal" dan menjawab, dari satu
+      permintaan, pertanyaan yang justru ditahan bentuk 404 generiknya. Tesnya menuntut
+      URUTAN terhadap `notFound` terakhir dan satu-satunya respons penyaji, dan mutasi yang
+      memindahkan panggilannya ke atas gerbang memerahkannya.
+
+      **B4 memindahkan satu shape-check bersamanya, dan itu nyaris luput.** Penjaga
+      circuit-open berkunci pada `tenantName` — yang tidak lagi ada di return blok itu —
+      sehingga membiarkannya berarti menguji field yang tidak pernah ada dan diam-diam
+      melewati SETIAP penugasan di bawahnya: indikator sync, himpunan modul nonaktif, dan
+      susunan sidebar.
+
   13. **B5 — ~6 round trip middleware per request publik sebelum query pertama halaman.**
       `middleware.ts:305`; `redirect-resolution-service.ts:170-212`. Dibayar bahkan oleh
       tenant tanpa satu pun aturan redirect. `standar-performa-dan-keamanan.md:195` mengaku

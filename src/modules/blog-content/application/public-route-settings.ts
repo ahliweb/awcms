@@ -68,23 +68,54 @@ export async function fetchEffectivePublicRouteSettings(
   tx: Bun.SQL,
   tenantId: string
 ): Promise<EffectivePublicRouteSettings> {
+  const [legacyTenantRouteEnabled, blogSettings] = [
+    await readLegacyTenantRouteEnabled(tx, tenantId),
+    await fetchBlogSettings(tx, tenantId)
+  ];
+
+  return {
+    legacyTenantRouteEnabled,
+    rssEnabled: blogSettings.rssEnabled,
+    sitemapEnabled: blogSettings.sitemapEnabled
+  };
+}
+
+/**
+ * The `legacyTenantRouteEnabled` half on its own — ONE read, from module
+ * settings only.
+ *
+ * Split out for finding B2. `isLegacyTenantRouteEnabled` used to go through the
+ * merged reader above, which also reads `awcms_blog_settings` and then throws
+ * that row away: a wholly wasted round trip on every anonymous page view of all
+ * seven `/blog/{tenantCode}/*` routes — 100% of them on a default deployment,
+ * where the edge cache is off.
+ *
+ * Two of those seven were paying for it TWICE. `feed.xml.ts` and
+ * `sitemap-blog.xml.ts` call `isLegacyTenantRouteEnabled` and then call
+ * `fetchBlogSettings` themselves for `rssEnabled`/`sitemapEnabled`, so
+ * `awcms_blog_settings` was read once and discarded, then read again and used.
+ *
+ * The normalisation lives here rather than in the caller for the reason the
+ * merged reader's own header gives: `validateModuleSettingsPatch` checks the
+ * SHAPE of a settings patch, never per-field types, so a tenant override holding
+ * a garbage value reaches this read path — and this is where it must fall back
+ * to the safe default rather than throw.
+ */
+async function readLegacyTenantRouteEnabled(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<boolean> {
   const moduleSettingsView = await fetchModuleSettingsView(
     tx,
     tenantId,
     BLOG_CONTENT_MODULE_KEY
   );
-  const blogSettings = await fetchBlogSettings(tx, tenantId);
 
   const effective = moduleSettingsView?.effective ?? {};
 
-  return {
-    legacyTenantRouteEnabled:
-      typeof effective.legacyTenantRouteEnabled === "boolean"
-        ? effective.legacyTenantRouteEnabled
-        : DEFAULT_LEGACY_TENANT_ROUTE_ENABLED,
-    rssEnabled: blogSettings.rssEnabled,
-    sitemapEnabled: blogSettings.sitemapEnabled
-  };
+  return typeof effective.legacyTenantRouteEnabled === "boolean"
+    ? effective.legacyTenantRouteEnabled
+    : DEFAULT_LEGACY_TENANT_ROUTE_ENABLED;
 }
 
 /**
@@ -121,7 +152,5 @@ export async function isLegacyTenantRouteEnabled(
   tx: Bun.SQL,
   tenantId: string
 ): Promise<boolean> {
-  const settings = await fetchEffectivePublicRouteSettings(tx, tenantId);
-
-  return settings.legacyTenantRouteEnabled;
+  return readLegacyTenantRouteEnabled(tx, tenantId);
 }
