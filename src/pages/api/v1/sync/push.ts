@@ -10,7 +10,11 @@ import {
   resolveOrRegisterSyncNode,
   verifySyncHeaders
 } from "../../../../modules/sync-storage/application/sync-auth";
-import { evaluatePushEventConflict } from "../../../../modules/sync-storage/domain/sync-conflict";
+import {
+  evaluatePushEventConflict,
+  type SyncConflictType
+} from "../../../../modules/sync-storage/domain/sync-conflict";
+import { advanceAggregateVersion } from "../../../../modules/sync-storage/application/aggregate-version-store";
 import { validateSyncPushRequestBody } from "../../../../modules/sync-storage/domain/sync-validation";
 
 export const POST: APIRoute = async ({ request }) => {
@@ -173,34 +177,75 @@ export const POST: APIRoute = async ({ request }) => {
           event.baseVersion
         );
 
-        if (evaluation.conflict) {
+        const recordConflict = async (conflictType: SyncConflictType) => {
           await tx`
-          INSERT INTO awcms_sync_conflicts
-            (tenant_id, node_id, batch_id, aggregate_type, aggregate_id, conflict_type, payload_json)
-          VALUES (
-            ${tenantId}, ${node.id}, ${batchId}, ${event.aggregateType}, ${event.aggregateId},
-            ${evaluation.conflictType}, ${event.payload}
-          )
-        `;
+            INSERT INTO awcms_sync_conflicts
+              (tenant_id, node_id, batch_id, aggregate_type, aggregate_id, conflict_type, payload_json)
+            VALUES (
+              ${tenantId}, ${node.id}, ${batchId}, ${event.aggregateType}, ${event.aggregateId},
+              ${conflictType}, ${event.payload}
+            )
+          `;
           conflictedCount += 1;
+        };
+
+        if (evaluation.conflict) {
+          await recordConflict(evaluation.conflictType);
           continue;
         }
 
-        await tx`
-        INSERT INTO awcms_sync_inbox
-          (tenant_id, node_id, batch_id, event_type, aggregate_type, aggregate_id, payload_json)
-        VALUES (
-          ${tenantId}, ${node.id}, ${batchId}, ${event.eventType}, ${event.aggregateType},
-          ${event.aggregateId}, ${event.payload}
-        )
-      `;
+        // Finding C3 — this used to write the version unconditionally:
+        //
+        //   DO UPDATE SET current_version = ${currentVersion + 1}
+        //
+        // Two concurrent batches for the same aggregate both read 5, both
+        // passed the check above with `baseVersion = 5`, and both wrote the
+        // literal 6. Two conflicting events accepted, ZERO conflict rows, one
+        // increment lost — the read and the write were not atomic with respect
+        // to each other, and `evaluatePushEventConflict` was deciding on a
+        // value that could already be stale by the time it was acted on.
+        //
+        // `WHERE ... current_version = ${currentVersion}` makes it a
+        // compare-and-set: the row is only advanced if it still holds the value
+        // this decision was made on. A CAS that matches nothing means another
+        // writer moved it in between, which is exactly `version_mismatch` — the
+        // same verdict the pure evaluator would have reached with a fresh read,
+        // so the outcome is one the node already understands.
+        //
+        // On the INSERT path (`currentVersion = 0`, no row yet) the same
+        // predicate covers the create race: the loser's `ON CONFLICT DO UPDATE`
+        // finds `current_version = 1` and refuses.
+        //
+        // FOR UPDATE on the prefetch was the alternative and is weaker: it locks
+        // only rows that EXIST, so two batches creating the same aggregate would
+        // still both proceed, and it would serialise the whole batch's
+        // aggregates for the duration of the transaction rather than one row for
+        // the duration of one statement.
+        const advanced = await advanceAggregateVersion(
+          tx,
+          tenantId,
+          event.aggregateType,
+          event.aggregateId,
+          currentVersion
+        );
 
+        if (!advanced) {
+          await recordConflict("version_mismatch");
+          continue;
+        }
+
+        // The inbox row is written only AFTER the version has actually been
+        // advanced. It used to be written first, so a losing batch left an
+        // accepted event behind for an increment it never made.
         await tx`
-        INSERT INTO awcms_sync_aggregate_versions (tenant_id, aggregate_type, aggregate_id, current_version)
-        VALUES (${tenantId}, ${event.aggregateType}, ${event.aggregateId}, ${currentVersion + 1})
-        ON CONFLICT (tenant_id, aggregate_type, aggregate_id)
-        DO UPDATE SET current_version = ${currentVersion + 1}, updated_at = now()
-      `;
+          INSERT INTO awcms_sync_inbox
+            (tenant_id, node_id, batch_id, event_type, aggregate_type, aggregate_id, payload_json)
+          VALUES (
+            ${tenantId}, ${node.id}, ${batchId}, ${event.eventType}, ${event.aggregateType},
+            ${event.aggregateId}, ${event.payload}
+          )
+        `;
+
         // Keep the in-memory prefetch map in sync so a later event in this
         // same batch for the same aggregate sees the version this event
         // just bumped to (matching the old read-per-event behavior).

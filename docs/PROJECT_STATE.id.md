@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f7fd44373ef7c0ca19fd5fb2fab69e61346136ac91ebcb6d2435e657eeffda86 -->
+<!-- i18n-source-hash: sha256:ab261b9aa8ad7c3e352d3c6cded3e08094ec6ef59e507c1a25410f192e735f64 -->
 
 # AWCMS — Project State & Continuation
 
@@ -748,13 +748,53 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   17. **C3 — sync push melakukan read-modify-write pada `current_version` tanpa row lock.**
       `sync/push.ts:132-137`. Dua batch bersamaan sama-sama membaca 5, sama-sama lolos
       pemeriksaan konflik, sama-sama menulis literal `6`: dua event berkonflik diterima, nol
-      baris konflik, satu increment hilang.
+      baris konflik, satu increment hilang. Tidak berbahaya di hilir hari ini hanya karena
+      `awcms_sync_inbox` belum punya konsumen — cacatnya ada pada fondasi konfliknya
+      sendiri.
+
+      SELESAI (22 Agustus 2026). Tulisannya kini compare-and-set
+      (`… DO UPDATE … WHERE current_version = ${expected}`), diekstrak ke
+      `advanceAggregateVersion` supaya punya SATU nama dan SATU test. CAS yang tidak
+      mengenai apa pun ADALAH `version_mismatch` — vonis yang akan dicapai evaluator murni
+      dengan pembacaan segar, jadi node melihat hasil yang sudah dipahaminya.
+
+      Dua hal di luar rekomendasi. Baris inbox kini ditulis SETELAH versinya maju; dulu ia
+      ditulis lebih dulu, jadi batch yang kalah meninggalkan event "diterima" untuk increment
+      yang tak pernah dilakukannya. Dan `SELECT … FOR UPDATE` — perbaikan yang jelas — DITOLAK
+      karena LEBIH LEMAH: ia mengunci baris yang ADA, jadi dua batch yang MEMBUAT agregat
+      sama tetap sama-sama lanjut, dan ia menahan setiap agregat dalam batch selama seluruh
+      transaksi alih-alih satu baris selama satu statement.
+
+      Balapannya diuji sungguhan dan DETERMINISTIK: dua transaksi dengan jabat tangan DUA
+      arah. Menunggu pemenangnya saja tidak cukup — `withTenantOrThrow` kembali sebelum
+      statement pertamanya jalan, jadi yang kalah bisa membaca nilai pasca-tulis lalu gagal
+      karena alasan yang salah; itu terjadi satu dari lima run sebelum jabat tangan kedua
+      ditambahkan.
+
   18. **C4 — cursor proyeksi reporting melewati baris yang disisipkan lebih dulu tetapi
       di-commit belakangan.** `projection-incremental-worker.ts:195-223`. Tanpa batas atas,
       tanpa jendela lag. Karena `now()` adalah waktu mulai transaksi, baris dari transaksi
       panjang bisa commit setelah cursor melewati timestamp-nya — tidak pernah terpilih
       lagi. **ADR-0077 menolak persis bentuk ini untuk sync-pull**; mesin ini
-      mempertahankannya.
+      mempertahankannya. ADR-0072 menyatakan nilai inkremental itu otoritatif,
+      jadi tak ada yang merekonsiliasinya.
+
+      SELESAI (22 Agustus 2026). Pemindaiannya berhenti di
+      `now() - REPORTING_PROJECTION_LAG_SECONDS` (default 60), dan jaminannya DINYATAKAN
+      bukan disiratkan: sebuah baris terhitung bila transaksi yang menulisnya commit dalam
+      rentang lag sejak ia mulai. Penulis yang menahan transaksi lebih lama tetap terlewat —
+      dibatasi dan disebut namanya, bukan dihilangkan. `0` mengembalikan perilaku lama.
+
+      `min(xact_start)` dari `pg_stat_activity` akan tepat persis dan TIDAK BISA dipakai:
+      non-superuser tanpa `pg_read_all_stats` membaca NULL untuk pengguna lain, jadi batasnya
+      diam-diam menjadi `now()` — sama sekali bukan batas, tapi berbentuk seperti batas.
+      Jawaban salah yang tampak seperti mekanisme yang benar lebih buruk daripada pendekatan
+      yang terang-terangan aproksimatif.
+
+      `now()`-nya milik SQL, bukan aplikasi. Membandingkan timestamp database dengan jam JS
+      akan membuat batas itu bergantung pada skew jam app/DB, dan skew ke arah yang salah
+      diam-diam berarti tanpa batas sama sekali.
+
   19. **C5 — ekspor data subjek: 49 baca tak terbatas dalam satu transaksi interactive, dua
       di antaranya atas kolom aktor tanpa indeks.** `subject-data-executor.ts:200-217`.
       Tanpa LIMIT, tanpa cursor, semua baris di-buffer; `awcms_audit_events.actor_tenant_user_id`

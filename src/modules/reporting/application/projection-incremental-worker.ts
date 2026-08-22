@@ -67,7 +67,8 @@
  */
 import {
   applyCursorBoundarySafetyMargin,
-  CURSOR_BOUNDARY_SAFETY_MARGIN_MS
+  CURSOR_BOUNDARY_SAFETY_MARGIN_MS,
+  resolveProjectionLagSeconds
 } from "../domain/cursor-boundary";
 import type {
   ProjectionCursorMetricRule,
@@ -191,19 +192,33 @@ export async function runCursorStreamPass(
         ? applyCursorBoundarySafetyMargin(cursor)
         : null;
 
+      // Finding C4 — the UPPER bound. `now()` is transaction start, so a row
+      // written by a long transaction carries a timestamp from before it
+      // committed and can land BEHIND a cursor that has already moved past it,
+      // never to be selected again. `cursorColumn <= now() - lag` means the
+      // cursor only reaches a timestamp once every writer that took less than
+      // `lag` has committed. See `cursor-boundary.ts` for the exact guarantee
+      // this buys and the residue it leaves.
+      //
+      // `now()` is SQL's, not the app's: comparing a database timestamp against
+      // a JS clock would make the bound depend on app/DB clock skew, and skew in
+      // the wrong direction is silently no bound at all.
+      const lagSeconds = resolveProjectionLagSeconds();
       const rows = (
         resumeAfterBound
           ? await tx.unsafe(
               `SELECT ${selectColumns.join(", ")} FROM ${tableName}
                WHERE ${tenantColumn} = $1 AND ${cursorColumn} >= $2
-               ORDER BY ${cursorColumn} ASC LIMIT $3`,
-              [tenantId, resumeAfterBound, batchLimit]
+                 AND ${cursorColumn} <= now() - make_interval(secs => $3)
+               ORDER BY ${cursorColumn} ASC LIMIT $4`,
+              [tenantId, resumeAfterBound, lagSeconds, batchLimit]
             )
           : await tx.unsafe(
               `SELECT ${selectColumns.join(", ")} FROM ${tableName}
                WHERE ${tenantColumn} = $1
-               ORDER BY ${cursorColumn} ASC LIMIT $2`,
-              [tenantId, batchLimit]
+                 AND ${cursorColumn} <= now() - make_interval(secs => $2)
+               ORDER BY ${cursorColumn} ASC LIMIT $3`,
+              [tenantId, lagSeconds, batchLimit]
             )
       ) as Record<string, unknown>[];
 

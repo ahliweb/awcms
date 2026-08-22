@@ -761,12 +761,48 @@ pioneered directly here after the ADR-0047 freeze.)
       check, both write the literal `6`: two conflicting events accepted, zero conflict
       rows, one increment lost. Harmless downstream today only because `awcms_sync_inbox`
       has no consumer — it is a defect in the conflict foundation itself.
+
+      DONE (22 August 2026). The write is a compare-and-set
+      (`… DO UPDATE … WHERE current_version = ${expected}`), extracted to
+      `advanceAggregateVersion` so it has one name and one test. A CAS that matches
+      nothing IS `version_mismatch` — the verdict the pure evaluator would reach on a
+      fresh read, so a node sees an outcome it already understands.
+
+      Two things beyond the recommendation. The inbox row is now written AFTER the version
+      advances; it used to be first, so a losing batch left an accepted event behind for an
+      increment it never made. And `SELECT … FOR UPDATE` — the obvious fix — was rejected
+      as WEAKER: it locks rows that EXIST, so two batches creating the same aggregate would
+      both proceed, and it holds every aggregate in the batch for the whole transaction
+      rather than one row for one statement.
+
+      The race is tested for real and DETERMINISTICALLY: two transactions with handshakes
+      in both directions. Awaiting only the winner is not enough — `withTenantOrThrow`
+      returns before its first statement runs, so the loser could read the post-write value
+      and fail for the wrong reason, which it did one run in five before the second
+      handshake was added.
+
   18. **C4 — reporting projection cursor advances past rows inserted earlier but committed
       later.** `projection-incremental-worker.ts:195-223`. No upper bound, no lag window.
       Because `now()` is transaction-start, a long transaction's row can commit after the
       cursor has moved past its timestamp — never selected again. **ADR-0077 rejected
       exactly this shape for sync-pull**; this engine kept it, and ADR-0072 declares the
       incremental value authoritative, so nothing reconciles it.
+
+      DONE (22 August 2026). The scan stops at `now() - REPORTING_PROJECTION_LAG_SECONDS`
+      (default 60), and the guarantee is STATED rather than implied: a row is counted if
+      the transaction that wrote it committed within the lag of starting. A writer holding
+      a transaction open longer is still missed — bounded and named, not eliminated. `0`
+      restores the old behaviour.
+
+      `pg_stat_activity`'s `min(xact_start)` would be exactly right and is unusable: a
+      non-superuser without `pg_read_all_stats` reads NULL for other users, so the bound
+      would silently become `now()` — no bound at all, wearing the shape of one. A wrong
+      answer that looks like the right mechanism is worse than a plainly approximate one.
+
+      `now()` is SQL's, not the app's. Comparing a database timestamp against a JS clock
+      would make the bound depend on app/DB clock skew, and skew in the wrong direction is
+      silently no bound at all.
+
   19. **C5 — subject-data export: 49 unbounded reads in one interactive transaction, two
       over unindexed actor columns.** `subject-data-executor.ts:200-217`. No LIMIT, no
       cursor, all rows buffered; `awcms_audit_events.actor_tenant_user_id` and the
