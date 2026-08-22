@@ -261,7 +261,30 @@ export async function promotePrincipalCredential(
   `;
 }
 
-/** Replaces the credential outright — password reset and password change. */
+/**
+ * Replaces the credential outright — password reset and password change.
+ *
+ * ## The epoch bump is part of the credential change, not a step beside it
+ *
+ * Finding A5 (sql/144). Replacing the credential is global; revoking sessions is
+ * not, and cannot be — `awcms_sessions` is FORCE RLS and the transaction is
+ * scoped to one tenant. So a reset performed in tenant A used to leave every
+ * session in tenants B, C, D alive, holding access that survived a password
+ * change its holder did not make.
+ *
+ * `credential_epoch + 1` in the SAME statement is what closes that. It is here,
+ * rather than at the two call sites, for the reason ADR-0079 already paid for
+ * once: a caller that replaces the credential and forgets the bump leaves no
+ * trace — the password changes, the reset mail arrives, the tests pass, and the
+ * stolen session in the other tenant keeps working. Two writers that must always
+ * run together are one writer.
+ *
+ * `promotePrincipalCredential` deliberately does NOT bump. Promotion writes the
+ * hash the identity already had into the principal for the first time; nothing
+ * about the credential changed, so no live session is holding a stale one, and
+ * bumping there would sign every one of that human's other tenants out on their
+ * next ordinary login.
+ */
 export async function setPrincipalCredential(
   tx: Bun.SQL,
   principalId: string,
@@ -272,6 +295,7 @@ export async function setPrincipalCredential(
     SET password_hash = ${passwordHash},
         failed_login_count = 0,
         locked_until = NULL,
+        credential_epoch = credential_epoch + 1,
         updated_at = now()
     WHERE id = ${principalId}
   `;

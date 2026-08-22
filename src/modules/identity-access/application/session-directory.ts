@@ -8,6 +8,8 @@
  */
 
 /** What a person may see about their own session. Never a token, never a raw IP or User-Agent. */
+import { sessionCredentialCurrent } from "./session-credential-epoch";
+
 export type OwnSessionSummary = {
   id: string;
   issuedAt: string;
@@ -47,11 +49,12 @@ async function resolveCallerIdentity(
   now: Date
 ): Promise<string | null> {
   const rows = (await tx`
-    SELECT identity_id FROM awcms_sessions
-    WHERE tenant_id = ${tenantId}
-      AND token_hash = ${tokenHash}
-      AND revoked_at IS NULL
-      AND expires_at > ${now}
+    SELECT s.identity_id FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId}
+      AND s.token_hash = ${tokenHash}
+      AND s.revoked_at IS NULL
+      AND s.expires_at > ${now}
+      AND ${sessionCredentialCurrent(tx)}
   `) as { identity_id: string }[];
 
   return rows[0]?.identity_id ?? null;
@@ -69,14 +72,15 @@ export async function listOwnSessions(
   if (!identityId) return null;
 
   const rows = (await tx`
-    SELECT id, token_hash, issued_at, expires_at, assurance_level, origin_auth,
-           client_ip_hash, user_agent_summary
-    FROM awcms_sessions
-    WHERE tenant_id = ${tenantId}
-      AND identity_id = ${identityId}
-      AND revoked_at IS NULL
-      AND expires_at > ${now}
-    ORDER BY issued_at DESC
+    SELECT s.id, s.token_hash, s.issued_at, s.expires_at, s.assurance_level,
+           s.origin_auth, s.client_ip_hash, s.user_agent_summary
+    FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId}
+      AND s.identity_id = ${identityId}
+      AND s.revoked_at IS NULL
+      AND s.expires_at > ${now}
+      AND ${sessionCredentialCurrent(tx)}
+    ORDER BY s.issued_at DESC
   `) as SessionRow[];
 
   return rows.map((row) => ({

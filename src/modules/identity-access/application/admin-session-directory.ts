@@ -36,6 +36,8 @@
  * raw IP and no raw `User-Agent` — the same exclusions the self-service view
  * makes, for the same reason: none of them is needed to decide "end that one".
  */
+import { sessionCredentialCurrent } from "./session-credential-epoch";
+
 export type TenantUserSessionSummary = {
   id: string;
   issuedAt: string;
@@ -117,14 +119,15 @@ export async function listSessionsForTenantUser(
   if (!identityId) return { outcome: "not_found" };
 
   const rows = (await tx`
-    SELECT id, token_hash, issued_at, expires_at, assurance_level, origin_auth,
-           client_ip_hash, user_agent_summary
-    FROM awcms_sessions
-    WHERE tenant_id = ${tenantId}
-      AND identity_id = ${identityId}
-      AND revoked_at IS NULL
-      AND expires_at > ${now}
-    ORDER BY issued_at DESC
+    SELECT s.id, s.token_hash, s.issued_at, s.expires_at, s.assurance_level,
+           s.origin_auth, s.client_ip_hash, s.user_agent_summary
+    FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId}
+      AND s.identity_id = ${identityId}
+      AND s.revoked_at IS NULL
+      AND s.expires_at > ${now}
+      AND ${sessionCredentialCurrent(tx)}
+    ORDER BY s.issued_at DESC
   `) as SessionRow[];
 
   return {
@@ -202,12 +205,13 @@ export async function revokeSessionsForTenantUser(
   // one row the update excludes) but the question "was it in scope" is easier to
   // answer wrongly by inspecting the result set.
   const callerRows = (await tx`
-    SELECT 1 FROM awcms_sessions
-    WHERE tenant_id = ${tenantId}
-      AND identity_id = ${identityId}
-      AND token_hash = ${callerTokenHash}
-      AND revoked_at IS NULL
-      AND expires_at > ${now}
+    SELECT 1 FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId}
+      AND s.identity_id = ${identityId}
+      AND s.token_hash = ${callerTokenHash}
+      AND s.revoked_at IS NULL
+      AND s.expires_at > ${now}
+      AND ${sessionCredentialCurrent(tx)}
   `) as unknown[];
 
   const revoked = (await tx`

@@ -256,6 +256,15 @@ export async function completePasswordReset(
   // `setPrincipalCredential` also replaces the credential, so a reset performed
   // in ONE tenant changes the password everywhere — which is what "one human,
   // one credential" means, and why the reset mail says so.
+  //
+  // Finding A5 — it now also bumps `credential_epoch` in the same statement, and
+  // that is what makes the reset global in the direction that matters. The
+  // `revokeAllSessionsForIdentity` below can only reach THIS tenant's sessions
+  // (FORCE RLS, one tenant per transaction), so before the epoch a person whose
+  // tenant-B cookie was stolen could recover from tenant A, change the password
+  // everywhere, and leave the stolen session working. Sessions in every other
+  // tenant are now behind their principal's epoch and refused on their next
+  // request, without this transaction ever writing outside its own tenant.
   await setPrincipalCredentialForIdentity(tx, identity.id, passwordHash);
 
   await tx`

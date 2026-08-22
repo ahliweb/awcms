@@ -67,6 +67,7 @@ import {
   hashPrincipalSelectionToken
 } from "../../../../lib/auth/principal-selection-token";
 import { log } from "../../../../lib/logging/logger";
+import { currentCredentialEpoch } from "../../../../modules/identity-access/application/session-credential-epoch";
 
 /**
  * ADR-0088 — the selection token's whole life, in seconds.
@@ -857,10 +858,11 @@ export const POST: APIRoute = async ({
     await tx`
       INSERT INTO awcms_sessions
         (tenant_id, identity_id, token_hash, expires_at,
-         client_ip_hash, user_agent_summary, origin_auth)
+         client_ip_hash, user_agent_summary, origin_auth, credential_epoch)
       VALUES (
         ${tenantId}, ${identityRow!.id}, ${tokenHash}, ${expiresAt},
-        ${persistableClientIpHash(clientIp)}, ${summarizeUserAgent(request) ?? null}, 'password'
+        ${persistableClientIpHash(clientIp)}, ${summarizeUserAgent(request) ?? null}, 'password',
+        ${currentCredentialEpoch(tx, tenantId, identityRow!.id)}
       )
     `;
 

@@ -17,6 +17,7 @@ import {
   revokeSessionsForTenantUser
 } from "../src/modules/identity-access/application/admin-session-directory";
 import { identityAccessModule } from "../src/modules/identity-access/module";
+import { SESSION_EPOCH_FRAGMENT_MARKER } from "../src/modules/identity-access/application/session-credential-epoch";
 
 type Call = { sql: string; values: unknown[] };
 
@@ -26,7 +27,20 @@ function recordingTx(responses: unknown[][]) {
   let index = 0;
 
   const tx = ((strings: TemplateStringsArray, ...values: unknown[]) => {
-    calls.push({ sql: strings.join(" ? "), values });
+    const sql = strings.join(" ? ");
+
+    // A FRAGMENT, not a statement (`session-credential-epoch.ts`). Real
+    // Bun.SQL splices it into the outer statement and runs ONE query; a
+    // recording fake sees an indistinguishable call and would count two.
+    // Recording it would make every `toHaveLength` below assert something
+    // Postgres never does, which is worse than asserting nothing — so it is
+    // skipped, and the marker comment exists to make skipping it honest
+    // rather than a guess about the text.
+    if (sql.includes(SESSION_EPOCH_FRAGMENT_MARKER)) {
+      return { sql, values };
+    }
+
+    calls.push({ sql, values });
 
     return Promise.resolve(responses[index++] ?? []);
   }) as unknown as Bun.SQL;

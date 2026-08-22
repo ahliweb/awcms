@@ -70,15 +70,36 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
   {
     table: "awcms_principals",
     allowedFiles: [
-      "src/modules/identity-access/application/principal-store.ts"
+      "src/modules/identity-access/application/principal-store.ts",
+      // Finding A5, sql/144. It reads ONE column — `credential_epoch` — and
+      // reads no other, which is why it is not folded into the credential store:
+      // the store owns `password_hash`, and a file that never touches the hash
+      // should not be able to.
+      //
+      // This entry NARROWS the boundary rather than widening it. The two
+      // fragments here are embedded by eight live-session readers and two
+      // session INSERT sites, so ten files' worth of SQL reaches
+      // `awcms_principals` — and exactly one file names it. The alternative
+      // considered was a per-reader join, which would have put ten entries on
+      // this list instead of one.
+      "src/modules/identity-access/application/session-credential-epoch.ts"
     ],
     // `selection_token_hash` joined the list in ADR-0088, and it is a KEY in
     // the same sense the other two are: `awcms_principals_selection_token_key`
     // is unique, so the predicate binds to exactly one row. Widening this list
     // is a review decision — it is written in that ADR, not slipped in.
-    keyedPredicate: /\b(id|email_normalized|selection_token_hash)\s*=\s*\$\{/,
+    //
+    // The FK-join form (`<alias>.id = <other>.principal_id`) is keyed for the
+    // same reason `factor_id` is on the recovery-code list below: it can only
+    // reach the principal behind a row the outer query ALREADY resolved by its
+    // own keyed predicate. It cannot address a principal the caller had not
+    // already reached, which is the property this rule exists to hold — and it
+    // is what makes A5's epoch check a join rather than a second round trip on
+    // the hottest query in the codebase.
+    keyedPredicate:
+      /\b(id|email_normalized|selection_token_hash)\s*=\s*(\$\{|\w+\.principal_id\b)/,
     keyDescription:
-      "`id = ${…}`, `email_normalized = ${…}`, or `selection_token_hash = ${…}`"
+      "`id = ${…}`, `email_normalized = ${…}`, `selection_token_hash = ${…}`, or `id = <alias>.principal_id`"
   },
   {
     table: "awcms_principal_mfa_factors",

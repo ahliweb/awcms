@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ab6615e97c418709f74d7d2934e24ead2b84689847eea94930833fa4af30ecec -->
+<!-- i18n-source-hash: sha256:ab90eb6ad17258fa4b67f07df2e6632d5175f7e312f76ccafcebae756dc20eb2 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,11 +111,11 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **143** (`sql/001`–`143`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **144** (`sql/001`–`144`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **56** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -534,7 +534,38 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      `revokeAllSessionsForIdentity` membawa `WHERE tenant_id = …`. Pengguna yang cookie
      tenant-B-nya dicuri lalu memulihkan dari tenant A mengubah kata sandi di mana-mana dan
      tidak mencabut apa pun di B. "Keluarkan saya dari semua perangkat" punya batas yang
-     sama, dan dua komentar dokumen menegaskan jaminan yang tidak lagi diberikan kodenya.
+     sama, dan dua komentar dokumen menegaskan jaminan yang tidak lagi diberikan kodenya. **Perubahan:** tambahkan
+     `credential_epoch` pada `awcms_principals`, naikkan di statement yang mengganti hash,
+     stempelkan pada sesi, tolak sesi ber-epoch basi. Sebelum itu, perbaiki komentar palsunya.
+
+     SELESAI (22 Agustus 2026), `sql/144`. Rekomendasi diterapkan apa adanya, ditambah dua
+     hal yang tidak disebutkannya.
+
+     Pertama, MENGAPA epoch dan bukan pencabutan yang diperlebar — ditulis ke dalam migration
+     supaya tidak diperdebatkan ulang: pencabutan TIDAK BISA diperlebar dari dalam request
+     (satu GUC tenant per transaksi — UPDATE-nya akan diam-diam mengenai nol baris di tempat
+     lain, bug yang sama dengan kode lebih banyak), dan keluar dari RLS berarti fungsi
+     SECURITY DEFINER yang boleh mencabut sesi APA PUN di tenant MANA PUN, terjangkau dari
+     jalur request. Epoch membalikkannya: perubahan kredensial menulis SATU baris yang sudah
+     miliknya sendiri, dan tak ada penulis yang pernah melewati batas tenant. Suite integrasi
+     menegaskan persis itu — setelah reset di A, baris tenant B tetap `revoked_at IS NULL`
+     dan tetap ditolak; itulah yang membedakan perbaikan ini dari perbaikan yang diam-diam
+     memperoleh hak tulis lintas-tenant.
+
+     Kedua, kenaikannya ada DI DALAM `setPrincipalCredential`, bukan di dua titik panggil,
+     dan ada gerbang baru. Delapan berkas memutuskan apakah sebuah sesi hidup, dan baris sesi
+     tidak memberi petunjuk apa pun bahwa ada kredensial global untuk ditinggali — jadi
+     penulis berikutnya menulis tiga predikat yang bisa dilihatnya dan yang keempat tak
+     terlihat. Itu persis bentuk ADR-0079. `sessionCredentialCurrent` adalah satu-satunya
+     definisi dan `identity:session-readers:check` (gerbang 57) menggagalkan build untuk
+     pembaca sesi-hidup terdaftar yang tak memuatnya, untuk `INSERT` yang tak menstempel
+     epoch, dan untuk berkas baru yang menyebut `awcms_sessions` tapi tidak ada di kedua
+     daftar. Dibuktikan lewat mutasi di ketiga arah sebelum dipercaya.
+
+     `promotePrincipalCredential` sengaja TIDAK menaikkan: ia menulis hash yang sudah dimiliki
+     identity itu, jadi tidak ada yang berubah pada kredensialnya, dan menaikkan di sana akan
+     mengeluarkan orang dari tenant-tenant lainnya saat login biasa.
+
   6. **A6 — feed/sitemap blog meng-escape dengan `escapeHtml`, bukan `escapeXmlText`.**
      **SELESAI (22 Agustus 2026).**
      `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`. Satu
@@ -658,7 +689,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       untuk `count(*)`. `db:fk-index:check` tidak bisa melihatnya — `updated_at` bukan
       foreign key. Ongkosnya O(pos tenant), bukan O(ukuran halaman).
 
-      **DIUKUR, yang putaran ini tidak bisa lakukan.** `sql/143` menambah tiga indeks;
+      **DIUKUR, yang putaran ini tidak bisa lakukan.** `sql/144` menambah tiga indeks;
       terhadap 24.000 post ter-seed di PostgreSQL 18, daftar `/admin/blog` berubah dari Seq
       Scan 24.000 baris plus top-N heapsort (7,4 ms) menjadi Index Scan yang membaca **50**
       baris (0,057 ms), halaman keyset pertama dari 5,1 ms menjadi 0,110 ms, dan halaman
@@ -668,7 +699,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       **Satu klaim di entri ini SALAH dan dibiarkan terlihat alih-alih disunting hilang:**
       "plus scan penuh KEDUA untuk `count(*)`". Hitungan di samping daftar itu sudah
       terencana sebagai Index Only Scan pada `awcms_blog_posts_tenant_deleted_idx` (1,8 ms,
-      tidak berubah oleh `sql/143`). Ia membaca setiap entri indeks — itu sebabnya ia tidak
+      tidak berubah oleh `sql/144`). Ia membaca setiap entri indeks — itu sebabnya ia tidak
       menjadi lebih cepat — tetapi ia bukan heap scan, dan tidak ada indeks yang ditambahkan
       di sini yang menolongnya. Hitungan yang murah adalah keputusan lain (estimasi, atau
       penghitung terpelihara) dengan kompromnya sendiri.

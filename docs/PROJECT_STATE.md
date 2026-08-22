@@ -111,11 +111,11 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **143** (`sql/001`–`143`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **144** (`sql/001`–`144`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.599 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
-| Gates                             | **56** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -552,6 +552,35 @@ pioneered directly here after the ADR-0047 freeze.)
      `credential_epoch` to `awcms_principals`, bump it in the statement that replaces the
      hash, stamp it on sessions, reject stale-epoch sessions. Until then, correct the
      false comments.
+
+     DONE (22 August 2026), `sql/144`. The recommendation is implemented as written, plus
+     two things it did not say.
+
+     First, WHY an epoch and not a wider revoke, written into the migration so the next
+     person does not re-litigate it: the revocation cannot be widened from inside the
+     request (one tenant GUC per transaction — the UPDATE would silently match zero rows
+     everywhere else, the same bug with more code), and escaping RLS would mean a
+     SECURITY DEFINER function that may revoke any session in any tenant, reachable from a
+     request path. The epoch inverts it: the credential change writes ONE row it already
+     owns, and no writer ever crosses a boundary. The integration suite asserts exactly
+     that — after a reset in A, tenant B's row still has `revoked_at IS NULL` and is
+     refused anyway, which is what distinguishes this fix from one that quietly gained
+     cross-tenant write power.
+
+     Second, the bump lives INSIDE `setPrincipalCredential` rather than at the two call
+     sites, and there is a new gate. Eight files decide whether a session is live, and a
+     session row gives no hint that a global credential exists to be behind — so the next
+     author writes the three predicates they can see and the fourth is invisible. That is
+     ADR-0079's shape exactly. `sessionCredentialCurrent` is the one definition and
+     `identity:session-readers:check` (gate 57) fails the build for a recorded live-session
+     reader missing it, for an `INSERT` that does not stamp the epoch, and for a new file
+     naming `awcms_sessions` that is on neither list. Proven by mutation in all three
+     directions before it was trusted.
+
+     `promotePrincipalCredential` deliberately does NOT bump: it writes a hash the identity
+     already had, so nothing about the credential changed, and bumping there would sign a
+     person out of their other tenants on an ordinary login.
+
   6. **A6 — blog feed/sitemap escape with `escapeHtml` instead of `escapeXmlText`.**
      **DONE (22 August 2026).**
      `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`.
@@ -675,7 +704,7 @@ pioneered directly here after the ADR-0047 freeze.)
       - top-N sort, plus a second full scan for `count(*)`. `db:fk-index:check` cannot see
         it — `updated_at` is not a foreign key. Cost is O(tenant posts), not O(page size).
 
-      **MEASURED, which this round could not do.** `sql/143` adds three indexes; against
+      **MEASURED, which this round could not do.** `sql/144` adds three indexes; against
       24,000 seeded posts on PostgreSQL 18 the `/admin/blog` list went from a Seq Scan of
       24,000 rows plus a top-N heapsort (7.4 ms) to an Index Scan reading **50** (0.057
       ms), the keyset first page from 5.1 ms to 0.110 ms, and a keyset page resumed at row
@@ -685,7 +714,7 @@ pioneered directly here after the ADR-0047 freeze.)
       **One claim in this entry is wrong and is left visible rather than edited away:**
       "plus a second full scan for `count(*)`". The count beside the list already plans as
       an Index Only Scan on `awcms_blog_posts_tenant_deleted_idx` (1.8 ms, unchanged by
-      `sql/143`). It reads every index entry, which is why it does not get faster — but it
+      `sql/144`). It reads every index entry, which is why it does not get faster — but it
       is not a heap scan, and no index added here helps it. A cheap count is a different
       decision (an estimate, or a maintained counter) with its own trade-off.
 
