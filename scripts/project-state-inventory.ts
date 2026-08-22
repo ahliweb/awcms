@@ -46,13 +46,25 @@ import path from "node:path";
 
 import { listModules } from "../src/modules";
 import { MODULE_CONTRACT_VERSION } from "../src/modules/_shared/module-contract";
+import {
+  extractBlock,
+  parseInventoryRows,
+  replaceBlock,
+  type GeneratedBlockMarkers
+} from "./lib/markdown-table";
+import { listMigrationNames } from "./lib/migrations";
 import { listFilesRecursive } from "./lib/repo-files";
 
 const DOC_PATH = "docs/PROJECT_STATE.md";
 export const BEGIN = "<!-- project-state-inventory:mulai -->";
 export const END = "<!-- project-state-inventory:selesai -->";
 
-const MIGRATIONS_DIR = "sql";
+const MARKERS: GeneratedBlockMarkers = {
+  begin: BEGIN,
+  end: END,
+  docPath: DOC_PATH
+};
+
 const ADR_DIR = "docs/adr";
 const MODULES_DIR = "src/modules";
 const SRC_DIR = "src";
@@ -186,51 +198,6 @@ export function renderInventoryBlock(data: ProjectStateInventory): string {
 }
 
 /**
- * Parse a rendered block back into its rows — cell content only, padding and
- * alignment discarded. The split honours `\|` escapes because the changeset
- * command cell contains a real shell pipeline.
- */
-export function parseInventoryRows(block: string): string[][] {
-  return block
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("|"))
-    .filter((line) => !/^\|[\s\-:|]+\|$/.test(line))
-    .map((line) =>
-      line
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split(/(?<!\\)\|/)
-        .map((cell) => cell.trim())
-    );
-}
-
-export function extractBlock(markdown: string): string | null {
-  const start = markdown.indexOf(BEGIN);
-  const end = markdown.indexOf(END);
-  if (start === -1 || end === -1 || end < start) return null;
-  return markdown.slice(start + BEGIN.length, end).trim();
-}
-
-export function replaceBlock(markdown: string, block: string): string {
-  const start = markdown.indexOf(BEGIN);
-  const end = markdown.indexOf(END);
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error(
-      `${DOC_PATH} is missing the "${BEGIN}" / "${END}" markers — the generated table has no home.`
-    );
-  }
-
-  return (
-    markdown.slice(0, start + BEGIN.length) +
-    "\n\n" +
-    block +
-    "\n\n" +
-    markdown.slice(end)
-  );
-}
-
-/**
  * The `--check` verdict as data, so the test can prove it in both directions
  * without touching the real file. Empty array = in sync.
  */
@@ -238,7 +205,7 @@ export function diffAgainstFresh(
   markdown: string,
   freshBlock: string
 ): string[] {
-  const current = extractBlock(markdown);
+  const current = extractBlock(markdown, MARKERS);
   if (current === null) {
     return [
       `penanda \`${BEGIN}\` / \`${END}\` tidak ditemukan di ${DOC_PATH} — blok ter-generate tidak punya rumah`
@@ -296,14 +263,9 @@ export function collectInventory(): ProjectStateInventory {
     scripts: Record<string, string>;
   };
 
-  const migrations = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-  if (migrations.length === 0) {
-    throw new Error(
-      `no migrations in ${MIGRATIONS_DIR}/ — that cannot be right`
-    );
-  }
+  // The non-empty assertion this used to carry by hand now lives in the shared
+  // loader, where every caller gets it (finding D14).
+  const migrations = listMigrationNames();
 
   const adrs = readdirSync(ADR_DIR)
     .filter((name) => /^\d{4}-/.test(name) && name.endsWith(".md"))
@@ -369,7 +331,7 @@ async function main(): Promise<void> {
   const fresh = renderInventoryBlock(collectInventory());
 
   if (!check) {
-    writeFileSync(DOC_PATH, replaceBlock(markdown, fresh), "utf8");
+    writeFileSync(DOC_PATH, replaceBlock(markdown, fresh, MARKERS), "utf8");
     console.log(
       `Updated: ${DOC_PATH} §2. Run \`bun run project-state:inventory:check\` to verify.`
     );

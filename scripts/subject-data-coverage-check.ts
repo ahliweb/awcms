@@ -53,13 +53,10 @@
  *
  * Pure — reads `sql/` and the module registry, no database.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 
 import { listModules } from "../src/modules";
-import { deriveTableRlsStates } from "./repo-inventory";
-
-const MIGRATIONS_DIR = "sql";
+import { loadMigrations } from "./lib/migrations";
+import { deriveTableRlsStates } from "./lib/table-rls-states";
 
 /**
  * Tables that hold nothing about a person. **Reasoned refusals**, not a
@@ -210,16 +207,7 @@ export function findSubjectCoverageProblems(
 }
 
 export function collectTables(): string[] {
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-
-  return deriveTableRlsStates(
-    files.map((name) => ({
-      name,
-      sql: readFileSync(path.join(MIGRATIONS_DIR, name), "utf8")
-    }))
-  ).map((state) => state.table);
+  return deriveTableRlsStates(loadMigrations()).map((state) => state.table);
 }
 
 export function collectSubjectDescribedTables(): string[] {

@@ -1267,23 +1267,72 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       of the job there are.
 
   33. **D12 — three near-identical JSON fetch cores in `src/lib/ui/`, plus dead `postJson`
-      carrying a false comment.** `admin-form-client.ts:77-173`. They have **already
-      drifted**: `sendJson` supports `extraHeaders` (Idempotency-Key), bodyless requests and
-      `DELETE`; `sendJsonWithFieldErrors` supports none. `postJson` has zero callers while
+      carrying a false comment.** **DONE (22 August 2026).** `admin-form-client.ts:77-173`.
+      They had **already drifted**: `sendJson` supported `extraHeaders`
+      (Idempotency-Key), bodyless requests and `DELETE`; `sendJsonWithFieldErrors`
+      supported none until Issue #596 added the first by hand — which is why `/admin/seo`
+      reported "invalid" without saying which field. `postJson` had zero callers while
       claiming to serve "existing create-form call sites".
+
+      The three are now projections of one `sendJsonRequest`, and they stay three public
+      functions on purpose: `sendJson`'s narrow `{ ok, errorCode }` is what stops thirty-odd
+      screens painting internal detail onto the page (Issue #540), so widening it for
+      everyone to serve two callers would remove that property from all of them. `postJson`
+      is deleted. A third disagreement the finding did not name: the field-errors copy
+      merged `extraHeaders` OVER `Content-Type`, so a caller could have replaced it — the
+      kept order is the one both docblocks claimed.
+
+      Four other `src/lib/ui` files fetch with same-origin credentials and are deliberately
+      NOT folded in: two are GET reads, `language-switcher-client.ts` POSTs anonymously to a
+      public endpoint and decides by `response.ok` plus a cookie, and
+      `push-subscription-client.ts` surfaces the server's own `error.message` — the exact
+      thing the narrow shape exists to withhold. **Recovered 425 B** of a client asset
+      budget that had 161 B left, which is what unblocked ADR-0106's screen changes.
+
   34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` has 3 users and 20 hand-inlined copies.**
-      `_shared/keyset-pagination.ts:56-59`. The constant hardcodes bare `created_at` and its
-      own docblock concedes callers must "wrap it in a table alias" — impossible for a
-      string. All 20 copies are byte-correct today, so this is prospective: one dropped
-      `AT TIME ZONE 'UTC'` or `US`→`MS` silently resurrects #158's 105-rows-paged-to-4
-      defect, past page 1 only, where no test would see it.
+      **DONE (22 August 2026).** `_shared/keyset-pagination.ts:56-59`. The constant
+      hardcoded a bare `created_at` while its own docblock told callers to "wrap it in a
+      table alias" — not something a string can do, so every joined query wrote its own.
+
+      Now `keysetCursorCreatedAtSql(alias?)` over a shared
+      `utcMicrosecondTextSql(column, offsetSuffix)`. **There were twenty-ONE copies, not
+      twenty**: three more render the same expression for `occurred_at` and `last_seen_at`,
+      which the audit's `created_at` search could not see, and `idn_admin_regions` renders
+      it with a `Z` suffix for a DTO rather than a cursor. All are gone.
+
+      The finding called this prospective and it is: every copy was byte-correct. That is
+      not the same as safe — `AT TIME ZONE 'UTC'` and `US` are both silent when wrong, and
+      `US`→`MS` resurrects #158 past page one only. A test now refuses any
+      `to_char(… AT TIME ZONE 'UTC'` outside the owning module, matching the RENDERING
+      rather than the correct format string, because an edit that gets one character wrong
+      is the case it exists to catch. It was verified to FAIL on a real defect. The column
+      reference is asserted to be an identifier, since callers hand the result to
+      `tx.unsafe`.
+
   35. **D14 — finish the `scripts/lib/` extraction that has already started.**
-      `repo-inventory.ts:339-370`; `project-state-inventory.ts:198-225`; five
-      `MIGRATIONS_DIR = "sql"` declarations + four verbatim loads; `deriveTableRlsStates`
-      exported from a **generator** and imported by two gates. The markdown-escape fix
-      landed in one of three `parseInventoryRows` copies; the non-empty assertion exists in
-      one of six migration loaders. `scripts/lib/repo-files.ts` now exists and six scripts
-      are migrated — this is finishing a started job.
+      **DONE (22 August 2026).** Three shared modules, and each replaced a duplication that
+      had already produced a difference nobody chose.
+
+      `lib/markdown-table.ts` — `extractBlock`/`replaceBlock` were byte-identical copies;
+      `parseInventoryRows` was not. One had learned about `\|` escapes because its own table
+      holds a shell pipeline; the other split on a bare `|` and would have torn that cell.
+      The escape-aware version is a strict superset, so it costs the other caller nothing.
+
+      `lib/migrations.ts` — **six** copies of the loader (the audit found five; `sql-grants.ts`
+      had a sixth), and the non-empty assertion existed in exactly one. Every caller asks
+      "which tables exist, and which have RLS forced" — a question an empty list answers
+      with a confident, wrong "none". It now resolves `sql/` from the repository root, which
+      only `sql-grants.ts`'s copy did, so no gate depends on where it was run from.
+
+      `lib/table-rls-states.ts` — `deriveTableRlsStates` was exported from a documentation
+      GENERATOR and imported by two gates. A gate that fails because a generator was
+      refactored teaches a reader that the gate is fragile rather than that the code is
+      wrong.
+
+      Both `catch { return; }` walkers in `edge-cache-surfaces-check.ts` now use the shared
+      walk, which throws on an unreadable root — for that gate, a missed purge call site is
+      a stale cross-tenant page.
+
   36. **D15 — workflow `notify` nodes silently do nothing, and both composition roots
       justify it with a false claim.** **DONE (22 August 2026) — the comments, which is
       what the finding said the live defect was.**

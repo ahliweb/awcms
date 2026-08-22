@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:5fa03b4ade425d540f26dc81faa5b124d4832320b55e44e81ea5cf64db3c71d7 -->
+<!-- i18n-source-hash: sha256:bedbefeea8332e44a41664dda0bd2b64d79101bad603885d5b79aee9cc399f50 -->
 
 # AWCMS — Project State & Continuation
 
@@ -1277,21 +1277,74 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       advisory lock job-runner menentukan ada berapa job itu.
 
   33. **D12 — tiga inti fetch JSON nyaris identik di `src/lib/ui/`, plus `postJson` mati yang
-      membawa komentar palsu.** `admin-form-client.ts:77-173`. Keduanya **sudah menyimpang**:
-      `sendJson` mendukung `extraHeaders` (Idempotency-Key), request tanpa body, dan
-      `DELETE`; `sendJsonWithFieldErrors` tidak satu pun.
+      membawa komentar palsu.** **SELESAI (22 Agustus 2026).** `admin-form-client.ts:77-173`.
+      Keduanya **sudah menyimpang**: `sendJson` mendukung `extraHeaders` (Idempotency-Key),
+      request tanpa body, dan `DELETE`; `sendJsonWithFieldErrors` tidak satu pun sampai Issue
+      #596 menambahkan yang pertama secara manual — itulah sebabnya `/admin/seo` melaporkan
+      "invalid" tanpa menyebut field mana. `postJson` nol pemanggil sambil mengaku melayani
+      "call site form create yang sudah ada".
+
+      Ketiganya kini proyeksi dari satu `sendJsonRequest`, dan tetap tiga fungsi publik
+      dengan sengaja: bentuk sempit `{ ok, errorCode }` milik `sendJson` adalah yang
+      mencegah tiga puluhan layar melukiskan detail internal ke halaman (Issue #540), jadi
+      melebarkannya untuk semua demi dua pemanggil akan mencabut properti itu dari semuanya.
+      `postJson` dihapus. Perselisihan ketiga yang tidak disebut temuan: salinan
+      field-errors menggabungkan `extraHeaders` DI ATAS `Content-Type`, sehingga pemanggil
+      bisa menggantinya — urutan yang dipertahankan adalah yang diklaim kedua docblock.
+
+      Empat berkas `src/lib/ui` lain melakukan fetch dengan kredensial same-origin dan
+      sengaja TIDAK digabungkan: dua adalah baca GET, `language-switcher-client.ts` mem-POST
+      secara ANONIM ke endpoint publik dan memutuskan lewat `response.ok` plus cookie, dan
+      `push-subscription-client.ts` menampilkan `error.message` milik server — persis hal
+      yang ditahan bentuk sempit itu. **Memulihkan 425 B** dari anggaran aset klien yang
+      tersisa 161 B, dan itulah yang membuka jalan perubahan layar ADR-0106.
+
   34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` punya 3 pemakai dan 20 salinan inline tangan.**
-      `_shared/keyset-pagination.ts:56-59`. Konstantanya mengeraskan `created_at` telanjang
-      dan docblock-nya sendiri mengakui pemanggil harus "membungkusnya dalam alias tabel" —
-      mustahil untuk sebuah string. Kedua puluh salinan benar byte hari ini, jadi ini
-      prospektif: satu `AT TIME ZONE 'UTC'` yang hilang atau `US`→`MS` menghidupkan lagi
-      cacat #158 secara senyap, hanya setelah halaman 1, tempat tak ada tes yang melihat.
+      **SELESAI (22 Agustus 2026).** `_shared/keyset-pagination.ts:56-59`. Konstantanya
+      mengeraskan `created_at` telanjang sementara docblock-nya sendiri menyuruh pemanggil
+      "membungkusnya dalam alias tabel" — mustahil untuk sebuah string, jadi setiap kueri
+      ber-join menulis salinannya sendiri.
+
+      Kini `keysetCursorCreatedAtSql(alias?)` di atas `utcMicrosecondTextSql(column,
+offsetSuffix)` bersama. **Salinannya dua puluh SATU, bukan dua puluh**: tiga lagi
+      merender ekspresi yang sama untuk `occurred_at` dan `last_seen_at`, yang tak terlihat
+      oleh pencarian `created_at` si audit, dan `idn_admin_regions` merendernya dengan
+      akhiran `Z` untuk DTO alih-alih cursor. Semuanya hilang.
+
+      Temuan menyebutnya prospektif dan memang begitu: setiap salinan benar byte. Itu tidak
+      sama dengan aman — `AT TIME ZONE 'UTC'` dan `US` sama-sama senyap ketika salah, dan
+      `US`→`MS` menghidupkan lagi #158 hanya setelah halaman satu. Sebuah tes kini menolak
+      `to_char(… AT TIME ZONE 'UTC'` apa pun di luar modul pemiliknya, mencocokkan
+      PERENDERANNYA alih-alih format string yang benar, karena suntingan yang salah satu
+      karakter justru kasus yang ingin ditangkapnya. Ia dibuktikan GAGAL pada cacat asli.
+      Rujukan kolomnya diasersi sebagai identifier, karena pemanggil menyerahkan hasilnya ke
+      `tx.unsafe`.
+
   35. **D14 — selesaikan ekstraksi `scripts/lib/` yang sudah dimulai.**
-      `repo-inventory.ts:339-370`; `project-state-inventory.ts:198-225`; lima deklarasi
-      `MIGRATIONS_DIR = "sql"` + empat pemuatan verbatim; `deriveTableRlsStates` diekspor
-      dari sebuah **generator** dan diimpor dua gerbang. Perbaikan escape markdown mendarat
-      di satu dari tiga salinan `parseInventoryRows`. `scripts/lib/repo-files.ts` kini ada
-      dan enam skrip sudah dipindah — ini menyelesaikan pekerjaan yang sudah dimulai.
+      **SELESAI (22 Agustus 2026).** Tiga modul bersama, dan masing-masing menggantikan
+      duplikasi yang sudah menghasilkan perbedaan yang tak seorang pun memilihnya.
+
+      `lib/markdown-table.ts` — `extractBlock`/`replaceBlock` salinan identik byte;
+      `parseInventoryRows` tidak. Satu sudah belajar soal escape `\|` karena tabelnya
+      sendiri memuat shell pipeline; yang lain memecah pada `|` telanjang dan akan merobek
+      sel itu. Versi sadar-escape adalah superset ketat, jadi tak berbiaya bagi pemanggil
+      satunya.
+
+      `lib/migrations.ts` — **enam** salinan pemuatnya (audit menemukan lima; `sql-grants.ts`
+      punya yang keenam), dan asersi tidak-kosong hanya ada di satu. Setiap pemanggil
+      bertanya "tabel mana yang ada, dan mana yang RLS-nya di-FORCE" — pertanyaan yang
+      dijawab daftar kosong dengan "tidak ada" yang percaya diri dan salah. Kini ia
+      meresolusi `sql/` dari akar repositori, yang hanya dilakukan salinan `sql-grants.ts`,
+      sehingga tak ada gerbang yang bergantung pada dari mana ia dijalankan.
+
+      `lib/table-rls-states.ts` — `deriveTableRlsStates` diekspor dari sebuah GENERATOR
+      dokumentasi dan diimpor dua gerbang. Gerbang yang gagal karena sebuah generator
+      dirapikan mengajari pembacanya bahwa gerbang itu rapuh, bukan bahwa kodenya salah.
+
+      Kedua walker `catch { return; }` di `edge-cache-surfaces-check.ts` kini memakai walk
+      bersama yang melempar pada root yang tak terbaca — untuk gerbang itu, call site purge
+      yang terlewat berarti halaman lintas-tenant yang basi.
+
   36. **D15 — node `notify` workflow diam-diam tidak melakukan apa pun, dan kedua composition
       root membenarkannya dengan klaim palsu.** **SELESAI (22 Agustus 2026) — komentarnya,
       yang memang disebut temuan itu sebagai cacat hidupnya.**

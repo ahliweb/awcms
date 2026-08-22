@@ -16,6 +16,7 @@
  * self-contained tagged template.
  */
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -176,7 +177,7 @@ export async function listTenantDomains(
     SELECT id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
       is_primary, redirect_to_primary, verification_method, verification_record_name,
       verification_record_value, verified_at, last_checked_at, created_at, updated_at,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+      ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
       created_by, updated_by
     FROM awcms_tenant_domains
     WHERE tenant_id = ${tenantId} AND deleted_at IS NULL

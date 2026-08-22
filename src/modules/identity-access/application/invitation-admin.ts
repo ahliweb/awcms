@@ -36,7 +36,7 @@ import { sealUrlParams } from "../../../lib/security/secure-url-params";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   encodeKeysetCursor,
-  KEYSET_CURSOR_CREATED_AT_SQL
+  keysetCursorCreatedAtSql
 } from "../../_shared/keyset-pagination";
 import { INVITATION_MAX_RESEND_COUNT } from "../domain/invitation-policy";
 import type { KeysetCursor } from "../../_shared/keyset-pagination";
@@ -386,7 +386,7 @@ export async function listInvitations(
     SELECT
       i.id, i.login_identifier, i.display_name, i.status,
       i.skip_email_confirmation, i.resend_count, i.expires_at, i.created_at,
-      ${tx.unsafe(KEYSET_CURSOR_CREATED_AT_SQL)} AS created_at_cursor,
+      ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor,
       (
         SELECT array_agg(r.role_code ORDER BY r.role_code)
         FROM awcms_invitation_policies ip

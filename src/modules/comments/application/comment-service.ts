@@ -20,6 +20,7 @@ import {
   type CommentAuthorKind,
   type CommentPolicyRejectionReason
 } from "../domain/comment-policy";
+import { keysetCursorCreatedAtSql } from "../../_shared/keyset-pagination";
 import type { CommentSettings } from "../domain/comment-settings";
 import {
   normalizeCommentBody,
@@ -360,7 +361,7 @@ export async function listApprovedComments(
   const rows = (await tx`
     SELECT id, parent_id, depth, body_text, author_kind, author_display_name,
            created_at, edited_at,
-           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_comments_comments
     WHERE tenant_id = ${tenantId}
       AND thread_id = ${threadId}

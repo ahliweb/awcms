@@ -10,6 +10,7 @@
  */
 import { assertUuid } from "../../../lib/database/tenant-context";
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -87,7 +88,7 @@ export async function listWorkflowInboxTasks(
 
   const rows = (await tx`
     SELECT t.id, t.node_id, t.status, t.quorum_rule, t.due_at, t.created_at,
-           to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+           ${tx.unsafe(keysetCursorCreatedAtSql("t"))} AS created_at_cursor,
            i.id AS instance_id, i.resource_type, i.resource_id,
            i.requested_by_tenant_user_id,
            d.id AS definition_id, d.workflow_key, d.name AS definition_name

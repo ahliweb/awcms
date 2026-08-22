@@ -32,8 +32,6 @@
  * That was true of a five-entry list. The parser landed anyway, for
  * `data-lifecycle:worker-grants:check`, and the list reached seventeen.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 
 /**
  * A parsed `GRANT`/`REVOKE`. Names are lower-cased and privileges upper-cased
@@ -289,17 +287,4 @@ export function deriveSealedTables(
     .sort((a, b) => a.localeCompare(b));
 
   return { sealed, baselineRoles, refusal: null };
-}
-
-/** Every migration in `sql/`, in apply order. */
-export function loadMigrations(
-  dir: string = path.join(import.meta.dirname, "..", "sql")
-): { name: string; sql: string }[] {
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({
-      name,
-      sql: readFileSync(path.join(dir, name), "utf8")
-    }));
 }

@@ -43,14 +43,27 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { listModules } from "../src/modules";
+import { loadMigrations } from "./lib/migrations";
+import {
+  extractBlock,
+  parseInventoryRows,
+  replaceBlock,
+  type GeneratedBlockMarkers
+} from "./lib/markdown-table";
 import { listFilesRecursive } from "./lib/repo-files";
+import {
+  deriveTableRlsStates,
+  type TableRlsState
+} from "./lib/table-rls-states";
 import { routeOf } from "./validate-module-routes";
 
 const DOC_PATH = "docs/awcms/repo-inventory.md";
-const BEGIN = "<!-- BEGIN GENERATED: repo-inventory -->";
-const END = "<!-- END GENERATED: repo-inventory -->";
+const MARKERS: GeneratedBlockMarkers = {
+  begin: "<!-- BEGIN GENERATED: repo-inventory -->",
+  end: "<!-- END GENERATED: repo-inventory -->",
+  docPath: DOC_PATH
+};
 
-const MIGRATIONS_DIR = "sql";
 const TESTS_DIR = "tests";
 const PAGES_DIR = "src/pages";
 const ADR_DIR = "docs/adr";
@@ -97,82 +110,6 @@ export function collectModuleRows(
 // ---------------------------------------------------------------------------
 // Migrations + tables/RLS
 // ---------------------------------------------------------------------------
-
-export type TableRlsState = {
-  table: string;
-  /** The migration file that created it — the answer to "where did this come from". */
-  createdIn: string;
-  rowLevelSecurity: boolean;
-  force: boolean;
-};
-
-const CREATE_TABLE =
-  /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z0-9_."]+)/gi;
-const DROP_TABLE = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([a-z0-9_."]+)/gi;
-const ALTER_RLS =
-  /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?([a-z0-9_."]+)\s+(ENABLE|DISABLE|FORCE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY/gi;
-
-function normalizeTableName(raw: string): string {
-  return raw
-    .replace(/"/g, "")
-    .replace(/^public\./, "")
-    .toLowerCase();
-}
-
-/**
- * Strip `--` line comments and `/* … *​/` block comments before matching, so a
- * commented-out `CREATE TABLE` in a migration header — this repo's migrations
- * are heavily commented, several of them quoting the very DDL they replace —
- * never lands in the inventory as a real table.
- */
-export function stripSqlComments(sql: string): string {
-  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
-}
-
-/**
- * Fold every migration, in filename order, into the end-state of each
- * `awcms_%` table. Order is load-bearing: a table may be created, have RLS
- * enabled, have FORCE toggled off for a repair and back on, or be dropped
- * outright — and only the last statement about it is true.
- */
-export function deriveTableRlsStates(
-  files: readonly { name: string; sql: string }[]
-): TableRlsState[] {
-  const states = new Map<string, TableRlsState>();
-
-  for (const file of [...files].sort((a, b) => a.name.localeCompare(b.name))) {
-    const sql = stripSqlComments(file.sql);
-
-    for (const match of sql.matchAll(CREATE_TABLE)) {
-      const table = normalizeTableName(match[1]!);
-      if (!table.startsWith("awcms_") || states.has(table)) continue;
-      states.set(table, {
-        table,
-        createdIn: file.name,
-        rowLevelSecurity: false,
-        force: false
-      });
-    }
-
-    for (const match of sql.matchAll(ALTER_RLS)) {
-      const table = normalizeTableName(match[1]!);
-      const state = states.get(table);
-      if (!state) continue;
-
-      const verb = match[2]!.toUpperCase().replace(/\s+/g, " ");
-      if (verb === "ENABLE") state.rowLevelSecurity = true;
-      else if (verb === "DISABLE") state.rowLevelSecurity = false;
-      else if (verb === "FORCE") state.force = true;
-      else if (verb === "NO FORCE") state.force = false;
-    }
-
-    for (const match of sql.matchAll(DROP_TABLE)) {
-      states.delete(normalizeTableName(match[1]!));
-    }
-  }
-
-  return [...states.values()].sort((a, b) => a.table.localeCompare(b.table));
-}
 
 // ---------------------------------------------------------------------------
 // Tests + routes
@@ -326,65 +263,14 @@ export function renderInventoryBlock(data: InventoryData): string {
   return sections.join("\n\n");
 }
 
-/**
- * Parse a rendered block back into its rows — cell content only, padding and
- * alignment discarded. Used by `--check`, which compares this against a fresh
- * render of the same shape.
- */
-export function parseInventoryRows(block: string): string[][] {
-  return block
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("|"))
-    .filter((line) => !/^\|[\s\-|]+\|$/.test(line))
-    .map((line) =>
-      line
-        .slice(1, -1)
-        .split("|")
-        .map((cell) => cell.trim())
-    );
-}
-
-export function extractBlock(markdown: string): string | null {
-  const start = markdown.indexOf(BEGIN);
-  const end = markdown.indexOf(END);
-  if (start === -1 || end === -1 || end < start) return null;
-  return markdown.slice(start + BEGIN.length, end).trim();
-}
-
-export function replaceBlock(markdown: string, block: string): string {
-  const start = markdown.indexOf(BEGIN);
-  const end = markdown.indexOf(END);
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error(
-      `${DOC_PATH} is missing the "${BEGIN}" / "${END}" markers — the generated block has no home.`
-    );
-  }
-
-  return (
-    markdown.slice(0, start + BEGIN.length) +
-    "\n\n" +
-    block +
-    "\n\n" +
-    markdown.slice(end)
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Collection from disk
 // ---------------------------------------------------------------------------
 
 export function collectInventory(): InventoryData {
-  const migrationFiles = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-
-  const tables = deriveTableRlsStates(
-    migrationFiles.map((name) => ({
-      name,
-      sql: readFileSync(path.join(MIGRATIONS_DIR, name), "utf8")
-    }))
-  );
+  const migrations = loadMigrations();
+  const migrationFiles = migrations.map((migration) => migration.name);
+  const tables = deriveTableRlsStates(migrations);
 
   const adrCount = readdirSync(ADR_DIR).filter(
     (name) => /^\d{4}-/.test(name) && name.endsWith(".md")
@@ -406,14 +292,14 @@ async function main(): Promise<void> {
   const fresh = renderInventoryBlock(collectInventory());
 
   if (!check) {
-    writeFileSync(DOC_PATH, replaceBlock(markdown, fresh), "utf8");
+    writeFileSync(DOC_PATH, replaceBlock(markdown, fresh, MARKERS), "utf8");
     console.log(
       `Updated: ${DOC_PATH}. Run \`bun run repo:inventory:check\` to verify.`
     );
     return;
   }
 
-  const current = extractBlock(markdown);
+  const current = extractBlock(markdown, MARKERS);
 
   if (current === null) {
     console.error(

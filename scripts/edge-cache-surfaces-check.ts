@@ -13,8 +13,10 @@
  * `/blog/../admin/users`. Asserting the property directly is far more reliable
  * than asking a reviewer to simulate regexes in their head.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+
+import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
 
 import {
   PUBLIC_CACHE_SURFACES,
@@ -43,28 +45,16 @@ export async function collectPurgedModuleKeys(): Promise<Set<string>> {
     /export const ([A-Z][A-Z0-9_]*_MODULE_KEY)\s*=\s*"([^"]+)"/g;
   const callSites: string[] = [];
 
-  async function walk(dir: string): Promise<void> {
-    let entries;
-
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        await walk(full);
-        continue;
-      }
-
-      if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".astro")) {
-        continue;
-      }
-
-      const source = await readFile(full, "utf8");
+  // `listFilesRecursive` rather than a private walk with a `catch { return; }`
+  // (finding D14). A gate that silently skips an unreadable directory reports
+  // "no violations" for a tree it never opened, which is the one failure mode
+  // that never asks to be investigated — and for THIS gate a missed call site
+  // means an uncovered purge, which is a stale cross-tenant page.
+  for (const root of PURGE_CALLER_ROOTS) {
+    for (const file of listFilesRecursive(root, {
+      extensions: [".ts", ".astro"]
+    })) {
+      const source = await readFile(file, "utf8");
 
       // Collect exported `*_MODULE_KEY` constants from every file first, so a
       // call site may name one that is declared elsewhere — which is the
@@ -77,10 +67,6 @@ export async function collectPurgedModuleKeys(): Promise<Set<string>> {
         callSites.push(source);
       }
     }
-  }
-
-  for (const root of PURGE_CALLER_ROOTS) {
-    await walk(root);
   }
 
   for (const source of callSites) {
@@ -294,28 +280,15 @@ export async function findForbiddenVaryEmitters(
   const pattern =
     /["'`]\s*[Vv]ary\s*["'`]\s*[,:]\s*["'`]([^"'`]*)["'`]|[Vv]ary\s*:\s*["'`]([^"'`]*)["'`]/g;
 
-  async function walk(dir: string): Promise<void> {
-    let entries;
-
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        await walk(full);
-        continue;
-      }
-
-      if (!/\.(ts|tsx|astro|mts)$/.test(entry.name)) {
-        continue;
-      }
-
-      const source = await readFile(full, "utf8");
+  // Same reasoning as `collectPurgedModuleKeys` above: the shared walk throws
+  // on a root it cannot read, so "no forbidden `Vary`" cannot be an artefact of
+  // never having looked (finding D14).
+  for (const root of roots) {
+    for (const full of listFilesRecursive(root, {
+      extensions: [".ts", ".tsx", ".astro", ".mts"],
+      relativeTo: REPO_ROOT
+    })) {
+      const source = await readFile(path.join(REPO_ROOT, full), "utf8");
 
       for (const match of source.matchAll(pattern)) {
         const value = (match[1] ?? match[2] ?? "").toLowerCase();
@@ -327,10 +300,6 @@ export async function findForbiddenVaryEmitters(
         }
       }
     }
-  }
-
-  for (const root of roots) {
-    await walk(root);
   }
 
   return failures;

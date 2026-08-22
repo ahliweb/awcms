@@ -5,6 +5,7 @@ import type {
 } from "../domain/blog-term-validation";
 import { boundedPageSize } from "../../_shared/offset-pagination";
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -180,7 +181,7 @@ export async function listBlogTermsPage(
   const rows = (await tx`
     SELECT id, tenant_id, taxonomy_type, parent_id, name, slug, description,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+      ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_blog_terms
     WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
       AND (${taxonomyType}::text IS NULL OR taxonomy_type = ${taxonomyType})

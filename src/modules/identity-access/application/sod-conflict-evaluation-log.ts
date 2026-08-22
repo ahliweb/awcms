@@ -7,6 +7,7 @@
  * decisions (issue #181: "Setiap deny/override/exception lifecycle masuk audit
  * dan decision log").
  */
+import { utcMicrosecondTextSql } from "../../_shared/keyset-pagination";
 import type { KeysetCursor } from "../../_shared/keyset-pagination";
 
 export type SoDConflictEvaluationInput = {
@@ -111,7 +112,7 @@ export async function listSoDConflictEvaluations(
   const rows = (await tx`
     SELECT id, tenant_id, rule_key, subject_tenant_user_id, trigger_context,
       conflict_detected, resolved_via, decision_reason, occurred_at,
-      to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS occurred_at_cursor
+      ${tx.unsafe(utcMicrosecondTextSql("occurred_at"))} AS occurred_at_cursor
     FROM awcms_sod_conflict_evaluations
     WHERE tenant_id = ${tenantId}
       AND (${filter.ruleKey ?? null}::text IS NULL OR rule_key = ${filter.ruleKey ?? null})

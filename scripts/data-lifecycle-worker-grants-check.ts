@@ -38,11 +38,10 @@
  * boundary matters here, because "the grant exists in a migration" is exactly
  * the kind of statement that gets mistaken for "the job can run".
  */
-import path from "node:path";
 import { listModules } from "../src/modules";
-import { grantsPrivilegeToRole, loadMigrations } from "./sql-grants";
+import { loadMigrations } from "./lib/migrations";
+import { grantsPrivilegeToRole } from "./sql-grants";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKER_ROLE = "awcms_worker";
 
 export type RequiredGrant = {
@@ -118,7 +117,7 @@ export function grantsPrivilege(
 }
 
 function loadMigrationText(): string {
-  return loadMigrations(path.join(ROOT, "sql"))
+  return loadMigrations()
     .map((migration) => migration.sql)
     .join("\n");
 }

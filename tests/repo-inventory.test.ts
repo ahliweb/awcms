@@ -20,17 +20,28 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  extractBlock,
+  parseInventoryRows,
+  replaceBlock,
+  type GeneratedBlockMarkers
+} from "../scripts/lib/markdown-table";
+import {
+  deriveTableRlsStates,
+  stripSqlComments
+} from "../scripts/lib/table-rls-states";
+import {
   collectModuleRows,
   collectRouteCounts,
   collectTestCounts,
-  deriveTableRlsStates,
-  extractBlock,
-  parseInventoryRows,
   renderInventoryBlock,
-  replaceBlock,
-  stripSqlComments,
   type InventoryData
 } from "../scripts/repo-inventory";
+
+const MARKERS: GeneratedBlockMarkers = {
+  begin: "<!-- BEGIN GENERATED: repo-inventory -->",
+  end: "<!-- END GENERATED: repo-inventory -->",
+  docPath: "docs/awcms/repo-inventory.md"
+};
 import { GLOBAL_TABLE_FORBIDDEN_PRIVILEGES } from "../scripts/security-readiness";
 import { collectInventory } from "../scripts/repo-inventory";
 
@@ -248,15 +259,17 @@ describe("render/parse round trip", () => {
   test("replaceBlock round-trips through extractBlock", () => {
     const doc =
       "# Title\n\n<!-- BEGIN GENERATED: repo-inventory -->\n\nold\n\n<!-- END GENERATED: repo-inventory -->\n\ntail\n";
-    const updated = replaceBlock(doc, renderInventoryBlock(data));
+    const updated = replaceBlock(doc, renderInventoryBlock(data), MARKERS);
 
-    expect(extractBlock(updated)).toBe(renderInventoryBlock(data));
+    expect(extractBlock(updated, MARKERS)).toBe(renderInventoryBlock(data));
     expect(updated).toContain("# Title");
     expect(updated).toContain("tail");
   });
 
   test("replaceBlock refuses a document with no markers rather than appending", () => {
-    expect(() => replaceBlock("# no markers\n", "x")).toThrow(/markers/);
+    expect(() => replaceBlock("# no markers\n", "x", MARKERS)).toThrow(
+      /markers/
+    );
   });
 });
 

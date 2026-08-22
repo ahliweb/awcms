@@ -1,5 +1,6 @@
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
+  keysetCursorCreatedAtSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -133,7 +134,7 @@ export async function listOffices(
 
   const rows = (await tx`
     SELECT id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at,
-           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+           ${tx.unsafe(keysetCursorCreatedAtSql())} AS created_at_cursor
     FROM awcms_offices
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL

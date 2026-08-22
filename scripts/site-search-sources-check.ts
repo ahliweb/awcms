@@ -30,7 +30,6 @@
  * job, and a superuser `POSTGRES_USER` making the point moot is
  * `security:readiness`'s.
  */
-import path from "node:path";
 
 import type { SearchSourceTermFacet } from "../src/modules/_shared/module-contract";
 import { listModules } from "../src/modules";
@@ -38,9 +37,9 @@ import {
   formatSearchSourceRegistryIssue,
   validateSearchSourceRegistry
 } from "../src/modules/site-search/domain/search-source-registry";
-import { grantsPrivilegeToRole, loadMigrations } from "./sql-grants";
+import { loadMigrations } from "./lib/migrations";
+import { grantsPrivilegeToRole } from "./sql-grants";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
 const WORKER_ROLE = "awcms_worker";
 
 export type MissingSourceGrant = {
@@ -109,7 +108,7 @@ export function collectDescriptorTables(descriptor: {
 }
 
 function loadMigrationText(): string {
-  return loadMigrations(path.join(ROOT, "sql"))
+  return loadMigrations()
     .map((migration) => migration.sql)
     .join("\n");
 }

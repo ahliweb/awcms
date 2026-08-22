@@ -11,6 +11,7 @@
  * carries the full-precision text and never leaves this function.
  */
 import {
+  utcMicrosecondTextSql,
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -37,7 +38,7 @@ export async function listVisitorSessions(
 
   const rows = (await tx`
     SELECT *,
-      to_char(last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS last_seen_at_cursor
+      ${tx.unsafe(utcMicrosecondTextSql("last_seen_at"))} AS last_seen_at_cursor
     FROM awcms_visitor_sessions
     WHERE tenant_id = ${tenantId}
       AND (
