@@ -33,6 +33,7 @@ import { hashPassword, verifyPassword } from "../../../lib/auth/password";
 import { getMfaStatus } from "./mfa";
 import { requireStepUp } from "./mfa-session-assurance";
 import { revokeOtherOwnSessions } from "./session-directory";
+import { sessionCredentialCurrent } from "./session-credential-epoch";
 import { isPasswordLoginDisabledForIdentity } from "./tenant-auth-policy";
 
 export type ChangeOwnPasswordResult =
@@ -68,11 +69,12 @@ export async function changeOwnPassword(
   now: Date
 ): Promise<ChangeOwnPasswordResult> {
   const sessionRows = (await tx`
-    SELECT identity_id FROM awcms_sessions
-    WHERE tenant_id = ${tenantId}
-      AND token_hash = ${tokenHash}
-      AND revoked_at IS NULL
-      AND expires_at > ${now}
+    SELECT s.identity_id FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId}
+      AND s.token_hash = ${tokenHash}
+      AND s.revoked_at IS NULL
+      AND s.expires_at > ${now}
+      AND ${sessionCredentialCurrent(tx)}
   `) as { identity_id: string }[];
   const identityId = sessionRows[0]?.identity_id;
 

@@ -18,6 +18,7 @@
  */
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import { sessionCredentialCurrent } from "./session-credential-epoch";
 
 /** What the source session must prove before it may become another tenant's. */
 export type SwitchSource = {
@@ -56,6 +57,7 @@ export async function loadSwitchSource(
           AND s.token_hash = ${tokenHash}
           AND s.revoked_at IS NULL
           AND s.expires_at > ${now}
+          AND ${sessionCredentialCurrent(tx)}
       `) as {
         id: string;
         origin_auth: string;

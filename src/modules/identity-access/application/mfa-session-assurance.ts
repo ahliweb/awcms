@@ -22,6 +22,10 @@ import {
 } from "../../../lib/auth/ssr-session";
 import { resolveStepUpTtlSec } from "../../../lib/auth/mfa-config";
 import {
+  currentCredentialEpoch,
+  sessionCredentialCurrent
+} from "./session-credential-epoch";
+import {
   evaluateStepUp,
   type SessionAssuranceLevel
 } from "../domain/mfa-policy";
@@ -42,9 +46,11 @@ export async function resolveSessionAssurance(
   now: Date
 ): Promise<SessionAssurance | null> {
   const rows = (await tx`
-    SELECT id, identity_id, assurance_level, stepped_up_at, expires_at, revoked_at
-    FROM awcms_sessions
-    WHERE tenant_id = ${tenantId} AND token_hash = ${tokenHash}
+    SELECT s.id, s.identity_id, s.assurance_level, s.stepped_up_at,
+           s.expires_at, s.revoked_at
+    FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId} AND s.token_hash = ${tokenHash}
+      AND ${sessionCredentialCurrent(tx)}
   `) as {
     id: string;
     identity_id: string;
@@ -146,12 +152,13 @@ export async function createSessionWithAssurance(
     INSERT INTO awcms_sessions
       (tenant_id, identity_id, token_hash, expires_at,
        assurance_level, last_authenticated_at, stepped_up_at,
-       client_ip_hash, user_agent_summary, origin_auth)
+       client_ip_hash, user_agent_summary, origin_auth, credential_epoch)
     VALUES (
       ${input.tenantId}, ${input.identityId}, ${tokenHash}, ${expiresAt},
       ${input.assuranceLevel}, ${input.now}, ${steppedUpAt},
       ${input.issue.clientIpHash ?? null}, ${input.issue.userAgentSummary ?? null},
-      ${input.issue.originAuth}
+      ${input.issue.originAuth},
+      ${currentCredentialEpoch(tx, input.tenantId, input.identityId)}
     )
   `;
 

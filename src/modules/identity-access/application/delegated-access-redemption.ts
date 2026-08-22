@@ -32,6 +32,7 @@
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { redeemDelegatedAccess } from "./delegated-access-store";
+import { sessionCredentialCurrent } from "./session-credential-epoch";
 import type { RedeemDelegatedAccessResult } from "./delegated-access-store";
 
 /** Manusia di balik sesi penebus, dibuktikan di tenant ASALNYA. */
@@ -68,6 +69,7 @@ export async function loadRedeemer(
           AND s.token_hash = ${tokenHash}
           AND s.revoked_at IS NULL
           AND s.expires_at > ${now}
+          AND ${sessionCredentialCurrent(tx)}
       `) as { principal_id: string | null }[];
 
       const principalId = rows[0]?.principal_id;

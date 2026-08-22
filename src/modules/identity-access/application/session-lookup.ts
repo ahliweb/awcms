@@ -1,3 +1,5 @@
+import { sessionCredentialCurrent } from "./session-credential-epoch";
+
 export type ActiveSession = {
   id: string;
   tenant_id: string;
@@ -11,9 +13,10 @@ export async function resolveActiveSession(
   now: Date
 ): Promise<ActiveSession | null> {
   const rows = await tx`
-    SELECT id, tenant_id, identity_id, expires_at, revoked_at
-    FROM awcms_sessions
-    WHERE tenant_id = ${tenantId} AND token_hash = ${tokenHash}
+    SELECT s.id, s.tenant_id, s.identity_id, s.expires_at, s.revoked_at
+    FROM awcms_sessions s
+    WHERE s.tenant_id = ${tenantId} AND s.token_hash = ${tokenHash}
+      AND ${sessionCredentialCurrent(tx)}
   `;
   const session = rows[0] as
     | {

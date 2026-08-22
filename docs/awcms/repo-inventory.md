@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 24    |
-| Migrations                          | 143   |
+| Migrations                          | 144   |
 | `awcms_*` tables                    | 152   |
 | Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 448   |
+| Test files                          | 449   |
 | Route files                         | 382   |
 | ADR                                 | 212   |
 
@@ -192,6 +192,7 @@
 | 141 | `sql/141_awcms_repair_jsonb_string_bodies.sql`                     |
 | 142 | `sql/142_awcms_delegated_access_expiry_sweep.sql`                  |
 | 143 | `sql/143_awcms_blog_list_ordering_indexes.sql`                     |
+| 144 | `sql/144_awcms_credential_epoch.sql`                               |
 
 ### Tables & Row-Level Security
 
@@ -356,7 +357,7 @@
 | ------------- | ---------- |
 | `(root)`      | 380        |
 | `e2e`         | 12         |
-| `integration` | 55         |
+| `integration` | 56         |
 | `unit`        | 1          |
 
 ### Routes

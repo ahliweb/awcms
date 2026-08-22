@@ -7,6 +7,7 @@
  * a row.
  */
 import { activeRoleGrants } from "./grant-source";
+import { sessionCredentialCurrent } from "./session-credential-epoch";
 
 export type SessionIntrospection = {
   identityId: string;
@@ -39,6 +40,7 @@ export async function introspectSession(
     JOIN awcms_profiles p
       ON p.tenant_id = i.tenant_id AND p.id = i.profile_id
     WHERE s.tenant_id = ${tenantId} AND s.token_hash = ${tokenHash}
+      AND ${sessionCredentialCurrent(tx)}
   `) as {
     identity_id: string;
     expires_at: Date;
