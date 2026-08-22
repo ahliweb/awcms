@@ -25,7 +25,10 @@
  * deleting/clearing anything.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenantOrThrow } from "../src/lib/database/tenant-context";
+import {
+  DatabaseBusyError,
+  withTenantOrThrow
+} from "../src/lib/database/tenant-context";
 import {
   applyJobExitCode,
   formatJobOutcomeLine,
@@ -51,6 +54,8 @@ export type VisitorAnalyticsPurgeResult = {
   sessionsDeleted: number;
   rollupsDeleted: number;
   tenantsSkipped: number;
+  /** Named, not just counted — a re-run needs to know which tenants still hold data past retention. */
+  skippedTenantIds: string[];
 };
 
 export async function runVisitorAnalyticsPurge(
@@ -67,7 +72,8 @@ export async function runVisitorAnalyticsPurge(
     sessionsRawDetailCleared: 0,
     sessionsDeleted: 0,
     rollupsDeleted: 0,
-    tenantsSkipped: 0
+    tenantsSkipped: 0,
+    skippedTenantIds: []
   };
 
   if (ctx.dryRun) {
@@ -79,25 +85,41 @@ export async function runVisitorAnalyticsPurge(
       break;
     }
 
-    const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-      purgeVisitorAnalyticsData(
-        tx,
-        tenant.id,
-        config,
-        now,
-        legalHoldGuardPortAdapter
-      )
-    );
+    // Finding D4, second occurrence — `if (result instanceof Response)` was
+    // DEAD here too. That shape only ever comes out of `withTenant`;
+    // `withTenantOrThrow` THROWS `DatabaseBusyError`. So `tenantsSkipped` was
+    // permanently 0, the summary's `(WARNING: … database busy)` clause could
+    // never print, and a busy database abandoned every remaining tenant.
+    //
+    // The stakes here are higher than the rollup's. This job is what ENFORCES
+    // retention: an abandoned run means every tenant after the first keeps
+    // holding visitor data past its retention window, silently, until someone
+    // notices the counts are too low — and the summary was reporting success.
+    try {
+      const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
+        purgeVisitorAnalyticsData(
+          tx,
+          tenant.id,
+          config,
+          now,
+          legalHoldGuardPortAdapter
+        )
+      );
 
-    if (result instanceof Response) {
+      totals.eventsDeleted += result.eventsDeleted;
+      totals.sessionsRawDetailCleared += result.sessionsRawDetailCleared;
+      totals.sessionsDeleted += result.sessionsDeleted;
+      totals.rollupsDeleted += result.rollupsDeleted;
+    } catch (error) {
+      // ONLY backpressure is a skip. A legal-hold refusal or a broken query is
+      // a real failure and must reach the job runner, which classifies a
+      // thrown error as a retryable failure — swallowing it would turn a
+      // retention job that cannot run into a quiet zero.
+      if (!(error instanceof DatabaseBusyError)) throw error;
+
       totals.tenantsSkipped += 1;
-      continue;
+      totals.skippedTenantIds.push(tenant.id);
     }
-
-    totals.eventsDeleted += result.eventsDeleted;
-    totals.sessionsRawDetailCleared += result.sessionsRawDetailCleared;
-    totals.sessionsDeleted += result.sessionsDeleted;
-    totals.rollupsDeleted += result.rollupsDeleted;
   }
 
   return totals;
@@ -125,7 +147,8 @@ async function main() {
               `sessionsDeleted=${purgeResult.sessionsDeleted} rollupsDeleted=${purgeResult.rollupsDeleted}` +
               (ctx.dryRun ? " (dry-run: nothing was deleted)" : "") +
               (skipped
-                ? ` (WARNING: ${purgeResult.tenantsSkipped} tenant(s) skipped — database busy)`
+                ? ` (WARNING: ${purgeResult.tenantsSkipped} tenant(s) skipped — database busy;` +
+                  ` data past retention is STILL HELD for: ${purgeResult.skippedTenantIds.join(", ")})`
                 : "")
           );
 

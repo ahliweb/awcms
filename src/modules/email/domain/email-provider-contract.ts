@@ -47,7 +47,24 @@ export type EmailMessage = {
 
 export type EmailDeliveryResult =
   | { ok: true; providerMessageId?: string }
-  | { ok: false; error: string; retryable: boolean };
+  | {
+      ok: false;
+      error: string;
+      retryable: boolean;
+      /**
+       * Finding D6 — no attempt reached the provider AT ALL, and the
+       * dispatcher must not record one. Set when the adapter refuses to call
+       * out (the circuit breaker opening part-way through a pass is the only
+       * case today).
+       *
+       * Without this flag such a message was indistinguishable from a failed
+       * send: the dispatcher wrote a `failure` row into
+       * `awcms_email_delivery_attempts` and burned one of the message's
+       * retries for a contact that never happened. A skipped message returns
+       * to `queued` with its `retry_count` untouched and no ledger row.
+       */
+      skipped?: true;
+    };
 
 export type EmailHealthCheckResult =
   { ok: true } | { ok: false; error: string };
@@ -56,7 +73,20 @@ export type EmailHealthCheckResult =
  * The port. `retryable` on a failed send tells the dispatcher (Issue #495)
  * whether to schedule a retry (`queued → retry_wait`) or move straight to
  * a terminal `failed`/`suppressed` state — e.g. an invalid recipient
- * address is not retryable, a provider timeout is.
+ * address is not retryable, a provider timeout is. `skipped` is the third
+ * answer: not "it failed and may work later" but "it was never tried", which
+ * is neither an attempt to record nor a retry to spend.
+ *
+ * ## Who feeds the circuit breaker
+ *
+ * The ADAPTER, and only the adapter, as `push-delivery`'s
+ * `fcm-error-mapping.ts` states for the sibling port. The breaker exists to
+ * stop hammering a provider that is DOWN, so only statements about the
+ * SERVICE count toward it — a timeout, a 5xx, an unparseable body. A
+ * per-message business rejection (no recipient, a malformed address, a
+ * refused payload) says nothing about the provider's health and must not
+ * trip it, or one bad address in a batch takes email delivery down for
+ * everybody.
  */
 export type EmailProvider = {
   send(message: EmailMessage): Promise<EmailDeliveryResult>;

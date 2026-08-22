@@ -68,6 +68,10 @@ export type IndexRunResult = {
   totalIndexed: number;
   totalRemoved: number;
   failureCount: number;
+  /** Sources whose reconcile THREW. Distinct from `failureCount`, which counts documents. */
+  failedSources: string[];
+  /** Sources never attempted because an earlier one failed and aborted the transaction. */
+  unattemptedSources: string[];
   lastError: string | null;
 };
 
@@ -396,7 +400,21 @@ async function runReconcile(
   let status: "succeeded" | "failed" = "succeeded";
   let lastError: string | null = null;
 
-  for (const descriptor of descriptors) {
+  // Finding D5 — a source that THROWS never reaches `results.push`, so it
+  // contributed zero to `failureCount` (which sums per-document failures across
+  // the results that succeeded) and the `break` meant every source after it was
+  // never attempted either. The run row said `failed`, and the operator-facing
+  // number said `failures=0`.
+  //
+  // The `break` STAYS. `reconcileSource` failing is almost always a database
+  // error, which leaves this transaction aborted — continuing would produce a
+  // cascade of `25P02`s and `finalizeRun` itself would fail. What changes is
+  // that the sources are now named: the one that failed, and the ones that were
+  // consequently never attempted.
+  const failedSources: string[] = [];
+  const unattemptedSources: string[] = [];
+
+  for (const [index, descriptor] of descriptors.entries()) {
     try {
       results.push(
         await reconcileSource(tx, tenantId, descriptor, {
@@ -407,6 +425,10 @@ async function runReconcile(
     } catch (error) {
       status = "failed";
       lastError = safeErrorDetail(error).slice(0, MAX_FAILURE_DETAIL_LENGTH);
+      failedSources.push(descriptor.key);
+      unattemptedSources.push(
+        ...descriptors.slice(index + 1).map((rest) => rest.key)
+      );
       break;
     }
   }
@@ -430,7 +452,13 @@ async function runReconcile(
       status,
       documentsIndexed: totalIndexed,
       documentsRemoved: totalRemoved,
-      failureCount
+      failureCount,
+      // Named separately from `failureCount`, which counts DOCUMENTS that
+      // failed to map or upsert. A source that died is a different fact and
+      // summing them into one number is how "failures=0" came to mean
+      // "one whole source stopped indexing".
+      failedSources,
+      unattemptedSources
     }
   );
 
@@ -442,6 +470,8 @@ async function runReconcile(
     totalIndexed,
     totalRemoved,
     failureCount,
+    failedSources,
+    unattemptedSources,
     lastError
   };
 }

@@ -54,30 +54,80 @@ async function main(): Promise<void> {
     let totalIndexed = 0;
     let totalRemoved = 0;
     let totalFailures = 0;
+    // Finding D5 — this script summed `result.failureCount` and printed it, and
+    // never looked at `result.status`. `failureCount` counts DOCUMENTS that
+    // failed to map or upsert; a source whose reconcile threw contributes zero
+    // to it. So a run where a whole source stopped indexing printed
+    // `failures=0` and exited 0, while public search quietly stopped updating.
+    const failedTenants: string[] = [];
+    const failedSources = new Set<string>();
+    const unattemptedSources = new Set<string>();
+    let lastError: string | null = null;
 
     for (const tenant of tenants) {
-      const result = await withTenantOrThrow(
-        sql,
-        tenant.id,
-        (tx) =>
-          (rebuild ? rebuildTenantSearchIndex : reconcileTenantSearchIndex)(
-            tx,
-            tenant.id,
-            descriptors,
-            { trigger: "scheduled" }
-          ),
-        { workClass: "maintenance" }
-      );
+      // The other half of the same failure, and the one D4 names in
+      // `visitor-analytics-rollup.ts`: a source failing on a DATABASE error
+      // aborts the transaction, so `finalizeRun` cannot even write the run row
+      // and the whole call REJECTS. That was loud — it reached
+      // `logScriptFailure` and exited 1 — but it also abandoned every tenant
+      // after this one, on one tenant's bad row. Each tenant is an independent
+      // unit of work; one is now recorded and the loop continues.
+      let result;
+
+      try {
+        result = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            (rebuild ? rebuildTenantSearchIndex : reconcileTenantSearchIndex)(
+              tx,
+              tenant.id,
+              descriptors,
+              { trigger: "scheduled" }
+            ),
+          { workClass: "maintenance" }
+        );
+      } catch (error) {
+        failedTenants.push(tenant.id);
+        lastError = error instanceof Error ? error.message : String(error);
+        continue;
+      }
+
       totalIndexed += result.totalIndexed;
       totalRemoved += result.totalRemoved;
       totalFailures += result.failureCount;
+
+      if (result.status === "failed") {
+        failedTenants.push(tenant.id);
+        for (const key of result.failedSources) failedSources.add(key);
+        for (const key of result.unattemptedSources)
+          unattemptedSources.add(key);
+        lastError = result.lastError ?? lastError;
+      }
     }
 
     console.log(
       `site-search:reconcile complete — correlationId=${correlationId} ` +
         `mode=${rebuild ? "rebuild" : "reconcile"} tenants=${tenants.length} ` +
-        `indexed=${totalIndexed} removed=${totalRemoved} failures=${totalFailures}`
+        `indexed=${totalIndexed} removed=${totalRemoved} failures=${totalFailures} ` +
+        `tenantsFailed=${failedTenants.length}`
     );
+
+    if (failedTenants.length > 0) {
+      // Non-zero exit, because the whole point is that this used to be
+      // indistinguishable from success. `logScriptFailure` sets
+      // `process.exitCode = 1` only for an error that escapes the loop, and
+      // the loop no longer lets one escape — so it has to be said here.
+      console.error(
+        `site-search:reconcile INCOMPLETE — ${failedTenants.length} tenant(s) failed: ` +
+          `${failedTenants.join(", ")}\n` +
+          `  sources that failed:      ${[...failedSources].join(", ") || "(none named)"}\n` +
+          `  sources never attempted:  ${[...unattemptedSources].join(", ") || "(none)"}\n` +
+          `  last error:               ${lastError ?? "(none recorded)"}\n` +
+          "  Public search stops updating for the sources above until this is fixed."
+      );
+      process.exitCode = 1;
+    }
   } catch (error) {
     logScriptFailure("site-search:reconcile FAILED", error);
   } finally {
