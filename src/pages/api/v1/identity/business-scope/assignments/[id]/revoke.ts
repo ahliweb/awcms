@@ -18,6 +18,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../../../modules/_shared/idempotency";
 import { revokeBusinessScopeAssignment } from "../../../../../../../modules/identity-access/application/business-scope-assignment-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_business_scope_assignment_revoke";
 
@@ -61,12 +65,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: RevokeAssignmentBody;
-  try {
-    body = (await request.json()) as RevokeAssignmentBody;
-  } catch {
+  const bodyRead = await readJsonBody<RevokeAssignmentBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as RevokeAssignmentBody;
 
   const revokeReason =
     typeof body.revokeReason === "string" ? body.revokeReason : "";

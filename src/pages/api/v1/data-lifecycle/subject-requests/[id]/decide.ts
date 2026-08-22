@@ -25,6 +25,10 @@ import {
   recordErasureOutcome,
   resolveSubject
 } from "../../../../../../modules/data-lifecycle/application/subject-request-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../lib/security/request-body-limit";
 
 /**
  * `POST /api/v1/data-lifecycle/subject-requests/{id}/decide` — ADR-0094, Issue
@@ -71,12 +75,23 @@ export const POST = defineTenantRoute<Prepared>({
       );
     }
 
-    let body: { decision?: unknown; reason?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
+    const bodyRead = await readJsonBody<{
+      decision?: unknown;
+      reason?: unknown;
+    }>(request);
+
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    if (bodyRead.malformed) {
       return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
     }
+
+    const body = (bodyRead.value ?? {}) as {
+      decision?: unknown;
+      reason?: unknown;
+    };
 
     const decision = body.decision;
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";

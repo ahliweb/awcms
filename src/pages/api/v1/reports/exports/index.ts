@@ -26,6 +26,10 @@ import {
   createScheduledExport,
   listScheduledExports
 } from "../../../../../modules/reporting/application/scheduled-export-store";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "reporting_scheduled_export_create";
 
@@ -93,12 +97,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
   }
 
-  let body: CreateScheduledExportBody;
-  try {
-    body = (await request.json()) as CreateScheduledExportBody;
-  } catch {
+  const bodyRead = await readJsonBody<CreateScheduledExportBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as CreateScheduledExportBody;
 
   const projectionKey =
     typeof body.projectionKey === "string" ? body.projectionKey : "";

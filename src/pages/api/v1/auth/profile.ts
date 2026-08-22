@@ -39,6 +39,10 @@ import {
 } from "../../../../lib/security/rate-limit";
 import { resolveActiveSession } from "../../../../modules/identity-access/application/session-lookup";
 import { updateOwnDisplayName } from "../../../../modules/profile-identity/application/person-profile";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../lib/security/request-body-limit";
 
 const NO_STORE_HEADERS = { "cache-control": "private, no-store" };
 
@@ -147,11 +151,13 @@ export const PATCH = defineSelfServiceTenantRoute<{ displayName: string }>({
   // doing it inside `withTenant` would hold a pool connection and its work-class
   // slot for as long as the caller takes to send.
   prepare: async ({ request }) => {
-    let body: unknown;
+    const bodyRead = await readJsonBody(request);
 
-    try {
-      body = await request.json();
-    } catch {
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    if (bodyRead.malformed) {
       return fail(
         400,
         "INVALID_BODY",
@@ -161,6 +167,8 @@ export const PATCH = defineSelfServiceTenantRoute<{ displayName: string }>({
         NO_STORE_HEADERS
       );
     }
+
+    const body: unknown = bodyRead.value;
 
     const raw =
       body && typeof body === "object" && "displayName" in body

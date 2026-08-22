@@ -19,6 +19,10 @@ import {
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import { findProjectionDescriptor } from "../../../../../modules/reporting/application/projection-directory";
 import { generateProjectionExport } from "../../../../../modules/reporting/application/export-generation";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "reporting_export_trigger";
 
@@ -63,12 +67,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
   }
 
-  let body: TriggerExportBody;
-  try {
-    body = (await request.json()) as TriggerExportBody;
-  } catch {
+  const bodyRead = await readJsonBody<TriggerExportBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as TriggerExportBody;
 
   const projectionKey =
     typeof body.projectionKey === "string" ? body.projectionKey : "";

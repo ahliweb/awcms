@@ -24,6 +24,10 @@ import {
 import { officeScopeHierarchyPortAdapter } from "../../../../../../modules/tenant-admin/application/office-scope-hierarchy-port-adapter";
 import { collectSoDRuleDescriptors } from "../../../../../../modules/identity-access/domain/sod-rule-registry";
 import { listModules } from "../../../../../../modules";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_business_scope_assignment_create";
 
@@ -125,12 +129,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
   }
 
-  let body: CreateAssignmentBody;
-  try {
-    body = (await request.json()) as CreateAssignmentBody;
-  } catch {
+  const bodyRead = await readJsonBody<CreateAssignmentBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as CreateAssignmentBody;
 
   const tenantUserId =
     typeof body.tenantUserId === "string" ? body.tenantUserId : "";

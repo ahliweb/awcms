@@ -18,6 +18,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../../modules/_shared/idempotency";
 import { releaseLegalHold } from "../../../../../../modules/data-lifecycle/application/legal-hold-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "data_lifecycle_legal_hold_release";
 
@@ -56,12 +60,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: ReleaseLegalHoldBody;
-  try {
-    body = (await request.json()) as ReleaseLegalHoldBody;
-  } catch {
+  const bodyRead = await readJsonBody<ReleaseLegalHoldBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as ReleaseLegalHoldBody;
 
   const releaseReason =
     typeof body.releaseReason === "string" ? body.releaseReason : "";

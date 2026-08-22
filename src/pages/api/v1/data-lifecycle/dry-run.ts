@@ -8,6 +8,10 @@ import {
   authorizeInTransaction,
   resolveAuthInputs
 } from "../../../../modules/identity-access/application/access-guard";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../lib/security/request-body-limit";
 import { listModules } from "../../../../modules";
 import { collectHighVolumeTableDescriptors } from "../../../../modules/data-lifecycle/domain/lifecycle-registry";
 import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../../../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
@@ -39,12 +43,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
   }
 
-  let body: DryRunBody;
-  try {
-    body = (await request.json()) as DryRunBody;
-  } catch {
+  // The ONLY pre-auth body read in the repository, and the reason finding A4
+  // put this file first. `resolveAuthInputs` checks that a tenant header and a
+  // token are PRESENT — it does not resolve either — so everything above this
+  // point is satisfied by two arbitrary strings. An unauthenticated caller
+  // sending a chunked body with no `Content-Length` was buffered without bound,
+  // and `checkContentLengthCeiling` in the middleware could not help: it returns
+  // true when the header is absent, which is exactly the case that matters.
+  const bodyRead = await readJsonBody<DryRunBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as DryRunBody;
 
   if (
     typeof body.descriptorKey !== "string" ||

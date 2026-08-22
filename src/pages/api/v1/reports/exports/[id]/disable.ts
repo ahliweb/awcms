@@ -22,6 +22,10 @@ import {
   MAX_REASON_LENGTH,
   MIN_REASON_LENGTH
 } from "../../../../../../modules/reporting/domain/operator-input-bounds";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "reporting_scheduled_export_disable";
 
@@ -51,12 +55,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: DisableBody;
-  try {
-    body = (await request.json()) as DisableBody;
-  } catch {
+  const bodyRead = await readJsonBody<DisableBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as DisableBody;
 
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
   if (reason.length < MIN_REASON_LENGTH || reason.length > MAX_REASON_LENGTH) {

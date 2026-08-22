@@ -18,6 +18,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../../../modules/_shared/idempotency";
 import { rejectSoDConflictException } from "../../../../../../../modules/identity-access/application/sod-exception-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_sod_conflict_exception_reject";
 
@@ -50,12 +54,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: DecideExceptionBody;
-  try {
-    body = (await request.json()) as DecideExceptionBody;
-  } catch {
+  const bodyRead = await readJsonBody<DecideExceptionBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as DecideExceptionBody;
 
   const decisionReason =
     typeof body.decisionReason === "string" ? body.decisionReason : null;

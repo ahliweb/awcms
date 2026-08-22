@@ -54,6 +54,11 @@ import {
 } from "../../../../modules/identity-access/application/principal-preference-store";
 import { resolveActiveSession } from "../../../../modules/identity-access/application/session-lookup";
 import type { Locale } from "../../../../lib/i18n/locales";
+import {
+  bodyTooLargeResponse,
+  readFormBody,
+  readJsonBody
+} from "../../../../lib/security/request-body-limit";
 
 const NO_STORE_HEADERS = { "cache-control": "private, no-store" };
 
@@ -124,8 +129,14 @@ async function readSubmission(
 
   try {
     if (wantsRedirect) {
-      const form = await request.formData();
-      const rawLocale = form.get("locale")?.toString() ?? null;
+      const formRead = await readFormBody(request);
+
+      if (formRead.tooLarge) {
+        return bodyTooLargeResponse(formRead.limitBytes);
+      }
+
+      const form = formRead.value;
+      const rawLocale = form.get("locale");
       const locale = coerceLocale(rawLocale);
 
       // A form that names an unsupported locale is a bug in the form, not a
@@ -144,11 +155,19 @@ async function readSubmission(
       return {
         ...(rawLocale === null ? {} : { locale }),
         wantsRedirect: true,
-        returnTo: form.get("return_to")?.toString() ?? null
+        returnTo: form.get("return_to")
       };
     }
 
-    const body = (await request.json()) as Record<string, unknown> | null;
+    const bodyRead = await readJsonBody<Record<string, unknown>>(request);
+
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    // Malformed joins the `!body` branch below, which already answers
+    // `INVALID_BODY` — the same 400 this route returned before, by the same name.
+    const body = bodyRead.value;
 
     if (!body || typeof body !== "object") {
       return fail(

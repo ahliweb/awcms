@@ -13,6 +13,10 @@ import { validateSetupInitializeInput } from "../../../../modules/tenant-admin/d
 import type { SetupInitializeInput } from "../../../../modules/tenant-admin/domain/setup-validation";
 import { provisionTenant } from "../../../../modules/tenant-admin/application/tenant-provisioning";
 import { recordAuditEvent } from "../../../../modules/logging/application/audit-log";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../lib/security/request-body-limit";
 
 /**
  * `GET /api/v1/tenants` and `POST /api/v1/tenants` (ADR-0054) — the tenant
@@ -104,12 +108,17 @@ export const POST = defineTenantRoute<Prepared>({
       );
     }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const bodyRead = await readJsonBody(request);
+
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    if (bodyRead.malformed) {
       return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
     }
+
+    const body: unknown = bodyRead.value;
 
     // The SAME validator the setup wizard uses. Provisioning creates the same
     // shape of thing, so a second set of rules would drift — and the half that
