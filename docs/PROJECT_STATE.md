@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **145** (`sql/001`–`145`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0106** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.712 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **61** (34.728 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -390,26 +390,22 @@ pioneered directly here after the ADR-0047 freeze.)
   would have handed every newly created domain the only precondition `verify` has.
 
 - **FOUND WHILE WORKING, 22 August 2026: `docs:i18n:stamp` can silence
-  `check:docs:translation` on a mirror that is now WRONG.** The stamp script re-hashes
-  every English source into its mirror's `i18n-source-hash` marker. Its own output warns
-  about the case it was built for — `bun run format` touching a source and going stale for
-  no editorial reason — and says "FORMAT FIRST, THEN STAMP". What it cannot distinguish is
-  a source whose CONTENT changed. Running it after editing an English document re-stamps
-  the marker and the translation gate goes green while the Indonesian mirror still says the
-  old thing.
-
-  Hit for real in this session: `project-state:inventory:generate` updated §2's migration
-  count in `PROJECT_STATE.md` (141 → 142) and `docs:i18n:stamp` then declared the
-  Indonesian mirror current while it still read **141**. It was caught by
+  `check:docs:translation` on a mirror that is now WRONG.** **DONE (22 August 2026).**
+  The stamp script re-hashes every English source into its mirror's `i18n-source-hash`
+  marker, and it did so unconditionally — so "edit the English, run the stamp" turned the
+  translation gate green while the Indonesian mirror still said the old thing. Hit for
+  real: `project-state:inventory:generate` moved §2's migration count 141 -> 142 and the
+  stamp then declared the mirror current while it still read **141**. It was caught by
   `tests/doc-inventory-counts.test.ts`, which happens to check `sql/NNN` ranges across
   docs — a backstop that exists for a different reason and covers one field.
 
-  **Not fixed here, and worth its own change.** The shape of a fix is a stamp that refuses
-  to re-hash a source whose non-whitespace content changed (`--allow-formatting-only` by
-  default, an explicit flag to re-stamp after a genuine re-translation), or a mirror-side
-  marker that records WHICH revision was translated rather than only that one was. Until
-  then the working rule is: re-stamp only after you have actually updated the mirror, and
-  never as a reflex to get a gate green.
+  Re-writing the marker is a CLAIM about the translation, so it is now made only when
+  something says the translation was actually looked at: the mirror is modified (or
+  untracked) in this working tree, or the source changed only in WHITESPACE since `HEAD`
+  — the reflow case the tool was built for, where no translator needs to do anything.
+  Otherwise it refuses, names the file and exits 1; `--force-restamp` is the deliberate
+  override for a reword the translation survives. A missing `HEAD` version does not
+  silently allow it. Verified against all three cases.
 
 - **RECOMMENDATION ROUND — 17 August 2026, whole-repo audit across ten dimensions.**
   **38 recommendations from 48 verified findings.** Method: ten independent finders
@@ -1286,8 +1282,18 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       NOT folded in: two are GET reads, `language-switcher-client.ts` POSTs anonymously to a
       public endpoint and decides by `response.ok` plus a cookie, and
       `push-subscription-client.ts` surfaces the server's own `error.message` — the exact
-      thing the narrow shape exists to withhold. **Recovered 425 B** of a client asset
-      budget that had 161 B left, which is what unblocked ADR-0106's screen changes.
+      thing the narrow shape exists to withhold.
+
+      **It recovered NO client bytes, and the claim that it would was wrong.** Both files
+      were already shared chunks shipped once each, so "three copies of the bytes" was
+      never true — three copies of the SOURCE shipped once. The 425 B "saving" measured
+      while working came from a `dist/` the build had not cleaned, and it sent this whole
+      batch down the wrong road: D12/D13/D14 were sequenced BEFORE ADR-0106 to buy budget
+      headroom that did not exist, and the ADR-0106 branch turned out to be inside the
+      ceiling all along (191,733 B on a clean build). `bun run build` now runs
+      `rm -rf dist` first, because `client-asset-budget.ts`'s own docblock had already
+      recorded being misled this way twice and warning about it a third time would not
+      have worked either.
 
   34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` has 3 users and 20 hand-inlined copies.**
       **DONE (22 August 2026).** `_shared/keyset-pagination.ts:56-59`. The constant
@@ -1355,20 +1361,49 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       caller, where a `notify` node can actually be tested end to end. A test pins the
       absence so that change has to remove the pin deliberately.
 
-  37. **D16 — the media orphan lifecycle state is unreachable.**
-      `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` is the repo's only
-      writer of `status='orphaned'` and has zero callers, so the stale-orphan sweep, its
-      partial index and `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` gate a permanently empty set —
-      and a zero counter reads identically to a clean bucket. It is a leftover of the
-      pre-ADR-0036 model: `sql/087` deleted the attach/detach relation, so no reference
-      count exists to derive "orphaned" from. **Prefer deletion** unless orphan detection
-      is being built.
+  37. **D16 — the media orphan lifecycle state is unreachable.** **DONE (22 August 2026)
+      — code deleted, schema kept.** `media-object-directory.ts:592`.
+      `markNewsMediaObjectOrphaned` was the repo's only writer of `status='orphaned'`
+      and had zero callers, so the stale-orphan sweep, its partial index and
+      `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` gated a permanently empty set — and every run
+      printed `staleOrphaned(total=0,deleted=0,deferred=0)`, which reads exactly like a
+      clean bucket. A leftover of the pre-ADR-0036 model: `sql/087` deleted the
+      attach/detach relation, so no reference count exists to derive "orphaned" from.
+
+      Gone: the writer, `markStaleOrphanedNewsMediaObjectDeleted`, the
+      `cleanupStaleOrphaned` path (whose docblock reasoned carefully about a race that
+      could not occur), the `staleOrphaned` category and the job's three counters.
+
+      **One correction to the finding, and it matters:
+      `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` is NOT dead** and was not deleted. `orphanInR2` —
+      an R2 object with no DB row at all — genuinely uses it to decide when physical
+      deletion is safe. Removing it with the rest would have taken out a live control.
+
+      Kept per the decision: the `'orphaned'` CHECK value, `orphaned_at`, the partial
+      index, and BOTH status filters (admin screen and API). Those are reads over a column
+      that can still hold the value, and dropping one would leave two surfaces disagreeing
+      about the same column. `isNewsMediaObjectSafeForPublicReference` still refuses the
+      status, so a row that reached it by hand stays out of public references.
+
   38. **D17 — homepage sections and ad placements have no eligibility-aware read surface.**
+      **DONE (22 August 2026) — the narrow half, which is the whole of what was missing.**
       The three rendering helpers having zero callers is a **signed deferral** (ADR-0071
-      moved public news rendering to `awcms-astro`). The genuinely missing piece is narrow:
-      the ad list returns `media_object_id` with no resolved `public_url` and no
-      verified-status join, so an external renderer cannot reproduce the media safety
-      filter from the endpoint alone.
+      moved public news rendering to `awcms-astro`) and stays deferred.
+
+      The genuine gap is closed: `AdPlacementItem` now carries `mediaPublicUrl`,
+      `mediaAltText` and `mediaPubliclyReferenceable`, all three required. The last is the
+      point — it is the SERVER's verdict rather than a status to interpret, because
+      `isNewsMediaObjectSafeForPublicReference` turns on which lifecycle states count as
+      verified and a consumer reimplementing it gets that wrong in the PERMISSIVE
+      direction, which publishes an unverified image. `false` also covers a soft-deleted
+      object, so a consumer checking only this field cannot render one either.
+
+      Resolved in the same query on every path: a `LEFT JOIN` with the media predicate in
+      the `ON` clause, so a placement whose object was soft-deleted still appears in the
+      admin list instead of vanishing from the one screen that could repair it, and a
+      data-modifying CTE on create/update so a freshly created ad is not reported as
+      unreferenceable. No N+1 and no second endpoint. `/admin/blog-ads` now says whether
+      the attached image will actually be shown.
 
   ### Deliberately NOT recommended (recorded so the question is not reopened blind)
   - **Making `/api/v1/health` dependency-aware.** It does no DB call by design and three

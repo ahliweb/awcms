@@ -19315,6 +19315,9 @@ components:
         - placementKey
         - name
         - mediaObjectId
+        - mediaPublicUrl
+        - mediaAltText
+        - mediaPubliclyReferenceable
         - rotationMode
         - priority
         - isActive
@@ -19349,6 +19352,16 @@ components:
           description: Must reference a verified (`verified`/`attached`) R2 media object belonging to this tenant (`awcms_news_media_objects`) — never a local path or arbitrary external URL.
           type: string
           format: uuid
+        mediaPublicUrl:
+          type: string
+          nullable: true
+          description: Resolved from the media registry (ADR-0036) so a renderer never has to fetch the object separately. `null` when the media object has been soft-deleted.
+        mediaAltText:
+          type: string
+          nullable: true
+        mediaPubliclyReferenceable:
+          type: boolean
+          description: Whether this ad's media object may appear on a public page — the server's own verdict, not a status to interpret. `false` also covers a soft-deleted object, so a consumer checking only this field cannot render one.
         linkUrl:
           description: Optional, possibly external, link — validated server-side as an absolute http(s) URL only.
           type: string

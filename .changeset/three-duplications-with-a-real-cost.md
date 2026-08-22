@@ -29,7 +29,17 @@ deliberately not folded in — two are GET reads, and
 `data.subscription.endpointMasked`, which is exactly what the narrow shape
 exists to withhold.
 
-**Recovers 425 B of the client asset budget**, which had 161 B left.
+**It recovers no client bytes, and the claim that it would was wrong.** Both
+files were already shared chunks shipped once each, so "three copies of the
+bytes" was never true — three copies of the SOURCE shipped once. The 425 B
+"saving" measured during the work came from a `dist/` the build had not cleaned;
+clean builds either side of this change are byte-identical. `bun run build` now
+runs `rm -rf dist` first so the number cannot come from a tree the build did not
+produce — the budget script's own docblock had already recorded being misled
+this way twice.
+
+What the change is worth stands on the drift, the dead wrapper and the silent
+header disagreement, which is what the finding was actually about.
 
 **D13 — one timestamp expression, not twenty-one.** `KEYSET_CURSOR_CREATED_AT_SQL`
 hardcoded a bare `created_at` while its own docblock told callers to "wrap it in

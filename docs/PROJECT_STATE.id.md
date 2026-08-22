@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f409ae4afc890ef28f4da83b2f1c1c313b60585cfcb7d6b127247d33d7605859 -->
+<!-- i18n-source-hash: sha256:b8eb296f4ffb75a7e41e314556954c5c8f76fedd35aefbd52c4e040f5a45565f -->
 
 # AWCMS — Project State & Continuation
 
@@ -114,7 +114,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **145** (`sql/001`–`145`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0106** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **61** (34.712 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **61** (34.728 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -393,27 +393,24 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   setiap domain yang baru dibuat satu-satunya prasyarat yang dimiliki `verify`.
 
 - **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026: `docs:i18n:stamp` bisa MEMBUNGKAM
-  `check:docs:translation` pada mirror yang justru sudah SALAH.** Skrip stamp menghitung
-  ulang hash setiap sumber Inggris ke penanda `i18n-source-hash` mirrornya. Keluarannya
-  sendiri memperingatkan kasus yang menjadi alasan ia dibuat — `bun run format` menyentuh
-  sumber lalu hashnya basi tanpa alasan editorial — dan berkata "FORMAT DULU, BARU STAMP".
-  Yang TIDAK bisa ia bedakan adalah sumber yang ISINYA berubah. Menjalankannya setelah
-  menyunting dokumen Inggris menstempel ulang penandanya dan gerbang terjemahan menjadi
-  hijau padahal mirror Indonesianya masih mengatakan hal yang lama.
+  `check:docs:translation` pada mirror yang kini SALAH.** **SELESAI (22 Agustus 2026).**
+  Skrip stamp me-rehash setiap sumber Inggris ke penanda `i18n-source-hash` mirror-nya,
+  dan ia melakukannya tanpa syarat — sehingga "sunting bahasa Inggrisnya, jalankan stamp"
+  membuat gerbang terjemahan hijau sementara mirror Indonesia masih mengatakan hal yang
+  lama. Kena sungguhan: `project-state:inventory:generate` menggeser hitungan migrasi §2
+  dari 141 ke 142 dan stamp lalu menyatakan mirror-nya mutakhir sementara ia masih membaca
+  **141**. Ia tertangkap `tests/doc-inventory-counts.test.ts`, yang kebetulan memeriksa
+  rentang `sql/NNN` lintas dokumen — jaring pengaman yang ada untuk alasan lain dan
+  mencakup satu field.
 
-  Terjadi sungguhan di sesi ini: `project-state:inventory:generate` memperbarui hitungan
-  migrasi §2 di `PROJECT_STATE.md` (141 → 142) lalu `docs:i18n:stamp` menyatakan mirror
-  Indonesianya mutakhir padahal masih tertulis **141**. Yang menangkapnya
-  `tests/doc-inventory-counts.test.ts`, yang kebetulan memeriksa rentang `sql/NNN` di
-  dokumen — jaring pengaman yang ada untuk alasan lain dan hanya mencakup satu field.
-
-  **Tidak diperbaiki di sini, dan layak menjadi perubahannya sendiri.** Bentuk perbaikannya
-  adalah stamp yang MENOLAK menghitung ulang hash sumber yang isi non-spasinya berubah
-  (`--allow-formatting-only` sebagai bawaan, flag eksplisit untuk menstempel ulang setelah
-  terjemahan sungguhan), atau penanda di sisi mirror yang mencatat revisi MANA yang
-  diterjemahkan alih-alih sekadar bahwa ada yang diterjemahkan. Sampai itu ada, aturan
-  kerjanya: stempel ulang hanya setelah Anda benar-benar memperbarui mirrornya, dan jangan
-  pernah sebagai refleks supaya gerbangnya hijau.
+  Menulis ulang penanda itu adalah KLAIM tentang terjemahannya, jadi kini klaim itu hanya
+  dibuat bila ada yang menyatakan terjemahannya memang dilihat: mirror-nya termodifikasi
+  (atau untracked) di working tree ini, atau sumbernya hanya berubah SPASI sejak `HEAD` —
+  kasus reflow yang menjadi alasan tool ini dibuat, di mana tak ada penerjemah yang perlu
+  melakukan apa pun. Selain itu ia menolak, menyebut berkasnya, dan keluar 1;
+  `--force-restamp` adalah override yang disengaja untuk penulisan ulang yang tetap
+  dilewati terjemahannya. Versi `HEAD` yang tidak ada tidak diam-diam mengizinkannya.
+  Diverifikasi terhadap ketiga kasus.
 
 - **PUTARAN REKOMENDASI — 17 Agustus 2026, audit seluruh repo atas sepuluh dimensi.**
   **38 rekomendasi dari 48 temuan terverifikasi.** Metode: sepuluh pencari independen
@@ -1296,8 +1293,18 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       sengaja TIDAK digabungkan: dua adalah baca GET, `language-switcher-client.ts` mem-POST
       secara ANONIM ke endpoint publik dan memutuskan lewat `response.ok` plus cookie, dan
       `push-subscription-client.ts` menampilkan `error.message` milik server — persis hal
-      yang ditahan bentuk sempit itu. **Memulihkan 425 B** dari anggaran aset klien yang
-      tersisa 161 B, dan itulah yang membuka jalan perubahan layar ADR-0106.
+      yang ditahan bentuk sempit itu.
+
+      **Ia TIDAK memulihkan bita klien satu pun, dan klaim bahwa ia akan memulihkannya
+      salah.** Kedua berkas sudah menjadi chunk bersama yang masing-masing dikirim sekali,
+      jadi "tiga salinan bita" tak pernah benar — tiga salinan SUMBER yang dikirim sekali.
+      "Penghematan" 425 B yang terukur saat bekerja berasal dari `dist/` yang belum
+      dibersihkan build, dan ia membawa seluruh batch ini ke jalan yang salah:
+      D12/D13/D14 diurutkan SEBELUM ADR-0106 demi membeli kelonggaran anggaran yang tidak
+      ada, dan cabang ADR-0106 ternyata sejak awal berada di dalam pagu (191.733 B pada
+      build bersih). `bun run build` kini menjalankan `rm -rf dist` lebih dulu, karena
+      docblock `client-asset-budget.ts` sendiri sudah mencatat tertipu dengan cara ini dua
+      kali dan memperingatkannya untuk ketiga kali pun tak akan berhasil.
 
   34. **D13 — `KEYSET_CURSOR_CREATED_AT_SQL` punya 3 pemakai dan 20 salinan inline tangan.**
       **SELESAI (22 Agustus 2026).** `_shared/keyset-pagination.ts:56-59`. Konstantanya
@@ -1367,17 +1374,52 @@ offsetSuffix)` bersama. **Salinannya dua puluh SATU, bukan dua puluh**: tiga lag
       diuji ujung ke ujung. Sebuah uji memaku ketiadaannya supaya perubahan itu harus
       melepas pakunya dengan sengaja.
 
-  37. **D16 — keadaan siklus hidup orphan media tak terjangkau.**
-      `media-object-directory.ts:592`. `markNewsMediaObjectOrphaned` satu-satunya penulis
-      `status='orphaned'` di repo dan punya nol pemanggil, sehingga sapuan stale-orphan,
-      indeks parsialnya, dan `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` menjaga himpunan yang
-      permanen kosong — dan penghitung nol terbaca identik dengan bucket bersih.
-      **Utamakan penghapusan** kecuali deteksi orphan memang sedang dibangun.
+  37. **D16 — keadaan siklus hidup orphan media tak terjangkau.** **SELESAI (22 Agustus 2026) — kode dihapus, skema dipertahankan.** `media-object-directory.ts:592`.
+      `markNewsMediaObjectOrphaned` satu-satunya penulis `status='orphaned'` di repo dan
+      punya nol pemanggil, sehingga sapuan stale-orphan, indeks parsialnya, dan
+      `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` menjaga himpunan yang permanen kosong — dan setiap
+      putaran mencetak `staleOrphaned(total=0,deleted=0,deferred=0)`, yang terbaca persis
+      seperti bucket bersih. Ia peninggalan model pra-ADR-0036: `sql/087` menghapus relasi
+      attach/detach, jadi tak ada hitungan rujukan untuk menurunkan "orphaned" DARINYA.
+
+      Yang hilang: penulisnya, `markStaleOrphanedNewsMediaObjectDeleted`, jalur
+      `cleanupStaleOrphaned` (yang docblock-nya menalar hati-hati tentang balapan yang tak
+      mungkin terjadi), kategori `staleOrphaned`, dan tiga penghitung job itu.
+
+      **Satu koreksi atas temuannya, dan ini penting:
+      `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` TIDAK mati** dan tidak dihapus. `orphanInR2` —
+      objek R2 yang sama sekali tak punya baris DB — benar-benar memakainya untuk
+      memutuskan kapan penghapusan fisik aman. Menghapusnya bersama sisanya akan mencabut
+      sebuah kontrol hidup.
+
+      Dipertahankan sesuai keputusan: nilai CHECK `'orphaned'`, `orphaned_at`, indeks
+      parsialnya, dan KEDUA filter status (layar admin dan API). Keduanya adalah baca atas
+      kolom yang masih bisa menampung nilai itu, dan membuang salah satunya akan membuat
+      dua permukaan berselisih tentang kolom yang sama.
+      `isNewsMediaObjectSafeForPublicReference` tetap menolak status itu, jadi baris yang
+      mencapainya secara manual tetap dijauhkan dari rujukan publik.
+
   38. **D17 — homepage section dan ad placement tidak punya permukaan baca yang sadar
-      kelayakan.** Ketiga helper rendering bernol pemanggil adalah **penangguhan
-      bertanda tangan** (ADR-0071). Yang benar-benar hilang sempit: daftar iklan
-      mengembalikan `media_object_id` tanpa `public_url` terresolusi dan tanpa join status
-      terverifikasi.
+      kelayakan.** **SELESAI (22 Agustus 2026) — bagian sempitnya, yang memang seluruh
+      isi kekurangannya.** Ketiga helper rendering bernol pemanggil adalah **penangguhan
+      bertanda tangan** (ADR-0071 memindahkan rendering berita publik ke `awcms-astro`)
+      dan tetap ditangguhkan.
+
+      Celah yang sebenarnya ditutup: `AdPlacementItem` kini membawa `mediaPublicUrl`,
+      `mediaAltText`, dan `mediaPubliclyReferenceable`, ketiganya wajib. Yang terakhir
+      itulah intinya — ia VONIS server, bukan status untuk ditafsirkan, karena
+      `isNewsMediaObjectSafeForPublicReference` bergantung pada keadaan siklus hidup mana
+      yang dihitung terverifikasi dan konsumen yang mengimplementasikannya ulang salah ke
+      arah PERMISIF, yang berarti menerbitkan gambar tak terverifikasi. `false` juga
+      mencakup objek yang di-soft-delete, jadi konsumen yang hanya memeriksa field ini pun
+      tak bisa merendernya.
+
+      Diresolusi dalam kueri yang sama di setiap jalur: `LEFT JOIN` dengan predikat media
+      di klausa `ON`, sehingga placement yang objeknya di-soft-delete tetap muncul di
+      daftar admin alih-alih lenyap dari satu-satunya layar yang bisa memperbaikinya, dan
+      CTE ber-DML pada create/update sehingga iklan yang baru dibuat tidak dilaporkan tak
+      dapat dirujuk. Tanpa N+1 dan tanpa endpoint kedua. `/admin/blog-ads` kini menyatakan
+      apakah gambar terlampirnya benar-benar akan ditampilkan.
 
   ### Sengaja TIDAK direkomendasikan (dicatat agar pertanyaannya tak dibuka ulang buta)
   - **Membuat `/api/v1/health` sadar dependensi.** Ia sengaja tidak memanggil DB dan tiga

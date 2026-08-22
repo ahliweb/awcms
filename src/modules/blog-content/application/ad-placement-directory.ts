@@ -29,6 +29,30 @@ export type AdPlacementView = {
   placementKey: AdPlacementKey;
   name: string;
   mediaObjectId: string;
+  /**
+   * The media registry's own public URL for {@link mediaObjectId}, or `null`
+   * when the object has been soft-deleted (finding D17).
+   *
+   * Resolved server-side rather than left to the caller. The FK is `NOT NULL`,
+   * so every placement names an object — but an id alone is not something an
+   * external renderer can turn into an `<img src>`, and the one endpoint that
+   * hands these rows out was returning nothing else. The alternative, a second
+   * request per placement to the media resolver, is an N+1 across a list.
+   */
+  mediaPublicUrl: string | null;
+  mediaAltText: string | null;
+  /**
+   * Whether the media object may appear on a public page — the SERVER's
+   * verdict, not a status for the caller to interpret.
+   *
+   * `isNewsMediaObjectSafeForPublicReference` is the rule, and it is the kind
+   * of rule a consumer reimplementing it gets subtly wrong: it turns on which
+   * lifecycle states count as verified, and being wrong in the permissive
+   * direction publishes an unverified image. Returning the status string would
+   * have invited exactly that. `false` also covers the soft-deleted case, so a
+   * consumer that checks only this cannot show a deleted object either.
+   */
+  mediaPubliclyReferenceable: boolean;
   linkUrl: string | null;
   rotationMode: AdRotationMode;
   priority: number;
@@ -50,6 +74,9 @@ type AdPlacementRow = {
   placement_key: AdPlacementKey;
   name: string;
   media_object_id: string;
+  media_public_url: string | null;
+  media_alt_text: string | null;
+  media_status: string | null;
   link_url: string | null;
   rotation_mode: AdRotationMode;
   priority: number;
@@ -72,6 +99,15 @@ function toView(row: AdPlacementRow): AdPlacementView {
     placementKey: row.placement_key,
     name: row.name,
     mediaObjectId: row.media_object_id,
+    mediaPublicUrl: row.media_public_url,
+    mediaAltText: row.media_alt_text,
+    mediaPubliclyReferenceable:
+      row.media_status !== null &&
+      isNewsMediaObjectSafeForPublicReference(
+        row.media_status as Parameters<
+          typeof isNewsMediaObjectSafeForPublicReference
+        >[0]
+      ),
     linkUrl: row.link_url,
     rotationMode: row.rotation_mode,
     priority: row.priority,
@@ -99,6 +135,7 @@ export async function createAdPlacement(
   correlationId?: string
 ): Promise<AdPlacementView> {
   const rows = (await tx`
+    WITH written AS (
     INSERT INTO awcms_news_portal_ad_placements
       (tenant_id, placement_key, name, media_object_id, link_url, rotation_mode,
        priority, is_active, starts_at, ends_at, target_type, target_id)
@@ -110,6 +147,23 @@ export async function createAdPlacement(
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
       rotation_mode, priority, is_active, starts_at, ends_at, target_type,
       target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
+    )
+    -- The write and the media resolution in ONE statement (finding D17). A
+    -- data-modifying CTE keeps the resolved media fields consistent with every
+    -- read path without a second round trip, and without the alternative that
+    -- would actually be wrong: returning the written row with null media
+    -- fields, which reports a freshly created, perfectly valid ad as not
+    -- publicly referenceable.
+    SELECT p.id, p.tenant_id, p.placement_key, p.name, p.media_object_id,
+      m.public_url AS media_public_url, m.alt_text AS media_alt_text,
+      m.status AS media_status,
+      p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
+      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
+      p.deleted_by, p.delete_reason
+    FROM written p
+    LEFT JOIN awcms_news_media_objects m
+      ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
+      AND m.deleted_at IS NULL
   `) as AdPlacementRow[];
 
   const created = toView(rows[0]!);
@@ -136,11 +190,21 @@ export async function fetchAdPlacementById(
   id: string
 ): Promise<AdPlacementView | null> {
   const rows = (await tx`
-    SELECT id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
-      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
-    FROM awcms_news_portal_ad_placements
-    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
+    SELECT p.id, p.tenant_id, p.placement_key, p.name, p.media_object_id,
+      m.public_url AS media_public_url, m.alt_text AS media_alt_text,
+      m.status AS media_status,
+      p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
+      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
+      p.deleted_by, p.delete_reason
+    FROM awcms_news_portal_ad_placements p
+    -- LEFT, and the media predicate is in the ON clause: a placement whose
+    -- object was soft-deleted must still appear in an ADMIN list, reported as
+    -- not publicly referenceable, rather than vanishing from the one screen
+    -- that could repair it.
+    LEFT JOIN awcms_news_media_objects m
+      ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
+      AND m.deleted_at IS NULL
+    WHERE p.tenant_id = ${tenantId} AND p.id = ${id} AND p.deleted_at IS NULL
   `) as AdPlacementRow[];
 
   const row = rows[0];
@@ -153,12 +217,22 @@ export async function listAdPlacements(
   tenantId: string
 ): Promise<AdPlacementView[]> {
   const rows = (await tx`
-    SELECT id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
-      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
-    FROM awcms_news_portal_ad_placements
-    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
-    ORDER BY placement_key ASC, priority DESC, created_at DESC
+    SELECT p.id, p.tenant_id, p.placement_key, p.name, p.media_object_id,
+      m.public_url AS media_public_url, m.alt_text AS media_alt_text,
+      m.status AS media_status,
+      p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
+      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
+      p.deleted_by, p.delete_reason
+    FROM awcms_news_portal_ad_placements p
+    -- LEFT, and the media predicate is in the ON clause: a placement whose
+    -- object was soft-deleted must still appear in an ADMIN list, reported as
+    -- not publicly referenceable, rather than vanishing from the one screen
+    -- that could repair it.
+    LEFT JOIN awcms_news_media_objects m
+      ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
+      AND m.deleted_at IS NULL
+    WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL
+    ORDER BY p.placement_key ASC, p.priority DESC, p.created_at DESC
     LIMIT 500
   `) as AdPlacementRow[];
 
@@ -181,6 +255,7 @@ export async function updateAdPlacement(
   correlationId?: string
 ): Promise<AdPlacementView | null> {
   const rows = (await tx`
+    WITH written AS (
     UPDATE awcms_news_portal_ad_placements
     SET placement_key = COALESCE(${input.placementKey ?? null}, placement_key),
         name = COALESCE(${input.name ?? null}, name),
@@ -198,6 +273,23 @@ export async function updateAdPlacement(
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
       rotation_mode, priority, is_active, starts_at, ends_at, target_type,
       target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
+    )
+    -- The write and the media resolution in ONE statement (finding D17). A
+    -- data-modifying CTE keeps the resolved media fields consistent with every
+    -- read path without a second round trip, and without the alternative that
+    -- would actually be wrong: returning the written row with null media
+    -- fields, which reports a freshly created, perfectly valid ad as not
+    -- publicly referenceable.
+    SELECT p.id, p.tenant_id, p.placement_key, p.name, p.media_object_id,
+      m.public_url AS media_public_url, m.alt_text AS media_alt_text,
+      m.status AS media_status,
+      p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
+      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
+      p.deleted_by, p.delete_reason
+    FROM written p
+    LEFT JOIN awcms_news_media_objects m
+      ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
+      AND m.deleted_at IS NULL
   `) as AdPlacementRow[];
 
   const updated = rows[0] ? toView(rows[0]) : null;

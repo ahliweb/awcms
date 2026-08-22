@@ -33,7 +33,8 @@
   },
   "scripts": {
     "dev": "bun --bun astro dev",
-    "build": "bun --bun astro build && bun run build:server-entry && bun run build:asset-budget:check && bun run build:inline-scripts:check",
+    "build": "bun run build:clean && bun --bun astro build && bun run build:server-entry && bun run build:asset-budget:check && bun run build:inline-scripts:check",
+    "build:clean": "rm -rf dist",
     "build:inline-scripts:check": "bun scripts/build-inline-script-check.ts",
     "build:server-entry": "bun build src/lib/server/standalone-entry.ts --target=bun --outfile=dist/standalone-entry.mjs",
     "build:asset-budget:check": "bun scripts/client-asset-budget.ts",

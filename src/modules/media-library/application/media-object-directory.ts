@@ -37,7 +37,7 @@ import {
  * `pending_upload -> uploaded`
  * and any `-> orphaned`/`-> failed` transition are logged via the structured
  * logger only (`src/lib/logging/logger.ts`) — see `markNewsMediaObjectUploaded`/
- * `markNewsMediaObjectOrphaned`/`markNewsMediaObjectFailed` below for why
+ * `markNewsMediaObjectFailed` below for why
  * these are treated as routine lifecycle bookkeeping, not high-risk actions.
  */
 
@@ -625,42 +625,30 @@ export async function markNewsMediaObjectVerified(
  * flow produces, and it is equally referenceable.
  */
 
-/**
- * `pending_upload|uploaded|verified -> orphaned` — flags a never-attached
- * object as a cleanup candidate (doc `r2-backup-lifecycle.md` §2, e.g. a
- * pending TTL job). Deliberately excluded from the required audit-event
- * list (create/verify/attach/detach/delete/restore/purge) — this is routine
- * lifecycle bookkeeping performed by an automated job, not itself a
- * high-risk action; callers may still `log()` it structurally.
+/*
+ * `markNewsMediaObjectOrphaned` USED TO LIVE HERE, and is gone — finding D16.
  *
- * Sets `orphaned_at = now()` (migration 046, Issue #690) — the moment the
- * `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` grace period
- * (`scripts/news-media-r2-reconcile.ts`) starts counting from. Nothing else
- * in this file writes `orphaned_at` — it is set exactly once, here, and only
- * read afterward (by the reconciliation job's stale-orphan sweep), so the
- * grace period can never be silently reset/extended by an unrelated update.
+ * It was this repo's ONLY writer of `status = 'orphaned'`, and it had zero
+ * callers. So the reconciliation job's stale-orphan sweep, `sql/041`'s partial
+ * index and the `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` comparison all gated a
+ * permanently empty set — and a zero counter reads exactly like a clean bucket,
+ * which made the job's summary line a claim nobody could check.
+ *
+ * It is a leftover of the pre-ADR-0036 model, the same one that took
+ * `attachNewsMediaObject`/`detachNewsMediaObject` above: `sql/087` deleted the
+ * object->content relation, so there is no reference count left to derive
+ * "orphaned" FROM. Building the state a writer again would mean scanning every
+ * column in every module that can point at a media object, where one missed
+ * column silently deletes a live image after the grace period. That is a
+ * feature with a real design in it, not a repair, and it is not what the
+ * unreachable code was.
+ *
+ * The STATUS survives in `sql/041`'s CHECK, alongside `orphaned_at` and its
+ * partial index. An applied migration is immutable, the column stays honest
+ * about what the schema will hold, and it is where a future detector would
+ * write. `isNewsMediaObjectSafeForPublicReference` still refuses it, so a row
+ * that reached the state by hand is still kept out of public references.
  */
-export async function markNewsMediaObjectOrphaned(
-  tx: Bun.SQL,
-  tenantId: string,
-  id: string
-): Promise<NewsMediaObjectView | null> {
-  const rows = (await tx`
-    UPDATE awcms_news_media_objects
-    SET status = 'orphaned', orphaned_at = now(), updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${id}
-      AND status IN ('pending_upload', 'uploaded', 'verified') AND deleted_at IS NULL
-    RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
-      storage_driver, bucket_name, object_key, original_filename, public_url,
-      mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
-          credit_line, source_name, rights_notes, copyright_status,
-          rights_verification_status, rights_verified_by, rights_verified_at,
-      status, created_by_tenant_user_id, created_at, updated_at,
-      deleted_at, deleted_by, delete_reason, restored_at, restored_by
-  `) as NewsMediaObjectRow[];
-
-  return rows[0] ? toView(rows[0]) : null;
-}
 
 export type MarkNewsMediaObjectFailedOptions = {
   /**
@@ -686,7 +674,9 @@ export type MarkNewsMediaObjectFailedOptions = {
  * (checksum mismatch, R2 error, disallowed content sniffed, etc), OR (Issue
  * #690, `options.olderThan` set) the row expired past
  * `NEWS_MEDIA_R2_PENDING_TTL_MINUTES` without ever being finalized. Same
- * "not in the required audit list" reasoning as `markNewsMediaObjectOrphaned`.
+ * Deliberately excluded from the required audit-event list
+ * (create/verify/delete/restore/purge) — routine lifecycle bookkeeping
+ * performed by an automated job, not itself a high-risk action.
  */
 export async function markNewsMediaObjectFailed(
   tx: Bun.SQL,
@@ -773,49 +763,10 @@ export async function purgeExpiredPendingNewsMediaObject(
   return true;
 }
 
-/**
- * `orphaned -> ` soft-deleted (Issue #690,
- * `scripts/news-media-r2-reconcile.ts`) — physical R2 cleanup grace period
- * (`NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS`, `r2-backup-lifecycle.md` §3) has
- * elapsed for a row already flagged `orphaned`. Unlike
- * `purgeExpiredPendingNewsMediaObject`, this is a SOFT delete — the row WAS
- * a real, once-verified media object (§3's retention table: "Baris metadata
- * `deleted` (soft delete): baris tetap ada (audit trail)... objek fisik R2
- * dihapus setelah masa tenggang"). `status`/`orphaned_at` are left
- * unchanged (soft delete stays orthogonal to `status`, same convention as
- * every other transition in this file). No `actorTenantUserId` — this is a
- * system job, not a human action; `deleted_by` stays `NULL`.
+/*
+ * `markStaleOrphanedNewsMediaObjectDeleted` is gone with it (finding D16) —
+ * its only caller was the sweep over a category that could never be non-empty.
  */
-export async function markStaleOrphanedNewsMediaObjectDeleted(
-  tx: Bun.SQL,
-  tenantId: string,
-  id: string,
-  olderThan: Date
-): Promise<boolean> {
-  const rows = (await tx`
-    UPDATE awcms_news_media_objects
-    SET deleted_at = now(), delete_reason = 'r2_orphan_grace_period_expired',
-        updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${id}
-      AND status = 'orphaned' AND deleted_at IS NULL AND orphaned_at < ${olderThan}
-    RETURNING object_key
-  `) as { object_key: string }[];
-
-  if (rows.length === 0) return false;
-
-  await recordAuditEvent(tx, {
-    tenantId,
-    moduleKey: AUDIT_MODULE_KEY,
-    action: "news_media.object.orphan_expired_deleted",
-    resourceType: AUDIT_RESOURCE_TYPE,
-    resourceId: id,
-    severity: "warning",
-    message: `News media object soft deleted: orphan grace period expired (${rows[0]!.object_key}).`,
-    attributes: { objectKey: rows[0]!.object_key }
-  });
-
-  return true;
-}
 
 /**
  * Point lookup used as the FINAL, immediate-before-delete gate for

@@ -199,33 +199,40 @@ describe("categorizeNewsMediaReconciliation (Issue #690)", () => {
     expect(result.expiredPending).toHaveLength(0);
   });
 
-  test("stale-orphaned: an orphaned row past the grace period is included, a fresh one is not", () => {
-    const staleOrphanedAt = new Date(
+  test("there is no orphaned category at all, and an orphaned row lands nowhere", () => {
+    // Finding D16. This test used to assert that an `orphaned` row past the
+    // grace period was picked up — over a status NOTHING could write:
+    // `markNewsMediaObjectOrphaned` was the repo's only writer of it and had
+    // zero callers, so the category matched a permanently empty set and the
+    // job printed `staleOrphaned(total=0,...)` on every run. A zero counter and
+    // a clean bucket read identically.
+    //
+    // The status value survives in `sql/041`'s CHECK — an applied migration is
+    // immutable and the column stays honest about what the schema will hold —
+    // so a row could still reach it by hand. It is categorised as nothing,
+    // which is the truthful answer: this job has no remediation for a state it
+    // cannot produce and cannot derive. `orphanGraceDays` is untouched; the
+    // `orphanInR2` category genuinely uses it.
+    const orphanedAt = new Date(
       NOW.getTime() - (ORPHAN_GRACE_DAYS + 1) * 24 * 60 * 60 * 1000
-    );
-    const freshOrphanedAt = new Date(
-      NOW.getTime() - (ORPHAN_GRACE_DAYS - 1) * 24 * 60 * 60 * 1000
     );
 
     const result = categorize(
       [
         row({
-          objectKey: "stale-orphan",
+          objectKey: "hand-written-orphan",
           status: "orphaned",
-          orphanedAt: staleOrphanedAt
-        }),
-        row({
-          objectKey: "fresh-orphan",
-          status: "orphaned",
-          orphanedAt: freshOrphanedAt
+          orphanedAt
         })
       ],
-      []
+      [{ key: "hand-written-orphan", lastModified: orphanedAt.toISOString() }]
     );
 
-    expect(result.staleOrphaned.map((entry) => entry.objectKey)).toEqual([
-      "stale-orphan"
-    ]);
+    expect(result).not.toHaveProperty("staleOrphaned");
+    expect(result.healthy).toHaveLength(0);
+    expect(result.orphanInDb).toHaveLength(0);
+    expect(result.expiredPending).toHaveLength(0);
+    expect(result.orphanInR2).toHaveLength(0);
   });
 
   test("orphan-in-r2: an R2 object with no matching DB row at all (any status) is flagged", () => {

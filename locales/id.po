@@ -4030,6 +4030,9 @@ msgstr "Gambar utama"
 msgid "An image is attached."
 msgstr "Sebuah gambar terpasang."
 
+msgid "An image is attached, but it is not publicly referenceable — it is unverified or has been deleted, so this ad will render nothing."
+msgstr "Sebuah gambar terlampir, tetapi tidak dapat dirujuk publik — ia belum terverifikasi atau sudah dihapus, jadi iklan ini tidak akan merender apa pun."
+
 msgid "No image attached."
 msgstr "Belum ada gambar terpasang."
 
