@@ -709,11 +709,53 @@ pioneered directly here after the ADR-0047 freeze.)
       fetched.** `AdminLayout.astro:184-206`. `tenant_name` is fetched separately from the
       same row `readTenantDisplayDefaults` already selects.
   13. **B5 — ~6 middleware round trips per public request before the page's first query.**
+      **DONE (22 August 2026)** — measured first, then reduced.
       `middleware.ts:305`; `redirect-resolution-service.ts:170-212`. Paid even by tenants
       with zero redirect rules. `standar-performa-dan-keamanan.md:195` claims the
       ≤3-query hot-read ceiling is "measured", but **both budget suites call directory
       functions directly and never drive middleware**, so the excess is structurally
       invisible to the gate that claims to enforce it.
+
+      **The measurement was the harder half, and it is what the finding was really
+      about.** `countQueries` can only be handed a `tx`, so it can only see code the
+      test has already placed inside a transaction — a directory function. Everything
+      the request pays first was not merely unmeasured but unmeasurable by that tool.
+      `countPoolQueries` wraps the POOL and the transaction opened on it, and
+      `tests/integration/middleware-query-budget.integration.test.ts` now pins the
+      real numbers against a real PostgreSQL: **5 statements** for a passthrough,
+      **7** for a request that redirects, **0** for a path the redirect vocabulary
+      does not cover. Exact, not ceilings — a ceiling with slack cannot tell an
+      improvement from a regression into the slack. And explicitly a FLOOR: `BEGIN`
+      and `COMMIT` are two more round trips that `sql.begin` issues itself and no
+      Proxy can see. A budget that quietly under-counts is how "measured" came to
+      mean something other than measured in the first place.
+
+      **The reduction is one read, not a short-circuit.** `resolveTenantAllowedHosts`
+      and `resolveTenantPrimaryHost` read the same table under the same
+      active/not-deleted filter, differing only by `is_primary`, and the redirect path
+      called them one after the other — so `resolveTenantDomainSet` answers both from
+      one round trip (6 → 5, and 8 → 7). Proven by running the new budget against the
+      PRE-fix code and watching it report 6 and 8. The short-circuit the file's own
+      perf note considered ("does this tenant have any live rule?") is still NOT
+      applied, for the reason that note gives: the passthrough branch needs the
+      server-derived host to attribute a 404, and the legacy-blog auto-redirect fires
+      from settings rather than a rule row.
+
+      **The standard now states its scope.** The ≤ 3 ceiling was always a ROUTE budget;
+      the table did not say so, and "measured" is a word a reader takes as a bound on
+      the REQUEST. The middleware budget is a separate row rather than folded into the
+      same number, because the two are paid by different code and one sum would hide
+      which half moved.
+
+      **Found while working: two comments asserted a live code path was dead.** Both
+      `redirect-resolution-service.ts` and `redirect-middleware.ts` said the middleware
+      passes `locale = null` "all the way through", so locale-scoped redirect rules
+      could never match. True under ADR-0039; **false since ADR-0098's locale routing
+      landed** and the middleware started passing the served locale for a prefixed
+      URL. Corrected in both places. Same shape as the stale-skill hazard this repo
+      keeps a memory about: a claim that ages into the opposite of the truth, in a
+      file nobody had reason to re-read.
+
   14. **B6 — in-process rate-limit `buckets` Map has no eviction.** **DONE (22 August
       2026).**
       `security/rate-limit.ts:57`. One permanent entry per distinct client IP; Redis is

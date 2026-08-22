@@ -57,3 +57,100 @@ export async function countQueries<T>(
 
   return { result, queries };
 }
+
+/**
+ * Run `work` with a query-counting POOL handle, counting statements issued
+ * directly on it AND inside any `sql.begin(...)` transaction it opens.
+ *
+ * `countQueries` above can only be handed a `tx`, which means it can only
+ * measure code the test has already put inside a transaction — i.e. a directory
+ * function. That is why finding B5 could exist: the performance standard claims
+ * a "≤ 3 queries per hot read" ceiling as **measured**, and both budget suites
+ * call directory functions directly, so everything the request pays BEFORE the
+ * page's first query — tenant resolution, redirect resolution, the transaction
+ * they run in — was structurally outside what the measurement could see.
+ *
+ * ## What the number does and does not include
+ *
+ * Counted: every tagged-template statement, on the pool and inside the
+ * transaction, plus the `SET LOCAL` that `withTenantOrThrow` issues through
+ * `tx.unsafe`.
+ *
+ * NOT counted: the `BEGIN` and `COMMIT` that `sql.begin` sends itself. They are
+ * real round trips and a Proxy cannot see them, so a count from here is a
+ * **floor** on the true number, not the whole of it. Stating that is the point:
+ * a budget that quietly under-counts is how "measured" came to mean something
+ * other than measured.
+ */
+export async function countPoolQueries<T>(
+  sql: Bun.SQL,
+  work: (counting: Bun.SQL) => Promise<T>
+): Promise<{ result: T; queries: number }> {
+  let queries = 0;
+
+  const countTx = (tx: Bun.TransactionSQL): Bun.TransactionSQL =>
+    new Proxy(tx, {
+      apply(target, thisArg, args) {
+        queries += 1;
+
+        return Reflect.apply(
+          target as unknown as (...a: unknown[]) => unknown,
+          thisArg,
+          args
+        );
+      },
+      get(target, prop, receiver) {
+        if (prop === "unsafe") {
+          // `SET LOCAL app.current_tenant_id` comes through here on every
+          // tenant transaction — a round trip like any other.
+          return (...args: unknown[]) => {
+            queries += 1;
+
+            return (
+              target as unknown as {
+                unsafe: (...a: unknown[]) => unknown;
+              }
+            ).unsafe(...args);
+          };
+        }
+
+        return Reflect.get(target as object, prop, receiver);
+      }
+    }) as unknown as Bun.TransactionSQL;
+
+  const counting = new Proxy(sql, {
+    apply(target, thisArg, args) {
+      queries += 1;
+
+      return Reflect.apply(
+        target as unknown as (...a: unknown[]) => unknown,
+        thisArg,
+        args
+      );
+    },
+    get(target, prop, receiver) {
+      if (prop === "begin") {
+        // Called on the REAL pool, with the callback's `tx` wrapped — a proxy
+        // as `this` is not something Bun's transaction machinery has to
+        // tolerate, and the wrapping is what makes in-transaction work visible.
+        return (...args: unknown[]) => {
+          const fn = args[args.length - 1] as (
+            tx: Bun.TransactionSQL
+          ) => Promise<unknown>;
+
+          return (
+            target as unknown as { begin: (...a: unknown[]) => unknown }
+          ).begin(...args.slice(0, -1), (tx: Bun.TransactionSQL) =>
+            fn(countTx(tx))
+          );
+        };
+      }
+
+      return Reflect.get(target as object, prop, receiver);
+    }
+  }) as unknown as Bun.SQL;
+
+  const result = await work(counting);
+
+  return { result, queries };
+}

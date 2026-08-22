@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f1a13869b3fa723064588a3816cb62ccff87e0fb057570ec7416dc5ec201a8d1 -->
+<!-- i18n-source-hash: sha256:89dad0e2915ba1daed2dcc078dac6fac858d9e98b72e2354334f232b0d5f525a -->
 
 # AWCMS — Project State & Continuation
 
@@ -694,11 +694,55 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       susunan sidebar.
 
   13. **B5 — ~6 round trip middleware per request publik sebelum query pertama halaman.**
+      **SELESAI (22 Agustus 2026)** — diukur dulu, baru dikurangi.
       `middleware.ts:305`; `redirect-resolution-service.ts:170-212`. Dibayar bahkan oleh
       tenant tanpa satu pun aturan redirect. `standar-performa-dan-keamanan.md:195` mengaku
       plafon ≤3 query hot-read "terukur", tetapi **kedua suite budget memanggil fungsi
       directory langsung dan tidak pernah menggerakkan middleware**, jadi kelebihannya
       secara struktural tak terlihat oleh gerbang yang mengaku menegakkannya.
+
+      **Pengukurannya adalah paruh yang lebih sulit, dan itulah inti temuan ini.**
+      `countQueries` hanya bisa diberi `tx`, jadi ia hanya bisa melihat kode yang sudah
+      ditaruh uji di dalam transaksi — sebuah fungsi directory. Semua yang dibayar
+      request lebih dulu bukan sekadar tak terukur, melainkan tak TERUKURKAN oleh alat
+      itu. `countPoolQueries` membungkus POOL dan transaksi yang dibuka di atasnya, dan
+      `tests/integration/middleware-query-budget.integration.test.ts` kini memaku angka
+      sebenarnya di atas PostgreSQL nyata: **5 statement** untuk passthrough, **7**
+      untuk request yang redirect, **0** untuk path di luar kosakata redirect. Persis,
+      bukan plafon — plafon berkelonggaran tak bisa membedakan perbaikan dari regresi
+      ke dalam kelonggaran itu. Dan secara eksplisit BATAS BAWAH: `BEGIN` dan `COMMIT`
+      adalah dua round trip lagi yang dikirim `sql.begin` sendiri dan tak terlihat
+      Proxy mana pun. Anggaran yang diam-diam kurang menghitung adalah persis
+      bagaimana "terukur" bisa berarti sesuatu selain terukur.
+
+      **Pengurangannya satu pembacaan, bukan short-circuit.** `resolveTenantAllowedHosts`
+      dan `resolveTenantPrimaryHost` membaca tabel yang SAMA dengan filter
+      aktif/tak-terhapus yang sama, hanya beda `is_primary`, dan jalur redirect
+      memanggil keduanya berurutan — maka `resolveTenantDomainSet` menjawab keduanya
+      dari satu round trip (6 → 5, dan 8 → 7). Dibuktikan dengan menjalankan anggaran
+      baru itu terhadap kode SEBELUM perbaikan dan melihatnya melaporkan 6 dan 8.
+      Short-circuit yang dipertimbangkan catatan perf berkas itu sendiri ("apakah
+      tenant ini punya aturan hidup?") TETAP tidak diterapkan, dengan alasan yang
+      catatan itu berikan: cabang passthrough butuh host turunan-server untuk
+      mengatribusikan 404, dan auto-redirect legacy-blog menyala dari settings, bukan
+      dari baris aturan.
+
+      **Standar kini menyatakan cakupannya.** Plafon ≤ 3 selalu anggaran ROUTE; tabelnya
+      tidak mengatakan itu, dan "terukur" adalah kata yang ditangkap pembaca sebagai
+      batas atas sebuah REQUEST. Anggaran middleware menjadi baris terpisah alih-alih
+      dilebur ke angka yang sama, karena keduanya dibayar kode berbeda dan satu jumlah
+      akan menyembunyikan paruh mana yang bergerak.
+
+      **Ditemukan sambil bekerja: dua komentar menyatakan jalur kode HIDUP sebagai
+      mati.** Baik `redirect-resolution-service.ts` maupun `redirect-middleware.ts`
+      menyatakan middleware meneruskan `locale = null` "sepanjang jalan", sehingga
+      aturan redirect ber-scope locale tak pernah bisa cocok. Benar di bawah ADR-0039;
+      **salah sejak locale routing ADR-0098 mendarat** dan middleware mulai meneruskan
+      locale yang disajikan untuk URL berprefiks. Dikoreksi di kedua tempat. Bentuk
+      yang sama dengan hazard skill basi yang punya memori tersendiri di repo ini:
+      klaim yang menua menjadi kebalikan kebenaran, di berkas yang tak punya alasan
+      untuk dibaca ulang.
+
   14. **B6 — Map `buckets` rate-limit in-process tanpa eviction.** **SELESAI (22 Agustus
       2026).**
       `security/rate-limit.ts:57`. Satu entri permanen per IP klien berbeda; Redis mati

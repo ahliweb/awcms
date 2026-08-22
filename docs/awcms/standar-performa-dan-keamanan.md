@@ -187,16 +187,29 @@ not be copied back and forth.
 
 ### Outcome targets, and the state of their measurement
 
-| Metric                          | "Good" threshold | State                                                                                                                                                                                                                    |
-| ------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| LCP — Largest Contentful Paint  | ≤ 2.5 seconds    | **measured in the LAB** — `tests/e2e/cwv-lab.e2e.ts` (ADR-0067 Option D, 5 August 2026); a single-machine regression detector, **not** field p75                                                                         |
-| INP — Interaction to Next Paint | ≤ 200 ms         | **not yet measured, and the lab does not claim it** — INP needs real visitor interaction; waiting on the RUM decision (ADR-0067 Option B)                                                                                |
-| CLS — Cumulative Layout Shift   | ≤ 0.1            | **measured in the LAB** — same file, same limits                                                                                                                                                                         |
-| Queries per hot read request    | ≤ 3              | **measured** — `tests/integration/query-budget.integration.test.ts` (public, 40-post fixture) + `tests/integration/query-budget-admin.integration.test.ts` (admin dashboard, blog list, sitemap — budget = exact actual) |
+| Metric                                              | "Good" threshold              | State                                                                                                                                                                                                                                                 |
+| --------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LCP — Largest Contentful Paint                      | ≤ 2.5 seconds                 | **measured in the LAB** — `tests/e2e/cwv-lab.e2e.ts` (ADR-0067 Option D, 5 August 2026); a single-machine regression detector, **not** field p75                                                                                                      |
+| INP — Interaction to Next Paint                     | ≤ 200 ms                      | **not yet measured, and the lab does not claim it** — INP needs real visitor interaction; waiting on the RUM decision (ADR-0067 Option B)                                                                                                             |
+| CLS — Cumulative Layout Shift                       | ≤ 0.1                         | **measured in the LAB** — same file, same limits                                                                                                                                                                                                      |
+| Queries per hot read request                        | ≤ 3 in the ROUTE              | **measured, and the scope is now stated** — `tests/integration/query-budget.integration.test.ts` (public, 40-post fixture) + `tests/integration/query-budget-admin.integration.test.ts` (admin dashboard, blog list, sitemap — budget = exact actual) |
+| Queries the MIDDLEWARE spends before the route runs | 5 (passthrough), 7 (redirect) | **measured** — `tests/integration/middleware-query-budget.integration.test.ts`; exact counts, and a FLOOR (`BEGIN`/`COMMIT` are two more that no Proxy can see)                                                                                       |
 
 The lab numbers answer "does this change make the page slower", not "what does a
 visitor experience" — swapping the two is the class of defect ADR-0067 writes out
 explicitly. The RUM part is still waiting on the product owner.
+
+**The ≤ 3 ceiling has always been a ROUTE budget, and until 22 August 2026 this
+table did not say so** (finding B5 of the 17 August round). Both suites it cites
+hand a counting `tx` to a directory function, so everything a public request
+pays BEFORE the route — resolving the tenant from the host, opening the tenant
+transaction, asking `seo_distribution` whether the path redirects — was outside
+what either could count. The word "measured" was true of what was measured and
+false of what a reader would take it to mean: a bound on the request.
+
+The middleware row above closes that. It is a separate budget on purpose rather
+than folded into the ≤ 3: the two are paid by different code for different
+reasons, and adding them into one number would hide which half moved.
 
 ### What is already right
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](standar-performa-dan-keamanan.md)
 
-<!-- i18n-source-hash: sha256:6cf44a7fb8fcd59d4b3a3e81eb5fd52a0b79cc3da9f2812c37b1839522d2e6a8 -->
+<!-- i18n-source-hash: sha256:9539c183315a5a412de43d958ffa741ae9985abc729a5145a37766025883bec4 -->
 
 # awcms — Standar Performa dan Keamanan
 
@@ -191,16 +191,31 @@ boleh disalin bolak-balik.
 
 ### Target hasil, dan status pengukurannya
 
-| Metrik                          | Ambang "baik"   | Keadaan                                                                                                                                                                                                                     |
-| ------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LCP — Largest Contentful Paint  | ≤ 2,5 detik     | **diukur di LAB** — `tests/e2e/cwv-lab.e2e.ts` (Opsi D ADR-0067, 5 Agustus 2026); detektor regresi satu-mesin, **bukan** p75 lapangan                                                                                       |
-| INP — Interaction to Next Paint | ≤ 200 milidetik | **belum diukur, dan lab tidak mengklaimnya** — INP butuh interaksi pengunjung nyata; menunggu keputusan RUM (ADR-0067 Opsi B)                                                                                               |
-| CLS — Cumulative Layout Shift   | ≤ 0,1           | **diukur di LAB** — berkas yang sama, batas yang sama                                                                                                                                                                       |
-| Query per permintaan baca panas | ≤ 3             | **diukur** — `tests/integration/query-budget.integration.test.ts` (publik, fixture 40 post) + `tests/integration/query-budget-admin.integration.test.ts` (dashboard admin, daftar blog, sitemap — anggaran = aktual persis) |
+| Metrik                                                 | Ambang "baik"                 | Keadaan                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LCP — Largest Contentful Paint                         | ≤ 2,5 detik                   | **diukur di LAB** — `tests/e2e/cwv-lab.e2e.ts` (Opsi D ADR-0067, 5 Agustus 2026); detektor regresi satu-mesin, **bukan** p75 lapangan                                                                                                                       |
+| INP — Interaction to Next Paint                        | ≤ 200 milidetik               | **belum diukur, dan lab tidak mengklaimnya** — INP butuh interaksi pengunjung nyata; menunggu keputusan RUM (ADR-0067 Opsi B)                                                                                                                               |
+| CLS — Cumulative Layout Shift                          | ≤ 0,1                         | **diukur di LAB** — berkas yang sama, batas yang sama                                                                                                                                                                                                       |
+| Query per permintaan baca panas                        | ≤ 3 di ROUTE-nya              | **diukur, dan cakupannya kini dinyatakan** — `tests/integration/query-budget.integration.test.ts` (publik, fixture 40 post) + `tests/integration/query-budget-admin.integration.test.ts` (dashboard admin, daftar blog, sitemap — anggaran = aktual persis) |
+| Query yang dibelanjakan MIDDLEWARE sebelum route jalan | 5 (passthrough), 7 (redirect) | **diukur** — `tests/integration/middleware-query-budget.integration.test.ts`; hitungan persis, dan merupakan BATAS BAWAH (`BEGIN`/`COMMIT` dua lagi yang tak bisa dilihat Proxy mana pun)                                                                   |
 
 Angka lab menjawab "apakah perubahan ini membuat halaman lebih lambat", bukan
 "apa yang dialami pengunjung" — menukar keduanya adalah kelas cacat yang ADR-0067
 tulis eksplisit. Bagian RUM tetap menunggu pemilik produk.
+
+**Plafon ≤ 3 selalu merupakan anggaran ROUTE, dan sampai 22 Agustus 2026 tabel
+ini tidak mengatakannya** (temuan B5 putaran 17 Agustus). Kedua suite yang
+dirujuknya menyerahkan `tx` penghitung ke sebuah fungsi directory, sehingga
+semua yang dibayar permintaan publik SEBELUM route — meresolusi tenant dari
+host, membuka transaksi tenant, menanyai `seo_distribution` apakah path itu
+redirect — berada di luar jangkauan hitungan keduanya. Kata "diukur" benar untuk
+apa yang diukur dan salah untuk apa yang akan ditangkap pembaca: batas atas
+sebuah permintaan.
+
+Baris middleware di atas menutup celah itu. Ia sengaja menjadi anggaran
+TERPISAH, bukan dilebur ke dalam ≤ 3: keduanya dibayar oleh kode berbeda dengan
+alasan berbeda, dan menjumlahkannya menjadi satu angka akan menyembunyikan
+paruh mana yang bergerak.
 
 ### Yang sudah benar
 

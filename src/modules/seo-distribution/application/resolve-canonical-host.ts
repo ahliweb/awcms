@@ -19,11 +19,35 @@ import { normalizePublicHost } from "../../../lib/tenant/public-host-tenant-reso
 type PrimaryHostRow = { normalized_hostname: string };
 
 /**
+ * Defense-in-depth: re-validate a stored hostname's DNS shape at the render
+ * boundary. The stored value is already `normalized_hostname` (migration 046
+ * rejects CR/LF/whitespace/underscores at write time), so a valid host
+ * round-trips to itself; if a future domain-write path ever relaxes that
+ * validation, this keeps `https://{host}/sitemap.xml` etc. (robots.txt /
+ * sitemap / feed) from being fed a header/response-splitting payload — an
+ * out-of-shape value degrades to `null` (discovery 404s), never emits a
+ * poisoned host.
+ *
+ * Exported so the batched reader in `tenant-allowed-hosts.ts` applies the SAME
+ * rule rather than a second copy of it: a defense that exists twice is a
+ * defense that can be relaxed in one place and still look present in the
+ * other.
+ */
+export function validateRenderableHost(host: string | null): string | null {
+  if (host === null) return null;
+
+  return normalizePublicHost(host) === host ? host : null;
+}
+
+/**
  * Resolve `tenantId`'s primary canonical host, or `null` when the tenant has no
  * verified primary domain (offline-lan / not-yet-configured deployments). The
  * returned value is the already-normalized hostname (lowercased, port-stripped —
  * migration 046's `normalized_hostname`), safe to place directly into
  * `https://{host}{path}`.
+ *
+ * For a caller that ALSO needs the tenant's full allowed-host set, use
+ * `resolveTenantDomainSet` instead — it answers both from one round trip.
  */
 export async function resolveTenantPrimaryHost(
   tx: Bun.SQL,
@@ -39,15 +63,5 @@ export async function resolveTenantPrimaryHost(
     LIMIT 1
   `) as PrimaryHostRow[];
 
-  const host = rows[0]?.normalized_hostname ?? null;
-  if (host === null) return null;
-
-  // Defense-in-depth: re-validate the DNS shape at the render boundary. The
-  // stored value is already `normalized_hostname` (migration 046 rejects
-  // CR/LF/whitespace/underscores at write time), so a valid host round-trips to
-  // itself; if a future domain-write path ever relaxes that validation, this
-  // keeps `https://{host}/sitemap.xml` etc. (robots.txt / sitemap / feed) from
-  // being fed a header/response-splitting payload — an out-of-shape value
-  // degrades to `null` (discovery 404s), never emits a poisoned host.
-  return normalizePublicHost(host) === host ? host : null;
+  return validateRenderableHost(rows[0]?.normalized_hostname ?? null);
 }

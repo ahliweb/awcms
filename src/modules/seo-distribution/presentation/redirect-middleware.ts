@@ -57,8 +57,11 @@ export function buildRedirectResponse(
  * `{ capture }` (tenant resolved, no redirect) so the caller can observe a
  * subsequent 404, or `null` (not eligible / no tenant / error). Never throws.
  *
- * awcms has NO i18n/locale seam (ADR-0039), so `locale` is always `null` here — the
- * parameter is kept for signature parity with awcms-micro and a future locale port.
+ * `locale` is the SERVED locale for a prefixed URL (`/id/…`) and `null` for a
+ * bare one. This used to say it was always `null` "for signature parity with a
+ * future locale port" — true under ADR-0039, false since ADR-0098's locale
+ * routing landed and made the middleware pass a real value. Corrected 22 August
+ * 2026; the parameter is live, not vestigial.
  */
 export async function resolvePublicRedirectForRequest(
   request: Request,
