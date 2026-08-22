@@ -60,6 +60,43 @@ export function isDelegatedWriteForbidden(input: {
   return input.action !== DELEGATED_ALLOWED_ACTION_IN_FORBIDDEN_MODULE;
 }
 
+/**
+ * Deny-only. `true` HANYA untuk aktor terdelegasi yang grantnya sudah lewat
+ * tanggalnya — atau yang tidak punya baris grant hidup sama sekali.
+ *
+ * ## Kenapa aturan ini ada di sini dan bukan di jobnya
+ *
+ * ADR-0090 menjanjikan pencabutan **dan kedaluwarsa** mematikan keanggotaan di
+ * transaksi yang sama. Pencabutan punya pelaksana; kedaluwarsa tidak pernah
+ * punya. Sebuah sapuan terjadwal — sebaik apa pun jadwalnya — meninggalkan
+ * jendela antara detik `expires_at` dan detik timer berikutnya, dan jendela itu
+ * PERSIS saat aksesnya seharusnya sudah berhenti. Preseden yang sama sudah
+ * tertulis dua kali di repo ini: `isBusinessScopeAssignmentCurrentlyActive` dan
+ * `isSoDConflictExceptionCurrentlyValid` keduanya menolak baris yang lewat
+ * `effective_to` pada waktu keputusan, dan jobnya cuma membereskan `status`.
+ *
+ * ## Kenapa `grantLive` dan bukan `expiresAt`
+ *
+ * Perbandingannya dikerjakan basis data terhadap jamnya sendiri — jam yang sama
+ * yang menulis `expires_at`. Membawa `Date` aplikasi ke sini akan membuat
+ * gerbangnya bergantung pada dua jam yang sepakat, dan `now()` Postgres adalah
+ * instant MULAI TRANSAKSI sehingga setiap keputusan dalam satu permintaan
+ * membaca jam yang sama.
+ *
+ * Aktor biasa (`principalKind` absen atau `"user"`) mendapat `false` sebelum
+ * `grantLive` dilihat sama sekali, jadi keputusannya tidak berubah.
+ */
+export function isDelegatedGrantNotInForce(input: {
+  /** `undefined` dibaca sebagai `"user"` — lihat `TenantContext.principalKind`. */
+  principalKind?: PrincipalKind;
+  /** Dari `resolveDelegatedGrantState`: `expires_at > now()` di baris grantnya. */
+  grantLive: boolean;
+}): boolean {
+  if (input.principalKind !== "delegated") return false;
+
+  return !input.grantLive;
+}
+
 export type DelegatedGrantTtlProblem =
   | { ok: true }
   | { ok: false; reason: "expires_in_the_past" | "exceeds_max_ttl" };

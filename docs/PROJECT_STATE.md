@@ -391,8 +391,8 @@ pioneered directly here after the ADR-0047 freeze.)
   defect of this class ship green).
 
   ### A. Security
-  1. **A1 — a redeemed delegated-access grant never expires.** _(found independently by
-     two dimensions, from the job side and the chokepoint side)_
+  1. **A1 — a redeemed delegated-access grant never expires.** **MOSTLY DONE (22 August 2026)** — the gate landed; the sweep did not, see the closing paragraph.
+     _(found independently by two dimensions, from the job side and the chokepoint side)_
      `identity-access/application/auth-context.ts:63-70` and `:101-108`;
      `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
      `sql/117:105,165`. `expireDelegatedAccessGrants` has **zero callers** — no job
@@ -407,6 +407,36 @@ pioneered directly here after the ADR-0047 freeze.)
      through the existing `isDelegatedPartnerRefused` null-is-refuse branch — no new code
      path); pass the grant's `expiresAt` as `effective_to`; then add the job so sessions
      are actually revoked.
+
+     **What landed, and the two places the plan was not followed.** The predicate is now
+     in `resolveDelegatedGrantState` (the renamed resolver, which answers expiry and
+     partner status off ONE row), and redemption stamps `effective_to` **paired with an
+     explicit `effective_from`** — `sql/102` compares the two columns and `effective_from`
+     DEFAULTs to `now()`, so supplying only the end date would compare this process's
+     clock against PostgreSQL's and could refuse a legitimate redemption. Expiry does NOT
+     fall through the `partner_suspended` branch as planned: that would have written a
+     decision-log row asserting a suspension that never happened, so it gets its own
+     branch above it (`403 DELEGATED_GRANT_EXPIRED`, `matchedPolicy:
+"delegated_grant_expired"`). The ATTRIBUTION resolver (`resolveDelegatedGrantId`) is
+     deliberately left unfiltered — its only readers are `awcms_abac_decision_logs` and
+     `awcms_audit_events` (verified), so a stale id can widen no decision and it is what
+     makes the refusal name the engagement.
+
+     **Still open: the sweep.** An expired actor is refused every authorization but keeps
+     an `active` row in the customer's user list and a live session row — bookkeeping, not
+     access. `expireDelegatedAccessGrants` still has zero callers. The blocker is a
+     PRIVILEGE decision, not work: the sweep ends a membership and revokes its sessions,
+     and `awcms_worker` holds neither `UPDATE` on `awcms_tenant_users` nor anything on
+     `awcms_sessions`. Granting them plainly would let a scheduled job set a deactivated
+     member back to `active` and set `revoked_at` back to `NULL` on a stolen session —
+     wider than the sweep needs, and in the escalation direction. The three candidates:
+     (a) a narrow `SECURITY DEFINER` function per the `sql/048`/`sql/119`/`sql/124`
+     precedent, deny-direction only; (b) column-scoped grants plus an accepted residual
+     risk, written down; (c) run this one job on the `awcms_app` connection, which already
+     holds exactly these privileges because the request-path revocation does the identical
+     thing — at the cost that `db:work-class:check` discovers worker scripts by grepping
+     `getWorkerDatabaseClient(`, so the job would fall out of the capacity model.
+
   2. **A2 — ADR-0073 suspension does not reach the self-service or client-credential
      route factories.** `_shared/tenant-route.ts:247-301` and `:342-379`;
      `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.

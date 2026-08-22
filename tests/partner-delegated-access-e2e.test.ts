@@ -26,10 +26,13 @@
  * - Point `listManagedTenants` at the table instead of the function → "the
  *   partner sees its book" goes RED with zero rows, which is exactly the
  *   failure `sql/119` exists to prevent.
- * - Point `resolveDelegatedPartnerRegistryStatus` at `awcms_partners` directly
- *   instead of `awcms_partner_registry_status()` → the suspension tests go RED
- *   with `null`, which is the SAME cross-tenant-read failure one table over
+ * - Point `resolveDelegatedGrantState` at `awcms_partners` directly instead of
+ *   `awcms_partner_registry_status()` → the suspension tests go RED with
+ *   `null`, which is the SAME cross-tenant-read failure one table over
  *   (ADR-0093).
+ * - Drop `AND (g.expires_at > now())` from `resolveDelegatedGrantState` → "the
+ *   chokepoint refuses the instant the grant's date passes" goes RED, which is
+ *   the state the repository actually shipped in until finding A1 (ADR-0090).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { APIRoute } from "astro";
@@ -499,6 +502,42 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     expect(rows[0]!.status).toBe("active");
   });
 
+  test("ADR-0090: the role it grants carries the grant's OWN end date", async () => {
+    // Before this, the grant row had a date and the thing it granted did not:
+    // `activeRoleGrants` reads `effective_to IS NULL` as "in force forever", so
+    // an engagement scoped "until 30 September" conferred its role until
+    // somebody revoked it by hand.
+    await sql`SELECT set_config('app.current_tenant_id', ${customerTenantId}, false)`;
+    const rows = (await sql`
+      SELECT ap.effective_from, ap.effective_to, g.expires_at
+      FROM awcms_access_policies ap
+      JOIN awcms_delegated_access_grants g
+        ON g.tenant_id = ap.tenant_id AND g.id = ${grantId}
+      WHERE ap.tenant_id = ${customerTenantId}
+        AND ap.tenant_user_id = ${delegatedTenantUserId}
+    `) as {
+      effective_from: Date;
+      effective_to: Date | null;
+      expires_at: Date;
+    }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.effective_to).not.toBeNull();
+
+    // Equal to the grant's own expiry, to the millisecond JavaScript can carry.
+    // PostgreSQL stores microseconds, so the round trip can only land EARLIER —
+    // the direction that ends the grant sooner, never later.
+    const stamped = new Date(rows[0]!.effective_to!).getTime();
+    const expires = new Date(rows[0]!.expires_at).getTime();
+    expect(expires - stamped).toBeGreaterThanOrEqual(0);
+    expect(expires - stamped).toBeLessThan(1000);
+
+    // And the CHECK it has to satisfy really is comparing these two columns.
+    expect(stamped).toBeGreaterThan(
+      new Date(rows[0]!.effective_from).getTime()
+    );
+  });
+
   test("the same code cannot be redeemed twice", async () => {
     const res = await callRoute(redeemPOST, {
       tenantId: partnerTenantId,
@@ -553,6 +592,99 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     // The gate reads this field, and it comes from the row both resolvers read.
     expect(kinds).toBe("delegated");
     expect(typeof authorizeInTransaction).toBe("function");
+  });
+
+  test("ADR-0090: the chokepoint refuses the instant the grant's date passes", async () => {
+    const { authorizeInTransaction } =
+      await import("../src/modules/identity-access/application/access-guard");
+
+    // A live session for the delegated member — the chokepoint authenticates
+    // from a token hash, so "expired" has to be provable through the same door
+    // a real request comes in by.
+    await sql`SELECT set_config('app.current_tenant_id', ${customerTenantId}, false)`;
+    const identity = (await sql`
+      SELECT identity_id FROM awcms_tenant_users
+      WHERE tenant_id = ${customerTenantId} AND id = ${delegatedTenantUserId}
+    `) as { identity_id: string }[];
+
+    const token = generateSessionToken();
+    const tokenHash = hashSessionToken(token);
+    await sql`
+      INSERT INTO awcms_sessions (tenant_id, identity_id, token_hash, expires_at, origin_auth)
+      VALUES (${customerTenantId}, ${identity[0]!.identity_id},
+              ${tokenHash}, ${new Date(Date.now() + 3600_000)}, 'delegated')
+    `;
+
+    const guard = {
+      moduleKey: "blog_content",
+      activityCode: "posts",
+      action: "read" as const
+    };
+
+    const codeFor = async () => {
+      const result = await withTenantOrThrow(
+        sql,
+        customerTenantId,
+        (tx) =>
+          authorizeInTransaction(
+            tx,
+            customerTenantId,
+            tokenHash,
+            new Date(),
+            guard
+          ),
+        { workClass: "interactive" }
+      );
+
+      if (result.allowed) return "ALLOWED";
+      return ((await result.denied.json()) as { error: { code: string } }).error
+        .code;
+    };
+
+    // NON-VACUOUS: while the grant is live the refusal is the ordinary
+    // permission one. Without this half, a test asserting the expiry code would
+    // also pass against a chokepoint that refused delegated actors outright.
+    const before = await codeFor();
+    expect(before).not.toBe("DELEGATED_GRANT_EXPIRED");
+
+    // Age the grant past its date. `created_at` moves with it because `sql/117`
+    // constrains the PAIR (`expires_at > created_at` and within 31 days) — an
+    // UPDATE that moved only the end date would be refused by the database,
+    // which is itself the proof that the ceiling is enforced there and not only
+    // in `validateDelegatedGrantTtl`.
+    await sql`
+      UPDATE awcms_delegated_access_grants
+      SET created_at = now() - interval '40 days',
+          expires_at = now() - interval '10 days'
+      WHERE tenant_id = ${customerTenantId} AND id = ${grantId}
+    `;
+
+    expect(await codeFor()).toBe("DELEGATED_GRANT_EXPIRED");
+
+    // And the refusal is EXPLAINED, by its own name — not filed under the
+    // suspension the partner never had.
+    const logged = (await sql`
+      SELECT matched_policy FROM awcms_abac_decision_logs
+      WHERE tenant_id = ${customerTenantId}
+        AND tenant_user_id = ${delegatedTenantUserId}
+        AND matched_policy = 'delegated_grant_expired'
+    `) as { matched_policy: string }[];
+
+    expect(logged.length).toBeGreaterThan(0);
+
+    // Put the dates back: the arc continues with a grant that is revoked by a
+    // human, which is a different story from one that ran out.
+    await sql`
+      UPDATE awcms_delegated_access_grants
+      SET created_at = now() - interval '1 hour',
+          expires_at = now() + interval '7 days'
+      WHERE tenant_id = ${customerTenantId} AND id = ${grantId}
+    `;
+
+    await sql`
+      UPDATE awcms_sessions SET revoked_at = now()
+      WHERE tenant_id = ${customerTenantId} AND token_hash = ${tokenHash}
+    `;
   });
 
   test("revoking the grant deactivates the membership and kills its sessions", async () => {
