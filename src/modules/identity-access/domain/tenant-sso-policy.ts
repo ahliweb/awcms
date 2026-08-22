@@ -10,6 +10,60 @@
 export type ValidationError = { field: string; message: string };
 
 const PROVIDER_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+
+/**
+ * The ONLY environment variables a tenant may name as its OIDC client secret —
+ * finding A3 of the 17 August 2026 audit round.
+ *
+ * ## What this closes
+ *
+ * `client_secret_env_var` used to be validated as "a non-empty string". A tenant
+ * SSO administrator could therefore write `DATABASE_URL` or
+ * `AUTH_MFA_SECRET_ENCRYPTION_KEY` into it, point `issuer_url` at a host they
+ * control, and receive that value in the `client_secret` field of the
+ * token-exchange POST — before any ID token is validated, and with the SSRF
+ * guard satisfied because the host really is reachable. That is a tenant-admin →
+ * deployment-compromise primitive, and it needed no bug anywhere else: every
+ * component behaved exactly as designed.
+ *
+ * ## Why a NAMESPACE and not a deny-list
+ *
+ * A deny-list of dangerous variable names is a list somebody has to keep in step
+ * with every secret this deployment or any future one happens to hold, and it
+ * fails open for the one that was added last week. A namespace fails the other
+ * way: a variable an operator has not deliberately created under this prefix
+ * cannot be named at all, whatever it is.
+ *
+ * `AUTH_SSO_CLIENT_SECRET_` rather than a shorter prefix, because the prefix has
+ * to be one an operator would never give an unrelated secret. Note what it does
+ * NOT match: `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`, the key that decrypts every
+ * OTHER provider's stored secret, is one underscore-separated word away and is
+ * excluded.
+ *
+ * The 48-character tail is generous enough for `AUTH_SSO_CLIENT_SECRET_` plus a
+ * provider key an admin chose, and bounded so the value is not itself a place to
+ * store data.
+ */
+export const SSO_CLIENT_SECRET_ENV_VAR_PATTERN =
+  /^AUTH_SSO_CLIENT_SECRET_[A-Z0-9_]{1,48}$/;
+
+/**
+ * Deny-only, and asserted TWICE on purpose: once by each admin validator, and
+ * again by `resolveProviderClientSecret` immediately before it touches `env`.
+ *
+ * The second assertion is the load-bearing one. Validators only see values
+ * arriving now; a row written before this pattern existed — or by any future
+ * writer that forgets — is still read at every login. A gate that only guards
+ * the front door leaves the rows already inside untouched.
+ */
+export function isAllowedSsoClientSecretEnvVar(name: string): boolean {
+  return SSO_CLIENT_SECRET_ENV_VAR_PATTERN.test(name);
+}
+
+const SSO_CLIENT_SECRET_ENV_VAR_MESSAGE =
+  "clientSecretEnvVar must name an environment variable matching " +
+  "^AUTH_SSO_CLIENT_SECRET_[A-Z0-9_]{1,48}$ — a provider may only read a " +
+  "variable an operator created for it, never an arbitrary one.";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -239,6 +293,20 @@ export function validateCreateAuthProviderInput(
     });
   }
 
+  // ADR-0093-adjacent, finding A3: the NAME is a capability, so it is bounded
+  // to a namespace an operator has to create on purpose.
+  if (
+    hasSecretEnvVar &&
+    !isAllowedSsoClientSecretEnvVar(
+      (record.clientSecretEnvVar as string).trim()
+    )
+  ) {
+    errors.push({
+      field: "clientSecretEnvVar",
+      message: SSO_CLIENT_SECRET_ENV_VAR_MESSAGE
+    });
+  }
+
   const scopes =
     typeof record.scopes === "string" && record.scopes.trim().length > 0
       ? record.scopes.trim()
@@ -340,6 +408,16 @@ export function validateUpdateAuthProviderInput(
         field: "clientSecret",
         message:
           "Only one of clientSecret or clientSecretEnvVar may be set at a time."
+      });
+    } else if (
+      hasSecretEnvVar &&
+      !isAllowedSsoClientSecretEnvVar(
+        (record.clientSecretEnvVar as string).trim()
+      )
+    ) {
+      errors.push({
+        field: "clientSecretEnvVar",
+        message: SSO_CLIENT_SECRET_ENV_VAR_MESSAGE
       });
     } else {
       value.clientSecret = hasSecret ? (record.clientSecret as string) : null;
