@@ -35,9 +35,15 @@
  *    to normal content resolution) — a redirect subsystem error must never take
  *    down public pages.
  *
- * awcms adaptation (ADR-0039): there is NO i18n/locale seam in this base, so the
- * middleware passes `locale = null` all the way through — locale-scoped rules simply
- * never match a locale, only the all-locales (`locale_scope IS NULL`) rules do.
+ * ## `locale` is no longer always `null` — corrected 22 August 2026
+ *
+ * ADR-0039 was written when this base had no i18n seam, and this header said the
+ * middleware "passes `locale = null` all the way through", so locale-scoped
+ * rules could never match. **ADR-0098's locale routing changed that and the
+ * claim went stale in place**: `src/middleware.ts` now passes the served locale
+ * for a prefixed URL (`/id/…`), and `null` only for a bare one. Locale-scoped
+ * rules DO fire, for prefixed URLs, and a reader who trusted this paragraph
+ * would have concluded a live code path was dead.
  */
 import { assertSafeRedirectTarget } from "../domain/redirect-target-classification";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
@@ -65,8 +71,7 @@ import {
   findActiveRedirectByPath,
   incrementRedirectHit
 } from "./redirect-directory";
-import { resolveTenantAllowedHosts } from "./tenant-allowed-hosts";
-import { resolveTenantPrimaryHost } from "./resolve-canonical-host";
+import { resolveTenantDomainSet } from "./tenant-allowed-hosts";
 import { resolveSiteScheme } from "../../../lib/http/site-origin";
 
 /** Context the middleware needs to record a privacy-minimized 404 observation later. */
@@ -142,10 +147,14 @@ async function resolveRetiredNewsRedirect(
     // restates. Let the 404 it already chose stand.
     if (!routeSettings.legacyTenantRouteEnabled) return null;
 
-    const primaryHost = await resolveTenantPrimaryHost(tx, tenant.tenantId);
+    // One read for both: the allow-list and the canonical host are the same
+    // rows (B5).
+    const { hosts: allowedHosts, primaryHost } = await resolveTenantDomainSet(
+      tx,
+      tenant.tenantId
+    );
     if (!primaryHost) return null; // no canonical host — cannot safely redirect
 
-    const allowedHosts = await resolveTenantAllowedHosts(tx, tenant.tenantId);
     const target = `${resolveSiteScheme(request)}://${primaryHost}${buildLegacyBlogPath(tenant.tenantCode, rest)}${options.search}`;
 
     try {
@@ -192,11 +201,18 @@ async function resolveHostBasedRedirect(
       return { kind: "skip" };
     }
 
-    const allowedHosts = await resolveTenantAllowedHosts(tx, tenant.tenantId);
+    // One read for both. The allow-list is needed for the rule lookup itself
+    // (host-scoped rules) and for the frozen target guard; the canonical host
+    // is only the 404-attribution fallback — and it is the SAME rows, so
+    // asking twice was a round trip per eligible public request for a fact
+    // already in hand (B5).
+    const { hosts: allowedHosts, primaryHost } = await resolveTenantDomainSet(
+      tx,
+      tenant.tenantId
+    );
     const allowedLower = new Set(allowedHosts.map((h) => h.toLowerCase()));
     const scopeHost =
       requestHost && allowedLower.has(requestHost) ? requestHost : null;
-    const primaryHost = await resolveTenantPrimaryHost(tx, tenant.tenantId);
     const domainHost = scopeHost ?? primaryHost;
 
     const capture: NotFoundCaptureContext = {

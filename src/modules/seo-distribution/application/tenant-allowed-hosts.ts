@@ -12,14 +12,37 @@
  * tenant has since removed fails closed on the next resolve.
  */
 
-type HostRow = { normalized_hostname: string };
+import { validateRenderableHost } from "./resolve-canonical-host";
 
-export async function resolveTenantAllowedHosts(
+type HostRow = { normalized_hostname: string; is_primary: boolean };
+
+/** A tenant's verified active domains: the allow-list, plus which one is canonical. */
+export type TenantDomainSet = {
+  /** Every verified active host, ordered — the `allowedHosts` guard argument. */
+  hosts: string[];
+  /** The canonical host for absolute URLs, or `null` when the tenant has none. */
+  primaryHost: string | null;
+};
+
+/**
+ * Both facts about a tenant's domains in ONE round trip.
+ *
+ * `resolveTenantAllowedHosts` and `resolveTenantPrimaryHost` read the SAME
+ * table under the same `active`/not-deleted filter, differing only by
+ * `is_primary`. The public redirect path called them one after the other, on
+ * every eligible public request, so a fact already in the first result set was
+ * fetched a second time — finding B5 of the 17 August 2026 round, where the
+ * middleware's per-request round trips are the whole subject.
+ *
+ * `primaryHost` goes through the same `validateRenderableHost` as the dedicated
+ * reader, so a caller cannot get a laxer value by asking this way.
+ */
+export async function resolveTenantDomainSet(
   tx: Bun.SQL,
   tenantId: string
-): Promise<string[]> {
+): Promise<TenantDomainSet> {
   const rows = (await tx`
-    SELECT normalized_hostname
+    SELECT normalized_hostname, is_primary
     FROM awcms_tenant_domains
     WHERE tenant_id = ${tenantId}
       AND status = 'active'
@@ -27,5 +50,17 @@ export async function resolveTenantAllowedHosts(
     ORDER BY normalized_hostname
   `) as HostRow[];
 
-  return rows.map((r) => r.normalized_hostname);
+  return {
+    hosts: rows.map((r) => r.normalized_hostname),
+    primaryHost: validateRenderableHost(
+      rows.find((r) => r.is_primary)?.normalized_hostname ?? null
+    )
+  };
+}
+
+export async function resolveTenantAllowedHosts(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<string[]> {
+  return (await resolveTenantDomainSet(tx, tenantId)).hosts;
 }
