@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a2407c9641638efc8fd083b8175234dac4d83d634bcdc8e8bceca450c7f02de0 -->
+<!-- i18n-source-hash: sha256:3ffc6f4ffd74d2f490bc281db837e690662b3095fe53f22127b8550c026afcae -->
 
 # AWCMS — Project State & Continuation
 
@@ -681,7 +681,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       berbalut konfigurasi, dengan gejala yang identik dengan sukses.
 
   23. **D2 — empat salinan `stripComments` naif menelan kode nyata; lima gerbang memindai
-      lebih sedikit dari yang diakuinya.** `table-write-ownership-check.ts:68`;
+      lebih sedikit dari yang diakuinya.** **SELESAI (22 Agustus 2026)** — delapan salinan,
+      bukan empat. `table-write-ownership-check.ts:68`;
       `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;
       `identity-principal-access-check.ts:177`; `work-class-registry-generate.ts:101`. Regex
       komentar blok berjalan atas seluruh berkas lebih dulu, jadi docblock apa pun yang
@@ -691,6 +692,30 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       berkas kehilangan kode nyata dibanding orakel. Tidak ada sinyal gerbang yang berbeda
       _hari ini_ — ini fail-open laten yang tumbuh tiap ada docblock baru. Versi
       sadar-string yang benar sudah ada di `i18n-catalog-check.ts:263`.
+
+      **Mendarat, dan jangkauannya lebih besar dari yang tertulis di entri ini.** Delapan
+      berkas membawa salinan, bukan empat. Fakta paling tajamnya bukan jumlah berkas:
+      `src/modules/blog-content/module.ts` kehilangan **7.260 karakter dan 57 baris** akibat
+      stripper naif itu, TERMASUK seluruh deklarasi `jobs:` dan `capabilities:`-nya —
+      sehingga gerbang yang membaca deskriptor itu lewat stripper tersebut sedang melihat
+      modul tanpa job dan melaporkan OK. Di seluruh `src/`, 29 berkas kehilangan lebih dari
+      200 karakter.
+
+      Kedelapan gerbang terdampak dijalankan sebelum dan sesudah: jawabannya sama, dan
+      `work-class-registry.generated.json` diregenerasi identik byte-per-byte — klaim "tidak
+      ada sinyal yang berbeda hari ini" DIVERIFIKASI, bukan diulang.
+
+      `codeOnly` milik `work-class-registry-generate.ts` ikut dilebur. Ia BUKAN jenis
+      penelan (tanpa regex sewhole-file) tetapi buta ke arah sebaliknya: komentar blok yang
+      baris tengahnya tidak diawali `*`, atau `/* … */` di belakang kode, lolos darinya dan
+      bisa terbaca sebagai pemanggilan.
+
+      `stripComments` tetap DI-RE-EXPORT dari tiga skrip yang sudah menjadi tempat impor 21
+      berkas tes — menyunting 21 baris impor di dalam perubahan tentang hal lain adalah cara
+      sebuah diff berhenti bisa direview. Tesnya menyimpan versi naifnya sebagai ORACLE: tes
+      yang hanya menjalankan stripper yang benar hanya menegaskan bahwa ia bekerja, yang
+      mudah dan tidak informatif.
+
   24. **D3 — `LOG_LEVEL=warn` lolos `config:validate` dan diabaikan diam-diam; `warning`,
       nilai yang diimplementasikan logger, ditolak.** `validate-env.ts:51-56`;
       `logger.ts:12,21-26`. Tidak ada nilai yang sekaligus lolos kontrak tervalidasi dan

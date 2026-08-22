@@ -45,6 +45,7 @@ import path from "node:path";
 
 import { JOB_WORK_CLASS_REGISTRY } from "../src/lib/database/work-class-registry";
 import type { WorkClass } from "../src/lib/database/work-class";
+import { stripComments } from "./lib/source-text";
 
 const ROUTES_ROOT = "src/pages/api";
 const SCRIPTS_ROOT = "scripts";
@@ -97,20 +98,19 @@ async function* walk(directory: string): AsyncGenerator<string> {
   }
 }
 
-/** Comment lines are dropped so a docblock mentioning a call is not a call. */
+/**
+ * Comments are blanked so a docblock mentioning a call is not a call.
+ *
+ * `stripComments` from `./lib/source-text` rather than the line-based filter
+ * this used to carry (finding D2). The old one was not the swallowing variety —
+ * it had no whole-file block regex — but it was blind in the other direction: a
+ * block comment whose middle lines do not begin with `*`, or a trailing
+ * `/* … *\/` after code, survived it intact and could be read as a call. The
+ * shared scanner tracks string state and handles both, and it is now the only
+ * implementation in the repository.
+ */
 function codeOnly(content: string): string {
-  return content
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-
-      return (
-        !trimmed.startsWith("*") &&
-        !trimmed.startsWith("//") &&
-        !trimmed.startsWith("/*")
-      );
-    })
-    .join("\n");
+  return stripComments(content);
 }
 
 /**

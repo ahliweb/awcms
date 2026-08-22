@@ -47,31 +47,13 @@
  */
 import { listModules } from "../src/modules";
 import { collectClaims, resolveOwner, routeOf } from "./validate-module-routes";
+import { stripComments } from "./lib/source-text";
 
 /** `INSERT INTO x` / `UPDATE x` / `DELETE FROM x`, table name captured. */
 const WRITE_PATTERN =
   /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(awcms_\w+)/gi;
 
 const SOURCE_GLOBS = ["src/**/*.ts", "src/**/*.astro", "scripts/*.ts"];
-
-/**
- * Drops block comments and whole-line `//` comments before matching.
- *
- * Without this the gate reports ITSELF and `person-profile.ts` as writers of
- * `awcms_profiles`, because both files EXPLAIN the rule using the statement
- * they are about — a gate going red on its own documentation, which is the
- * third time that shape has appeared in this repo. Trailing `// ...` after code
- * is deliberately left alone: stripping it would truncate any line containing
- * `https://`, trading a false positive for a false negative, and prose about
- * SQL does not live at the end of a code line.
- */
-export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !/^\s*(?:\/\/|\*)/.test(line))
-    .join("\n");
-}
 
 /**
  * Owners that are not modules. Named so a violation reads as a sentence.
@@ -315,3 +297,10 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main();
 }
+
+/**
+ * Re-exported for the callers that already import it from here — finding D2
+ * moved the implementation to `scripts/lib/source-text.ts` and left the name
+ * reachable rather than editing 21 import lines in the same change.
+ */
+export { stripComments };

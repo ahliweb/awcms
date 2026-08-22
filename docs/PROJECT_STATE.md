@@ -698,7 +698,8 @@ pioneered directly here after the ADR-0047 freeze.)
       wearing a configuration, with a symptom identical to success.
 
   23. **D2 — four copies of a naive `stripComments` swallow real code; five gates scan
-      less than they claim.** `table-write-ownership-check.ts:68`;
+      less than they claim.** **DONE (22 August 2026)** — eight copies, not four.
+      `table-write-ownership-check.ts:68`;
       `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;
       `identity-principal-access-check.ts:177`; `work-class-registry-generate.ts:101`. The
       block-comment regex runs over the whole file first, so any docblock containing a
@@ -709,6 +710,29 @@ pioneered directly here after the ADR-0047 freeze.)
       docblock. The correct string-aware version already exists at
       `i18n-catalog-check.ts:263`. **Change:** extract it to `scripts/lib/source-text.ts`
       and delete the five copies.
+
+      **Landed, and the blast radius was bigger than this entry says.** Eight files carried
+      a copy, not four. The sharpest single fact is not the file count:
+      `src/modules/blog-content/module.ts` loses **7,260 characters and 57 lines** to the
+      naive stripper, INCLUDING its entire `jobs:` and `capabilities:` declarations — so a
+      gate reading that descriptor through it was looking at a module with no jobs and
+      reporting OK. Across `src/`, 29 files lose more than 200 characters.
+
+      All eight affected gates were run before and after: same answers, and
+      `work-class-registry.generated.json` regenerates byte-identical — the "no signal
+      differs today" claim VERIFIED rather than repeated.
+
+      `work-class-registry-generate.ts`'s `codeOnly` is folded in as well. It was NOT the
+      swallowing variety (no whole-file regex) but it was blind the other way: a block
+      comment whose middle lines do not begin with `*`, or a trailing `/* … */` after code,
+      survived it and could be read as a call.
+
+      `stripComments` stays RE-EXPORTED from the three scripts that 21 test files already
+      import it from — editing 21 import lines inside a change about something else is how
+      a diff stops being reviewable. The test keeps the naive version as an ORACLE: one
+      that only exercised the good stripper would assert that it works, which is easy and
+      uninformative.
+
   24. **D3 — `LOG_LEVEL=warn` passes `config:validate` and is silently ignored; `warning`,
       the value the logger implements, is rejected.** `validate-env.ts:51-56`;
       `logger.ts:12,21-26`. There is no value that both passes the validated contract and

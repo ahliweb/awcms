@@ -21,33 +21,10 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { stripComments } from "../scripts/lib/source-text";
 
 const REPO_ROOT = join(import.meta.dir, "..");
 const SRC_ROOT = join(REPO_ROOT, "src");
-
-/**
- * Comments are stripped BEFORE matching. This file's own subject matter is
- * `method="post"` and `application/x-www-form-urlencoded`, and the component it
- * guards explains the trap in prose — an assertion that reads comments would be
- * answered by the explanation rather than by the code.
- *
- * Block comments are removed FIRST, and the braces a JSX comment leaves behind
- * are collapsed afterwards. Doing it the other way round — matching `{/* … *\/}`
- * as one unit — is wrong in a way that is easy to ship: `\{\s*\/\*` also matches
- * `interface Props {` followed by its JSDoc, and the pattern then runs on
- * looking for a `*\/` that happens to be followed by `}`. The first one it finds
- * is the JSX comment far below in the template, so everything between them —
- * the entire markup, `<form>` included — disappears. The scanner then reports
- * nothing and reads as a pass. That is the same lazy-quantifier failure CodeQL
- * caught in `i18n-screen-coverage-check.ts`, in a different costume.
- */
-function stripComments(source: string): string {
-  return source
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\{\s*\}/g, " ")
-    .replace(/^[ \t]*\/\/.*$/gm, " ");
-}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

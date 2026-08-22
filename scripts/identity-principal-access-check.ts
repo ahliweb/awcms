@@ -43,6 +43,7 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./lib/source-text";
 
 type GuardedTable = {
   readonly table: string;
@@ -173,10 +174,6 @@ function tableInClause(table: string): RegExp {
  * the store and watching the detector stay silent.
  */
 const STATEMENT_WINDOW = 400;
-
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
-}
 
 /** Does this file issue a query against the table at all? */
 function mentionsTableInSql(source: string, table: string): boolean {
