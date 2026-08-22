@@ -28,23 +28,35 @@ import type { SQL } from "bun";
 async function readTenantDisplayDefaults(
   tx: SQL,
   tenantId: string
-): Promise<{ defaultLocale: string | null; defaultTheme: string | null }> {
+): Promise<{
+  defaultLocale: string | null;
+  defaultTheme: string | null;
+  tenantName: string | null;
+}> {
   try {
+    // `tenant_name` rides along for finding B4. `AdminLayout` used to open a
+    // THIRD transaction whose first statement was
+    // `SELECT tenant_name FROM awcms_tenants WHERE id = $1` — the same row this
+    // query already has open, one column wider. Adding a column to a
+    // primary-key read costs nothing; the transaction it removes is a
+    // connection acquisition and a round trip on every `/admin/*` render.
     const rows = (await tx`
-      SELECT default_locale, default_theme
+      SELECT default_locale, default_theme, tenant_name
       FROM awcms_tenants
       WHERE id = ${tenantId}
     `) as Array<{
       default_locale: string | null;
       default_theme: string | null;
+      tenant_name: string | null;
     }>;
 
     return {
       defaultLocale: rows[0]?.default_locale ?? null,
-      defaultTheme: rows[0]?.default_theme ?? null
+      defaultTheme: rows[0]?.default_theme ?? null,
+      tenantName: rows[0]?.tenant_name ?? null
     };
   } catch {
-    return { defaultLocale: null, defaultTheme: null };
+    return { defaultLocale: null, defaultTheme: null, tenantName: null };
   }
 }
 
@@ -91,6 +103,14 @@ export type SsrContext = {
     tenantDefaultLocale: string | null;
     /** `awcms_tenants.default_theme` — see `theme-init-script.ts`'s seam. */
     tenantDefaultTheme: string | null;
+    /**
+     * `awcms_tenants.tenant_name` — the topbar label.
+     *
+     * Carried here because the query above already had the row open (finding
+     * B4). `AdminLayout` reads it from the session rather than opening its own
+     * transaction for one column.
+     */
+    tenantName: string | null;
   };
 };
 
@@ -168,7 +188,8 @@ export async function resolveSsrContext(
           preferredLocale: preferences.locale,
           preferredTheme: preferences.theme,
           tenantDefaultLocale: tenantDefaults.defaultLocale,
-          tenantDefaultTheme: tenantDefaults.defaultTheme
+          tenantDefaultTheme: tenantDefaults.defaultTheme,
+          tenantName: tenantDefaults.tenantName
         }
       };
     });

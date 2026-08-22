@@ -19,6 +19,7 @@ import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/applic
 import { resolveNewsArticlePreviewImage } from "../../../modules/blog-content/application/news-article-seo-metadata";
 import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 import { resolveMetaDescription } from "../../../modules/blog-content/domain/seo-rendering";
+import { publishEdgeCacheTenant } from "../../../lib/edge-cache/publish-tenant";
 
 /**
  * `GET /blog/{tenantCode}/feed.xml` (Issue #540) — RSS 2.0, only
@@ -43,7 +44,7 @@ import { resolveMetaDescription } from "../../../modules/blog-content/domain/seo
  * feed). Issue #564 adds the same generic 404 when the tenant's
  * `legacyTenantRouteEnabled` setting is `false`.
  */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const tenantCode = params.tenantCode;
 
   if (!tenantCode) {
@@ -116,6 +117,18 @@ ${enclosure}
 ${items}
 </channel>
 </rss>`;
+
+      // Finding B3 — publish the tenant this response belongs to, so middleware
+      // does not repeat the `awcms_tenants` lookup this route already made on
+      // every cache MISS. `discovery-route.ts:145` is the working precedent.
+      //
+      // HERE and not earlier, which is the rule `publish-tenant.ts` states: a
+      // 404 is a cacheable status, so publishing before the missing-resource
+      // branch would annotate that 404 differently from the unknown-tenant one
+      // and answer "is this tenant code live?" from a single request. Every
+      // `return notFound…` above is therefore left unpublished, and this sits
+      // immediately before the only response that serves the resource.
+      publishEdgeCacheTenant(locals, tenant.tenantId);
 
       return new Response(xml, {
         status: 200,

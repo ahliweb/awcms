@@ -31,6 +31,7 @@ import { renderSocialShareButtonsHtml } from "../../../modules/blog-content/doma
 import { composeAdSlots } from "../../../modules/blog-content/application/ad-slot-composition";
 import { AD_SLOT_AVAILABLE_LABEL } from "../../../modules/blog-content/domain/ad-slot-labels";
 import { insertMidArticleSlotHtml } from "../../../modules/blog-content/domain/ad-slot-rendering";
+import { publishEdgeCacheTenant } from "../../../lib/edge-cache/publish-tenant";
 
 const NEWS_SHARE_CLIENT_SCRIPT_SRC = "/js/news-share.js";
 
@@ -187,6 +188,18 @@ ${ads.get("article_bottom") ?? ""}
         structuredDataJsonLd: seoMetadata.structuredDataJsonLd,
         variant: "article"
       });
+
+      // Finding B3 — publish the tenant this response belongs to, so middleware
+      // does not repeat the `awcms_tenants` lookup this route already made on
+      // every cache MISS. `discovery-route.ts:145` is the working precedent.
+      //
+      // HERE and not earlier, which is the rule `publish-tenant.ts` states: a
+      // 404 is a cacheable status, so publishing before the missing-resource
+      // branch would annotate that 404 differently from the unknown-tenant one
+      // and answer "is this tenant code live?" from a single request. Every
+      // `return notFound…` above is therefore left unpublished, and this sits
+      // immediately before the only response that serves the resource.
+      publishEdgeCacheTenant(locals, tenant.tenantId);
 
       return new Response(html, {
         status: 200,

@@ -164,7 +164,20 @@ const defaultThemeAttribute =
  * `undefined`. Testing for a key we know we returned is what makes the
  * fallback real.
  */
-let tenantName = "Tenant";
+/**
+ * Finding B4 — taken from the session, which already had the row open.
+ *
+ * This layout used to open a THIRD transaction whose first statement was
+ * `SELECT tenant_name FROM awcms_tenants WHERE id = $1`. `readTenantDisplayDefaults`
+ * in `ssr-session.ts` reads that same row for `default_locale`/`default_theme`
+ * on every `/admin/*` render, so the name now rides along on that query and this
+ * screen spends a connection acquisition and a round trip less.
+ *
+ * `"Tenant"` stays the fallback for the same reason it always was: on a
+ * circuit-open session resolution the field is `null`, and chrome degrades
+ * rather than failing.
+ */
+let tenantName = ssr.display.tenantName?.trim() || "Tenant";
 let syncActive = false;
 /**
  * Empty on failure, which shows the full sidebar. Deliberate: hiding a link is
@@ -183,12 +196,7 @@ let arrangement: SidebarArrangement = { types: [], items: [] };
 try {
   const sql = getDatabaseClient();
   const chrome = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-    const rows = (await tx`
-      SELECT tenant_name FROM awcms_tenants WHERE id = ${ssr.tenantId}
-    `) as Array<{ tenant_name: string | null }>;
-
     return {
-      tenantName: rows[0]?.tenant_name ?? null,
       // Bounded EXISTS, not the full sync-health aggregation — the topbar
       // needs one boolean and this runs on every `/admin/*` request.
       syncActive: await fetchSyncIndicatorActive(tx, ssr.tenantId),
@@ -205,16 +213,13 @@ try {
     };
   });
 
-  // Shape check, not a truthiness check: on circuit-open `withTenant` hands
-  // back a `Response`, whose `.tenantName` is `undefined` rather than an error.
-  if (chrome && typeof chrome === "object" && "tenantName" in chrome) {
-    if (
-      typeof chrome.tenantName === "string" &&
-      chrome.tenantName.trim() !== ""
-    ) {
-      tenantName = chrome.tenantName;
-    }
-
+  // Shape check, not a truthiness check: on circuit-open `withTenant` hands back
+  // a `Response`, whose fields are `undefined` rather than an error.
+  //
+  // Keyed on `syncActive` since finding B4 moved `tenantName` to the session —
+  // keying on a field this block no longer returns would test for something that
+  // is never there and silently skip every assignment below.
+  if (chrome && typeof chrome === "object" && "syncActive" in chrome) {
     syncActive = chrome.syncActive === true;
     disabledModuleKeys = new Set(chrome.disabledModuleKeys);
     arrangement = chrome.arrangement;

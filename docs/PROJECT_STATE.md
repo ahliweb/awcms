@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **143** (`sql/001`–`143`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.594 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **61** (34.599 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **56** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -623,14 +623,37 @@ pioneered directly here after the ADR-0047 freeze.)
      changes.
 
   10. **B2 — `isLegacyTenantRouteEnabled` reads `awcms_blog_settings` and discards it.**
+      **DONE (22 August 2026).**
       `public-route-settings.ts:68-87`; called from all 7 `/blog/[tenantCode]/*` routes.
       One wholly wasted round trip on every anonymous page view — 100% of them on a
       default deployment, where the edge cache is off.
   11. **B3 — `/blog/*` routes never publish `locals.edgeCacheTenantId`.** The routes
+      **DONE (22 August 2026).**
       already resolved the tenant and drop the id, so middleware repeats the
       `awcms_tenants` lookup on every cache MISS. One call per route; the working
       precedent is `seo-distribution/presentation/discovery-route.ts:145`.
+
+      **B2 was worse than written: two of the seven paid TWICE.** `feed.xml.ts` and
+      `sitemap-blog.xml.ts` call `isLegacyTenantRouteEnabled` and then call
+      `fetchBlogSettings` themselves, so `awcms_blog_settings` was read, discarded, and
+      read again. The gate is now ONE query and the merged reader still reads both,
+      because it uses both — pinned separately so the saving cannot come from dropping a
+      field somebody depends on.
+
+      **B3's placement is the whole of it.** `publish-tenant.ts` states the rule — resolve,
+      gate, produce, publish LAST — because a 404 is a cacheable status: publishing before
+      the missing-resource branch annotates a "no such post" 404 differently from an
+      "unknown tenant" one and answers, from a single request, the question the generic-404
+      shape exists to withhold. The test asserts ORDER against the last `notFound` and the
+      one serving response, and a mutation moving the call above the gate turns it red.
+
+      **B4 moved a shape check with it, which was the near-miss.** The circuit-open guard
+      keyed on `tenantName` — no longer in that block's return — so leaving it would have
+      tested for a field that is never there and silently skipped EVERY assignment below:
+      the sync indicator, the disabled-module set, the sidebar arrangement.
+
   12. **B4 — `AdminLayout` opens a third transaction whose first read is a column nobody
+      **DONE (22 August 2026).**
       fetched.** `AdminLayout.astro:184-206`. `tenant_name` is fetched separately from the
       same row `readTenantDisplayDefaults` already selects.
   13. **B5 — ~6 middleware round trips per public request before the page's first query.**
