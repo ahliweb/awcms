@@ -990,4 +990,109 @@ suite("site_search module (integration, ADR-0040)", () => {
       expect(facets.terms).toEqual({});
     });
   });
+  /**
+   * Finding D5 of the 17 August 2026 audit round — a reconcile that reported
+   * `failures=0` while a whole source had stopped indexing.
+   *
+   * `failureCount` sums the per-DOCUMENT failures recorded on each
+   * `SourceReconcileResult`. A source whose reconcile THREW never reached
+   * `results.push`, so it contributed nothing to that sum, and the `break`
+   * meant every source after it was never attempted either. The engine
+   * returned `status: "failed"`; the script summing the number never looked at
+   * it. `site-search:reconcile complete … failures=0`, exit 0, and public
+   * search silently frozen for that source.
+   *
+   * The source used here fails inside `buildExtractionQuery`'s identifier
+   * assertion, which runs BEFORE any SQL — so the transaction stays healthy and
+   * `finalizeRun` still commits the run row. That is the reachable half of the
+   * finding. The other half, a source that fails on a DATABASE error, aborts
+   * the transaction, takes `finalizeRun` down with it and rejects out of the
+   * call entirely; that was always loud, and `scripts/site-search-reconcile.ts`
+   * now catches it per tenant rather than abandoning the rest of the run.
+   */
+  describe("a source that dies is NAMED, not averaged into failures=0 (D5)", () => {
+    const BROKEN = {
+      key: "test_broken.source",
+      ownerModuleKey: "test_broken",
+      resourceType: "broken",
+      tableName: "awcms_blog_posts",
+      localeColumn: "locale",
+      updatedAtColumn: "updated_at",
+      // Rejected by `assertSafeIdentifier` — a plain JS throw, before a single
+      // statement is sent.
+      titleColumn: "title; DROP TABLE awcms_blog_posts",
+      bodyColumns: ["content_text"],
+      slugColumn: "slug",
+      urlTemplate: "/blog/:tenantCode/:slug",
+      publicPredicateSql: "status = 'published'"
+    } as unknown as (typeof SOURCES)[number];
+
+    test("the run reports WHICH source failed and which were never attempted", async () => {
+      await insertPost(TENANT_A, {
+        title: "Indexable one",
+        body: "indexable body",
+        slug: "indexable"
+      });
+
+      const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, [BROKEN, ...SOURCES])
+      );
+
+      expect(result.status).toBe("failed");
+      // The number the operator used to read. It is STILL zero — no document
+      // failed to map or upsert — which is exactly why it could never have
+      // carried this fact and why the fix is a separate field rather than a
+      // bigger count.
+      expect(result.failureCount).toBe(0);
+      expect(result.failedSources).toEqual([BROKEN.key]);
+      expect(result.unattemptedSources).toEqual(SOURCES.map((s) => s.key));
+      expect(result.lastError).toContain("unsafe titleColumn identifier");
+    });
+
+    test("sources that DID run are still reported, and their documents indexed", async () => {
+      // Ordering flipped: the real sources run first, the broken one last. The
+      // engine must report both halves — what succeeded and what did not — not
+      // collapse the run to a single verdict.
+      await insertPost(TENANT_A, {
+        title: "Alpha bright fox",
+        body: "fox body",
+        slug: "alpha"
+      });
+
+      const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, [...SOURCES, BROKEN])
+      );
+
+      expect(result.status).toBe("failed");
+      expect(result.results).toHaveLength(SOURCES.length);
+      expect(result.totalIndexed).toBe(1);
+      expect(result.failedSources).toEqual([BROKEN.key]);
+      // Nothing came after it, so nothing was abandoned.
+      expect(result.unattemptedSources).toEqual([]);
+
+      // The run row COMMITTED: this failure path leaves the transaction usable,
+      // which is what makes the misreported result observable at all.
+      const runs = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchRecentRuns(tx, TENANT_A, 1)
+      );
+      expect(runs[0]!.status).toBe("failed");
+      expect(Number(runs[0]!.failureCount)).toBe(0);
+    });
+
+    test("a clean run names nothing — the fields are not always-populated noise", async () => {
+      await insertPost(TENANT_A, {
+        title: "Clean run",
+        body: "clean body",
+        slug: "clean"
+      });
+
+      const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
+      );
+
+      expect(result.status).toBe("succeeded");
+      expect(result.failedSources).toEqual([]);
+      expect(result.unattemptedSources).toEqual([]);
+    });
+  });
 });

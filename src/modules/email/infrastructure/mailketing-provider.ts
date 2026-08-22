@@ -60,6 +60,23 @@ function truncate(message: string): string {
  * `status: "failed"` is a provider-side validation/business rejection
  * (invalid recipient, bad token, etc.) — `retryable: false`, since retrying
  * an identical request cannot change the outcome.
+ *
+ * ## What counts toward the circuit breaker (finding D6)
+ *
+ * Only statements about the SERVICE: a network error, a timeout, a 5xx, a
+ * body that is not JSON. The breaker exists to stop hammering a provider that
+ * is down, and `push-delivery/domain/fcm-error-mapping.ts` states the same
+ * rule for the sibling port.
+ *
+ * Two branches used to trip it and no longer do — a message with no recipient,
+ * and a `2xx` body carrying `status: "failed"`. Both are per-message business
+ * rejections, which this file's own paragraph above already classifies as
+ * `retryable: false`. Counting them meant a handful of bad addresses in one
+ * batch could open the breaker and stop email for the whole deployment,
+ * including the password-reset messages that are the reason this module
+ * exists. A genuinely bad API token — the one shape that hides among those
+ * rejections — is `email:provider:health`'s job (`healthCheck` probes exactly
+ * that, and unlike the breaker it can tell an operator WHICH problem it is).
  */
 export function createMailketingEmailProvider(
   config: MailketingProviderConfig
@@ -90,17 +107,24 @@ export function createMailketingEmailProvider(
       const attemptedAt = new Date();
 
       if (!breaker.canAttempt(attemptedAt)) {
+        // `skipped` — nothing was sent, so there is no attempt to record and
+        // no retry to spend. `dispatchEmailQueue` short-circuits when the
+        // breaker is already open at the START of a pass; this branch is the
+        // one that opens MID-pass, and it used to bill the remaining claimed
+        // messages for a contact that never happened.
         return {
           ok: false,
-          error: "Mailketing circuit breaker is open; skipping attempt.",
-          retryable: true
+          error: "Mailketing circuit breaker is open; no attempt was made.",
+          retryable: true,
+          skipped: true
         };
       }
 
       const recipient = message.to[0]?.address;
 
       if (!recipient) {
-        breaker.recordFailure(attemptedAt);
+        // Deliberately does NOT feed the breaker: a message with no recipient
+        // is this deployment's own bad row, not a Mailketing outage.
         return {
           ok: false,
           error: "Email message has no recipient address.",
@@ -121,7 +145,13 @@ export function createMailketingEmailProvider(
         const { response, rawBody } = await callSend(formData);
 
         if (!response.ok) {
-          breaker.recordFailure(attemptedAt);
+          // Same split the sibling port draws (`fcm-error-mapping.ts`): 429 and
+          // 5xx are statements about the service; every other 4xx means the
+          // request was understood and refused, which is about this message.
+          if (response.status === 429 || response.status >= 500) {
+            breaker.recordFailure(attemptedAt);
+          }
+
           return {
             ok: false,
             error: truncate(
@@ -145,7 +175,8 @@ export function createMailketingEmailProvider(
         }
 
         if (parsed.status !== "success") {
-          breaker.recordFailure(attemptedAt);
+          // Also deliberately breaker-free. Mailketing answered, in time, with
+          // a well-formed body — it is up. It just refused THIS message.
           return {
             ok: false,
             error: truncate(parsed.response ?? "Unknown error from Mailketing"),

@@ -84,6 +84,13 @@ export type DispatchEmailQueueResult = {
   retried: number;
   failed: number;
   suppressed: number;
+  /**
+   * Finding D6 — claimed messages the provider refused to even attempt (the
+   * breaker opening MID-pass). Returned to `queued` untouched: no
+   * `awcms_email_delivery_attempts` row, no `retry_count` increment. Counted
+   * separately from `failed`/`retried` precisely because it is neither.
+   */
+  deferred: number;
   breakerOpen: boolean;
 };
 
@@ -259,6 +266,44 @@ async function finalizeSuppressed(
   );
 }
 
+/**
+ * Finding D6 — the provider declined to attempt this message at all, so the
+ * claim is simply undone.
+ *
+ * `status = 'queued'` with `next_attempt_at = null` restores exactly the
+ * pre-claim state: the row was already due when `claimEligibleEntries` picked
+ * it up, so it is due again. No backoff is skipped, because no backoff was
+ * consumed — `retry_count` is deliberately not touched.
+ *
+ * What this replaced: `recordDeliveryAttempt(… 'failure' …)` followed by
+ * `finalizeFailure(…)`. That wrote a delivery-attempt row for a contact that
+ * never happened and spent one of the message's retries on it, so a breaker
+ * that opened part-way through a pass could push the rest of the batch to
+ * terminal `failed` without a single one of them having been sent.
+ *
+ * `last_error` carries the reason with an explicit non-attempt prefix, so the
+ * queue explains itself to an operator without the string being mistakable
+ * for a delivery failure.
+ */
+async function finalizeDeferred(
+  sql: Bun.SQL,
+  tenantId: string,
+  id: string,
+  reason: string
+): Promise<void> {
+  await withTenantOrThrow(
+    sql,
+    tenantId,
+    (tx) => tx`
+      UPDATE awcms_email_messages
+      SET status = 'queued', next_attempt_at = null,
+          last_error = ${`Deferred (no attempt made): ${reason}`}
+      WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
+    `,
+    { workClass: "background_sync" }
+  );
+}
+
 async function finalizeFailure(
   sql: Bun.SQL,
   tenantId: string,
@@ -367,6 +412,7 @@ export async function dispatchEmailQueue(
     retried: 0,
     failed: 0,
     suppressed: 0,
+    deferred: 0,
     breakerOpen
   };
 
@@ -515,6 +561,24 @@ export async function dispatchEmailQueue(
     const safeError = redactEmailAddressesInText(
       deliveryResult.error.slice(0, MAX_RESPONSE_SNIPPET_LENGTH)
     );
+
+    if (deliveryResult.skipped) {
+      // Nothing reached the provider. Undo the claim and move on — the loop
+      // deliberately does NOT break, because every remaining claimed row also
+      // needs releasing; breaking would leave them in `sending` until their
+      // lease expires. `provider.send` returns immediately once the breaker is
+      // open, so finishing the batch costs nothing outbound.
+      await finalizeDeferred(sql, tenantId, entry.id, safeError);
+      log("warning", "email.dispatch.deferred", {
+        correlationId: messageCorrelationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        category: entry.category,
+        error: safeError
+      });
+      result.deferred += 1;
+      continue;
+    }
 
     await recordDeliveryAttempt(
       sql,

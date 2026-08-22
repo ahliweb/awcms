@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:163a10000ee02f9bc34710df9de9dbac0944b5d725047b96e59bf43964cfdf88 -->
+<!-- i18n-source-hash: sha256:ab6615e97c418709f74d7d2934e24ead2b84689847eea94930833fa4af30ecec -->
 
 # AWCMS — Project State & Continuation
 
@@ -798,17 +798,66 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       `withTenantOrThrow` — kode mati yang menyembunyikan abort nyata.**
       `visitor-analytics-rollup.ts:97-106`. `tenantsSkipped` permanen 0, peringatan
       `partial` tak pernah bisa menyala, dan backpressure meninggalkan setiap tenant sisa
-      alih-alih melewati satu.
+      alih-alih melewati satu. Rollup hanya menyasar SATU hari, jadi
+      run yang ditinggalkan meninggalkan lubang permanen: pass besok me-rollup besok.
+
+      SELESAI (PR D4/D5/D6). Cabang mati diganti `catch` yang MELEMPAR ULANG apa pun yang
+      bukan `DatabaseBusyError` — sengaja sempit, karena mencuci query rusak menjadi
+      `tenantsSkipped` akan mengembalikan persis kelas bug yang jadi pokok temuan ini.
+      Tenant yang dilewati DISEBUT NAMANYA, bukan sekadar dihitung: `--date=` adalah
+      obatnya dan operator butuh id-nya.
+
+      Audit menyebut "dua job analitik" dan benar untuk keduanya:
+      `visitor-analytics-purge.ts:92` membawa cabang mati yang identik dan diperbaiki dengan
+      cara yang sama. Purge justru yang lebih serius. Job itulah yang MENEGAKKAN retensi,
+      jadi run yang ditinggalkan berarti setiap tenant sesudah yang pertama tetap menyimpan
+      data pengunjung melewati jendela retensinya — diam-diam, sementara ringkasannya
+      melaporkan sukses dan klausa `(WARNING: … database busy)` miliknya sendiri, yang
+      digerbangi penghitung yang permanen nol, tak pernah bisa tercetak.
+
   26. **D5 — `site-search:reconcile` keluar 0 dan mencetak `failures=0` saat satu sumber
       penuh gagal.** `site-search-reconcile.ts:57-83`. `break` di mesinnya terjadi sebelum
       `results.push`, jadi sumber yang gagal menyumbang nol ke `failureCount`. Pencarian
       publik berhenti diperbarui sementara setiap sinyal operator mengatakan sukses.
+
+      SELESAI (PR yang sama). Mesin kini melaporkan `failedSources` dan
+      `unattemptedSources`, dijaga TERPISAH dari `failureCount` — meleburkan sumber yang
+      mati ke dalam penghitung per-DOKUMEN justru itulah cara "0" berarti "satu sumber
+      penuh berhenti". Skripnya memeriksa `status`, mencetak kedua daftar, dan keluar 1.
+
+      Dua koreksi atas rekomendasinya. (a) `break` itu BENAR dan tetap: sumber yang gagal
+      karena error database meninggalkan transaksi dalam keadaan abort, jadi melanjutkan
+      hanya melahirkan rentetan `25P02` dan `finalizeRun` sendiri akan gagal. (b)
+      Sukses-palsu itu hanya terjangkau bila sumbernya melempar error **JS** (asersi
+      identifier di `buildExtractionQuery`, yang jalan sebelum SQL apa pun) — error DATABASE
+      meracuni transaksi, menyeret `finalizeRun`, lalu menolak keluar dari panggilan, dan
+      itu selalu berisik. Sampai PR ini ia berisik ke arah yang salah: ia meninggalkan
+      setiap tenant sisa. Skripnya kini menangkap PER TENANT lalu lanjut, bentuk yang sama
+      dengan D4.
+
   27. **D6 — circuit breaker email disuapi penolakan per-pesan, dan breaker terbuka dicatat
       sebagai percobaan nyata.** `mailketing-provider.ts:91-107`. Penolakan penerima tak
       sah — fakta tentang barisnya — mencatat kegagalan breaker, bertentangan dengan header
       berkas itu sendiri. Sekali terbuka, dispatcher menulis baris `failure` dan membakar
       `retry_count` untuk pesan yang tak pernah sampai ke provider: **buku besar pengiriman
       mencatat kontak yang tidak terjadi.**
+
+      SELESAI (PR yang sama). `EmailDeliveryResult` mendapat `skipped`, yang bukan percobaan
+      untuk dicatat maupun retry untuk dibelanjakan: pesan seperti itu kembali ke `queued`
+      tanpa disentuh, dihitung sebagai `deferred` dan dicetak di baris ringkasan. Angka yang
+      tidak dicetak ringkasan adalah angka yang tak dibaca siapa pun, jadi memisahkan
+      `deferred` tanpa mencetaknya justru akan membuat pass itu lebih senyap, bukan lebih
+      jelas.
+
+      Akuntansi breaker kini memakai pembagian yang sudah didokumentasikan
+      `push-delivery/domain/fcm-error-mapping.ts`: 429 dan 5xx adalah pernyataan tentang
+      LAYANAN, setiap 4xx lain tentang PESAN. Itu menutup kasus ketiga yang tak disebut
+      audit — cabang `!response.ok` juga menjatuhkan breaker pada 4xx biasa. Konkretnya:
+      ambangnya 5 kegagalan beruntun, jadi ENAM alamat tak sah dalam satu batch dulu cukup
+      untuk menghentikan email seluruh deployment, termasuk pesan reset kata sandi. Token
+      API yang benar-benar salah adalah urusan `email:provider:health`, dan tak seperti
+      breaker ia bisa memberi tahu operator masalahnya yang MANA.
+
   28. **D7 — `defaultVerificationMethod: "manual"` yang dideklarasikan `tenant_domain` tidak
       punya pembaca runtime.** `tenant-domain/module.ts:163`. Validatornya default `null` dan
       verifikasi menjawab `missing_verification_method` — keadaan `pending_verification` yang

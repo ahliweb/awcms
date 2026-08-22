@@ -33,6 +33,7 @@ import {
 } from "../src/lib/jobs/job-runner";
 import { fetchActiveTenants } from "../src/lib/jobs/batching";
 import { rollupVisitorAnalyticsForDate } from "../src/modules/visitor-analytics/application/rollup";
+import { DatabaseBusyError } from "../src/lib/database/tenant-context";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -66,6 +67,8 @@ export type VisitorAnalyticsRollupResult = {
   tenantsRolledUp: number;
   areasProcessed: number;
   tenantsSkipped: number;
+  /** Named, not just counted: `--date=` is the remedy and it needs the ids. */
+  skippedTenantIds: string[];
 };
 
 export async function runVisitorAnalyticsRollup(
@@ -81,32 +84,49 @@ export async function runVisitorAnalyticsRollup(
       tenantsChecked: tenants.length,
       tenantsRolledUp: 0,
       areasProcessed: 0,
-      tenantsSkipped: 0
+      tenantsSkipped: 0,
+      skippedTenantIds: []
     };
   }
 
   let tenantsRolledUp = 0;
   let areasProcessed = 0;
-  let tenantsSkipped = 0;
+  const skippedTenantIds: string[] = [];
 
   for (const tenant of tenants) {
     if (ctx.signal?.aborted) {
       break;
     }
 
-    const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-      rollupVisitorAnalyticsForDate(tx, tenant.id, date)
-    );
+    // Finding D4 — this used to read
+    // `if (result instanceof Response) { tenantsSkipped += 1; continue; }`,
+    // and that branch was DEAD. `withTenant` returns a 503 `Response` on
+    // backpressure; `withTenantOrThrow`, which is what this loop calls,
+    // THROWS a `DatabaseBusyError` instead. So `tenantsSkipped` was
+    // permanently 0, the `partial` warning built on it could never fire, and
+    // — the part that actually cost something — a busy database abandoned
+    // every REMAINING tenant instead of skipping one.
+    //
+    // The rollup targets a single day, so an abandoned run is a permanent
+    // hole: tomorrow's pass rolls up tomorrow. That is why the ids are
+    // collected and printed rather than counted — `--date=` is the remedy and
+    // an operator needs to know which tenants to name.
+    try {
+      const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
+        rollupVisitorAnalyticsForDate(tx, tenant.id, date)
+      );
 
-    // `withTenant` returns a 503 `Response` when the circuit breaker is open /
-    // a work-class queue is saturated — count it as skipped, not processed.
-    if (result instanceof Response) {
-      tenantsSkipped += 1;
-      continue;
+      tenantsRolledUp += 1;
+      areasProcessed += result.areasProcessed;
+    } catch (error) {
+      // ONLY backpressure is a skip. Anything else is a defect in the rollup
+      // and must reach the job runner, which classifies a thrown error as a
+      // retryable failure — swallowing it would turn a broken query into a
+      // quiet zero.
+      if (!(error instanceof DatabaseBusyError)) throw error;
+
+      skippedTenantIds.push(tenant.id);
     }
-
-    tenantsRolledUp += 1;
-    areasProcessed += result.areasProcessed;
   }
 
   return {
@@ -114,7 +134,8 @@ export async function runVisitorAnalyticsRollup(
     tenantsChecked: tenants.length,
     tenantsRolledUp,
     areasProcessed,
-    tenantsSkipped
+    tenantsSkipped: skippedTenantIds.length,
+    skippedTenantIds
   };
 }
 
@@ -139,7 +160,7 @@ async function main() {
               `rolledUp=${rollupResult.tenantsRolledUp} areas=${rollupResult.areasProcessed}` +
               (ctx.dryRun ? " (dry-run: nothing was written)" : "") +
               (skipped
-                ? ` (WARNING: ${rollupResult.tenantsSkipped} tenant(s) skipped — database busy)`
+                ? ` (WARNING: ${rollupResult.tenantsSkipped} tenant(s) skipped — database busy; re-run with --date=${date} for: ${rollupResult.skippedTenantIds.join(", ")})`
                 : "")
           );
 

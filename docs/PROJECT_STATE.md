@@ -815,16 +815,62 @@ pioneered directly here after the ADR-0047 freeze.)
       `tenantsSkipped` is permanently 0, the `partial` warning can never fire, and
       backpressure abandons every remaining tenant instead of skipping one. The rollup
       targets _yesterday_ only, so an aborted run leaves a permanent hole.
+
+      RESOLVED (PR for D4/D5/D6). The dead branch is a `catch` that re-throws anything that
+      is not a `DatabaseBusyError` — narrow on purpose, because laundering a broken query
+      into `tenantsSkipped` would reintroduce the exact class of bug the finding is about.
+      Skipped tenants are NAMED rather than counted: `--date=` is the remedy and an
+      operator needs the ids. The audit said "two analytics jobs" and it was right about
+      both: `visitor-analytics-purge.ts:92` carries the identical dead branch and is fixed
+      the same way.
+
+      The purge is the more serious of the two. It is what ENFORCES retention, so an
+      abandoned run means every tenant after the first keeps holding visitor data past its
+      window — silently, while the summary reports success and its `(WARNING: … database
+busy)` clause, gated on the permanently-zero counter, could never print.
+
   26. **D5 — `site-search:reconcile` exits 0 and prints `failures=0` when a whole source
       fails.** `site-search-reconcile.ts:57-83`. The engine's `break` happens before
       `results.push`, so a failed source contributes zero to `failureCount`. Public search
       stops updating while every operator signal says success.
+
+      RESOLVED (same PR). The engine now reports `failedSources` and `unattemptedSources`,
+      kept SEPARATE from `failureCount` — collapsing a dead source into a per-document
+      counter is precisely how "0" came to mean "one whole source stopped". The script
+      checks `status`, prints both lists and exits 1.
+
+      Two corrections to the recommendation. (a) The `break` is CORRECT and stays: a source
+      failing on a database error leaves the transaction aborted, so continuing would
+      produce a cascade of `25P02`s and `finalizeRun` itself would fail. (b) The
+      false-success is only reachable when the source throws a **JS** error (an identifier
+      assertion in `buildExtractionQuery`, which runs before any SQL) — a DATABASE error
+      poisons the transaction, takes `finalizeRun` down with it, and rejects out of the
+      call, which was always loud. It was also, until this PR, loud in the wrong way: it
+      abandoned every remaining tenant. The script now catches per tenant and continues,
+      the same shape as D4.
+
   27. **D6 — email circuit breaker is fed by per-message rejections, and an open breaker is
       recorded as a real attempt.** `mailketing-provider.ts:91-107`. An invalid-recipient
       rejection — a fact about the row — records a breaker failure, contrary to the file's
       own header and to the rule `push-delivery` states explicitly. Once open, the
       dispatcher writes a `failure` row and burns `retry_count` for messages that never
       reached the provider: **the delivery ledger records contacts that did not happen.**
+
+      RESOLVED (same PR). `EmailDeliveryResult` gains `skipped`, which is neither an attempt
+      to record nor a retry to spend: such a message returns to `queued` untouched, counted
+      as `deferred` and printed in the summary line. A number the summary does not print is
+      a number nobody reads, so splitting `deferred` out without printing it would have made
+      the pass quieter than before rather than clearer.
+
+      The breaker accounting is now the split `push-delivery/domain/fcm-error-mapping.ts`
+      already documents: 429 and 5xx are statements about the SERVICE, every other 4xx is
+      about the message. That removes a third case the audit did not name — the
+      `!response.ok` branch was tripping the breaker on ordinary 4xx too. Concretely: the
+      threshold is 5 consecutive failures, so SIX invalid addresses in one batch used to
+      stop email for the whole deployment, password-reset messages included. A genuinely bad
+      API token is `email:provider:health`'s job, and unlike the breaker it can tell an
+      operator WHICH problem it is.
+
   28. **D7 — `tenant_domain`'s declared `defaultVerificationMethod: "manual"` has no runtime
       reader.** `tenant-domain/module.ts:163`. The validator defaults to `null` and
       verification answers `missing_verification_method` — the `pending_verification` state
