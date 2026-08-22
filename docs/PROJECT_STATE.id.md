@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:4198425eab75219668a8c280421a32d08585d71f892f3f61b5dffcc3c8f77bca -->
+<!-- i18n-source-hash: sha256:32688066ef50e4534e6ecfddc54de2337fa15f867bcc32cc29925b7572c8a53f -->
 
 # AWCMS — Project State & Continuation
 
@@ -115,7 +115,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **52** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Gerbang                            | **55** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -620,7 +620,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   ### D. Perbaikan fungsional & kemudahan pemeliharaan
   22. **D1 — job terjadwal berjalan di container tanpa volume dan dengan allow-list env yang
-      bocor.** `ops/run-job.sh:88,92`. `docker run --rm` **tanpa `-v`**: arsip lifecycle dan
+      bocor.** **SELESAI (22 Agustus 2026).** `ops/run-job.sh:88,92`. `docker run --rm` **tanpa `-v`**: arsip lifecycle dan
       ekspor laporan ditulis ke dalam container yang dihapus beberapa detik kemudian
       sementara `awcms_data_lifecycle_archive_manifests` dan `awcms_report_export_runs`
       mencatatnya ada — prosedur restore di README tidak bisa dijalankan dan ekspor
@@ -628,6 +628,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       tangan membuang ~10 variabel yang benar-benar dibaca job terjadwal (alternatif
       `^CLOUDFLARE_` ter-anchor sehingga melewatkan `TENANT_DOMAIN_CLOUDFLARE_*`), dan
       job-nya tetap keluar 0.
+
+      **Paruh env-nya LEBIH BURUK dari yang tertulis di entri ini: 81 dari 171, bukan ~10.**
+      Diukur dengan `collectEnvReads()` — sumber yang sama dipakai
+      `config:env:coverage:check`. Kedua path akar artefak
+      (`DATA_LIFECYCLE_ARCHIVE_ROOT_PATH`, `REPORTING_EXPORT_ROOT_PATH`) termasuk di
+      dalamnya, yang membuat kedua paruh temuan ini SATU cacat, bukan dua: volumenya tidak
+      ada DAN variabel yang bisa mengarahkan tulisannya ke tempat lain tidak pernah sampai.
+
+      Sebuah direktori host kini di-mount di atas `var/` container — satu mount menutupi
+      kedua akar karena keduanya berdefault `./var/...` relatif terhadap `WORKDIR`, dan
+      sebuah tes mengikat path container itu ke `WORKDIR` SUNGGUHAN milik image supaya
+      pemindahan di Dockerfile tidak bisa mendarat diam-diam. Env dipilih berdasarkan NAMA
+      persis dari `ops/awcms-jobs.env-allowlist`, DIGENERASI oleh
+      `bun run jobs:env-allowlist:generate` dan dijaga gerbang baru di `bun run check`.
+      Pencocokan nama-persis bukan kebetulan: pola prefiks juga menyalin
+      `DATABASE_URL_LOOKALIKE`, dan tidak ada asersi source yang bisa membedakannya —
+      karena itu ekspresi `awk` milik runner DIJALANKAN atas environment fixture di tesnya.
+
+      Dua penolakan alih-alih fallback, karena kedua alternatif senyapnya menghasilkan job
+      yang jalan dan melaporkan sukses: allow-list yang tak terbaca, dan menyalin nol
+      variabel. `*_ROOT_PATH` yang menunjuk ke luar mount DISEBUT di log — cacat yang sama
+      berbalut konfigurasi, dengan gejala yang identik dengan sukses.
+
   23. **D2 — empat salinan `stripComments` naif menelan kode nyata; lima gerbang memindai
       lebih sedikit dari yang diakuinya.** `table-write-ownership-check.ts:68`;
       `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;

@@ -115,7 +115,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.594 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
-| Gates                             | **54** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **55** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -622,7 +622,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
   ### D. Functional improvements & maintainability
   22. **D1 — scheduled jobs run in a container with no volume and a lossy env
-      allow-list.** `ops/run-job.sh:88,92`. `docker run --rm` with **no `-v`**: lifecycle
+      allow-list.** **DONE (22 August 2026).** `ops/run-job.sh:88,92`. `docker run --rm` with **no `-v`**: lifecycle
       archives and report exports are written into a container deleted seconds later while
       `awcms_data_lifecycle_archive_manifests` and `awcms_report_export_runs` record them
       as present — the README's restore procedure cannot be executed and scheduled exports
@@ -630,6 +630,28 @@ pioneered directly here after the ADR-0047 freeze.)
       variables scheduled jobs actually read (the `^CLOUDFLARE_` alternative is anchored
       and misses `TENANT_DOMAIN_CLOUDFLARE_*`), and the job still exits 0. Latent only
       because `.env.example`'s values happen to equal the code defaults.
+
+      **The env half was WORSE than this entry says: 81 of 171, not ~10.** Measured with
+      `collectEnvReads()` — the same source `config:env:coverage:check` uses. Both
+      artefact-root paths (`DATA_LIFECYCLE_ARCHIVE_ROOT_PATH`,
+      `REPORTING_EXPORT_ROOT_PATH`) were among them, which makes the two halves of this
+      finding one defect rather than two: the volume was missing AND the variable that
+      could have pointed the write somewhere else never arrived.
+
+      A host directory is now mounted over the container's `var/` — one mount covers both
+      roots because both default to `./var/...` relative to `WORKDIR`, and a test pins that
+      container path to the image's ACTUAL `WORKDIR` so a Dockerfile move cannot land
+      quietly. Env is selected by exact NAME from `ops/awcms-jobs.env-allowlist`, GENERATED
+      by `bun run jobs:env-allowlist:generate` and held by a new gate in `bun run check`.
+      Exact-name matching is not incidental: a prefix pattern also copies
+      `DATABASE_URL_LOOKALIKE`, and no source assertion distinguishes the two — so the
+      runner's own `awk` expression is EXECUTED over a fixture environment in the test.
+
+      Two refusals rather than a fallback, because both silent alternatives produce a job
+      that runs and reports success: an unreadable allow-list, and copying zero variables.
+      A `*_ROOT_PATH` pointed outside the mount is named in the log — the same defect
+      wearing a configuration, with a symptom identical to success.
+
   23. **D2 — four copies of a naive `stripComments` swallow real code; five gates scan
       less than they claim.** `table-write-ownership-check.ts:68`;
       `access-chokepoint-check.ts:111`; `env-contract-coverage-check.ts:145`;
