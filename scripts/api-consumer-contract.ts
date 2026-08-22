@@ -96,7 +96,11 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/site-profile/composed":
     "who the site IS — masthead, favicon, footer, editorial address, contact details, social links, and the `Organization` node, plus the `seo_distribution` half this endpoint merges in (#596, ADR-0102). `src/lib/awcms/profil.ts` there. Promised as COMMITTED in #645 and moved here when `ahliweb/awcms-astro#61` made the call real.",
   "/api/v1/blog/terms":
-    "the tenant's vocabulary, read at build time so a category or tag archive can exist at all (#597 item 1, ADR-0104). `src/lib/awcms/taksonomi.ts` there. The consumer uses the `?order=created_at` TRAVERSAL and never the default alphabetical list — that list returns some of the terms and says nothing about the rest (#647), and a site built from it would generate a hundred archive pages out of thousands. Promised as COMMITTED in #650 and moved here when `ahliweb/awcms-astro#66` made the call real."
+    "the tenant's vocabulary, read at build time so a category or tag archive can exist at all (#597 item 1, ADR-0104). `src/lib/awcms/taksonomi.ts` there. The consumer uses the `?order=created_at` TRAVERSAL and never the default alphabetical list — that list returns some of the terms and says nothing about the rest (#647), and a site built from it would generate a hundred archive pages out of thousands. Promised as COMMITTED in #650 and moved here when `ahliweb/awcms-astro#66` made the call real.",
+  "/api/v1/blog/menus":
+    "the tenant's navigation menus, rendered as a SECONDARY footer region — the localised tab bar is NOT replaced, because a menu item carries one label and no per-locale variant (#597 item 6, ADR-0105). `src/lib/awcms/navigasi.ts` there. Only freezable after #652 gave the response a real schema; promised as COMMITTED in #653 and moved here when `ahliweb/awcms-astro#67` made the call real.",
+  "/api/v1/blog/widgets":
+    "the tenant's widgets, rendered in their declared positions (#597 item 6, ADR-0105). `bodyText` is plain text and the consumer ESCAPES it, because the write path refuses markup rather than sanitizing it. Inactive widgets are returned on purpose and filtered there. Same #652/#653/#67 sequence as the menus above."
 };
 
 /**
@@ -114,10 +118,6 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
-  "/api/v1/blog/menus":
-    "ADR-0105 — the tenant's navigation menus, rendered as a SECONDARY region so the localised tab bar is not replaced (#597 item 6). Frozen only after #652 gave the response a real schema: before that it was an array of bare `object`, and freezing it would have frozen a promise nothing could ever fail against.",
-  "/api/v1/blog/widgets":
-    "ADR-0105 — the tenant's widgets, rendered in their declared positions. `bodyText` is plain text and is escaped by the consumer, because the write path REFUSES markup rather than sanitizing it. Same #652 caveat as the menus above.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
