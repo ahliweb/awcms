@@ -30,7 +30,7 @@ import { getTranslatorFor } from "../../lib/i18n";
 import {
   listDeletedRoles,
   listPermissionCatalog,
-  listRolePermissions,
+  listRolePermissionsForRoles,
   type DeletedRoleView,
   type PermissionCatalogEntry
 } from "../../modules/identity-access/application/role-admin";
@@ -38,10 +38,20 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
+/**
+ * `availableCount` rather than the available ENTRIES: the catalogue is ~230
+ * rows and it used to be rendered as `<option>`s once per role, so the
+ * document grew as roles x catalogue — ~23,000 options on a 100-role tenant,
+ * of which at most one is ever chosen. The catalogue is now emitted once, in a
+ * `<template>`, and the client clones it into a role's `<select>` the first
+ * time that role's panel is opened, minus what the panel already lists as
+ * granted. The count is still needed here because a role holding EVERYTHING
+ * must not be offered an empty grant form.
+ */
 type RolePermRow = {
   role: RoleView;
   granted: PermissionCatalogEntry[];
-  available: PermissionCatalogEntry[];
+  availableCount: number;
 };
 
 function permLabel(p: PermissionCatalogEntry): string {
@@ -71,6 +81,7 @@ const screen = await loadAdminScreen({
     if (!canConfigure) {
       return {
         liveRoles,
+        catalog: [] as PermissionCatalogEntry[],
         rolePerms: [] as RolePermRow[],
         deletedRoles: [] as DeletedRoleView[],
         canConfigure
@@ -85,16 +96,30 @@ const screen = await loadAdminScreen({
       includePlatformScoped:
         platformTenant !== null && platformTenant.tenantId === ssr.tenantId
     });
-    const perms: RolePermRow[] = [];
-    for (const role of liveRoles) {
-      const granted = await listRolePermissions(tx, ssr.tenantId, role.id);
+    // One query for every role's grants, not one per role.
+    const grantsByRole = await listRolePermissionsForRoles(
+      tx,
+      ssr.tenantId,
+      liveRoles.map((role) => role.id)
+    );
+    const perms: RolePermRow[] = liveRoles.map((role) => {
+      const granted = grantsByRole.get(role.id) ?? [];
       const grantedIds = new Set(granted.map((p) => p.id));
-      const available = catalog.filter((p) => !grantedIds.has(p.id));
-      perms.push({ role, granted, available });
-    }
+
+      // Counted against the catalogue rather than `catalog.length -
+      // granted.length`: a role can hold a permission the catalogue omits (a
+      // platform-scoped grant seen from a non-platform tenant), and the
+      // subtraction would then under-count and hide the grant form.
+      return {
+        role,
+        granted,
+        availableCount: catalog.filter((p) => !grantedIds.has(p.id)).length
+      };
+    });
 
     return {
       liveRoles,
+      catalog,
       rolePerms: perms,
       deletedRoles: await listDeletedRoles(tx, ssr.tenantId),
       canConfigure
@@ -115,15 +140,18 @@ const roles: RoleView[] =
   screen.state === "allowed" ? screen.data.liveRoles : [];
 const rolePerms: RolePermRow[] =
   screen.state === "allowed" ? screen.data.rolePerms : [];
+const catalog: PermissionCatalogEntry[] =
+  screen.state === "allowed" ? screen.data.catalog : [];
 const deletedRoles: DeletedRoleView[] =
   screen.state === "allowed" ? screen.data.deletedRoles : [];
 const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 
 // A uniform row list so the table renders the same whether or not the viewer
-// can configure (a read-only viewer gets empty grant/available lists).
+// can configure (a read-only viewer gets empty grant lists and nothing on
+// offer).
 const rows: RolePermRow[] = canConfigure
   ? rolePerms
-  : roles.map((role) => ({ role, granted: [], available: [] }));
+  : roles.map((role) => ({ role, granted: [], availableCount: 0 }));
 const colCount = canConfigure ? 5 : 4;
 ---
 
@@ -239,7 +267,7 @@ const colCount = canConfigure ? 5 : 4;
                 </td>
               </tr>
             ) : (
-              rows.map(({ role, granted, available }) => (
+              rows.map(({ role, granted, availableCount }) => (
                 <tr>
                   <td data-label="Code">
                     <span class="cell-code">{role.roleCode}</span>
@@ -280,7 +308,7 @@ const colCount = canConfigure ? 5 : 4;
                           </button>
                         )}
                       </div>
-                      <details class="role-permissions">
+                      <details class="role-permissions" data-role-panel>
                         <summary>
                           {t("Permissions ({count})", {
                             count: granted.length
@@ -310,7 +338,7 @@ const colCount = canConfigure ? 5 : 4;
                             ))
                           )}
                         </ul>
-                        {available.length > 0 && (
+                        {availableCount > 0 && (
                           <form
                             class="admin-create-form"
                             data-role-grant-form
@@ -319,11 +347,13 @@ const colCount = canConfigure ? 5 : 4;
                             <label for={`grant-${role.id}`}>
                               {t("Add permission")}
                             </label>
-                            <select id={`grant-${role.id}`} name="permissionId">
-                              {available.map((p) => (
-                                <option value={p.id}>{permLabel(p)}</option>
-                              ))}
-                            </select>
+                            {/* Filled from the one catalogue `<template>` below
+                                the first time this panel is opened. */}
+                            <select
+                              id={`grant-${role.id}`}
+                              name="permissionId"
+                              data-role-grant-select
+                            />
                             <button type="submit">{t("Add")}</button>
                           </form>
                         )}
@@ -336,6 +366,23 @@ const colCount = canConfigure ? 5 : 4;
           </tbody>
         </table>
       </div>
+    )
+  }
+
+  {
+    /*
+     * The permission catalogue, ONCE for the whole page. `<template>` content
+     * is inert — not rendered, not submitted, not focusable — so this costs
+     * one copy of the catalogue instead of one per role, and the client clones
+     * from it on demand. Options carry no per-role state, so one copy is all
+     * there is to share.
+     */
+    canConfigure && !loadError && catalog.length > 0 && (
+      <template id="permission-catalog-options">
+        {catalog.map((p) => (
+          <option value={p.id}>{permLabel(p)}</option>
+        ))}
+      </template>
     )
   }
 
@@ -412,6 +459,57 @@ const colCount = canConfigure ? 5 : 4;
 
   const actionError = messageBox("roles-action-error");
   const createError = messageBox("role-create-error");
+
+  /*
+   * Fills a role's permission picker from the single catalogue `<template>`,
+   * the first time that role's panel is opened.
+   *
+   * The server sends the catalogue once and each role's GRANTS; the options a
+   * role may still be given are the difference, computed here rather than
+   * shipped per role (see `RolePermRow`). The granted ids come from the
+   * panel's own revoke buttons — the list is already in the DOM, so a second
+   * copy could only disagree with it.
+   *
+   * The picker is empty until this runs. That is not a regression in
+   * no-JavaScript behaviour: the grant form submits through `sendJson` and has
+   * never worked without the bundle. The server still decides whether the form
+   * exists at all (`availableCount > 0`), and the endpoint's `configure` guard
+   * remains the only authority on the grant itself.
+   */
+  function fillGrantPicker(panel: HTMLDetailsElement): void {
+    const select = panel.querySelector<HTMLSelectElement>(
+      "select[data-role-grant-select]"
+    );
+    if (!select || select.options.length > 0) return;
+
+    const template = document.getElementById("permission-catalog-options");
+    if (!(template instanceof HTMLTemplateElement)) return;
+
+    const granted = new Set<string | undefined>();
+
+    for (const element of panel.querySelectorAll<HTMLElement>(
+      "[data-permission-id]"
+    )) {
+      granted.add(element.dataset.permissionId);
+    }
+
+    const options = template.content.cloneNode(true) as DocumentFragment;
+
+    // `querySelectorAll` returns a STATIC list, so removing as we go is safe.
+    for (const option of options.querySelectorAll("option")) {
+      if (granted.has(option.value)) option.remove();
+    }
+
+    select.appendChild(options);
+  }
+
+  for (const panel of document.querySelectorAll<HTMLDetailsElement>(
+    "details[data-role-panel]"
+  )) {
+    panel.addEventListener("toggle", () => {
+      if (panel.open) fillGrantPicker(panel);
+    });
+  }
 
   onSubmit("role-create-form", async ({ data, submit }) => {
     await mutateAndReload(

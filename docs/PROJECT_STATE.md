@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **145** (`sql/001`–`145`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.599 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **61** (34.697 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -714,10 +714,31 @@ pioneered directly here after the ADR-0047 freeze.)
       ≤3-query hot-read ceiling is "measured", but **both budget suites call directory
       functions directly and never drive middleware**, so the excess is structurally
       invisible to the gate that claims to enforce it.
-  14. **B6 — in-process rate-limit `buckets` Map has no eviction.**
+  14. **B6 — in-process rate-limit `buckets` Map has no eviction.** **DONE (22 August
+      2026).**
       `security/rate-limit.ts:57`. One permanent entry per distinct client IP; Redis is
       off by default so this is the live path. A slow leak, not an acute risk — but the
       failure mode is an OOM of the process holding every other cache.
+
+      **Two mechanisms, because a sweep alone is not a bound.** An amortised sweep (at
+      most once a minute, and on the way past the cap) drops every entry whose window has
+      elapsed — `checkRateLimit` already treats an elapsed window as a fresh start, so
+      such an entry holds no information. That bounds the map to "distinct clients seen
+      within one window", which is the correct working set and, under a distributed
+      flood, is itself attacker-controlled. So there is also a hard cap of 50,000, and
+      when it is reached the victims are chosen to be the least harmful ones available:
+      the entries CLOSEST TO EXPIRING, evicted in one batch down to 45,000 so the sort
+      that picks them runs once per 10% of growth rather than once per request.
+
+      **The recommendation did not say where `windowMs` comes from, and that is the
+      whole design.** The bucket now stores it. Eviction happens OUTSIDE any call for
+      that key, so a sweep has to know when an entry it was not asked about stopped
+      counting, and the map is shared by callers with different windows (login is
+      minutes, site-search is seconds) — taking the window from whichever caller happens
+      to trigger the sweep would expire the other family's counters early. Early
+      expiry is the one failure a memory fix must not introduce: forgetting a LIVE
+      counter hands its owner a fresh allowance, so that is what
+      `tests/rate-limit-bucket-eviction.test.ts` asserts alongside the size.
 
   ### C. Algorithm / query cost
   15. **C1 — no index supports the blog list ordering.** **DONE (22 August 2026).** `blog-post-directory.ts:398,436`;
@@ -851,13 +872,52 @@ pioneered directly here after the ADR-0047 freeze.)
       identical and only the COST differs. That is the finding's own shape, so the suite
       now carries an explicit assertion that the statement really contains the LIMIT.
 
-  20. **C6 — `/admin/roles` is an N+1 plus an O(roles × catalogue) payload.**
+  20. **C6 — `/admin/roles` is an N+1 plus an O(roles × catalogue) payload.** **DONE (22
+      August 2026).**
       `roles.astro:88-94`. `listRolePermissions` awaited once per role (up to 100,
       sequential); the ~230-row catalogue rendered as `<option>` once per role.
+
+      **The N+1 half:** `listRolePermissionsForRoles` answers the whole set in one
+      `role_id = ANY(...)` round trip and returns an entry for EVERY requested id, empty
+      array included — a caller that had to tell "no grants" from "not in the result"
+      would be back to asking per role. The single-role reader was DELETED rather than
+      left unused: a zero-caller export is how the next screen quietly reintroduces the
+      N+1 (see D12/D15/D16 for the same shape as a live finding).
+
+      **The payload half moved a decision to the client, so it is worth being explicit
+      about what did not move.** The catalogue is now emitted once inside a `<template>`
+      — inert content, not rendered and not submitted — and the client clones it into a
+      role's picker on the first open, minus what that panel already lists as granted.
+      The granted ids come from the panel's own revoke buttons, because a second copy
+      could only disagree with the list already on screen. The SERVER still decides
+      whether a picker exists at all (`availableCount > 0`, counted against the
+      catalogue rather than by subtraction — a role can hold a permission the catalogue
+      omits), and the endpoint's `configure` guard remains the only authority on the
+      grant itself. The picker is empty without JavaScript; that is not a regression,
+      the form has always submitted through `sendJson`.
+
+      **One thing to carry forward: this consumed nearly all of the client asset
+      budget.** `build:asset-budget:check` allows 192,000 B for the app bundle; the
+      picker filler costs ~540 B and leaves **161 B** of headroom. The trade is good in
+      itself (a few hundred bytes of cached JS against ~23,000 `<option>`s in every
+      render of the page) but the NEXT screen that adds a client script will fail that
+      gate, and it will fail it for reasons unrelated to whatever that screen did.
+      Raising the ceiling is a decision, not a formality — it is not taken here.
+
   21. **C7 — `prepareCandidates` re-escapes every tag name inside the sort comparator.**
+      **DONE (22 August 2026).**
       `internal-tag-linking.ts:155-158`. Measured 1090 calls/sort vs 100 for
       decorate-sort-undecorate. On by default on every public article render; absolute
       saving is small (~0.14 ms), which is why it is last.
+
+      Decorate-sort-undecorate, with the escaped name carried on the row the dedupe loop
+      and the caller both already need — so the cheaper version is also the shorter one.
+      No behavioural test can separate the two implementations: escaping is monotone
+      over a prefix, so raw-longer and escaped-longer can only disagree for candidates
+      that never compete at the same text position. What is asserted instead is that the
+      comparator contains no `escapeHtml(` call, plus the two properties the sort exists
+      to provide (longest-escaped-first for overlapping terms; `minTermLength` still
+      measured on the RAW name, so escaping cannot smuggle a filtered-out tag back in).
 
   ### D. Functional improvements & maintainability
   22. **D1 — scheduled jobs run in a container with no volume and a lossy env

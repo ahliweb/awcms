@@ -1,3 +1,4 @@
+import { log } from "../logging/logger";
 import { getRedisClient, withRedisCommandTimeout } from "../redis/client";
 import { buildRedisKey } from "../redis/config";
 
@@ -52,9 +53,102 @@ export type RateLimitConfig = {
 export type RateLimitResult =
   { allowed: true } | { allowed: false; retryAfterSec: number };
 
-type Bucket = { count: number; windowStart: number };
+/**
+ * `windowMs` is stored per bucket, not read from the caller's config, because
+ * eviction happens outside any call for that key: the sweep below has to know
+ * when an entry it was not asked about stopped counting, and the same map is
+ * shared by callers with different windows (login: minutes; site-search:
+ * seconds).
+ */
+type Bucket = { count: number; windowStart: number; windowMs: number };
 
 const buckets = new Map<string, Bucket>();
+
+/**
+ * ## Why this map is swept, and why it is also capped
+ *
+ * An entry is created per distinct key — in practice per client IP — and
+ * before this it was never removed. A live entry is only meaningful until its
+ * window ends: `checkRateLimit` already treats an elapsed window as a fresh
+ * start, so an entry past `windowStart + windowMs` holds no information and
+ * only occupies memory. Redis is off by default, so the in-process map is the
+ * live path for the default topology, and the leak is one permanent entry per
+ * IP that has ever touched a rate-limited endpoint — a slow leak whose end
+ * state is an OOM of the process holding every other cache.
+ *
+ * The sweep alone bounds the map to "distinct clients seen within one window",
+ * which is the correct working set. That set is itself attacker-controlled
+ * during a distributed flood, so there is also a hard cap. Evicting a LIVE
+ * bucket forgets a counter and hands its owner a fresh allowance, so the cap
+ * is deliberately high and the victims are chosen as the least harmful ones
+ * available: the entries CLOSEST TO EXPIRING, which would have been forgotten
+ * within milliseconds anyway. Eviction is in one batch down to
+ * `BUCKET_EVICTION_TARGET` rather than one entry per insert, so the sort it
+ * needs runs once per 10% growth instead of once per request while the cap is
+ * pinned.
+ *
+ * This is a memory bound, not a second limiter: nothing here can make a
+ * request MORE limited than the configured ceiling.
+ */
+const BUCKET_SWEEP_INTERVAL_MS = 60_000;
+const BUCKET_HARD_CAP = 50_000;
+const BUCKET_EVICTION_TARGET = Math.floor(BUCKET_HARD_CAP * 0.9);
+
+let lastSweepAt = 0;
+let warnedAboutCap = false;
+
+/** Drops every entry whose window has already elapsed. */
+function sweepExpiredBuckets(now: number): void {
+  for (const [key, bucket] of buckets) {
+    if (now - bucket.windowStart >= bucket.windowMs) {
+      buckets.delete(key);
+    }
+  }
+}
+
+function boundBuckets(now: number): void {
+  if (
+    buckets.size < BUCKET_HARD_CAP &&
+    now - lastSweepAt < BUCKET_SWEEP_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastSweepAt = now;
+  sweepExpiredBuckets(now);
+
+  // `<` rather than `<=`: this runs BEFORE the caller's own insert, so leaving
+  // the map exactly AT the cap is leaving it one entry over.
+  if (buckets.size < BUCKET_HARD_CAP) {
+    return;
+  }
+
+  // Still over the cap with nothing expired to reclaim: every remaining entry
+  // is live. Take the ones with the least window left.
+  const byExpiry = [...buckets.entries()].sort(
+    (a, b) =>
+      a[1].windowStart + a[1].windowMs - (b[1].windowStart + b[1].windowMs)
+  );
+
+  const evictCount = buckets.size - BUCKET_EVICTION_TARGET;
+
+  for (let index = 0; index < evictCount; index += 1) {
+    buckets.delete(byExpiry[index]![0]);
+  }
+
+  if (!warnedAboutCap) {
+    warnedAboutCap = true;
+
+    // Once per process: this fires under exactly the traffic that makes a
+    // per-event log a free amplifier for whoever caused it.
+    log("warning", "security.rate_limit.bucket_cap_reached", {
+      cap: BUCKET_HARD_CAP,
+      evicted: evictCount,
+      reason:
+        "in-process rate-limit map hit its size cap — soonest-to-expire counters were dropped; configure Redis (REDIS_URL) for a shared limiter"
+    });
+  }
+}
 
 /**
  * Clear all in-process rate-limit buckets. Test-only: the integration harness
@@ -66,6 +160,13 @@ const buckets = new Map<string, Bucket>();
  */
 export function resetRateLimitForTests(): void {
   buckets.clear();
+  lastSweepAt = 0;
+  warnedAboutCap = false;
+}
+
+/** Test-only: the number of live in-process buckets. */
+export function rateLimitBucketCountForTests(): number {
+  return buckets.size;
 }
 
 export function checkRateLimit(
@@ -73,10 +174,16 @@ export function checkRateLimit(
   config: RateLimitConfig,
   now: number = Date.now()
 ): RateLimitResult {
+  boundBuckets(now);
+
   const existing = buckets.get(key);
 
   if (!existing || now - existing.windowStart >= config.windowMs) {
-    buckets.set(key, { count: 1, windowStart: now });
+    buckets.set(key, {
+      count: 1,
+      windowStart: now,
+      windowMs: config.windowMs
+    });
     return { allowed: true };
   }
 

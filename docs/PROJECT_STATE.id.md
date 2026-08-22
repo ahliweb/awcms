@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a605ad70c9f559b56d18940d2356f79ad7e367c84de28b6daee479abacf6b6dc -->
+<!-- i18n-source-hash: sha256:f1a13869b3fa723064588a3816cb62ccff87e0fb057570ec7416dc5ec201a8d1 -->
 
 # AWCMS — Project State & Continuation
 
@@ -114,7 +114,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **145** (`sql/001`–`145`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **61** (34.697 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -699,10 +699,31 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       plafon ≤3 query hot-read "terukur", tetapi **kedua suite budget memanggil fungsi
       directory langsung dan tidak pernah menggerakkan middleware**, jadi kelebihannya
       secara struktural tak terlihat oleh gerbang yang mengaku menegakkannya.
-  14. **B6 — Map `buckets` rate-limit in-process tanpa eviction.**
+  14. **B6 — Map `buckets` rate-limit in-process tanpa eviction.** **SELESAI (22 Agustus
+      2026).**
       `security/rate-limit.ts:57`. Satu entri permanen per IP klien berbeda; Redis mati
       secara default sehingga inilah jalur hidupnya. Kebocoran lambat, bukan risiko akut —
       tetapi mode gagalnya adalah OOM proses yang memegang setiap cache lain.
+
+      **Dua mekanisme, karena sapuan saja bukan batas.** Sapuan ter-amortisasi (paling
+      sering sekali per menit, dan saat melewati cap) membuang setiap entri yang
+      jendelanya sudah lewat — `checkRateLimit` memang sudah memperlakukan jendela lewat
+      sebagai awal baru, jadi entri seperti itu tidak menyimpan informasi apa pun. Itu
+      membatasi map ke "klien berbeda yang terlihat dalam satu jendela", yaitu working
+      set yang benar dan, saat banjir terdistribusi, dikendalikan penyerang. Maka ada
+      juga cap keras 50.000, dan ketika tercapai korbannya dipilih yang paling tidak
+      merugikan: entri yang PALING DEKAT KEDALUWARSA, dibuang satu batch sampai 45.000
+      supaya sort yang memilihnya jalan sekali per 10% pertumbuhan, bukan tiap request.
+
+      **Rekomendasi tidak menyebut dari mana `windowMs` datang, dan justru itulah inti
+      desainnya.** Bucket kini menyimpannya. Eviction terjadi DI LUAR panggilan untuk
+      kunci itu, jadi sapuan harus tahu kapan entri yang tidak ditanyakan berhenti
+      menghitung, dan map itu dipakai bersama oleh pemanggil dengan jendela berbeda
+      (login menit, site-search detik) — mengambil jendela dari pemanggil yang kebetulan
+      memicu sapuan akan mengedaluwarsakan penghitung keluarga lain lebih awal.
+      Kedaluwarsa dini adalah satu-satunya kegagalan yang tidak boleh diperkenalkan
+      perbaikan memori: melupakan penghitung HIDUP memberi pemiliknya jatah baru —
+      itulah yang diasersi `tests/rate-limit-bucket-eviction.test.ts` bersama ukurannya.
 
   ### C. Ongkos algoritma / query
   15. **C1 — tidak ada indeks yang mendukung pengurutan daftar blog.** **SELESAI (22 Agustus 2026).**
@@ -842,12 +863,54 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       identik dan hanya BIAYA-nya yang berbeda. Itu persis bentuk temuannya sendiri, jadi
       suite-nya kini membawa asersi eksplisit bahwa statement-nya benar-benar memuat LIMIT.
 
-  20. **C6 — `/admin/roles` adalah N+1 plus payload O(peran × katalog).**
+  20. **C6 — `/admin/roles` adalah N+1 plus payload O(peran × katalog).** **SELESAI (22
+      Agustus 2026).**
       `roles.astro:88-94`. `listRolePermissions` di-await sekali per peran (sampai 100,
       berurutan); katalog ~230 baris dirender sebagai `<option>` sekali per peran.
+
+      **Paruh N+1:** `listRolePermissionsForRoles` menjawab seluruh himpunan dalam satu
+      round trip `role_id = ANY(...)` dan mengembalikan entri untuk SETIAP id yang
+      diminta, termasuk array kosong — pemanggil yang harus membedakan "tanpa grant" dari
+      "tidak ada di hasil" akan kembali bertanya per peran. Pembaca satu-peran DIHAPUS,
+      bukan dibiarkan tak terpakai: ekspor tanpa pemanggil adalah cara layar berikutnya
+      diam-diam menghidupkan lagi N+1 (lihat D12/D15/D16 untuk bentuk yang sama sebagai
+      temuan hidup).
+
+      **Paruh payload memindahkan satu keputusan ke klien, jadi perlu tegas soal apa yang
+      TIDAK ikut pindah.** Katalog kini dikirim sekali di dalam `<template>` — konten
+      inert, tidak dirender dan tidak ikut submit — dan klien mengklonnya ke picker satu
+      peran saat panel itu pertama dibuka, dikurangi apa yang sudah didaftar panel itu
+      sebagai granted. Id yang granted diambil dari tombol revoke panel itu sendiri,
+      karena salinan kedua hanya bisa berbeda dari daftar yang sudah di layar. SERVER
+      tetap memutuskan apakah picker ada sama sekali (`availableCount > 0`, dihitung
+      terhadap katalog dan bukan lewat pengurangan — sebuah peran bisa memegang izin yang
+      tidak ada di katalog), dan guard `configure` endpoint tetap satu-satunya otoritas
+      atas grant-nya. Picker kosong tanpa JavaScript; itu bukan regresi, formulirnya
+      memang selalu submit lewat `sendJson`.
+
+      **Satu hal untuk dibawa ke depan: ini menghabiskan hampir seluruh anggaran aset
+      klien.** `build:asset-budget:check` mengizinkan 192.000 B untuk bundel app; pengisi
+      picker memakan ~540 B dan menyisakan **161 B**. Tukar-tambahnya bagus (beberapa
+      ratus byte JS ter-cache melawan ~23.000 `<option>` di tiap render halaman) tetapi
+      layar BERIKUTNYA yang menambah skrip klien akan memerahkan gerbang itu, dan
+      memerahkannya karena sebab yang tak ada hubungannya dengan layar tersebut.
+      Menaikkan plafon adalah keputusan, bukan formalitas — tidak diambil di sini.
+
   21. **C7 — `prepareCandidates` meng-escape ulang tiap nama tag di dalam komparator sort.**
+      **SELESAI (22 Agustus 2026).**
       `internal-tag-linking.ts:155-158`. Terukur 1090 panggilan/sort vs 100 untuk
       decorate-sort-undecorate. Hemat absolutnya kecil (~0,14 ms), itulah sebabnya terakhir.
+
+      Decorate-sort-undecorate, dengan nama ter-escape dibawa di baris yang memang sudah
+      dibutuhkan loop dedupe dan pemanggilnya — sehingga versi yang lebih murah juga
+      lebih pendek. Tidak ada uji perilaku yang bisa memisahkan kedua implementasi:
+      escaping monoton atas prefiks, jadi "lebih panjang mentah" dan "lebih panjang
+      ter-escape" hanya bisa berbeda untuk kandidat yang tak pernah bersaing di posisi
+      teks yang sama. Yang diasersi sebagai gantinya: komparator tidak memuat panggilan
+      `escapeHtml(`, plus dua properti yang menjadi alasan sort itu ada (terpanjang-
+      ter-escape lebih dulu untuk istilah yang tumpang tindih; `minTermLength` tetap
+      diukur pada nama MENTAH, sehingga escaping tak bisa menyelundupkan kembali tag yang
+      sudah tersaring).
 
   ### D. Perbaikan fungsional & kemudahan pemeliharaan
   22. **D1 — job terjadwal berjalan di container tanpa volume dan dengan allow-list env yang

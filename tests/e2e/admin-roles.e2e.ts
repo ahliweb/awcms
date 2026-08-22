@@ -71,4 +71,85 @@ test.describe("admin roles CRUD (authenticated)", () => {
     ).toBeVisible();
     await expect(row.locator("details.role-permissions")).toBeVisible();
   });
+
+  /**
+   * PROJECT_STATE §4 **C6** — the permission catalogue is sent ONCE, in a
+   * `<template>`, and cloned into a role's picker when that role's panel is
+   * opened. The exclusion of already-granted permissions moved from the server
+   * to that clone, so it needs cross-layer proof: source assertions
+   * (`admin-roles-page-payload.test.ts`) can show the template exists and the
+   * per-role loop is gone, but only a browser can show that the picker ends up
+   * holding the right options — and, after a grant, one fewer.
+   */
+  test("the grant picker fills from the shared catalogue and drops what is granted", async ({
+    page
+  }) => {
+    await page.goto("/login");
+    await provideTenant(page, tenantId!);
+    await page.locator("#login-identifier").fill(loginIdentifier!);
+    await page.locator("#password").fill(password!);
+    await page.locator("#login-submit").click();
+    await page.waitForURL("**/admin");
+
+    await page.goto("/admin/roles");
+
+    const newCode = `qa-e2e-grant-${Date.now()}`;
+    await page.locator("#role-code").fill(newCode);
+    await page.locator("#role-name").fill("E2E Grant Role");
+    await page.locator("#role-create-submit").click();
+
+    const table = page.locator("#roles-table");
+    await expect(table).toContainText(newCode);
+
+    // The catalogue is in the document exactly once, whatever the role count.
+    await expect(page.locator("#permission-catalog-options")).toHaveCount(1);
+
+    const openPanel = async () => {
+      const row = table.locator("tr", { hasText: newCode });
+      const panel = row.locator("details.role-permissions");
+      await panel.locator("summary").click();
+      return panel;
+    };
+
+    let panel = await openPanel();
+    const select = panel.locator("select[data-role-grant-select]");
+
+    // Empty until the panel is opened; filled from the template on open.
+    await expect(select.locator("option").first()).toBeAttached();
+    const optionsBefore = await select.locator("option").count();
+    expect(optionsBefore).toBeGreaterThan(0);
+
+    const grantedId = await select
+      .locator("option")
+      .first()
+      .getAttribute("value");
+    expect(grantedId).toBeTruthy();
+
+    await select.selectOption(grantedId!);
+    await panel
+      .locator("form[data-role-grant-form] button[type='submit']")
+      .click();
+
+    // The client reloads on success. Wait on the GRANT itself rather than on
+    // the row — the row is already on screen, so waiting for it would pass
+    // against the pre-reload DOM and race the navigation. The revoke button
+    // exists only in the re-rendered page (attached, though its panel starts
+    // collapsed).
+    await expect(
+      page.locator(`button[data-permission-id="${grantedId}"]`)
+    ).toBeAttached();
+
+    panel = await openPanel();
+    await expect(
+      panel.locator(`button[data-permission-id="${grantedId}"]`)
+    ).toBeVisible();
+
+    // ...and the picker no longer offers it.
+    const selectAfter = panel.locator("select[data-role-grant-select]");
+    await expect(selectAfter.locator("option").first()).toBeAttached();
+    await expect(
+      selectAfter.locator(`option[value="${grantedId}"]`)
+    ).toHaveCount(0);
+    expect(await selectAfter.locator("option").count()).toBe(optionsBefore - 1);
+  });
 });
