@@ -15,6 +15,7 @@
  * `normalized_hostname = lower(btrim(hostname))` exactly).
  */
 import { normalizePublicHost } from "../../../lib/tenant/public-host-tenant-resolver";
+import { buildVerificationRecordName } from "./domain-verification-challenge";
 
 export type ValidationError = {
   field: string;
@@ -26,8 +27,30 @@ type Result<T> =
 
 export type TenantDomainType = "subdomain" | "custom_domain";
 export type TenantDomainRouteMode = "canonical" | "legacy_blog";
-export type TenantDomainVerificationMethod =
-  "dns_txt" | "dns_cname" | "file" | "manual";
+/**
+ * ADR-0106 — one method, and it is the one that is actually implemented.
+ *
+ * `awcms_tenant_domains.verification_method` (migration 046) still accepts
+ * `dns_cname`, `file` and `manual`, and the CHECK constraint is left alone: an
+ * applied migration is immutable, and the column is documentation of what the
+ * schema was willing to hold. What changed is that this application only ever
+ * writes, and only ever honours, `dns_txt`.
+ *
+ * `manual` is gone because it never meant anything. It was the whole of the old
+ * check — `verification_method IS NOT NULL` then `status = 'active'` — so a
+ * tenant admin could PATCH it onto a row and activate any hostname they liked.
+ * `file` is gone because implementing it means this server issuing an HTTP
+ * request to a hostname the caller chose, which is SSRF wearing a verification
+ * badge; see `dns-txt-verifier.ts`. `dns_cname` is gone because it needs a
+ * platform target hostname to point AT, which is per-deployment configuration
+ * that does not exist — and a second half-built method would not make the first
+ * one any more true.
+ */
+export type TenantDomainVerificationMethod = "dns_txt";
+
+/** The only method this application writes. */
+export const TENANT_DOMAIN_VERIFICATION_METHOD: TenantDomainVerificationMethod =
+  "dns_txt";
 /**
  * PATCH-only status vocabulary — deliberately excludes `active`. A domain can
  * only ever reach `active` through `POST .../verify` (DNS verification stays
@@ -49,30 +72,18 @@ export const TENANT_DOMAIN_ROUTE_MODES: readonly TenantDomainRouteMode[] = [
   "canonical",
   "legacy_blog"
 ];
-export const TENANT_DOMAIN_VERIFICATION_METHODS: readonly TenantDomainVerificationMethod[] =
-  ["dns_txt", "dns_cname", "file", "manual"];
 export const TENANT_DOMAIN_UPDATABLE_STATUSES: readonly UpdatableTenantDomainStatus[] =
   ["pending_verification", "suspended", "failed"];
 
 const DOMAIN_TYPES = TENANT_DOMAIN_TYPES;
 const ROUTE_MODES = TENANT_DOMAIN_ROUTE_MODES;
-const VERIFICATION_METHODS = TENANT_DOMAIN_VERIFICATION_METHODS;
 const UPDATABLE_STATUSES = TENANT_DOMAIN_UPDATABLE_STATUSES;
-
-// DNS TXT record values can legitimately run long (concatenated multi-string
-// records); this is a generous defense-in-depth cap, not a DNS-protocol-
-// accurate limit — the field is never parsed/executed, only stored and echoed
-// back.
-const MAX_RECORD_LENGTH = 2000;
 
 export type CreateTenantDomainInput = {
   hostname: string;
   normalizedHostname: string;
   domainType: TenantDomainType;
   routeMode: TenantDomainRouteMode;
-  verificationMethod: TenantDomainVerificationMethod | null;
-  verificationRecordName: string | null;
-  verificationRecordValue: string | null;
   redirectToPrimary: boolean;
 };
 
@@ -80,9 +91,6 @@ export type UpdateTenantDomainInput = {
   domainType?: TenantDomainType;
   routeMode?: TenantDomainRouteMode;
   status?: UpdatableTenantDomainStatus;
-  verificationMethod?: TenantDomainVerificationMethod | null;
-  verificationRecordName?: string | null;
-  verificationRecordValue?: string | null;
   redirectToPrimary?: boolean;
 };
 
@@ -134,57 +142,32 @@ function validateHostname(
   return { hostname: trimmed, normalizedHostname: normalized };
 }
 
-function validateRecordString(
-  field: string,
-  value: unknown,
+/**
+ * Fields the API used to accept and now mints itself (ADR-0106). Supplying one
+ * is REFUSED rather than ignored: a caller that sends
+ * `verificationRecordValue` believes it has chosen what will be checked, and
+ * silently dropping it would leave that belief intact while the server checked
+ * something else entirely. A 400 naming the field is the only answer that tells
+ * the truth.
+ */
+const SERVER_MANAGED_FIELDS = [
+  "verificationMethod",
+  "verificationRecordName",
+  "verificationRecordValue"
+] as const;
+
+function refuseServerManagedFields(
+  record: Record<string, unknown>,
   errors: ValidationError[]
-): string | null {
-  if (value === undefined || value === null) {
-    return null;
+): void {
+  for (const field of SERVER_MANAGED_FIELDS) {
+    if (record[field] !== undefined) {
+      errors.push({
+        field,
+        message: `${field} is managed by the server and cannot be set — the DNS TXT challenge is minted when the domain is created and re-issued by POST /api/v1/tenant/domains/{id}/verify.`
+      });
+    }
   }
-
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    value.length > MAX_RECORD_LENGTH
-  ) {
-    errors.push({
-      field,
-      message: `${field} must be a non-empty string up to ${MAX_RECORD_LENGTH} characters, or null.`
-    });
-    return null;
-  }
-
-  return value.trim();
-}
-
-/** Tri-state helper for PATCH: field omitted -> leave unchanged; `null` -> clear; string -> validate + set. */
-function validateUpdateRecordString(
-  field: string,
-  value: unknown,
-  errors: ValidationError[]
-): { present: boolean; value: string | null } {
-  if (value === undefined) {
-    return { present: false, value: null };
-  }
-
-  if (value === null) {
-    return { present: true, value: null };
-  }
-
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    value.length > MAX_RECORD_LENGTH
-  ) {
-    errors.push({
-      field,
-      message: `${field} must be a non-empty string up to ${MAX_RECORD_LENGTH} characters, or null.`
-    });
-    return { present: false, value: null };
-  }
-
-  return { present: true, value: value.trim() };
 }
 
 export function validateCreateTenantDomainInput(
@@ -225,37 +208,7 @@ export function validateCreateTenantDomainInput(
     }
   }
 
-  let verificationMethod: TenantDomainVerificationMethod | null = null;
-  if (
-    record.verificationMethod !== undefined &&
-    record.verificationMethod !== null
-  ) {
-    if (
-      typeof record.verificationMethod !== "string" ||
-      !VERIFICATION_METHODS.includes(
-        record.verificationMethod as TenantDomainVerificationMethod
-      )
-    ) {
-      errors.push({
-        field: "verificationMethod",
-        message: `verificationMethod must be one of ${VERIFICATION_METHODS.join(", ")}, or null.`
-      });
-    } else {
-      verificationMethod =
-        record.verificationMethod as TenantDomainVerificationMethod;
-    }
-  }
-
-  const verificationRecordName = validateRecordString(
-    "verificationRecordName",
-    record.verificationRecordName,
-    errors
-  );
-  const verificationRecordValue = validateRecordString(
-    "verificationRecordValue",
-    record.verificationRecordValue,
-    errors
-  );
+  refuseServerManagedFields(record, errors);
 
   let redirectToPrimary = false;
   if (record.redirectToPrimary !== undefined) {
@@ -269,6 +222,22 @@ export function validateCreateTenantDomainInput(
     }
   }
 
+  // ADR-0106 — refuse here rather than accepting a row that can never be
+  // verified. `_awcms-verify.` + the hostname has to fit in a DNS name, and a
+  // hostname that does not leave room for the label is one this platform cannot
+  // prove ownership of. Checked at CREATE so the impossible row never exists,
+  // which is why `createTenantDomain`'s own mint is infallible.
+  if (
+    hostnameResult &&
+    !buildVerificationRecordName(hostnameResult.normalizedHostname).ok
+  ) {
+    errors.push({
+      field: "hostname",
+      message:
+        "hostname is too long to carry a DNS verification record and cannot be verified."
+    });
+  }
+
   if (errors.length > 0 || !hostnameResult) {
     return { valid: false, errors };
   }
@@ -280,9 +249,6 @@ export function validateCreateTenantDomainInput(
       normalizedHostname: hostnameResult.normalizedHostname,
       domainType,
       routeMode,
-      verificationMethod,
-      verificationRecordName,
-      verificationRecordValue,
       redirectToPrimary
     }
   };
@@ -343,42 +309,7 @@ export function validateUpdateTenantDomainInput(
     }
   }
 
-  if (record.verificationMethod !== undefined) {
-    if (record.verificationMethod === null) {
-      value.verificationMethod = null;
-    } else if (
-      typeof record.verificationMethod !== "string" ||
-      !VERIFICATION_METHODS.includes(
-        record.verificationMethod as TenantDomainVerificationMethod
-      )
-    ) {
-      errors.push({
-        field: "verificationMethod",
-        message: `verificationMethod must be one of ${VERIFICATION_METHODS.join(", ")}, or null.`
-      });
-    } else {
-      value.verificationMethod =
-        record.verificationMethod as TenantDomainVerificationMethod;
-    }
-  }
-
-  const verificationRecordName = validateUpdateRecordString(
-    "verificationRecordName",
-    record.verificationRecordName,
-    errors
-  );
-  if (verificationRecordName.present) {
-    value.verificationRecordName = verificationRecordName.value;
-  }
-
-  const verificationRecordValue = validateUpdateRecordString(
-    "verificationRecordValue",
-    record.verificationRecordValue,
-    errors
-  );
-  if (verificationRecordValue.present) {
-    value.verificationRecordValue = verificationRecordValue.value;
-  }
+  refuseServerManagedFields(record, errors);
 
   if (record.redirectToPrimary !== undefined) {
     if (typeof record.redirectToPrimary !== "boolean") {
@@ -395,7 +326,7 @@ export function validateUpdateTenantDomainInput(
     errors.push({
       field: "body",
       message:
-        "Provide at least one of domainType, routeMode, status, verificationMethod, verificationRecordName, verificationRecordValue, redirectToPrimary."
+        "Provide at least one of domainType, routeMode, status, redirectToPrimary."
     });
   }
 

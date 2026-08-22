@@ -618,12 +618,12 @@ Gated by tenant_domain.domains.set_primary. Requires Idempotency-Key. Atomically
 | 404    | Resource not found.                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
 | 409    | Domain is not `active` (INVALID_STATUS_TRANSITION), a concurrent request already changed the primary (CONCURRENT_UPDATE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/tenant/domains/{id}/verify` — Verify a tenant domain (manual-first)
+### `POST /api/v1/tenant/domains/{id}/verify` — Verify a tenant domain by DNS TXT record
 
 - **operationId**: `tenantDomainsVerify`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Manual-first: flips status to `active` based on the row's own `verification_method`/`verification_record_*` — no outbound DNS/HTTP call. Audited.
+Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Resolves the TXT records at the domain's server-minted `verificationRecordName` and activates the domain only if one of them carries its `verificationRecordValue` exactly (ADR-0106). The lookup runs outside the database transaction. A miss records `status = failed` and answers 409 DOMAIN_NOT_VERIFIED; a resolver failure changes nothing and answers 503. Rate limited per tenant. Audited on both outcomes.
 
 **Parameters**
 
@@ -635,14 +635,16 @@ Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Manual-first: f
 
 **Responses**
 
-| Status | Description                                                                                                                                           | Schema                                 |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Domain verified (status `active`), or replay of a prior identical request.                                                                            | object                                 |
-| 400    | Validation error.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | Cannot verify from the current status (INVALID_STATUS_TRANSITION), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                                                                                                                                                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Domain verified (status `active`), or replay of a prior identical request.                                                                                                                                                                                                                                                                                                                                                           | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                                                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | The DNS TXT challenge was not found and the domain is now `failed` (DOMAIN_NOT_VERIFIED); a challenge was just issued and has not been published yet (DOMAIN_NOT_VERIFIED); the hostname is too long to carry one (DOMAIN_NOT_VERIFIABLE); the status is not verifiable (INVALID_STATUS_TRANSITION); the row changed mid-verification (CONFLICT); or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many verification attempts for this tenant (RATE_LIMITED). Carries `Retry-After`.                                                                                                                                                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 503    | The DNS lookup could not be completed (SERVICE_UNAVAILABLE). Nothing was written — the domain's status is unchanged.                                                                                                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
 
 ## Identity & Access
 
@@ -9927,15 +9929,12 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 
 ### Schema: CreateTenantDomainRequest
 
-| Field                     | Type                                                   | Required | Nullable | Description                                                            |
-| ------------------------- | ------------------------------------------------------ | -------- | -------- | ---------------------------------------------------------------------- |
-| `hostname`                | string                                                 | yes      | no       | DNS hostname (no port). Normalized to lowercase for uniqueness/lookup. |
-| `domainType`              | enum(`subdomain`, `custom_domain`)                     | no       | no       |                                                                        |
-| `routeMode`               | enum(`canonical`, `legacy_blog`)                       | no       | no       |                                                                        |
-| `verificationMethod`      | enum(`dns_txt`, `dns_cname`, `file`, `manual`, `null`) | no       | yes      |                                                                        |
-| `verificationRecordName`  | string                                                 | no       | yes      |                                                                        |
-| `verificationRecordValue` | string                                                 | no       | yes      |                                                                        |
-| `redirectToPrimary`       | boolean                                                | no       | no       |                                                                        |
+| Field               | Type                               | Required | Nullable | Description                                                            |
+| ------------------- | ---------------------------------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `hostname`          | string                             | yes      | no       | DNS hostname (no port). Normalized to lowercase for uniqueness/lookup. |
+| `domainType`        | enum(`subdomain`, `custom_domain`) | no       | no       |                                                                        |
+| `routeMode`         | enum(`canonical`, `legacy_blog`)   | no       | no       |                                                                        |
+| `redirectToPrimary` | boolean                            | no       | no       |                                                                        |
 
 **Example**
 
@@ -9944,9 +9943,6 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
   "hostname": "tenant.example.com",
   "domainType": "subdomain",
   "routeMode": "canonical",
-  "verificationMethod": "dns_txt",
-  "verificationRecordName": "string",
-  "verificationRecordValue": "string",
   "redirectToPrimary": false
 }
 ```
@@ -10788,17 +10784,14 @@ A tenant's DATA-only theme configuration. Every key/value is validated against t
 
 ### Schema: UpdateTenantDomainRequest
 
-At least one field required. `status` may not be `active` (use verify); `hostname`/`is_primary` are immutable.
+At least one field required. `status` may not be `active` (use verify); `hostname`/`is_primary` are immutable. `verificationMethod` and `verificationRecordName`/`Value` are server-managed (ADR-0106) and are REFUSED with 400 rather than ignored if supplied.
 
-| Field                     | Type                                                   | Required | Nullable | Description |
-| ------------------------- | ------------------------------------------------------ | -------- | -------- | ----------- |
-| `domainType`              | enum(`subdomain`, `custom_domain`)                     | no       | no       |             |
-| `routeMode`               | enum(`canonical`, `legacy_blog`)                       | no       | no       |             |
-| `status`                  | enum(`pending_verification`, `suspended`, `failed`)    | no       | no       |             |
-| `verificationMethod`      | enum(`dns_txt`, `dns_cname`, `file`, `manual`, `null`) | no       | yes      |             |
-| `verificationRecordName`  | string                                                 | no       | yes      |             |
-| `verificationRecordValue` | string                                                 | no       | yes      |             |
-| `redirectToPrimary`       | boolean                                                | no       | no       |             |
+| Field               | Type                                                | Required | Nullable | Description |
+| ------------------- | --------------------------------------------------- | -------- | -------- | ----------- |
+| `domainType`        | enum(`subdomain`, `custom_domain`)                  | no       | no       |             |
+| `routeMode`         | enum(`canonical`, `legacy_blog`)                    | no       | no       |             |
+| `status`            | enum(`pending_verification`, `suspended`, `failed`) | no       | no       |             |
+| `redirectToPrimary` | boolean                                             | no       | no       |             |
 
 **Example**
 
@@ -10807,9 +10800,6 @@ At least one field required. `status` may not be `active` (use verify); `hostnam
   "domainType": "subdomain",
   "routeMode": "canonical",
   "status": "pending_verification",
-  "verificationMethod": "dns_txt",
-  "verificationRecordName": "string",
-  "verificationRecordValue": "string",
   "redirectToPrimary": false
 }
 ```

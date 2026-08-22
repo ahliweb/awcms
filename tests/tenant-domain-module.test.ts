@@ -105,17 +105,22 @@ describe("tenant_domain module descriptor (ported from awcms-micro)", () => {
     expect(tenantDomainModule.settings).toBeUndefined();
   });
 
-  test("nothing applies a default verification method at creation", () => {
-    // The behavioural half of the above, and the half that would actually
-    // regress: a future edit that defaults the column on the create path leaves
-    // this test as the thing that says why not.
+  test("the create surface has no verification input at all (ADR-0106)", () => {
+    // The behavioural half of the above, and it changed direction once. When
+    // D7 was closed, this asserted that creation left `verification_method`
+    // NULL, because NULL was the only thing standing between a hostname row
+    // and an active domain. ADR-0106 removed the reason: `verify` now performs
+    // a real DNS TXT check, so the column is server-minted at creation and
+    // there is nothing for a caller to supply or default.
     const validation = validateCreateTenantDomainInput({
       hostname: "example.test",
       domainType: "custom_domain"
     });
 
     expect(validation.valid).toBe(true);
-    expect(validation.valid && validation.value.verificationMethod).toBeNull();
+    expect(validation.valid && validation.value).not.toHaveProperty(
+      "verificationMethod"
+    );
   });
 
   test("the DNS sync job is declared, with a schedule an operator can act on", () => {

@@ -45,7 +45,7 @@ export const tenantDomainModule = defineModule({
   version: "0.1.0",
   status: "active",
   description:
-    "Tenant domain/subdomain mapping for host-based public routing (ported from awcms-micro epic #555). Ships the awcms_tenant_domains schema (migration 046: hostname/normalized_hostname, domain_type subdomain|custom_domain, route_mode canonical|legacy_blog, status pending_verification|active|suspended|failed, verification_method dns_txt|dns_cname|file|manual, is_primary/redirect_to_primary, tenant-scoped RLS with FORCE), its permission catalog seed (migration 047: tenant_domain.domains.{read,create,update,delete,verify,set_primary}), the SECURITY DEFINER bootstrap host-lookup function (migration 048, EXECUTE restricted to awcms_app), the authenticated tenant-scoped management API (GET/POST /api/v1/tenant/domains, GET/PATCH/DELETE .../{id}, POST .../{id}/verify, POST .../{id}/set-primary), an admin screen (/admin/tenant/domains), the additive public host resolver (lib/tenant/public-host-tenant-resolver.ts — coexists with ADR-0009 path-based /blog/{tenantCode}, never regresses it), and the OPTIONAL Cloudflare DNS adapter (infrastructure/cloudflare-dns-adapter.ts, env-gated, absent-safe, not wired into any route). The host-resolved public content route family is NOT owned here — it landed in blog_content as /news/** (ADR-0059), and this module's public host resolver is what it resolves tenants with; src/middleware.ts is untouched by this module. This module never stores a DNS provider API token/credential in the database.",
+    "Tenant domain/subdomain mapping for host-based public routing (ported from awcms-micro epic #555). Ships the awcms_tenant_domains schema (migration 046: hostname/normalized_hostname, domain_type subdomain|custom_domain, route_mode canonical|legacy_blog, status pending_verification|active|suspended|failed, verification_method dns_txt (ADR-0106 — the schema CHECK still accepts dns_cname|file|manual, which this application no longer writes or honours), is_primary/redirect_to_primary, tenant-scoped RLS with FORCE), its permission catalog seed (migration 047: tenant_domain.domains.{read,create,update,delete,verify,set_primary}), the SECURITY DEFINER bootstrap host-lookup function (migration 048, EXECUTE restricted to awcms_app), the authenticated tenant-scoped management API (GET/POST /api/v1/tenant/domains, GET/PATCH/DELETE .../{id}, POST .../{id}/verify — a real DNS TXT ownership check against a server-minted challenge, ADR-0106 — POST .../{id}/set-primary), an admin screen (/admin/tenant/domains), the additive public host resolver (lib/tenant/public-host-tenant-resolver.ts — coexists with ADR-0009 path-based /blog/{tenantCode}, never regresses it), and the OPTIONAL Cloudflare DNS adapter (infrastructure/cloudflare-dns-adapter.ts, env-gated, absent-safe, not wired into any route). The host-resolved public content route family is NOT owned here — it landed in blog_content as /news/** (ADR-0059), and this module's public host resolver is what it resolves tenants with; src/middleware.ts is untouched by this module. This module never stores a DNS provider API token/credential in the database.",
   dependencies: ["tenant_admin", "identity_access"],
   // ADR-0084, Gelombang 5 PR 5.4 — the first REAL entitlement attachment in this
   // base, and the module chosen for it deliberately.
@@ -154,25 +154,19 @@ export const tenantDomainModule = defineModule({
   // NO `settings` BLOCK, and its absence is the decision — finding D7.
   //
   // This declared `defaults: { defaultVerificationMethod: "manual" }`, and
-  // NOTHING read it: `validateCreateTenantDomainInput` defaults the field to
-  // `null`, so every domain is created with `verification_method = NULL` and
-  // `POST …/domains/{id}/verify` answers `missing_verification_method`. That is
-  // the `pending_verification` state §4 item 6 observes in production, and the
-  // obvious repair is to have creation apply this default.
-  //
-  // **Do not do that.** `verifyTenantDomain` performs no verification of any
-  // kind — it checks that `verification_method` is non-NULL and then sets
-  // `status = 'active'`. There is no DNS lookup anywhere on the route path (the
-  // Cloudflare adapter is selected by `TENANT_DOMAIN_DNS_PROVIDER` and is
-  // called by nothing). So a NULL `verification_method` is currently the only
+  // NOTHING read it, so every domain was created with
+  // `verification_method = NULL`. The repair that suggested itself — apply the
+  // default at creation — was the one that had to be refused, because at the
+  // time `verifyTenantDomain` performed no verification of any kind: it checked
+  // the column was non-NULL and set `status = 'active'`. A NULL was the only
   // thing standing between "a tenant created a hostname row" and "that hostname
-  // is active", and an active domain feeds host->tenant resolution, the
-  // redirect allow-list and the canonical host. Applying a default here would
-  // remove that step for every domain at creation.
+  // is active" in host->tenant resolution.
   //
-  // A setting whose only honest use would weaken a control does not belong in
-  // the descriptor pretending to be configuration. Deleted rather than left to
-  // read as a preference somebody had chosen. The real gap — that `verify`
-  // verifies nothing — is recorded as its own §4 item, because closing it is a
-  // security change and not a settings edit.
+  // ADR-0106 removed the reason rather than the symptom. `verify` now resolves
+  // a server-minted TXT challenge in the claimed zone, and
+  // `verification_method` is written by the server at creation — so there is
+  // no preference left for a setting to express, and no NULL left doing a
+  // security control's job by accident. The block stays deleted on the original
+  // ground: a value in the descriptor that nothing reads is a claim about
+  // behaviour, and this module makes none.
 });
