@@ -42,6 +42,10 @@ import {
   resolveTenantPrincipalForTenantUser
 } from "./auth-context";
 import { isDelegatedPartnerRefused } from "../domain/partner-suspension";
+import {
+  cachedRead,
+  type AuthorizationReadCache
+} from "./authorization-read-cache";
 import { recordDecisionLog } from "./decision-log";
 import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
@@ -172,6 +176,17 @@ export async function authorizeInTransaction(
     sodRules?: readonly SoDRuleDescriptor[];
     ownershipGrant?: OwnershipGrant;
     /**
+     * An OPT-IN memo for the reads this function repeats when one caller makes
+     * several decisions about the same principal in one transaction — finding
+     * B1. `loadAdminScreen` supplies one per render; nothing else does, and a
+     * caller that omits it reads fresh exactly as before.
+     *
+     * Only principal-scoped inputs are memoised, never a decision. See
+     * `authorization-read-cache.ts` for the full list and for why a cache
+     * living INSIDE this function would be unsafe for a caller that writes.
+     */
+    readCache?: AuthorizationReadCache;
+    /**
      * ADR-0092 — the caller's resolved address, used ONLY to decide whether a
      * write-class machine credential may act from here.
      *
@@ -222,17 +237,28 @@ export async function authorizeInTransaction(
   // one table is consulted and neither kind is ever searched in the other's.
   // Everything after this block is identical for both: a machine credential
   // AUTHENTICATES, it never AUTHORIZES.
+  const readCache = options?.readCache;
+
   const machine = isMachineCredentialHash(tokenHash)
-    ? await resolveActiveMachineCredential(tx, tenantId, tokenHash, now)
+    ? await cachedRead(readCache, `machine:${tenantId}:${tokenHash}`, () =>
+        resolveActiveMachineCredential(tx, tenantId, tokenHash, now)
+      )
     : null;
 
   const principal = machine
-    ? await resolveTenantPrincipalForTenantUser(
-        tx,
-        tenantId,
-        machine.tenantUserId
+    ? await cachedRead(
+        readCache,
+        `principal-by-user:${tenantId}:${machine.tenantUserId}`,
+        () =>
+          resolveTenantPrincipalForTenantUser(
+            tx,
+            tenantId,
+            machine.tenantUserId
+          )
       )
-    : await resolveTenantPrincipal(tx, tenantId, tokenHash, now);
+    : await cachedRead(readCache, `principal:${tenantId}:${tokenHash}`, () =>
+        resolveTenantPrincipal(tx, tenantId, tokenHash, now)
+      );
 
   const context = principal?.context ?? null;
 
@@ -265,7 +291,9 @@ export async function authorizeInTransaction(
     !isAllowedWhileSuspended(guard) &&
     !isSuspensionExemptTenant(
       tenantId,
-      await resolvePlatformTenantIdIgnoringStatus(tx)
+      await cachedRead(readCache, "platform-tenant-any-status", () =>
+        resolvePlatformTenantIdIgnoringStatus(tx)
+      )
     )
   ) {
     const decision = {
@@ -418,7 +446,10 @@ export async function authorizeInTransaction(
     requiredEntitlementKey,
     held: availability.entitlementHeld,
     actingTenantIsPlatform: entitlementRefusalPending
-      ? tenantId === (await resolvePlatformTenantIdIgnoringStatus(tx))
+      ? tenantId ===
+        (await cachedRead(readCache, "platform-tenant-any-status", () =>
+          resolvePlatformTenantIdIgnoringStatus(tx)
+        ))
       : false
   });
 
@@ -548,11 +579,16 @@ export async function authorizeInTransaction(
   // episode, not the hot path. `resolveDelegatedGrantState` short-circuits for
   // every ordinary member, and both deny rules answer `false` for them before
   // they look at either field at all.
-  const delegatedGrantState = await resolveDelegatedGrantState(
-    tx,
-    tenantId,
-    context.tenantUserId,
-    context.principalKind ?? "user"
+  const delegatedGrantState = await cachedRead(
+    readCache,
+    `delegated-state:${tenantId}:${context.tenantUserId}:${context.principalKind ?? "user"}`,
+    () =>
+      resolveDelegatedGrantState(
+        tx,
+        tenantId,
+        context.tenantUserId,
+        context.principalKind ?? "user"
+      )
   );
 
   // ADR-0090 — a grant that is past its date confers nothing, from that instant.
@@ -624,10 +660,10 @@ export async function authorizeInTransaction(
     };
   }
 
-  const accountPermissionKeys = await fetchGrantedPermissionKeys(
-    tx,
-    tenantId,
-    context.tenantUserId
+  const accountPermissionKeys = await cachedRead(
+    readCache,
+    `permission-keys:${tenantId}:${context.tenantUserId}`,
+    () => fetchGrantedPermissionKeys(tx, tenantId, context.tenantUserId)
   );
 
   // ADR-0049 §2 — a credential NARROWS, it can never widen. The effective set
