@@ -343,9 +343,13 @@ detailed CLI implementation status).
   test (`tests/database-pooling.test.ts`), not a live scenario.
 - Work-class saturation at the HTTP level is hard to observe deterministically
   because requests tend to finish faster than manual observation.
-- Job workers (`scripts/*.ts`) are not yet runtime-gated through
-  `work-class.ts`'s concurrency gate — see `database-capacity-runbook.md`
-  §Known limitation for the reason and follow-up status.
+- Job workers used to be listed here as "not yet runtime-gated through
+  `work-class.ts`'s concurrency gate". That is **wrong and was wrong for some
+  time**: they open their transactions through `withTenantOrThrow`, which
+  acquires a work-class slot exactly as a request does. What was genuinely
+  missing — seven scripts passing no class, so their transactions queued as
+  `interactive` — is finding D11, now closed and gated. See
+  `database-capacity-runbook.md` §Jobs and the concurrency gate.
 - There is no real ERP domain endpoint exploiting the work-class
   classification above yet — revalidate the classification once the first
   finance/inventory/payroll module is implemented.

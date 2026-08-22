@@ -71,7 +71,7 @@ that exist in `package.json` today.
 **`DATABASE_CAPACITY_WORKER_INSTANCES_MAX`'s default (1) is narrower than
 it looks.** It only accounts for one instance of the SAME job NAME running
 at a time — the case `job-runner.ts`'s Postgres advisory lock already
-mitigates (see §Known limitation below). It does NOT budget for two
+mitigates (see §Jobs and the concurrency gate below). It does NOT budget for two
 DIFFERENT worker scripts scheduled to run concurrently on the same host
 (e.g. a payroll batch job and an audit-log purge both firing in the same
 cron minute) — each is a separate process opening its own `worker`-role
@@ -265,21 +265,37 @@ labels only, no tenant ids, no DSNs:
    timestamp, which class saturated, instance count at the time, resolution
    (self-recovered vs. manual pool/instance-count change).
 
-## Known limitation
+## Jobs and the concurrency gate — corrected 22 August 2026
 
-Background jobs (the `worker` process class) are NOT runtime-gated through
-`work-class.ts`'s concurrency gate — they are classified in
-`src/lib/database/work-class-registry.ts` for the capacity CONNECTION
-BUDGET (counted in the formula above) and for the CI drift gate described
-below (`bun run db:work-class:check`, target — not yet in `package.json`,
-see §CI drift gate), but a job's actual DB calls do not
-currently call `acquireWorkClassSlot`. Job-level concurrency is instead
-bounded by a different, already-existing mechanism —
+This section used to be headed "Known limitation" and said background jobs are
+**not** runtime-gated through `work-class.ts`, that "a job's actual DB calls do
+not currently call `acquireWorkClassSlot`", and that retrofitting them was a
+reasonable follow-up. **That was true when written and false by the time anyone
+read it.** Jobs open their tenant transactions through `withTenantOrThrow`,
+which acquires a work-class slot exactly as a request does — so they have been
+going through the gate for some time, and the only question was which bucket.
+
+Finding D11 of the 17 August 2026 round is what that ambiguity cost: **seven
+scripts passed no `workClass` at all**, so their transactions took
+`withTenant`'s documented `"interactive"` default and nightly purges queued in
+the bucket sized for live users. The drift also ran the other way —
+`site-search-reconcile.ts` passed `maintenance` where the registry says
+`background_sync`.
+
+**Where it stands now.** Every job script that opens its own transaction passes
+the class `src/lib/database/work-class-registry.ts` declares for it, and
+`bun run db:work-class:generate` REFUSES to run when one does not — in both
+directions, a missing option and a contradicting one. The refusal reads one
+file, the script: a job whose transactions live in a module under `src/` has no
+call of its own to inspect and is not covered by it.
+
+Job-level concurrency is still bounded by a second, independent mechanism:
 `src/lib/jobs/job-runner.ts`'s Postgres advisory lock ensures at most ONE
-instance of a given job NAME runs cluster-wide at a time, which is the
-dominant connection-storm risk for scheduled jobs (an overlapping re-run of
-the SAME job, e.g. a payroll run or purge job). Retrofitting all worker
-scripts onto the work-class gate itself is a reasonable follow-up.
+instance of a given job NAME runs cluster-wide at a time, which is the dominant
+connection-storm risk for scheduled jobs (an overlapping re-run of the SAME job,
+e.g. a slow purge still running when the next cron tick fires). The work class
+governs which bounded queue a job's transactions wait in; the advisory lock
+governs how many of the job there are. Neither replaces the other.
 
 ## CI drift gate — work-class registry (BUILT, Issue #263)
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-capacity-runbook.md)
 
-<!-- i18n-source-hash: sha256:565290ea57679eab432f7524be0ef5e18818b594bd7f8782996b832a0029afb6 -->
+<!-- i18n-source-hash: sha256:21ae1faf11ff23d49e8442e5b70a8770654037592afe390f5b997cb21a452243 -->
 
 # Runbook Kapasitas Database — Anggaran Pool/Work-Class Sadar-Deployment
 
@@ -74,8 +74,8 @@ di `package.json` hari ini.
 **Default `DATABASE_CAPACITY_WORKER_INSTANCES_MAX` (1) lebih sempit
 daripada kelihatannya.** Ia hanya memperhitungkan satu instance dari NAMA
 job yang SAMA berjalan pada satu waktu — kasus yang sudah dimitigasi oleh
-advisory lock Postgres milik `job-runner.ts` (lihat §Keterbatasan yang
-diketahui di bawah). Ia TIDAK menganggarkan dua skrip worker BERBEDA yang
+advisory lock Postgres milik `job-runner.ts` (lihat §Job dan gerbang
+konkurensi di bawah). Ia TIDAK menganggarkan dua skrip worker BERBEDA yang
 dijadwalkan berjalan bersamaan di host yang sama (mis. job batch payroll
 dan purge audit-log sama-sama menyala di menit cron yang sama) —
 masing-masing adalah proses terpisah yang membuka pool role `worker`-nya
@@ -279,22 +279,39 @@ berkardinalitas-rendah/terdefinisi-di-kode, tanpa id tenant, tanpa DSN:
    lain — stempel waktu, kelas mana yang jenuh, jumlah instance saat itu,
    resolusinya (pulih sendiri vs. perubahan manual pool/jumlah instance).
 
-## Keterbatasan yang diketahui
+## Job dan gerbang konkurensi — dikoreksi 22 Agustus 2026
 
-Job latar (kelas proses `worker`) TIDAK digerbangi saat runtime lewat
-gerbang konkurensi milik `work-class.ts` — mereka diklasifikasikan di
-`src/lib/database/work-class-registry.ts` untuk ANGGARAN KONEKSI kapasitas
-(dihitung dalam rumus di atas) dan untuk gerbang drift CI yang dijelaskan
-di bawah (`bun run db:work-class:check`, target — belum ada di
-`package.json`, lihat §Gerbang drift CI), tapi panggilan DB nyata sebuah
-job saat ini tidak memanggil `acquireWorkClassSlot`. Konkurensi
-tingkat-job justru dibatasi oleh mekanisme lain yang sudah ada —
-advisory lock Postgres milik `src/lib/jobs/job-runner.ts` memastikan
-paling banyak SATU instance dari sebuah NAMA job berjalan se-cluster pada
-satu waktu, dan itulah risiko badai koneksi yang dominan untuk job
-terjadwal (re-run yang tumpang tindih dari job yang SAMA, mis. sebuah
-payroll run atau job purge). Memasang ulang seluruh skrip worker ke
-gerbang work-class itu sendiri adalah tindak lanjut yang masuk akal.
+Bagian ini dulu berjudul "Keterbatasan yang diketahui" dan menyatakan job latar
+**tidak** digerbangi saat runtime lewat `work-class.ts`, bahwa "panggilan DB
+nyata sebuah job saat ini tidak memanggil `acquireWorkClassSlot`", dan bahwa
+memasang ulang mereka adalah tindak lanjut yang masuk akal. **Itu benar saat
+ditulis dan sudah salah ketika ada yang membacanya.** Job membuka transaksi
+tenant lewat `withTenantOrThrow`, yang mengambil slot work-class persis seperti
+sebuah request — jadi mereka sudah melewati gerbang itu sejak lama, dan
+satu-satunya pertanyaan adalah bucket mana.
+
+Temuan D11 putaran 17 Agustus 2026 adalah harga dari kekaburan itu: **tujuh
+skrip tidak meneruskan `workClass` sama sekali**, sehingga transaksinya memakai
+default `"interactive"` yang didokumentasikan `withTenant` dan purge malam
+mengantre di bucket yang diukur untuk pengguna hidup. Driftnya juga berjalan
+arah sebaliknya — `site-search-reconcile.ts` meneruskan `maintenance` padahal
+registry menyatakan `background_sync`.
+
+**Posisinya sekarang.** Setiap skrip job yang membuka transaksinya sendiri
+meneruskan kelas yang dinyatakan `src/lib/database/work-class-registry.ts`
+untuknya, dan `bun run db:work-class:generate` MENOLAK jalan bila tidak — di
+kedua arah, opsi yang hilang maupun yang bertentangan. Penolakan itu membaca
+satu berkas, yaitu skripnya: job yang transaksinya berada di modul bawah `src/`
+tidak punya panggilan sendiri untuk diperiksa dan tidak tercakup olehnya.
+
+Konkurensi tingkat-job tetap dibatasi mekanisme kedua yang independen: advisory
+lock Postgres milik `src/lib/jobs/job-runner.ts` memastikan paling banyak SATU
+instance dari sebuah NAMA job berjalan se-cluster pada satu waktu, dan itulah
+risiko badai koneksi yang dominan untuk job terjadwal (re-run yang tumpang
+tindih dari job yang SAMA, mis. purge lambat yang masih jalan saat tik cron
+berikutnya menyala). Work class mengatur antrean terbatas mana yang ditunggu
+transaksi sebuah job; advisory lock mengatur ada berapa job itu. Keduanya tidak
+saling menggantikan.
 
 ## Gerbang drift CI — registry work-class (SUDAH DIBANGUN, Issue #263)
 

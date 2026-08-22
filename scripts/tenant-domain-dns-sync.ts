@@ -81,7 +81,8 @@ async function main(): Promise<void> {
               AND status = 'active'
               AND deleted_at IS NULL
             ORDER BY normalized_hostname
-          ` as Promise<ServingDomainRow[]>
+          ` as Promise<ServingDomainRow[]>,
+        { workClass: "background_sync" }
       );
 
       considered += rows.length;

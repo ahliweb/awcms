@@ -8,28 +8,39 @@
  * second hand-maintained copy).
  *
  * Background jobs (`scripts/*.ts` that call `getWorkerDatabaseClient()`/
- * `getSetupDatabaseClient()`) have no equivalent inline declaration — they
- * do not call `withTenant`/`acquireWorkClassSlot` at all today (see below),
- * so there is nothing to generate FROM. This is therefore a small,
- * hand-authored, DECLARATIVE map: which work-class "bucket" each job's
- * connection usage should be attributed to for the capacity model/registry
- * drift gate, not proof that the job runtime-enforces that class today.
+ * `getSetupDatabaseClient()`) have no equivalent inline declaration to
+ * generate FROM, so this is a small, hand-authored, DECLARATIVE map: which
+ * work-class "bucket" each job's connection usage is attributed to.
  *
- * ## Why jobs are not runtime-gated through work-class.ts (yet)
+ * ## What "declared" means here, corrected 22 August 2026
  *
- * Retrofitting all 9 worker scripts to call `acquireWorkClassSlot` around
- * their main loop is a real, separately-scoped follow-up (see
- * `docs/awcms/database-capacity-runbook.md` §Known limitation), not
- * done in Issue #743: job concurrency is already bounded by a DIFFERENT,
- * already-existing mechanism — `src/lib/jobs/job-runner.ts`'s Postgres
- * advisory lock ensures at most ONE instance of a given job NAME runs
- * cluster-wide at a time, which is the dominant connection-storm risk for
- * scheduled jobs (an overlapping re-run of the SAME job, e.g. a slow purge
- * still running when the next cron tick fires). This registry still
- * requires every worker script to be explicitly classified — closing the
- * "every database-using process is included in the capacity model, or
- * explicitly exempted with rationale" gap — without also taking on a
- * runtime behavior change to 9 already-shipped scripts in the same issue.
+ * This header used to say jobs "do not call `withTenant`/`acquireWorkClassSlot`
+ * at all today", and the capacity runbook said the same. **That was written
+ * when it was true and stayed after it stopped being true.** Jobs open tenant
+ * transactions through `withTenantOrThrow` — which is `acquireWorkClassSlot`,
+ * the same pool gate a request goes through — and finding D11 found seven
+ * scripts passing no class at all, so a nightly purge attributed its pool
+ * pressure to the bucket that serves live users, and one script passing
+ * `maintenance` where this map says `background_sync`.
+ *
+ * So the map is no longer only a capacity-planning label: for a script that
+ * opens its own transactions, the class here is the class the script must
+ * PASS, and `db:work-class:generate` refuses to run when it does not (in both
+ * directions — a missing option and a contradicting one). What the gate cannot
+ * see is a script whose transactions live in a job module under `src/`; those
+ * have no call of their own to inspect, and the rationales below that claim
+ * "every call inside <module> already passes it explicitly" are not verified
+ * by it.
+ *
+ * ## Job concurrency is still bounded by something else, and that is unchanged
+ *
+ * `src/lib/jobs/job-runner.ts`'s Postgres advisory lock ensures at most ONE
+ * instance of a given job NAME runs cluster-wide at a time, which is the
+ * dominant connection-storm risk for scheduled jobs (an overlapping re-run of
+ * the SAME job — a slow purge still running when the next cron tick fires).
+ * The work class governs which bounded queue the job's transactions wait in;
+ * the advisory lock governs how many of the job there are. Neither replaces
+ * the other.
  *
  * `scripts/work-class-registry-check.ts` discovers the CURRENT set of
  * worker scripts by grepping `scripts/*.ts` for `getWorkerDatabaseClient(`/

@@ -136,114 +136,123 @@ async function main() {
     `) as TenantRow[];
 
     for (const tenant of tenants) {
-      await withTenantOrThrow(sql, tenant.id, async (tx) => {
-        const ads = await listLegacyAdsForIngest(tx, tenant.id);
+      await withTenantOrThrow(
+        sql,
+        tenant.id,
+        async (tx) => {
+          const ads = await listLegacyAdsForIngest(tx, tenant.id);
 
-        for (const ad of ads) {
-          const classification = classifyLegacyAdImage({
-            tenantId: tenant.id,
-            imageUrl: ad.imageUrl,
-            publicBaseUrl
-          });
-
-          if (classification.kind === "residue") {
-            residue.push({
+          for (const ad of ads) {
+            const classification = classifyLegacyAdImage({
               tenantId: tenant.id,
-              adId: ad.id,
-              adName: ad.name,
-              reason: classification.reason,
-              detail: classification.detail
+              imageUrl: ad.imageUrl,
+              publicBaseUrl
             });
-            continue;
-          }
 
-          const media = await fetchNewsMediaObjectByObjectKey(
-            tx,
-            tenant.id,
-            classification.objectKey
-          );
-
-          // A registry row that is not safe to reference publicly (still
-          // pending, failed verification, orphaned) is treated exactly like a
-          // missing one. Carrying an ad onto it would produce a placement the
-          // render query filters out anyway — silently, which is the outcome
-          // this whole job exists to avoid.
-          if (
-            !media ||
-            !isNewsMediaObjectSafeForPublicReference(media.status)
-          ) {
-            residue.push({
-              tenantId: tenant.id,
-              adId: ad.id,
-              adName: ad.name,
-              reason: "unregistered_media_object",
-              detail: media
-                ? `${classification.objectKey} (status ${media.status})`
-                : classification.objectKey
-            });
-            continue;
-          }
-
-          const placements = await listLegacyAdPlacements(tx, tenant.id, ad.id);
-
-          if (placements.length === 0) {
-            residue.push({
-              tenantId: tenant.id,
-              adId: ad.id,
-              adName: ad.name,
-              reason: "unplaced_ad",
-              detail: UNPLACED_LEGACY_AD_DETAIL
-            });
-            continue;
-          }
-
-          for (const placement of placements) {
-            const mapping = mapLegacyPlacementToTarget(placement);
-
-            if (mapping.kind === "residue") {
+            if (classification.kind === "residue") {
               residue.push({
                 tenantId: tenant.id,
                 adId: ad.id,
                 adName: ad.name,
-                reason: mapping.reason,
-                detail: mapping.detail
+                reason: classification.reason,
+                detail: classification.detail
               });
               continue;
             }
 
-            ingestable += 1;
+            const media = await fetchNewsMediaObjectByObjectKey(
+              tx,
+              tenant.id,
+              classification.objectKey
+            );
 
-            if (!apply || !placementKey) {
+            // A registry row that is not safe to reference publicly (still
+            // pending, failed verification, orphaned) is treated exactly like a
+            // missing one. Carrying an ad onto it would produce a placement the
+            // render query filters out anyway — silently, which is the outcome
+            // this whole job exists to avoid.
+            if (
+              !media ||
+              !isNewsMediaObjectSafeForPublicReference(media.status)
+            ) {
+              residue.push({
+                tenantId: tenant.id,
+                adId: ad.id,
+                adName: ad.name,
+                reason: "unregistered_media_object",
+                detail: media
+                  ? `${classification.objectKey} (status ${media.status})`
+                  : classification.objectKey
+              });
               continue;
             }
 
-            const written = await insertIngestedAdPlacement(tx, tenant.id, {
-              placementKey,
-              name: ad.name,
-              mediaObjectId: media.id,
-              linkUrl: ad.linkUrl,
-              isActive: ad.isActive,
-              startsAt: ad.startsAt,
-              endsAt: ad.endsAt,
-              targetType: mapping.target.targetType,
-              targetId: mapping.target.targetId,
-              sourceLegacyAdId: ad.id
-            });
+            const placements = await listLegacyAdPlacements(
+              tx,
+              tenant.id,
+              ad.id
+            );
 
-            if (written) {
-              inserted += 1;
-              console.log(
-                `blog:ads:ingest INGESTED — tenant=${tenant.id} legacyAd=${ad.id} ` +
-                  `placementKey=${placementKey} target=${mapping.target.targetType}` +
-                  `${mapping.target.targetId ? `:${mapping.target.targetId}` : ""} ` +
-                  `mediaObject=${media.id}`
-              );
-            } else {
-              alreadyPresent += 1;
+            if (placements.length === 0) {
+              residue.push({
+                tenantId: tenant.id,
+                adId: ad.id,
+                adName: ad.name,
+                reason: "unplaced_ad",
+                detail: UNPLACED_LEGACY_AD_DETAIL
+              });
+              continue;
+            }
+
+            for (const placement of placements) {
+              const mapping = mapLegacyPlacementToTarget(placement);
+
+              if (mapping.kind === "residue") {
+                residue.push({
+                  tenantId: tenant.id,
+                  adId: ad.id,
+                  adName: ad.name,
+                  reason: mapping.reason,
+                  detail: mapping.detail
+                });
+                continue;
+              }
+
+              ingestable += 1;
+
+              if (!apply || !placementKey) {
+                continue;
+              }
+
+              const written = await insertIngestedAdPlacement(tx, tenant.id, {
+                placementKey,
+                name: ad.name,
+                mediaObjectId: media.id,
+                linkUrl: ad.linkUrl,
+                isActive: ad.isActive,
+                startsAt: ad.startsAt,
+                endsAt: ad.endsAt,
+                targetType: mapping.target.targetType,
+                targetId: mapping.target.targetId,
+                sourceLegacyAdId: ad.id
+              });
+
+              if (written) {
+                inserted += 1;
+                console.log(
+                  `blog:ads:ingest INGESTED — tenant=${tenant.id} legacyAd=${ad.id} ` +
+                    `placementKey=${placementKey} target=${mapping.target.targetType}` +
+                    `${mapping.target.targetId ? `:${mapping.target.targetId}` : ""} ` +
+                    `mediaObject=${media.id}`
+                );
+              } else {
+                alreadyPresent += 1;
+              }
             }
           }
-        }
-      });
+        },
+        { workClass: "maintenance" }
+      );
     }
 
     for (const row of residue) {

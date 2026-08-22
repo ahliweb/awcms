@@ -49,8 +49,11 @@ async function main() {
 
     for (const tenant of tenants) {
       reports.push(
-        await withTenantOrThrow(sql, tenant.id, (tx) =>
-          assessLegacyAdDropReadiness(tx, tenant.id)
+        await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) => assessLegacyAdDropReadiness(tx, tenant.id),
+          { workClass: "maintenance" }
         )
       );
     }

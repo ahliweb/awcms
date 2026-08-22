@@ -86,6 +86,16 @@ COPY --chown=bun:bun package.json ./
 USER bun
 EXPOSE 4321
 
+# LIVENESS, deliberately — `/api/v1/health` is dependency-free and answers 200
+# with the database on fire. That is the right question for a probe that
+# RESTARTS things: restarting an app does not repair a database, and a probe
+# that cycles containers through a database outage turns one incident into two.
+#
+# The other question — can this process actually serve content — is answered by
+# `/api/v1/database/pool/health` (`databaseReachable`, `circuitBreakerState`).
+# Finding D10 was that nothing read it; `ops/synthetic-check.sh` now does, from
+# outside, where it alerts a human instead of restarting a container. Do not
+# "fix" the probe below to point at it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://localhost:'+(process.env.PORT||4321)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

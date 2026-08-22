@@ -85,7 +85,12 @@ async function main(): Promise<void> {
               descriptors,
               { trigger: "scheduled" }
             ),
-          { workClass: "maintenance" }
+          // `background_sync`, matching the job registry's argued entry:
+          // this drives user-visible public search freshness, so it is a
+          // recurring dispatcher rather than a delay-tolerant sweep. The script
+          // used to pass `maintenance` with no reason given, and the drift ran
+          // in both directions (finding D11).
+          { workClass: "background_sync" }
         );
       } catch (error) {
         failedTenants.push(tenant.id);

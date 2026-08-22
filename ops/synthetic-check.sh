@@ -59,6 +59,39 @@ ok() { log "ok   $1"; }
 CODE=$($CURL -o /dev/null -w '%{http_code}' "${BASE}/api/v1/health" || echo 000)
 [ "$CODE" = "200" ] && ok "health 200" || fail "health returned ${CODE}"
 
+# --- 1b. READINESS, which is a different question ----------------------------
+#
+# Finding D10: `/api/v1/database/pool/health` reports `databaseReachable` and
+# `circuitBreakerState`, is equally unauthenticated, and until now was consulted
+# by NOTHING. Coolify, the Docker HEALTHCHECK and the Varnish probe all read
+# `/api/v1/health`, which is dependency-free ON PURPOSE — it answers "is this
+# process alive", and it answers `200` with the database on fire.
+#
+# Those three are right to use liveness: restarting an app does not repair a
+# database, and a probe that restarts containers during a database outage turns
+# one incident into two. What was missing is a reader for the OTHER question,
+# and this is the file whose job is exactly that — the header above says so:
+# "not 'is the box up' — the container healthcheck already answers that, and it
+# answers it from INSIDE, where every defect this project has actually shipped
+# was invisible."
+#
+# Matched as JSON text rather than through `jq`, which the rest of this script
+# does not require and the host may not have.
+READY=$($CURL "${BASE}/api/v1/database/pool/health" || echo "")
+if [ -z "$READY" ]; then
+  fail "readiness endpoint returned nothing — the process is not answering at all"
+else
+  case "$READY" in
+    *'"databaseReachable":true'*) ok "database reachable from the app" ;;
+    *) fail "app is up but reports databaseReachable=false — it can serve no content" ;;
+  esac
+  case "$READY" in
+    *'"circuitBreakerState":"open"'*)
+      fail "database circuit breaker is OPEN — the app is refusing its own queries" ;;
+    *) ok "database circuit breaker not open" ;;
+  esac
+fi
+
 # --- 2 & 3 & 4. the login page, its CSP, and its scripts ---------------------
 HEADERS=$(mktemp); BODY=$(mktemp)
 trap 'rm -f "$HEADERS" "$BODY"' EXIT

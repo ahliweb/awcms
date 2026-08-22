@@ -65,12 +65,42 @@ fi
 # `--timestamps` so a line's time survives even when the app's own JSON is
 # truncated, and no `--since`: a new container's history starts at zero and we
 # want all of it. setsid + nohup so cron exiting does not take the tailer with it.
-setsid nohup docker logs -f --timestamps "$APP" \
-  >> "${DEST}/app-$(date -u +%Y-%m-%d).log" 2>&1 &
+#
+# WHY THE OUTPUT GOES THROUGH A LOOP AND NOT A REDIRECT
+#
+# This used to be `>> "${DEST}/app-$(date -u +%Y-%m-%d).log"`. A redirect names
+# its file ONCE, when the shell spawns the tailer, and the file descriptor then
+# lives until the container changes — which on a stable deployment is weeks. The
+# two consequences compound:
+#
+#   - Today's lines land in a file dated by the LAST DEPLOY. An operator reading
+#     `app-2026-08-01.log` to answer "what happened last night" is reading a
+#     file whose name is the one thing about it that is wrong.
+#   - The `-mtime` sweep below can never reclaim it: the file keeps being
+#     written, so its mtime is always today no matter how old its name is. The
+#     retention policy applied to every file except the one actually growing.
+#
+# The loop re-derives the date per line, so the writer follows midnight. `printf
+# -v ... %(...)T` is a bash builtin — no `date` fork per line, which matters on
+# a log this script exists to keep all of. `TZ=UTC` because `%(...)T` formats in
+# LOCAL time and the filenames are UTC (`date -u` above was explicit about it).
+# `>>` per line reopens the file, so a rotation or a delete underneath is
+# survivable rather than a silent write into an unlinked inode.
+setsid nohup bash -c '
+  set -uo pipefail
+  export TZ=UTC
+  docker logs -f --timestamps "$2" 2>&1 | while IFS= read -r line; do
+    printf -v day "%(%Y-%m-%d)T" -1
+    printf "%s\n" "$line" >> "$1/app-${day}.log"
+  done
+' _ "$DEST" "$APP" >/dev/null 2>&1 &
 
 echo "$APP" > "$MARKER"
 log "following ${APP}"
 
 # Retention. These files are the debugging record, not an archive — 30 days is
-# well past the window in which anyone asks "what happened last night".
+# well past the window in which anyone asks "what happened last night". This
+# only became a real policy with the loop above: while one descriptor stayed
+# open on one file forever, the file the operator most wanted bounded was the
+# single file this could never touch.
 find "$DEST" -maxdepth 1 -name 'app-*.log' -mtime "+${KEEP_DAYS}" -delete
