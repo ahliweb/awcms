@@ -104,9 +104,14 @@ test.describe("admin roles CRUD (authenticated)", () => {
     // The catalogue is in the document exactly once, whatever the role count.
     await expect(page.locator("#permission-catalog-options")).toHaveCount(1);
 
+    // Everything below is scoped to THIS role's row. The seeded tenant has
+    // several roles, and the permission granted here is one the owner role
+    // already holds — a page-wide `[data-permission-id=…]` matches all of
+    // them, which is a strict-mode violation rather than a useful assertion.
+    const roleRow = () => table.locator("tr", { hasText: newCode });
+
     const openPanel = async () => {
-      const row = table.locator("tr", { hasText: newCode });
-      const panel = row.locator("details.role-permissions");
+      const panel = roleRow().locator("details.role-permissions");
       await panel.locator("summary").click();
       return panel;
     };
@@ -130,13 +135,13 @@ test.describe("admin roles CRUD (authenticated)", () => {
       .locator("form[data-role-grant-form] button[type='submit']")
       .click();
 
-    // The client reloads on success. Wait on the GRANT itself rather than on
-    // the row — the row is already on screen, so waiting for it would pass
-    // against the pre-reload DOM and race the navigation. The revoke button
-    // exists only in the re-rendered page (attached, though its panel starts
-    // collapsed).
+    // The client reloads on success. Wait on THIS ROW's grant rather than on
+    // the row itself — the row is already on screen, so waiting for it would
+    // pass against the pre-reload DOM and race the navigation. The revoke
+    // button exists only in the re-rendered page (attached, though its panel
+    // starts collapsed).
     await expect(
-      page.locator(`button[data-permission-id="${grantedId}"]`)
+      roleRow().locator(`button[data-permission-id="${grantedId}"]`)
     ).toBeAttached();
 
     panel = await openPanel();
