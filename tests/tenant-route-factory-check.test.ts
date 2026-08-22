@@ -79,7 +79,67 @@ describe("tenant-route migration ledger", () => {
       []
     );
 
-    expect(result).toEqual({ unlisted: [], stale: [] });
+    expect(result).toEqual({
+      unlisted: [],
+      stale: [],
+      handRolledSuspension: []
+    });
+  });
+});
+
+describe("a route may not decide ADR-0073 suspension itself (finding A2)", () => {
+  test("a hand-rolled isTenantServiceStopped() call is reported", () => {
+    const content = `
+${MIGRATED}
+    if (isTenantServiceStopped(principal.tenantStatus)) {
+      return fail(403, "TENANT_SUSPENDED", "no");
+    }
+`;
+
+    const result = evaluateTenantRouteMigration(
+      [{ path: "src/pages/api/v1/thing/index.ts", content }],
+      []
+    );
+
+    // The state this repository actually shipped in: ONE route in the
+    // self-service class carried the check, on one of its two verbs, and the
+    // eleven others did not.
+    expect(result.handRolledSuspension).toEqual([
+      "src/pages/api/v1/thing/index.ts"
+    ]);
+  });
+
+  test("a docblock EXPLAINING that the factory owns the refusal is not a call", () => {
+    const content = `
+/**
+ * The isTenantServiceStopped() refusal belongs to the factory now.
+ * // isTenantServiceStopped(status) — also not a call
+ */
+${MIGRATED}
+`;
+
+    const result = evaluateTenantRouteMigration(
+      [{ path: "src/pages/api/v1/thing/index.ts", content }],
+      []
+    );
+
+    expect(result.handRolledSuspension).toEqual([]);
+  });
+
+  test("declaring a REASON is not deciding it", () => {
+    const content = `
+export const GET = defineSelfServiceTenantRoute({
+  allowedWhileTenantSuspended: "Revocation only ever removes access.",
+  workClass: "interactive"
+});
+`;
+
+    const result = evaluateTenantRouteMigration(
+      [{ path: "src/pages/api/v1/thing/index.ts", content }],
+      []
+    );
+
+    expect(result.handRolledSuspension).toEqual([]);
   });
 });
 
@@ -150,7 +210,11 @@ const rows = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => load(tx));
       ["src/pages/admin/thing.astro"]
     );
 
-    expect(listed).toEqual({ unlisted: [], stale: [] });
+    expect(listed).toEqual({
+      unlisted: [],
+      stale: [],
+      handRolledSuspension: []
+    });
   });
 
   test("`src/pages/admin` is actually walked, with `.astro` among its extensions", () => {

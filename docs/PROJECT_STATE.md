@@ -438,7 +438,19 @@ pioneered directly here after the ADR-0047 freeze.)
      `getWorkerDatabaseClient(`, so the job would fall out of the capacity model.
 
   2. **A2 — ADR-0073 suspension does not reach the self-service or client-credential
-     route factories.** `_shared/tenant-route.ts:247-301` and `:342-379`;
+     route factories.** **DONE (22 August 2026).** Both factories now refuse before the
+     handler runs, and the plan's third clause landed too: `api:tenant-route:check` fails
+     any file under `src/pages/api`/`src/pages/admin` that calls `isTenantServiceStopped`
+     itself. Verified against a real database that `PATCH /api/v1/auth/profile` answered
+     **200** for a suspended tenant beforehand and `403 TENANT_SUSPENDED` after.
+
+     One departure from "resolve the status once inside both factories": omitting the
+     declaration REFUSES, and a route that must stay reachable states
+     `allowedWhileTenantSuspended: "<reason>"`. Four do, under one rule — a suspended
+     tenant may still SEE its own security state and may still do things that only ever
+     REMOVE its own access (list sessions, end one, end all, unregister a push device). A
+     suspension that stops a customer ending a stolen session is protecting the attacker.
+     `_shared/tenant-route.ts:247-301` and `:342-379`;
      `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.
      The check lives only in `authorizeInTransaction` and `ssr-session.ts`, and neither
      factory calls it, so a suspended tenant's live session can still write profiles,
@@ -447,6 +459,7 @@ pioneered directly here after the ADR-0047 freeze.)
      checks by hand; its sibling `DELETE` does not, which is the asymmetry proving the
      omission is accidental. **Change:** resolve `awcms_tenants.status` once inside both
      factories; delete the hand-rolled copy; extend `api:tenant-route:check` to assert it.
+
   3. **A3 — a tenant SSO admin can name ANY env var as the OIDC client secret and POST
      it to a host they choose.** `tenant-sso.ts:180-184`;
      `tenant-sso-policy.ts:229-239,333-348`; `generic-oidc-client.ts:268-277`.

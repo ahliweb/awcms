@@ -15,6 +15,11 @@ import {
   type AuthorizeResult
 } from "../identity-access/application/access-guard";
 import type { AccessRequest } from "../identity-access/domain/access-control";
+import {
+  isSuspensionExemptTenant,
+  isTenantServiceStopped
+} from "../identity-access/domain/suspended-tenant-allowlist";
+import { resolvePlatformTenantIdIgnoringStatus } from "../../lib/tenant/platform-tenant";
 import { runSseLoop, type SseTickOutcome } from "./sse-stream";
 
 /**
@@ -197,6 +202,21 @@ export type TenantRouteConfig<TPrepared> = {
  * shared default would quietly flatten.
  */
 export type SelfServiceTenantRouteConfig<TPrepared = undefined> = {
+  /**
+   * ADR-0073 — WHY this route stays reachable while the tenant is suspended.
+   *
+   * Omitting it refuses, which is the default a new route inherits and the
+   * whole reason the field is shaped this way round. A REASON rather than a
+   * boolean, for the reason `SUSPENDED_TENANT_ALLOWED_PERMISSION_KEYS` is a
+   * code declaration: `true` can be added in a diff without anybody having to
+   * say what it buys, and this list only stays short if each entry argues for
+   * itself.
+   *
+   * The rule the current entries follow: a suspended tenant may still SEE its
+   * own security state and may still do things that only ever REMOVE its own
+   * access. Everything else is service, and suspension stops service.
+   */
+  allowedWhileTenantSuspended?: string;
   /** REQUIRED, same reasoning as `defineTenantRoute`. */
   workClass: WorkClass;
   queueTimeoutMs?: number;
@@ -244,6 +264,55 @@ export type SelfServiceTenantRouteConfig<TPrepared = undefined> = {
   ) => Response | Promise<Response>;
 };
 
+/**
+ * ADR-0073 for the two factories that have no `AccessRequest` to consult.
+ *
+ * `authorizeInTransaction` refuses a suspended tenant before it looks up a
+ * permission, and `ssr-session.ts` refuses one before it hands an admin screen a
+ * session. Neither of those is on the path of a self-service or
+ * client-credential route, so until this existed a suspended tenant's live
+ * session could still write its profile, rewrite its credential, and — through
+ * the handoff pair — mint NEW sessions indefinitely. The foothold outlived the
+ * TTL that suspension was meant to drain, which is the one thing suspension is
+ * for.
+ *
+ * ## One read, and only for the tenant that is already suspended
+ *
+ * `awcms_tenants` is the deliberately RLS-free root table (ADR-0003), so this is
+ * a primary-key lookup with no policy work. The platform-tenant resolution —
+ * which can cost a chain — sits behind the `&&`, so it runs only for a tenant
+ * that is ALREADY refused. A healthy request pays one PK read.
+ *
+ * A missing row reads as stopped. That is unreachable behind a resolved tenant
+ * id, and it is because it is unreachable that fail-closed costs nothing.
+ */
+async function refuseIfTenantSuspended(
+  tx: Bun.SQL,
+  tenantId: string,
+  allowedWhileTenantSuspended: string | undefined
+): Promise<Response | undefined> {
+  if (allowedWhileTenantSuspended) return undefined;
+
+  const rows = (await tx`
+    SELECT status FROM awcms_tenants WHERE id = ${tenantId}
+  `) as { status: string }[];
+
+  const status = rows[0]?.status ?? "suspended";
+
+  if (!isTenantServiceStopped(status)) return undefined;
+
+  if (
+    isSuspensionExemptTenant(
+      tenantId,
+      await resolvePlatformTenantIdIgnoringStatus(tx)
+    )
+  ) {
+    return undefined;
+  }
+
+  return fail(403, "TENANT_SUSPENDED", "Tenant is suspended.");
+}
+
 export function defineSelfServiceTenantRoute<TPrepared = undefined>(
   config: SelfServiceTenantRouteConfig<TPrepared>
 ): APIRoute {
@@ -286,14 +355,23 @@ export function defineSelfServiceTenantRoute<TPrepared = undefined>(
     return withTenant<Response>(
       sqlClientForRoute(),
       tenantId,
-      async (tx) =>
-        config.handler({
+      async (tx) => {
+        const suspended = await refuseIfTenantSuspended(
+          tx,
+          tenantId,
+          config.allowedWhileTenantSuspended
+        );
+
+        if (suspended) return suspended;
+
+        return config.handler({
           ...requestContext,
           tx,
           token,
           tokenHash: hashSessionToken(token),
           prepared
-        }),
+        });
+      },
       {
         workClass: config.workClass,
         queueTimeoutMs: config.queueTimeoutMs
@@ -327,6 +405,13 @@ export function defineSelfServiceTenantRoute<TPrepared = undefined>(
  * it is authenticating, not in a shared default that would flatten it.
  */
 export type ClientCredentialTenantRouteConfig = {
+  /**
+   * ADR-0073 — see `SelfServiceTenantRouteConfig`. Omitting it refuses.
+   *
+   * The one route in this class today MINTS a session, which is precisely the
+   * loop suspension has to close, so nothing here opts out.
+   */
+  allowedWhileTenantSuspended?: string;
   /** REQUIRED, same reasoning as `defineTenantRoute`. */
   workClass: WorkClass;
   queueTimeoutMs?: number;
@@ -370,7 +455,17 @@ export function defineClientCredentialTenantRoute(
     return withTenant<Response>(
       sqlClientForRoute(),
       tenantId,
-      async (tx) => config.handler({ ...requestContext, tx }),
+      async (tx) => {
+        const suspended = await refuseIfTenantSuspended(
+          tx,
+          tenantId,
+          config.allowedWhileTenantSuspended
+        );
+
+        if (suspended) return suspended;
+
+        return config.handler({ ...requestContext, tx });
+      },
       {
         workClass: config.workClass,
         queueTimeoutMs: config.queueTimeoutMs

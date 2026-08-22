@@ -49,6 +49,10 @@ function authRequired(): Response {
 }
 
 export const DELETE = defineSelfServiceTenantRoute({
+  // ADR-0073 — see `revoke-all.ts`: ending a session can only take access
+  // away, and the suspended tenant is exactly the one that may need to.
+  allowedWhileTenantSuspended:
+    "Revocation only ever removes access; refusing it would protect a stolen session.",
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant"

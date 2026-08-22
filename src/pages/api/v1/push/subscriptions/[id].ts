@@ -40,6 +40,10 @@ function authRequired(): Response {
 }
 
 export const DELETE = defineSelfServiceTenantRoute({
+  // ADR-0073 — unregistering a device removes a delivery target and grants
+  // nothing. Its POST sibling, which ADDS one, is refused.
+  allowedWhileTenantSuspended:
+    "Unregistering a device only ever removes a delivery target.",
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant"
