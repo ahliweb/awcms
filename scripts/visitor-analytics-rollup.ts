@@ -112,8 +112,11 @@ export async function runVisitorAnalyticsRollup(
     // collected and printed rather than counted — `--date=` is the remedy and
     // an operator needs to know which tenants to name.
     try {
-      const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-        rollupVisitorAnalyticsForDate(tx, tenant.id, date)
+      const result = await withTenantOrThrow(
+        sql,
+        tenant.id,
+        (tx) => rollupVisitorAnalyticsForDate(tx, tenant.id, date),
+        { workClass: "background_sync" }
       );
 
       tenantsRolledUp += 1;

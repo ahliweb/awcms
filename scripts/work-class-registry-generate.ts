@@ -167,6 +167,98 @@ export function compareJobRegistry(
   };
 }
 
+/** Global form of `WITH_TENANT_CALL`, for counting rather than testing. */
+const WITH_TENANT_CALL_GLOBAL = new RegExp(WITH_TENANT_CALL.source, "g");
+
+/**
+ * What a job script's own source says about the class its transactions run as.
+ *
+ * `undeclaredCalls` is the count of `withTenant*(` calls that no `workClass:`
+ * literal can account for; `conflicting` are literals that name a class other
+ * than the registry's.
+ */
+export type JobRuntimeDeclaration = {
+  path: string;
+  calls: number;
+  declared: WorkClass[];
+  undeclaredCalls: number;
+  conflicting: WorkClass[];
+};
+
+/**
+ * Finding D11 — the registry declared a class for every job, and seven scripts
+ * did not pass it, so they opened their transactions as the default
+ * `interactive`: a nightly purge attributing its pool pressure to the bucket
+ * that serves live users. The drift also ran the other way —
+ * `site-search-reconcile.ts` passed `maintenance` where the registry says
+ * `background_sync` — which is what makes this a two-sided check rather than a
+ * "did you remember an option" one.
+ *
+ * ## What this can and cannot see, stated because a gate that implies more is
+ * worse than one that implies less
+ *
+ * It reads ONE file: the script. A script whose transactions live in a job
+ * module under `src/` has no `withTenant*(` call of its own, so `calls` is 0
+ * and nothing here is asserted about it — several registry rationales say
+ * "every call inside <module> already passes it explicitly", and this gate is
+ * not the thing that verifies those. What it does cover exactly is the shape
+ * the finding had: a call in the script itself, with no class or with the
+ * wrong one.
+ *
+ * Counting is what catches the partial case. A script with three calls and one
+ * literal looks declared to any presence check, and two of its transactions
+ * still run as `interactive`.
+ */
+export function inspectJobRuntimeDeclaration(
+  filePath: string,
+  content: string,
+  registryClass: WorkClass
+): JobRuntimeDeclaration {
+  const code = codeOnly(content);
+  const calls = [...code.matchAll(WITH_TENANT_CALL_GLOBAL)].length;
+  const literals = [...code.matchAll(WORK_CLASS_LITERAL)].map(
+    (m) => m[1]! as WorkClass
+  );
+
+  return {
+    path: filePath,
+    calls,
+    declared: [...new Set(literals)].sort(),
+    undeclaredCalls: Math.max(0, calls - literals.length),
+    conflicting: [
+      ...new Set(literals.filter((c) => c !== registryClass))
+    ].sort()
+  };
+}
+
+/** The human-readable refusal for one script, or `null` when it is consistent. */
+export function describeJobRuntimeProblem(
+  declaration: JobRuntimeDeclaration,
+  registryClass: WorkClass
+): string | null {
+  if (declaration.calls === 0) {
+    return null;
+  }
+
+  const problems: string[] = [];
+
+  if (declaration.undeclaredCalls > 0) {
+    problems.push(
+      `${declaration.undeclaredCalls} of ${declaration.calls} withTenant call(s) declare no workClass, so they run as the default "interactive"`
+    );
+  }
+
+  if (declaration.conflicting.length > 0) {
+    problems.push(
+      `declares ${declaration.conflicting.map((c) => `"${c}"`).join(", ")} where the registry says "${registryClass}"`
+    );
+  }
+
+  return problems.length > 0
+    ? `  ${declaration.path} — ${problems.join("; ")}.`
+    : null;
+}
+
 export async function buildSnapshot(): Promise<WorkClassRegistrySnapshot> {
   const routes: RouteEntry[] = [];
 
@@ -215,6 +307,37 @@ export async function buildSnapshot(): Promise<WorkClassRegistrySnapshot> {
         `the scripts on disk. Fix src/lib/database/work-class-registry.ts first:\n${detail}\n` +
         "Refusing to GENERATE (not merely to check) is deliberate: a snapshot " +
         "written from a half-true map would look authoritative."
+    );
+  }
+
+  // The declared class must also be the one the script PASSES. Same refusal
+  // posture as the map/reality mismatch above and for the same reason: a
+  // snapshot that records `maintenance` for a job whose transactions open as
+  // `interactive` is a capacity model that reads as authoritative and is wrong.
+  const runtimeProblems: string[] = [];
+
+  for (const scriptPath of discovered.sort()) {
+    const registryClass = JOB_WORK_CLASS_REGISTRY[scriptPath]!.workClass;
+    const problem = describeJobRuntimeProblem(
+      inspectJobRuntimeDeclaration(
+        scriptPath,
+        await Bun.file(scriptPath).text(),
+        registryClass
+      ),
+      registryClass
+    );
+
+    if (problem) {
+      runtimeProblems.push(problem);
+    }
+  }
+
+  if (runtimeProblems.length > 0) {
+    throw new Error(
+      "db:work-class:generate REFUSES to run — a job script does not open its " +
+        "transactions as the class the registry declares for it. Pass " +
+        "`{ workClass: … }` to every withTenant call in the script, or change " +
+        `the registry entry deliberately:\n${runtimeProblems.join("\n")}`
     );
   }
 

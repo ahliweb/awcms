@@ -203,7 +203,7 @@ On Coolify, run the migration as a separate step **before** the app's first depl
 
 Every application/database in a multi-app topology has its own one-shot migration — do not run one application's migration against another application's database.
 
-## Health check
+## Health check — two endpoints, two questions
 
 Endpoint: `GET /api/v1/health` — used as the **Health Check Path** in the Coolify application configuration (see §Two deploy patterns above). Coolify uses this endpoint to decide the container is healthy before marking the deploy successful/before routing traffic.
 
@@ -212,6 +212,26 @@ curl https://awcms.ahlikoding.com/api/v1/health
 ```
 
 Every application in a multi-app topology is checked via its own health endpoint — there is no shared cross-application health check. Note the limit of what it proves: this endpoint proves **the container answering that domain** is healthy, not which container is answering. For the question "is deployment X really alive", the answer is in Coolify's `applications`/`standalone_postgresqls` — see the verification note at the head of this document.
+
+### It is LIVENESS, and it answers 200 with the database on fire
+
+`/api/v1/health` touches no dependency by design. Coolify, the container `HEALTHCHECK` and the Varnish backend probe all use it, and all three are right to: they RESTART or REROUTE, and restarting an app does not repair a database — a probe that cycles containers through a database outage turns one incident into two.
+
+The consequence, and it is the one finding **D10** of the 17 August 2026 round names: **a release whose database is unreachable is marked successful and cut over.** Nothing in the deploy path asks whether the new container can actually serve.
+
+### The readiness endpoint, and where it is now read
+
+`GET /api/v1/database/pool/health` is equally unauthenticated and reports `databaseReachable`, `circuitBreakerState`, per-work-class saturation and this process's pool capacity.
+
+```bash
+curl -s https://awcms.ahlikoding.com/api/v1/database/pool/health
+# {"status":"healthy","databaseReachable":true,"circuitBreakerState":"closed", …}
+```
+
+- **`ops/synthetic-check.sh` reads it** (every 10 minutes, from outside, alerting once on the transition) — that is the automatic reader D10 asked for, and it alerts a human rather than restarting a container.
+- **Run it yourself as the last step of a deploy**, before you call the deploy done. `status` must be `healthy`; `databaseReachable` must be `true`; `circuitBreakerState` must not be `open`. A `200` from the domain is not evidence the release works — the container answering it may be the previous one, and it answers `/api/v1/health` either way.
+
+**Do NOT point Coolify's Health Check Path at the readiness endpoint.** That configuration is not in this repo, so nothing here can enforce the choice — which is exactly why it is written down: it drives restart, and readiness belongs on the path that pages a person.
 
 ## Backup — mandatory, and mandatory BEFORE a migration
 

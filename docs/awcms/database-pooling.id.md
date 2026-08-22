@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:f51d4fdde58f65ddd7f04fa301790e4123055956da102cd6c86f336ffbad9d7b -->
+<!-- i18n-source-hash: sha256:4f069960621f2a3f181edfc1bb4358e26f666a869c9a859a5749fea7587d2bff -->
 
 # Database Connection Pooling and Backpressure
 
@@ -343,9 +343,14 @@ implementasi CLI yang lebih rinci).
   (`tests/database-pooling.test.ts`), bukan skenario live.
 - Saturasi work-class di level HTTP sulit diamati secara deterministik
   karena request cenderung selesai lebih cepat daripada observasi manual.
-- Job worker (`scripts/*.ts`) belum runtime-gated lewat `work-class.ts`'s
-  concurrency gate — lihat `database-capacity-runbook.md` §Known
-  limitation untuk alasan dan status follow-up.
+- Job worker dulu terdaftar di sini sebagai "belum runtime-gated lewat
+  concurrency gate `work-class.ts`". Itu **salah, dan sudah salah sejak
+  beberapa waktu**: mereka membuka transaksinya lewat `withTenantOrThrow`,
+  yang mengambil slot work-class persis seperti sebuah request. Yang
+  benar-benar hilang — tujuh skrip tidak meneruskan kelas apa pun, sehingga
+  transaksinya mengantre sebagai `interactive` — adalah temuan D11, kini
+  tertutup dan digerbangi. Lihat `database-capacity-runbook.md` §Job dan
+  gerbang konkurensi.
 - Belum ada endpoint domain ERP nyata yang memanfaatkan klasifikasi
 work-class di atas — validasi ulang klasifikasi begitu modul finance/
 inventory/payroll pertama diimplementasikan.

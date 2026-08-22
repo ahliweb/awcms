@@ -1112,21 +1112,94 @@ busy)` clause, gated on the permanently-zero counter, could never print.
       that never happened is recorded as judgement, so the shrink-only ledger does not
       count it.
   30. **D9 — `ship-logs.sh` names its output file at attach time and never rotates.**
+      **DONE (22 August 2026).**
       `ops/ship-logs.sh:53-57`. `$(date)` is expanded once when the tailer is spawned and
       the fd lives until the next deploy, so today's lines land in a file dated by the last
       deploy and the 30-day `-mtime` sweep can never touch the open file.
+
+      The redirect is now a `while read` loop that re-derives the date and reopens with
+      `>>` per line — `printf -v day "%(...)T"`, a bash builtin, so there is no `date`
+      fork per line on a log this script exists to keep all of. `TZ=UTC` inside the
+      payload because `%(...)T` formats in LOCAL time while the filenames were always
+      UTC.
+
+      **The property is testable without waiting for midnight, and the test executes
+      it.** Delete the file underneath a running writer: a single long-lived descriptor
+      keeps writing into the unlinked inode and the path never returns; a per-line `>>`
+      recreates it on the next line. `tests/ops-log-shipping-and-readiness.test.ts` runs
+      that against the payload EXTRACTED FROM THE SCRIPT (not a copy), and carries a
+      CONTROL case driving the old redirect shape through the same procedure to show the
+      file staying gone — without it the suite would only prove the new writer works, not
+      that it differs.
+
   31. **D10 — nothing in the deploy or LB path consults the readiness endpoint that already
-      exists.** `health.ts:8-14`; `infra/varnish/default.vcl:26-34`. Coolify, the Docker
+      exists.** **DONE (22 August 2026)** — with a deliberate split, not a swap.
+      `health.ts:8-14`; `infra/varnish/default.vcl:26-34`. Coolify, the Docker
       HEALTHCHECK and the Varnish probe all use the deliberately dependency-free liveness
       endpoint, so a release with an unreachable database is marked successful and cut
       over. `/api/v1/database/pool/health` reports `databaseReachable` +
       `circuitBreakerState`, is equally unauthenticated, and is wired to nothing.
+
+      **The obvious fix is wrong and was not taken.** Pointing those three probes at
+      readiness would restart or de-route containers during a database outage, and
+      restarting an app does not repair a database — it turns one incident into two.
+      All three RESTART or REROUTE, so liveness is the correct question for them, and
+      that reasoning is now written at each site so the next reader does not "fix" it.
+
+      **What readiness was missing was a reader on the path that pages a person.**
+      `ops/synthetic-check.sh` now probes it every 10 minutes from OUTSIDE — the file
+      whose own header says its job is the question the container healthcheck answers
+      from inside, where "every defect this project has actually shipped was invisible".
+      It asserts `databaseReachable` and that the breaker is not `open`, because the
+      endpoint answers 200 while reporting the database is gone: a probe that only
+      checked the status code would be the liveness check again under a longer URL.
+
+      **What is NOT closed, and cannot be from here.** Coolify's Health Check Path is
+      configuration in Coolify, not in this repo. The runbook now states the split, gives
+      the readiness assertion as a numbered deploy step, and says explicitly not to point
+      Coolify at it — but nothing in this repository can enforce that, and calling it
+      enforced would be the same class of claim as the ≤3-query "measured" in B5.
+
   32. **D11 — six job scripts call `withTenantOrThrow` with no `workClass`, so they run as
-      `interactive`.** Nightly purges attribute their pool pressure to the bucket that
+      `interactive`.** **DONE (22 August 2026) — and it was SEVEN, not six.**
+      Nightly purges attribute their pool pressure to the bucket that
       serves live users. Both `work-class-registry.ts:11-17` and
       `database-capacity-runbook.md:268-282` assert jobs never reach
       `acquireWorkClassSlot` — that is now false, and `site-search-reconcile.ts:69` passes
       `maintenance` where the registry says `background_sync`, so the drift runs both ways.
+
+      The full set, checked rather than counted from the finding: `visitor-analytics-purge`,
+      `visitor-analytics-rollup`, `blog-ads-drop-readiness`, `blog-ads-ingest`,
+      `comments-retention` (3 calls), `edge-cache-purge` (3 calls) and
+      `tenant-domain-dns-sync` — plus `site-search-reconcile` contradicting the map. Each
+      now passes the class the registry declares for it. The drift was resolved TOWARD
+      THE REGISTRY (`background_sync` for site-search): the registry entry carries an
+      argued rationale and the script's literal carried none, and if `maintenance` is
+      right the place to change it is the rationale.
+
+      **The fix that matters is the gate, because otherwise it re-drifts.**
+      `db:work-class:generate` now REFUSES to run when a job script does not open its
+      transactions as its declared class — in both directions, a missing option and a
+      contradicting one. It COUNTS rather than checking presence: a script with three
+      calls and one literal reads as declared to any presence check while two of its
+      transactions still run as `interactive`, and two of these scripts have exactly that
+      shape. Proven by reverting one option and watching the gate name the file and the
+      count.
+
+      **The gate reads ONE file, the script, and says so.** Several registry rationales
+      claim "every call inside <module> already passes it explicitly"; those calls live
+      under `src/`, the script has no `withTenant*(` of its own, and nothing verifies
+      them. Silence there is "not covered", not "correct".
+
+      **Both false claims are corrected.** `work-class-registry.ts` said jobs "do not
+      call `withTenant`/`acquireWorkClassSlot` at all today" and the capacity runbook's
+      "Known limitation" said the same. Both were true when written and stayed after they
+      stopped being true — jobs go through `withTenantOrThrow`, which IS
+      `acquireWorkClassSlot`. The runbook section is renamed from a limitation to a
+      description of how the two mechanisms divide: work class decides which bounded
+      queue a job's transactions wait in, the job-runner advisory lock decides how many
+      of the job there are.
+
   33. **D12 — three near-identical JSON fetch cores in `src/lib/ui/`, plus dead `postJson`
       carrying a false comment.** `admin-form-client.ts:77-173`. They have **already
       drifted**: `sendJson` supports `extraHeaders` (Idempotency-Key), bodyless requests and

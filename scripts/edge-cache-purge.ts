@@ -80,8 +80,17 @@ async function main(): Promise<void> {
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const claimed = await withTenantOrThrow(sql, tenant.id, (tx) =>
-          claimEdgeCachePurges(tx, tenant.id, config.purgeBatchSize, new Date())
+        const claimed = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            claimEdgeCachePurges(
+              tx,
+              tenant.id,
+              config.purgeBatchSize,
+              new Date()
+            ),
+          { workClass: "background_sync" }
         );
 
         if (claimed.length === 0) {
@@ -95,16 +104,20 @@ async function main(): Promise<void> {
 
           // Each outcome is committed on its own so a crash mid-batch loses at
           // most one row's status, not the whole pass's progress.
-          await withTenantOrThrow(sql, tenant.id, (tx) =>
-            outcome.ok
-              ? markEdgeCachePurgeDone(tx, row.id, new Date())
-              : markEdgeCachePurgeFailed(
-                  tx,
-                  row.id,
-                  outcome.detail,
-                  new Date(),
-                  !outcome.retryable
-                )
+          await withTenantOrThrow(
+            sql,
+            tenant.id,
+            (tx) =>
+              outcome.ok
+                ? markEdgeCachePurgeDone(tx, row.id, new Date())
+                : markEdgeCachePurgeFailed(
+                    tx,
+                    row.id,
+                    outcome.detail,
+                    new Date(),
+                    !outcome.retryable
+                  ),
+            { workClass: "background_sync" }
           );
 
           if (outcome.ok) {
@@ -115,11 +128,17 @@ async function main(): Promise<void> {
         }
       }
 
-      const retention = await withTenantOrThrow(sql, tenant.id, (tx) =>
-        pruneTerminalEdgeCachePurges(tx, tenant.id, legalHoldGuardPortAdapter, {
-          now,
-          limit: config.purgeBatchSize
-        })
+      const retention = await withTenantOrThrow(
+        sql,
+        tenant.id,
+        (tx) =>
+          pruneTerminalEdgeCachePurges(
+            tx,
+            tenant.id,
+            legalHoldGuardPortAdapter,
+            { now, limit: config.purgeBatchSize }
+          ),
+        { workClass: "background_sync" }
       );
 
       prunedCompleted += retention.prunedCompleted;

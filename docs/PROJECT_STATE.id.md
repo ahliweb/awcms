@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:89dad0e2915ba1daed2dcc078dac6fac858d9e98b72e2354334f232b0d5f525a -->
+<!-- i18n-source-hash: sha256:398eacb9dee40847b543fa82a46d46329b41b95e9c8e6f428c681fb3eb68151e -->
 
 # AWCMS — Project State & Continuation
 
@@ -1111,20 +1111,99 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       Relokasi yang tak pernah terjadi tercatat sebagai penilaian, sehingga ledger yang hanya
       boleh menyusut tidak menghitungnya.
   30. **D9 — `ship-logs.sh` menamai berkas keluarannya saat attach dan tidak pernah
-      merotasi.** `ops/ship-logs.sh:53-57`. `$(date)` diekspansi sekali saat tailer
+      merotasi.** **SELESAI (22 Agustus 2026).**
+      `ops/ship-logs.sh:53-57`. `$(date)` diekspansi sekali saat tailer
       dijalankan dan fd-nya hidup sampai deploy berikutnya, jadi baris hari ini mendarat di
       berkas bertanggal deploy terakhir dan sapuan `-mtime` 30 hari tak pernah bisa
       menyentuh berkas yang terbuka itu.
+
+      Redirect itu kini menjadi loop `while read` yang menurunkan ulang tanggalnya dan
+      membuka ulang dengan `>>` per baris — `printf -v day "%(...)T"`, sebuah builtin
+      bash, sehingga tidak ada fork `date` per baris pada log yang justru menjadi alasan
+      skrip ini ada. `TZ=UTC` di dalam payload karena `%(...)T` memformat waktu LOKAL
+      sementara nama berkasnya selalu UTC.
+
+      **Sifatnya bisa diuji tanpa menunggu tengah malam, dan ujinya menjalankannya.**
+      Hapus berkasnya di bawah penulis yang sedang jalan: satu descriptor berumur panjang
+      terus menulis ke inode tak bertaut dan path-nya tak pernah kembali; `>>` per baris
+      membuatnya lagi pada baris berikutnya. `tests/ops-log-shipping-and-readiness.test.ts`
+      menjalankan itu terhadap payload yang DIEKSTRAK DARI SKRIPNYA (bukan salinan), dan
+      membawa kasus KONTROL yang menjalankan bentuk redirect lama lewat prosedur yang sama
+      untuk memperlihatkan berkasnya tetap hilang — tanpa itu suite tersebut hanya
+      membuktikan penulis baru bekerja, bukan bahwa ia berbeda.
+
   31. **D10 — tidak ada apa pun di jalur deploy atau load balancer yang membaca endpoint
-      readiness yang sudah ada.** `health.ts:8-14`; `infra/varnish/default.vcl:26-34`.
+      readiness yang sudah ada.** **SELESAI (22 Agustus 2026)** — dengan pemisahan yang
+      disengaja, bukan penukaran.
+      `health.ts:8-14`; `infra/varnish/default.vcl:26-34`.
       Coolify, HEALTHCHECK Docker, dan probe Varnish semuanya memakai endpoint liveness yang
       sengaja bebas dependensi, jadi rilis dengan database tak terjangkau ditandai sukses
       lalu dialihkan.
+
+      **Perbaikan yang tampak jelas justru salah dan tidak diambil.** Mengarahkan ketiga
+      probe itu ke readiness akan merestart atau mengeluarkan container dari rotasi saat
+      gangguan database, dan merestart aplikasi tidak memperbaiki database — ia mengubah
+      satu insiden menjadi dua. Ketiganya MERESTART atau MENGALIHKAN, jadi liveness adalah
+      pertanyaan yang benar bagi mereka, dan alasan itu kini tertulis di masing-masing
+      tempat agar pembaca berikutnya tidak "memperbaikinya".
+
+      **Yang kurang dari readiness adalah pembaca di jalur yang memanggil manusia.**
+      `ops/synthetic-check.sh` kini memeriksanya tiap 10 menit dari LUAR — berkas yang
+      kepalanya sendiri menyatakan tugasnya adalah pertanyaan yang dijawab healthcheck
+      container dari dalam, tempat "setiap cacat yang benar-benar dikirim proyek ini tak
+      terlihat". Ia mengasersi `databaseReachable` dan bahwa breaker tidak `open`, karena
+      endpoint itu menjawab 200 sambil melaporkan databasenya hilang: probe yang hanya
+      memeriksa kode status akan menjadi liveness lagi dengan URL lebih panjang.
+
+      **Yang BELUM tertutup, dan tak bisa ditutup dari sini.** Health Check Path Coolify
+      adalah konfigurasi di Coolify, bukan di repo ini. Runbook kini menyatakan
+      pemisahannya, memberikan asersi readiness sebagai langkah deploy bernomor, dan
+      menyatakan eksplisit untuk tidak mengarahkan Coolify ke sana — tetapi tak ada apa pun
+      di repositori ini yang bisa menegakkannya, dan menyebutnya ditegakkan akan menjadi
+      klaim sekelas "terukur" ≤3 query di B5.
+
   32. **D11 — enam skrip job memanggil `withTenantOrThrow` tanpa `workClass`, jadi berjalan
-      sebagai `interactive`.** Purge malam menisbatkan tekanan pool-nya ke ember yang
+      sebagai `interactive`.** **SELESAI (22 Agustus 2026) — dan jumlahnya TUJUH, bukan
+      enam.**
+      Purge malam menisbatkan tekanan pool-nya ke ember yang
       melayani pengguna hidup. Baik `work-class-registry.ts:11-17` maupun
       `database-capacity-runbook.md:268-282` menegaskan job tak pernah mencapai
       `acquireWorkClassSlot` — itu kini salah.
+
+      Himpunan lengkapnya, diperiksa alih-alih dihitung dari temuan:
+      `visitor-analytics-purge`, `visitor-analytics-rollup`, `blog-ads-drop-readiness`,
+      `blog-ads-ingest`, `comments-retention` (3 panggilan), `edge-cache-purge` (3
+      panggilan), dan `tenant-domain-dns-sync` — plus `site-search-reconcile` yang
+      bertentangan dengan peta. Masing-masing kini meneruskan kelas yang dinyatakan
+      registry untuknya. Driftnya diselesaikan KE ARAH REGISTRY (`background_sync` untuk
+      site-search): entri registry membawa rationale beralasan sementara literal skripnya
+      tidak membawa apa pun, dan bila `maintenance` yang benar, tempat mengubahnya adalah
+      rationale itu.
+
+      **Perbaikan yang penting adalah gerbangnya, karena tanpa itu ia menyimpang lagi.**
+      `db:work-class:generate` kini MENOLAK jalan bila sebuah skrip job tidak membuka
+      transaksinya sebagai kelas yang dinyatakannya — di kedua arah, opsi yang hilang
+      maupun yang bertentangan. Ia MENGHITUNG alih-alih memeriksa keberadaan: skrip dengan
+      tiga panggilan dan satu literal terbaca "sudah dinyatakan" oleh pemeriksaan
+      keberadaan mana pun sementara dua transaksinya tetap berjalan sebagai `interactive`,
+      dan dua skrip di sini persis berbentuk demikian. Dibuktikan dengan mengembalikan satu
+      opsi dan melihat gerbang menyebut nama berkas dan hitungannya.
+
+      **Gerbang itu membaca SATU berkas, yaitu skripnya, dan menyatakannya.** Beberapa
+      rationale registry mengklaim "setiap panggilan di dalam <modul> sudah meneruskannya
+      eksplisit"; panggilan itu ada di bawah `src/`, skripnya tidak punya `withTenant*(`
+      sendiri, dan tak ada yang memverifikasinya. Diam di sana berarti "tidak tercakup",
+      bukan "benar".
+
+      **Kedua klaim palsu dikoreksi.** `work-class-registry.ts` menyatakan job "tidak
+      memanggil `withTenant`/`acquireWorkClassSlot` sama sekali hari ini" dan bagian
+      "Keterbatasan yang diketahui" runbook kapasitas menyatakan hal yang sama. Keduanya
+      benar saat ditulis dan bertahan setelah berhenti benar — job melewati
+      `withTenantOrThrow`, yang MEMANG `acquireWorkClassSlot`. Bagian runbook itu diganti
+      namanya dari keterbatasan menjadi penjelasan bagaimana kedua mekanisme membagi tugas:
+      work class menentukan antrean terbatas mana yang ditunggu transaksi sebuah job,
+      advisory lock job-runner menentukan ada berapa job itu.
+
   33. **D12 — tiga inti fetch JSON nyaris identik di `src/lib/ui/`, plus `postJson` mati yang
       membawa komentar palsu.** `admin-form-client.ts:77-173`. Keduanya **sudah menyimpang**:
       `sendJson` mendukung `extraHeaders` (Idempotency-Key), request tanpa body, dan

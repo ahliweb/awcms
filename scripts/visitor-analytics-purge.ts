@@ -113,14 +113,18 @@ export async function runVisitorAnalyticsPurge(
       // by the next scheduled run.
       const outcome = await runBoundedBatches(
         async () => {
-          const pass = await withTenantOrThrow(sql, tenant.id, (tx) =>
-            purgeVisitorAnalyticsData(
-              tx,
-              tenant.id,
-              config,
-              now,
-              legalHoldGuardPortAdapter
-            )
+          const pass = await withTenantOrThrow(
+            sql,
+            tenant.id,
+            (tx) =>
+              purgeVisitorAnalyticsData(
+                tx,
+                tenant.id,
+                config,
+                now,
+                legalHoldGuardPortAdapter
+              ),
+            { workClass: "maintenance" }
           );
 
           totals.eventsDeleted += pass.eventsDeleted;

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:b12082b7aaf4aaee3c566a5e4636e7ba9559193b7dc6a134369362534d84767c -->
+<!-- i18n-source-hash: sha256:0bfdfcc4d98b7c33658a97b718d005eabfab94aa4248156ce556b26e9a8bff6c -->
 
 # Deploy Coolify
 
@@ -206,7 +206,7 @@ Di Coolify, jalankan migrasi sebagai langkah terpisah **sebelum** deploy pertama
 
 Setiap aplikasi/database pada topologi multi-app punya migrasi one-shot sendiri — jangan menjalankan migrasi satu aplikasi terhadap database aplikasi lain.
 
-## Health check
+## Health check — dua endpoint, dua pertanyaan
 
 Endpoint: `GET /api/v1/health` — dipakai sebagai **Health Check Path** di konfigurasi Coolify application (lihat §Dua pola deploy di atas). Coolify memakai endpoint ini untuk menentukan container sehat sebelum menandai deploy sukses/sebelum mengarahkan traffic.
 
@@ -215,6 +215,26 @@ curl https://awcms.ahlikoding.com/api/v1/health
 ```
 
 Setiap aplikasi pada topologi multi-app dicek lewat endpoint health-nya masing-masing — tidak ada health check bersama lintas aplikasi. Perhatikan batas buktinya: endpoint ini membuktikan **container yang menjawab domain itu** sehat, bukan container mana yang menjawab. Untuk pertanyaan "apakah deployment X benar-benar hidup", jawabannya ada di `applications`/`standalone_postgresqls` Coolify — lihat catatan verifikasi di kepala dokumen ini.
+
+### Ini LIVENESS, dan ia menjawab 200 sementara database terbakar
+
+`/api/v1/health` sengaja tidak menyentuh satu pun dependensi. Coolify, `HEALTHCHECK` container, dan probe backend Varnish semuanya memakainya, dan ketiganya benar melakukannya: mereka MERESTART atau MENGALIHKAN, dan merestart aplikasi tidak memperbaiki database — probe yang menggilir container sepanjang gangguan database mengubah satu insiden menjadi dua.
+
+Konsekuensinya adalah yang disebut temuan **D10** putaran 17 Agustus 2026: **rilis yang databasenya tak terjangkau ditandai sukses lalu dialihkan.** Tidak ada apa pun di jalur deploy yang menanyakan apakah container baru benar-benar bisa melayani.
+
+### Endpoint readiness, dan di mana kini ia dibaca
+
+`GET /api/v1/database/pool/health` sama-sama tanpa autentikasi dan melaporkan `databaseReachable`, `circuitBreakerState`, saturasi per work class, serta kapasitas pool proses ini.
+
+```bash
+curl -s https://awcms.ahlikoding.com/api/v1/database/pool/health
+# {"status":"healthy","databaseReachable":true,"circuitBreakerState":"closed", …}
+```
+
+- **`ops/synthetic-check.sh` membacanya** (tiap 10 menit, dari luar, memberi alert sekali pada transisi) — itulah pembaca otomatis yang diminta D10, dan ia memanggil manusia alih-alih merestart container.
+- **Jalankan sendiri sebagai langkah terakhir deploy**, sebelum deploy dinyatakan selesai. `status` harus `healthy`; `databaseReachable` harus `true`; `circuitBreakerState` tidak boleh `open`. `200` dari domain bukan bukti rilisnya bekerja — container yang menjawabnya bisa jadi yang lama, dan ia menjawab `/api/v1/health` dalam kondisi apa pun.
+
+**JANGAN arahkan Health Check Path Coolify ke endpoint readiness.** Konfigurasi itu tidak ada di repo ini, jadi tidak ada yang bisa menegakkan pilihan tersebut dari sini — justru karena itu ia ditulis: ia menggerakkan restart, dan readiness adalah urusan jalur yang memanggil manusia.
 
 ## Backup — wajib, dan wajib SEBELUM migrasi
 

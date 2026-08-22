@@ -104,11 +104,15 @@ async function main() {
       let anonymizeCutoffIso = "";
 
       for (const tenant of tenants) {
-        const preview = await withTenantOrThrow(sql, tenant.id, (tx) =>
-          previewCommentsRetention(tx, tenant.id, legalHoldGuardPortAdapter, {
-            retentionDays,
-            now
-          })
+        const preview = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            previewCommentsRetention(tx, tenant.id, legalHoldGuardPortAdapter, {
+              retentionDays,
+              now
+            }),
+          { workClass: "maintenance" }
         );
 
         wouldAnonymize += preview.wouldAnonymize;
@@ -135,11 +139,15 @@ async function main() {
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-          anonymizeAgedComments(tx, tenant.id, legalHoldGuardPortAdapter, {
-            retentionDays,
-            now
-          })
+        const result = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            anonymizeAgedComments(tx, tenant.id, legalHoldGuardPortAdapter, {
+              retentionDays,
+              now
+            }),
+          { workClass: "maintenance" }
         );
 
         cutoffIso = result.cutoff.toISOString();
@@ -157,8 +165,11 @@ async function main() {
       }
 
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-          purgeUnconfirmedReplySubscriptions(tx, tenant.id, { now })
+        const result = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) => purgeUnconfirmedReplySubscriptions(tx, tenant.id, { now }),
+          { workClass: "maintenance" }
         );
 
         totalPurged += result.purgedCount;
