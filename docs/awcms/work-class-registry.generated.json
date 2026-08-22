@@ -1443,6 +1443,12 @@
       "rationale": "Scheduled expiry sweep for business-scope assignments/SoD conflict exceptions (identity-access:business-scope:expiry, Issue #746) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenantOrThrow call inside business-scope-expiry-job.ts already passes workClass: \"maintenance\" explicitly."
     },
     {
+      "path": "scripts/identity-access-delegated-access-expiry.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled expiry sweep (identity-access:delegated-access:expiry, ADR-0090) — the same tolerant-of-delay profile as identity-access:business-scope:expiry, and for the same reason: the authorization decision is already made at the chokepoint, so a late pass costs bookkeeping and never access. Both its sweep and its --dry-run count pass workClass: \"maintenance\" explicitly."
+    },
+    {
       "path": "scripts/identity-access-subscription-lifecycle.ts",
       "workClass": "maintenance",
       "source": "registry",

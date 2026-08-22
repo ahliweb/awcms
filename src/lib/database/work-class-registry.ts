@@ -59,6 +59,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled retention purge (logs:audit:purge) — tolerant of delay, never latency-sensitive."
   },
+  "scripts/identity-access-delegated-access-expiry.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled expiry sweep (identity-access:delegated-access:expiry, ADR-0090) — the same tolerant-of-delay profile as identity-access:business-scope:expiry, and for the same reason: the authorization decision is already made at the chokepoint, so a late pass costs bookkeeping and never access. Both its sweep and its --dry-run count pass workClass: "maintenance" explicitly.'
+  },
   "scripts/form-draft-purge.ts": {
     workClass: "maintenance",
     rationale:

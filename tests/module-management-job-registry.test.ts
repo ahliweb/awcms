@@ -106,6 +106,7 @@ describe("fetchModuleJobs", () => {
         "bun run entitlements:backfill",
         "bun run form-drafts:purge",
         "bun run identity-access:business-scope:expiry",
+        "bun run identity-access:delegated-access:expiry",
         "bun run identity-access:subscription-lifecycle",
         "bun run idn-regions:activate",
         "bun run idn-regions:import",

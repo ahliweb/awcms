@@ -290,44 +290,61 @@ export async function revokeDelegatedAccess(
  * Menyapu grant yang lewat tanggalnya. Dipanggil job, bukan request.
  *
  * Kedaluwarsa dievaluasi terhadap JAM, jadi sebuah grant berhenti memberi
- * apa pun pada detik `expires_at` — sapuan ini yang mematikan keanggotaan dan
- * sesinya, bukan yang membuat grantnya berhenti berlaku.
+ * apa pun pada detik `expires_at` — dan yang menegakkan itu adalah
+ * `resolveDelegatedGrantState` di chokepoint, bukan sapuan ini. Sapuan ini
+ * PEMBUKUAN: ia mematikan keanggotaannya dan mencabut sesinya, sesudah setiap
+ * otorisasi sudah ditolak.
+ *
+ * ## Kenapa sebuah pemanggilan fungsi, dan bukan tiga statement di sini
+ *
+ * Job berjalan sebagai `awcms_worker`, yang TIDAK memegang `UPDATE` pada
+ * `awcms_tenant_users` maupun apa pun pada `awcms_sessions` — dan tidak boleh
+ * memegangnya: kolom yang sama yang menonaktifkan anggota juga bisa
+ * MENGAKTIFKANNYA kembali, dan kolom yang mencabut sesi juga bisa
+ * mengembalikannya. Keduanya eskalasi, di role yang seluruh maksudnya adalah
+ * tidak bisa naik hak.
+ *
+ * `sql/142` memberi hak itu kepada sebuah FUNGSI `SECURITY DEFINER` sempit
+ * (preseden `sql/048`/`sql/119`/`sql/124`): ia menerima id tenant dan ukuran
+ * batch dan tidak menerima apa pun lagi, sehingga tidak ada nilai dari
+ * pemanggil yang pernah ditulis, dan ketiga statement-nya dijaga sehingga hanya
+ * bisa MENGHAPUS akses. Yang tersisa di sini tinggal pemanggilannya.
+ *
+ * `now` sengaja TIDAK diteruskan: perbandingannya dikerjakan basis data
+ * terhadap jamnya sendiri — jam yang sama yang menulis `expires_at` — sama
+ * seperti gerbang di chokepoint.
  */
 export async function expireDelegatedAccessGrants(
   tx: Bun.SQL,
   tenantId: string,
-  now: Date,
   limit = 200
 ): Promise<{ expired: number }> {
   const rows = (await tx`
-    UPDATE awcms_delegated_access_grants
-    SET revoked_at = ${now},
-        revoke_reason = 'expired',
-        updated_at = ${now}
+    SELECT awcms_expire_delegated_access_grants(${tenantId}, ${limit}) AS expired
+  `) as { expired: number }[];
+
+  return { expired: Number(rows[0]?.expired ?? 0) };
+}
+
+/**
+ * Berapa banyak grant yang MENUNGGU disapu — untuk `--dry-run`, dan hanya baca.
+ *
+ * Jam yang sama dengan sapuannya (`now()` basis data), supaya angka pratinjau
+ * dan angka yang sesungguhnya tidak bisa berasal dari dua jam yang berbeda.
+ */
+export async function countExpiredDelegatedAccessGrants(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<number> {
+  const rows = (await tx`
+    SELECT count(*)::int AS backlog
+    FROM awcms_delegated_access_grants
     WHERE tenant_id = ${tenantId}
-      AND id IN (
-        SELECT id FROM awcms_delegated_access_grants
-        WHERE tenant_id = ${tenantId}
-          AND revoked_at IS NULL
-          AND expires_at <= ${now}
-        ORDER BY expires_at
-        LIMIT ${limit}
-      )
-    RETURNING granted_tenant_user_id
-  `) as { granted_tenant_user_id: string | null }[];
+      AND revoked_at IS NULL
+      AND expires_at <= now()
+  `) as { backlog: number }[];
 
-  for (const row of rows) {
-    if (row.granted_tenant_user_id) {
-      await deactivateDelegatedMembership(
-        tx,
-        tenantId,
-        row.granted_tenant_user_id,
-        now
-      );
-    }
-  }
-
-  return { expired: rows.length };
+  return Number(rows[0]?.backlog ?? 0);
 }
 
 /**
