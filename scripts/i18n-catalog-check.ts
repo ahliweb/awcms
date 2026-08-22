@@ -45,6 +45,7 @@ import {
   type Locale
 } from "../src/lib/i18n/locales";
 import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
+import { stripComments } from "./lib/source-text";
 
 const SOURCE_ROOTS = ["src"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".astro"];
@@ -234,89 +235,6 @@ function literalOf(
   if (raw === undefined) return undefined;
 
   return decodeSourceLiteral(raw) ?? undefined;
-}
-
-/**
- * Blanks out comments, preserving offsets and every non-comment character.
- *
- * WHY THIS IS NOT OPTIONAL
- *
- * The harvester matches source TEXT, and prose about the code is source text
- * too. `account.astro` documents its own bug fix with the words `t("Light")`
- * inside a block comment, and the first version of this gate dutifully reported
- * `"Light"` as an undeclared msgid — a failure with no defect behind it.
- *
- * The tempting fix is to reword the comment. That is backwards: it makes the
- * gate's false positive into a permanent tax on writing comments, and this repo
- * has already recorded the lesson that assertions over source must strip
- * comments FIRST.
- *
- * The scanner tracks string state so a `//` inside a quoted string (`"https://…"`)
- * does not start a comment — without that, everything after such a URL on the
- * same line would be blanked, which would silently HIDE real `t()` calls. A
- * false negative in a coverage gate is worse than the false positive it fixes.
- *
- * Characters are replaced with spaces rather than removed so that regex offsets
- * and line structure stay intact, and so a comment can never splice two tokens
- * together into something that matches.
- */
-export function stripComments(source: string): string {
-  const out = source.split("");
-  let index = 0;
-
-  const blank = (from: number, to: number): void => {
-    for (let i = from; i < to && i < out.length; i += 1) {
-      // Keep newlines: line numbers and the `[^"\\\n]` guards in LITERAL both
-      // depend on line structure surviving.
-      if (out[i] !== "\n") out[i] = " ";
-    }
-  };
-
-  while (index < source.length) {
-    const char = source[index];
-    const next = source[index + 1];
-
-    // String literals — skipped whole, so their contents are never treated as
-    // comment starts and never blanked.
-    if (char === '"' || char === "'" || char === "`") {
-      const quote = char;
-      index += 1;
-
-      while (index < source.length) {
-        if (source[index] === "\\") {
-          index += 2;
-          continue;
-        }
-        if (source[index] === quote) {
-          index += 1;
-          break;
-        }
-        index += 1;
-      }
-
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      const end = source.indexOf("\n", index);
-      const stop = end === -1 ? source.length : end;
-      blank(index, stop);
-      index = stop;
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      const end = source.indexOf("*/", index + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      blank(index, stop);
-      index = stop;
-      continue;
-    }
-
-    index += 1;
-  }
-
-  return out.join("");
 }
 
 interface UsedMsgid {
@@ -580,3 +498,10 @@ function main(): void {
 if (import.meta.main) {
   main();
 }
+
+/**
+ * Re-exported for the callers that already import it from here — finding D2
+ * moved the implementation to `scripts/lib/source-text.ts` and left the name
+ * reachable rather than editing 21 import lines in the same change.
+ */
+export { stripComments };

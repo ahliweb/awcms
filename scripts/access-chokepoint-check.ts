@@ -51,6 +51,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { stripComments } from "./lib/source-text";
 
 const ROUTES_ROOT = "src/pages/api/v1";
 const SCREENS_ROOT = "src/pages/admin";
@@ -91,30 +92,6 @@ const CHOKEPOINT_EXEMPTIONS: Readonly<Record<string, string>> = {
  * each a sentence would have dressed 31 open defects as 31 decisions.
  */
 export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [];
-
-/**
- * Drops block comments and whole-line `//` comments before matching.
- *
- * Not hygiene — a correctness fix caught on this gate's first run against the
- * screen root. `form-drafts.astro` was migrated and then explained itself with
- * "the decision is the chokepoint's, not `ssr.permissions.has()`", so the
- * signal matched the sentence saying the code no longer does it. This repo has
- * hit the same shape three times (`table-write-ownership-check` reporting
- * itself, and PR #404's mutation probe matching its own comment), and it is
- * always the FIX that plants the false positive, because a fix explains what it
- * removed.
- *
- * Trailing `// ...` after code is left alone on purpose: stripping it would
- * truncate any line containing `https://`, trading a false positive for a false
- * negative.
- */
-export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !/^\s*(?:\/\/|\*)/.test(line))
-    .join("\n");
-}
 
 export type ChokepointProblem = { handler: string; message: string };
 
@@ -503,3 +480,10 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main();
 }
+
+/**
+ * Re-exported for the callers that already import it from here — finding D2
+ * moved the implementation to `scripts/lib/source-text.ts` and left the name
+ * reachable rather than editing 21 import lines in the same change.
+ */
+export { stripComments };

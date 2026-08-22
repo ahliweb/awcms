@@ -46,6 +46,7 @@
  */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { stripComments } from "./lib/source-text";
 
 const SOURCE_ROOTS = ["src", "scripts"];
 const SOURCE_EXTENSIONS = [".ts", ".astro", ".mjs"];
@@ -135,20 +136,6 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
 ];
 
 export type EnvCoverageViolation = { name: string; files: string[] };
-
-/**
- * Comments are stripped so a docblock that MENTIONS `process.env.TOKEN` while
- * explaining a rule is not read as a read — `security-readiness.ts` does
- * exactly that, and without this the gate reports a variable that no code ever
- * touches.
- */
-export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !/^\s*(?:\/\/|\*)/.test(line))
-    .join("\n");
-}
 
 /** Present whether assigned or left as a commented placeholder. */
 export function declaredInEnvExample(source: string): Set<string> {
@@ -243,3 +230,10 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main();
 }
+
+/**
+ * Re-exported for the callers that already import it from here — finding D2
+ * moved the implementation to `scripts/lib/source-text.ts` and left the name
+ * reachable rather than editing 21 import lines in the same change.
+ */
+export { stripComments };

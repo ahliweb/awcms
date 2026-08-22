@@ -1,4 +1,5 @@
 import type { ModuleDescriptor } from "./module-contract";
+import { stripComments } from "../../../scripts/lib/source-text";
 
 /**
  * Permission-enforcement coverage (ADR-0057 §F).
@@ -77,17 +78,6 @@ export type EnforcementCoverageResult = {
 
 export function permissionTripleKey(triple: PermissionTriple): string {
   return `${triple.moduleKey}.${triple.activityCode}.${triple.action}`;
-}
-
-/**
- * Strips `//` and block comments so that prose mentioning a guard shape cannot
- * be mistaken for one. This file's own header would otherwise register as an
- * enforcer for several permissions.
- */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
 }
 
 /**

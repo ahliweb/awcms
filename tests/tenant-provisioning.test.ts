@@ -27,6 +27,7 @@ import {
   isPlatformScopedPermissionKey,
   resetPlatformScopeCacheForTests
 } from "../src/modules/identity-access/domain/platform-scope";
+import { stripComments } from "../scripts/lib/source-text";
 
 const BOOTSTRAP = "src/modules/tenant-admin/application/platform-bootstrap.ts";
 const PROVISIONING =
@@ -34,19 +35,6 @@ const PROVISIONING =
 const ROUTE = "src/pages/api/v1/tenants/index.ts";
 const PAGE = "src/pages/admin/tenants.astro";
 const MIGRATION = "sql/086_awcms_tenant_provisioning_permissions.sql";
-
-/**
- * Removes block and line comments before counting call sites.
- *
- * Without this, a doc comment that MENTIONS `grantPlatformScope: true` — which
- * `bootstrapPlatformTenant`'s does, correctly — counts as a call site, and the
- * assertion below fails for a reason that has nothing to do with the code. The
- * fix is to count code, not prose; loosening the count would have hidden a real
- * second call site later.
- */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-}
 
 describe("tenant provisioning is platform-scoped", () => {
   test("both provisioning permissions are declared PLATFORM-scoped", () => {
