@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1377b30f51b4d25a56ba85b928eb2b26e2d6f3910c7a6236e29a9f7ab162847d -->
+<!-- i18n-source-hash: sha256:78b1b999c98869d17cdca5a3384a71d9646e38e65c6a43283e6a3c2ba77461b3 -->
 
 # Scripts AWCMS
 

@@ -47,6 +47,20 @@ CONTEXT="${AWCMS_JOBS_CONTEXT:-/home/admin1/awcms-jobs}"
 APP_FILTER="${AWCMS_APP_FILTER:-n3gg3qudm91kqdy62znmyxuq}"
 NETWORK="${AWCMS_DOCKER_NETWORK:-coolify}"
 
+# The container's WORKDIR (`Dockerfile.production`) and the directory the two
+# artefact-writing jobs default to underneath it. `data-lifecycle:archive-purge`
+# writes `./var/data-lifecycle-archive` and `reporting:exports:dispatch` writes
+# `./var/reporting-exports`, both relative to the working directory — so ONE
+# mount at `var/` covers both without either job needing to be told anything.
+CONTAINER_WORKDIR="${AWCMS_JOBS_WORKDIR:-/home/bun/app}"
+DATA_DIR="${AWCMS_JOBS_DATA_DIR:-/var/lib/awcms-jobs}"
+
+# The generated companion to this script. Kept beside it deliberately: a runner
+# deployed without its allow-list must fail loudly rather than fall back to a
+# partial one, because a job missing a variable takes the code's default, does
+# the inert thing, and reports success.
+ALLOWLIST="${AWCMS_JOBS_ENV_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/awcms-jobs.env-allowlist}"
+
 log() { echo "$(date -Is) run-job.sh: $*"; }
 
 if [ -z "$IMAGE" ]; then
@@ -81,12 +95,65 @@ ENVFILE=$(mktemp /tmp/awcms-job-env.XXXXXX)
 chmod 600 "$ENVFILE"
 trap 'rm -f "$ENVFILE"' EXIT
 
+if [ ! -r "$ALLOWLIST" ]; then
+  log "env allow-list not readable at $ALLOWLIST — refusing to run $JOB" >&2
+  log "  Deploy ops/awcms-jobs.env-allowlist beside this script, or point" >&2
+  log "  AWCMS_JOBS_ENV_ALLOWLIST at it. Running with a partial environment" >&2
+  log "  makes a job take code defaults and report success." >&2
+  exit 1
+fi
+
 # Env is read from the RUNNING app container each tick, so a Coolify env change
 # takes effect on the next run. The container name changes on every deploy, so it
 # is resolved above and never hardcoded.
+#
+# Selected by exact NAME from the generated allow-list, not by prefix. The prefix
+# pattern this replaced dropped 81 of the 171 variables the code reads —
+# including both artefact-root paths, every `TENANT_DOMAIN_CLOUDFLARE_*` (because
+# `^CLOUDFLARE_` is anchored and those do not start with it), and every
+# `VISITOR_ANALYTICS_*` retention window that `analytics:purge` exists to
+# enforce. `-F -x` on the name half is what makes a partial match impossible.
+NAMES=$(grep -vE '^\s*(#|$)' "$ALLOWLIST")
+
 docker exec "$APP" printenv \
-  | grep -E '^(DATABASE_URL|WORKER_DATABASE_URL|SETUP_DATABASE_URL|EMAIL_|APP_URL|APP_ENV|LOG_LEVEL|AUTH_|REDIS_|R2_|NEWS_MEDIA_|PUSH_|VAPID_|FCM_|COMMENTS_|CLOUDFLARE_|EDGE_CACHE_)' \
+  | awk -F= 'NR==FNR { want[$0]=1; next } ($1 in want)' <(printf '%s\n' "$NAMES") - \
   > "$ENVFILE"
 
-log "$JOB $* (image=$IMAGE app=$APP)"
-docker run --rm --network "$NETWORK" --env-file "$ENVFILE" "$IMAGE" bun run "$JOB" "$@"
+COPIED=$(wc -l < "$ENVFILE" | tr -d ' ')
+if [ "$COPIED" -eq 0 ]; then
+  log "copied 0 environment variables from $APP — refusing to run $JOB" >&2
+  log "  Every job would run with no DATABASE_URL and most would still exit 0." >&2
+  exit 1
+fi
+
+# The volume the finding was really about. Without `-v`, `docker run --rm` gave
+# `data-lifecycle:archive-purge` and `reporting:exports:dispatch` a filesystem
+# that was deleted seconds later, while `awcms_data_lifecycle_archive_manifests`
+# and `awcms_report_export_runs` recorded the artefacts as PRESENT. The README's
+# restore procedure could not be executed and a scheduled export 404'd on
+# download — and nothing reported either, because writing the file really did
+# succeed.
+mkdir -p "$DATA_DIR"
+
+# A path the operator has overridden to somewhere OUTSIDE the mount is the same
+# defect wearing a configuration. Named rather than silently tolerated, because
+# the symptom is identical to success.
+while IFS='=' read -r name value; do
+  case "$name" in
+    DATA_LIFECYCLE_ARCHIVE_ROOT_PATH | REPORTING_EXPORT_ROOT_PATH)
+      case "$value" in
+        ./var/* | var/* | "$CONTAINER_WORKDIR"/var/*) ;;
+        *)
+          log "WARNING: $name=$value is outside the mounted $CONTAINER_WORKDIR/var" >&2
+          log "  Artefacts written there vanish with the container while the" >&2
+          log "  database keeps recording them as present." >&2
+          ;;
+      esac
+      ;;
+  esac
+done < "$ENVFILE"
+
+log "$JOB $* (image=$IMAGE app=$APP env=$COPIED vars data=$DATA_DIR)"
+docker run --rm --network "$NETWORK" --env-file "$ENVFILE" \
+  -v "$DATA_DIR:$CONTAINER_WORKDIR/var" \
+  "$IMAGE" bun run "$JOB" "$@"
