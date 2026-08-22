@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { getDatabaseClient } from "../../../lib/database/client";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
-import { escapeHtml } from "../../../lib/html/escape";
+import { escapeXmlText } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
 import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
 import { coerceLocale } from "../../../lib/i18n/negotiate";
@@ -80,7 +80,7 @@ export const GET: APIRoute = async ({ params, request, url }) => {
         buildHreflangAlternates(barePath, tenantDefaultLocale)
           .map(
             (alternate) =>
-              `<xhtml:link rel="alternate" hreflang="${escapeHtml(alternate.hreflang)}" href="${escapeHtml(origin + alternate.pathname)}" />`
+              `<xhtml:link rel="alternate" hreflang="${escapeXmlText(alternate.hreflang)}" href="${escapeXmlText(origin + alternate.pathname)}" />`
           )
           .join("\n");
       const channelPath = `/blog/${tenantCode}`;
@@ -100,11 +100,11 @@ export const GET: APIRoute = async ({ params, request, url }) => {
           post
         );
         const imageTag = previewImage
-          ? `<image:image><image:loc>${escapeHtml(previewImage.url)}</image:loc></image:image>`
+          ? `<image:image><image:loc>${escapeXmlText(previewImage.url)}</image:loc></image:image>`
           : "";
 
         urlParts.push(`<url>
-<loc>${escapeHtml(link)}</loc>
+<loc>${escapeXmlText(link)}</loc>
 ${alternatesXml(postPath)}
 <lastmod>${post.publishedAt.toISOString()}</lastmod>
 ${imageTag}
@@ -124,7 +124,7 @@ ${imageTag}
         const pagePath = `${channelPath}/pages/${page.slug}`;
 
         urlParts.push(`<url>
-<loc>${escapeHtml(localisedUrl(pagePath))}</loc>
+<loc>${escapeXmlText(localisedUrl(pagePath))}</loc>
 ${alternatesXml(pagePath)}
 <lastmod>${page.updatedAt.toISOString()}</lastmod>
 </url>`);
@@ -135,7 +135,7 @@ ${alternatesXml(pagePath)}
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 <url>
-<loc>${escapeHtml(channelLink)}</loc>
+<loc>${escapeXmlText(channelLink)}</loc>
 ${alternatesXml(channelPath)}
 </url>
 ${urls}

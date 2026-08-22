@@ -52,7 +52,12 @@ const RULES: readonly Rule[] = [
     name: "LOG_LEVEL",
     required: false,
     type: "enum",
-    values: ["debug", "info", "warn", "error"]
+    // `warning` is the level the logger implements; `warn` is accepted as an
+    // alias it canonicalises. Finding D3: this list used to hold `warn` and NOT
+    // `warning`, so the only spelling that validated was the one that matched
+    // no level and silently fell back to `info`, and the spelling that worked
+    // was rejected. There was no value that both passed and worked.
+    values: ["debug", "info", "warning", "warn", "error"]
   },
   { name: "AUDIT_LOG_RETENTION_DAYS", required: false, type: "int", min: 1 },
 

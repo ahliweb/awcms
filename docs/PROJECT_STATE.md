@@ -553,11 +553,19 @@ pioneered directly here after the ADR-0047 freeze.)
      hash, stamp it on sessions, reject stale-epoch sessions. Until then, correct the
      false comments.
   6. **A6 — blog feed/sitemap escape with `escapeHtml` instead of `escapeXmlText`.**
+     **DONE (22 August 2026).**
      `blog/[tenantCode]/feed.xml.ts:6,88,92,102`; `sitemap-blog.xml.ts:6,104,116`.
      One C0 control character in a post title (`validateTitleField` checks length only)
      makes the whole channel non-well-formed XML and every reader rejects it. ADR-0038
      named `escapeXmlText`; it was applied to the `seo_distribution` serializers, which
      are 404 in production, and not to these routes, which are 200.
+
+     Both routes now use `escapeXmlText` (16 call sites). The route's own docblock is why
+     the wrong function looked right — "escaped through the same `escapeHtml` used for HTML
+     (XML and HTML share the same five entity escapes)" — true, and not the whole
+     difference. It is CORRECTED rather than deleted: a false comment beside correct code
+     is the next author's instruction.
+
   7. **A7 — sync-storage uses node-supplied strings verbatim as a server filesystem path
      and as an object-store key.** `sync-storage/domain/object-queue.ts:40-58,91`;
      `object-storage-uploader.ts:110-129`. `localPath` gets no root confinement and the
@@ -567,10 +575,23 @@ pioneered directly here after the ADR-0047 freeze.)
      Requires a compromised legitimate node (`AWCMS_SYNC_ENABLED` + `R2_ENABLED` + the
      deployment HMAC secret), which is why it is not higher.
   8. **A8 — public site-search rate-limit config is neither validated nor NaN-guarded.**
+     **ALREADY FIXED when checked, 22 August 2026 — this entry was stale on the day it was
+     written.**
      `site-search/query.ts:34-37`; `suggest.ts:27-32`. A typo yields `NaN`, and both
      `count > NaN` and `now - windowStart >= NaN` are false — **the limiter is off** on an
      anonymous full-text endpoint while the `rate_limited` metric stays at zero and
      confirms it as "no abuse". An empty value yields `0` and 429s every visitor.
+
+     Both settings already go through `parsePositiveIntSetting`
+     (`src/lib/security/env-thresholds.ts`), which returns the fallback for an
+     empty/undefined value AND for anything non-finite, non-integer or ≤ 0, warning once.
+     `suggest.ts` even carries the comment "See `query.ts` — same defect, same fix". It was
+     closed by #601 alongside #593.
+
+     **Left visible rather than deleted.** An audit item describing a defect that is not
+     there sends the next reader looking for it — the same failure shape as a stale skill
+     banner, which this repository has a memory about. Verified by reading both call sites
+     and the helper, not by trusting the comment.
 
   ### B. Performance (request path + delivery)
   9. **B1 — every `can()` affordance probe re-runs the FULL authorization pipeline.**
@@ -734,9 +755,18 @@ pioneered directly here after the ADR-0047 freeze.)
       uninformative.
 
   24. **D3 — `LOG_LEVEL=warn` passes `config:validate` and is silently ignored; `warning`,
-      the value the logger implements, is rejected.** `validate-env.ts:51-56`;
+      the value the logger implements, is rejected.** **DONE (22 August 2026).** `validate-env.ts:51-56`;
       `logger.ts:12,21-26`. There is no value that both passes the validated contract and
       works, so the firehose keeps shipping while the operator believes it is quieted.
+
+      Fixed on BOTH sides and additively: the validator accepts `warning` (and keeps
+      `warn`), and the logger canonicalises `warn` → `warning` with a one-time notice
+      naming the canonical spelling. Rejecting `warn` outright would have been tidier and
+      would have turned a silent no-op into a FAILED `config:validate` on a deployment that
+      is running right now, to punish a spelling. An unrecognised value still falls back to
+      `info` — the safe direction, because the alternative is a deployment that logs nothing
+      because somebody typed `infoo`.
+
   25. **D4 — two analytics jobs branch on `result instanceof Response` after
       `withTenantOrThrow` — dead code hiding a real abort.** `visitor-analytics-rollup.ts:97-106`.
       `tenantsSkipped` is permanently 0, the `partial` warning can never fire, and
