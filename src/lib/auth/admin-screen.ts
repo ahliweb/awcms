@@ -67,6 +67,7 @@ import type { AccessRequest } from "../../modules/identity-access/domain/access-
 import type { BusinessScopeHierarchyPort } from "../../modules/_shared/ports/business-scope-hierarchy-port";
 import type { SoDRuleDescriptor } from "../../modules/_shared/module-contract";
 import type { SsrContext } from "./ssr-session";
+import { createAuthorizationReadCache } from "../../modules/identity-access/application/authorization-read-cache";
 
 /** The `allowed: true` half, so `auth.context.tenantUserId` reads as in a route. */
 export type AuthorizedScreenAccess = Extract<
@@ -210,6 +211,26 @@ export async function loadAdminScreen<TData>(
           ? (config.authorize as readonly AccessRequest[])
           : [config.authorize as AccessRequest];
 
+        // One memo for the whole render — finding B1.
+        //
+        // `/admin/blog` makes ELEVEN authorization decisions (its entry plus ten
+        // `can()` affordance probes), and each one re-resolved the same session,
+        // the same permission set and the same tenant state. Measured against a
+        // real database: 89 queries and 89 ms, on ONE reserved `interactive`
+        // connection out of eight process-wide.
+        //
+        // Safe HERE and deliberately not inside `authorizeInTransaction`: a
+        // screen render is a read path by construction, so the eleven decisions
+        // describe one moment and nothing writes between them. A route that
+        // granted a role and then re-authorized would want fresh reads, and it
+        // still gets them — it never passes a cache.
+        //
+        // Only principal-scoped INPUTS are memoised, never a decision: module
+        // availability, entitlement, the delegated-write rule, SoD, the policy
+        // evaluation and the decision log all run per request, unchanged.
+        const readCache = createAuthorizationReadCache();
+        const authorizeOptions = { ...config.authorizeOptions, readCache };
+
         // Every request, not just up to the first allow — see `entry` on
         // `AdminScreenLoadContext` for why the extra evaluations are the point
         // rather than waste. Sequential: `tx` is ONE reserved connection.
@@ -223,7 +244,7 @@ export async function loadAdminScreen<TData>(
               config.ssr.tokenHash,
               now,
               request,
-              config.authorizeOptions
+              authorizeOptions
             )
           );
         }
@@ -246,7 +267,7 @@ export async function loadAdminScreen<TData>(
             config.ssr.tokenHash,
             now,
             request,
-            config.authorizeOptions
+            authorizeOptions
           );
 
           return secondary.allowed;

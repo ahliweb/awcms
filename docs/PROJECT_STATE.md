@@ -595,6 +595,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
   ### B. Performance (request path + delivery)
   9. **B1 — every `can()` affordance probe re-runs the FULL authorization pipeline.**
+     **DONE (22 August 2026).**
      `lib/auth/admin-screen.ts:241-252`. One `/admin/blog` render issues 11
      `authorizeInTransaction` calls ≈ 66 sequential round trips on one reserved
      `interactive` connection (max 8 process-wide), ~50 of them re-reading byte-identical
@@ -602,6 +603,25 @@ pioneered directly here after the ADR-0047 freeze.)
      screens; no budget measures the chokepoint. **Change:** memoize per transaction
      (WeakMap keyed on `tx`) or add a `canInTransaction` probe modelled on
      `evaluateFieldAccessInTransaction`, which already reuses context and writes no log.
+
+     **Measured, and the estimate was low: 89 queries, not ~66.** 11 calls, 89 queries,
+     47 ms on one reserved `interactive` connection. After: **29 queries, 23 ms**. The
+     eleven decision-log rows are still eleven — inputs are memoised, never a decision.
+
+     Neither of the two suggested shapes exactly. A `canInTransaction` modelled on
+     `evaluateFieldAccessInTransaction` would skip the STRUCTURAL gates (tenant suspension,
+     entitlement, delegated-write, partner/grant state, SoD), so an affordance would appear
+     that the real chokepoint then refuses — the fake-affordance defect this repo condemns
+     elsewhere. A `WeakMap` keyed on `tx` INSIDE the guard would change what a caller sees
+     after IT has written: a route that grants a role and then re-authorizes would read the
+     grant set from before its own write, silently and only sometimes.
+
+     So the memo is an OPT-IN the caller supplies. `loadAdminScreen` creates one per render
+     — a read path by construction, where the eleven decisions describe one moment — and
+     every other caller is untouched. The test EXECUTES that argument rather than asserting
+     it: grant a permission mid-transaction, re-authorize WITHOUT a cache, and the answer
+     changes.
+
   10. **B2 — `isLegacyTenantRouteEnabled` reads `awcms_blog_settings` and discards it.**
       `public-route-settings.ts:68-87`; called from all 7 `/blog/[tenantCode]/*` routes.
       One wholly wasted round trip on every anonymous page view — 100% of them on a

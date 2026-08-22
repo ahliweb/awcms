@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:c9dd334cae256163bd3e5e2ca23bde515a7ad5ef9a7f4eb46414766fe5d22ef7 -->
+<!-- i18n-source-hash: sha256:ed0d365bb7f6639c4f1eb8db4d6cbc0362b726c4926e73d9801cbbf47881bbd2 -->
 
 # AWCMS — Project State & Continuation
 
@@ -576,11 +576,32 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   ### B. Performa (jalur request + pengiriman)
   9. **B1 — tiap probe afordans `can()` menjalankan ULANG SELURUH pipeline otorisasi.**
+     **SELESAI (22 Agustus 2026).**
      `lib/auth/admin-screen.ts:241-252`. Satu render `/admin/blog` menerbitkan 11 panggilan
      `authorizeInTransaction` ≈ 66 round trip berurutan pada satu koneksi `interactive`
      terpesan (maksimum 8 se-proses), ~50 di antaranya membaca ulang baris yang identik
      byte-per-byte, plus 11 insert decision-log per tampilan halaman. 112 panggilan `can()`
      di 38 layar; tidak ada budget yang mengukur chokepoint.
+
+     **Diukur, dan estimasinya terlalu rendah: 89 query, bukan ~66.** 11 panggilan, 89
+     query, 47 ms di satu koneksi `interactive` terpesan. Sesudahnya: **29 query, 23 ms**.
+     Sebelas baris decision-log tetap sebelas — INPUT yang di-memo, bukan keputusan.
+
+     Bukan persis salah satu dari dua bentuk yang disarankan. `canInTransaction` bergaya
+     `evaluateFieldAccessInTransaction` akan melewati gerbang STRUKTURAL (penangguhan
+     tenant, entitlement, larangan tulis terdelegasi, keadaan partner/grant, SoD), sehingga
+     muncul affordance yang justru ditolak chokepoint sungguhan — cacat affordance-palsu
+     yang repo ini kecam di tempat lain. `WeakMap` berkunci `tx` DI DALAM guard akan
+     mengubah apa yang dilihat pemanggil setelah IA menulis: rute yang memberi role lalu
+     mengotorisasi ulang akan membaca himpunan grant dari sebelum tulisannya sendiri, diam-
+     diam dan hanya kadang-kadang.
+
+     Maka memonya adalah OPT-IN yang disediakan pemanggil. `loadAdminScreen` membuat satu
+     per render — jalur baca menurut konstruksinya, tempat kesebelas keputusan menggambarkan
+     satu momen — dan setiap pemanggil lain tidak tersentuh. Tesnya MENJALANKAN argumen itu
+     alih-alih menegaskannya: beri satu permission di tengah transaksi, otorisasi ulang
+     TANPA cache, dan jawabannya berubah.
+
   10. **B2 — `isLegacyTenantRouteEnabled` membaca `awcms_blog_settings` lalu membuangnya.**
       `public-route-settings.ts:68-87`; dipanggil ketujuh rute `/blog/[tenantCode]/*`. Satu
       round trip terbuang penuh pada setiap tampilan halaman anonim — 100% dari semuanya
