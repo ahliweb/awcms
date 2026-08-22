@@ -360,6 +360,28 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **FOUND WHILE WORKING, 22 August 2026: `docs:i18n:stamp` can silence
+  `check:docs:translation` on a mirror that is now WRONG.** The stamp script re-hashes
+  every English source into its mirror's `i18n-source-hash` marker. Its own output warns
+  about the case it was built for — `bun run format` touching a source and going stale for
+  no editorial reason — and says "FORMAT FIRST, THEN STAMP". What it cannot distinguish is
+  a source whose CONTENT changed. Running it after editing an English document re-stamps
+  the marker and the translation gate goes green while the Indonesian mirror still says the
+  old thing.
+
+  Hit for real in this session: `project-state:inventory:generate` updated §2's migration
+  count in `PROJECT_STATE.md` (141 → 142) and `docs:i18n:stamp` then declared the
+  Indonesian mirror current while it still read **141**. It was caught by
+  `tests/doc-inventory-counts.test.ts`, which happens to check `sql/NNN` ranges across
+  docs — a backstop that exists for a different reason and covers one field.
+
+  **Not fixed here, and worth its own change.** The shape of a fix is a stamp that refuses
+  to re-hash a source whose non-whitespace content changed (`--allow-formatting-only` by
+  default, an explicit flag to re-stamp after a genuine re-translation), or a mirror-side
+  marker that records WHICH revision was translated rather than only that one was. Until
+  then the working rule is: re-stamp only after you have actually updated the mirror, and
+  never as a reflex to get a gate green.
+
 - **RECOMMENDATION ROUND — 17 August 2026, whole-repo audit across ten dimensions.**
   **38 recommendations from 48 verified findings.** Method: ten independent finders
   (functional gaps, algorithmic cost, DB query shape, request-path performance,
@@ -466,7 +488,7 @@ pioneered directly here after the ADR-0047 freeze.)
      factories; delete the hand-rolled copy; extend `api:tenant-route:check` to assert it.
 
   3. **A3 — a tenant SSO admin can name ANY env var as the OIDC client secret and POST
-     it to a host they choose.** `tenant-sso.ts:180-184`;
+     it to a host they choose.** **DONE (22 August 2026).** `tenant-sso.ts:180-184`;
      `tenant-sso-policy.ts:229-239,333-348`; `generic-oidc-client.ts:268-277`.
      `client_secret_env_var` is validated only as a non-empty string, then read as
      `env[...]` and sent to a discovery endpoint derived from the admin-supplied
@@ -475,6 +497,25 @@ pioneered directly here after the ADR-0047 freeze.)
      but it is a tenant-admin → deployment-compromise primitive the day SSO is enabled.
      **Change:** require `^AWCMS_SSO_CLIENT_SECRET_[A-Z0-9_]{1,48}$` in both validators
      and re-assert it before touching `env`.
+
+     **Landed with one deliberate difference: the prefix is `AUTH_SSO_CLIENT_SECRET_`,
+     not `AWCMS_SSO_CLIENT_SECRET_`.** Every SSO variable in this repo is `AUTH_SSO_*`
+     (`.env.example`, `18_configuration_env_reference.md`), and a namespace nobody would
+     guess from the neighbouring names is one an operator sets up wrong once and then
+     works around. Note what the chosen prefix does NOT match:
+     `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY` — the key that decrypts every OTHER provider's
+     stored secret — is one underscore-separated word away, and is excluded.
+
+     A NAMESPACE rather than a deny-list, and the reasoning generalises: a deny-list of
+     dangerous variable names has to be kept in step with every secret this deployment or
+     a future one happens to hold, and fails open for the one added last week.
+
+     Checked in three places; the third is the load-bearing one. Both admin validators
+     refuse at write time (create AND update — a create-only check is one an admin walks
+     around by patching afterwards), and `resolveProviderClientSecret` re-asserts
+     immediately before it touches `env`. Validators only see values arriving now; the
+     reader reads rows written in the past by writers that predate the rule.
+
   4. **A4 — pre-auth unbounded body buffering; 23 routes skip `readJsonBody`.**
      `data-lifecycle/dry-run.ts:32-44`; `security/request-body-limit.ts:127-132`.
      `resolveAuthInputs` checks only the _presence_ of a tenant header and token, then

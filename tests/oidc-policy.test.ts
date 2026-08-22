@@ -246,9 +246,24 @@ describe("validateCreateAuthProviderInput", () => {
       displayName: "Okta",
       issuerUrl: "https://okta.example",
       clientId: "abc",
-      clientSecretEnvVar: "OKTA_SECRET"
+      // Namespaced since finding A3: the name a provider may give is bounded to
+      // `AUTH_SSO_CLIENT_SECRET_*`, so `OKTA_SECRET` — what this test used to
+      // pass — is now correctly refused. See the assertion below.
+      clientSecretEnvVar: "AUTH_SSO_CLIENT_SECRET_OKTA"
     });
     expect(ok.valid).toBe(true);
+
+    // The value this test used to assert as VALID. Kept as the negative case,
+    // because the whole point of A3 is that an unnamespaced variable is a
+    // capability an admin must not be able to hand themselves.
+    const arbitraryEnvVar = validateCreateAuthProviderInput({
+      providerKey: "okta",
+      displayName: "Okta",
+      issuerUrl: "https://okta.example",
+      clientId: "abc",
+      clientSecretEnvVar: "OKTA_SECRET"
+    });
+    expect(arbitraryEnvVar.valid).toBe(false);
 
     const httpIssuer = validateCreateAuthProviderInput({
       providerKey: "okta",

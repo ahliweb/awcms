@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:135d7290785a80d709fc94783ef6067d6fc187bf7abdb28e2a2948e4546463e0 -->
+<!-- i18n-source-hash: sha256:4198425eab75219668a8c280421a32d08585d71f892f3f61b5dffcc3c8f77bca -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026: `docs:i18n:stamp` bisa MEMBUNGKAM
+  `check:docs:translation` pada mirror yang justru sudah SALAH.** Skrip stamp menghitung
+  ulang hash setiap sumber Inggris ke penanda `i18n-source-hash` mirrornya. Keluarannya
+  sendiri memperingatkan kasus yang menjadi alasan ia dibuat — `bun run format` menyentuh
+  sumber lalu hashnya basi tanpa alasan editorial — dan berkata "FORMAT DULU, BARU STAMP".
+  Yang TIDAK bisa ia bedakan adalah sumber yang ISINYA berubah. Menjalankannya setelah
+  menyunting dokumen Inggris menstempel ulang penandanya dan gerbang terjemahan menjadi
+  hijau padahal mirror Indonesianya masih mengatakan hal yang lama.
+
+  Terjadi sungguhan di sesi ini: `project-state:inventory:generate` memperbarui hitungan
+  migrasi §2 di `PROJECT_STATE.md` (141 → 142) lalu `docs:i18n:stamp` menyatakan mirror
+  Indonesianya mutakhir padahal masih tertulis **141**. Yang menangkapnya
+  `tests/doc-inventory-counts.test.ts`, yang kebetulan memeriksa rentang `sql/NNN` di
+  dokumen — jaring pengaman yang ada untuk alasan lain dan hanya mencakup satu field.
+
+  **Tidak diperbaiki di sini, dan layak menjadi perubahannya sendiri.** Bentuk perbaikannya
+  adalah stamp yang MENOLAK menghitung ulang hash sumber yang isi non-spasinya berubah
+  (`--allow-formatting-only` sebagai bawaan, flag eksplisit untuk menstempel ulang setelah
+  terjemahan sungguhan), atau penanda di sisi mirror yang mencatat revisi MANA yang
+  diterjemahkan alih-alih sekadar bahwa ada yang diterjemahkan. Sampai itu ada, aturan
+  kerjanya: stempel ulang hanya setelah Anda benar-benar memperbarui mirrornya, dan jangan
+  pernah sebagai refleks supaya gerbangnya hijau.
+
 - **PUTARAN REKOMENDASI — 17 Agustus 2026, audit seluruh repo atas sepuluh dimensi.**
   **38 rekomendasi dari 48 temuan terverifikasi.** Metode: sepuluh pencari independen
   (celah fungsional, ongkos algoritma, bentuk query DB, performa jalur request,
@@ -471,13 +494,34 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      dan asimetri itulah yang membuktikan kelalaian ini tidak disengaja.
 
   3. **A3 — admin SSO tenant bisa menyebut env var APA PUN sebagai client secret OIDC dan
-     mengirimkannya ke host pilihannya.** `tenant-sso.ts:180-184`;
+     mengirimkannya ke host pilihannya.** **SELESAI (22 Agustus 2026).** `tenant-sso.ts:180-184`;
      `tenant-sso-policy.ts:229-239,333-348`. `client_secret_env_var` hanya divalidasi
      sebagai string tak-kosong, lalu dibaca `env[...]` dan dikirim ke endpoint discovery
      yang diturunkan dari `issuer_url` pilihan admin, sebelum validasi ID-token apa pun.
      `DATABASE_URL` dan `AUTH_MFA_SECRET_ENCRYPTION_KEY` terjangkau. Belum hidup
      (`AUTH_SSO_ENABLED` mati), tetapi ini primitif tenant-admin → kompromi-deployment pada
      hari SSO dinyalakan.
+
+     **Mendarat dengan satu perbedaan yang disengaja: prefiksnya `AUTH_SSO_CLIENT_SECRET_`,
+     bukan `AWCMS_SSO_CLIENT_SECRET_`.** Setiap variabel SSO di repo ini ber-`AUTH_SSO_*`
+     (`.env.example`, `18_configuration_env_reference.md`), dan namespace yang tidak bisa
+     ditebak dari nama-nama tetangganya adalah namespace yang sekali dipasang keliru lalu
+     diakali. Perhatikan apa yang TIDAK cocok dengan prefiks itu:
+     `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY` — kunci yang mendekripsi client secret tersimpan
+     milik SETIAP provider lain — hanya berjarak satu kata dan tetap tertolak.
+
+     NAMESPACE, bukan deny-list, dan alasannya berlaku umum: deny-list nama variabel
+     berbahaya harus dijaga tetap seiring dengan setiap secret yang dipegang deployment ini
+     atau deployment mana pun kelak, dan ia gagal-terbuka untuk yang ditambahkan minggu
+     lalu.
+
+     Diperiksa di tiga tempat; yang ketiga yang menanggung beban. Kedua validator admin
+     menolak saat tulis (create DAN update — pemeriksaan hanya-create adalah kontrol yang
+     diakali admin dengan mem-patch setelahnya), dan `resolveProviderClientSecret`
+     menegaskannya ulang persis sebelum menyentuh `env`. Validator hanya melihat nilai yang
+     datang sekarang; pembacanya membaca baris yang ditulis di masa lalu oleh penulis yang
+     mendahului aturan ini.
+
   4. **A4 — buffering body tak terbatas pra-autentikasi; 23 rute melewati `readJsonBody`.**
      `data-lifecycle/dry-run.ts:32-44`; `security/request-body-limit.ts:127-132`.
      `resolveAuthInputs` hanya memeriksa _keberadaan_ header tenant dan token, lalu

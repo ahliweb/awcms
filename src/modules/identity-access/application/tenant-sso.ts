@@ -56,7 +56,10 @@ import {
   type IdTokenClaims,
   type OAuthRequestDenyReason
 } from "../domain/oidc-policy";
-import { isAutoLinkAllowedForProvider } from "../domain/tenant-sso-policy";
+import {
+  isAllowedSsoClientSecretEnvVar,
+  isAutoLinkAllowedForProvider
+} from "../domain/tenant-sso-policy";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolveChallengeTtlSec } from "../../../lib/auth/mfa-config";
 import { createMfaChallenge, findActiveMfaFactor } from "./mfa";
@@ -173,12 +176,36 @@ export async function consumeSsoOAuthRequest(
   };
 }
 
-/** Resolves a provider's client secret in plaintext, in memory only, for the token-exchange call this request makes — never persisted, logged, or returned. `null` means misconfigured. */
+/**
+ * Resolves a provider's client secret in plaintext, in memory only, for the
+ * token-exchange call this request makes — never persisted, logged, or
+ * returned. `null` means misconfigured.
+ *
+ * ## The namespace is re-asserted HERE, and that is the assertion that matters
+ *
+ * Both admin validators refuse a `clientSecretEnvVar` outside
+ * `AUTH_SSO_CLIENT_SECRET_*` (finding A3). Validators only ever see values
+ * arriving now. This function reads a value that was written at some point in
+ * the past, by a writer that may predate the rule — so without the check on this
+ * side, a row already in the table keeps handing an arbitrary process
+ * environment variable to a host the tenant admin chose, at every login, exactly
+ * as before.
+ *
+ * The refusal is `null`, which the caller already treats as "misconfigured
+ * provider". A refused name deliberately does NOT get its own error shape: the
+ * only person who can act on it is an operator reading the provider row, and a
+ * distinct code would tell a caller which env vars this deployment does and does
+ * not hold.
+ */
 export function resolveProviderClientSecret(
   provider: AuthProviderRow,
   env: NodeJS.ProcessEnv = process.env
 ): string | null {
   if (provider.client_secret_env_var) {
+    if (!isAllowedSsoClientSecretEnvVar(provider.client_secret_env_var)) {
+      return null;
+    }
+
     const value = env[provider.client_secret_env_var];
     return value && value.length > 0 ? value : null;
   }
