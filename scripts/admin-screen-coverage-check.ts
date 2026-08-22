@@ -57,7 +57,7 @@ const SCREEN_GLOB = "src/pages/admin/**/*.astro";
  * not drive this from a page", and the next reader can disagree with a sentence
  * rather than with silence.
  */
-const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
+export const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
   // Six permissions, one decision: authoring a node/transition graph needs a
   // real editor, and a JSON textarea that accepts a malformed graph until
   // `publish` rejects it is a worse affordance than none.
@@ -92,13 +92,15 @@ const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
   "media_library.media.cancel":
     "three-step upload; only the uploading client knows what to cancel",
 
-  // A ONE-WAY tenant policy switch, not an action on an object — it belongs
-  // with the other posture switches on `/admin/security`, not in an object
-  // console. Deliberately no `enforcement.disable` exists at all.
-  "media_library.enforcement.read":
-    "tenant posture switch; belongs with /admin/security, not an object console",
-  "media_library.enforcement.enable":
-    "tenant posture switch, one-way; belongs with /admin/security",
+  // `media_library.enforcement.read`/`.enable` USED to sit here, on the
+  // reasoning that a one-way tenant posture switch "belongs with the other
+  // posture switches on /admin/security, not in an object console". Finding D8:
+  // that sentence describes a RELOCATION THAT NEVER HAPPENED. `/admin/security`
+  // carries the MFA enforcement level and nothing about media at all, so the
+  // entry recorded a screen that does not implement it as a settled judgement —
+  // and a decision is exempt from the shrink-only ledger, so the surface stopped
+  // being counted as work not done. Moved to `NOT_YET_SCREENED`; the reasoning
+  // about WHERE it belongs survives there, as a note about the screen to build.
 
   // The admin post list has its own search, which tolerates an empty query;
   // the public search endpoint does not, and wiring the screen to it would make

@@ -71,6 +71,18 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",
 
+  // media_library (2) — finding D8. These were filed as DECISIONS
+  // ("belongs with /admin/security, not an object console") until 22 August
+  // 2026, and `/admin/security` implements the MFA enforcement level and
+  // nothing about media. A relocation nobody performed is not a judgement, and
+  // filing it as one kept the surface off this list — the one list that is
+  // supposed to say how much is unbuilt. The reasoning about WHERE it belongs
+  // still holds: a one-way tenant posture switch sits with the other posture
+  // switches, not in an object console. There is deliberately no
+  // `enforcement.disable` permission to screen at all.
+  "media_library.enforcement.enable",
+  "media_library.enforcement.read",
+
   // module_management (6)
   "module_management.health.check",
   "module_management.health.read",

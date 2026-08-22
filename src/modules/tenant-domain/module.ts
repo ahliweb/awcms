@@ -150,16 +150,29 @@ export const tenantDomainModule = defineModule({
       action: "set_primary",
       description: "Set a tenant domain as the active primary domain"
     }
-  ],
-  settings: {
-    schemaVersion: 1,
-    // Non-secret operational preference only: the default domain verification
-    // mode is manual DNS attestation, never an automatic provider. "manual"
-    // means no automated check at all is assumed until a tenant/operator
-    // explicitly picks one of the other `verification_method` values. The
-    // optional Cloudflare adapter is selected purely via the
-    // `TENANT_DOMAIN_DNS_PROVIDER` env var (not this settings object, and not
-    // wired into any route yet) — it never defaults this value away from manual.
-    defaults: { defaultVerificationMethod: "manual" }
-  }
+  ]
+  // NO `settings` BLOCK, and its absence is the decision — finding D7.
+  //
+  // This declared `defaults: { defaultVerificationMethod: "manual" }`, and
+  // NOTHING read it: `validateCreateTenantDomainInput` defaults the field to
+  // `null`, so every domain is created with `verification_method = NULL` and
+  // `POST …/domains/{id}/verify` answers `missing_verification_method`. That is
+  // the `pending_verification` state §4 item 6 observes in production, and the
+  // obvious repair is to have creation apply this default.
+  //
+  // **Do not do that.** `verifyTenantDomain` performs no verification of any
+  // kind — it checks that `verification_method` is non-NULL and then sets
+  // `status = 'active'`. There is no DNS lookup anywhere on the route path (the
+  // Cloudflare adapter is selected by `TENANT_DOMAIN_DNS_PROVIDER` and is
+  // called by nothing). So a NULL `verification_method` is currently the only
+  // thing standing between "a tenant created a hostname row" and "that hostname
+  // is active", and an active domain feeds host->tenant resolution, the
+  // redirect allow-list and the canonical host. Applying a default here would
+  // remove that step for every domain at creation.
+  //
+  // A setting whose only honest use would weaken a control does not belong in
+  // the descriptor pretending to be configuration. Deleted rather than left to
+  // read as a preference somebody had chosen. The real gap — that `verify`
+  // verifies nothing — is recorded as its own §4 item, because closing it is a
+  // security change and not a settings edit.
 });

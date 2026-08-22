@@ -35,8 +35,9 @@ const FORCE_DECIDE_GUARD = {
   action: "force_decide" as const
 };
 const IDEMPOTENCY_SCOPE = "workflow_task_force_decision";
-// No notification port is wired in this base — see decisions.ts for why the
-// `email`-owned WorkflowNotificationPort adapter is not injected yet.
+// No notification port is injected here — see decisions.ts. (That note used to
+// say `email` "has not been ported yet"; it is live and owns the adapter. The
+// real reason is that nothing can reach this path yet — finding D15.)
 
 type ForceDecisionRequestBody = { decision?: unknown; reason?: unknown };
 

@@ -31,10 +31,23 @@ import {
 
 const GUARD_ACTIVITY = { moduleKey: "workflow", activityCode: "approval" };
 const IDEMPOTENCY_SCOPE = "workflow_task_decision";
-// No notification port is wired in this base — the `email` module (which
-// owns the concrete WorkflowNotificationPort adapter in awcms-mini) has not
-// been ported yet, so `notify` graph nodes silently no-op (they always
-// advance to `next` regardless). Inject an adapter here once `email` lands.
+// No notification port is injected here, so `notify` graph nodes advance to
+// `next` without sending anything.
+//
+// This comment used to say the reason was that "the `email` module has not been
+// ported yet". **That is false and has been for some time** (finding D15):
+// `email` is a live module in this repo and it OWNS the concrete adapter,
+// `src/modules/email/application/workflow-notification-port-adapter.ts` — which
+// has zero importers, so the adapter and the comment were each other's alibi.
+//
+// It is still not injected, and that is now a decision rather than an
+// oversight. Nothing can reach this path: `startWorkflowInstance` has no
+// caller and no route creates an instance, so no task exists to decide on.
+// Wiring a port into an unreachable path would add a second thing that is
+// declared and never runs — and it would put an announcement enqueue inside
+// the decision transaction with no way to exercise the failure. Inject it in
+// the same change that gives instance creation a caller, where the wiring can
+// actually be tested.
 
 /**
  * `POST /api/v1/workflows/tasks/{id}/decisions` (Issue 11.1, evolved by
