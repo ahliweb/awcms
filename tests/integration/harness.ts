@@ -137,6 +137,7 @@ export const integrationEnabled = ADMIN_DATABASE_URL.length > 0;
  */
 const OWNER_ROLE_PASSWORD = "integration_owner_role_password";
 const APP_ROLE_PASSWORD = "integration_app_role_password";
+const WORKER_ROLE_PASSWORD = "integration_worker_role_password";
 
 const SUFFIX = String(process.pid);
 const EPHEMERAL_DATABASE = `awcms_it_${SUFFIX}`;
@@ -161,6 +162,23 @@ export const APP_ROLE_NAME = "awcms_app";
  */
 export let appRoleActivated = false;
 
+/**
+ * The BACKGROUND-JOB role created by migration 022. Activated the same way and
+ * for the same reason as `awcms_app`: cluster-scoped, shipped NOLOGIN because a
+ * password is a secret, flipped to LOGIN with a fixture password here and put
+ * back on teardown.
+ *
+ * A suite needs this whenever the property under test is a privilege the worker
+ * must NOT have. `sql/142`'s narrow SECURITY DEFINER sweep is the first: the
+ * whole design rests on `awcms_worker` holding EXECUTE on one function and no
+ * UPDATE on `awcms_tenant_users`/`awcms_sessions`, and a source test cannot see
+ * a GRANT.
+ */
+export const WORKER_ROLE_NAME = "awcms_worker";
+
+/** False when migration 022 has not created `awcms_worker`; guard on it. */
+export let workerRoleActivated = false;
+
 function buildUrl(database: string, user?: string, password?: string): string {
   const url = new URL(ADMIN_DATABASE_URL);
   url.pathname = `/${database}`;
@@ -183,6 +201,11 @@ function appUrl(): string {
   return buildUrl(EPHEMERAL_DATABASE, APP_ROLE_NAME, APP_ROLE_PASSWORD);
 }
 
+/** Connection string of the ephemeral database, as background-job `awcms_worker`. */
+function workerUrl(): string {
+  return buildUrl(EPHEMERAL_DATABASE, WORKER_ROLE_NAME, WORKER_ROLE_PASSWORD);
+}
+
 /**
  * `postgres` rather than the admin database itself: `CREATE DATABASE` /
  * `DROP DATABASE` cannot run while connected to the target, and cannot run
@@ -192,6 +215,7 @@ let rootSql: Bun.SQL | undefined;
 let adminSql: Bun.SQL | undefined;
 let ownerSql: Bun.SQL | undefined;
 let appRoleSql: Bun.SQL | undefined;
+let workerRoleSql: Bun.SQL | undefined;
 let handlerAdminSql: Bun.SQL | undefined;
 let refCount = 0;
 let setupPromise: Promise<void> | undefined;
@@ -256,6 +280,27 @@ export function getAppRoleSql(): Bun.SQL {
   }
 
   return appRoleSql;
+}
+
+/**
+ * A DEDICATED connection to the ephemeral database as `awcms_worker`
+ * (migration 022). Only valid when `workerRoleActivated`; callers MUST guard on
+ * it. Use it to assert what a scheduled job CAN and — more often — CANNOT do:
+ * the worker's grant list is a least-privilege claim, and a claim nothing
+ * exercises is a comment.
+ */
+export function getWorkerRoleSql(): Bun.SQL {
+  if (!workerRoleActivated) {
+    throw new Error(
+      "getWorkerRoleSql() called but awcms_worker is not activated — guard on workerRoleActivated first."
+    );
+  }
+
+  if (!workerRoleSql) {
+    workerRoleSql = new Bun.SQL(workerUrl(), { max: 2 });
+  }
+
+  return workerRoleSql;
 }
 
 /**
@@ -362,7 +407,12 @@ async function dropEphemeralDatabase(): Promise<void> {
     await root.unsafe(`ALTER ROLE "${APP_ROLE_NAME}" NOLOGIN PASSWORD NULL`);
   }
 
+  if (await roleExists(WORKER_ROLE_NAME)) {
+    await root.unsafe(`ALTER ROLE "${WORKER_ROLE_NAME}" NOLOGIN PASSWORD NULL`);
+  }
+
   appRoleActivated = false;
+  workerRoleActivated = false;
 
   // After DROP DATABASE: a role cannot be dropped while it still owns objects.
   await root.unsafe(`DROP ROLE IF EXISTS "${OWNER_ROLE}"`);
@@ -411,6 +461,19 @@ async function activateAppRole(): Promise<void> {
   appRoleActivated = true;
 }
 
+/** The same flip for migration 022's `awcms_worker`; see `getWorkerRoleSql()`. */
+async function activateWorkerRole(): Promise<void> {
+  if (!(await roleExists(WORKER_ROLE_NAME))) {
+    workerRoleActivated = false;
+    return;
+  }
+
+  await getRootSql().unsafe(
+    `ALTER ROLE "${WORKER_ROLE_NAME}" LOGIN PASSWORD '${WORKER_ROLE_PASSWORD}'`
+  );
+  workerRoleActivated = true;
+}
+
 /**
  * `beforeAll` entry point for WORLD-1 files. Ref-counted + memoized: the first
  * caller provisions role + database + schema + `awcms_app`; later files reuse
@@ -429,6 +492,7 @@ export async function setupIntegrationDatabase(): Promise<void> {
       await applyMigrationsAsOwner();
       await demoteOwnerRole();
       await activateAppRole();
+      await activateWorkerRole();
     })();
   }
 
@@ -454,9 +518,11 @@ export async function teardownIntegrationDatabase(): Promise<void> {
   await adminSql?.close({ timeout: 1 });
   await ownerSql?.close({ timeout: 1 });
   await appRoleSql?.close({ timeout: 1 });
+  await workerRoleSql?.close({ timeout: 1 });
   adminSql = undefined;
   ownerSql = undefined;
   appRoleSql = undefined;
+  workerRoleSql = undefined;
   setupPromise = undefined;
 
   await dropEphemeralDatabase();

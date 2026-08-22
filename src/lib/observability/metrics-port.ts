@@ -299,6 +299,15 @@ export const METRIC_DEFINITIONS = {
     approxCardinality: 'Exactly 2 — itemType is "assignment" or "exception".',
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
+  delegated_access_grants_expired_total: {
+    name: "delegated_access_grants_expired_total",
+    type: "counter",
+    description:
+      "Count of delegated-access grants swept by the scheduled expiry job (ADR-0090) — their membership ended and their sessions revoked. Not a measure of when access STOPPED: an expired grant is refused at the chokepoint from the instant on its row, so a jump here says a backlog was tidied, never that a partner kept reaching in until now.",
+    allowedLabelKeys: [],
+    approxCardinality: "Exactly 1 — unlabeled.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
   business_scope_cross_tenant_denied_total: {
     name: "business_scope_cross_tenant_denied_total",
     type: "counter",

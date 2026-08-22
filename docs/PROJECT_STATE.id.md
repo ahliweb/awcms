@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:171a1010c7d986d7865954c45189e76e6989d900e5d6bcd9e172c5433d76c38f -->
+<!-- i18n-source-hash: sha256:135d7290785a80d709fc94783ef6067d6fc187bf7abdb28e2a2948e4546463e0 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **141** (`sql/001`–`141`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **142** (`sql/001`–`142`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0103** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.594 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -392,8 +392,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   ### A. Keamanan
   1. **A1 — grant delegated-access yang sudah ditebus TIDAK PERNAH kedaluwarsa.**
-     **SEBAGIAN BESAR SELESAI (22 Agustus 2026)** — gerbangnya mendarat; sapuannya tidak,
-     lihat paragraf penutup.
+     **SELESAI (22 Agustus 2026)** — gerbangnya, grant peran bertanggal, dan sapuannya.
      _(ditemukan independen oleh dua dimensi, dari sisi job dan dari sisi chokepoint)_
      `identity-access/application/auth-context.ts:63-70` dan `:101-108`;
      `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
@@ -426,21 +425,26 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
      bisa melebarkan keputusan apa pun dan justru itulah yang membuat penolakannya menyebut
      keterlibatan mana.
 
-     **Masih terbuka: sapuannya.** Aktor yang kedaluwarsa ditolak setiap otorisasi tetapi
-     tetap memegang baris `active` di daftar pengguna pelanggan dan baris sesi hidup —
-     pembukuan, bukan akses. `expireDelegatedAccessGrants` masih nol pemanggil.
-     Penghalangnya keputusan HAK AKSES, bukan pekerjaan: sapuan itu mematikan keanggotaan
-     dan mencabut sesinya, sedangkan `awcms_worker` tidak memegang `UPDATE` pada
-     `awcms_tenant_users` maupun apa pun pada `awcms_sessions`. Memberikannya polos akan
-     membuat sebuah job terjadwal bisa mengembalikan anggota nonaktif menjadi `active` dan
-     mengembalikan `revoked_at` menjadi `NULL` pada sesi curian — lebih lebar dari yang
-     dibutuhkan sapuan, dan ke arah eskalasi. Tiga kandidatnya: (a) fungsi `SECURITY
-DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124`, hanya arah-tolak;
-     (b) grant ber-kolom plus risiko sisa yang diterima dan DITULIS; (c) menjalankan job
-     yang satu ini di koneksi `awcms_app`, yang sudah memegang persis hak ini karena
-     pencabutan jalur-request melakukan hal yang sama — dengan ongkos `db:work-class:check`
-     menemukan skrip worker lewat grep `getWorkerDatabaseClient(`, sehingga job itu jatuh
-     keluar dari model kapasitas.
+     **Sapuannya ikut mendarat, dan pertanyaan hak akses yang menahannya sudah terjawab.**
+     `bun run identity-access:delegated-access:expiry` (per jam, berbatas, `maintenance`)
+     mencabut grant dengan alasan `expired` dan TANPA aktor, menonaktifkan tenant user
+     terdelegasinya, lalu mencabut sesinya. Opsi (a) yang diambil: `sql/142` adalah fungsi
+     `SECURITY DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124` — pemilik
+     NOLOGIN tanpa anggota, policy khusus role itu saja, dan batas yang berupa
+     STATEMENT-nya alih-alih daftar kolom (ia menerima id tenant dan ukuran batch dan tidak
+     lebih, jadi tidak ada nilai dari pemanggil yang pernah ditulis). `awcms_worker`
+     memegang `EXECUTE` dan tetap TIDAK memegang `UPDATE` pada
+     `awcms_tenant_users`/`awcms_sessions`; `awcms_app` sengaja tidak memegang `EXECUTE`
+     sama sekali, karena jalur request punya pencabutannya sendiri dan hak untuk pemanggil
+     yang tidak ada adalah hak untuk apa-apa. Diverifikasi terhadap basis data nyata,
+     termasuk kedua penolakannya.
+
+     **Satu hal yang layak dibawa ke depan.** Bukti-mutasi pertama yang ditulis untuk tes
+     sapuan ini SALAH: membuang `AND principal_kind = 'delegated'` dari UPDATE keanggotaan
+     tidak mengubah hasil tes mana pun, karena predikat `id` sudah melindungi anggota
+     biasa — keduanya penjaga independen atas baris yang sama, dan hanya kehilangan
+     KEDUANYA yang membuka siapa pun. Klaimnya dikoreksi di header tesnya sendiri alih-alih
+     dibuang diam-diam, karena bukti-mutasi yang salah terbaca sebagai cakupan.
 
   2. **A2 — penangguhan ADR-0073 tidak menjangkau factory rute self-service maupun
      client-credential.** **SELESAI (22 Agustus 2026).** Kedua factory kini menolak
@@ -695,7 +699,18 @@ DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124`, hanya arah-tol
   `SYNC_HMAC_ALLOW_LEGACY` (GHSA-c972-3q5p-g3h4), MFA/SSO/Turnstile mati di produksi,
   ketiadaan crontab `edge-cache:purge`, dan item Varnish/s-maxage/asset-budget di bawah.
 
-- **KEPUTUSAN TERBUKA — 17 Agustus 2026: enam tag git pra-model.** `bun run version:check`
+- **DIPUTUSKAN 22 Agustus 2026 — enam tag git pra-model TETAP ADA, dikecualikan.**
+  Pemelihara memilih opsi 1 di bawah. Tidak ada yang berubah di repositori: keenam nama
+  tetap di `LEGACY_UNPREFIXED_TAGS`, `bun run version:check` tetap menahan setiap tag yang
+  dipotong sejak `v5.1.0` pada modelnya, dan halaman Releases tetap menampilkan `3.0.0` di
+  samping `v3.0.0`. Alasan yang memutuskannya adalah alasan `release-process.md`
+  §Rollback: konsumen yang sudah menarik tag terbit kehilangan kemampuan mendiagnosis apa
+  yang ia pegang saat tag itu hilang, dan ongkos itu dibayar orang yang tidak ada di
+  percakapan ini. Dicatat di sini supaya pertanyaannya tidak dibuka ulang tanpa konteks.
+
+  Entri aslinya, disimpan karena argumennya:
+
+- **KEPUTUSAN TERBUKA (DIGANTIKAN) — 17 Agustus 2026: enam tag git pra-model.** `bun run version:check`
   (gerbang 52) kini memegang model `vX.Y.Z` di setiap commit, dan ia mengecualikan enam tag
   bernama persis: `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0`. Keenamnya mendahului
   rebuild (ADR-0024); `3.0.0` duduk di commit `b23d3308` berdampingan dengan `v3.0.0`, satu

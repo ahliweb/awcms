@@ -221,6 +221,21 @@ export const identityAccessModule = defineModule({
       safeInOfflineLan: true
     },
     {
+      command: "bun run identity-access:delegated-access:expiry",
+      schedule: {
+        mode: "cron",
+        expression: "20 * * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Ends delegated support episodes whose grant has run out (ADR-0090): the grant is revoked with reason `expired` and no actor, its delegated tenant user goes inactive, and its live sessions are revoked. CLEANUP, not the gate — an expired grant is already refused at the chokepoint from the instant on its row.",
+      recommendedSchedule:
+        "Hourly via cron/systemd timer, offset from the business-scope sweep so two identity_access passes do not contend for the same maintenance slots.",
+      environmentNotes:
+        "Database-only operation, no external network dependency. The work happens inside `awcms_expire_delegated_access_grants` (sql/142), a narrow SECURITY DEFINER function: `awcms_worker` holds EXECUTE on it and no UPDATE on awcms_tenant_users or awcms_sessions, so the job cannot re-activate a member or un-revoke a session. Safe to run alongside request traffic (bounded per-tenant passes, maintenance work class).",
+      safeInOfflineLan: true
+    },
+    {
       command: "bun run entitlements:backfill",
       schedule: {
         mode: "manual",

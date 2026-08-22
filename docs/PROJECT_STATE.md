@@ -111,7 +111,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **141** (`sql/001`–`141`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **142** (`sql/001`–`142`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.594 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
@@ -391,7 +391,7 @@ pioneered directly here after the ADR-0047 freeze.)
   defect of this class ship green).
 
   ### A. Security
-  1. **A1 — a redeemed delegated-access grant never expires.** **MOSTLY DONE (22 August 2026)** — the gate landed; the sweep did not, see the closing paragraph.
+  1. **A1 — a redeemed delegated-access grant never expires.** **DONE (22 August 2026)** — the gate, the dated role grant, and the sweep.
      _(found independently by two dimensions, from the job side and the chokepoint side)_
      `identity-access/application/auth-context.ts:63-70` and `:101-108`;
      `delegated-access-store.ts:283`; `access-policy-writer.ts:65`; `grant-source.ts:113`;
@@ -422,20 +422,25 @@ pioneered directly here after the ADR-0047 freeze.)
      `awcms_audit_events` (verified), so a stale id can widen no decision and it is what
      makes the refusal name the engagement.
 
-     **Still open: the sweep.** An expired actor is refused every authorization but keeps
-     an `active` row in the customer's user list and a live session row — bookkeeping, not
-     access. `expireDelegatedAccessGrants` still has zero callers. The blocker is a
-     PRIVILEGE decision, not work: the sweep ends a membership and revokes its sessions,
-     and `awcms_worker` holds neither `UPDATE` on `awcms_tenant_users` nor anything on
-     `awcms_sessions`. Granting them plainly would let a scheduled job set a deactivated
-     member back to `active` and set `revoked_at` back to `NULL` on a stolen session —
-     wider than the sweep needs, and in the escalation direction. The three candidates:
-     (a) a narrow `SECURITY DEFINER` function per the `sql/048`/`sql/119`/`sql/124`
-     precedent, deny-direction only; (b) column-scoped grants plus an accepted residual
-     risk, written down; (c) run this one job on the `awcms_app` connection, which already
-     holds exactly these privileges because the request-path revocation does the identical
-     thing — at the cost that `db:work-class:check` discovers worker scripts by grepping
-     `getWorkerDatabaseClient(`, so the job would fall out of the capacity model.
+     **The sweep landed too, and the privilege question it was waiting on has an
+     answer.** `bun run identity-access:delegated-access:expiry` (hourly, bounded,
+     `maintenance`) revokes the grant with reason `expired` and NO actor, deactivates the
+     delegated tenant user, and revokes its sessions. Option (a) was taken: `sql/142` is a
+     narrow `SECURITY DEFINER` function on the `sql/048`/`sql/119`/`sql/124` precedent —
+     memberless NOLOGIN owner, policies scoped to that role alone, and a boundary that is
+     the STATEMENTS rather than a column list (it takes a tenant id and a batch size and
+     nothing else, so no caller-supplied value is ever written). `awcms_worker` holds
+     `EXECUTE` and still no `UPDATE` on `awcms_tenant_users`/`awcms_sessions`; `awcms_app`
+     deliberately holds no `EXECUTE` at all, because the request path has its own
+     revocation and a privilege for a caller that does not exist is a privilege for
+     nothing. Proven against a real database, including the two refusals.
+
+     **One thing worth carrying forward.** The first mutation-proof written for the sweep's
+     tests was FALSE: dropping `AND principal_kind = 'delegated'` from the membership
+     UPDATE changes no test result, because the `id` predicate already protects an ordinary
+     member — the two are independent guards over the same row, and only losing BOTH
+     exposes anybody. The claim was corrected in the test's own header rather than quietly
+     dropped, because a false mutation-proof reads as coverage.
 
   2. **A2 — ADR-0073 suspension does not reach the self-service or client-credential
      route factories.** **DONE (22 August 2026).** Both factories now refuse before the
@@ -708,7 +713,18 @@ pioneered directly here after the ADR-0047 freeze.)
   Turnstile off in production, the `edge-cache:purge` crontab absence, and the
   Varnish/s-maxage/asset-budget items below.
 
-- **OPEN DECISION — 17 August 2026: the six pre-model git tags.** `bun run version:check`
+- **SETTLED 22 August 2026 — the six pre-model git tags stay, exempted.** The maintainer
+  chose option 1 below. Nothing changes in the repository: the six names remain in
+  `LEGACY_UNPREFIXED_TAGS`, `bun run version:check` keeps holding every tag cut since
+  `v5.1.0` to the model, and the Releases page keeps showing `3.0.0` beside `v3.0.0`. The
+  reasoning that decided it is `release-process.md` §Rollback's: a consumer who pulled a
+  published tag loses the ability to diagnose what they have when it disappears, and that
+  cost is paid by somebody who is not in this conversation. Recorded here so the question
+  is not reopened blind.
+
+  The original entry, kept for its argument:
+
+- **OPEN DECISION (SUPERSEDED) — 17 August 2026: the six pre-model git tags.** `bun run version:check`
   (gate 52) now holds the `vX.Y.Z` model at every commit, and it exempts six tags by exact
   name: `2.9.9`, `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0`. All six predate the rebuild
   (ADR-0024); `3.0.0` sits on commit `b23d3308` beside `v3.0.0`, one release under two

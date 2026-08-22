@@ -82,6 +82,13 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # audit for exceptions).
 5 * * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-business-scope-expiry.lock $AWCMS_RUN_JOB identity-access:business-scope:expiry >> $AWCMS_JOB_LOG/identity-access-business-scope-expiry.log 2>&1
 
+# identity_access — Ends delegated support episodes whose grant has run out
+# (ADR-0090): the grant is revoked with reason `expired` and no actor, its
+# delegated tenant user goes inactive, and its live sessions are revoked.
+# CLEANUP, not the gate — an expired grant is already refused at the
+# chokepoint from the instant on its row.
+20 * * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-delegated-access-expiry.lock $AWCMS_RUN_JOB identity-access:delegated-access:expiry >> $AWCMS_JOB_LOG/identity-access-delegated-access-expiry.log 2>&1
+
 # identity_access — Walks each tenant's subscription one rung down the
 # trialing -> active -> past_due -> grace -> suspended ladder when its own
 # dates say so (ADR-0084), auditing every transition in that tenant's own
