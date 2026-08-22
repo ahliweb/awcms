@@ -13,6 +13,22 @@ export const BODY_SIZE_HARD_CEILING_BYTES = 10 * 1024 * 1024;
 export type BodyReadResult<T> =
   { tooLarge: false; value: T } | { tooLarge: true; limitBytes: number };
 
+/**
+ * What `readJsonBody` answers, with the one distinction its caller usually needs
+ * and the plain `BodyReadResult` cannot express.
+ *
+ * `value: null` means the body was EMPTY. `malformed: true` means bytes arrived
+ * and were not JSON. Collapsing those two into one `null` — which this function
+ * used to do — turns a route's "Request body must be valid JSON" 400 into a
+ * field-validation 400 with a different sentence, or into a silent accept for a
+ * route where an empty body is legitimate. Both are wrong answers to a question
+ * the caller is entitled to ask.
+ */
+export type JsonBodyReadResult<T> =
+  | { tooLarge: false; malformed: false; value: T | null }
+  | { tooLarge: false; malformed: true; value: null }
+  | { tooLarge: true; limitBytes: number };
+
 function resolveLimitBytes(tier: BodySizeTier): number {
   return BODY_SIZE_TIER_BYTES[tier];
 }
@@ -78,7 +94,7 @@ async function readCappedText(
 export async function readJsonBody<T = unknown>(
   request: Request,
   tier: BodySizeTier = "default"
-): Promise<BodyReadResult<T | null>> {
+): Promise<JsonBodyReadResult<T>> {
   const limitBytes = resolveLimitBytes(tier);
   const textResult = await readCappedText(request, limitBytes);
 
@@ -87,14 +103,47 @@ export async function readJsonBody<T = unknown>(
   }
 
   if (textResult.text.length === 0) {
-    return { tooLarge: false, value: null };
+    return { tooLarge: false, malformed: false, value: null };
   }
 
   try {
-    return { tooLarge: false, value: JSON.parse(textResult.text) as T };
+    return {
+      tooLarge: false,
+      malformed: false,
+      value: JSON.parse(textResult.text) as T
+    };
   } catch {
-    return { tooLarge: false, value: null };
+    return { tooLarge: false, malformed: true, value: null };
   }
+}
+
+/**
+ * Capped replacement for `await request.formData()` on
+ * `application/x-www-form-urlencoded` — the only content type the routes in this
+ * repo reach `formData()` for (each branches on the header first).
+ *
+ * `URLSearchParams` rather than `FormData`, and the difference is worth naming:
+ * `request.formData()` reads the whole body before it returns anything, with no
+ * bound, which is the defect. Reading capped text and parsing it gives the same
+ * `.get(name)` surface with a ceiling in front of it.
+ *
+ * NOT a substitute for `multipart/form-data`: a multipart body parsed this way
+ * yields nothing rather than failing loudly. No route here sends one — file
+ * upload goes direct to R2 through a presigned session — and a route that starts
+ * to needs a real parser, not this.
+ */
+export async function readFormBody(
+  request: Request,
+  tier: BodySizeTier = "default"
+): Promise<BodyReadResult<URLSearchParams>> {
+  const limitBytes = resolveLimitBytes(tier);
+  const textResult = await readCappedText(request, limitBytes);
+
+  if (textResult.tooLarge) {
+    return { tooLarge: true, limitBytes };
+  }
+
+  return { tooLarge: false, value: new URLSearchParams(textResult.text) };
 }
 
 /** Drop-in replacement for `await request.text()`, capped at `tier`'s limit. */

@@ -21,6 +21,10 @@ import {
   createLegalHold,
   listLegalHolds
 } from "../../../../modules/data-lifecycle/application/legal-hold-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "data_lifecycle_legal_hold_create";
 
@@ -97,12 +101,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
   }
 
-  let body: CreateLegalHoldBody;
-  try {
-    body = (await request.json()) as CreateLegalHoldBody;
-  } catch {
+  const bodyRead = await readJsonBody<CreateLegalHoldBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as CreateLegalHoldBody;
 
   const descriptorKey =
     typeof body.descriptorKey === "string" ? body.descriptorKey : null;

@@ -18,6 +18,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../../../modules/_shared/idempotency";
 import { revokeSoDConflictException } from "../../../../../../../modules/identity-access/application/sod-exception-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_sod_conflict_exception_revoke";
 
@@ -50,12 +54,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: RevokeExceptionBody;
-  try {
-    body = (await request.json()) as RevokeExceptionBody;
-  } catch {
+  const bodyRead = await readJsonBody<RevokeExceptionBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as RevokeExceptionBody;
 
   const revokeReason =
     typeof body.revokeReason === "string" ? body.revokeReason : "";

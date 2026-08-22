@@ -14,6 +14,10 @@ import {
   saveTenantMfaPolicy
 } from "../../../../../modules/identity-access/application/tenant-mfa-policy";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 const READ_GUARD = {
   moduleKey: "identity_access",
@@ -70,7 +74,17 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
     return fail(400, "TENANT_REQUIRED", "Tenant header is required.");
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
-  const body = (await request.json().catch(() => null)) as PolicyBody | null;
+  const bodyRead = await readJsonBody<PolicyBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  // Malformed stays indistinguishable from absent HERE, deliberately: the
+  // validation immediately below already answers 400 for both, and this route
+  // is an authentication surface where two different sentences would tell a
+  // caller which of its guesses was closer.
+  const body = bodyRead.value;
 
   if (!body) {
     return fail(400, "VALIDATION_ERROR", "enforcementLevel is required.");

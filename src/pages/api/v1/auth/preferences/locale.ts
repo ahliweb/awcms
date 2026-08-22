@@ -43,6 +43,11 @@ import {
 } from "../../../../../lib/i18n/request-locale";
 import { coerceLocale } from "../../../../../lib/i18n/negotiate";
 import { sameOriginPathOr } from "../../../../../lib/security/same-origin-path";
+import {
+  bodyTooLargeResponse,
+  readFormBody,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 const NO_STORE_HEADERS = { "cache-control": "private, no-store" };
 
@@ -81,11 +86,26 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   try {
     if (wantsRedirect) {
-      const form = await request.formData();
-      requestedLocale = form.get("locale")?.toString() ?? null;
-      returnTo = form.get("return_to")?.toString() ?? null;
+      const formRead = await readFormBody(request);
+
+      if (formRead.tooLarge) {
+        return bodyTooLargeResponse(formRead.limitBytes);
+      }
+
+      requestedLocale = formRead.value.get("locale");
+      returnTo = formRead.value.get("return_to");
     } else {
-      const body = (await request.json()) as unknown;
+      const bodyRead = await readJsonBody(request);
+
+      if (bodyRead.tooLarge) {
+        return bodyTooLargeResponse(bodyRead.limitBytes);
+      }
+
+      if (bodyRead.malformed) {
+        throw new Error("malformed json body");
+      }
+
+      const body: unknown = bodyRead.value;
       requestedLocale =
         body && typeof body === "object" && "locale" in body
           ? String((body as { locale: unknown }).locale)

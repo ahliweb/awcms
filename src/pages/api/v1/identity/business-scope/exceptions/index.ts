@@ -23,6 +23,10 @@ import {
 } from "../../../../../../modules/identity-access/application/sod-exception-service";
 import { collectSoDRuleDescriptors } from "../../../../../../modules/identity-access/domain/sod-rule-registry";
 import { listModules } from "../../../../../../modules";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_sod_conflict_exception_create";
 
@@ -115,12 +119,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
   }
 
-  let body: CreateExceptionBody;
-  try {
-    body = (await request.json()) as CreateExceptionBody;
-  } catch {
+  const bodyRead = await readJsonBody<CreateExceptionBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as CreateExceptionBody;
 
   const ruleKey = typeof body.ruleKey === "string" ? body.ruleKey : "";
   const subjectTenantUserId =

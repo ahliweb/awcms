@@ -115,7 +115,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | ADR                               | **0000**–**0105** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.594 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
-| Gates                             | **55** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **56** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -516,7 +516,8 @@ pioneered directly here after the ADR-0047 freeze.)
      immediately before it touches `env`. Validators only see values arriving now; the
      reader reads rows written in the past by writers that predate the rule.
 
-  4. **A4 — pre-auth unbounded body buffering; 23 routes skip `readJsonBody`.**
+  4. **A4 — pre-auth unbounded body buffering; 23 routes skip `readJsonBody`.** **DONE (22
+     August 2026)** — 25, not 23.
      `data-lifecycle/dry-run.ts:32-44`; `security/request-body-limit.ts:127-132`.
      `resolveAuthInputs` checks only the _presence_ of a tenant header and token, then
      `await request.json()` runs. `checkContentLengthCeiling` returns true when the header
@@ -524,6 +525,23 @@ pioneered directly here after the ADR-0047 freeze.)
      before any DB or session work. Availability only — but unauthenticated.
      **Change:** convert the 23 files (`dry-run.ts` first, the only pre-auth one), then
      gate bare `request.json()/.text()/.formData()` under `src/pages/api/`.
+
+     **Landed, with three notes.** The count was **25**, not 23. `readFormBody` had to be
+     written — two routes read `formData()`, and there was no bounded equivalent; it parses
+     capped text as `URLSearchParams` and states plainly that it is NOT a multipart parser.
+     And `readJsonBody` now distinguishes EMPTY from MALFORMED: it answered `null` for
+     both, so converting a route that returned "Request body must be valid JSON" would have
+     silently turned that 400 into a field-validation 400 with a different sentence, or into
+     a silent accept where an empty body is legitimate. Every converted route keeps the
+     response it had.
+
+     `bun run api:body-limit:check` is the gate; its exemption list starts EMPTY and may
+     only shrink. The test drives real streaming `Request` objects that declare no length —
+     the shape the middleware cannot see — and asserts the read STOPS EARLY by counting the
+     bytes the producer emitted. A ceiling applied after buffering is not a ceiling, and
+     only an executed test tells them apart: moving the check below the loop turns three
+     cases red.
+
   5. **A5 — password reset changes the credential in EVERY tenant but revokes sessions in
      only one.** `password-reset.ts:259,267`; `session-revocation.ts:26-31`.
      `setPrincipalCredentialForIdentity` is global by design (ADR-0086);

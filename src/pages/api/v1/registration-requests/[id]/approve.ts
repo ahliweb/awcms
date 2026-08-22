@@ -4,6 +4,10 @@ import { createEmailAuthNotificationAdapter } from "../../../../../modules/email
 import { approveRegistrationRequest } from "../../../../../modules/identity-access/application/self-registration";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import { resolveDeclaredBaseUrl } from "../../../../../lib/http/site-origin";
+import {
+  bodyTooLargeResponse,
+  readTextBody
+} from "../../../../../lib/security/request-body-limit";
 
 const TOKEN_TTL_MIN = Number(
   process.env.AUTH_PASSWORD_RESET_TOKEN_TTL_MIN ?? 30
@@ -56,7 +60,13 @@ export const POST = defineTenantRoute({
     // A bodyless approve is the common case (no roles), so an absent or
     // unparseable body is not an error — but a PRESENT, malformed one is not
     // silently reinterpreted as "no roles" either.
-    const raw = await request.text();
+    const rawRead = await readTextBody(request);
+
+    if (rawRead.tooLarge) {
+      return bodyTooLargeResponse(rawRead.limitBytes);
+    }
+
+    const raw = rawRead.value;
 
     if (raw.trim().length > 0) {
       try {

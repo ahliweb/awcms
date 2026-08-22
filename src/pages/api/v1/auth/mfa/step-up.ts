@@ -23,6 +23,10 @@ import {
   setSessionCookies
 } from "../../../../../modules/identity-access/application/mfa-session-assurance";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 type StepUpBody = { code?: unknown; recoveryCode?: unknown };
 
@@ -67,7 +71,17 @@ export const POST: APIRoute = async ({
     );
   }
 
-  const body = (await request.json().catch(() => null)) as StepUpBody | null;
+  const bodyRead = await readJsonBody<StepUpBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  // Malformed stays indistinguishable from absent HERE, deliberately: the
+  // validation immediately below already answers 400 for both, and this route
+  // is an authentication surface where two different sentences would tell a
+  // caller which of its guesses was closer.
+  const body = bodyRead.value;
 
   if (
     !body ||

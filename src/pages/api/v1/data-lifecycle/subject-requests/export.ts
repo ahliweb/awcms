@@ -21,6 +21,10 @@ import {
   recordExportDisclosure,
   resolveSubject
 } from "../../../../../modules/data-lifecycle/application/subject-request-service";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 
 /**
  * `POST /api/v1/data-lifecycle/subject-requests/export` — ADR-0094, Issue #557.
@@ -72,12 +76,23 @@ export const POST = defineTenantRoute<Prepared>({
       );
     }
 
-    let body: { tenantUserId?: unknown; reason?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
+    const bodyRead = await readJsonBody<{
+      tenantUserId?: unknown;
+      reason?: unknown;
+    }>(request);
+
+    if (bodyRead.tooLarge) {
+      return bodyTooLargeResponse(bodyRead.limitBytes);
+    }
+
+    if (bodyRead.malformed) {
       return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
     }
+
+    const body = (bodyRead.value ?? {}) as {
+      tenantUserId?: unknown;
+      reason?: unknown;
+    };
 
     const subjectTenantUserId =
       typeof body.tenantUserId === "string" ? body.tenantUserId.trim() : "";

@@ -24,6 +24,10 @@ import {
 import { resolveSoDApprovalAuthority } from "../../../../../../../modules/identity-access/domain/sod-approval-authority";
 import { collectSoDRuleDescriptors } from "../../../../../../../modules/identity-access/domain/sod-rule-registry";
 import { listModules } from "../../../../../../../modules";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../../../lib/security/request-body-limit";
 
 const IDEMPOTENCY_SCOPE = "identity_access_sod_conflict_exception_approve";
 
@@ -94,12 +98,17 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     );
   }
 
-  let body: DecideExceptionBody;
-  try {
-    body = (await request.json()) as DecideExceptionBody;
-  } catch {
+  const bodyRead = await readJsonBody<DecideExceptionBody>(request);
+
+  if (bodyRead.tooLarge) {
+    return bodyTooLargeResponse(bodyRead.limitBytes);
+  }
+
+  if (bodyRead.malformed) {
     return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
+
+  const body = (bodyRead.value ?? {}) as DecideExceptionBody;
 
   const decisionReason =
     typeof body.decisionReason === "string" ? body.decisionReason : null;
