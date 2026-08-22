@@ -100,6 +100,13 @@ function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
 }
 
+// Two of these are statuses nothing WRITES any more, and both stay on purpose
+// (finding D16). `attached` was retired by ADR-0036's inversion (`sql/087`) and
+// rows already hold it. `orphaned` never had a reachable writer at all, and its
+// only one is now deleted — but `sql/041`'s CHECK still admits the value, so a
+// row could reach it by hand, and this list is a READ over that column. The
+// same is true of the API's own `status` filter; dropping the option here and
+// not there would leave two surfaces disagreeing about the same column.
 const STATUS_OPTIONS: readonly NewsMediaObjectStatus[] = [
   "pending_upload",
   "uploaded",

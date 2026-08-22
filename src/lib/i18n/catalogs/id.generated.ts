@@ -86,6 +86,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Allowed email domains (comma separated; empty means any)": ["Domain email yang diizinkan (dipisah koma; kosong berarti apa pun)"],
   "Already archived": ["Sudah diarsipkan"],
   "An exception lets one person hold both halves of a conflict for a bounded window. Approving is the whole point of the checker half of this flow — and the person who asked for it, and the person it is for, are both refused.": ["Pengecualian membuat satu orang bisa memegang kedua sisi sebuah konflik untuk jangka waktu terbatas. Menyetujui adalah inti dari sisi pemeriksa pada alur ini — dan orang yang memintanya, serta orang yang dituju, sama-sama ditolak."],
+  "An image is attached, but it is not publicly referenceable — it is unverified or has been deleted, so this ad will render nothing.": ["Sebuah gambar terlampir, tetapi tidak dapat dirujuk publik — ia belum terverifikasi atau sudah dihapus, jadi iklan ini tidak akan merender apa pun."],
   "An image is attached.": ["Sebuah gambar terpasang."],
   "Analytics could not be loaded right now. Please try again later.": ["Analitik tidak dapat dimuat saat ini. Silakan coba lagi nanti."],
   "Any": ["Apa pun"],

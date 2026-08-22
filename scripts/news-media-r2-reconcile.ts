@@ -46,7 +46,7 @@
  * listing WITHOUT deleting or modifying anything — safe to run in
  * production to preview impact. See `news-media-reconciliation.ts`'s own
  * header for the exact categories (`healthy`/`orphanInDb`/`expiredPending`/
- * `staleOrphaned`/`orphanInR2`) and the ordering/race-safety guarantees the
+ * `orphanInR2`) and the ordering/race-safety guarantees the
  * REAL (non-dry-run) path applies.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
@@ -108,7 +108,6 @@ async function main() {
           const hadFailures =
             totals.tenantsWithR2ListFailure > 0 ||
             totals.expiredPendingDeferred > 0 ||
-            totals.staleOrphanedDeferred > 0 ||
             totals.orphanInR2Deferred > 0;
 
           console.log(
@@ -116,7 +115,6 @@ async function main() {
               `tenants=${totals.tenantsChecked} healthy=${totals.healthy} ` +
               `orphanInDb=${totals.orphanInDb} ` +
               `expiredPending(total=${totals.expiredPendingTotal},deleted=${totals.expiredPendingDeleted},racedSkipped=${totals.expiredPendingRacedSkipped},deferred=${totals.expiredPendingDeferred}) ` +
-              `staleOrphaned(total=${totals.staleOrphanedTotal},deleted=${totals.staleOrphanedDeleted},deferred=${totals.staleOrphanedDeferred}) ` +
               `orphanInR2(total=${totals.orphanInR2Total},eligible=${totals.orphanInR2Eligible},deleted=${totals.orphanInR2Deleted},raceAverted=${totals.orphanInR2RaceAverted},deferred=${totals.orphanInR2Deferred})` +
               (ctx.dryRun ? " (dry-run: nothing was deleted/modified)" : "") +
               (totals.tenantsWithR2ListFailure > 0
@@ -137,7 +135,6 @@ async function main() {
               healthy: totals.healthy,
               orphanInDb: totals.orphanInDb,
               expiredPendingDeleted: totals.expiredPendingDeleted,
-              staleOrphanedDeleted: totals.staleOrphanedDeleted,
               orphanInR2Deleted: totals.orphanInR2Deleted
             },
             detail: summary.aborted

@@ -135,8 +135,13 @@ export const READER_BUDGET_BYTES = 24_000;
  * August 2026 for the Portable Text block editor (ADR-0100, Issue #589), and
  * the measurement was the argument.**
  *
- * Measured on clean builds (`rm -rf dist && bun run build` — a stale `dist`
- * produced a wrong delta once already, so the clean step is not optional):
+ * Measured on clean builds. That used to be a manual `rm -rf dist &&` that this
+ * docblock told the reader not to skip — and the instruction was ignored twice,
+ * once here (a 2,493 B admin screen first reported as 82 B) and again on 22
+ * August 2026, when a phantom 425 B "saving" sent a whole PR down the wrong
+ * road. A gate that documents its own hazard is a gate that will mislead
+ * somebody a third time, so `bun run build` now runs `build:clean` first and
+ * the number cannot come from a tree the current build did not produce:
  *
  * ```
  * main                                     181,418 B

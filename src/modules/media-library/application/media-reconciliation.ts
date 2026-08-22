@@ -37,25 +37,21 @@
  *   between this module's DB claim and its R2 delete therefore self-heals,
  *   just on the next scheduled run instead of instantly.
  *
- * **`staleOrphaned` (`cleanupStaleOrphaned`): R2 delete FIRST, DB soft-
- * delete SECOND** — the doc's original ordering, unmodified. This path has
- * no equivalent race to guard against: no other code path in
- * `news-media-object-directory.ts` ever transitions a row OUT of
- * `status = 'orphaned'` (there is no "un-orphan" operation), so there is no
- * concurrently-running flow that could be racing this cleanup the way
- * `finalize()` races `expiredPending`. R2-delete-first here matches the
- * doc's own crash-safety reasoning: a crash after the R2 delete but before
- * the DB soft-delete just leaves a row pointing at an already-gone object,
- * which the NEXT run's `orphanInDb`/retry naturally reconciles.
+ * There WAS a third path here, `cleanupStaleOrphaned`, and it is gone
+ * (finding D16). It cleaned up `status = 'orphaned'` rows past a grace period,
+ * and `markNewsMediaObjectOrphaned` was this repo's only writer of that status
+ * and had zero callers — so the path ran, found nothing, and printed
+ * `staleOrphaned(total=0,deleted=0,deferred=0)` on every run. A zero counter
+ * and a clean bucket read identically, which made the summary line a claim
+ * nobody could check. Its own docblock even reasoned carefully about a race
+ * that could not occur, because no row could be in the state it guarded.
  *
  * ## Idempotency across reruns
  *
  * Every mutation below is a guarded UPDATE/DELETE that only succeeds if the
  * row is STILL in the exact state that made it eligible. Once a row is
- * hard-deleted (`expiredPending`) or soft-deleted (`staleOrphaned`), it no
- * longer appears in the NEXT run's `fetchNewsMediaObjectsForReconciliation`
- * snapshot (hard-delete) or no longer satisfies the `deleted_at IS NULL`
- * guard (soft-delete) — so a rerun with nothing new to do performs zero
+ * hard-deleted (`expiredPending`), it no longer appears in the NEXT run's
+ * `fetchNewsMediaObjectsForReconciliation` snapshot — so a rerun with nothing new to do performs zero
  * mutations and reports the same `healthy` set, by construction, not by a
  * separate "already processed" bookkeeping mechanism.
  *
@@ -80,15 +76,13 @@ import {
   type NewsMediaExpiredPendingEntry,
   type NewsMediaOrphanInDbEntry,
   type NewsMediaOrphanInR2Entry,
-  type NewsMediaReconciliationDbRow,
-  type NewsMediaStaleOrphanedEntry
+  type NewsMediaReconciliationDbRow
 } from "../domain/media-reconciliation-categorization";
 import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import type { NewsMediaR2Client } from "../infrastructure/media-r2-client";
 import {
   fetchNewsMediaObjectsForReconciliation,
   markNewsMediaObjectFailed,
-  markStaleOrphanedNewsMediaObjectDeleted,
   NEWS_MEDIA_RECONCILIATION_SNAPSHOT_LIMIT,
   objectKeyExistsForTenant,
   purgeExpiredPendingNewsMediaObject
@@ -123,11 +117,6 @@ export type NewsMediaTenantReconciliationResult = {
     total: number;
     deleted: number;
     racedSkipped: number;
-    deferred: number;
-  };
-  staleOrphaned: {
-    total: number;
-    deleted: number;
     deferred: number;
   };
   orphanInR2: {
@@ -283,48 +272,6 @@ async function cleanupExpiredPending(
   return { deleted, racedSkipped, deferred };
 }
 
-async function cleanupStaleOrphaned(
-  sql: Bun.SQL,
-  tenantId: string,
-  entries: NewsMediaStaleOrphanedEntry[],
-  orphanCutoff: Date,
-  r2Client: NewsMediaR2Client,
-  signal?: AbortSignal
-): Promise<{ deleted: number; deferred: number }> {
-  let deleted = 0;
-  let deferred = 0;
-
-  for (const entry of entries) {
-    if (signal?.aborted) break;
-
-    const deleteResult = await r2Client.deleteObject(entry.objectKey);
-
-    if (!deleteResult.ok) {
-      deferred += 1;
-      continue;
-    }
-
-    const softDeleted = await withTenantOrThrow(
-      sql,
-      tenantId,
-      (tx) =>
-        markStaleOrphanedNewsMediaObjectDeleted(
-          tx,
-          tenantId,
-          entry.id,
-          orphanCutoff
-        ),
-      { workClass: "maintenance" }
-    );
-
-    if (softDeleted) {
-      deleted += 1;
-    }
-  }
-
-  return { deleted, deferred };
-}
-
 async function cleanupOrphanInR2(
   sql: Bun.SQL,
   tenantId: string,
@@ -417,7 +364,6 @@ export async function reconcileNewsMediaForTenant(
       healthyCount: 0,
       orphanInDb: [],
       expiredPending: { total: 0, deleted: 0, racedSkipped: 0, deferred: 0 },
-      staleOrphaned: { total: 0, deleted: 0, deferred: 0 },
       orphanInR2: {
         total: 0,
         eligible: 0,
@@ -440,9 +386,6 @@ export async function reconcileNewsMediaForTenant(
   const pendingCutoff = new Date(
     now.getTime() - config.pendingTtlMinutes * 60_000
   );
-  const orphanCutoff = new Date(
-    now.getTime() - config.orphanGraceDays * 24 * 60 * 60 * 1000
-  );
 
   if (dryRun) {
     return {
@@ -457,11 +400,6 @@ export async function reconcileNewsMediaForTenant(
         total: categorized.expiredPending.length,
         deleted: 0,
         racedSkipped: 0,
-        deferred: 0
-      },
-      staleOrphaned: {
-        total: categorized.staleOrphaned.length,
-        deleted: 0,
         deferred: 0
       },
       orphanInR2: {
@@ -482,15 +420,6 @@ export async function reconcileNewsMediaForTenant(
     tenantId,
     categorized.expiredPending,
     pendingCutoff,
-    r2Client,
-    signal
-  );
-
-  const staleOrphanedResult = await cleanupStaleOrphaned(
-    sql,
-    tenantId,
-    categorized.staleOrphaned,
-    orphanCutoff,
     r2Client,
     signal
   );
@@ -516,10 +445,6 @@ export async function reconcileNewsMediaForTenant(
       total: categorized.expiredPending.length,
       ...expiredPendingResult
     },
-    staleOrphaned: {
-      total: categorized.staleOrphaned.length,
-      ...staleOrphanedResult
-    },
     orphanInR2: {
       total: categorized.orphanInR2.length,
       eligible: categorized.orphanInR2.filter((entry) =>
@@ -541,9 +466,6 @@ export type NewsMediaReconciliationTotals = {
   expiredPendingDeleted: number;
   expiredPendingRacedSkipped: number;
   expiredPendingDeferred: number;
-  staleOrphanedTotal: number;
-  staleOrphanedDeleted: number;
-  staleOrphanedDeferred: number;
   orphanInR2Total: number;
   orphanInR2Eligible: number;
   orphanInR2Deleted: number;
@@ -569,9 +491,6 @@ function emptyTotals(): NewsMediaReconciliationTotals {
     expiredPendingDeleted: 0,
     expiredPendingRacedSkipped: 0,
     expiredPendingDeferred: 0,
-    staleOrphanedTotal: 0,
-    staleOrphanedDeleted: 0,
-    staleOrphanedDeferred: 0,
     orphanInR2Total: 0,
     orphanInR2Eligible: 0,
     orphanInR2Deleted: 0,
@@ -624,9 +543,6 @@ export async function reconcileNewsMediaForAllTenants(
     totals.expiredPendingDeleted += result.expiredPending.deleted;
     totals.expiredPendingRacedSkipped += result.expiredPending.racedSkipped;
     totals.expiredPendingDeferred += result.expiredPending.deferred;
-    totals.staleOrphanedTotal += result.staleOrphaned.total;
-    totals.staleOrphanedDeleted += result.staleOrphaned.deleted;
-    totals.staleOrphanedDeferred += result.staleOrphaned.deferred;
     totals.orphanInR2Total += result.orphanInR2.total;
     totals.orphanInR2Eligible += result.orphanInR2.eligible;
     totals.orphanInR2Deleted += result.orphanInR2.deleted;

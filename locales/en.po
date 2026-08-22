@@ -4043,6 +4043,9 @@ msgstr ""
 msgid "An image is attached."
 msgstr ""
 
+msgid "An image is attached, but it is not publicly referenceable — it is unverified or has been deleted, so this ad will render nothing."
+msgstr ""
+
 msgid "No image attached."
 msgstr ""
 

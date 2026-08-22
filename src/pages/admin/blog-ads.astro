@@ -375,10 +375,19 @@ function formatWindow(placement: AdPlacementView): string {
               value={editing?.mediaObjectId ?? ""}
             />
             <div class="media-choice" id="ad-media-choice">
+              {/* Finding D17 — the row now carries the media registry's own
+                  verdict, so this can say whether the image will actually be
+                  SHOWN rather than only that an id is set. An ad pointing at an
+                  unverified or soft-deleted object renders nothing publicly,
+                  and saying "an image is attached" is how that goes unnoticed. */}
               <p class="form-hint" id="ad-media-label">
-                {editing?.mediaObjectId
-                  ? t("An image is attached.")
-                  : t("No image attached.")}
+                {!editing?.mediaObjectId
+                  ? t("No image attached.")
+                  : editing.mediaPubliclyReferenceable
+                    ? t("An image is attached.")
+                    : t(
+                        "An image is attached, but it is not publicly referenceable — it is unverified or has been deleted, so this ad will render nothing."
+                      )}
               </p>
               <div class="media-choice-actions">
                 <button

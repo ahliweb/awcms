@@ -5,8 +5,11 @@
  * `src/lib/ui/`, and they had ALREADY drifted: `sendJson` and `sendJsonForData`
  * supported `extraHeaders`, bodyless requests and `DELETE`;
  * `sendJsonWithFieldErrors` supported none of it until Issue #596 added the
- * first by hand. Three copies of a fetch is also three copies of the bytes, on
- * a client budget this repo measures and had 161 B left in.
+ * first by hand.
+ *
+ * It was ALSO argued as a byte saving, and that argument was wrong: both files
+ * were already shared chunks shipped once each, so consolidating them recovered
+ * nothing. The 425 B measured at the time came from an uncleaned `dist/`.
  *
  * What the consolidation must NOT do is merge the three public functions.
  * Their differing return shapes are a control, not an accident: `sendJson`'s

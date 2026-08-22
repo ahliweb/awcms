@@ -18,9 +18,34 @@
  * moves the bookkeeping, which is why `--check` can be trusted to say whether a
  * tree is already correct.
  *
+ * ## It will REFUSE to declare a mirror current that nobody re-translated
+ *
+ * The marker says "this mirror was translated from a source with this hash".
+ * Re-writing it is a CLAIM about the translation, and until this guard existed
+ * the tool made that claim unconditionally — so the sequence "edit the English,
+ * run the stamp" turned `check:docs:translation` green over an Indonesian
+ * mirror that still said the old thing. That happened for real: a generated
+ * §2 count went 141 -> 142 in `PROJECT_STATE.md`, the stamp declared the mirror
+ * current, and the mirror still read 141. It was caught by a test that checks
+ * `sql/NNN` ranges across documents — a backstop that exists for a different
+ * reason and covers one field.
+ *
+ * So when a mirror's recorded hash is stale, re-stamping is allowed only when
+ * something says the translation was actually looked at:
+ *
+ *  1. **the mirror itself is modified** in this working tree (or untracked) —
+ *     somebody edited the translation, which is the whole signal; or
+ *  2. **the source changed only in whitespace** since `HEAD` — the case this
+ *     tool was built for, where `bun run format` reflows an English document
+ *     and no translator needs to do anything.
+ *
+ * Otherwise it refuses, names the file, and says what to do. `--force-restamp`
+ * is the deliberate override for a reword the translation genuinely survives.
+ *
  * Usage:
- *   bun run docs:i18n:stamp            # rewrite banners + markers in place
- *   bun run docs:i18n:stamp --check    # report what would change, exit 1 if any
+ *   bun run docs:i18n:stamp                   # rewrite banners + markers in place
+ *   bun run docs:i18n:stamp --check           # report what would change, exit 1 if any
+ *   bun run docs:i18n:stamp --force-restamp   # re-stamp even an untouched mirror
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -28,11 +53,13 @@ import { execFileSync } from "node:child_process";
 import {
   MARKER_REGEX,
   computeSourceHash,
-  deriveSourcePath
+  deriveSourcePath,
+  extractRecordedHash
 } from "./lib/docs-i18n-checks.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CHECK_ONLY = process.argv.includes("--check");
+const FORCE_RESTAMP = process.argv.includes("--force-restamp");
 
 /** A line is a language banner when it opens with either flag. */
 const BANNER_REGEX = /^(?:🇬🇧|🇮🇩).*$/u;
@@ -176,6 +203,104 @@ function readFileIfPresent(path) {
   }
 }
 
+/**
+ * Paths git reports as modified, staged, or untracked in this working tree.
+ *
+ * Computed once: `git status --porcelain` over the whole repository is one
+ * process, where asking per file would be one per mirror.
+ *
+ * @returns {Set<string>}
+ */
+function workingTreeChanges() {
+  const output = execFileSync("git", ["status", "--porcelain", "-z"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+
+  const paths = new Set();
+
+  // NUL-separated so a path containing a space or a quote cannot be misparsed.
+  // A rename entry is `R  new\0old`, and both halves matter to us: the new path
+  // is the changed file, and the old one no longer exists.
+  for (const entry of output.split("\0")) {
+    if (entry.length < 4) continue;
+    paths.add(entry.slice(3));
+  }
+
+  return paths;
+}
+
+/**
+ * The committed content of `path`, or `null` when it is not in `HEAD` (a new
+ * file, or a repository with no commits yet).
+ *
+ * @param {string} path
+ * @returns {string | null}
+ */
+function committedContent(path) {
+  try {
+    return execFileSync("git", ["show", `HEAD:${path}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every whitespace run to one space, so a reflow compares equal.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+function withoutWhitespace(content) {
+  return content.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * May this mirror's marker be re-written to claim the source's new hash?
+ *
+ * @param {string} mirrorPath
+ * @param {string} sourcePath
+ * @param {string} originalMirror
+ * @param {string} nextSource
+ * @param {Set<string>} touched
+ * @returns {boolean}
+ */
+function mayRestamp(
+  mirrorPath,
+  sourcePath,
+  originalMirror,
+  nextSource,
+  touched
+) {
+  if (FORCE_RESTAMP) return true;
+
+  const recorded = extractRecordedHash(originalMirror);
+
+  // No marker yet, or the marker already matches: nothing is being CLAIMED that
+  // was not already true, so there is nothing to refuse.
+  if (!recorded || recorded === computeSourceHash(nextSource)) return true;
+
+  // Somebody edited the translation in this working tree.
+  if (touched.has(mirrorPath)) return true;
+
+  // A formatting-only change to the source — the case this tool exists for.
+  const committed = committedContent(sourcePath);
+
+  return (
+    committed !== null &&
+    withoutWhitespace(committed) === withoutWhitespace(nextSource)
+  );
+}
+
+const touchedPaths = workingTreeChanges();
+
+/** @type {string[]} */
+const refused = [];
+
 /** @type {string[]} */
 const changed = [];
 
@@ -215,9 +340,39 @@ for (const mirrorPath of listMirrors()) {
     if (!CHECK_ONLY) writeFileSync(sourceFull, nextSource);
   }
   if (nextMirror !== originalMirror) {
+    if (
+      !mayRestamp(
+        mirrorPath,
+        sourcePath,
+        originalMirror,
+        nextSource,
+        touchedPaths
+      )
+    ) {
+      refused.push(mirrorPath);
+      continue;
+    }
+
     changed.push(mirrorPath);
     if (!CHECK_ONLY) writeFileSync(mirrorFull, nextMirror);
   }
+}
+
+if (refused.length > 0) {
+  console.error(
+    `docs:i18n:stamp REFUSES to re-stamp ${refused.length} mirror(s) nobody re-translated:`
+  );
+  for (const file of refused) console.error(`  - ${file}`);
+  console.error(
+    "\n  Their English source changed by more than whitespace and the mirror was\n" +
+      "  not touched in this working tree. Re-stamping would make\n" +
+      "  `check:docs:translation` green over a translation that still says the old\n" +
+      "  thing — which is the failure this guard exists for, and which has\n" +
+      "  happened.\n\n" +
+      "  Update the mirror, or pass --force-restamp if the translation genuinely\n" +
+      "  survives the reword."
+  );
+  process.exit(1);
 }
 
 if (CHECK_ONLY) {

@@ -36,10 +36,14 @@
  *   `pending_upload`/`uploaded` so a previous run's R2-delete failure
  *   (provider outage) is retried on the next run — see this module's own
  *   idempotency note below.
- * - **staleOrphaned** — a `status = 'orphaned'` row, not yet soft-deleted,
- *   whose `orphanedAt` is older than `orphanGraceDays`
- *   (`NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS`). Eligible for R2-object-delete +
- *   DB soft-delete (`r2-backup-lifecycle.md` §3's retention table).
+ * There is deliberately NO "stale orphaned" category (finding D16). One used
+ * to sit here, matching `status = 'orphaned'` rows past a grace period — and
+ * `markNewsMediaObjectOrphaned` was the repo's only writer of that status and
+ * had zero callers, so it matched a permanently empty set. A zero counter and
+ * a clean bucket printed the same line. The status itself is a leftover of the
+ * pre-ADR-0036 model: `sql/087` removed the attach/detach relation, so no
+ * reference count exists to derive "orphaned" FROM. `orphanGraceDays` survives
+ * because `orphanInR2` below genuinely uses it.
  * - **orphanInR2** — an R2 object whose key has NO matching DB row AT ALL
  *   (any status, any `deletedAt`) for this tenant. Eligible for physical R2
  *   deletion once its OWN age (R2's reported `lastModified`, the only
@@ -56,7 +60,7 @@
  *
  * ## Idempotency
  *
- * Categorizing the SAME snapshot twice always produces the SAME five lists
+ * Categorizing the SAME snapshot twice always produces the SAME four lists
  * — this function has no side effects and no hidden state. Real-world
  * idempotency across ACTUAL job runs (`bun run news-media:reconcile` twice
  * in a row doing nothing the second time) additionally depends on the
@@ -109,6 +113,13 @@ export type NewsMediaReconciliationInput = {
   r2Objects: NewsMediaReconciliationR2Object[];
   now: Date;
   pendingTtlMinutes: number;
+  /**
+   * NOT read by this function any more (finding D16) — the one category that
+   * used it, `staleOrphaned`, matched a permanently empty set. It stays on the
+   * INPUT because `isOrphanInR2EligibleForDeletion` below takes the same number
+   * and the application layer passes one config object to both; removing it
+   * here would only move the field, not delete it.
+   */
   orphanGraceDays: number;
 };
 
@@ -128,12 +139,6 @@ export type NewsMediaExpiredPendingEntry = {
   ageMinutes: number;
 };
 
-export type NewsMediaStaleOrphanedEntry = {
-  id: string;
-  objectKey: string;
-  ageDays: number;
-};
-
 export type NewsMediaOrphanInR2Entry = {
   objectKey: string;
   sizeBytes?: number;
@@ -145,7 +150,6 @@ export type NewsMediaReconciliationResult = {
   healthy: NewsMediaHealthyEntry[];
   orphanInDb: NewsMediaOrphanInDbEntry[];
   expiredPending: NewsMediaExpiredPendingEntry[];
-  staleOrphaned: NewsMediaStaleOrphanedEntry[];
   orphanInR2: NewsMediaOrphanInR2Entry[];
 };
 
@@ -186,20 +190,16 @@ function r2ObjectAgeInDays(
 export function categorizeNewsMediaReconciliation(
   input: NewsMediaReconciliationInput
 ): NewsMediaReconciliationResult {
-  const { dbRows, r2Objects, now, pendingTtlMinutes, orphanGraceDays } = input;
+  const { dbRows, r2Objects, now, pendingTtlMinutes } = input;
 
   const r2KeySet = new Set(r2Objects.map((object) => object.key));
   const dbKeySet = new Set(dbRows.map((row) => row.objectKey));
 
   const pendingCutoff = new Date(now.getTime() - pendingTtlMinutes * 60_000);
-  const orphanCutoff = new Date(
-    now.getTime() - orphanGraceDays * 24 * 60 * 60 * 1000
-  );
 
   const healthy: NewsMediaHealthyEntry[] = [];
   const orphanInDb: NewsMediaOrphanInDbEntry[] = [];
   const expiredPending: NewsMediaExpiredPendingEntry[] = [];
-  const staleOrphaned: NewsMediaStaleOrphanedEntry[] = [];
 
   for (const row of dbRows) {
     // Security-auditor Medium finding on PR #718: `"uploaded"` is a member
@@ -242,19 +242,6 @@ export function categorizeNewsMediaReconciliation(
         ageMinutes: ageInMinutes(row.createdAt, now)
       });
     }
-
-    if (
-      row.deletedAt === null &&
-      row.status === "orphaned" &&
-      row.orphanedAt !== null &&
-      row.orphanedAt < orphanCutoff
-    ) {
-      staleOrphaned.push({
-        id: row.id,
-        objectKey: row.objectKey,
-        ageDays: ageInDays(row.orphanedAt, now)
-      });
-    }
   }
 
   const orphanInR2: NewsMediaOrphanInR2Entry[] = r2Objects
@@ -265,7 +252,7 @@ export function categorizeNewsMediaReconciliation(
       ageDays: r2ObjectAgeInDays(object.lastModified, now)
     }));
 
-  return { healthy, orphanInDb, expiredPending, staleOrphaned, orphanInR2 };
+  return { healthy, orphanInDb, expiredPending, orphanInR2 };
 }
 
 /** `true` iff `entry.ageDays` is known AND at least `orphanGraceDays` — the deletion-eligibility gate for `orphanInR2` entries (application layer still re-verifies via `objectKeyExistsForTenant` immediately before acting). */
