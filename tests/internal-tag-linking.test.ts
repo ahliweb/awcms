@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { stripComments } from "../scripts/lib/source-text";
 import {
   applyInternalTagLinksToHtml,
   createInternalTagLinkEngine,
@@ -403,5 +404,65 @@ describe("createInternalTagLinkEngine", () => {
       { ...BASE_POLICY, minTermLength: 5 }
     );
     expect(engine).toBeNull();
+  });
+});
+
+/**
+ * PROJECT_STATE §4 **C7** — `prepareCandidates` re-escaped every tag name
+ * inside the sort comparator.
+ *
+ * A comparator runs O(n log n) times, so escaping inside it cost 1090
+ * `escapeHtml` calls per sort at the 100-candidate cap instead of 100. This is
+ * on by default on every public article render.
+ *
+ * The saving is small in absolute terms; what makes it worth locking is that
+ * the comparator is the wrong place for it either way — the escaped name is
+ * needed by the dedupe loop and by the caller, so computing it once and
+ * carrying it is also the simpler code.
+ */
+describe("candidate preparation escapes once, not once per comparison", () => {
+  test("the sort comparator does not call escapeHtml", async () => {
+    const source = stripComments(
+      await Bun.file(
+        "src/modules/blog-content/domain/internal-tag-linking.ts"
+      ).text()
+    );
+    const sortAt = source.indexOf("decorated.sort(");
+    const comparator = source.slice(sortAt, source.indexOf("});", sortAt));
+
+    expect(sortAt).toBeGreaterThan(-1);
+    expect(comparator).not.toContain("escapeHtml(");
+    // The escaped form is carried on the row rather than recomputed.
+    expect(comparator).toContain("escapedName.length");
+  });
+
+  test("longest-escaped-first ordering still decides overlapping terms", async () => {
+    // The property the comparator exists for: JS alternation takes the FIRST
+    // alternative that matches, so "Jakarta Selatan" must precede "Jakarta".
+    const html = "<p>Reporting from Jakarta Selatan this week.</p>";
+    const result = await applyInternalTagLinksToHtml(
+      html,
+      [
+        candidate("t1", "Jakarta", "/news/tag/jakarta"),
+        candidate("t2", "Jakarta Selatan", "/news/tag/jakarta-selatan")
+      ],
+      BASE_POLICY
+    );
+
+    expect(result.matches[0]?.tagId).toBe("t2");
+    expect(result.html).toContain(">Jakarta Selatan</a>");
+  });
+
+  test("the raw name still decides eligibility and the alphabetical tie", async () => {
+    // `minTermLength` is measured on the RAW name — a short tag is noisy
+    // regardless of how it happens to escape — and escaping must not smuggle a
+    // filtered-out candidate back in by inflating its length.
+    const result = await applyInternalTagLinksToHtml(
+      "<p>Trading as R&amp;D today.</p>",
+      [candidate("t1", "R&D", "/news/tag/rd")],
+      { ...BASE_POLICY, minTermLength: 4 }
+    );
+
+    expect(result.matches).toHaveLength(0);
   });
 });

@@ -221,27 +221,63 @@ export async function listPermissionCatalog(
   }));
 }
 
-/** The permissions currently granted to `roleId`, joined to the catalog. */
-export async function listRolePermissions(
+/**
+ * The permissions currently granted to each role, joined to the catalog — in
+ * ONE round trip for the whole set.
+ *
+ * `/admin/roles` renders one grant panel per role, and awaiting
+ * `listRolePermissions` inside that loop is an N+1 whose N is the tenant's
+ * role count — sequential, because concurrent queries on a single transaction
+ * connection leak it, so the latency is the sum rather than the max. A tenant
+ * with 40 roles paid 40 round trips to render one screen.
+ *
+ * Every requested id gets an entry, empty array included. A caller that has to
+ * tell "this role has no grants" from "this role was not in the result" would
+ * reintroduce the per-role question this exists to remove.
+ */
+export async function listRolePermissionsForRoles(
   tx: Bun.SQL,
   tenantId: string,
-  roleId: string
-): Promise<PermissionCatalogEntry[]> {
+  roleIds: readonly string[]
+): Promise<Map<string, PermissionCatalogEntry[]>> {
+  const byRole = new Map<string, PermissionCatalogEntry[]>();
+
+  for (const roleId of roleIds) {
+    byRole.set(roleId, []);
+  }
+
+  if (byRole.size === 0) {
+    return byRole;
+  }
+
+  // `= ANY(tx.array(...))` rather than `IN ${…}`: a bare `${array}` binding
+  // arrives at PostgreSQL as comma-joined TEXT (22P02), not as a list.
   const rows = (await tx`
-    SELECT p.id, p.module_key, p.activity_code, p.action, p.description
+    SELECT rp.role_id, p.id, p.module_key, p.activity_code, p.action, p.description
     FROM awcms_role_permissions rp
     JOIN awcms_permissions p ON p.id = rp.permission_id
-    WHERE rp.tenant_id = ${tenantId} AND rp.role_id = ${roleId}
-    ORDER BY p.module_key, p.activity_code, p.action
-  `) as PermissionRow[];
+    WHERE rp.tenant_id = ${tenantId}
+      AND rp.role_id = ANY(${tx.array([...byRole.keys()], "uuid")})
+    ORDER BY rp.role_id, p.module_key, p.activity_code, p.action
+  `) as (PermissionRow & { role_id: string })[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    moduleKey: row.module_key,
-    activityCode: row.activity_code,
-    action: row.action,
-    description: row.description
-  }));
+  for (const row of rows) {
+    // Present by construction above; a row for an unrequested role cannot
+    // occur, but dropping one silently would be worse than not creating it.
+    const entries = byRole.get(row.role_id) ?? [];
+
+    entries.push({
+      id: row.id,
+      moduleKey: row.module_key,
+      activityCode: row.activity_code,
+      action: row.action,
+      description: row.description
+    });
+
+    byRole.set(row.role_id, entries);
+  }
+
+  return byRole;
 }
 
 // --- Writes ---
