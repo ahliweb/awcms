@@ -5871,7 +5871,9 @@ Gated by blog_content.internal_links.configure. disabledTagIds are validated aga
 - **operationId**: `blogListMenus`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.menus.read.
+Gated by blog_content.menus.read. Bounded at 100 menus, name ascending — a site has a handful, and unlike the tag vocabulary this one does not grow with the archive.
+
+Each menu carries its own `items`, already sorted by `sortOrder`. That costs one query per menu rather than one for all of them, and the route says why in a comment: the queries run on one transaction, so they cannot be issued concurrently.
 
 **Parameters**
 
@@ -6980,13 +6982,16 @@ Gated by blog_content.theme.configure.
 - **operationId**: `blogListWidgets`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.widgets.read.
+Gated by blog_content.widgets.read. Optional `?position=` filter. Bounded at 100, ordered by `position` then `sortOrder`.
+
+**Inactive widgets are returned too.** There is no `?activeOnly=` parameter: `isActive` is on every row, and a consumer that wants only the live ones filters on it. An endpoint that hid them would make "this widget is switched off" and "this widget was deleted" the same answer.
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type                                                                   | Description |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------------- | ----------- |
+| `position`         | query  | no       | enum(`header`, `sidebar`, `footer`, `content_before`, `content_after`) |             |
+| `X-Correlation-ID` | header | no       | string                                                                 |             |
 
 **Responses**
 

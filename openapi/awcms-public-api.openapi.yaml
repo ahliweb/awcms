@@ -4336,7 +4336,10 @@ paths:
         - Blog Content
       operationId: blogListMenus
       summary: List this tenant's navigation menus (with items)
-      description: Gated by blog_content.menus.read.
+      description: |
+        Gated by blog_content.menus.read. Bounded at 100 menus, name ascending — a site has a handful, and unlike the tag vocabulary this one does not grow with the archive.
+
+        Each menu carries its own `items`, already sorted by `sortOrder`. That costs one query per menu rather than one for all of them, and the route says why in a comment: the queries run on one transaction, so they cannot be issued concurrently.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
       responses:
@@ -4357,7 +4360,7 @@ paths:
                       menus:
                         type: array
                         items:
-                          type: object
+                          $ref: "#/components/schemas/BlogMenu"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -6428,8 +6431,21 @@ paths:
         - Blog Content
       operationId: blogListWidgets
       summary: List this tenant's widgets
-      description: Gated by blog_content.widgets.read.
+      description: |
+        Gated by blog_content.widgets.read. Optional `?position=` filter. Bounded at 100, ordered by `position` then `sortOrder`.
+
+        **Inactive widgets are returned too.** There is no `?activeOnly=` parameter: `isActive` is on every row, and a consumer that wants only the live ones filters on it. An endpoint that hid them would make "this widget is switched off" and "this widget was deleted" the same answer.
       parameters:
+        - name: position
+          in: query
+          schema:
+            type: string
+            enum:
+              - header
+              - sidebar
+              - footer
+              - content_before
+              - content_after
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -6449,7 +6465,7 @@ paths:
                       widgets:
                         type: array
                         items:
-                          type: object
+                          $ref: "#/components/schemas/BlogWidget"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -19762,6 +19778,58 @@ components:
           items:
             type: string
             format: uuid
+    BlogMenu:
+      type: object
+      description: |
+        One navigation menu, as `GET /api/v1/blog/menus` returns it.
+
+        It exists as a schema because that endpoint's response was documented as
+        an array of bare `object` — which promises a consumer nothing at all.
+        Any field could have been renamed or dropped and the frozen consumer
+        contract would still have passed, because everything is a subset of
+        "object". That is the same defect the list endpoint shipped once over
+        `BlogPostSummary`, one step further along: not a wrong shape, but no
+        shape.
+
+        `key` is the stable identifier a template selects a menu by (`main`,
+        `footer`); `name` is the editorial label and may be renamed at any time.
+        A consumer that keys off `name` breaks the first time somebody fixes a
+        typo.
+      required:
+        - id
+        - tenantId
+        - key
+        - name
+        - items
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: Stable slug. What a consumer selects a menu by.
+        name:
+          type: string
+          description: Editorial label. NOT an identifier.
+        items:
+          type: array
+          description: Already sorted by `sortOrder`. One level of nesting at most — an item whose parent itself has a parent is refused at write time.
+          items:
+            $ref: "#/components/schemas/BlogMenuItem"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Always null on this list — it filters soft-deleted menus out. Present because the row carries it, and named here rather than left as a surprise field.
     BlogMenuItem:
       type: object
       required:
@@ -19773,6 +19841,16 @@ components:
         id:
           type: string
           format: uuid
+        tenantId:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Returned on a read, never accepted on a write — the tenant comes from the credential.
+        menuId:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Returned on a read, never accepted on a write — the item's menu is the one it was submitted with.
         parentItemId:
           type: string
           format: uuid
@@ -19789,9 +19867,11 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: Required for `post`/`page`. Its existence is deliberately NOT checked against the posts/pages tables, because a menu may point at something not created yet — so a consumer must treat a target that resolves to nothing as a normal state, not an error.
         url:
           type: string
           nullable: true
+          description: Required for `url`. An absolute http(s) URL, validated at write time by the same check `canonicalUrl` uses.
         sortOrder:
           type: integer
     BlogPage:
@@ -20320,6 +20400,55 @@ components:
         description:
           type: string
           nullable: true
+    BlogWidget:
+      type: object
+      description: |
+        One widget, as `GET /api/v1/blog/widgets` returns it. Its response was
+        documented as an array of bare `object` too — see `BlogMenu` for why
+        that is worse than a wrong shape.
+
+        `bodyText` is PLAIN TEXT, not markup: the write path refuses unsafe HTML
+        rather than sanitizing it, so a consumer must escape this before
+        rendering and must not treat it as trusted HTML.
+      required:
+        - id
+        - tenantId
+        - position
+        - title
+        - bodyText
+        - isActive
+        - sortOrder
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        position:
+          type: string
+          enum:
+            - header
+            - sidebar
+            - footer
+            - content_before
+            - content_after
+        title:
+          type: string
+        bodyText:
+          type: string
+          description: Plain text. Escape before rendering.
+        isActive:
+          type: boolean
+          description: Inactive widgets ARE returned by the list — filter on this rather than expecting the endpoint to hide them.
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     BulkModerationResult:
       type: object
       properties:
