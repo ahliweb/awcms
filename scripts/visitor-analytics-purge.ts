@@ -39,7 +39,10 @@ import {
   writeJobTelemetry,
   type JobContext
 } from "../src/lib/jobs/job-runner";
-import { fetchActiveTenants } from "../src/lib/jobs/batching";
+import {
+  fetchActiveTenants,
+  runBoundedBatches
+} from "../src/lib/jobs/batching";
 import { purgeVisitorAnalyticsData } from "../src/modules/visitor-analytics/application/retention-purge";
 import {
   resolveVisitorAnalyticsConfig,
@@ -56,6 +59,8 @@ export type VisitorAnalyticsPurgeResult = {
   tenantsSkipped: number;
   /** Named, not just counted — a re-run needs to know which tenants still hold data past retention. */
   skippedTenantIds: string[];
+  /** Finding C2 — tenants that hit the pass cap with work still to do. The next run continues them; silence here would read as "finished". */
+  tenantsWithBacklog: string[];
 };
 
 export async function runVisitorAnalyticsPurge(
@@ -73,7 +78,8 @@ export async function runVisitorAnalyticsPurge(
     sessionsDeleted: 0,
     rollupsDeleted: 0,
     tenantsSkipped: 0,
-    skippedTenantIds: []
+    skippedTenantIds: [],
+    tenantsWithBacklog: []
   };
 
   if (ctx.dryRun) {
@@ -96,20 +102,44 @@ export async function runVisitorAnalyticsPurge(
     // holding visitor data past its retention window, silently, until someone
     // notices the counts are too low — and the summary was reporting success.
     try {
-      const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
-        purgeVisitorAnalyticsData(
-          tx,
-          tenant.id,
-          config,
-          now,
-          legalHoldGuardPortAdapter
-        )
+      // Finding C2 — the purge is BATCHED now, so one pass is one bounded bite
+      // and the loop is what finishes the job. A fresh transaction per pass is
+      // the whole point: looping inside one transaction would hold every lock
+      // and every dead tuple for the duration, which is the thing the batching
+      // exists to avoid.
+      //
+      // `runBoundedBatches` caps the passes, so a tenant with a pathological
+      // backlog cannot make this job run forever; whatever is left is picked up
+      // by the next scheduled run.
+      const outcome = await runBoundedBatches(
+        async () => {
+          const pass = await withTenantOrThrow(sql, tenant.id, (tx) =>
+            purgeVisitorAnalyticsData(
+              tx,
+              tenant.id,
+              config,
+              now,
+              legalHoldGuardPortAdapter
+            )
+          );
+
+          totals.eventsDeleted += pass.eventsDeleted;
+          totals.sessionsRawDetailCleared += pass.sessionsRawDetailCleared;
+          totals.sessionsDeleted += pass.sessionsDeleted;
+          totals.rollupsDeleted += pass.rollupsDeleted;
+
+          // `count` drives the loop: zero ends it. `hasMore` alone would not,
+          // because a pass that deletes nothing but is `hasMore` cannot exist —
+          // and a pass that deletes something without being `hasMore` should
+          // still stop.
+          return { count: pass.hasMore ? 1 : 0 };
+        },
+        { signal: ctx.signal }
       );
 
-      totals.eventsDeleted += result.eventsDeleted;
-      totals.sessionsRawDetailCleared += result.sessionsRawDetailCleared;
-      totals.sessionsDeleted += result.sessionsDeleted;
-      totals.rollupsDeleted += result.rollupsDeleted;
+      if (outcome.hitPassLimit) {
+        totals.tenantsWithBacklog.push(tenant.id);
+      }
     } catch (error) {
       // ONLY backpressure is a skip. A legal-hold refusal or a broken query is
       // a real failure and must reach the job runner, which classifies a
@@ -139,6 +169,11 @@ async function main() {
         handler: async (ctx) => {
           const purgeResult = await runVisitorAnalyticsPurge(sql, ctx, config);
           const skipped = purgeResult.tenantsSkipped > 0;
+          // Finding C2 — the batching means "finished this pass" and "finished"
+          // are now different states, and a run that stops with work left must
+          // say so. A summary that reads identically either way is the same
+          // false-success the D4/D5/D6 round was about.
+          const backlog = purgeResult.tenantsWithBacklog.length > 0;
 
           console.log(
             `analytics:purge complete — correlationId=${ctx.correlationId} ` +
@@ -149,22 +184,29 @@ async function main() {
               (skipped
                 ? ` (WARNING: ${purgeResult.tenantsSkipped} tenant(s) skipped — database busy;` +
                   ` data past retention is STILL HELD for: ${purgeResult.skippedTenantIds.join(", ")})`
+                : "") +
+              (backlog
+                ? ` (${purgeResult.tenantsWithBacklog.length} tenant(s) hit the pass cap with work remaining;` +
+                  ` the next run continues them: ${purgeResult.tenantsWithBacklog.join(", ")})`
                 : "")
           );
 
           return {
-            status: skipped ? "partial" : "success",
+            status: skipped || backlog ? "partial" : "success",
             itemCounts: {
               tenantsChecked: purgeResult.tenantsChecked,
               eventsDeleted: purgeResult.eventsDeleted,
               sessionsRawDetailCleared: purgeResult.sessionsRawDetailCleared,
               sessionsDeleted: purgeResult.sessionsDeleted,
               rollupsDeleted: purgeResult.rollupsDeleted,
-              tenantsSkipped: purgeResult.tenantsSkipped
+              tenantsSkipped: purgeResult.tenantsSkipped,
+              tenantsWithBacklog: purgeResult.tenantsWithBacklog.length
             },
             detail: skipped
               ? `${purgeResult.tenantsSkipped} tenant(s) skipped due to database backpressure`
-              : undefined
+              : backlog
+                ? `${purgeResult.tenantsWithBacklog.length} tenant(s) hit the pass cap with work remaining`
+                : undefined
           };
         }
       },

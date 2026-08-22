@@ -99,6 +99,12 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       });
     }
 
+    // Finding C2 — ONE bounded pass, deliberately. The scheduled job loops until
+    // a tenant is drained; an interactive request must not, because the size of
+    // the work is unknown at the moment the caller presses the button and a
+    // request that holds a purge of unbounded size open is the problem the
+    // batching was added to remove. `hasMore` travels back in the response body
+    // so the operator knows to run it again rather than assuming it finished.
     const result = await purgeVisitorAnalyticsData(
       tx,
       tenantId,

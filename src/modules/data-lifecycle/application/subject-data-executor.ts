@@ -127,6 +127,40 @@ export type SubjectTableExport = {
   /** Columns held back — carried so the report can SAY what it withheld. */
   redactedColumns: readonly string[];
   rows: readonly Record<string, unknown>[];
+  /**
+   * Finding C5 — this table filled the row cap, so the export is INCOMPLETE for
+   * it.
+   *
+   * Reported, never swallowed, and that is the whole reason a cap is acceptable
+   * here at all. A subject-access export that quietly returned the first N rows
+   * would answer a legal obligation with a number dressed as an answer —
+   * strictly worse than the unbounded read it replaced, which was at least
+   * honest. `redactedColumns` already establishes the shape: the report says
+   * what it held back.
+   */
+  truncated: boolean;
+};
+
+/**
+ * Finding C5 — the export ran 49 reads with no LIMIT, buffering every row of
+ * every registered table into one interactive HTTP response, inside one
+ * transaction.
+ *
+ * The cap is a SAFETY VALVE, not a page size. It sits far above any real
+ * subject's footprint; the point is that a pathological case — an automation
+ * account named as actor on a million audit rows — degrades into a flagged,
+ * incomplete report rather than a transaction that buffers a million rows and
+ * then times out with nothing to show for it.
+ *
+ * There is deliberately no cursor. Paging a subject-access export would mean
+ * the "complete answer" is assembled by a client across requests, and every
+ * page boundary is a place where a partial answer can be mistaken for the whole
+ * one. A flagged truncation says the true thing in one response.
+ */
+export const SUBJECT_EXPORT_ROW_LIMIT = 10_000;
+
+export type SubjectExportOptions = {
+  rowLimit?: number;
 };
 
 /**
@@ -171,8 +205,10 @@ export async function readSubjectExport(
   tx: Bun.SQL,
   tenantId: string,
   plan: SubjectPlan,
-  columnTypes: ReadonlyMap<string, ColumnType[]>
+  columnTypes: ReadonlyMap<string, ColumnType[]>,
+  options: SubjectExportOptions = {}
 ): Promise<SubjectTableExport[]> {
+  const rowLimit = options.rowLimit ?? SUBJECT_EXPORT_ROW_LIMIT;
   const results: SubjectTableExport[] = [];
 
   for (const entry of plan.exportEntries) {
@@ -192,24 +228,35 @@ export async function readSubjectExport(
         tableName: entry.tableName,
         ownerModuleKey: entry.ownerModuleKey,
         redactedColumns: entry.redactedColumns,
-        rows: []
+        rows: [],
+        // Nothing was read, so nothing was cut short. `false` here is a fact,
+        // not a default.
+        truncated: false
       });
       continue;
     }
 
     const predicate = subjectPredicate(entry, 2);
+    // `rowLimit + 1` is what makes `truncated` truthful rather than a guess:
+    // reading exactly the limit cannot distinguish "there were exactly N" from
+    // "there were more". One extra row answers it, and is discarded.
+    const limitPlaceholder = `$${2 + predicate.values.length}`;
     const rows = (await tx.unsafe(
       `SELECT ${selected.join(", ")} FROM ${table} ` +
-        `WHERE ${tenantColumn} = $1::uuid AND ${predicate.sql}`,
-      [tenantId, ...predicate.values]
+        `WHERE ${tenantColumn} = $1::uuid AND ${predicate.sql} ` +
+        `LIMIT ${limitPlaceholder}`,
+      [tenantId, ...predicate.values, rowLimit + 1]
     )) as Record<string, unknown>[];
+
+    const truncated = rows.length > rowLimit;
 
     results.push({
       key: entry.key,
       tableName: entry.tableName,
       ownerModuleKey: entry.ownerModuleKey,
       redactedColumns: entry.redactedColumns,
-      rows
+      rows: truncated ? rows.slice(0, rowLimit) : rows,
+      truncated
     });
   }
 

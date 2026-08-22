@@ -168,6 +168,15 @@ export const POST = defineTenantRoute<Prepared>({
     );
     const tables = await readSubjectExport(tx, tenantId, plan, columnTypes);
     const rowCount = tables.reduce((sum, table) => sum + table.rows.length, 0);
+    // Finding C5 — the export is row-capped now, so "incomplete" is a state
+    // that can occur and must never be silent. It rides in the response
+    // alongside `unanswered` (this file's own coverage statement) and into the
+    // audit event, because a disclosure record that says "we gave them
+    // everything" when a table was cut short is the record being wrong about
+    // the one thing it exists to establish.
+    const truncatedTables = tables
+      .filter((table) => table.truncated)
+      .map((table) => table.key);
 
     const record = await recordExportDisclosure(tx, tenantId, {
       subjectTenantUserId: prepared.subjectTenantUserId,
@@ -189,13 +198,17 @@ export const POST = defineTenantRoute<Prepared>({
       resourceType: "subject_request",
       resourceId: record.id,
       severity: "critical",
-      message: `Subject-access export disclosed for tenant user ${prepared.subjectTenantUserId}`,
+      message:
+        truncatedTables.length > 0
+          ? `Subject-access export disclosed for tenant user ${prepared.subjectTenantUserId} — INCOMPLETE, ${truncatedTables.length} table(s) hit the row cap`
+          : `Subject-access export disclosed for tenant user ${prepared.subjectTenantUserId}`,
       attributes: {
         subjectTenantUserId: prepared.subjectTenantUserId,
         reason: prepared.reason,
         tablesRead: tables.length,
         rowCount,
-        tablesUnanswered: plan.unansweredEntries.length
+        tablesUnanswered: plan.unansweredEntries.length,
+        tablesTruncated: truncatedTables
       },
       correlationId: locals.correlationId ?? undefined
     });
@@ -205,7 +218,11 @@ export const POST = defineTenantRoute<Prepared>({
       subject: { tenantUserId: prepared.subjectTenantUserId },
       tables,
       // The report's own coverage statement — see this file's header.
-      unanswered: plan.unansweredEntries
+      unanswered: plan.unansweredEntries,
+      // The second half of that statement (finding C5): which tables were cut
+      // short. Empty means the report is complete, which is a claim worth being
+      // able to make explicitly rather than by the absence of a warning.
+      truncatedTables
     });
     const successBody = await successResponse.clone().json();
 

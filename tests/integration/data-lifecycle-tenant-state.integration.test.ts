@@ -269,7 +269,10 @@ suite("data_lifecycle module (integration)", () => {
       eventsDeleted: 0,
       sessionsRawDetailCleared: 0,
       sessionsDeleted: 0,
-      rollupsDeleted: 0
+      rollupsDeleted: 0,
+      // Finding C2 — a hold is not "more to purge". Looping on it would spin
+      // forever against a control whose whole purpose is to stop the purge.
+      hasMore: false
     });
 
     // The PII column is physically untouched, and both rows still exist.
