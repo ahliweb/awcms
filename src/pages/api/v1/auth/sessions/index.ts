@@ -54,6 +54,12 @@ function authRequired(): Response {
 }
 
 export const GET = defineSelfServiceTenantRoute({
+  // ADR-0073 — "where am I signed in" is the customer's own security view, and
+  // it is what a person needs in order to notice and end a session they do not
+  // recognise. Refusing it while a tenant is cut off would take away the only
+  // list the DELETE beside it operates on.
+  allowedWhileTenantSuspended:
+    "Seeing one's own live sessions is a security view, not service.",
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant"

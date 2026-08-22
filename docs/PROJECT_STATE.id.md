@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b40ae00dfd60694e88244573f1c6e20e0a08bbfcd4156026f8aada80e5ad8574 -->
+<!-- i18n-source-hash: sha256:171a1010c7d986d7865954c45189e76e6989d900e5d6bcd9e172c5433d76c38f -->
 
 # AWCMS — Project State & Continuation
 
@@ -443,7 +443,21 @@ DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124`, hanya arah-tol
      keluar dari model kapasitas.
 
   2. **A2 — penangguhan ADR-0073 tidak menjangkau factory rute self-service maupun
-     client-credential.** `_shared/tenant-route.ts:247-301` dan `:342-379`;
+     client-credential.** **SELESAI (22 Agustus 2026).** Kedua factory kini menolak
+     sebelum handler-nya jalan, dan klausa ketiga rencananya ikut mendarat:
+     `api:tenant-route:check` menggagalkan berkas mana pun di
+     `src/pages/api`/`src/pages/admin` yang memanggil `isTenantServiceStopped` sendiri.
+     Diverifikasi terhadap basis data nyata: `PATCH /api/v1/auth/profile` menjawab **200**
+     untuk tenant yang ditangguhkan sebelum perbaikan, dan `403 TENANT_SUSPENDED` sesudah.
+
+     Satu penyimpangan dari "resolve statusnya sekali di dalam kedua factory": MENGHILANGKAN
+     deklarasinya berarti MENOLAK, dan rute yang harus tetap terjangkau menyatakan
+     `allowedWhileTenantSuspended: "<alasan>"`. Empat rute melakukannya, dengan satu aturan
+     — tenant yang ditangguhkan masih boleh MELIHAT keadaan keamanannya sendiri dan masih
+     boleh melakukan hal yang hanya MENGHAPUS aksesnya sendiri (melihat daftar sesi,
+     mengakhiri satu, mengakhiri semua, mencabut pendaftaran perangkat push). Penangguhan
+     yang menghalangi pelanggan mengakhiri sesi curian justru melindungi penyerangnya.
+     `_shared/tenant-route.ts:247-301` dan `:342-379`;
      `auth/profile.ts:125`; `session-handoff/{issue,redeem}.ts`; `auth/password/change.ts:118`.
      Pemeriksaannya hanya ada di `authorizeInTransaction` dan `ssr-session.ts`, dan tidak
      satu pun factory memanggilnya, jadi sesi hidup milik tenant yang ditangguhkan masih
@@ -451,6 +465,7 @@ DEFINER` sempit mengikuti preseden `sql/048`/`sql/119`/`sql/124`, hanya arah-tol
      batas — pijakan itu hidup lebih lama daripada TTL yang seharusnya dikuras penangguhan.
      `push/subscriptions/index.ts:154` memeriksa dengan tangan; saudara `DELETE`-nya tidak,
      dan asimetri itulah yang membuktikan kelalaian ini tidak disengaja.
+
   3. **A3 — admin SSO tenant bisa menyebut env var APA PUN sebagai client secret OIDC dan
      mengirimkannya ke host pilihannya.** `tenant-sso.ts:180-184`;
      `tenant-sso-policy.ts:229-239,333-348`. `client_secret_env_var` hanya divalidasi

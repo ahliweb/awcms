@@ -279,18 +279,44 @@ describe("a machine credential is refused before any database work", () => {
 });
 
 describe("the self-service routes carry the suspension check the chokepoint would have", () => {
-  test("registration refuses a suspended tenant", () => {
+  test("neither verb on the collection opts out of it", () => {
     // ADR-0073 made suspension a SERVICE status. Guarded routes get it from
     // `authorizeInTransaction`; these three do not go through it, so the one
     // class of endpoint that skips the guard must not become the one place a
     // suspended tenant can still add outbound capacity.
+    //
+    // This file used to assert the check INLINE here, and that is exactly what
+    // went wrong: the copy sat on `POST` only, `DELETE` never had it, and
+    // eleven other self-service routes never had it either. The refusal now
+    // belongs to `defineSelfServiceTenantRoute`, so what is left to assert here
+    // is that this file does not opt OUT of it — and that it no longer decides
+    // the question itself, which `api:tenant-route:check` also enforces.
     const source = readFileSync(
       "src/pages/api/v1/push/subscriptions/index.ts",
       "utf8"
     );
 
-    expect(source).toContain("isTenantServiceStopped(principal.tenantStatus)");
-    expect(source).toContain("TENANT_SUSPENDED");
+    expect(source).not.toContain("allowedWhileTenantSuspended");
+    expect(source).not.toContain("isTenantServiceStopped(");
+    expect(source).toContain("defineSelfServiceTenantRoute({");
+  });
+
+  test("unregistering a device DOES stay reachable, with a stated reason", () => {
+    // The one deliberate exception in this module, and the rule behind it: a
+    // suspended tenant may still do things that only ever REMOVE its own
+    // access. Removing a delivery target grants nothing.
+    const source = readFileSync(
+      "src/pages/api/v1/push/subscriptions/[id].ts",
+      "utf8"
+    );
+
+    const match = source.match(
+      /allowedWhileTenantSuspended:\s*\n?\s*"([^"]+)"/
+    );
+
+    expect(match).not.toBeNull();
+    // A REASON, not a boolean — the whole point of the field's shape.
+    expect(match![1]!.length).toBeGreaterThan(20);
   });
 });
 

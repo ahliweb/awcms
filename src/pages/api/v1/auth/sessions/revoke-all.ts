@@ -55,6 +55,11 @@ function authRequired(): Response {
 }
 
 export const POST = defineSelfServiceTenantRoute({
+  // ADR-0073 — sign-out only ever REMOVES access. A suspended tenant that
+  // cannot sign itself out everywhere is a suspension that protects a stolen
+  // session, which is the opposite of what suspension is for.
+  allowedWhileTenantSuspended:
+    "Revocation only ever removes access; refusing it would protect a stolen session.",
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant"

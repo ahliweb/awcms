@@ -10,7 +10,6 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { isMachineCredentialToken } from "../../../../../lib/auth/machine-credential-token";
 import { resolveTenantPrincipal } from "../../../../../modules/identity-access/application/auth-context";
-import { isTenantServiceStopped } from "../../../../../modules/identity-access/domain/suspended-tenant-allowlist";
 import {
   listPushSubscriptions,
   registerPushSubscription
@@ -47,9 +46,14 @@ import { summarizeUserAgent } from "../../../../../lib/security/client-fingerpri
  *
  * ADR-0073 made suspension a SERVICE status rather than a login status, and the
  * chokepoint enforces it for every guarded route. A self-service route has no
- * chokepoint, so it does the same check by hand — otherwise the one class of
- * endpoint that skips the guard would become the one place a suspended tenant
- * can still add outbound capacity.
+ * chokepoint — so `defineSelfServiceTenantRoute` now carries the refusal for
+ * the whole class, and neither verb here opts out.
+ *
+ * This file used to do it by hand, on `POST` only. The `DELETE` sibling never
+ * had it, and that asymmetry is what showed the omission was accidental: a
+ * per-route copy is enforced by whoever remembers, and eleven other routes in
+ * this class did not. Unregistering a device DOES stay reachable, because it
+ * removes a delivery target and grants nothing.
  */
 const NO_STORE_HEADERS = { "cache-control": "private, no-store" };
 
@@ -151,14 +155,11 @@ export const POST = defineSelfServiceTenantRoute({
 
     if (!principal) return authRequired();
 
-    if (isTenantServiceStopped(principal.tenantStatus)) {
-      return fail(
-        403,
-        "TENANT_SUSPENDED",
-        "This tenant is suspended; new device registrations are not accepted."
-      );
-    }
-
+    // The ADR-0073 refusal that used to sit here by hand now belongs to
+    // `defineSelfServiceTenantRoute`, which applies it to every route in this
+    // class instead of the one that remembered. The DELETE sibling never had
+    // this check, and that asymmetry is what showed the omission was accidental
+    // rather than a decision.
     const body = await readJsonBody(request);
 
     if (body.tooLarge) return bodyTooLargeResponse(body.limitBytes);

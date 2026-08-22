@@ -25,6 +25,7 @@ const GUARD_SOURCE = "src/modules/identity-access/application/access-guard.ts";
 const SSR_SOURCE = "src/lib/auth/ssr-session.ts";
 const LIFECYCLE_SOURCE =
   "src/modules/tenant-admin/application/tenant-lifecycle.ts";
+const FACTORY_SOURCE = "src/modules/_shared/tenant-route.ts";
 
 describe("which tenant states stop service", () => {
   test("suspended and inactive both stop it; active does not", () => {
@@ -187,5 +188,110 @@ describe("the admin shell", () => {
 
     expect(source).toContain("isTenantServiceStopped(");
     expect(source).toContain("resolveTenantPrincipal(");
+  });
+});
+
+/**
+ * Finding A2 — the two factories that have no `AccessRequest` to consult.
+ *
+ * The behavioural half is
+ * `tests/integration/suspended-tenant-self-service.integration.test.ts`. What is
+ * asserted here is the shape that decides which way an omission fails, and every
+ * one of these was FALSE before the fix.
+ */
+describe("the factories with no chokepoint", () => {
+  test("both open their transaction and refuse BEFORE the handler runs", async () => {
+    const source = await Bun.file(FACTORY_SOURCE).text();
+
+    // Two call sites, one per factory. One would mean a route class was left
+    // out, which is exactly how this finding came to exist.
+    expect(
+      (source.match(/await refuseIfTenantSuspended\(/g) ?? []).length
+    ).toBe(2);
+
+    // Sliced by factory rather than matched on a formatted call expression: an
+    // assertion keyed to exact indentation is one `bun run format` away from
+    // passing for a reason nobody chose.
+    const factories: [string, string][] = [
+      [
+        "export function defineSelfServiceTenantRoute",
+        "export type ClientCredentialTenantRouteConfig"
+      ],
+      ["export function defineClientCredentialTenantRoute", "\n/**\n * SSE"]
+    ];
+
+    for (const [start, end] of factories) {
+      const from = source.indexOf(start);
+      const to = source.indexOf(end, from);
+
+      expect(from).toBeGreaterThan(-1);
+      expect(to).toBeGreaterThan(from);
+
+      const body = source.slice(from, to);
+      const refusal = body.indexOf("refuseIfTenantSuspended(");
+      const handler = body.indexOf("config.handler(");
+
+      expect(refusal).toBeGreaterThan(-1);
+      expect(handler).toBeGreaterThan(-1);
+      expect(refusal).toBeLessThan(handler);
+    }
+  });
+
+  test("omitting the declaration REFUSES — the default is the safe one", async () => {
+    const source = await Bun.file(FACTORY_SOURCE).text();
+
+    // A truthy reason opts out; anything else falls through to the read. The
+    // inverse shape (`if (!allowed) return undefined`) would make every route
+    // that never heard of this field served while suspended, which is the state
+    // this finding describes.
+    expect(source).toContain(
+      "if (allowedWhileTenantSuspended) return undefined;"
+    );
+  });
+
+  test("a missing tenant row reads as stopped", async () => {
+    const source = await Bun.file(FACTORY_SOURCE).text();
+
+    expect(source).toContain('const status = rows[0]?.status ?? "suspended";');
+  });
+
+  test("the platform exemption is consulted, and only for a tenant already refused", async () => {
+    const source = await Bun.file(FACTORY_SOURCE).text();
+
+    const stopped = source.indexOf("if (!isTenantServiceStopped(status))");
+    const exempt = source.indexOf("isSuspensionExemptTenant(");
+
+    expect(stopped).toBeGreaterThan(-1);
+    expect(exempt).toBeGreaterThan(stopped);
+    // The status-IGNORING resolver, for the reason the guard uses it: a
+    // platform tenant that has been suspended must still be able to lift it.
+    expect(source).toContain("resolvePlatformTenantIdIgnoringStatus(");
+  });
+
+  test("every opt-out states a REASON, and the set is the four that only remove access", async () => {
+    const declared: Record<string, string> = {};
+
+    for await (const entry of new Bun.Glob("src/pages/api/**/*.ts").scan(".")) {
+      const source = await Bun.file(entry).text();
+      const match = source.match(
+        /allowedWhileTenantSuspended:\s*\n?\s*"([^"]+)"/
+      );
+
+      if (match) declared[entry.split("\\").join("/")] = match[1]!;
+    }
+
+    // Widening this set is widening what a cut-off customer may still do, and
+    // it should be as visible in a diff as an entry in
+    // SUSPENDED_TENANT_ALLOWED_PERMISSION_KEYS is.
+    expect(Object.keys(declared).sort()).toEqual([
+      "src/pages/api/v1/auth/sessions/[id].ts",
+      "src/pages/api/v1/auth/sessions/index.ts",
+      "src/pages/api/v1/auth/sessions/revoke-all.ts",
+      "src/pages/api/v1/push/subscriptions/[id].ts"
+    ]);
+
+    for (const reason of Object.values(declared)) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
   });
 });

@@ -342,8 +342,8 @@ async function* walk(
   }
 }
 
-/** Comment lines are skipped so a docblock MENTIONING `withTenant(` is not a call. */
-function callsWithTenantDirectly(content: string): boolean {
+/** Comment lines are skipped so a docblock MENTIONING a call is not a call. */
+function matchesOutsideComments(content: string, pattern: RegExp): boolean {
   return content.split("\n").some((line) => {
     const trimmed = line.trim();
 
@@ -355,15 +355,35 @@ function callsWithTenantDirectly(content: string): boolean {
       return false;
     }
 
-    return WITH_TENANT_CALL_PATTERN.test(line);
+    return pattern.test(line);
   });
 }
+
+function callsWithTenantDirectly(content: string): boolean {
+  return matchesOutsideComments(content, WITH_TENANT_CALL_PATTERN);
+}
+
+/**
+ * The ADR-0073 refusal, named once so a file that re-implements it is visible.
+ *
+ * `push/subscriptions/index.ts` used to carry this call by hand, on `POST`
+ * only. Its `DELETE` sibling did not, and neither did the other eleven routes
+ * in the self-service class — so a suspended tenant could still write its
+ * profile, rewrite its credential, and mint new sessions. The check now belongs
+ * to `defineSelfServiceTenantRoute` and
+ * `defineClientCredentialTenantRoute`; a route that decides it again is a route
+ * that can decide it differently, which is how the asymmetry appeared the first
+ * time.
+ */
+const SUSPENSION_CALL_PATTERN = /\bisTenantServiceStopped\s*\(/;
 
 export type TenantRouteMigrationResult = {
   /** Calls `withTenant` directly and is NOT on the allowlist — a newly hand-rolled opening. */
   unlisted: string[];
   /** Allowlist entries that no longer call `withTenant` directly — the list must only shrink. */
   stale: string[];
+  /** Decides ADR-0073 suspension itself instead of letting its factory do it. */
+  handRolledSuspension: string[];
 };
 
 /** Pure over already-read contents, so both failure directions are unit-testable without a synthetic file tree. */
@@ -373,9 +393,17 @@ export function evaluateTenantRouteMigration(
 ): TenantRouteMigrationResult {
   const allowed = new Set(allowlist);
   const unlisted: string[] = [];
+  const handRolledSuspension: string[] = [];
   const stillDirect = new Set<string>();
 
   for (const file of files) {
+    // Comment-skipping for the same reason `callsWithTenantDirectly` does it: a
+    // docblock EXPLAINING that the factory owns this refusal must not read as a
+    // route deciding it.
+    if (matchesOutsideComments(file.content, SUSPENSION_CALL_PATTERN)) {
+      handRolledSuspension.push(file.path);
+    }
+
     if (!callsWithTenantDirectly(file.content)) {
       continue;
     }
@@ -390,7 +418,8 @@ export function evaluateTenantRouteMigration(
 
   return {
     unlisted,
-    stale: allowlist.filter((entry) => !stillDirect.has(entry))
+    stale: allowlist.filter((entry) => !stillDirect.has(entry)),
+    handRolledSuspension
   };
 }
 
@@ -432,17 +461,20 @@ async function main(): Promise<void> {
     }
   }
 
-  const { unlisted, stale } = evaluateTenantRouteMigration(
-    files,
-    NOT_YET_MIGRATED
-  );
+  const { unlisted, stale, handRolledSuspension } =
+    evaluateTenantRouteMigration(files, NOT_YET_MIGRATED);
 
-  if (unlisted.length === 0 && stale.length === 0) {
+  if (
+    unlisted.length === 0 &&
+    stale.length === 0 &&
+    handRolledSuspension.length === 0
+  ) {
     console.log(
       `api:tenant-route:check OK — ${files.length} berkas di ` +
         `${SCAN_ROOTS.map((scan) => scan.root).join(" + ")}: memakai defineTenantRoute, ` +
         `atau salah satu dari ${NOT_YET_MIGRATED.length} berkas yang masih antre migrasi ` +
-        "(rute API: Issue #255; layar admin: R3 / Issue #424)."
+        "(rute API: Issue #255; layar admin: R3 / Issue #424); " +
+        "0 berkas memutuskan penangguhan ADR-0073 sendiri."
     );
     process.exit(0);
   }
@@ -460,9 +492,20 @@ async function main(): Promise<void> {
     );
   }
 
+  for (const file of handRolledSuspension) {
+    console.error(
+      `${file} — memutuskan penangguhan ADR-0073 sendiri lewat isTenantServiceStopped(). ` +
+        "Refusal itu milik defineSelfServiceTenantRoute/defineClientCredentialTenantRoute " +
+        "(src/modules/_shared/tenant-route.ts). Sebuah rute yang tetap harus terjangkau saat " +
+        "tenant ditangguhkan menyatakan ALASANNYA lewat `allowedWhileTenantSuspended`, bukan " +
+        "dengan menyalin pemeriksaannya — salinan per-rute ditegakkan oleh siapa pun yang ingat."
+    );
+  }
+
   console.error(
     `\napi:tenant-route:check GAGAL — ${unlisted.length} berkas membuka transaksinya sendiri tanpa terdaftar, ` +
-      `${stale.length} entri allowlist basi.`
+      `${stale.length} entri allowlist basi, ` +
+      `${handRolledSuspension.length} berkas menyalin penangguhan ADR-0073.`
   );
 
   process.exit(1);
