@@ -26,8 +26,7 @@ import {
 } from "../../../modules/tenant-domain/application/tenant-domain-directory";
 import {
   TENANT_DOMAIN_TYPES,
-  TENANT_DOMAIN_ROUTE_MODES,
-  TENANT_DOMAIN_VERIFICATION_METHODS
+  TENANT_DOMAIN_ROUTE_MODES
 } from "../../../modules/tenant-domain/domain/tenant-domain-validation";
 
 const ssr = Astro.locals.ssrContext!;
@@ -173,15 +172,11 @@ function statusVariant(status: string): string {
           ))}
         </select>
 
-        <label for="domain-verification-method">
-          {t("Verification method")}
-        </label>
-        <select id="domain-verification-method" name="verificationMethod">
-          <option value="">{t("(none yet)")}</option>
-          {TENANT_DOMAIN_VERIFICATION_METHODS.map((value) => (
-            <option value={value}>{value}</option>
-          ))}
-        </select>
+        <p class="cell-muted">
+          {t(
+            "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify."
+          )}
+        </p>
 
         <button type="submit" id="domain-create-submit">
           {t("Add domain")}
@@ -240,8 +235,22 @@ function statusVariant(status: string): string {
             ) : (
               domains.map((domain) => (
                 <tr data-domain-row={domain.id}>
-                  <td data-label="Hostname">
+                  <td data-label="Hostname" class="stacked-block">
                     <span class="cell-code">{domain.hostname}</span>
+                    {domain.status !== "active" &&
+                      domain.verificationRecordName &&
+                      domain.verificationRecordValue && (
+                        <p class="cell-muted">
+                          {t("Publish TXT")}{" "}
+                          <span class="cell-code">
+                            {domain.verificationRecordName}
+                          </span>{" "}
+                          ={" "}
+                          <span class="cell-code">
+                            {domain.verificationRecordValue}
+                          </span>
+                        </p>
+                      )}
                   </td>
                   <td data-label="Type">
                     <span class="cell-muted">{domain.domainType}</span>
@@ -329,19 +338,18 @@ function statusVariant(status: string): string {
   }
 
   onSubmit("domain-create-form", async ({ data, submit }) => {
-    const verificationMethod = field(data, "verificationMethod");
-
-    const payload: Record<string, unknown> = {
-      hostname: field(data, "hostname"),
-      domainType: field(data, "domainType"),
-      routeMode: field(data, "routeMode")
-    };
-    if (verificationMethod) payload.verificationMethod = verificationMethod;
-
+    // No verification fields are sent: the DNS TXT challenge is minted by the
+    // server (ADR-0106), and the API now REFUSES a caller that tries to choose
+    // its own. Sending one would be a 400, not a preference.
     await mutateAndReload(
       submit,
       createError,
-      () => sendJson("POST", "/api/v1/tenant/domains", payload),
+      () =>
+        sendJson("POST", "/api/v1/tenant/domains", {
+          hostname: field(data, "hostname"),
+          domainType: field(data, "domainType"),
+          routeMode: field(data, "routeMode")
+        }),
       (errorCode) =>
         errorCode === "HOSTNAME_CONFLICT"
           ? "That hostname is already mapped. Choose another."
@@ -363,7 +371,14 @@ function statusVariant(status: string): string {
           undefined,
           idempotency()
         ),
-      "Could not verify the domain. Set a verification method first, then retry.",
+      (errorCode) =>
+        errorCode === "DOMAIN_NOT_VERIFIED"
+          ? "The DNS TXT record was not found. Publish the record shown beside the hostname, then verify again."
+          : errorCode === "SERVICE_UNAVAILABLE"
+            ? "DNS could not be reached. Nothing changed — try again shortly."
+            : errorCode === "RATE_LIMITED"
+              ? "Too many attempts. Wait a minute, then try again."
+              : "Could not verify the domain. Try again.",
       "Verifying…"
     );
   });

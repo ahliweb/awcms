@@ -225,8 +225,8 @@ paths:
     post:
       tags:
         - Tenant Domains
-      summary: Verify a tenant domain (manual-first)
-      description: "Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Manual-first: flips status to `active` based on the row's own `verification_method`/`verification_record_*` — no outbound DNS/HTTP call. Audited."
+      summary: Verify a tenant domain by DNS TXT record
+      description: "Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Resolves the TXT records at the domain's server-minted `verificationRecordName` and activates the domain only if one of them carries its `verificationRecordValue` exactly (ADR-0106). The lookup runs outside the database transaction. A miss records `status = failed` and answers 409 DOMAIN_NOT_VERIFIED; a resolver failure changes nothing and answers 503. Rate limited per tenant. Audited on both outcomes."
       operationId: tenantDomainsVerify
       parameters:
         - name: id
@@ -263,7 +263,19 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Cannot verify from the current status (INVALID_STATUS_TRANSITION), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          description: "The DNS TXT challenge was not found and the domain is now `failed` (DOMAIN_NOT_VERIFIED); a challenge was just issued and has not been published yet (DOMAIN_NOT_VERIFIED); the hostname is too long to carry one (DOMAIN_NOT_VERIFIABLE); the status is not verifiable (INVALID_STATUS_TRANSITION); the row changed mid-verification (CONFLICT); or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many verification attempts for this tenant (RATE_LIMITED). Carries `Retry-After`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The DNS lookup could not be completed (SERVICE_UNAVAILABLE). Nothing was written — the domain's status is unchanged.
           content:
             application/json:
               schema:
@@ -347,13 +359,16 @@ components:
         verificationMethod:
           type: string
           nullable: true
+          description: "Server-managed. `dns_txt` for every domain this application creates; `null` only on a row created before ADR-0106 that has not been verified since. Rows migrated from an older build may still carry `dns_cname`, `file` or `manual`, which this application no longer writes or honours."
           enum: [dns_txt, dns_cname, file, manual, null]
         verificationRecordName:
           type: string
           nullable: true
+          description: "Server-minted DNS name to publish the challenge at (`_awcms-verify.<hostname>`). Read-only."
         verificationRecordValue:
           type: string
           nullable: true
+          description: "Server-minted TXT value that must appear at `verificationRecordName`. Read-only, and not a secret — it is published in DNS."
         verifiedAt:
           type: string
           format: date-time
@@ -392,22 +407,12 @@ components:
           type: string
           enum: [canonical, legacy_blog]
           default: canonical
-        verificationMethod:
-          type: string
-          nullable: true
-          enum: [dns_txt, dns_cname, file, manual, null]
-        verificationRecordName:
-          type: string
-          nullable: true
-        verificationRecordValue:
-          type: string
-          nullable: true
         redirectToPrimary:
           type: boolean
           default: false
     UpdateTenantDomainRequest:
       type: object
-      description: At least one field required. `status` may not be `active` (use verify); `hostname`/`is_primary` are immutable.
+      description: "At least one field required. `status` may not be `active` (use verify); `hostname`/`is_primary` are immutable. `verificationMethod` and `verificationRecordName`/`Value` are server-managed (ADR-0106) and are REFUSED with 400 rather than ignored if supplied."
       properties:
         domainType:
           type: string
@@ -418,16 +423,6 @@ components:
         status:
           type: string
           enum: [pending_verification, suspended, failed]
-        verificationMethod:
-          type: string
-          nullable: true
-          enum: [dns_txt, dns_cname, file, manual, null]
-        verificationRecordName:
-          type: string
-          nullable: true
-        verificationRecordValue:
-          type: string
-          nullable: true
         redirectToPrimary:
           type: boolean
     DeleteTenantDomainRequest:

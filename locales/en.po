@@ -2173,9 +2173,6 @@ msgstr ""
 msgid "none — falling back to the default theme"
 msgstr ""
 
-msgid "(none yet)"
-msgstr ""
-
 msgid "No offices yet"
 msgstr ""
 
@@ -3643,7 +3640,10 @@ msgstr ""
 msgid "Verification"
 msgstr ""
 
-msgid "Verification method"
+msgid "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify."
+msgstr ""
+
+msgid "Publish TXT"
 msgstr ""
 
 msgid "Verify"

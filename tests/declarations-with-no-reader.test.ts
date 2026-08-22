@@ -40,21 +40,29 @@ describe("D7 — tenant_domain declares no setting nothing reads", () => {
     expect(tenantDomainModule.settings).toBeUndefined();
   });
 
-  test("verifyTenantDomain still requires a verification_method to exist", async () => {
-    // The reason the default was deleted rather than applied. `verify` does no
-    // DNS lookup of any kind — it checks this column is non-NULL and sets
-    // `status = 'active'`, and an active domain feeds host->tenant resolution.
-    // A default applied at creation would hand every new row the only
-    // precondition there is.
-    const source = stripComments(
+  test("verify performs a real DNS check, and creation mints the challenge", async () => {
+    // The reason the default was deleted rather than applied, and the reason it
+    // stays deleted now that the reason has changed.
+    //
+    // When D7 was closed, `verify` did no DNS lookup of any kind — it checked
+    // the column was non-NULL and set `status = 'active'` — so a default
+    // applied at creation would have handed every new row the only precondition
+    // there was. ADR-0106 built the check. The setting stays gone because
+    // nothing reads it, not because a NULL is load-bearing any more, and these
+    // two assertions are what would fail if the check were ever removed while
+    // the descriptor stayed quiet about it.
+    const directory = stripComments(
       await Bun.file(
         "src/modules/tenant-domain/application/tenant-domain-directory.ts"
       ).text()
     );
-
-    expect(source).toContain(
-      'return { outcome: "missing_verification_method" }'
+    const route = stripComments(
+      await Bun.file("src/pages/api/v1/tenant/domains/[id]/verify.ts").text()
     );
+
+    expect(directory).toContain("mintVerificationChallenge");
+    expect(route).toContain("resolveVerificationTxtRecords");
+    expect(route).toContain("txtRecordsCarryValue");
   });
 
   test("no code path applies a default verification method", async () => {

@@ -20,9 +20,11 @@ import {
   encodeKeysetCursor,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
-import type {
-  CreateTenantDomainInput,
-  UpdateTenantDomainInput
+import { mintVerificationChallenge } from "../domain/domain-verification-challenge";
+import {
+  TENANT_DOMAIN_VERIFICATION_METHOD,
+  type CreateTenantDomainInput,
+  type UpdateTenantDomainInput
 } from "../domain/tenant-domain-validation";
 
 export const TENANT_DOMAIN_LIST_LIMIT = 100;
@@ -118,6 +120,22 @@ export async function createTenantDomain(
   actorTenantUserId: string,
   input: CreateTenantDomainInput
 ): Promise<TenantDomainView> {
+  // ADR-0106 — the challenge is minted HERE, from the hostname being claimed,
+  // and is not a field of `CreateTenantDomainInput` any more. The caller used
+  // to supply the record name and value it wanted checked, which is a check
+  // that proves nothing; see `domain-verification-challenge.ts`.
+  //
+  // Not fallible at this point: `validateCreateTenantDomainInput` has already
+  // refused a hostname too long to carry the prefixed record name, which is the
+  // only way minting can fail.
+  const minted = mintVerificationChallenge(input.normalizedHostname);
+
+  if (!minted.ok) {
+    throw new Error(
+      `Cannot mint a verification challenge for "${input.normalizedHostname}": ${minted.reason}. validateCreateTenantDomainInput should have refused this hostname.`
+    );
+  }
+
   const rows = (await tx`
     INSERT INTO awcms_tenant_domains
       (tenant_id, hostname, normalized_hostname, domain_type, route_mode,
@@ -125,9 +143,9 @@ export async function createTenantDomain(
        redirect_to_primary, created_by, updated_by)
     VALUES (
       ${tenantId}, ${input.hostname}, ${input.normalizedHostname}, ${input.domainType},
-      ${input.routeMode}, ${input.verificationMethod}, ${input.verificationRecordName},
-      ${input.verificationRecordValue}, ${input.redirectToPrimary},
-      ${actorTenantUserId}, ${actorTenantUserId}
+      ${input.routeMode}, ${TENANT_DOMAIN_VERIFICATION_METHOD},
+      ${minted.challenge.recordName}, ${minted.challenge.recordValue},
+      ${input.redirectToPrimary}, ${actorTenantUserId}, ${actorTenantUserId}
     )
     RETURNING id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
       is_primary, redirect_to_primary, verification_method, verification_record_name,
@@ -204,7 +222,16 @@ export async function listTenantDomains(
  * should not silently change under an existing mapping; re-pointing a hostname
  * to a different tenant means deleting the mapping and creating a new one.
  * `is_primary` is also never settable here — the only path to becoming primary
- * is the atomic `setPrimaryTenantDomain` below. `status` can only reach
+ * is the atomic `setPrimaryTenantDomain` below.
+ *
+ * `verification_method` and `verification_record_*` are NO LONGER writable here
+ * (ADR-0106). They used to be, and that is what made verification meaningless:
+ * a caller who supplies both the name to query and the value to expect can name
+ * a record that already exists in a zone it does not control. All three are now
+ * server-minted at creation, and only ever re-minted by
+ * `beginTenantDomainVerification` below.
+ *
+ * `status` can only reach
  * non-`active` values here — see `UpdateTenantDomainInput`'s own docblock.
  */
 export async function updateTenantDomain(
@@ -220,18 +247,6 @@ export async function updateTenantDomain(
         route_mode = COALESCE(${input.routeMode ?? null}, route_mode),
         status = COALESCE(${input.status ?? null}, status),
         redirect_to_primary = COALESCE(${input.redirectToPrimary ?? null}, redirect_to_primary),
-        verification_method = CASE
-          WHEN ${input.verificationMethod === undefined} THEN verification_method
-          ELSE ${input.verificationMethod ?? null}
-        END,
-        verification_record_name = CASE
-          WHEN ${input.verificationRecordName === undefined} THEN verification_record_name
-          ELSE ${input.verificationRecordName ?? null}
-        END,
-        verification_record_value = CASE
-          WHEN ${input.verificationRecordValue === undefined} THEN verification_record_value
-          ELSE ${input.verificationRecordValue ?? null}
-        END,
         updated_by = ${actorTenantUserId},
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
@@ -269,34 +284,64 @@ export async function softDeleteTenantDomain(
   return rows.length > 0;
 }
 
-export type VerifyTenantDomainResult =
-  | { outcome: "verified"; entry: TenantDomainView }
+/**
+ * What `beginTenantDomainVerification` found, before anything left the process.
+ *
+ * `challenge_issued` is not a failure the caller did something wrong to earn:
+ * it is what a row created before ADR-0106 gets. Those rows have
+ * `verification_method = NULL` and no challenge at all, because nothing ever
+ * wrote one — the very defect that made `verify` meaningless. Rather than
+ * leaving them permanently unverifiable, the challenge is minted on the first
+ * verify attempt and the caller is told to publish it. Looking it up in DNS in
+ * the same breath would be a guaranteed miss for a record that was invented
+ * one millisecond ago.
+ */
+export type BeginTenantDomainVerificationResult =
+  | {
+      outcome: "challenge_ready";
+      recordName: string;
+      recordValue: string;
+    }
+  | { outcome: "challenge_issued"; entry: TenantDomainView }
+  | { outcome: "already_active"; entry: TenantDomainView }
   | { outcome: "not_found" }
-  | { outcome: "missing_verification_method" }
-  | { outcome: "not_verifiable"; currentStatus: string };
+  | { outcome: "not_verifiable"; currentStatus: string }
+  | { outcome: "hostname_too_long" };
 
 /**
- * Manual-first verify (no outbound DNS/HTTP call): flips `status` to `active`
- * based purely on fields already on the row. A domain with no
- * `verification_method` configured cannot be verified (nothing to attest).
- * `active` is idempotent — calling verify again just returns the current row,
- * not an error, since the end state is identical (also what makes a same-key
- * idempotency replay and a genuine second call with a fresh key behave the same
- * way). `suspended` is the one non-`active` status this refuses to transition
- * out of via verify — that state is an explicit operator/tenant pause, not
- * something a "yes, DNS is fine" attestation should silently override.
+ * Phase one of verification: decide whether a DNS lookup is worth making, and
+ * hand back exactly what to look for. Runs INSIDE a tenant transaction; makes
+ * no outbound call (ADR-0006 — the lookup belongs between the transactions,
+ * not inside one).
+ *
+ * `active` is idempotent and answers `already_active` without a lookup: the end
+ * state is identical, which is also what makes a same-key idempotency replay
+ * and a genuine second call with a fresh key behave the same way. `suspended`
+ * is the one non-`active` status this refuses to transition out of — that state
+ * is an explicit operator/tenant pause, and a passing DNS check is not a reason
+ * to silently undo it.
+ *
+ * `failed` IS re-verifiable, deliberately. It means "the last check did not
+ * pass", which is a fact about a moment, not a sentence — publishing the record
+ * and asking again is exactly the remedy, and a status that could not be left
+ * would be a dead end nothing could recover from.
  */
-export async function verifyTenantDomain(
+export async function beginTenantDomainVerification(
   tx: Bun.SQL,
   tenantId: string,
   actorTenantUserId: string,
   id: string
-): Promise<VerifyTenantDomainResult> {
+): Promise<BeginTenantDomainVerificationResult> {
   const existingRows = (await tx`
-    SELECT status, verification_method
+    SELECT status, normalized_hostname, verification_record_name, verification_record_value
     FROM awcms_tenant_domains
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
-  `) as { status: string; verification_method: string | null }[];
+  `) as {
+    status: string;
+    normalized_hostname: string;
+    verification_record_name: string | null;
+    verification_record_value: string | null;
+  }[];
 
   const existing = existingRows[0];
 
@@ -304,21 +349,11 @@ export async function verifyTenantDomain(
     return { outcome: "not_found" };
   }
 
-  if (!existing.verification_method) {
-    return { outcome: "missing_verification_method" };
-  }
-
   if (existing.status === "active") {
-    const rows = (await tx`
-      SELECT id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
-        is_primary, redirect_to_primary, verification_method, verification_record_name,
-        verification_record_value, verified_at, last_checked_at, created_at, updated_at,
-        created_by, updated_by
-      FROM awcms_tenant_domains
-      WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
-    `) as TenantDomainRow[];
+    const entry = await fetchActiveTenantDomain(tx, tenantId, id);
 
-    return { outcome: "verified", entry: toView(rows[0]!) };
+    // Non-null: the row was read one statement ago inside this transaction.
+    return { outcome: "already_active", entry: entry! };
   }
 
   if (
@@ -328,10 +363,28 @@ export async function verifyTenantDomain(
     return { outcome: "not_verifiable", currentStatus: existing.status };
   }
 
+  if (existing.verification_record_name && existing.verification_record_value) {
+    return {
+      outcome: "challenge_ready",
+      recordName: existing.verification_record_name,
+      recordValue: existing.verification_record_value
+    };
+  }
+
+  // A pre-ADR-0106 row. Mint the challenge it never got, and stop here.
+  const minted = mintVerificationChallenge(existing.normalized_hostname);
+
+  if (!minted.ok) {
+    return { outcome: "hostname_too_long" };
+  }
+
   const rows = (await tx`
     UPDATE awcms_tenant_domains
-    SET status = 'active', verified_at = now(), last_checked_at = now(),
-        updated_by = ${actorTenantUserId}, updated_at = now()
+    SET verification_method = ${TENANT_DOMAIN_VERIFICATION_METHOD},
+        verification_record_name = ${minted.challenge.recordName},
+        verification_record_value = ${minted.challenge.recordValue},
+        updated_by = ${actorTenantUserId},
+        updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
       is_primary, redirect_to_primary, verification_method, verification_record_name,
@@ -339,7 +392,74 @@ export async function verifyTenantDomain(
       created_by, updated_by
   `) as TenantDomainRow[];
 
-  return { outcome: "verified", entry: toView(rows[0]!) };
+  return { outcome: "challenge_issued", entry: toView(rows[0]!) };
+}
+
+export type CompleteTenantDomainVerificationResult =
+  | { outcome: "verified"; entry: TenantDomainView }
+  | { outcome: "not_verified"; entry: TenantDomainView }
+  /**
+   * The row moved between the two transactions — deleted, suspended, or its
+   * challenge re-minted. A proof of the OLD challenge must not activate the
+   * new one.
+   */
+  | { outcome: "stale" };
+
+/**
+ * Phase two: record what the lookup found. Runs inside a SECOND tenant
+ * transaction, after the DNS call has returned.
+ *
+ * `provenRecordValue` is the value phase one handed out and the resolver
+ * actually returned, and it is carried back into the `WHERE` clause rather than
+ * trusted. Between the two transactions the row is unlocked: it can be
+ * soft-deleted, suspended, or re-issued a fresh challenge. Requiring the value
+ * to still be the row's current one makes every one of those a `stale` answer
+ * instead of an activation earned by a challenge that is no longer the
+ * challenge. The status is re-checked in the same predicate for the same
+ * reason — `pending_verification`/`failed` at read time is not a promise about
+ * write time.
+ *
+ * A miss sets `failed` rather than leaving `pending_verification` untouched.
+ * The two mean different things and an operator needs to tell them apart:
+ * "nobody has checked yet" versus "we checked, and the record was not there".
+ * Leaving the status alone would also make `failed` unreachable — a declared
+ * state nothing can produce is precisely the shape of defect this repo has
+ * spent three PRs removing.
+ */
+export async function completeTenantDomainVerification(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  id: string,
+  provenRecordValue: string,
+  passed: boolean
+): Promise<CompleteTenantDomainVerificationResult> {
+  const rows = (await tx`
+    UPDATE awcms_tenant_domains
+    SET status = ${passed ? "active" : "failed"},
+        verified_at = CASE WHEN ${passed} THEN now() ELSE verified_at END,
+        last_checked_at = now(),
+        updated_by = ${actorTenantUserId},
+        updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
+      AND status IN ('pending_verification', 'failed')
+      AND verification_record_value = ${provenRecordValue}
+    RETURNING id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
+      is_primary, redirect_to_primary, verification_method, verification_record_name,
+      verification_record_value, verified_at, last_checked_at, created_at, updated_at,
+      created_by, updated_by
+  `) as TenantDomainRow[];
+
+  const row = rows[0];
+
+  if (!row) {
+    return { outcome: "stale" };
+  }
+
+  return {
+    outcome: passed ? "verified" : "not_verified",
+    entry: toView(row)
+  };
 }
 
 export type SetPrimaryTenantDomainResult =

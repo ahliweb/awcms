@@ -17,8 +17,10 @@ describe("validateCreateTenantDomainInput", () => {
     // Defaults.
     expect(result.value.domainType).toBe("custom_domain");
     expect(result.value.routeMode).toBe("canonical");
-    expect(result.value.verificationMethod).toBeNull();
     expect(result.value.redirectToPrimary).toBe(false);
+    // ADR-0106: the challenge is not an input at all any more, so there is no
+    // `verificationMethod` on the accepted value to default.
+    expect(result.value).not.toHaveProperty("verificationMethod");
   });
 
   test("rejects a missing/blank hostname", () => {
@@ -70,15 +72,53 @@ describe("validateCreateTenantDomainInput", () => {
       hostname: "shop.example.com",
       domainType: "custom_domain",
       routeMode: "canonical",
-      verificationMethod: "dns_txt",
-      verificationRecordName: "_awcms-verify.shop.example.com",
-      verificationRecordValue: "awcms-verify=abc123",
       redirectToPrimary: true
     });
     expect(result.valid).toBe(true);
     if (!result.valid) return;
-    expect(result.value.verificationMethod).toBe("dns_txt");
+    expect(result.value.domainType).toBe("custom_domain");
     expect(result.value.redirectToPrimary).toBe(true);
+  });
+
+  test("REFUSES a caller-supplied challenge rather than ignoring it (ADR-0106)", () => {
+    // The heart of the decision. A caller that chooses both the record name and
+    // the record value can point them at something that already exists in a
+    // zone it does not control, so a check against them proves nothing.
+    // Dropping the fields silently would leave the caller believing it had
+    // chosen what would be checked.
+    for (const field of [
+      "verificationMethod",
+      "verificationRecordName",
+      "verificationRecordValue"
+    ]) {
+      const result = validateCreateTenantDomainInput({
+        hostname: "shop.example.com",
+        [field]: "anything at all"
+      });
+
+      expect(result.valid, `${field} was accepted`).toBe(false);
+      if (result.valid) continue;
+      expect(result.errors.some((e) => e.field === field)).toBe(true);
+    }
+  });
+
+  test("refuses a hostname too long to carry the challenge record", () => {
+    // `_awcms-verify.` + hostname must fit in a DNS name. Refused at CREATE so
+    // a row that could never be verified is never written.
+    const label = "a".repeat(60);
+    const hostname = [label, label, label, label, "com"].join(".");
+
+    expect(hostname.length).toBeGreaterThan(239);
+
+    const result = validateCreateTenantDomainInput({ hostname });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(
+      result.errors.some(
+        (e) => e.field === "hostname" && e.message.includes("verification")
+      )
+    ).toBe(true);
   });
 });
 
@@ -106,15 +146,21 @@ describe("validateUpdateTenantDomainInput", () => {
     }
   });
 
-  test("tri-state: null clears verification fields, omit leaves unchanged", () => {
-    const cleared = validateUpdateTenantDomainInput({
-      verificationMethod: null,
-      verificationRecordName: null
-    });
-    expect(cleared.valid).toBe(true);
-    if (!cleared.valid) return;
-    expect(cleared.value.verificationMethod).toBeNull();
-    expect(cleared.value.verificationRecordName).toBeNull();
+  test("REFUSES the server-managed challenge fields on PATCH too (ADR-0106)", () => {
+    // These used to be tri-state (omit / null / set). They are now refused in
+    // every form, including `null`: clearing the challenge would put a row back
+    // into the state that made verification meaningless in the first place.
+    for (const value of [null, "dns_txt", "_awcms-verify.example.com"]) {
+      const result = validateUpdateTenantDomainInput({
+        verificationMethod: value
+      });
+
+      expect(result.valid, `verificationMethod: ${String(value)}`).toBe(false);
+      if (result.valid) continue;
+      expect(result.errors.some((e) => e.field === "verificationMethod")).toBe(
+        true
+      );
+    }
 
     const partial = validateUpdateTenantDomainInput({
       routeMode: "legacy_blog"

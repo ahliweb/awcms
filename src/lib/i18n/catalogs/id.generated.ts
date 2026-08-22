@@ -10,7 +10,6 @@ import type { CompiledCatalog } from "../catalog";
 
 export const ID_CATALOG: CompiledCatalog = {
   "(infrastructure)": ["(infrastruktur)"],
-  "(none yet)": ["(belum ada)"],
   ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable.": [", bukan pembacaan: ia diaudit sebagai tindakan, dan alasan yang Anda berikan adalah bagian dari catatan itu. Hasilnya muncul di bawah dan tidak pernah disimpan atau bisa diunduh."],
   ", or — for a table owned by": [", atau — untuk tabel yang dimiliki"],
   ", with no review queue and no scheduling. Posts live on": [", tanpa antrean tinjauan dan tanpa penjadwalan. Post berada di"],
@@ -21,6 +20,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "/api/v1/auth/sso-providers": ["/api/v1/auth/sso-providers"],
   ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each.": [": halaman ini mencakup apa yang dipegang tenant INI, dan orang yang tergabung di beberapa tenant punya permintaan terpisah di masing-masing."],
   "; escalation notifies, it never decides.": ["; eskalasi memberi tahu, ia tidak pernah memutuskan."],
+  "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify.": ["Record DNS TXT dibuat saat domain ditambahkan. Terbitkan di zona domain itu, lalu tekan Verifikasi."],
   "A credential that can change data is bound to an address range and expires within {days} days. Leave this empty for the read-only credential.": ["Kredensial yang bisa mengubah data terikat pada rentang alamat dan kedaluwarsa dalam {days} hari. Biarkan kosong untuk kredensial hanya-baca."],
   "A delegation lets the delegate decide on the delegator's behalf while it is in effect. It never widens what the delegate may decide beyond the delegator's own eligibility.": ["Delegasi membuat penerima delegasi bisa memutuskan atas nama pemberi delegasi selama ia berlaku. Ia tidak pernah melebarkan apa yang boleh diputuskan penerima melampaui kelayakan pemberi delegasi sendiri."],
   "A favicon is attached.": ["Sebuah favicon terpasang."],
@@ -813,6 +813,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Public": ["Publik"],
   "Public unique visitors": ["Pengunjung unik publik"],
   "Publish": ["Terbitkan"],
+  "Publish TXT": ["Terbitkan TXT"],
   "Publish an article before curating a homepage slot for it.": ["Terbitkan artikel lebih dulu sebelum mengurasinya ke slot beranda."],
   "Publish draft": ["Terbitkan draf"],
   "Published": ["Terbit"],
@@ -1249,7 +1250,6 @@ export const ID_CATALOG: CompiledCatalog = {
   "Validate": ["Validasi"],
   "Value": ["Nilai"],
   "Verification": ["Verifikasi"],
-  "Verification method": ["Metode verifikasi"],
   "Verify": ["Verifikasi"],
   "Version": ["Versi"],
   "View": ["Lihat"],

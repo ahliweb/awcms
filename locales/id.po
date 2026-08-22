@@ -2160,9 +2160,6 @@ msgstr "tidak ada"
 msgid "none — falling back to the default theme"
 msgstr "tidak ada — kembali ke tema bawaan"
 
-msgid "(none yet)"
-msgstr "(belum ada)"
-
 msgid "No offices yet"
 msgstr "Belum ada kantor"
 
@@ -3630,8 +3627,11 @@ msgstr "variabel."
 msgid "Verification"
 msgstr "Verifikasi"
 
-msgid "Verification method"
-msgstr "Metode verifikasi"
+msgid "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify."
+msgstr "Record DNS TXT dibuat saat domain ditambahkan. Terbitkan di zona domain itu, lalu tekan Verifikasi."
+
+msgid "Publish TXT"
+msgstr "Terbitkan TXT"
 
 msgid "Verify"
 msgstr "Verifikasi"

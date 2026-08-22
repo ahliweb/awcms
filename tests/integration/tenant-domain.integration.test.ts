@@ -45,7 +45,8 @@ import {
   setPrimaryTenantDomain,
   softDeleteTenantDomain,
   updateTenantDomain,
-  verifyTenantDomain
+  beginTenantDomainVerification,
+  completeTenantDomainVerification
 } from "../../src/modules/tenant-domain/application/tenant-domain-directory";
 import { resolvePublicTenantByHost } from "../../src/lib/tenant/public-host-tenant-resolver";
 
@@ -65,18 +66,47 @@ async function seedTenants(): Promise<void> {
   `;
 }
 
-function createInput(hostname: string, method: string | null = null) {
+function createInput(hostname: string) {
   return {
     hostname,
     normalizedHostname: hostname.toLowerCase(),
     domainType: "custom_domain" as const,
     routeMode: "canonical" as const,
-    verificationMethod: method as
-      "dns_txt" | "dns_cname" | "file" | "manual" | null,
-    verificationRecordName: null,
-    verificationRecordValue: null,
     redirectToPrimary: false
   };
+}
+
+/**
+ * The two-phase verification of ADR-0106, with the DNS half assumed to have
+ * passed. The lookup itself is a pure function of the resolver's answer and is
+ * covered by `tests/tenant-domain-dns-verification.test.ts` — what these
+ * integration tests are for is the two transactions either side of it, which
+ * is the part that needs a real database.
+ */
+async function activateByVerification(
+  runtime: Bun.SQL,
+  tenantId: string,
+  domainId: string,
+  passed = true
+) {
+  const begun = await withTenantOrThrow(runtime, tenantId, (tx) =>
+    beginTenantDomainVerification(tx, tenantId, ACTOR, domainId)
+  );
+
+  if (begun.outcome !== "challenge_ready") {
+    return begun;
+  }
+
+  return withTenantOrThrow(runtime, tenantId, (tx) =>
+    completeTenantDomainVerification(
+      tx,
+      tenantId,
+      ACTOR,
+      domainId,
+      begun.recordValue,
+      passed
+    )
+  );
 }
 
 const suite = integrationEnabled ? describe : describe.skip;
@@ -159,36 +189,50 @@ suite("tenant_domain module (integration)", () => {
     expect(recreated.tenantId).toBe(TENANT_B);
   });
 
-  test("verify: needs a method, is idempotent at active, refuses suspended", async () => {
+  test("verify: creation mints a challenge, a proof activates, a miss records failed", async () => {
     const runtime = getRuntimeSql();
     const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(tx, TENANT_A, ACTOR, createInput("v.example.com"))
     );
 
-    // No verification_method configured yet.
-    const noMethod = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
+    // ADR-0106: the challenge exists from the moment the row does, so the old
+    // `missing_verification_method` state is unreachable for new rows.
+    expect(created.verificationMethod).toBe("dns_txt");
+    expect(created.verificationRecordName).toBe("_awcms-verify.v.example.com");
+    expect(created.verificationRecordValue).toStartWith(
+      "awcms-site-verification="
     );
-    expect(noMethod.outcome).toBe("missing_verification_method");
 
-    // Configure a method, then verify -> active.
-    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      updateTenantDomain(tx, TENANT_A, ACTOR, created.id, {
-        verificationMethod: "manual"
-      })
+    // A check that did NOT find the record records `failed` — distinguishable
+    // from "nobody has looked yet", and it leaves `failed` reachable.
+    const missed = await activateByVerification(
+      runtime,
+      TENANT_A,
+      created.id,
+      false
     );
-    const verified = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
+    expect(missed.outcome).toBe("not_verified");
+    if (missed.outcome !== "not_verified") return;
+    expect(missed.entry.status).toBe("failed");
+    expect(missed.entry.lastCheckedAt).not.toBeNull();
+    expect(missed.entry.verifiedAt).toBeNull();
+
+    // `failed` is re-verifiable — it describes a moment, not a sentence.
+    const verified = await activateByVerification(
+      runtime,
+      TENANT_A,
+      created.id
     );
     expect(verified.outcome).toBe("verified");
     if (verified.outcome !== "verified") return;
     expect(verified.entry.status).toBe("active");
+    expect(verified.entry.verifiedAt).not.toBeNull();
 
-    // Idempotent at active.
+    // Idempotent at active, and short-circuited before any lookup.
     const again = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
+      beginTenantDomainVerification(tx, TENANT_A, ACTOR, created.id)
     );
-    expect(again.outcome).toBe("verified");
+    expect(again.outcome).toBe("already_active");
 
     // Suspended cannot be verified back to active.
     await withTenantOrThrow(runtime, TENANT_A, (tx) =>
@@ -197,28 +241,92 @@ suite("tenant_domain module (integration)", () => {
       })
     );
     const suspended = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
+      beginTenantDomainVerification(tx, TENANT_A, ACTOR, created.id)
     );
     expect(suspended.outcome).toBe("not_verifiable");
+  });
+
+  test("verify: a proof of a superseded challenge cannot be cashed in", async () => {
+    // The reason phase 3 carries the proven value into its WHERE clause. The
+    // row is unlocked between the two transactions; a challenge re-issued (or
+    // a row suspended) in that window must not be activated by a proof of the
+    // value it used to have.
+    const runtime = getRuntimeSql();
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      createTenantDomain(tx, TENANT_A, ACTOR, createInput("race.example.com"))
+    );
+
+    const stale = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      completeTenantDomainVerification(
+        tx,
+        TENANT_A,
+        ACTOR,
+        created.id,
+        "awcms-site-verification=a-value-this-row-never-had",
+        true
+      )
+    );
+
+    expect(stale.outcome).toBe("stale");
+
+    const unchanged = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchActiveTenantDomain(tx, TENANT_A, created.id)
+    );
+    expect(unchanged?.status).toBe("pending_verification");
+  });
+
+  test("verify: a row created before ADR-0106 is issued a challenge, not activated", async () => {
+    // Pre-ADR rows carry `verification_method = NULL` and no challenge. There
+    // is no backfill migration: the challenge is minted on first verify, and
+    // the caller is told to publish it rather than having a record invented one
+    // millisecond ago looked up.
+    const runtime = getRuntimeSql();
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      createTenantDomain(tx, TENANT_A, ACTOR, createInput("legacy.example.com"))
+    );
+
+    // Reproduce the old shape directly — the API can no longer produce it.
+    await withTenantOrThrow(
+      runtime,
+      TENANT_A,
+      (tx) =>
+        tx`
+        UPDATE awcms_tenant_domains
+        SET verification_method = NULL,
+            verification_record_name = NULL,
+            verification_record_value = NULL
+        WHERE tenant_id = ${TENANT_A} AND id = ${created.id}
+      `
+    );
+
+    const issued = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      beginTenantDomainVerification(tx, TENANT_A, ACTOR, created.id)
+    );
+
+    expect(issued.outcome).toBe("challenge_issued");
+    if (issued.outcome !== "challenge_issued") return;
+    expect(issued.entry.status).toBe("pending_verification");
+    expect(issued.entry.verificationMethod).toBe("dns_txt");
+    expect(issued.entry.verificationRecordValue).toStartWith(
+      "awcms-site-verification="
+    );
+
+    // Second call finds the challenge already there and asks for a lookup.
+    const ready = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      beginTenantDomainVerification(tx, TENANT_A, ACTOR, created.id)
+    );
+    expect(ready.outcome).toBe("challenge_ready");
+    if (ready.outcome !== "challenge_ready") return;
+    expect(ready.recordValue).toBe(issued.entry.verificationRecordValue!);
   });
 
   test("set-primary: only an active domain, at most one primary per tenant", async () => {
     const runtime = getRuntimeSql();
     const first = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      createTenantDomain(
-        tx,
-        TENANT_A,
-        ACTOR,
-        createInput("one.example.com", "manual")
-      )
+      createTenantDomain(tx, TENANT_A, ACTOR, createInput("one.example.com"))
     );
     const second = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      createTenantDomain(
-        tx,
-        TENANT_A,
-        ACTOR,
-        createInput("two.example.com", "manual")
-      )
+      createTenantDomain(tx, TENANT_A, ACTOR, createInput("two.example.com"))
     );
 
     // A pending domain cannot become primary.
@@ -228,12 +336,8 @@ suite("tenant_domain module (integration)", () => {
     expect(notActive.outcome).toBe("not_active");
 
     // Verify both, set first primary, then switch to second — only one primary.
-    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, first.id)
-    );
-    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, second.id)
-    );
+    await activateByVerification(runtime, TENANT_A, first.id);
+    await activateByVerification(runtime, TENANT_A, second.id);
     const setFirst = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       setPrimaryTenantDomain(tx, TENANT_A, ACTOR, first.id)
     );
@@ -272,16 +376,9 @@ suite("tenant_domain module (integration)", () => {
     const runtime = getRuntimeSql();
     // Create an active, verified domain for the active tenant A.
     const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      createTenantDomain(
-        tx,
-        TENANT_A,
-        ACTOR,
-        createInput("live.example.com", "manual")
-      )
+      createTenantDomain(tx, TENANT_A, ACTOR, createInput("live.example.com"))
     );
-    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
-      verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
-    );
+    await activateByVerification(runtime, TENANT_A, created.id);
 
     const app = getAppRoleSql();
 
@@ -326,12 +423,10 @@ suite("tenant_domain module (integration)", () => {
         tx,
         TENANT_INACTIVE,
         ACTOR,
-        createInput("inactive-tenant.example.com", "manual")
+        createInput("inactive-tenant.example.com")
       )
     );
-    await withTenantOrThrow(runtime, TENANT_INACTIVE, (tx) =>
-      verifyTenantDomain(tx, TENANT_INACTIVE, ACTOR, onInactive.id)
-    );
+    await activateByVerification(runtime, TENANT_INACTIVE, onInactive.id);
 
     const app = getAppRoleSql();
     expect(
