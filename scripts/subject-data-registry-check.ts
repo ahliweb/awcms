@@ -301,9 +301,17 @@ export function findSubjectRegistryProblems(
   const severanceAnchor = all.find(
     (entry) => entry.descriptor.tableName === SEVERANCE_ANCHOR_TABLE
   );
+  // ADR-0108 added the third clause, and it is the one that was false for
+  // months: the anchor answered `anonymize` while naming only `password_hash`,
+  // so an "anonymised" identity still held the address the person signs in
+  // with — and the ~90 descriptors answering `severed_with_subject_row` all
+  // rest on the premise that a stamp pointing at this row resolves to nobody.
+  // An anchor that writes nothing personal makes every one of them a claim
+  // about a severance that did not happen.
   const severanceHolds =
     severanceAnchor?.descriptor.erasure === "anonymize" &&
-    severanceAnchor.descriptor.tenantColumn !== null;
+    severanceAnchor.descriptor.tenantColumn !== null &&
+    (severanceAnchor.descriptor.anonymizedColumns ?? []).length > 0;
 
   for (const { declaringModuleKey, descriptor } of all) {
     const key = descriptor.key;
@@ -458,6 +466,43 @@ export function findSubjectRegistryProblems(
             "dan tampak persis seperti redaksi yang bekerja."
         );
       }
+    }
+
+    // ADR-0108. The same rule for the OTHER list, and it matters more here:
+    // a misspelled redaction leaks a column into an export the operator can
+    // see, while a misspelled anonymisation leaves personal data in the
+    // database and reports the erasure as done.
+    for (const anonymized of descriptor.anonymizedColumns ?? []) {
+      if (!columns.has(anonymized)) {
+        report(
+          `\`${key}\` menganonimkan kolom \`${anonymized}\` yang tidak ada di ` +
+            `\`${descriptor.tableName}\`. Penghapusan yang salah nama TIDAK menghapus apa pun, ` +
+            "dan melaporkan dirinya berhasil."
+        );
+      }
+    }
+
+    // The rule that closes the class ADR-0108 was written for: an `anonymize`
+    // that writes nothing. Three descriptors answered `anonymize` with no
+    // column named — `awcms_profiles` (the person's name), `awcms_identities`
+    // (before the login address was added) and `awcms_registration_requests`
+    // (the name and address they supplied) — and the executor's UPDATE was
+    // skipped entirely, so the erasure reported success and changed nothing.
+    // A `jsonb_array_contains` subject column IS a write, so it counts.
+    if (
+      descriptor.erasure === "anonymize" &&
+      (descriptor.anonymizedColumns ?? []).length === 0 &&
+      !descriptor.subjectColumns.some(
+        (column) => column.match === "jsonb_array_contains"
+      )
+    ) {
+      report(
+        `\`${key}\` menjawab \`erasure: "anonymize"\` tetapi tidak menamai satu pun ` +
+          "`anonymizedColumns` dan tidak punya kolom subjek `jsonb_array_contains`. " +
+          "Eksekutor tidak akan menulis apa pun, jadi penghapusannya melaporkan berhasil " +
+          "sambil membiarkan datanya utuh. Bila memang tidak ada yang perlu ditulis di sini, " +
+          "jawabannya `severed_with_subject_row`, bukan `anonymize`."
+      );
     }
 
     // The three-way `tenantColumn` contract, each branch proved against `sql/`

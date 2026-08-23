@@ -212,6 +212,20 @@ export const visitorAnalyticsModule = defineModule({
         "ip_hash",
         "visitor_key_hash",
         "user_agent_hash"
+      ],
+      // The rationale above says `login_identifier_snapshot` is "a copy of
+      // their email that outlives any change to the identity, so erasure has to
+      // reach in and clear it" — and until ADR-0108 nothing cleared it, because
+      // the only list available was the export-exclusion one and the snapshot
+      // is the subject's own data. `ip_address` is an `inet`, which no sentinel
+      // fits; it is nullable, so the erasure NULLs it instead of reporting it
+      // skipped and leaving the address in place.
+      anonymizedColumns: [
+        "ip_address",
+        "ip_hash",
+        "visitor_key_hash",
+        "user_agent_hash",
+        "login_identifier_snapshot"
       ]
     },
     {
@@ -223,7 +237,12 @@ export const visitorAnalyticsModule = defineModule({
       erasure: "anonymize",
       rationale:
         "Every page this person requested while signed in, with the referrer domain and coarse geography. The most detailed behavioural record the platform keeps about anyone, and therefore the one a subject-access request most obviously covers.",
-      redactedColumns: ["ip_hash", "user_agent_hash", "geo"]
+      redactedColumns: ["ip_hash", "user_agent_hash", "geo"],
+      // `geo` is `jsonb` — emptied rather than sentinel-written, and until
+      // ADR-0108 it was neither: coarse geography survived the erasure of the
+      // person it described, reported only in a `skippedColumns` list nobody
+      // reads.
+      anonymizedColumns: ["ip_hash", "user_agent_hash", "geo"]
     },
     {
       key: "visitor_analytics.visitor_daily_rollups",

@@ -52,6 +52,17 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
+  # 4.1.0 sejak ADR-0108: field opsional
+  # `SubjectDataDescriptor.anonymizedColumns` DITAMBAHKAN (penambahan murni,
+  # jadi MINOR) dan makna terdokumentasi `redactedColumns` DIPERSEMPIT menjadi
+  # pengecualian ekspor saja. Perubahan PERILAKU-nya ada di penghapusan:
+  # eksekutor kini menulis apa yang dinamai `anonymizedColumns`, bukan apa yang
+  # dinamai `redactedColumns` — karena satu daftar memaksa tabel yang memuat
+  # NAMA seseorang memilih antara "diekspor" dan "dihapus", dan mereka dengan
+  # tepat memilih yang pertama, sehingga penghapusannya tidak menulis apa pun.
+  # Setiap deskriptor `anonymize` diperbarui dalam perubahan yang sama, dan
+  # `subject-data:registry:check` menolak `anonymize` yang tidak menamai apa pun.
+  #
   # 4.0.0 sejak ADR-0094 gelombang 2 (#557): DUA perubahan pada keluarga
   # `subjectData`, keduanya MAJOR menurut aturan file kontraknya sendiri.
   #
@@ -88,7 +99,7 @@ contracts:
   # DIHAPUS dari union `ModuleDeploymentProfile` — union yang menyempit adalah
   # penarikan kemampuan, jadi MAJOR (preseden 2.0.0, yang menghapus tipe
   # ekspor). Nilai ini di-cross-check gerbang terhadap MODULE_CONTRACT_VERSION.
-  moduleDescriptorContractVersion: "4.0.0"
+  moduleDescriptorContractVersion: "4.1.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base

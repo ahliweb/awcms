@@ -164,7 +164,7 @@ describe("the registered descriptors say something real", () => {
     expect(sessions?.redactedColumns).toContain("token_hash");
   });
 
-  test("the membership row is anonymised, never hard-deleted", () => {
+  test("the membership row is never hard-deleted", () => {
     const tenantUsers = listModules()
       .flatMap((module) => module.subjectData ?? [])
       .find((descriptor) => descriptor.tableName === "awcms_tenant_users");
@@ -173,7 +173,47 @@ describe("the registered descriptors say something real", () => {
     // workflow history. Deleting it would either cascade the evidence away or
     // abort on the first constraint — and the evidence includes the record
     // that the erasure itself happened.
-    expect(tenantUsers?.erasure).toBe("anonymize");
+    //
+    // ADR-0108 moved it from `anonymize` to `severed_with_subject_row`, which
+    // is what its own rationale always described: the row carries no personal
+    // detail beyond the link, so under `anonymize` it named no column and the
+    // executor wrote nothing while the report said it had been anonymised.
+    // What the test actually protects is unchanged — the row is not deleted.
+    expect(tenantUsers?.erasure).toBe("severed_with_subject_row");
+    expect(tenantUsers?.erasure).not.toBe("hard_delete");
+  });
+
+  test("every `anonymize` descriptor names at least one column to overwrite", () => {
+    // The property ADR-0108 exists for, asserted over the REAL registry rather
+    // than only in the gate: three descriptors answered `anonymize` while
+    // naming nothing, so an erasure reported success and left the person's
+    // name, legal name and login address exactly where they were.
+    const emptyAnonymize = listModules()
+      .flatMap((module) => module.subjectData ?? [])
+      .filter(
+        (descriptor) =>
+          descriptor.erasure === "anonymize" &&
+          (descriptor.anonymizedColumns ?? []).length === 0 &&
+          !descriptor.subjectColumns.some(
+            (column) => column.match === "jsonb_array_contains"
+          )
+      )
+      .map((descriptor) => descriptor.key);
+
+    expect(emptyAnonymize).toEqual([]);
+  });
+
+  test("the severance anchor really anonymises something", () => {
+    // ~90 descriptors answer `severed_with_subject_row` on the premise that
+    // anonymising `awcms_identities` makes their stamps resolve to nobody. If
+    // the anchor writes nothing, every one of those is a claim about a
+    // severance that did not happen.
+    const identities = listModules()
+      .flatMap((module) => module.subjectData ?? [])
+      .find((descriptor) => descriptor.tableName === "awcms_identities");
+
+    expect(identities?.erasure).toBe("anonymize");
+    expect(identities?.anonymizedColumns).toContain("login_identifier");
   });
 });
 
@@ -363,10 +403,12 @@ describe("the plan binds the RIGHT id, which is the whole point of two kinds", (
 });
 
 describe("the contract version records the addition", () => {
-  test("MAJOR bump: the erasure union widened and `tenantColumn` was retyped", () => {
-    // Wave 2. A widened union is MAJOR here because the consumers that matter
-    // are exhaustive switches over it — the point of adding
-    // `severed_with_subject_row` is that each one must decide what it means.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.0.0");
+  test("MINOR bump: `anonymizedColumns` was added (ADR-0108)", () => {
+    // 4.0.0 was wave 2 — a widened erasure union plus a retyped `tenantColumn`,
+    // both MAJOR because the consumers that matter are exhaustive switches.
+    // 4.1.0 adds an OPTIONAL field, so MINOR by this contract's own rule; the
+    // behaviour change it carries is in the erasure executor, and every
+    // `anonymize` descriptor was updated in the same change.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.1.0");
   });
 });

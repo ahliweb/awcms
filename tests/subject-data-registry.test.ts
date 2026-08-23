@@ -55,7 +55,11 @@ const SEVERANCE_ANCHOR: SubjectDataDescriptor = {
   exportable: true,
   erasure: "anonymize",
   rationale:
-    "the login identity behind the membership, anonymised so every stamp elsewhere stops resolving"
+    "the login identity behind the membership, anonymised so every stamp elsewhere stops resolving",
+  // ADR-0108: an anchor that names no column writes nothing, so the severance
+  // every other descriptor leans on would not have happened. The gate refuses
+  // that now, and so this fixture has to be a REAL anchor.
+  anonymizedColumns: ["password_hash"]
 };
 
 function run(

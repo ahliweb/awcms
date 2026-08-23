@@ -14,7 +14,7 @@
 | RLS-free tables (global, by design) | 18    |
 | Test files                          | 465   |
 | Route files                         | 382   |
-| ADR                                 | 216   |
+| ADR                                 | 218   |
 
 ### Modules
 

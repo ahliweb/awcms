@@ -1067,6 +1067,47 @@ export type SubjectDataDescriptor = {
   rationale: string;
   /** Columns a portability export must NEVER carry — hashes, tokens, secrets — even though the row is the subject's own. */
   redactedColumns?: readonly string[];
+  /**
+   * Columns an `anonymize` erasure OVERWRITES.
+   *
+   * ## Why this is not `redactedColumns`
+   *
+   * Until ADR-0108 there was one list, and the executor used it for both jobs.
+   * That silently conflated two different questions, and the conflation had
+   * teeth in both directions:
+   *
+   * - `awcms_profiles` names the person — `display_name`, `legal_name`. Those
+   *   must be OVERWRITTEN and must still be EXPORTED (they are the subject's
+   *   own data, and a subject-access request is largely about them). Under one
+   *   list, declaring them would have withheld them from the export, so the
+   *   descriptor declared nothing — and an "anonymised" profile kept the
+   *   person's name. Three descriptors answered `anonymize` and wrote nothing
+   *   at all.
+   * - `awcms_identities.password_hash` must be overwritten AND never exported.
+   *   That is the case one list happens to fit, which is why the defect was
+   *   invisible: the tables where both answers coincide worked perfectly.
+   *
+   * So: `redactedColumns` answers "may the subject be handed this?" and this
+   * field answers "must the erasure destroy this?". A column may be in both,
+   * either, or neither.
+   *
+   * ## What the executor does with it
+   *
+   * Text-like columns get the shared `[erased]` sentinel; `jsonb`/`json` get an
+   * empty object. A column that participates in any UNIQUE index gets a
+   * per-row-unique sentinel instead — derived from `pg_index` at run time, not
+   * declared here, because a declaration would be a second copy of the schema
+   * that can rot. Without it, erasing a subject who holds TWO rows in such a
+   * table (two invitations, two identifiers, two suppressed addresses) aborts
+   * the whole erasure on a unique violation, mid-transaction, after the request
+   * has already been claimed.
+   *
+   * `subject-data:registry:check` refuses an `anonymize` descriptor that names
+   * no column here and has no `jsonb_array_contains` subject column, because
+   * that combination is precisely "reports anonymisation, writes nothing"; and
+   * it refuses a column name this table does not have.
+   */
+  anonymizedColumns?: readonly string[];
 };
 
 /**
@@ -1171,8 +1212,17 @@ export type SubjectDataDescriptor = {
  *
  * No `ModuleDescriptor` field was removed and every wave-1 descriptor stays
  * valid unchanged.
+ *
+ * `4.1.0` (ADR-0108) — added the optional
+ * `SubjectDataDescriptor.anonymizedColumns` and NARROWED the documented meaning
+ * of `redactedColumns` to export exclusion alone. MINOR: the field is additive
+ * and no existing descriptor becomes invalid. It is a behaviour change for the
+ * ERASURE, though — the executor now writes what `anonymizedColumns` names
+ * rather than what `redactedColumns` named, so every `anonymize` descriptor was
+ * updated in the same change, and `subject-data:registry:check` refuses an
+ * `anonymize` that names nothing so the omission cannot be silent.
  */
-export const MODULE_CONTRACT_VERSION = "4.0.0";
+export const MODULE_CONTRACT_VERSION = "4.1.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;
