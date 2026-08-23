@@ -33,8 +33,29 @@ export type NewsArticleJsonLdInput = {
   image: NewsArticleImage | null;
   datePublished: Date;
   dateModified: Date;
-  /** Issue #649 design decision: organization-level byline (tenant/site name), NOT an individual editor's identity — this repo has no public-safe "author display name" concept today, and exposing internal user identity in public structured data would be a new PII surface out of this issue's scope. See the news-portal skill's §649 section for the full reasoning. */
+  /**
+   * The ORGANISATION-level byline (tenant/site name) — the fallback, and still
+   * the answer for every article whose author has not opted into one.
+   *
+   * Issue #649's reasoning stands and is why `authorByline` below is a separate
+   * field rather than this one being repointed: publishing an internal editor's
+   * account name would be a new PII surface, so no existing article's
+   * attribution changes.
+   */
   authorName: string;
+  /**
+   * ADR-0109 — the author's OPT-IN public byline, or `null`.
+   *
+   * When it is set, the `author` node becomes a `Person` with that name and
+   * NOTHING else: no `url`, no `sameAs`, no identifier of any kind. A byline is
+   * a name somebody chose to publish under; a linked profile is a directory of
+   * the newsroom's staff, which nobody asked for and which the person cannot
+   * withdraw article by article.
+   *
+   * `null` — the state of every article until a writer fills the field in —
+   * keeps the `Organization` node exactly as it was.
+   */
+  authorByline?: string | null;
   publisherName: string;
   /** Best-effort — omitted when the tenant has no verified R2 fallback social image configured (Google's NewsArticle guidance recommends a publisher logo, but does not make it a hard requirement this repo can satisfy without a dedicated tenant-logo concept, which does not exist yet). */
   publisherLogoUrl: string | null;
@@ -66,10 +87,9 @@ export function buildNewsArticleJsonLd(
     description: input.description,
     datePublished: input.datePublished.toISOString(),
     dateModified: input.dateModified.toISOString(),
-    author: {
-      "@type": "Organization",
-      name: input.authorName
-    },
+    author: input.authorByline
+      ? { "@type": "Person", name: input.authorByline }
+      : { "@type": "Organization", name: input.authorName },
     publisher,
     mainEntityOfPage: {
       "@type": "WebPage",

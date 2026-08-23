@@ -18,6 +18,7 @@ import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/applic
 import { fetchBlogSettings } from "../../../modules/blog-content/application/blog-settings-directory";
 import { buildNewsArticleSeoMetadata } from "../../../modules/blog-content/application/news-article-seo-metadata";
 import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
+import { fetchPublicBylinesForAuthors } from "../../../modules/identity-access/application/own-byline";
 import { resolveBlogShareConfig } from "../../../modules/blog-content/domain/social-share-config";
 import { renderBlogBodyHtml } from "../../../modules/blog-content/domain/blog-body-rendering";
 import { renderContentHtmlWithInternalTagLinks } from "../../../modules/blog-content/application/internal-tag-link-rendering";
@@ -97,6 +98,16 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
       // single bulk media resolution, reusing Issue #636's exact
       // R2-verification primitive rather than re-deriving it.
       const blogSettings = await fetchBlogSettings(tx, tenant.tenantId);
+      // ADR-0109 — the author's OPT-IN byline. Read through `identity_access`'s
+      // own service (its table), one query, and `null` for the overwhelming
+      // majority of articles, whose author has not set one: those keep the
+      // organisation-level attribution ADR-0102 ships, unchanged.
+      const bylineByAuthor = await fetchPublicBylinesForAuthors(
+        tx,
+        tenant.tenantId,
+        [post.authorTenantUserId]
+      );
+      const authorByline = bylineByAuthor.get(post.authorTenantUserId) ?? null;
       const seoMetadata = await buildNewsArticleSeoMetadata(
         tx,
         tenant.tenantId,
@@ -107,7 +118,8 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
           tenantName: tenant.tenantName,
           canonicalUrl,
           seoTitle,
-          metaDescription
+          metaDescription,
+          authorByline
         }
       );
 
@@ -158,6 +170,7 @@ export const GET: APIRoute = async ({ locals, params, request, url }) => {
       const bodyHtml = `${ads.get("header_banner") ?? ""}
 <article>
   <h1>${escapeHtml(post.title)}</h1>
+  ${authorByline ? `<p class="byline">${escapeHtml(authorByline)}</p>` : ""}
   <p><time datetime="${post.publishedAt.toISOString()}">${escapeHtml(post.publishedAt.toDateString())}</time></p>
   ${ads.get("article_top") ?? ""}
   ${insertMidArticleSlotHtml(contentHtml, ads.get("article_middle") ?? "")}

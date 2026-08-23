@@ -1271,6 +1271,13 @@ components:
           items:
             type: string
             format: uuid
+        authorByline:
+          description: |-
+            ADR-0109 — the author's OPT-IN public byline, returned by the `?view=full` traversal a static site is built from.
+            `null` is the normal state and means the article keeps the ORGANISATION-level attribution (ADR-0102): a consumer renders no individual name for it. It is deliberately NOT the author's internal display name — publishing an account name because somebody wrote an article is the PII surface Issue #649 refused to open — and it carries no id, URL or profile link, only the name.
+          type: string
+          nullable: true
+          maxLength: 120
     BlogPostSummary:
       type: object
       description: |

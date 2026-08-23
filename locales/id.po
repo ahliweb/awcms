@@ -439,8 +439,14 @@ msgstr "Menyimpan…"
 msgid "Too many attempts. Please wait a moment and try again."
 msgstr "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi."
 
-msgid "Enter a display name of 1 to 200 characters."
-msgstr "Masukkan nama tampilan sepanjang 1 sampai 200 karakter."
+msgid "Public byline"
+msgstr "Byline publik"
+
+msgid "The name your articles are published under. Leave it empty and articles are attributed to this site, not to you."
+msgstr "Nama yang tercantum pada artikel Anda saat terbit. Biarkan kosong dan artikel diatribusikan kepada situs ini, bukan kepada Anda."
+
+msgid "Enter a display name of 1 to 200 characters, and a byline of at most 120."
+msgstr "Masukkan nama tampilan sepanjang 1 sampai 200 karakter, dan byline paling panjang 120 karakter."
 
 msgid "Could not save your profile. Please try again."
 msgstr "Tidak dapat menyimpan profil Anda. Silakan coba lagi."

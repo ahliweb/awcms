@@ -651,16 +651,21 @@ export const identityAccessModule = defineModule({
       // logs, assignments and workflow history. Deleting it would either
       // cascade the evidence away or abort on the first constraint — and the
       // evidence includes the record that the erasure itself happened.
-      // ADR-0108 corrected this from `anonymize` to what it always was.
-      // "It carries no personal detail of its own beyond the link" is true —
-      // and it is precisely the definition of `severed_with_subject_row`. Under
-      // `anonymize` the descriptor named no column, so the executor wrote
-      // nothing while the report said the row had been anonymised; the honest
-      // reading is that this row stops naming anybody when the identity and
-      // profile it points at are anonymised, which they now really are.
-      erasure: "severed_with_subject_row",
+      // ADR-0108 moved this to `severed_with_subject_row` because the row
+      // carried no personal detail of its own. ADR-0109 gives it one —
+      // `public_byline_name`, the name a writer is PUBLISHED under — so it
+      // returns to `anonymize`, naming exactly that column and nothing else.
+      // The id itself is still never rewritten: it is the FK target of audit
+      // events, decision logs, assignments and workflow history, including the
+      // record of the erasure itself.
+      //
+      // A byline that survived an erasure would leave the person's name under
+      // every article they wrote, which is the most visible place a name can
+      // survive.
+      erasure: "anonymize",
+      anonymizedColumns: ["public_byline_name"],
       rationale:
-        "The membership row itself: this is what 'a subject in this tenant' MEANS here, and the id every other table joins on. It carries no personal detail of its own beyond the link, so it stops resolving to a person the moment `awcms_identities` and `awcms_profiles` are anonymised — and rewriting the id would take the tenant's whole history down with it."
+        "The membership row itself: this is what 'a subject in this tenant' MEANS here, and the id every other table joins on. Its one personal field is the public byline (ADR-0109), which is anonymised; the id is not, because rewriting it would take the tenant's whole history down with it."
     },
     {
       key: "identity_access.identities",

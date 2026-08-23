@@ -3314,6 +3314,14 @@ paths:
                         type: string
                       loginIdentifier:
                         type: string
+                      publicBylineName:
+                        description: >-
+                          ADR-0109 — the name this person's articles are
+                          published under, or `null` for "no byline" (the
+                          article keeps the organisation-level attribution).
+                        type: string
+                        nullable: true
+                        maxLength: 120
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3358,6 +3366,20 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 200
+                publicBylineName:
+                  description: >-
+                    ADR-0109 — OPTIONAL, and the three states are distinct:
+                    ABSENT leaves the byline unchanged, `null` (or an empty
+                    string) clears it, a string sets it. Absence cannot mean
+                    "clear" — a PATCH that saved only a display name would
+                    delete the byline every time.
+
+                    There is no administrative sibling for this field on
+                    purpose: an editor who could set somebody else's byline
+                    could publish an article under a colleague's name.
+                  type: string
+                  nullable: true
+                  maxLength: 120
       responses:
         "200":
           description: The stored display name.

@@ -174,12 +174,14 @@ describe("the registered descriptors say something real", () => {
     // abort on the first constraint — and the evidence includes the record
     // that the erasure itself happened.
     //
-    // ADR-0108 moved it from `anonymize` to `severed_with_subject_row`, which
-    // is what its own rationale always described: the row carries no personal
-    // detail beyond the link, so under `anonymize` it named no column and the
-    // executor wrote nothing while the report said it had been anonymised.
-    // What the test actually protects is unchanged — the row is not deleted.
-    expect(tenantUsers?.erasure).toBe("severed_with_subject_row");
+    // ADR-0108 moved it from `anonymize` to `severed_with_subject_row` (it
+    // carried no personal detail beyond the link, so `anonymize` named no
+    // column and wrote nothing). ADR-0109 gave it one — the public byline —
+    // so it is `anonymize` again, and this time it names the column.
+    // What the test actually protects is unchanged across all three: the row
+    // is not deleted.
+    expect(tenantUsers?.erasure).toBe("anonymize");
+    expect(tenantUsers?.anonymizedColumns).toEqual(["public_byline_name"]);
     expect(tenantUsers?.erasure).not.toBe("hard_delete");
   });
 

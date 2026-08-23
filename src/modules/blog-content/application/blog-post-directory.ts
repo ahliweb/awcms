@@ -24,6 +24,7 @@ import { isSupportedLocale } from "../../../lib/i18n/locales";
 import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
 import { fetchPostTermIdsForPosts } from "./blog-taxonomy-directory";
 import { fetchPostInstitutionIdsForPosts } from "./institution-directory";
+import { fetchPublicBylinesForAuthors } from "../../identity-access/application/own-byline";
 
 /**
  * Read/write query module for `awcms_blog_posts` (Issue #537 scaffolded
@@ -134,6 +135,17 @@ export type BlogPostFeedView = BlogPostView & {
   termIds: string[];
   /** Institution assignments (Issue #595). `[]` means none, never "not fetched". */
   institutionIds: string[];
+  /**
+   * The author's OPT-IN public byline (ADR-0109), or `null`.
+   *
+   * `null` is the normal state and means "no byline": the article keeps the
+   * organisation-level attribution ADR-0102 ships, which is what every article
+   * had before this field existed. It is deliberately NOT
+   * `awcms_profiles.display_name` — publishing an internal account name because
+   * somebody happens to have written an article is the PII surface #649 refused
+   * to open.
+   */
+  authorByline: string | null;
 };
 
 type BlogPostRow = {
@@ -471,11 +483,21 @@ export async function listBlogPostsFullPage(
     tenantId,
     postIds
   );
+  // A third batched lookup, awaited sequentially like the two above — same
+  // connection, one query at a time — and ONE query for the whole page rather
+  // than one per post. Cross-module read through `identity_access`'s own
+  // service: `awcms_tenant_users` is its table.
+  const bylineByAuthor = await fetchPublicBylinesForAuthors(
+    tx,
+    tenantId,
+    rows.map((row) => row.author_tenant_user_id)
+  );
 
   const items = rows.map((row) => ({
     ...toView(row),
     termIds: termIdsByPost.get(row.id) ?? [],
-    institutionIds: institutionIdsByPost.get(row.id) ?? []
+    institutionIds: institutionIdsByPost.get(row.id) ?? [],
+    authorByline: bylineByAuthor.get(row.author_tenant_user_id) ?? null
   }));
 
   return { items, nextCursor };
