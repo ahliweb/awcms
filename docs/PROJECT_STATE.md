@@ -360,6 +360,57 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BOUNDARY ROUND — 24 August 2026: 77 API endpoints handed their validation
+  schema to ANY bearer token, and left no decision-log row while doing it.**
+
+  Found by RUNNING the API, not reading it:
+
+  ```
+  POST /api/v1/blog/institutions   Authorization: Bearer nonsense
+  → 400 VALIDATION_ERROR + every field name, enum value and length limit
+  ```
+
+  No account, no session — any string at all. **77 session-gated endpoints
+  answered that way**, measured against a running server.
+
+  **The disclosure is the smallest part.** `authorizeInTransaction` is what
+  writes the decision log, so a request short-circuiting before it was never
+  recorded: enumerating the API left NO TRACE. The cause is ordering —
+  `defineTenantRoute` checked a token was PRESENT, then ran `prepare`, which
+  parses and validates the body.
+
+  **Every static gate was green that day**, and they could not have been
+  otherwise: ordering between a `prepare` hook and a chokepoint call is not a
+  text property. A textual "validation before authorization" scan reported 297
+  of 305 route blocks — wrong enough to be useless, and nearly reported before
+  being checked against a server.
+
+  **Closed with ONE boundary in `src/middleware.ts`**, not 77 route edits: no
+  API body is parsed until the caller's credential resolves. 63 of the 77 were
+  hand-written handlers with no shared shape, so the per-route fix would have
+  had no mechanism behind it. It also turns "which endpoints are reachable
+  without a session" — implicit until now, knowable only by reading 246
+  handlers — into `SESSION_FREE_BODY_ENDPOINTS`, 26 entries each with a reason.
+
+  **Authentication only.** Authorization stays at the ADR-0063 chokepoint and is
+  NOT duplicated. The session is looked up twice on a write, deliberately:
+  handing the route a principal resolved in a different transaction would split
+  the decision from the read it guards. Reads carry no body and never reach it.
+
+  **The authorization half:** `defineTenantRoute` now HOLDS a `prepare` refusal
+  until authorization has answered, so a caller lacking the permission gets
+  `403` plus a decision-log row instead of `400` plus a schema. Authorizing
+  before parsing would have been wrong — `await request.json()` waits on the
+  CLIENT, and parsing inside `withTenant` holds a reserved connection for as
+  long as a caller chooses to take. Two routes compute their guard FROM the body
+  and cannot defer; both are named in the code.
+
+  Mutation-proven: boundary disabled and rebuilt → **185 assertion failures**
+  across 92 endpoints. Recorded as **C18** in the standards document.
+
+  **Still open, unchanged from the WAVE ROUND:** which individual WRITE controls
+  a partially-permissioned user should see.
+
 - **WAVE ROUND — 24 August 2026: the two admin sweeps were ACCIDENTALLY IMMUNE,
   and the harness had to be fixed before they could be told the truth.**
 
@@ -421,7 +472,7 @@ pioneered directly here after the ADR-0047 freeze.)
   exists here — all inherited from `awcms-mini` when the skill was ported. It
   also described the CI job as running in TWO PHASES with
   `--grep-invert "@full-online-gate"`; `ci.yml` has one phase and neither
-  security spec exists. The Status section now lists the 15 specs that are
+  security spec exists. The Status section now lists the 16 specs that are
   actually present, and a new mandatory convention covers wave classification.
 
   **Still open, and named rather than assumed closed:** which individual WRITE

@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:db7c289569f139fe8bc281367eb30bd586d54a9b112a27b8823688114a91002c -->
+<!-- i18n-source-hash: sha256:e8aeba02d80287ada05bb5f7f8428834538d533686ce962eae7049e7c841f9b2 -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -202,7 +202,7 @@ dan `@axe-core/playwright` bukan dependency repo ini. Dikoreksi 24 Agu 2026 —
 skill yang menggambarkan repo LAIN lebih buruk daripada tak ada skill, karena
 agen MENGIKUTINYA alih-alih melihat sendiri.
 
-Yang benar-benar ada (15 berkas spec di `tests/e2e/`):
+Yang benar-benar ada (16 berkas spec di `tests/e2e/`):
 
 - **Gelombang baca** — `login.e2e.ts` (alur login itu sendiri),
   `not-found.e2e.ts`, `cwv-lab.e2e.ts` (ber-env-gate `E2E_CWV_LAB`),
@@ -213,8 +213,11 @@ Yang benar-benar ada (15 berkas spec di `tests/e2e/`):
   (operator read-only tenant — pemeriksaan platform-scope ADR-0053 saat
   runtime).
 - **Gelombang tulis** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
-  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, serta spec CRUD
-  `admin-*-create` / `admin-offices-edit`.
+  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, spec CRUD
+  `admin-*-create` / `admin-offices-edit`, dan `api-body-auth-boundary.e2e.ts`
+  (setiap rute API ber-body wajib menolak token bearer palsu SEBELUM membaca
+  apa pun — diklasifikasikan menurut apa yang DICOBANYA, karena tak satu pun
+  yang dikirimnya dimaksudkan berhasil).
 
 Ketiga sapuan sudah mencakup SETIAP layar admin, jadi layar baru tidak butuh
 spec baru untuk sekadar DIMUAT — hanya butuh spec sendiri bila ada perilaku

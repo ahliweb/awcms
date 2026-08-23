@@ -88,6 +88,11 @@ export const READ_WAVE: readonly string[] = [
  */
 export const WRITE_WAVE: readonly string[] = [
   "admin-abac-policies.e2e.ts",
+  // Nothing here mutates — every request it sends is refused by construction —
+  // but it sends non-GET requests, and classifying by what a spec ATTEMPTS
+  // rather than by what it happens to achieve is the rule that stays true when
+  // a defect makes the attempt succeed. That is the case it exists to catch.
+  "api-body-auth-boundary.e2e.ts",
   "admin-email-templates-create.e2e.ts",
   "admin-modules-toggle.e2e.ts",
   "admin-offices-create.e2e.ts",
