@@ -51,6 +51,19 @@ const FIXTURE_PATH =
 /**
  * Surfaces `ahliweb/awcms-astro` CALLS today.
  *
+ * ## "Calls" stopped meaning "the build calls" on 23 August 2026
+ *
+ * Seven of these are called by `astro build` over there, from a machine holding
+ * a read-only credential. The two `site-search` entries are called by the
+ * READER's BROWSER, anonymously and cross-origin, and that difference is
+ * invisible from this side — both are `GET`s against this API, and the gate over
+ * there extracts string literals from `src/` without knowing who executes them.
+ *
+ * It is written here because it changes what breaking one costs. A shape change
+ * on a build-called path reddens a build somebody is watching. A shape change on
+ * these two fails silently in a stranger's browser, on a site that was published
+ * weeks ago and will not be rebuilt because of it.
+ *
  * The neighbour repo is the authority for this list, and it has a gate for it:
  * `tests/kontrak-awcms.test.mjs` there asserts an exact set of surfaces,
  * derived from `src/` **with comments stripped first**, and bound two-ways to a
@@ -100,7 +113,11 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/blog/menus":
     "the tenant's navigation menus, rendered as a SECONDARY footer region — the localised tab bar is NOT replaced, because a menu item carries one label and no per-locale variant (#597 item 6, ADR-0105). `src/lib/awcms/navigasi.ts` there. Only freezable after #652 gave the response a real schema; promised as COMMITTED in #653 and moved here when `ahliweb/awcms-astro#67` made the call real.",
   "/api/v1/blog/widgets":
-    "the tenant's widgets, rendered in their declared positions (#597 item 6, ADR-0105). `bodyText` is plain text and the consumer ESCAPES it, because the write path refuses markup rather than sanitizing it. Inactive widgets are returned on purpose and filtered there. Same #652/#653/#67 sequence as the menus above."
+    "the tenant's widgets, rendered in their declared positions (#597 item 6, ADR-0105). `bodyText` is plain text and the consumer ESCAPES it, because the write path refuses markup rather than sanitizing it. Inactive widgets are returned on purpose and filtered there. Same #652/#653/#67 sequence as the menus above.",
+  "/api/v1/site-search/query":
+    "the reader's search results (#597 item 3, #607, ADR-0107). `src/lib/pencarian.ts` there, and its ADR-0043. THE FIRST CONSUMED PATH THAT IS NOT CALLED BY A BUILD: it runs in a reader's browser, anonymously, cross-origin, so the tenant comes from the request's `Origin` matched against `awcms_tenant_domains` and never from a credential. That changes where a broken shape surfaces — in a stranger's browser rather than in a build somebody is watching — which is precisely why freezing it matters more here, not less. Frozen: the result shape AND the facet payload the filter chips render from. The CORS grant is a header, not a schema, and is documented on the path. Promised as COMMITTED in #681 and moved here when `ahliweb/awcms-astro` published the box.",
+  "/api/v1/site-search/suggest":
+    "the typeahead behind the same box, same origin rule, same anonymity (ADR-0107). Consumed through a `<datalist>` there, debounced client-side; this repo still enforces its own `min_query_length` and per-IP limit, because a consumer's debounce is a courtesy and not a control."
 };
 
 /**
@@ -121,11 +138,7 @@ export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
-    "ADR-0049 — how a human mints the read-only build credential. Never a build call, but the build cannot exist if this shape changes.",
-  "/api/v1/site-search/query":
-    "ADR-0107 — the reader's search results, called from the READER's browser at runtime rather than from the build (#597 item 3, #607). Unlike every other entry here it is anonymous: the tenant comes from the request's `Origin`, matched against `awcms_tenant_domains`. What is frozen is the result shape AND the facet payload the filter chips render from; the CORS grant itself is a header, not a schema, and is documented on the path.",
-  "/api/v1/site-search/suggest":
-    "ADR-0107 — the typeahead behind the same search box, same origin rule, same anonymity. Frozen alongside `/query` because a search box that lists suggestions and a search box that cannot are different products, and a consumer that has one will call both."
+    "ADR-0049 — how a human mints the read-only build credential. Never a build call, but the build cannot exist if this shape changes."
 };
 
 /** Every path frozen by the fixture: consumed today plus promised by ADR. */

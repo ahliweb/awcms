@@ -360,6 +360,64 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **CONSUMER ROUND — 23 August 2026: the two reader-facing items that were left
+  are BUILT, in `ahliweb/awcms-astro`. There is no `awcms` work left on #597 or
+  #607, and the only `awcms` change in this round is a contract move.**
+
+  With ADR-0107/0109/0110 written the same day, both remaining items became
+  ordinary work in the neighbour repo. What landed there:
+
+  - **The reader's search box** (#607, #597 item 3) — `/cari/` and `/en/cari/`,
+    with ranked results, highlighted snippets, facet chips for content type /
+    channel / topic / institution / region, a cursor-paged "load more", and
+    autocomplete. Its ADR-0043 there.
+  - **The byline** (#597 item 4) — rendered on the article page, in the JSON-LD
+    `author` (a `Person` when there is one), and on the article's Atom entry. Its
+    ADR-0042 there.
+
+  **On this side the only change is `scripts/api-consumer-contract.ts`:**
+  `/api/v1/site-search/query` and `/suggest` move from COMMITTED to CONSUMED,
+  which is the direction the cross-repo Definition of Done requires — freeze
+  here first, call there second. The byline needed no move at all: `authorByline`
+  rides on `/api/v1/blog/posts`, which was already consumed.
+
+  **Three things worth carrying forward, because each is a class rather than an
+  incident.**
+
+  **1. "CONSUMED" no longer means "a build calls it".** Seven of the nine paths
+  are called by `astro build` from a machine holding a read-only credential; the
+  two search paths are called by the READER's BROWSER. That difference is
+  invisible from here — both are `GET`s, and the gate over there extracts string
+  literals from `src/` without knowing who executes them — and it changes what
+  breaking one costs. A shape change on a build-called path reddens a build
+  somebody is watching. A shape change on these two fails **silently in a
+  stranger's browser**, on a site published weeks ago that will not be rebuilt on
+  account of it. Written into that file's docblock rather than left to be
+  noticed.
+
+  **2. The absence of an `OPTIONS` handler is a CONTRACT now, not an omission.**
+  The box calls both paths with no custom headers, which keeps them simple
+  requests. A header added on EITHER side — an `accept`, a correlation id, a
+  tenant hint — turns them into preflighted requests with nothing to answer the
+  preflight. That failure happens in the reader's browser and appears in no log
+  here. The same holds for `Access-Control-Allow-Credentials`, whose absence is
+  what makes `credentials: "include"` unreadable by construction.
+
+  **3. The gate over there could not see the defect that mattered, and running it
+  found it in one minute.** The content-type facet returns `resource_type` as
+  stored — `blog_post`, `blog_page` — because it is this repo's module-registry
+  identifier and carries no editor-written label, unlike a term facet. The first
+  browser run rendered those as chips, in both languages: a machine key on
+  screen. Nothing could have gone red — the value was present, the type correct,
+  the page published. It is the `run-it-don't-read-it` class again, and the fix
+  over there is that a facet value with no readable label renders no chip at all.
+
+  **What this leaves open on #597, and it is not work:** item 9, the analytics
+  beacon, whose backend was verified in #637/#638 and which is blocked on a
+  privacy ADR in `awcms-astro` — the repo owner's decision. #599 is likewise
+  blocked on two artefacts that are not in either repo (the legacy `.htaccess`
+  and the live sitemap URL), not on code.
+
 - **DECISION ROUND — 23 August 2026: the three items of #597 that were blocked on
   a WRITTEN DECISION rather than on work.** **DONE — ADR-0107, ADR-0109,
   ADR-0110.** After that issue's items 1/2/5/6/7 shipped, its own status table
