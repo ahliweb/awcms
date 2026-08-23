@@ -20,10 +20,14 @@
  * permission-gated screen owes the same answer and one rule covers all of them:
  * the denial renders and the contents do not.
  *
- * `read` gives every tenant-scoped read, which is a real minimum-privilege
- * operator. The rule there is the inverse: every screen must RENDER, because
- * each one authorizes on a read triple. A screen that denies a user holding
- * every read is demanding more than it declares.
+ * `read` gives every tenant-scoped read, a real minimum-privilege operator.
+ * NOTHING USES IT YET: the spec written against it proved flaky for a reason
+ * that is not its own — `admin-modules-toggle.e2e.ts` deliberately DISABLES the
+ * `reporting` module, and `/admin` authorizes on `reporting.dashboard.read`, so
+ * a read-only sweep overlapping that toggle sees the dashboard correctly deny.
+ * The fixture is kept because the interference is a harness problem worth
+ * solving properly (read sweeps must not overlap global-state mutators), not a
+ * reason to throw the grant away.
  *
  * What neither covers is which individual WRITE controls a partially-
  * permissioned user should see. Those expectations differ per screen, so they

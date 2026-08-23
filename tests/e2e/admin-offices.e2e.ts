@@ -33,6 +33,13 @@ test.describe("admin offices (authenticated)", () => {
   }) => {
     // Already authenticated as the owner: the `setup` project logged in once
     // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
+    //
+    // The navigation is explicit now. It used to be implied by
+    // `waitForURL("**/admin")` after the login form — which was the redirect
+    // landing this test on the dashboard, not just a wait. Removing the login
+    // block removed the navigation with it, and the assertion below then ran
+    // against `about:blank`.
+    await page.goto("/admin");
     await expect(page.locator("#admin-dashboard-heading")).toBeVisible();
     await expect(page.locator("#dashboard-tenant-id")).toHaveText(tenantId!);
 
@@ -47,7 +54,6 @@ test.describe("admin offices (authenticated)", () => {
   test("the other management screens render their tables for the owner", async ({
     page
   }) => {
-    // Log in first (fresh page/context per test).
     // Already authenticated as the owner: the `setup` project logged in once
     // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 

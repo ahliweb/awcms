@@ -18,13 +18,15 @@ Nothing about argon2's cost is wrong; that cost is the control. What was wrong w
 
 Six consecutive runs at ~18s with zero variance, against the previous 15s-or-four-minutes.
 
-### `tests/e2e/admin-read-only-access.e2e.ts`
+### A read-only sweep is NOT in this change, and why
 
-The gap between "owner sees everything" and "nobody sees anything": a user granted every tenant read and no writes. Every gated screen must render for them — a screen that denies is demanding more than its `authorize` block declares, and one that throws renders fine for an owner and breaks for everyone else.
+A spec for the user between "owner sees everything" and "nobody sees anything" was written and works — but it proved flaky for a reason that is not its own, and shipping a known-flaky test right after diagnosing one would be incoherent.
 
-The first version asserted "every screen renders" and reported `/admin/tenants` and `/admin/partner-registry` as defects. **They were not** — both authorize on PLATFORM-scoped permissions, and denying a tenant-scoped operator is exactly right. Checking before reporting turned a wrong assertion into a better one: the expectation is now derived from each screen's authorize scope against the live catalogue, so the test also exercises ADR-0053's tenant/platform boundary at runtime for the first time.
+`admin-modules-toggle.e2e.ts` deliberately DISABLES the `reporting` module, and `/admin` authorizes on `reporting.dashboard.read`. A read-only sweep overlapping that toggle sees the dashboard deny — correctly. Alone it passed 4/4; in the suite it failed roughly one run in three, always on `/admin`.
 
-Its limits are stated in the file rather than implied: it verifies **consistency** between declared scope and behaviour, not that the right screens are platform-scoped — proven by a mutation that downgraded `/admin/tenants` and correctly, uselessly, passed. The mutation that does belong to it — granting the read-only role the two platform reads — turns it red naming both screens.
+That is a harness problem worth solving properly: read sweeps must not run concurrently with specs that mutate tenant-wide state. The `read` grant stays in `e2e-restricted-user.ts` for that work, with the reason recorded beside it.
+
+Worth noting the two sweeps already on `main` are accidentally immune rather than correct: the render sweep asserts only `200`, and a denied screen still returns `200`; the deny sweep expects denial, which a disabled module also produces.
 
 ### The hydration window, documented not closed
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:9bf3e510ef902b036d71d3ef95f1c24dd0b61bf57f90c5394cd7d738f4366470 -->
+<!-- i18n-source-hash: sha256:6d61007a544b761b5b6cd2c81dece42c401395839600bc7414e13db67c59eb88 -->
 
 # AWCMS — Project State & Continuation
 
@@ -389,6 +389,18 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   Tidak ada yang salah dengan biaya argon2 — biaya itu JUSTRU kontrolnya.
   Membayarnya sebelas kali untuk menguji hal yang bukan autentikasi itulah
   kekeliruannya.
+
+  DITAHAN dari putaran ini: sapuan READ-ONLY. Ia bekerja, tetapi
+  `admin-modules-toggle.e2e.ts` sengaja MEMATIKAN modul `reporting` dan `/admin`
+  mengotorisasi pada `reporting.dashboard.read` — jadi sapuan baca yang tumpang
+  tindih dengan toggle itu melihat dasbor menolak, dan itu BENAR. Sendirian ia
+  lulus 4/4; di dalam suite ia gagal sekitar satu dari tiga kali, selalu pada
+  `/admin`. **Sapuan baca TIDAK BOLEH berjalan bersamaan dengan spec yang
+  memutasi keadaan se-tenant**, dan itu perubahan harness yang layak dilakukan
+  dengan sengaja. Dua sapuan yang sudah ada di `main` KEBETULAN kebal, bukan
+  benar: sapuan render hanya meng-assert `200` dan layar yang menolak tetap
+  mengembalikan `200`; sapuan deny justru mengharapkan penolakan, yang juga
+  dihasilkan modul yang dimatikan.
 
 - **PUTARAN DENY — 23 Agustus 2026: tidak pernah ada yang menyaksikan layar
   admin MENOLAK pengguna tanpa permission, dan empat layar sama sekali tak bisa

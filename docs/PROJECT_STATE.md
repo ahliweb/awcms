@@ -387,6 +387,17 @@ pioneered directly here after the ADR-0047 freeze.)
   Nothing about argon2's cost is wrong — that cost IS the control. Paying it
   eleven times to test things that are not authentication was the mistake.
 
+  Held back from this round: a READ-ONLY sweep. It works, but
+  `admin-modules-toggle.e2e.ts` deliberately DISABLES the `reporting` module and
+  `/admin` authorizes on `reporting.dashboard.read` — so a read sweep overlapping
+  that toggle sees the dashboard deny, correctly. Alone it passed 4/4; in the
+  suite it failed about one run in three, always on `/admin`. **Read sweeps must
+  not run concurrently with specs that mutate tenant-wide state**, and that is a
+  harness change worth doing deliberately. The two sweeps already on `main` are
+  ACCIDENTALLY immune, not correct: the render sweep asserts only `200` and a
+  denied screen still returns `200`; the deny sweep expects denial, which a
+  disabled module also produces.
+
 - **DENY ROUND — 23 August 2026: nothing had ever watched an admin screen
   refuse a user holding no permissions, and four screens could not be checked
   at all.**
