@@ -2,15 +2,27 @@
 "awcms": minor
 ---
 
-test(e2e): the intermittent suite failure was eleven parallel argon2id verifications, not a race
+test(e2e): two different intermittent failures, and the CI one was shared tenant state
 
-`admin-users.e2e.ts` went flaky in CI, and the first diagnosis here was wrong. It looked like a hydration race — delegated admin listeners bind on `document` inside a deferred module, so a click before that is silently swallowed. That window is real and is now documented, but it was **not** the cause.
+`admin-users.e2e.ts` went flaky in CI. This change fixes it — and the diagnosis took three attempts, two of which were wrong. Both wrong turns are recorded because each was confidently argued and each would have shipped a false explanation.
 
-The cause: **every authenticated spec drove the real `/login` form itself.** With `fullyParallel: true` that meant up to five simultaneous `Bun.password.verify` calls — argon2id on Bun's defaults, memory- and CPU-hard by design — while the same server rendered admin pages.
+### What the CI flake actually was
 
-The suite was bimodal: usually ~15s and green, occasionally **four minutes with six or seven failures**, every one a 30s `waitForURL` timeout **at the login step**, in specs with nothing to do with each other. It reproduced with the screen-sweep specs removed, so it predates them, and `--workers=1` made it vanish. CI hid it behind `retries: 1` — which is exactly why it surfaced as one "flaky" line rather than as a problem.
+The test asserts that re-assigning the role the owner already holds is rejected with `409`. It intermittently got **`200`** — the assignment succeeded.
 
-Nothing about argon2's cost is wrong; that cost is the control. What was wrong was paying it eleven times to test things that are not authentication.
+The assign dropdown lists *every role in the tenant*, and `admin-roles.e2e.ts` creates one, concurrently. When it had, the dropdown's default was a role the owner did **not** hold, so the assign legitimately succeeded. Nothing about the page was wrong; the test depended on tenant state another spec mutates.
+
+It now selects the `owner` role explicitly. Shared-state dependence, not a race.
+
+### Wrong turn 1: a hydration race
+
+Delegated admin listeners bind on `document` inside a deferred module, so a click before that is silently swallowed. That window is **real** and is now observable via `ADMIN_DELEGATION_READY_ATTRIBUTE` — but it was not the cause of anything here.
+
+### Wrong turn 2: argon2 contention — real, but a different failure
+
+Locally the suite was bimodal: usually ~15s green, occasionally **four minutes with six or seven failures**, every one a 30s `waitForURL` timeout **at the login step**. Every authenticated spec drove the real `/login` form, so five parallel workers meant five simultaneous `Bun.password.verify` calls — argon2id, memory- and CPU-hard by design — while the same server rendered admin pages. `--workers=1` made it vanish.
+
+That is a genuine finding and the fix below is worth keeping. **But CI runs 2 workers, not 5, and never showed those login timeouts.** It was a local phenomenon, and treating it as the CI flake's cause was wrong.
 
 ### A setup project logs in once
 

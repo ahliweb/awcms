@@ -46,6 +46,17 @@ test.describe("admin users write controls (authenticated)", () => {
     await expect(page.locator(".js-user-status").first()).toBeVisible();
 
     // Assign the already-held role → 409 → the client shows the generic error.
+    //
+    // The role is SELECTED explicitly rather than left on whatever the dropdown
+    // defaults to, and that is the whole point of this block. The select lists
+    // every role in the tenant, so `admin-roles.e2e.ts` creating one — which it
+    // does, concurrently — changed the default to a role the owner does NOT
+    // hold. The assign then SUCCEEDED with 200 and this test failed asserting
+    // 409. That was the CI flake: shared tenant state, not a race in the page.
+    const assignSelect = page.locator(".js-assign-role-select").first();
+    await expect(assignSelect).toBeVisible();
+    await assignSelect.selectOption({ label: "owner" });
+
     const assignButton = page.locator(".js-assign-role").first();
     await expect(assignButton).toBeVisible();
 

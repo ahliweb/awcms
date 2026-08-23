@@ -360,13 +360,22 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
-- **SESSION ROUND — 23 August 2026: the intermittent e2e failure was eleven
-  parallel argon2id verifications, and the first diagnosis here was WRONG.**
+- **SESSION ROUND — 23 August 2026: TWO different intermittent e2e failures,
+  and the CI one was SHARED TENANT STATE. Two diagnoses before it were wrong.**
 
-  It looked like a hydration race: delegated admin listeners bind on `document`
+  **The CI flake:** `admin-users.e2e.ts` asserts that re-assigning the role the
+  owner already holds is rejected `409`. It intermittently got `200` — the
+  assign SUCCEEDED. The dropdown lists every role in the tenant, and
+  `admin-roles.e2e.ts` creates one concurrently, so the default selection was
+  sometimes a role the owner did not hold. Fixed by selecting `owner`
+  explicitly. Shared state, not a race, and nothing wrong with the page.
+
+  **Wrong turn 1 — a hydration race.** Delegated listeners bind on `document`
   inside a deferred module, so a click before that is silently swallowed. That
-  window is real and is now observable via `ADMIN_DELEGATION_READY_ATTRIBUTE` —
-  but it was not the cause.
+  window is REAL and is now observable via `ADMIN_DELEGATION_READY_ATTRIBUTE`,
+  but it caused none of this.
+
+  **Wrong turn 2 — argon2 contention.** Also real, also a DIFFERENT failure:
 
   Every authenticated spec drove the real `/login` form itself. With
   `fullyParallel: true` that meant up to five simultaneous `Bun.password.verify`
@@ -375,11 +384,19 @@ pioneered directly here after the ADR-0047 freeze.)
   occasionally FOUR MINUTES with six or seven failures, every one a 30s
   `waitForURL` timeout AT THE LOGIN STEP, in specs unrelated to each other.
 
-  Two things made it hard to see. It reproduced with the new screen-sweep specs
-  REMOVED, so it predates them — the obvious suspect was innocent. And CI hid it
-  behind `retries: 1`, so it surfaced as one "flaky" line rather than a problem.
-  **A suite that goes green on the second try teaches people to re-run instead
-  of investigate.**
+  **CI runs 2 workers, not 5, and never showed those login timeouts.** It was a
+  local phenomenon, and calling it the CI flake's cause was the second mistake.
+  The session fix below is kept because it is a genuine improvement, not because
+  it fixed the flake — it did not.
+
+  CI hid the real flake behind `retries: 1`, so it surfaced as one "flaky" line
+  rather than a problem. **A suite that goes green on the second try teaches
+  people to re-run instead of investigate** — and it cost three diagnoses here.
+
+  **The pattern under all of it: specs mutate shared tenant state that other
+  specs read.** Roles created by one spec change another's dropdown; the module
+  toggle disables `reporting`, which `/admin` authorizes on. That is the real
+  harness problem, and it is still open.
 
   `tests/e2e/auth.setup.ts` logs the owner in once and saves `storageState`;
   thirteen logins became four. Six consecutive runs at ~18s, zero variance.

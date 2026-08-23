@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6d61007a544b761b5b6cd2c81dece42c401395839600bc7414e13db67c59eb88 -->
+<!-- i18n-source-hash: sha256:b0e32c0de5a233137606a63dedc540022a769a966268e648f5313cb710f66b04 -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,13 +360,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
-- **PUTARAN SESI — 23 Agustus 2026: kegagalan e2e yang intermiten ternyata
-  sebelas verifikasi argon2id paralel, dan diagnosis PERTAMA di sini SALAH.**
+- **PUTARAN SESI — 23 Agustus 2026: DUA kegagalan e2e intermiten yang berbeda,
+  dan yang di CI ternyata KEADAAN TENANT BERSAMA. Dua diagnosis sebelumnya salah.**
 
-  Tampaknya seperti balapan hidrasi: listener admin terdelegasi mengikat pada
-  `document` di dalam modul yang ditangguhkan, jadi klik sebelum itu ditelan
-  diam-diam. Jendela itu NYATA dan kini teramati lewat
-  `ADMIN_DELEGATION_READY_ATTRIBUTE` — tetapi bukan penyebabnya.
+  **Flake di CI:** `admin-users.e2e.ts` meng-assert bahwa menugaskan ulang peran
+  yang SUDAH dipegang owner ditolak `409`. Ia sesekali mendapat `200` — penugasan
+  BERHASIL. Dropdown-nya mendaftar SETIAP peran di tenant, dan
+  `admin-roles.e2e.ts` membuat satu secara bersamaan, jadi pilihan bawaannya
+  kadang peran yang TIDAK dipegang owner. Diperbaiki dengan memilih `owner`
+  secara eksplisit. Keadaan bersama, bukan balapan, dan tidak ada yang salah
+  pada halamannya.
+
+  **Salah arah 1 — balapan hidrasi.** Listener terdelegasi mengikat pada
+  `document` di dalam modul tertangguh, jadi klik sebelum itu ditelan diam-diam.
+  Jendela itu NYATA dan kini teramati lewat `ADMIN_DELEGATION_READY_ATTRIBUTE`,
+  tetapi tidak menyebabkan apa pun di sini.
+
+  **Salah arah 2 — kontensi argon2.** Juga nyata, juga kegagalan BERBEDA:
 
   Setiap spec terautentikasi menjalankan sendiri formulir `/login` sungguhan.
   Dengan `fullyParallel: true`, itu berarti sampai lima `Bun.password.verify`
@@ -376,11 +386,20 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   kegagalan, semuanya timeout `waitForURL` 30 detik DI LANGKAH LOGIN, pada spec
   yang tak berhubungan satu sama lain.
 
-  Dua hal menyulitkannya terlihat. Ia bereproduksi meski spec penyapu layar yang
-  baru DIHAPUS, jadi ia mendahului mereka — tersangka yang jelas ternyata tak
-  bersalah. Dan CI menyembunyikannya di balik `retries: 1`, sehingga ia muncul
-  sebagai satu baris "flaky" alih-alih sebuah masalah. **Suite yang hijau pada
-  percobaan kedua mengajari orang untuk mengulang, bukan menyelidiki.**
+  **CI berjalan dengan 2 worker, bukan 5, dan tidak pernah menunjukkan timeout
+  login itu.** Itu fenomena LOKAL, dan menyebutnya sebagai penyebab flake di CI
+  adalah kekeliruan kedua. Perbaikan sesi di bawah dipertahankan karena ia
+  peningkatan yang nyata, bukan karena ia memperbaiki flake-nya — ia tidak.
+
+  CI menyembunyikan flake yang sebenarnya di balik `retries: 1`, sehingga ia
+  muncul sebagai satu baris "flaky" alih-alih sebuah masalah. **Suite yang hijau
+  pada percobaan kedua mengajari orang untuk mengulang, bukan menyelidiki** — dan
+  di sini itu berharga tiga diagnosis.
+
+  **Pola di balik semuanya: spec memutasi keadaan tenant BERSAMA yang dibaca spec
+  lain.** Peran yang dibuat satu spec mengubah dropdown spec lain; toggle modul
+  mematikan `reporting`, yang justru menjadi otorisasi `/admin`. Itulah masalah
+  harness yang sebenarnya, dan ia MASIH TERBUKA.
 
   `tests/e2e/auth.setup.ts` me-login owner SEKALI lalu menyimpan `storageState`;
   tiga belas login menjadi empat. Enam kali jalan berturut-turut ~18 detik,
