@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:011ac81e62c6c7414fe982fbd4a1246d86a9b30bd685bbc4f13bba39c0104dfa -->
+<!-- i18n-source-hash: sha256:e6cf46128545c346d88fed45ce77ec683a80a3f8b8a6325bfca10748fba34459 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,63 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN LEDGER — 24 Agustus 2026: 121 endpoint MENOLAK pengguna tenant
+  TANPA MENCATAT bahwa mereka melakukannya.**
+
+  PUTARAN BATAS di bawah menutup pemanggil yang BUKAN SIAPA-SIAPA. Ini mengukur
+  pemanggil yang SESEORANG TANPA GRANT — bentuk yang dimiliki SETIAP tenant, dan
+  yang paling tak bisa dinalar gerbang statis. Sesi ber-NOL permission, ditembakkan
+  ke setiap endpoint ber-body yang ber-gate:
+
+  | Jawaban                                       | Jumlah |
+  | --------------------------------------------- | ------ |
+  | `403 ACCESS_DENIED` — otorisasi duluan, BENAR | 84     |
+  | `400 VALIDATION_ERROR` — skema endpoint-nya   | 61     |
+  | `400 IDEMPOTENCY_REQUIRED`                    | 54     |
+  | `404` — pencarian eksistensi jalan duluan     | 3      |
+  | `422` / `401`                                 | 3      |
+
+  **Temuannya adalah BARIS YANG HILANG, bukan kode statusnya.** ADR-0063
+  menjadikan `authorizeInTransaction` satu-satunya tempat keputusan diambil DAN
+  satu-satunya tempat ia dicatat. Rute yang menolak sebelum sampai ke sana
+  menolak secara tak terlihat — tanpa baris `awcms_access_decision_log`.
+  "Endpoint mana yang menjawab selain 403" adalah pertanyaan yang SAMA dengan
+  "penolakan mana yang tak meninggalkan jejak", dan jawabannya **121**.
+
+  **Ledger yang HANYA BOLEH MENGECIL, ditegakkan DUA ARAH**
+  (`tests/e2e/api-authorization-first.e2e.ts` +
+  `support/authorization-first-ledger.ts`): endpoint tak terdaftar yang menjawab
+  selain `403` → MERAH (utangnya tak bisa tumbuh), dan endpoint TERDAFTAR yang
+  menjawab `403` juga MERAH (ia sudah diperbaiki; barisnya harus dihapus). Tanpa
+  arah kedua, ledger penuh baris basi dan jadi hiasan dinding. Keduanya terbukti
+  lewat mutasi — 121 entri itu DIHASILKAN oleh arah pertama yang gagal, dan satu
+  baris basi memerahkan arah kedua. Bentuk yang sama dengan
+  `api:tenant-route:check`.
+
+  **Satu rute diperbaiki sebagai contoh kerja:**
+  `POST /api/v1/media/news-images/upload-sessions` dulu memberi tahu pemanggil
+  tanpa grant apakah R2 terkonfigurasi (`502`) beserta daftar MIME dan batas
+  ukurannya (`400`), tanpa mencatat apa pun. Kini ia MENAHAN kedua penolakan itu
+  sampai otorisasi menjawab. Body tetap dibaca DI LUAR transaksi —
+  `await request.json()` menunggu KLIEN — dan nilai yang ditahan berupa union
+  ber-diskriminan, bukan dua nullable berkorelasi, sehingga kodenya membaca
+  `held.value` alih-alih mengasersi `input!`.
+
+  **Tiga entri bersifat STRUKTURAL dan tetap didaftarkan.** `blog/posts/:id` dan
+  `blog/pages/:id` membaca barisnya duluan karena BASIS GRANT kepemilikan
+  dihitung darinya; `partners/:id/status` dan `access/machine-credentials`
+  menghitung permission yang lebih ketat DARI body. "Ada alasannya" dan "ini
+  baik-baik saja" adalah dua klaim berbeda, dan hanya yang pertama benar.
+
+  **Dua jebakan, keduanya dicatat.** Sapuan itu MENGELUARKAN DIRINYA SENDIRI dari
+  sesi dengan menembak `POST /api/v1/auth/logout`, setelah itu setiap request
+  menjawab `401` — false negative buatan sendiri yang terbaca persis seperti
+  gerbang yang lulus; kini ia melewati endpoint perusak-sesi dan meng-assert
+  sesinya hidup SEBELUM memercayai penolakan apa pun. Dan beberapa "temuan" larut
+  saat diperiksa: `push/subscriptions` itu self-service dengan `404` anti-oracle
+  yang TERDOKUMENTASI, dan `502`-nya pemeriksaan env lokal, bukan panggilan
+  keluar. Kode status saja menyesatkan di kedua arah.
 
 - **PUTARAN BATAS — 24 Agustus 2026: 77 endpoint API menyerahkan skema
   validasinya kepada TOKEN BEARER APA PUN, tanpa meninggalkan baris

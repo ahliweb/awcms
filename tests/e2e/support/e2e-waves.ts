@@ -92,6 +92,7 @@ export const WRITE_WAVE: readonly string[] = [
   // but it sends non-GET requests, and classifying by what a spec ATTEMPTS
   // rather than by what it happens to achieve is the rule that stays true when
   // a defect makes the attempt succeed. That is the case it exists to catch.
+  "api-authorization-first.e2e.ts",
   "api-body-auth-boundary.e2e.ts",
   "admin-email-templates-create.e2e.ts",
   "admin-modules-toggle.e2e.ts",
