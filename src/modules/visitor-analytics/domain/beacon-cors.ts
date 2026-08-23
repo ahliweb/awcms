@@ -58,6 +58,16 @@
  * served to a denied one. This endpoint is not cached today; a header whose
  * value depends on the request and does not say so is a defect waiting for the
  * next cache change.
+ *
+ * ## Where the `Origin` parser went
+ *
+ * `parseBeaconOrigin`/`isCrossOriginBeacon` used to live here. ADR-0107 gave
+ * the public search endpoints the same cross-origin need, so the two pure
+ * functions moved to `lib/security/request-origin.ts` — unchanged, and with
+ * their reasoning — rather than being copied. A security parser is the worst
+ * place in a codebase to keep two of: the copy nobody hardens is the one an
+ * attacker finds. What stays here is what is genuinely the BEACON's:
+ * credentials, a preflight, and a cookie `SameSite`.
  */
 
 /**
@@ -67,99 +77,6 @@
  * somebody is still watching.
  */
 export const BEACON_PREFLIGHT_MAX_AGE_SECONDS = 600;
-
-export type BeaconOrigin = {
-  /** The origin exactly as it will be echoed back, e.g. `https://news.example`. */
-  origin: string;
-  /** Its hostname, lowercased and port-free — the `awcms_tenant_domains` key. */
-  hostname: string;
-};
-
-/**
- * Parses an `Origin` request header into something safe to look up and echo.
- *
- * Returns `null` — never a partially-trusted value — for everything that is not
- * a plain `http(s)://host[:port]` origin. In particular:
- *
- * - **the literal string `null`**, which is what a sandboxed iframe, a
- *   `file://` document and some redirect chains send. It is an opaque origin,
- *   and echoing it back would hand a document with no origin the same access a
- *   verified tenant domain has;
- * - any non-`http(s)` scheme, so a `chrome-extension://` or `moz-extension://`
- *   page cannot be granted access to a tenant's analytics endpoint;
- * - anything carrying a path, query, fragment or userinfo. A real `Origin`
- *   header has none of those, so rather than strip them, this requires the
- *   header to be EQUAL to the parsed origin — one comparison that rejects every
- *   such shape at once, including the ones nobody has thought of yet.
- */
-export function parseBeaconOrigin(
-  originHeader: string | null | undefined
-): BeaconOrigin | null {
-  if (typeof originHeader !== "string") {
-    return null;
-  }
-
-  const trimmed = originHeader.trim();
-
-  if (trimmed.length === 0 || trimmed === "null") {
-    return null;
-  }
-
-  let url: URL;
-
-  try {
-    url = new URL(trimmed);
-  } catch {
-    return null;
-  }
-
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return null;
-  }
-
-  // A well-formed `Origin` serializes back to itself. Anything that does not —
-  // a trailing slash, a path, credentials, a query — is not an origin.
-  //
-  // The comparison is against the LOWERCASED header because scheme and host are
-  // case-insensitive and `new URL()` has already normalized them; a browser
-  // sends them lowercase anyway, and refusing `https://News.Example` would be
-  // strictness that protects nothing. What is echoed back is `url.origin`, the
-  // normalized form — which is also the form the browser compares against.
-  if (url.origin !== trimmed.toLowerCase()) {
-    return null;
-  }
-
-  if (url.hostname.length === 0) {
-    return null;
-  }
-
-  return { origin: url.origin, hostname: url.hostname.toLowerCase() };
-}
-
-/**
- * True when this request came from a different origin than the one serving it.
- *
- * Same-origin callers — this repo's own `/blog/{tenantCode}` pages — take the
- * unchanged path: no allow-list lookup, no CORS headers, not one extra query.
- * The cost of the cross-origin surface lands only on the cross-origin surface.
- */
-export function isCrossOriginBeacon(
-  parsedOrigin: BeaconOrigin | null,
-  requestUrl: string
-): boolean {
-  if (!parsedOrigin) {
-    return false;
-  }
-
-  try {
-    return parsedOrigin.origin !== new URL(requestUrl).origin;
-  } catch {
-    // An unparseable request URL cannot be shown to be same-origin, and the
-    // safe reading of "cannot be shown same-origin" is cross-origin: it leads
-    // to the allow-list check rather than around it.
-    return true;
-  }
-}
 
 /**
  * Headers for a granted cross-origin ACTUAL request (the POST itself).

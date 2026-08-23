@@ -8646,7 +8646,7 @@ Gated by `site_search.index.read`. Bounded: document counts by resource type, th
 - **operationId**: `siteSearchQuery`
 - **Security**: none (public endpoint)
 
-PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error.
+PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers.
 
 **Parameters**
 
@@ -8722,7 +8722,7 @@ Gated by `site_search.settings.update`. Changes what the PUBLIC search surface r
 - **operationId**: `siteSearchSuggest`
 - **Security**: none (public endpoint)
 
-PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale scoped. Same host-based tenant resolution, per-IP rate limit, query bounds and neutral empty payload as the search endpoint. Returns at most the tenant's configured `suggestionLimit`; returns an empty list when the tenant has suggestions turned off.
+PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale scoped. Same host-based tenant resolution, per-IP rate limit, query bounds and neutral empty payload as the search endpoint. Returns at most the tenant's configured `suggestionLimit`; returns an empty list when the tenant has suggestions turned off. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers.
 
 **Parameters**
 

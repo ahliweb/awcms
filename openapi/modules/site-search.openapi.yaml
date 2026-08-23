@@ -38,6 +38,14 @@ paths:
         An unresolved host, a disabled module, a search-disabled tenant, and a
         too-short query all return the SAME neutral empty payload — never a
         distinguishing error.
+        A request carrying a cross-origin `Origin` resolves its tenant from THAT
+        ORIGIN against the tenant-domain table — never from the host, and never
+        through the host chain's default-tenant fallback (ADR-0107). It is
+        answered with `Access-Control-Allow-Origin` only when the origin is an
+        `active` domain of an `active` tenant; any other origin gets the same
+        neutral empty payload with no grant header. There is no `OPTIONS`
+        handler: a `GET` carrying only CORS-safelisted headers is a simple
+        request, so a consumer must not add custom headers.
       parameters:
         - name: q
           in: query
@@ -106,6 +114,23 @@ paths:
       responses:
         "200":
           description: Search results (possibly empty).
+          headers:
+            Access-Control-Allow-Origin:
+              description: >-
+                Present ONLY for a cross-origin request whose `Origin` is an
+                active domain of an active tenant (ADR-0107). Echoed verbatim,
+                never `*`. Absent for a same-origin request and for a refused
+                origin — the absence IS the refusal.
+              required: false
+              schema:
+                type: string
+            Vary:
+              description: >-
+                Always `Origin`. The body is identical for a granted and a
+                refused request; the headers are not, so a cache must key on it.
+              required: false
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -118,6 +143,15 @@ paths:
                     $ref: "#/components/schemas/SiteSearchQueryResult"
         "429":
           description: Too many search requests from this source.
+          headers:
+            Vary:
+              description: >-
+                Always `Origin`. The limiter answers before the origin is
+                classified, so this response never carries a grant — but it is
+                still one of the answers this URL gives (ADR-0107).
+              required: false
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -135,6 +169,14 @@ paths:
         bounds and neutral empty payload as the search endpoint. Returns at most
         the tenant's configured `suggestionLimit`; returns an empty list when the
         tenant has suggestions turned off.
+        A request carrying a cross-origin `Origin` resolves its tenant from THAT
+        ORIGIN against the tenant-domain table — never from the host, and never
+        through the host chain's default-tenant fallback (ADR-0107). It is
+        answered with `Access-Control-Allow-Origin` only when the origin is an
+        `active` domain of an `active` tenant; any other origin gets the same
+        neutral empty payload with no grant header. There is no `OPTIONS`
+        handler: a `GET` carrying only CORS-safelisted headers is a simple
+        request, so a consumer must not add custom headers.
       parameters:
         - name: q
           in: query
@@ -150,6 +192,23 @@ paths:
       responses:
         "200":
           description: Title suggestions (possibly empty).
+          headers:
+            Access-Control-Allow-Origin:
+              description: >-
+                Present ONLY for a cross-origin request whose `Origin` is an
+                active domain of an active tenant (ADR-0107). Echoed verbatim,
+                never `*`. Absent for a same-origin request and for a refused
+                origin — the absence IS the refusal.
+              required: false
+              schema:
+                type: string
+            Vary:
+              description: >-
+                Always `Origin`. The body is identical for a granted and a
+                refused request; the headers are not, so a cache must key on it.
+              required: false
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -162,6 +221,15 @@ paths:
                     $ref: "#/components/schemas/SiteSearchSuggestResult"
         "429":
           description: Too many suggestion requests from this source.
+          headers:
+            Vary:
+              description: >-
+                Always `Origin`. The limiter answers before the origin is
+                classified, so this response never carries a grant — but it is
+                still one of the answers this URL gives (ADR-0107).
+              required: false
+              schema:
+                type: string
           content:
             application/json:
               schema:

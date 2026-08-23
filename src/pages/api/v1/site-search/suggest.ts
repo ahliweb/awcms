@@ -11,7 +11,7 @@ import {
 } from "../../../../lib/security/rate-limit";
 import { parsePositiveIntSetting } from "../../../../lib/security/env-thresholds";
 import { ok, fail } from "../../../../modules/_shared/api-response";
-import { withSiteSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
+import { withPublicSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
 import { suggestSiteContent } from "../../../../modules/site-search/application/search-service";
 import {
   normalizeSearchLocale,
@@ -23,7 +23,9 @@ import {
  * typeahead endpoint (trigram over titles). Same host-based tenant resolution,
  * per-IP rate limit, query bounds, and neutral empty payload as `/query`. Returns
  * at most `suggestion_limit` title suggestions; disabled when the tenant turns
- * suggestions off.
+ * suggestions off. Cross-origin readers are handled exactly as in `query.ts`
+ * (ADR-0107): tenant from the `Origin`, grant only for a registered active
+ * domain, neutral payload otherwise.
  */
 // See `query.ts` — same defect, same fix. Suggestions run on every keystroke,
 // so an off-by-NaN limiter here is the cheaper of the two endpoints to abuse.
@@ -59,7 +61,14 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
       "Too many suggestion requests from this source. Try again later.",
       {},
       undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+      {
+        "retry-after": String(rateLimit.retryAfterSec),
+        // The limiter answers before the origin is ever classified, so this
+        // response carries no CORS grant — but it is still one of the answers
+        // this URL gives, and a cache must not hand it to another origin as if
+        // it were origin-independent (ADR-0107).
+        vary: "Origin"
+      }
     );
   }
 
@@ -67,7 +76,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   const rawQuery = url.searchParams.get("q");
   const localeParam = url.searchParams.get("locale");
 
-  const result = await withSiteSearchTenant(
+  const { result, corsHeaders, origin } = await withPublicSearchTenant(
     sql,
     request,
     async (tx, tenant, settings) => {
@@ -109,9 +118,12 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   if (result === null) {
     recordCounter("site_search_queries_total", {
       surface: "suggest",
-      outcome: "disabled"
+      // See `query.ts` — an origin this deployment does not serve is a
+      // different operational fact from a tenant that turned search off, and
+      // only the counter is allowed to know it.
+      outcome: origin === "refused" ? "origin_refused" : "disabled"
     });
-    return ok({ items: [], query: "", locale: "" });
+    return ok({ items: [], query: "", locale: "" }, {}, corsHeaders);
   }
-  return ok(result);
+  return ok(result, {}, corsHeaders);
 };

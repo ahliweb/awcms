@@ -37,10 +37,21 @@ export function jsonResponse<TBody>(
   });
 }
 
-export function ok<TData>(data: TData, meta: ApiMeta = {}): Response {
+/**
+ * `headers` is the same escape hatch `fail` has always had, added when ADR-0107
+ * gave a 200 a header that depends on the request (`Vary: Origin`, and the CORS
+ * grant when there is one). Without it the only way to attach a header to a
+ * success was to stop using this helper and hand-build the envelope — which is
+ * how envelopes drift.
+ */
+export function ok<TData>(
+  data: TData,
+  meta: ApiMeta = {},
+  headers?: Record<string, string>
+): Response {
   return jsonResponse<ApiSuccess<TData>>(
     { success: true, data, meta },
-    { status: 200 }
+    { status: 200, headers }
   );
 }
 
