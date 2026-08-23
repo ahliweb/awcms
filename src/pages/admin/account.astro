@@ -86,6 +86,7 @@ type SessionRow = {
 };
 
 let displayName = "";
+let publicBylineName = "";
 let loginIdentifier = "";
 let sessions: SessionRow[] = [];
 let mfaEnabled = false;
@@ -136,12 +137,21 @@ const screen = await loadSelfServiceScreen({
   onError: (error) => logAdminPageError("/admin/account", error),
   load: async ({ tx }) => {
     const profileRows = (await tx`
-      SELECT p.display_name, i.login_identifier
+      SELECT p.display_name, i.login_identifier, tu.public_byline_name
       FROM awcms_identities i
       JOIN awcms_profiles p
         ON p.tenant_id = i.tenant_id AND p.id = i.profile_id
+      -- LEFT, not INNER (ADR-0109): an identity with no membership row is a
+      -- broken invariant, and an inner join would answer it by hiding the whole
+      -- profile card rather than by showing a profile with no byline.
+      LEFT JOIN awcms_tenant_users tu
+        ON tu.tenant_id = i.tenant_id AND tu.identity_id = i.id
       WHERE i.tenant_id = ${ssr.tenantId} AND i.id = ${ssr.identityId}
-    `) as Array<{ display_name: string; login_identifier: string }>;
+    `) as Array<{
+      display_name: string;
+      login_identifier: string;
+      public_byline_name: string | null;
+    }>;
 
     const principalId = await resolvePrincipalIdForIdentity(
       tx,
@@ -173,6 +183,7 @@ if (screen.state === "allowed") {
   const account = screen.data;
 
   displayName = account.profile?.display_name ?? "";
+  publicBylineName = account.profile?.public_byline_name ?? "";
   loginIdentifier = account.profile?.login_identifier ?? "";
   sessions = (account.sessions ?? []) as SessionRow[];
   mfaEnabled = account.mfa.enabled;
@@ -259,7 +270,9 @@ const themeOptions = [
     data-rate-limited={t(
       "Too many attempts. Please wait a moment and try again."
     )}
-    data-profile-invalid={t("Enter a display name of 1 to 200 characters.")}
+    data-profile-invalid={t(
+      "Enter a display name of 1 to 200 characters, and a byline of at most 120."
+    )}
     data-profile-failed={t("Could not save your profile. Please try again.")}
     data-preferences-failed={t(
       "Could not save your preferences. Please try again."
@@ -332,6 +345,25 @@ const themeOptions = [
           maxlength="200"
           required
         />
+      </div>
+
+      <div class="admin-field">
+        <label for="account-public-byline">{t("Public byline")}</label>
+        <input
+          type="text"
+          id="account-public-byline"
+          name="publicBylineName"
+          value={publicBylineName}
+          maxlength="120"
+          aria-describedby="account-public-byline-hint"
+        />
+        <p id="account-public-byline-hint" class="admin-field-hint">
+          {
+            t(
+              "The name your articles are published under. Leave it empty and articles are attributed to this site, not to you."
+            )
+          }
+        </p>
       </div>
 
       <div class="admin-field">

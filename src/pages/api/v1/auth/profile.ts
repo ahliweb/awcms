@@ -40,6 +40,11 @@ import {
 import { resolveActiveSession } from "../../../../modules/identity-access/application/session-lookup";
 import { updateOwnDisplayName } from "../../../../modules/profile-identity/application/person-profile";
 import {
+  readOwnPublicByline,
+  updateOwnPublicBylineName,
+  validatePublicBylineName
+} from "../../../../modules/identity-access/application/own-byline";
+import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
@@ -89,16 +94,23 @@ export const GET = defineSelfServiceTenantRoute({
 
     if (!session) return authRequired();
 
+    // `LEFT JOIN` on the membership: an identity with no `awcms_tenant_users`
+    // row is a broken invariant, and an INNER join would answer it by hiding
+    // the account screen's profile section entirely rather than by showing a
+    // profile with no byline.
     const rows = (await tx`
-      SELECT p.id, p.display_name, i.login_identifier
+      SELECT p.id, p.display_name, i.login_identifier, tu.public_byline_name
       FROM awcms_identities i
       JOIN awcms_profiles p
         ON p.tenant_id = i.tenant_id AND p.id = i.profile_id
+      LEFT JOIN awcms_tenant_users tu
+        ON tu.tenant_id = i.tenant_id AND tu.identity_id = i.id
       WHERE i.tenant_id = ${tenantId} AND i.id = ${session.identity_id}
     `) as Array<{
       id: string;
       display_name: string;
       login_identifier: string;
+      public_byline_name: string | null;
     }>;
 
     const profile = rows[0];
@@ -117,7 +129,9 @@ export const GET = defineSelfServiceTenantRoute({
           // nothing they do not already type to sign in. It is not masked for
           // that reason: masking your own address on your own account page
           // helps nobody and makes "is this the right account" unanswerable.
-          loginIdentifier: profile.login_identifier
+          loginIdentifier: profile.login_identifier,
+          /** ADR-0109. `null` means no byline — the organisation is the author. */
+          publicBylineName: profile.public_byline_name
         },
         meta: {}
       },
@@ -126,7 +140,11 @@ export const GET = defineSelfServiceTenantRoute({
   }
 });
 
-export const PATCH = defineSelfServiceTenantRoute<{ displayName: string }>({
+export const PATCH = defineSelfServiceTenantRoute<{
+  displayName: string;
+  /** `undefined` = leave it alone; `null` = clear it; a string = set it. */
+  publicBylineName?: string | null;
+}>({
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant" ? tenantRequired() : authRequired(),
@@ -207,7 +225,32 @@ export const PATCH = defineSelfServiceTenantRoute<{ displayName: string }>({
       );
     }
 
-    return { displayName };
+    // Absent means "unchanged", so the key's PRESENCE is what is tested, not
+    // its value — `publicBylineName: null` is a real instruction (clear it) and
+    // must not be read as "not supplied".
+    const hasByline =
+      body !== null && typeof body === "object" && "publicBylineName" in body;
+
+    if (!hasByline) {
+      return { displayName };
+    }
+
+    const byline = validatePublicBylineName(
+      (body as { publicBylineName: unknown }).publicBylineName
+    );
+
+    if (!byline.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "publicBylineName is invalid.",
+        {},
+        [{ field: "publicBylineName", message: byline.message }],
+        NO_STORE_HEADERS
+      );
+    }
+
+    return { displayName, publicBylineName: byline.value };
   },
   handler: async ({ tx, tenantId, tokenHash, now, prepared }) => {
     const session = await resolveActiveSession(tx, tenantId, tokenHash, now);
@@ -233,10 +276,46 @@ export const PATCH = defineSelfServiceTenantRoute<{ displayName: string }>({
 
     if (!profile) return authRequired();
 
+    // Awaited SEQUENTIALLY after the profile write, not with `Promise.all`:
+    // both run on the same transaction connection, and one Postgres connection
+    // serves one query at a time.
+    //
+    // Through `identity_access`'s own service for the same ADR-0013 §6 reason
+    // the display name goes through `profile_identity`'s: this route living
+    // under `/api/v1/auth/*` does not make it a co-writer of another module's
+    // table, and `modules:table-writes:check` says so.
+    let publicBylineName: string | null = null;
+
+    if (prepared.publicBylineName !== undefined) {
+      const byline = await updateOwnPublicBylineName(
+        tx,
+        tenantId,
+        session.identity_id,
+        prepared.publicBylineName
+      );
+
+      if (!byline) return authRequired();
+
+      publicBylineName = byline.publicBylineName;
+    } else {
+      publicBylineName = await readOwnPublicByline(
+        tx,
+        tenantId,
+        session.identity_id
+      );
+    }
+
     return jsonResponse(
       {
         success: true,
-        data: { profileId: profile.id, displayName: profile.displayName },
+        data: {
+          profileId: profile.id,
+          displayName: profile.displayName,
+          // Always returned, changed or not: the account screen re-renders from
+          // this response, and a field that vanished from the answer because it
+          // was not part of THIS request would read as "it was cleared".
+          publicBylineName
+        },
         meta: {}
       },
       { status: 200, headers: NO_STORE_HEADERS }

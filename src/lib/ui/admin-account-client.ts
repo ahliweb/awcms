@@ -68,13 +68,18 @@ onSubmit("account-profile-form", async ({ data, submit }) => {
     profileError,
     () =>
       sendJson("PATCH", "/api/v1/auth/profile", {
-        displayName: field(data, "displayName")
+        displayName: field(data, "displayName"),
+        // ADR-0109. Sent on EVERY profile save, including as an empty string —
+        // which the endpoint normalises to `null`, i.e. "no byline". The
+        // alternative (omitting it when empty) would make clearing a byline the
+        // one thing this form cannot do, because absence means "unchanged".
+        publicBylineName: field(data, "publicBylineName")
       }),
     (errorCode) =>
       errorCode === "VALIDATION_ERROR"
         ? message(
             "profileInvalid",
-            "Enter a display name of 1 to 200 characters."
+            "Enter a display name of 1 to 200 characters, and a byline of at most 120."
           )
         : message(
             "profileFailed",

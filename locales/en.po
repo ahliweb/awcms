@@ -442,7 +442,13 @@ msgstr ""
 msgid "Too many attempts. Please wait a moment and try again."
 msgstr ""
 
-msgid "Enter a display name of 1 to 200 characters."
+msgid "Public byline"
+msgstr ""
+
+msgid "The name your articles are published under. Leave it empty and articles are attributed to this site, not to you."
+msgstr ""
+
+msgid "Enter a display name of 1 to 200 characters, and a byline of at most 120."
 msgstr ""
 
 msgid "Could not save your profile. Please try again."

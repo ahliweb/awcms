@@ -38,6 +38,16 @@ export type NewsArticleSeoMetadataInput = {
   seoTitle: string;
   /** Already-resolved via `resolveMetaDescription` — used as JSON-LD `description`. */
   metaDescription: string;
+  /**
+   * ADR-0109 — the author's OPT-IN byline, already resolved by the caller
+   * through `identity_access`'s own service, or `null` for "no byline".
+   *
+   * Resolved by the CALLER for the same reason `canonicalUrl` and `seoTitle`
+   * are: this builder composes already-decided values, and the one decision
+   * here — whether an individual is named at all — belongs to the route that
+   * knows whether it is rendering a public page or an editor's preview.
+   */
+  authorByline?: string | null;
 };
 
 export type NewsArticleSeoMetadata = {
@@ -154,6 +164,7 @@ export async function buildNewsArticleSeoMetadata(
       datePublished: input.post.publishedAt,
       dateModified: input.post.updatedAt,
       authorName: input.tenantName,
+      authorByline: input.authorByline ?? null,
       publisherName: input.tenantName,
       publisherLogoUrl: fallbackLogoMedia
         ? resolveOgImageUrl(fallbackLogoMedia.publicUrl)

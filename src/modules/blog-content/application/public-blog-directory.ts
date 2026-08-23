@@ -26,6 +26,15 @@ import {
 } from "../../_shared/offset-pagination";
 export type PublicBlogPostDetail = {
   id: string;
+  /**
+   * ADR-0109 — who wrote it, so the route can resolve their OPT-IN byline.
+   *
+   * The id itself never leaves the server: it is a tenant-internal identifier,
+   * and what a reader sees is either the author's chosen byline or the
+   * organisation. Selected here rather than joined because the byline lives in
+   * `identity_access`'s table and is read through that module's own service.
+   */
+  authorTenantUserId: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -61,6 +70,7 @@ export type PublicBlogPostDetail = {
 
 type PublicBlogPostDetailRow = {
   id: string;
+  author_tenant_user_id: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -82,6 +92,7 @@ type PublicBlogPostDetailRow = {
 function toDetail(row: PublicBlogPostDetailRow): PublicBlogPostDetail {
   return {
     id: row.id,
+    authorTenantUserId: row.author_tenant_user_id,
     title: row.title,
     slug: row.slug,
     excerpt: row.excerpt,
@@ -110,7 +121,7 @@ export async function fetchPublicBlogPostBySlug(
     SELECT id, title, slug, excerpt, content_json, content_text, seo_title,
       meta_description, canonical_url, locale, published_at, updated_at,
       visibility, featured_media_id, auto_internal_tag_links_disabled,
-      seo_image_media_id, body_portable_text
+      seo_image_media_id, body_portable_text, author_tenant_user_id
     FROM awcms_blog_posts
     WHERE tenant_id = ${tenantId} AND slug = ${slug}
       AND status = 'published' AND visibility IN ('public', 'unlisted')

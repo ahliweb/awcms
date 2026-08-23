@@ -2795,6 +2795,11 @@ paths:
                         type: string
                       loginIdentifier:
                         type: string
+                      publicBylineName:
+                        description: ADR-0109 — the name this person's articles are published under, or `null` for "no byline" (the article keeps the organisation-level attribution).
+                        type: string
+                        nullable: true
+                        maxLength: 120
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -2824,6 +2829,13 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 200
+                publicBylineName:
+                  description: |-
+                    ADR-0109 — OPTIONAL, and the three states are distinct: ABSENT leaves the byline unchanged, `null` (or an empty string) clears it, a string sets it. Absence cannot mean "clear" — a PATCH that saved only a display name would delete the byline every time.
+                    There is no administrative sibling for this field on purpose: an editor who could set somebody else's byline could publish an article under a colleague's name.
+                  type: string
+                  nullable: true
+                  maxLength: 120
       responses:
         "200":
           description: The stored display name.
@@ -20219,6 +20231,13 @@ components:
           items:
             type: string
             format: uuid
+        authorByline:
+          description: |-
+            ADR-0109 — the author's OPT-IN public byline, returned by the `?view=full` traversal a static site is built from.
+            `null` is the normal state and means the article keeps the ORGANISATION-level attribution (ADR-0102): a consumer renders no individual name for it. It is deliberately NOT the author's internal display name — publishing an account name because somebody wrote an article is the PII surface Issue #649 refused to open — and it carries no id, URL or profile link, only the name.
+          type: string
+          nullable: true
+          maxLength: 120
     BlogPostSummary:
       type: object
       description: |
