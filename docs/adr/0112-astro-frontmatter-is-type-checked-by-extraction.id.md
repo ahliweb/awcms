@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0112-astro-frontmatter-is-type-checked-by-extraction.md)
 
-<!-- i18n-source-hash: sha256:88b8866dc964d7e25a57677d16737dc83a7c5a3871708a46aca48b4bbbf37019 -->
+<!-- i18n-source-hash: sha256:b9b02bb4e00b5aa3e1cac78268e202550610eda463fa55b6770e7420f9d6af50 -->
 
 # ADR-0112 — Frontmatter `.astro` ditype-check lewat EKSTRAKSI, karena `astro check` tak bisa jalan di sini
 
@@ -29,9 +29,9 @@ const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
 
 sebagai pernyataan KETIGA frontmatter-nya, dari tiga `const` yang dideklarasikan **130 baris di bawahnya** dalam scope yang sama. Itu temporal dead zone: fungsi komponen terkompilasi melempar `ReferenceError: Cannot access 'canUpdateRedirect' before initialization` sebelum merender apa pun.
 
-**Layar itu menjawab 500 pada setiap permintaan dan tidak pernah sekali pun bekerja.** Ia lolos review, `bun run check`, build, dan CI. Chunk produksi terkompilasi menunjukkan urutannya terjaga — pernyataan 3 membaca apa yang dideklarasikan pernyataan 120 — jadi ini bukan bahaya teoretis.
+**Layar itu menjawab 404 pada setiap permintaan dan tidak pernah sekali pun bekerja.** Ia lolos review, `bun run check`, build, dan CI. Chunk produksi terkompilasi menunjukkan urutannya terjaga — pernyataan 3 membaca apa yang dideklarasikan pernyataan 120 — jadi ini bukan bahaya teoretis.
 
-Layar operator yang selalu 500 adalah mode kegagalan yang paling sulit disadari repo ini: tidak ada yang mem-poll `/admin/seo`, dan deskriptor modulnya mendaftarkannya di sidebar, jadi ia TAMPAK terkirim.
+Layar operator yang selalu 404 adalah mode kegagalan yang paling sulit disadari repo ini: tidak ada yang mem-poll `/admin/seo`, dan deskriptor modulnya mendaftarkannya di sidebar, jadi ia TAMPAK terkirim.
 
 ## Keputusan
 
@@ -65,6 +65,26 @@ Bersama-sama keempatnya menurunkan keluaran mentah dari **920 diagnostik menjadi
 
 **Turunkan TypeScript ke 6.x supaya `astro check` jalan.** Ditolak: ia membeli pemeriksaan props di 61 berkas dengan harga meregresi kompiler di bawah ~156.000 baris dan 33 gerbang. Rasionya terbalik, dan ADR-0068 sudah menalar ini.
 
-**Tunggu `astro check` mendukung TypeScript 7.** Itu status quo yang dicatat selisihnya, dan itulah yang membiarkan sebuah layar 500 berminggu-minggu. Menunggu tetap benar untuk separuh pemeriksaan props — itulah sebabnya entrinya bertahan — tetapi TIDAK benar untuk keseluruhannya.
+**Tunggu `astro check` mendukung TypeScript 7.** Itu status quo yang dicatat selisihnya, dan itulah yang membiarkan sebuah layar 404 berminggu-minggu. Menunggu tetap benar untuk separuh pemeriksaan props — itulah sebabnya entrinya bertahan — tetapi TIDAK benar untuk keseluruhannya.
 
 **Periksa seluruh berkas `.astro` dengan parser sendiri.** Ditolak: parser yang berbeda pendapat dengan parser Astro adalah sumber galat yang tidak ada di halaman, dan sumber kebisuan di tempat yang ada. Mengekstrak sebuah region apa adanya lalu menyerahkannya ke kompiler SUNGGUHAN tidak punya kedua mode kegagalan itu.
+
+## Amandemen — 23 Agustus 2026: gejalanya 404, BUKAN 500
+
+Membangun uji asap render yang melengkapi gerbang ini
+(`tests/e2e/admin-screens-render.e2e.ts`) menuntut cacat `/admin/seo`
+dimunculkan kembali lalu menyaksikan server SUNGGUHAN menjawab. Ia **tidak**
+menjawab `500`.
+
+Ketika frontmatter melempar, `ReferenceError`-nya masuk ke **log server** dan
+peramban diberi **404**. ADR ini semula menyebut 500 di mana-mana, dan setiap
+dokumen yang mengulanginya sudah dikoreksi.
+
+Koreksi ini penting karena mengubah cara kelas ini diburu. Bertanya "layar
+admin mana yang 5xx?" tidak menemukan apa pun lalu menyimpulkan armadanya
+sehat — layar yang melempar di setiap render TIDAK BISA dibedakan, dari
+statusnya saja, dari rute yang memang tak pernah dibangun. Karena itu uji
+asapnya meng-assert `200` PERSIS (owner ter-seed memegang setiap permission,
+jadi tiap layar admin berutang halaman terender kepadanya) alih-alih sekadar
+"bukan 5xx", yang justru akan lolos begitu saja melewati cacat yang menjadi
+alasan penulisannya.

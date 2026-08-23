@@ -2,11 +2,11 @@
 "awcms": minor
 ---
 
-fix(admin-seo): `/admin/seo` answered 500 on every request and had never rendered — plus the gate that found it (C4)
+fix(admin-seo): `/admin/seo` answered 404 on every request and had never rendered — plus the gate that found it (C4)
 
 `/admin/seo` computed `showRedirectActions` as the **third statement** of its frontmatter, from three `const`s declared 130 lines further down in the same scope. That is a temporal dead zone: the compiled component threw `ReferenceError: Cannot access 'canUpdateRedirect' before initialization` before rendering anything.
 
-The screen had never worked once. It passed review, `bun run check`, the build, and CI, and the compiled production chunk shows the ordering preserved — statement 3 reading what statement 120 declares. An always-500 operator screen is the failure this repo is least able to notice: nothing polls it, and its module descriptor lists it in the sidebar, so it looks shipped.
+The screen had never worked once. It passed review, `bun run check`, the build, and CI, and the compiled production chunk shows the ordering preserved — statement 3 reading what statement 120 declares. An always-404 operator screen is the failure this repo is least able to notice: nothing polls it, and its module descriptor lists it in the sidebar, so it looks shipped.
 
 ### Why nothing saw it, and why the fix is a gate
 

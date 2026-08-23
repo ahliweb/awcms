@@ -229,7 +229,9 @@ const canUpdateNotFound =
 // top of the frontmatter reading `const`s declared 130 lines further down, so
 // the component function threw `ReferenceError: Cannot access
 // 'canUpdateRedirect' before initialization` as its third statement and this
-// screen answered 500 on every request. Nothing caught it because `.astro`
+// screen answered 404 on every request (the ReferenceError goes to the
+// SERVER log; the browser is told the page does not exist). Nothing caught
+// it because `.astro`
 // frontmatter was type-checked by nothing at all; `check:astro-frontmatter:check`
 // now does, and reports exactly this.
 const showRedirectActions = canUpdateRedirect || canDeleteRedirect;

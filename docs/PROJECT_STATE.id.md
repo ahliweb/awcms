@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:8c4dc2134f8af28ab9c06dba490ca9722b7d1676b51bac4902cbcbb5fb79e2fc -->
+<!-- i18n-source-hash: sha256:6682b8223c17be1fdce5dedbe344356037a5c1bfd8e6fc6eef29b06f938e084f -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,36 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN RENDER — 23 Agustus 2026: 41 dari 48 layar admin tidak pernah
+  dimuat apa pun, dan gejala layar rusak adalah 404 — BUKAN 500.**
+
+  `/admin/seo` tidak pernah merender, dan alasan tak ada yang menyadarinya
+  sesederhana: **tidak ada yang memintanya**. Tujuh layar diuji spec CRUD e2e;
+  41 sisanya tidak pernah dimuat di CI, oleh gerbang mana pun, dalam bentuk apa
+  pun. `admin:screen-coverage:check` tampak berdekatan tapi menjawab pertanyaan
+  lain — apakah sebuah layar MENGKLAIM permission.
+
+  `tests/e2e/admin-screens-render.e2e.ts` menyusuri `src/pages/admin/**.astro`
+  saat DIJALANKAN lalu memuat setiap layar sebagai owner ter-seed. Daftarnya
+  DITEMUKAN, tidak pernah ditulis: daftar hardcoded adalah kegagalan yang terus
+  ditemukan repo ini — gerbang yang memeriksa matriksnya sendiri alih-alih apa
+  yang ADA. Menambah layar tanpa mencakupnya kini mustahil.
+
+  **Koreksi yang muncul dari memverifikasinya:** memunculkan kembali cacat
+  `/admin/seo` lalu menyaksikan server sungguhan menjawab menunjukkan ia
+  mengembalikan **404**, bukan 500. `ReferenceError`-nya masuk log server;
+  peramban diberi tahu halamannya tidak ada. ADR-0112 dan semua yang
+  mengulanginya menyebut 500; semuanya dikoreksi, dan ADR itu membawa
+  amandemen.
+
+  Itu mengubah cara kelas ini diburu, dan karena itu dicatat di sini bukan
+  hanya di ADR-nya: **bertanya "layar admin mana yang 5xx?" tidak menemukan apa
+  pun lalu menyimpulkan armadanya sehat.** Layar yang melempar di setiap render
+  tak bisa dibedakan, dari statusnya saja, dari rute yang memang tak pernah
+  dibangun. Karena itu tesnya meng-assert `200` PERSIS, bukan "bukan 5xx" —
+  asersi yang lebih lemah akan lolos begitu saja melewati cacat yang menjadi
+  alasan keberadaannya.
+
 - **PUTARAN FRONTMATTER — 23 Agustus 2026: `/admin/seo` selama ini menjawab 500
   di setiap permintaan dan tidak pernah sekali pun merender. Temuan standar C4
   DITUTUP (ADR-0112), dan itu baris terakhir yang terbuka di dokumen itu.**
@@ -371,7 +401,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 initialization` sebelum merender apa pun. Ia lolos review, `bun run check`,
   build dan CI, dan chunk produksinya mempertahankan urutan itu.
 
-  **Layar operator yang selalu 500 adalah kegagalan yang paling sulit disadari
+  **Layar operator yang selalu 404 adalah kegagalan yang paling sulit disadari
   repo ini**: tidak ada yang mem-poll `/admin/seo`, dan deskriptor modulnya
   mendaftarkannya di sidebar, jadi ia terbaca sebagai sudah terkirim.
 
