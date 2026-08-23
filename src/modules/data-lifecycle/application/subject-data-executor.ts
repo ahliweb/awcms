@@ -60,7 +60,12 @@ function quoted(identifier: string): string {
   return `"${assertSafeIdentifier(identifier)}"`;
 }
 
-export type ColumnType = { column: string; dataType: string };
+export type ColumnType = {
+  column: string;
+  dataType: string;
+  /** Whether the column accepts NULL — the erasure's answer for a type no sentinel fits (ADR-0108). */
+  nullable?: boolean;
+};
 
 /**
  * Column names and types for the planned tables, read from `information_schema`
@@ -85,17 +90,76 @@ export async function loadColumnTypes(
   }
 
   const rows = (await tx`
-    SELECT table_name, column_name, data_type
+    SELECT table_name, column_name, data_type, is_nullable
     FROM information_schema.columns
     WHERE table_schema = current_schema()
       AND table_name = ANY(${tx.array(tableNames.map(assertSafeIdentifier), "text")})
     ORDER BY table_name, ordinal_position
-  `) as { table_name: string; column_name: string; data_type: string }[];
+  `) as {
+    table_name: string;
+    column_name: string;
+    data_type: string;
+    is_nullable: string;
+  }[];
 
   for (const row of rows) {
     const list = byTable.get(row.table_name) ?? [];
-    list.push({ column: row.column_name, dataType: row.data_type });
+    list.push({
+      column: row.column_name,
+      dataType: row.data_type,
+      nullable: row.is_nullable === "YES"
+    });
     byTable.set(row.table_name, list);
+  }
+
+  return byTable;
+}
+
+/**
+ * Which of the planned tables' columns sit under a UNIQUE index — read from
+ * `pg_index` in the same transaction, for the same reason `loadColumnTypes`
+ * reads `information_schema` (ADR-0108).
+ *
+ * DERIVED rather than declared. A `unique: true` flag on the descriptor would
+ * be a second copy of the schema, maintained by hand, in a file whose author
+ * has no reason to look at index definitions — and the failure mode of a stale
+ * copy is a `23505` in the middle of an erasure whose request has already been
+ * claimed.
+ *
+ * Partial indexes count. `awcms_invitations`'s uniqueness is
+ * `(tenant_id, login_identifier) WHERE status = 'pending'`, and two pending
+ * invitations from the same person are exactly the case that collides.
+ * Expression indexes are ignored (`attnum = 0`), which is safe in the
+ * conservative direction only if no future unique index is built on an
+ * expression over an anonymised column — worth knowing, and not the case today.
+ */
+export async function loadUniqueColumns(
+  tx: Bun.SQL,
+  tableNames: readonly string[]
+): Promise<Map<string, Set<string>>> {
+  const byTable = new Map<string, Set<string>>();
+
+  if (tableNames.length === 0) {
+    return byTable;
+  }
+
+  const rows = (await tx`
+    SELECT cls.relname AS table_name, att.attname AS column_name
+    FROM pg_index idx
+    JOIN pg_class cls ON cls.oid = idx.indrelid
+    JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+    JOIN pg_attribute att
+      ON att.attrelid = cls.oid
+     AND att.attnum = ANY(idx.indkey::smallint[])
+    WHERE idx.indisunique
+      AND nsp.nspname = current_schema()
+      AND cls.relname = ANY(${tx.array(tableNames.map(assertSafeIdentifier), "text")})
+  `) as { table_name: string; column_name: string }[];
+
+  for (const row of rows) {
+    const set = byTable.get(row.table_name) ?? new Set<string>();
+    set.add(row.column_name);
+    byTable.set(row.table_name, set);
   }
 
   return byTable;
@@ -116,6 +180,9 @@ const ANONYMISABLE_TYPES = new Set([
   "character",
   "citext"
 ]);
+
+/** JSON document types, emptied rather than sentinel-written — see the anonymise branch. */
+const JSON_TYPES = new Set(["json", "jsonb"]);
 
 /** What an anonymised text column holds. Not empty string: an operator reading the row must be able to tell "erased" from "never set". */
 export const ANONYMIZED_TEXT = "[erased]";
@@ -296,7 +363,8 @@ export async function runSubjectErasure(
   tx: Bun.SQL,
   tenantId: string,
   plan: SubjectPlan,
-  columnTypes: ReadonlyMap<string, ColumnType[]>
+  columnTypes: ReadonlyMap<string, ColumnType[]>,
+  uniqueColumns: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 ): Promise<SubjectErasureResult> {
   const outcomes: SubjectErasureOutcome[] = [];
   const skipped: string[] = [];
@@ -319,12 +387,21 @@ export async function runSubjectErasure(
       // owner did not name would be this engine deciding what counts as
       // personal inside another module's table — the coupling ADR-0013 §6
       // exists to prevent.
+      //
+      // `anonymizedColumns`, NOT `redactedColumns` (ADR-0108). Those were one
+      // list until this repo checked what an executed erasure actually leaves
+      // behind: `awcms_profiles` kept `display_name` and `legal_name`,
+      // `awcms_identities` kept the login address, `awcms_registration_requests`
+      // kept both — because naming them in the export-exclusion list would have
+      // withheld the subject's own data FROM the subject, so their owners
+      // correctly named nothing, and the erasure correctly wrote nothing.
       const types = new Map(
-        (columnTypes.get(entry.tableName) ?? []).map((entry) => [
-          entry.column,
-          entry.dataType
+        (columnTypes.get(entry.tableName) ?? []).map((column) => [
+          column.column,
+          column
         ])
       );
+      const unique = uniqueColumns.get(entry.tableName) ?? new Set<string>();
       const assignments: string[] = [];
       const values: string[] = [];
       const bind = (value: string): string => {
@@ -332,11 +409,37 @@ export async function runSubjectErasure(
         return `$${1 + predicate.values.length + values.length}`;
       };
 
-      for (const column of entry.redactedColumns) {
-        const dataType = types.get(column);
+      for (const column of entry.anonymizedColumns) {
+        const meta = types.get(column);
+        const dataType = meta?.dataType;
 
         if (dataType && ANONYMISABLE_TYPES.has(dataType)) {
-          assignments.push(`${quoted(column)} = ${bind(ANONYMIZED_TEXT)}`);
+          // A column under a UNIQUE index cannot hold the shared sentinel: a
+          // subject with two rows in the same table — two pending invitations,
+          // two identifiers, two suppressed addresses — would collide with
+          // itself and abort the whole erasure with a 23505, after the request
+          // had already been claimed. The suffix keeps the value recognisable
+          // as erased while making it per-row unique.
+          assignments.push(
+            unique.has(column)
+              ? `${quoted(column)} = ${bind(ANONYMIZED_TEXT)} || ':' || gen_random_uuid()::text`
+              : `${quoted(column)} = ${bind(ANONYMIZED_TEXT)}`
+          );
+        } else if (dataType && JSON_TYPES.has(dataType)) {
+          // A JSON document is not a string, so the sentinel does not fit — and
+          // these documents are not incidental: `awcms_email_messages.variables`
+          // holds the template values a message was rendered with, which is
+          // where the recipient's own name lives. Emptied rather than left,
+          // because "skipped" was reported and read by nobody.
+          assignments.push(`${quoted(column)} = '{}'::${dataType}`);
+        } else if (dataType && meta?.nullable) {
+          // No sentinel fits an `inet`, a `text[]` or a timestamp — but NULL
+          // does, and "erased" is exactly what NULL says for a column that was
+          // allowed to be absent all along. Before this, such a column was
+          // silently added to `skippedColumns` and left holding the value:
+          // `awcms_visitor_sessions.ip_address` is the live example, an IP
+          // address surviving the erasure of the person it belongs to.
+          assignments.push(`${quoted(column)} = NULL`);
         } else {
           skipped.push(
             `${entry.tableName}.${column} (${dataType ?? "absent"})`

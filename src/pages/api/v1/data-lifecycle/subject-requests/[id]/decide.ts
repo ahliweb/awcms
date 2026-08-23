@@ -18,6 +18,7 @@ import {
 import { collectSubjectDataDescriptors } from "../../../../../../modules/data-lifecycle/domain/subject-data-registry";
 import {
   loadColumnTypes,
+  loadUniqueColumns,
   runSubjectErasure
 } from "../../../../../../modules/data-lifecycle/application/subject-data-executor";
 import {
@@ -215,11 +216,18 @@ export const POST = defineTenantRoute<Prepared>({
         resolution.subject
       );
       const targets = erasureTargets(plan);
-      const columnTypes = await loadColumnTypes(
+      const tables = targets.map((entry) => entry.tableName);
+      const columnTypes = await loadColumnTypes(tx, tables);
+      // Sequential, not `Promise.all`: both run on the SAME transaction
+      // connection, and one Postgres connection serves one query at a time.
+      const uniqueColumns = await loadUniqueColumns(tx, tables);
+      const result = await runSubjectErasure(
         tx,
-        targets.map((entry) => entry.tableName)
+        tenantId,
+        plan,
+        columnTypes,
+        uniqueColumns
       );
-      const result = await runSubjectErasure(tx, tenantId, plan, columnTypes);
 
       erasedTables = result.outcomes.map((outcome) => ({
         key: outcome.key,

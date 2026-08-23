@@ -651,9 +651,16 @@ export const identityAccessModule = defineModule({
       // logs, assignments and workflow history. Deleting it would either
       // cascade the evidence away or abort on the first constraint — and the
       // evidence includes the record that the erasure itself happened.
-      erasure: "anonymize",
+      // ADR-0108 corrected this from `anonymize` to what it always was.
+      // "It carries no personal detail of its own beyond the link" is true —
+      // and it is precisely the definition of `severed_with_subject_row`. Under
+      // `anonymize` the descriptor named no column, so the executor wrote
+      // nothing while the report said the row had been anonymised; the honest
+      // reading is that this row stops naming anybody when the identity and
+      // profile it points at are anonymised, which they now really are.
+      erasure: "severed_with_subject_row",
       rationale:
-        "The membership row itself: this is what 'a subject in this tenant' MEANS here, and the id every other table joins on. It carries no personal detail of its own beyond the link, so anonymising it severs the person from a history that stays intact and answerable."
+        "The membership row itself: this is what 'a subject in this tenant' MEANS here, and the id every other table joins on. It carries no personal detail of its own beyond the link, so it stops resolving to a person the moment `awcms_identities` and `awcms_profiles` are anonymised — and rewriting the id would take the tenant's whole history down with it."
     },
     {
       key: "identity_access.identities",
@@ -668,7 +675,20 @@ export const identityAccessModule = defineModule({
       // handed back a password hash would turn a privacy right into a
       // credential-disclosure channel, and the hash tells the subject nothing
       // they do not already know.
-      redactedColumns: ["password_hash"]
+      redactedColumns: ["password_hash"],
+      // The login address is the person. Before ADR-0108 the only list was
+      // `redactedColumns`, and putting it there would have withheld a subject's
+      // own sign-in address from their subject-access export — so it went
+      // nowhere, and an "anonymised" identity kept the address it signs in
+      // with. That mattered beyond this row: ~90 tables answer
+      // `severed_with_subject_row` on the premise that anonymising THIS table
+      // makes their stamps resolve to nobody, and a stamp pointing at a row
+      // that still carries the address resolves to somebody.
+      //
+      // It is under `(tenant_id, login_identifier)` UNIQUE, which the executor
+      // derives — so each erased identity gets its own sentinel instead of the
+      // second one colliding.
+      anonymizedColumns: ["password_hash", "login_identifier"]
     },
     {
       key: "identity_access.sessions",
@@ -858,7 +878,13 @@ export const identityAccessModule = defineModule({
       erasure: "anonymize",
       rationale:
         "How this person came to be in the tenant, and the invitations they sent or revoked. Note the honest limit of a per-tenant answer: an invitation that was never accepted names an email address belonging to somebody who never became a tenant user, and ADR-0094 gives them no subject request to make here.",
-      redactedColumns: ["token_hash"]
+      redactedColumns: ["token_hash"],
+      // The two columns the comment above already argued for, now actually
+      // written. `token_hash` is globally UNIQUE and `login_identifier` is
+      // unique among pending rows, so both take a per-row sentinel: a person
+      // who sent two invitations used to abort the whole erasure on a 23505,
+      // mid-transaction, with the request already claimed.
+      anonymizedColumns: ["token_hash", "login_identifier", "display_name"]
     },
     {
       key: "identity_access.registration_requests",
@@ -873,7 +899,11 @@ export const identityAccessModule = defineModule({
       // copy taken before the identity existed.
       erasure: "anonymize",
       rationale:
-        "The self-registration request this person's account was created from, and the requests they reviewed. Carries the name and address they supplied themselves, which no other table holds in that original form."
+        "The self-registration request this person's account was created from, and the requests they reviewed. Carries the name and address they supplied themselves, which no other table holds in that original form.",
+      // "Carries the name and address they supplied themselves" — and until
+      // ADR-0108 this descriptor named no column, so the erasure wrote nothing
+      // at all here. `login_identifier` is unique among pending rows.
+      anonymizedColumns: ["login_identifier", "display_name"]
     },
     {
       key: "identity_access.mfa_challenges",
@@ -958,7 +988,16 @@ export const identityAccessModule = defineModule({
       erasure: "anonymize",
       rationale:
         "Whether this person holds a break-glass exemption from the tenant's SSO requirement — a standing privilege they are entitled to know about. Anonymised rather than severed because their id sits INSIDE a jsonb list that anonymising the identity row does not reach: the entry has to be removed, or an erased person keeps a bypass.",
-      redactedColumns: ["allowed_email_domains"]
+      redactedColumns: ["allowed_email_domains"],
+      // Deliberately EMPTY, and this is the descriptor that shows why the two
+      // lists had to be separated in the other direction too.
+      // `allowed_email_domains` is withheld from the export because it is the
+      // TENANT's policy rather than the subject's data — and for exactly that
+      // reason an erasure must not wipe it. One list meant "never export" and
+      // "destroy on erasure" were the same declaration; here they are opposite
+      // answers about one column. The erasure that DOES happen on this row is
+      // the `jsonb_array_contains` removal of the person's break-glass entry.
+      anonymizedColumns: []
     },
     {
       key: "identity_access.tenant_mfa_policies",

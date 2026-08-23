@@ -254,6 +254,16 @@ export const emailModule = defineModule({
         "to_address_hash",
         "variables",
         "variables_hash"
+      ],
+      // Same four, and `variables` is why the executor learned to empty a JSON
+      // document: it is the merge data a message was rendered with, which is
+      // where the recipient's own name lives, and no text sentinel fits a
+      // `jsonb`. It used to be reported as "skipped" and left intact.
+      anonymizedColumns: [
+        "to_address",
+        "to_address_hash",
+        "variables",
+        "variables_hash"
       ]
     },
     {
@@ -269,7 +279,13 @@ export const emailModule = defineModule({
       erasure: "anonymize",
       rationale:
         "Addresses that have stopped receiving mail, and who suppressed them. A suppression is itself a privacy decision, so the record survives erasure with the actor detached; deleting it would quietly resume sending to a person who opted out.",
-      redactedColumns: ["recipient_hash"]
+      redactedColumns: ["recipient_hash"],
+      // `recipient_masked` too: a masked address is still a display of the
+      // address, and clearing the hash while leaving `a***@b***` erases the
+      // part nobody looks at. `recipient_hash` is under
+      // `(tenant_id, recipient_hash)` UNIQUE, so it takes a per-row sentinel —
+      // a person who suppressed two addresses used to abort the erasure.
+      anonymizedColumns: ["recipient_hash", "recipient_masked"]
     },
     {
       key: "email.email_templates",

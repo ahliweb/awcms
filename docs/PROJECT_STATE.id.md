@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:5dfdabe8e9887561a7147d274496a2062656f2244d9fcb58994db86e693028e7 -->
+<!-- i18n-source-hash: sha256:5016a4773c5386b8e99013b59edd81f206c60732809caa171f59cd1c7930b97b -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **145** (`sql/001`–`145`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0107** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0108** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.728 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -359,6 +359,52 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **DITEMUKAN SAAT BEKERJA, 23 Agustus 2026 (sambil merancang byline #597 butir
+  4): PENGHAPUSAN yang dieksekusi meninggalkan nama, nama legal, dan alamat login
+  orangnya di database.** **SELESAI (23 Agustus 2026) —
+  [ADR-0108](adr/0108-what-an-export-withholds-and-what-an-erasure-destroys-are-different-questions.id.md).**
+
+  `SubjectDataDescriptor` punya SATU daftar kolom — `redactedColumns`, yang
+  didokumentasikan sebagai apa yang tak boleh dibawa ekspor portabilitas — dan
+  eksekutor penghapusan memakai daftar yang SAMA sebagai himpunan kolom yang
+  ditimpa. Untuk sembilan tabel yang kedua jawabannya berimpit (`password_hash`,
+  `token_hash`) itu bekerja sempurna, dan itulah sebabnya tak ada yang tampak
+  salah.
+
+  Untuk tabel yang memuat identitas orangnya sendiri, kedua jawaban itu
+  BERLAWANAN. `awcms_profiles.display_name`/`legal_name` harus DIEKSPOR —
+  permintaan akses subjek justru sebagian besar tentang itu — DAN DIHANCURKAN,
+  jadi mendeklarasikannya berarti menahan nama subjek dari ekspornya sendiri.
+  Pemiliknya dengan tepat tidak mendeklarasikan apa pun, dan penghapusannya
+  dengan tepat tidak menulis apa pun. Sama untuk
+  `awcms_identities.login_identifier`, `awcms_registration_requests` (yang tak
+  menamai satu kolom pun), `awcms_invitations`, `awcms_comments_comments` dan
+  `awcms_visitor_sessions.login_identifier_snapshot` — yang rasionalnya harfiah
+  berbunyi "penghapusan harus menjangkau dan membersihkannya".
+
+  **Di setiap kasus, prosa deskriptornya menggambarkan perilaku yang benar dan
+  mekanismenya tidak bisa menyatakannya.** Diverifikasi terhadap Postgres nyata,
+  bukan dibaca: setelah penghapusan selesai, `SELECT login_identifier` masih
+  mengembalikan `subject@example.test`.
+
+  Tiga konsekuensi membuatnya lebih buruk dari sekadar daftar kolom tertinggal.
+  **~90 deskriptor menjawab `severed_with_subject_row`** dengan premis bahwa
+  menganonimkan `awcms_identities` membuat stempel mereka tidak menunjuk siapa
+  pun — stempel yang menunjuk baris yang masih membawa alamat login menunjuk
+  seseorang. Kolom yang tak muat sentinel dilewati diam-diam ke daftar
+  `skippedColumns` yang tak diasersikan apa pun (`ip_address`, `geo`). Dan
+  penghapusan bisa GAGAL TOTAL: subjek dengan dua baris di bawah index unique
+  menulis ulang keduanya menjadi `[erased]` yang sama dan menabrak 23505 di
+  tengah transaksi, dengan permintaannya telanjur diklaim.
+
+  Perbaikannya adalah dua deklarasi untuk dua pertanyaan, dan GERBANGNYA alih-alih
+  dua belas suntingannya: `subject-data:registry:check` kini menolak `anonymize`
+  yang tak menamai apa pun, nama kolom yang tak dimiliki tabelnya, dan
+  `severed_with_subject_row` yang jangkarnya tak menganonimkan apa pun. Keunikan
+  diturunkan dari `pg_index`, tak pernah dideklarasikan. Penghapusan yang sudah
+  SELESAI TIDAK diperbaiki surut — menjalankannya ulang adalah keputusan operator
+  dengan jejak auditnya sendiri.
 
 - **DITEMUKAN SAAT BEKERJA, 22 Agustus 2026 (sambil menutup D7): `POST
 /api/v1/tenant/domains/{id}/verify` TIDAK MEMVERIFIKASI APA PUN.** **SELESAI (22 Agustus 2026) — [ADR-0106](adr/0106-domain-verification-proves-control-of-the-zone.id.md).** Ia

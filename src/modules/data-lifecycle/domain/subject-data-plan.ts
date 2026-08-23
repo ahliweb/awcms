@@ -63,7 +63,10 @@ export type SubjectPlanEntry = {
   }[];
   exportable: boolean;
   erasure: SubjectDataErasure;
+  /** Never exported. */
   redactedColumns: readonly string[];
+  /** Overwritten by an `anonymize` erasure — a DIFFERENT question, see the descriptor. */
+  anonymizedColumns: readonly string[];
   rationale: string;
 };
 
@@ -186,6 +189,7 @@ export function buildSubjectPlan(
         exportable: descriptor.exportable,
         erasure: descriptor.erasure,
         redactedColumns: descriptor.redactedColumns ?? [],
+        anonymizedColumns: descriptor.anonymizedColumns ?? [],
         rationale: descriptor.rationale
       };
     })

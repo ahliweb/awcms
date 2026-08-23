@@ -82,7 +82,18 @@ export const profileIdentityModule = defineModule({
       // every one of them standing.
       erasure: "anonymize",
       rationale:
-        "The person themselves: the name they are known by, the legal name behind it, and the verification and risk assessments this tenant made ABOUT them. An assessment somebody else recorded about a person is exactly what a subject-access request is for, and there is no other table it can be read from."
+        "The person themselves: the name they are known by, the legal name behind it, and the verification and risk assessments this tenant made ABOUT them. An assessment somebody else recorded about a person is exactly what a subject-access request is for, and there is no other table it can be read from.",
+      // The comment above described the defect and the fix was missing:
+      // until ADR-0108 this descriptor named no column at all, because the only
+      // list available was `redactedColumns` and naming the person's NAME there
+      // would have withheld it from their own subject-access export. So the
+      // erasure ran, reported `anonymize`, wrote nothing, and left
+      // `display_name` and `legal_name` exactly as they were.
+      //
+      // `verification_status` and `risk_level` stay: both are CHECK-constrained
+      // enums that no sentinel satisfies, and neither identifies anybody once
+      // the name is gone.
+      anonymizedColumns: ["display_name", "legal_name"]
     },
     {
       key: "profile_identity.profile_identifiers",
@@ -101,7 +112,14 @@ export const profileIdentityModule = defineModule({
       // lookup key derived from it — handing back either would turn a subject's
       // own export into a re-identification oracle for the hashing scheme every
       // other row in this table uses.
-      redactedColumns: ["normalized_value", "value_hash"]
+      redactedColumns: ["normalized_value", "value_hash"],
+      // `masked_value` is the third one, and it was never written by anything:
+      // `j***@e***` alongside a name is a re-identification, so an erasure that
+      // scrubs the clear value and the hash while leaving the mask has erased
+      // the parts nobody reads. `value_hash` is under a partial unique index —
+      // the executor derives that and gives each row its own sentinel, so a
+      // person with two identifiers no longer aborts the erasure.
+      anonymizedColumns: ["normalized_value", "value_hash", "masked_value"]
     },
     {
       key: "profile_identity.profile_entity_links",

@@ -206,7 +206,24 @@ export const commentsModule = defineModule({
       erasure: "anonymize",
       rationale:
         "What this person wrote publicly, with the name, masked address and hashed IP captured alongside it. Their own words are theirs to export; the comment itself survives erasure with the author detached, because deleting a thread's replies would rewrite a conversation other people took part in. A comment left by a GUEST carries no tenant-user id and cannot be reached from a per-tenant subject request — ADR-0094 gives a non-member no request to make.",
-      redactedColumns: ["author_email_hash", "author_ip_hash"]
+      redactedColumns: ["author_email_hash", "author_ip_hash"],
+      // The comment above names three columns copied onto the row at write
+      // time, and until ADR-0108 the erasure wrote only the two that also
+      // happened to be export-redacted. `author_display_name` and
+      // `author_email_masked` stayed — the person's NAME sitting under their
+      // published words, which is the exact thing this descriptor says
+      // severance does not reach.
+      //
+      // `body_text` is deliberately NOT here: the comment survives with its
+      // author detached (the position the rationale takes, and the same one
+      // `blog_content.blog_posts` takes for an article), because deleting the
+      // words would rewrite a conversation other people took part in.
+      anonymizedColumns: [
+        "author_email_hash",
+        "author_ip_hash",
+        "author_display_name",
+        "author_email_masked"
+      ]
     },
     {
       key: "comments.moderation_events",

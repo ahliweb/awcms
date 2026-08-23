@@ -112,11 +112,11 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **145** (`sql/001`–`145`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0107** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0108** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.728 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
-| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -359,6 +359,49 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **FOUND WHILE WORKING, 23 August 2026 (while designing the byline of #597 item
+  4): an executed ERASURE left the person's name, legal name and login address in
+  the database.** **DONE (23 August 2026) —
+  [ADR-0108](adr/0108-what-an-export-withholds-and-what-an-erasure-destroys-are-different-questions.md).**
+
+  `SubjectDataDescriptor` had ONE column list — `redactedColumns`, documented as
+  what a portability export must never carry — and the erasure executor used that
+  same list as the set of columns to overwrite. For the nine tables where both
+  answers coincide (`password_hash`, `token_hash`) that works perfectly, which is
+  why nothing looked wrong.
+
+  For the tables that hold the person's own identity the two answers are
+  OPPOSITE. `awcms_profiles.display_name`/`legal_name` must be EXPORTED — a
+  subject-access request is largely about them — and DESTROYED, so declaring them
+  would have withheld the subject's own name from their own export. Their owners
+  correctly declared nothing, and the erasure correctly wrote nothing. The same
+  for `awcms_identities.login_identifier`, `awcms_registration_requests` (which
+  named no column at all), `awcms_invitations`, `awcms_comments_comments` and
+  `awcms_visitor_sessions.login_identifier_snapshot` — whose rationale literally
+  says "erasure has to reach in and clear it".
+
+  **In every case the descriptor's prose describes the correct behaviour and the
+  mechanism could not express it.** Verified against real Postgres, not read:
+  after a completed erasure, `SELECT login_identifier` still returned
+  `subject@example.test`.
+
+  Three consequences made it worse than a list of missing columns. **~90
+  descriptors answer `severed_with_subject_row`** on the premise that anonymising
+  `awcms_identities` makes their stamps resolve to nobody — a stamp pointing at a
+  row that still carries the login address resolves to somebody. A column no
+  sentinel fits was silently skipped into a `skippedColumns` list nothing asserts
+  on (`ip_address`, `geo`). And an erasure could ABORT: a subject with two rows
+  under a unique index rewrote both to the same `[erased]` and hit a 23505
+  mid-transaction, with the request already claimed.
+
+  The fix is two declarations for two questions, and the GATE rather than the
+  twelve edits: `subject-data:registry:check` now refuses an `anonymize` that
+  names nothing, a column name the table does not have, and a
+  `severed_with_subject_row` whose anchor anonymises nothing. Uniqueness is
+  derived from `pg_index`, never declared. Already-completed erasures are NOT
+  fixed retroactively — re-running is an operator decision with its own audit
+  trail.
 
 - **FOUND WHILE WORKING, 22 August 2026 (while closing D7): `POST
 /api/v1/tenant/domains/{id}/verify` VERIFIES NOTHING.** **DONE (22 August 2026) —

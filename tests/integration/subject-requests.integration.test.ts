@@ -28,6 +28,13 @@
  *      survives an erasure intact.
  *   4. `anonymize` clears exactly the declared columns, `hard_delete` removes
  *      the row, and the jsonb break-glass entry is REMOVED from its list.
+ *   7. (ADR-0108) The erasure really erases: the person's NAME, their LOGIN
+ *      ADDRESS and the address+name on the invitations they sent are gone
+ *      afterwards, a subject holding TWO rows under a unique index does not
+ *      abort the run on a 23505, and `skippedColumns` comes back EMPTY. Every
+ *      one of those was false until ADR-0108 — the executor overwrote the
+ *      export-exclusion list, which for the tables that hold a person's name
+ *      was correctly empty, so an erasure reported success and wrote nothing.
  *   5. The maker/checker CHECK constraint refuses a self-approval at the
  *      database, not merely at the guard.
  *   6. RLS keeps one tenant's requests invisible to another.
@@ -58,6 +65,7 @@ import { buildSubjectPlan } from "../../src/modules/data-lifecycle/domain/subjec
 import { collectSubjectDataDescriptors } from "../../src/modules/data-lifecycle/domain/subject-data-registry";
 import {
   loadColumnTypes,
+  loadUniqueColumns,
   readSubjectExport,
   runSubjectErasure,
   ANONYMIZED_TEXT
@@ -126,6 +134,20 @@ async function seedFixtures(): Promise<void> {
       (tenant_id, actor_tenant_user_id, module_key, action, resource_type, message)
     VALUES (${TENANT_A}, ${SUBJECT_USER}, 'blog_content', 'posts.update', 'post', 'edited a post'),
            (${TENANT_A}, ${SUBJECT_USER}, 'blog_content', 'posts.delete', 'post', 'removed a post')
+  `;
+  // TWO invitations sent by the subject, both still pending. The
+  // `(tenant_id, login_identifier) WHERE status = 'pending'` unique index and
+  // the global `token_hash` unique index are what made the old erasure abort on
+  // its second row with a 23505 — after the request had been claimed.
+  await admin`
+    INSERT INTO awcms_invitations
+      (tenant_id, login_identifier, display_name, token_hash, status,
+       invited_by_tenant_user_id, expires_at)
+    VALUES
+      (${TENANT_A}, 'invitee-one@example.test', 'Invitee One', 'invite-hash-1',
+       'pending', ${SUBJECT_USER}, now() + interval '7 days'),
+      (${TENANT_A}, 'invitee-two@example.test', 'Invitee Two', 'invite-hash-2',
+       'pending', ${SUBJECT_USER}, now() + interval '7 days')
   `;
   // The break-glass list — the one jsonb-array subject column in the schema.
   //
@@ -259,11 +281,10 @@ suite("subject-rights export + erasure (ADR-0094, #557)", () => {
       const resolution = await resolveSubject(tx, TENANT_A, SUBJECT_USER);
       if (!resolution.resolved) throw new Error("subject did not resolve");
       const plan = planFor(resolution.subject);
-      const columnTypes = await loadColumnTypes(
-        tx,
-        plan.entries.map((entry) => entry.tableName)
-      );
-      return runSubjectErasure(tx, TENANT_A, plan, columnTypes);
+      const tables = plan.entries.map((entry) => entry.tableName);
+      const columnTypes = await loadColumnTypes(tx, tables);
+      const uniqueColumns = await loadUniqueColumns(tx, tables);
+      return runSubjectErasure(tx, TENANT_A, plan, columnTypes, uniqueColumns);
     });
 
     // `hard_delete` really removed the session.
@@ -274,9 +295,63 @@ suite("subject-rights export + erasure (ADR-0094, #557)", () => {
 
     // `anonymize` cleared exactly the declared column on the identity.
     const identity = (await admin`
-      SELECT password_hash FROM awcms_identities WHERE id = ${subjectIdentity}
-    `) as { password_hash: string }[];
+      SELECT password_hash, login_identifier
+      FROM awcms_identities WHERE id = ${subjectIdentity}
+    `) as { password_hash: string; login_identifier: string }[];
     expect(identity[0]!.password_hash).toBe(ANONYMIZED_TEXT);
+
+    // ...and the LOGIN ADDRESS, which is the person, is gone too. It is under a
+    // unique index, so it cannot hold the shared sentinel — it holds a
+    // per-row-unique one, and what matters here is only that the address the
+    // person signed in with is no longer readable.
+    expect(identity[0]!.login_identifier).not.toBe("subject@example.test");
+    expect(identity[0]!.login_identifier.startsWith(ANONYMIZED_TEXT)).toBe(
+      true
+    );
+
+    // The person's NAME. `awcms_profiles` is the table whose own descriptor
+    // says `display_name`/`legal_name` are copies of personal detail that
+    // anonymising the identity "leaves standing" — so this is the assertion
+    // that the erasure did the thing its rationale describes, rather than
+    // reporting `anonymize` and writing nothing.
+    const profile = (await admin`
+      SELECT display_name, legal_name FROM awcms_profiles WHERE id = ${subjectProfile}
+    `) as { display_name: string; legal_name: string | null }[];
+    expect(profile[0]!.display_name).toBe(ANONYMIZED_TEXT);
+
+    // TWO rows in one table, both under unique indexes on the columns being
+    // anonymised. Before ADR-0108 this aborted the whole erasure with a 23505
+    // on the second row — the failure the per-row sentinel exists for — and
+    // before that it never got as far as colliding, because only `token_hash`
+    // was written and the invitee's address and name stayed put.
+    const invitations = (await admin`
+      SELECT login_identifier, display_name, token_hash
+      FROM awcms_invitations
+      WHERE tenant_id = ${TENANT_A}
+      ORDER BY login_identifier
+    `) as {
+      login_identifier: string;
+      display_name: string;
+      token_hash: string;
+    }[];
+
+    expect(invitations).toHaveLength(2);
+    for (const row of invitations) {
+      expect(row.login_identifier.startsWith(ANONYMIZED_TEXT)).toBe(true);
+      expect(row.display_name).toBe(ANONYMIZED_TEXT);
+      expect(row.token_hash.startsWith(ANONYMIZED_TEXT)).toBe(true);
+    }
+    // Per-ROW unique, not merely prefixed — the point of the suffix.
+    expect(invitations[0]!.login_identifier).not.toBe(
+      invitations[1]!.login_identifier
+    );
+
+    // Nothing was reported as skipped. A skipped column is a column a
+    // descriptor's author singled out as the personal one and the engine then
+    // left in place; the list has always been returned and never asserted on,
+    // which is how `awcms_visitor_sessions.ip_address` (an `inet`) and
+    // `awcms_visit_events.geo` (a `jsonb`) stayed put through every erasure.
+    expect(result.skippedColumns).toEqual([]);
 
     // `severed_with_subject_row`: the audit rows are UNTOUCHED. This is the
     // property the whole vocabulary exists for — an executor that "anonymised"
@@ -304,11 +379,10 @@ suite("subject-rights export + erasure (ADR-0094, #557)", () => {
       const resolution = await resolveSubject(tx, TENANT_A, SUBJECT_USER);
       if (!resolution.resolved) throw new Error("subject did not resolve");
       const plan = planFor(resolution.subject);
-      const columnTypes = await loadColumnTypes(
-        tx,
-        plan.entries.map((entry) => entry.tableName)
-      );
-      return runSubjectErasure(tx, TENANT_A, plan, columnTypes);
+      const tables = plan.entries.map((entry) => entry.tableName);
+      const columnTypes = await loadColumnTypes(tx, tables);
+      const uniqueColumns = await loadUniqueColumns(tx, tables);
+      return runSubjectErasure(tx, TENANT_A, plan, columnTypes, uniqueColumns);
     });
 
     const rows = (await admin`
