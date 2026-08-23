@@ -14,11 +14,13 @@ import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-
 import { resolvePublicTenantByHost } from "../../../../lib/tenant/public-host-tenant-resolver";
 import { collectVisitorTelemetry } from "../../../../modules/visitor-analytics/application/collector";
 import {
+  isCrossOriginRequest,
+  parseRequestOrigin
+} from "../../../../lib/security/request-origin";
+import {
   beaconCorsDeniedHeaders,
   beaconCorsResponseHeaders,
   beaconPreflightHeaders,
-  isCrossOriginBeacon,
-  parseBeaconOrigin,
   resolveVisitorCookieSameSite
 } from "../../../../modules/visitor-analytics/domain/beacon-cors";
 import { resolveVisitorAnalyticsConfig } from "../../../../modules/visitor-analytics/domain/visitor-analytics-config";
@@ -121,8 +123,8 @@ export const POST: APIRoute = async ({
 }) => {
   const config = resolveVisitorAnalyticsConfig();
   const existingVisitorKey = cookies.get(VISITOR_KEY_COOKIE_NAME)?.value;
-  const parsedOrigin = parseBeaconOrigin(request.headers.get("origin"));
-  const crossOrigin = isCrossOriginBeacon(parsedOrigin, request.url);
+  const parsedOrigin = parseRequestOrigin(request.headers.get("origin"));
+  const crossOrigin = isCrossOriginRequest(parsedOrigin, request.url);
 
   /**
    * The per-IP limiter, consumed AT MOST ONCE per request no matter how many
@@ -353,11 +355,11 @@ export const POST: APIRoute = async ({
  * form-like content-type rule.
  */
 export const OPTIONS: APIRoute = async ({ request, clientAddress }) => {
-  const parsedOrigin = parseBeaconOrigin(request.headers.get("origin"));
+  const parsedOrigin = parseRequestOrigin(request.headers.get("origin"));
 
   // No `Origin`, an opaque one, or our own: nothing to preflight. `Vary` still
   // goes out — this response WOULD have differed for a different origin.
-  if (!isCrossOriginBeacon(parsedOrigin, request.url) || !parsedOrigin) {
+  if (!isCrossOriginRequest(parsedOrigin, request.url) || !parsedOrigin) {
     return new Response(null, {
       status: 204,
       headers: beaconCorsDeniedHeaders()

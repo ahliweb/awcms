@@ -704,6 +704,162 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/site-search/query:
+    get:
+      operationId: siteSearchQuery
+      tags:
+        - Site Search
+      security: []
+      summary: Public full-text search over this site's published content (anonymous)
+      description: "PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers."
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Raw search text. Trimmed, whitespace-collapsed, and bounded before use.
+          schema:
+            type: string
+            maxLength: 128
+        - name: type
+          in: query
+          required: false
+          description: Restrict results to one resource type. Honored only when the tenant's `enabledResourceTypes` admits it; otherwise silently ignored.
+          schema:
+            type: string
+        - name: channel
+          in: query
+          required: false
+          description: "Term filter (Issue #633). One query parameter per facet name declared by the search-source registry — `channel`, `topic`, `institution`, `region` today. Filters are ANDed with each other and with `type`. The value is a slug or code (never a label), bounded to 200 characters. An unknown facet name is IGNORED rather than rejected, so the tracking parameters that ride along on a shared link do not turn a search into a 400."
+          schema:
+            type: string
+            maxLength: 200
+        - name: topic
+          in: query
+          required: false
+          description: See `channel`.
+          schema:
+            type: string
+            maxLength: 200
+        - name: institution
+          in: query
+          required: false
+          description: See `channel`.
+          schema:
+            type: string
+            maxLength: 200
+        - name: region
+          in: query
+          required: false
+          description: See `channel`. The value is a dotted `idn_admin_regions` code (`62`, `62.71`, `62.71.01`), because that is what an article stores.
+          schema:
+            type: string
+            maxLength: 200
+        - name: locale
+          in: query
+          required: false
+          description: BCP-47-ish content locale. Malformed values fall back to the tenant default.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset cursor from a previous response's `nextCursor`.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results (possibly empty).
+          headers:
+            Access-Control-Allow-Origin:
+              description: Present ONLY for a cross-origin request whose `Origin` is an active domain of an active tenant (ADR-0107). Echoed verbatim, never `*`. Absent for a same-origin request and for a refused origin — the absence IS the refusal.
+              required: false
+              schema:
+                type: string
+            Vary:
+              description: Always `Origin`. The body is identical for a granted and a refused request; the headers are not, so a cache must key on it.
+              required: false
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchQueryResult"
+        "429":
+          description: Too many search requests from this source.
+          headers:
+            Vary:
+              description: Always `Origin`. The limiter answers before the origin is classified, so this response never carries a grant — but it is still one of the answers this URL gives (ADR-0107).
+              required: false
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-search/suggest:
+    get:
+      operationId: siteSearchSuggest
+      tags:
+        - Site Search
+      security: []
+      summary: Public bounded title typeahead (anonymous)
+      description: "PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale scoped. Same host-based tenant resolution, per-IP rate limit, query bounds and neutral empty payload as the search endpoint. Returns at most the tenant's configured `suggestionLimit`; returns an empty list when the tenant has suggestions turned off. A request carrying a cross-origin `Origin` resolves its tenant from THAT ORIGIN against the tenant-domain table — never from the host, and never through the host chain's default-tenant fallback (ADR-0107). It is answered with `Access-Control-Allow-Origin` only when the origin is an `active` domain of an `active` tenant; any other origin gets the same neutral empty payload with no grant header. There is no `OPTIONS` handler: a `GET` carrying only CORS-safelisted headers is a simple request, so a consumer must not add custom headers."
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: locale
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Title suggestions (possibly empty).
+          headers:
+            Access-Control-Allow-Origin:
+              description: Present ONLY for a cross-origin request whose `Origin` is an active domain of an active tenant (ADR-0107). Echoed verbatim, never `*`. Absent for a same-origin request and for a refused origin — the absence IS the refusal.
+              required: false
+              schema:
+                type: string
+            Vary:
+              description: Always `Origin`. The body is identical for a granted and a refused request; the headers are not, so a cache must key on it.
+              required: false
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchSuggestResult"
+        "429":
+          description: Too many suggestion requests from this source.
+          headers:
+            Vary:
+              description: Always `Origin`. The limiter answers before the origin is classified, so this response never carries a grant — but it is still one of the answers this URL gives (ADR-0107).
+              required: false
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     CorrelationId:
@@ -1656,6 +1812,149 @@ components:
           type: string
           format: date-time
           nullable: true
+    SiteSearchFacetValue:
+      type: object
+      properties:
+        value:
+          type: string
+          description: A `resourceType` as stored — `blog_post`, `blog_page`, and whatever a future module contributes.
+        count:
+          type: integer
+      required:
+        - value
+        - count
+    SiteSearchFacets:
+      type: object
+      description: |
+        Counts per facet value for the whole result set (Issue #607 for content type, #633 for terms), computed on every page — they describe the result set rather than the page, so omitting them after the first page would make them look like they had changed.
+
+        A facet's OWN filter is never applied to its own count: a facet answers "what else is there", and applying it would zero every other value the moment a reader picks one, leaving no way back to results that still exist. Every OTHER filter is applied — so the `type` counts reflect the active term filters, and each term facet reflects `type` and the other term filters.
+
+        Every remaining predicate is shared with the result query character for character, so a count can never advertise a document the reader cannot reach. Bounded to 20 values PER facet.
+      properties:
+        resourceTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchFacetValue"
+        terms:
+          type: object
+          description: |
+            Term facets keyed by facet name — `channel`, `topic`, `institution`, `region`, and whatever a future module's search-source descriptor contributes. A facet with no matching documents is ABSENT rather than present-and-empty: the reader is being told what else is there, and an empty list is not something else.
+
+            Filter by one with a query parameter of the same name (`?channel=politik`). Filters are ANDed. Match is on `value` (a slug or code), never `label` — a label is display text an editor may rewrite, and a filter that broke when somebody fixed a capital letter would be a filter nobody trusts.
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/SiteSearchTermFacetValue"
+      required:
+        - resourceTypes
+        - terms
+    SiteSearchQueryResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchResultItem"
+        nextCursor:
+          type: string
+          nullable: true
+        facets:
+          $ref: "#/components/schemas/SiteSearchFacets"
+        query:
+          type: string
+          description: The NORMALIZED query actually executed (empty when nothing ran).
+        locale:
+          type: string
+        reason:
+          type: string
+          enum:
+            - empty
+            - too_short
+            - too_long
+          description: Present only when the submitted query was rejected by the input bounds.
+      required:
+        - items
+        - nextCursor
+        - facets
+        - query
+        - locale
+    SiteSearchResultItem:
+      type: object
+      description: One public search hit. `url` is a server-built absolute PATH, never a source-supplied URL.
+      properties:
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        snippet:
+          type: string
+          description: Pre-escaped safe HTML. The whole `ts_headline` output is HTML-escaped FIRST and only then are the non-HTML sentinels replaced with `<mark>`/`</mark>`, so the only markup this can ever contain is those two tags.
+        locale:
+          type: string
+        rank:
+          type: number
+      required:
+        - resourceType
+        - resourceId
+        - url
+        - title
+        - snippet
+        - locale
+        - rank
+    SiteSearchSuggestResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchSuggestionItem"
+        query:
+          type: string
+        locale:
+          type: string
+      required:
+        - items
+        - query
+        - locale
+    SiteSearchSuggestionItem:
+      type: object
+      properties:
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        locale:
+          type: string
+      required:
+        - resourceType
+        - resourceId
+        - url
+        - title
+        - locale
+    SiteSearchTermFacetValue:
+      type: object
+      properties:
+        value:
+          type: string
+          description: The stable value a filter matches and a URL carries — a slug (`politik`) or a code (`62.71`).
+        label:
+          type: string
+          description: Display text for `value`. Falls back to the value itself where the source stored no separate label (the `region` facet, whose human name lives in a dataset-versioned table this does not join).
+        count:
+          type: integer
+      required:
+        - value
+        - label
+        - count
     SocialProfileLink:
       type: object
       required:

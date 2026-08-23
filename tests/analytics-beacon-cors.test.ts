@@ -21,21 +21,23 @@ import type { APIRoute } from "astro";
 
 import { OPTIONS as collectOPTIONS } from "../src/pages/api/v1/analytics/collect";
 import {
+  isCrossOriginRequest,
+  parseRequestOrigin
+} from "../src/lib/security/request-origin";
+import {
   BEACON_PREFLIGHT_MAX_AGE_SECONDS,
   beaconCorsDeniedHeaders,
   beaconCorsResponseHeaders,
   beaconPreflightHeaders,
-  isCrossOriginBeacon,
-  parseBeaconOrigin,
   resolveVisitorCookieSameSite
 } from "../src/modules/visitor-analytics/domain/beacon-cors";
 import { resetRateLimitForTests } from "../src/lib/security/rate-limit";
 
 const ENDPOINT = "https://cms.example/api/v1/analytics/collect";
 
-describe("parseBeaconOrigin", () => {
+describe("parseRequestOrigin", () => {
   test("accepts a plain https origin and lowercases the hostname", () => {
-    expect(parseBeaconOrigin("https://News.Example")).toEqual({
+    expect(parseRequestOrigin("https://News.Example")).toEqual({
       origin: "https://news.example",
       hostname: "news.example"
     });
@@ -44,7 +46,7 @@ describe("parseBeaconOrigin", () => {
   test("keeps a non-default port in the echoed origin", () => {
     // The echoed value must match the browser's `Origin` byte for byte or the
     // grant does not apply; the hostname is the lookup key and carries no port.
-    expect(parseBeaconOrigin("http://localhost:4321")).toEqual({
+    expect(parseRequestOrigin("http://localhost:4321")).toEqual({
       origin: "http://localhost:4321",
       hostname: "localhost"
     });
@@ -54,13 +56,13 @@ describe("parseBeaconOrigin", () => {
     // A sandboxed iframe, a `file://` document and some redirect chains all
     // send this. Echoing it back would grant a document with NO origin the same
     // access a verified tenant domain has.
-    expect(parseBeaconOrigin("null")).toBeNull();
+    expect(parseRequestOrigin("null")).toBeNull();
   });
 
   test("rejects a missing or blank header", () => {
-    expect(parseBeaconOrigin(null)).toBeNull();
-    expect(parseBeaconOrigin(undefined)).toBeNull();
-    expect(parseBeaconOrigin("   ")).toBeNull();
+    expect(parseRequestOrigin(null)).toBeNull();
+    expect(parseRequestOrigin(undefined)).toBeNull();
+    expect(parseRequestOrigin("   ")).toBeNull();
   });
 
   test("rejects non-http(s) schemes", () => {
@@ -71,7 +73,7 @@ describe("parseBeaconOrigin", () => {
       "data:text/html,x",
       "javascript:alert(1)"
     ]) {
-      expect(parseBeaconOrigin(value)).toBeNull();
+      expect(parseRequestOrigin(value)).toBeNull();
     }
   });
 
@@ -88,19 +90,19 @@ describe("parseBeaconOrigin", () => {
       "https://news.example:443/x",
       "not a url"
     ]) {
-      expect(parseBeaconOrigin(value)).toBeNull();
+      expect(parseRequestOrigin(value)).toBeNull();
     }
   });
 
   test("rejects a URL with no hostname", () => {
-    expect(parseBeaconOrigin("http://")).toBeNull();
+    expect(parseRequestOrigin("http://")).toBeNull();
   });
 });
 
-describe("isCrossOriginBeacon", () => {
+describe("isCrossOriginRequest", () => {
   test("a same-origin request is not cross-origin", () => {
     expect(
-      isCrossOriginBeacon(parseBeaconOrigin("https://cms.example"), ENDPOINT)
+      isCrossOriginRequest(parseRequestOrigin("https://cms.example"), ENDPOINT)
     ).toBe(false);
   });
 
@@ -110,7 +112,7 @@ describe("isCrossOriginBeacon", () => {
       "https://news.example",
       "https://cms.example:8443"
     ]) {
-      expect(isCrossOriginBeacon(parseBeaconOrigin(origin), ENDPOINT)).toBe(
+      expect(isCrossOriginRequest(parseRequestOrigin(origin), ENDPOINT)).toBe(
         true
       );
     }
@@ -119,14 +121,14 @@ describe("isCrossOriginBeacon", () => {
   test("no origin at all is not cross-origin", () => {
     // Server-to-server callers and same-origin navigations send no `Origin`.
     // They take the unchanged path: no allow-list lookup, no CORS headers.
-    expect(isCrossOriginBeacon(null, ENDPOINT)).toBe(false);
+    expect(isCrossOriginRequest(null, ENDPOINT)).toBe(false);
   });
 
   test("an unparseable request URL is treated as cross-origin", () => {
     // "Cannot be shown same-origin" must lead INTO the allow-list check, not
     // around it.
     expect(
-      isCrossOriginBeacon(parseBeaconOrigin("https://news.example"), "::::")
+      isCrossOriginRequest(parseRequestOrigin("https://news.example"), "::::")
     ).toBe(true);
   });
 });

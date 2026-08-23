@@ -11,7 +11,7 @@ import {
 } from "../../../../lib/security/rate-limit";
 import { parsePositiveIntSetting } from "../../../../lib/security/env-thresholds";
 import { ok, fail } from "../../../../modules/_shared/api-response";
-import { withSiteSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
+import { withPublicSearchTenant } from "../../../../modules/site-search/application/public-search-tenant-resolution";
 import { recordSearchQuery } from "../../../../modules/site-search/application/search-query-log";
 import {
   countSearchFacets,
@@ -51,6 +51,15 @@ const EMPTY_FACETS = { resourceTypes: [], terms: {} };
  * is emitted (no XSS), and the endpoint is per-IP rate-limited,
  * query-length-bounded, and result-capped. Every non-resolving/disabled/short
  * outcome returns the same neutral empty payload — never leak WHY.
+ *
+ * ## Cross-origin readers (ADR-0107)
+ *
+ * A request carrying an `Origin` that is not ours resolves its tenant from that
+ * ORIGIN — never from the host, and never from the default-tenant fallback the
+ * host chain ends in — and is answered with `Access-Control-Allow-Origin` only
+ * when the origin is an `active` domain of an `active` tenant. A refused origin
+ * gets the same neutral payload with no grant header, so the browser refuses the
+ * read; only the `origin_refused` counter knows the difference.
  */
 // Parsed rather than coerced: `Number(process.env.X ?? 60)` yields `NaN` for a
 // non-numeric value, and `count > NaN` is false — which switches this limiter
@@ -89,7 +98,14 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
       "Too many search requests from this source. Try again later.",
       {},
       undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+      {
+        "retry-after": String(rateLimit.retryAfterSec),
+        // The limiter answers before the origin is ever classified, so this
+        // response carries no CORS grant — but it is still one of the answers
+        // this URL gives, and a cache must not hand it to another origin as if
+        // it were origin-independent (ADR-0107).
+        vary: "Origin"
+      }
     );
   }
 
@@ -100,7 +116,7 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   const localeParam = url.searchParams.get("locale");
   const termFilters = parseTermFilters(url.searchParams, TERM_FACET_KEYS);
 
-  const result = await withSiteSearchTenant(
+  const { result, corsHeaders, origin } = await withPublicSearchTenant(
     sql,
     request,
     async (tx, tenant, settings) => {
@@ -194,20 +210,29 @@ export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   if (result === null) {
     recordCounter("site_search_queries_total", {
       surface: "search",
-      outcome: "disabled"
+      // A cross-origin caller this deployment does not serve is counted apart
+      // from a disabled tenant. The two answers are byte-identical on purpose
+      // (never leak WHY); an operator asking "is the site's search box wired to
+      // a registered domain" still needs to be able to tell them apart, and a
+      // server-side counter is not a disclosure to the caller.
+      outcome: origin === "refused" ? "origin_refused" : "disabled"
     });
     // Neutral empty payload — indistinguishable from "no results", so an
     // unresolved host / disabled search never leaks its state.
-    return ok({
-      items: [],
-      nextCursor: null,
-      // Same SHAPE as a real answer: a payload that omitted `facets` here would
-      // distinguish "search is off for this host" from "no results", which is
-      // exactly what the neutral payload exists to prevent.
-      facets: EMPTY_FACETS,
-      query: "",
-      locale: ""
-    });
+    return ok(
+      {
+        items: [],
+        nextCursor: null,
+        // Same SHAPE as a real answer: a payload that omitted `facets` here
+        // would distinguish "search is off for this host" from "no results",
+        // which is exactly what the neutral payload exists to prevent.
+        facets: EMPTY_FACETS,
+        query: "",
+        locale: ""
+      },
+      {},
+      corsHeaders
+    );
   }
-  return ok(result);
+  return ok(result, {}, corsHeaders);
 };

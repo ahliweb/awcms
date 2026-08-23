@@ -121,7 +121,11 @@ export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
-    "ADR-0049 — how a human mints the read-only build credential. Never a build call, but the build cannot exist if this shape changes."
+    "ADR-0049 — how a human mints the read-only build credential. Never a build call, but the build cannot exist if this shape changes.",
+  "/api/v1/site-search/query":
+    "ADR-0107 — the reader's search results, called from the READER's browser at runtime rather than from the build (#597 item 3, #607). Unlike every other entry here it is anonymous: the tenant comes from the request's `Origin`, matched against `awcms_tenant_domains`. What is frozen is the result shape AND the facet payload the filter chips render from; the CORS grant itself is a header, not a schema, and is documented on the path.",
+  "/api/v1/site-search/suggest":
+    "ADR-0107 — the typeahead behind the same search box, same origin rule, same anonymity. Frozen alongside `/query` because a search box that lists suggestions and a search box that cannot are different products, and a consumer that has one will call both."
 };
 
 /** Every path frozen by the fixture: consumed today plus promised by ADR. */
