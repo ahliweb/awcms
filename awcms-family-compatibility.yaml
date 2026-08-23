@@ -207,20 +207,28 @@ intentionalDivergences:
     since: "2026-08-04"
 
   - id: astro-files-not-type-checked
-    summary: awcms-astro runs `astro check`; this repo cannot, so 44 `.astro` files (24,359 lines) have no type checker.
+    summary: >-
+      awcms-astro runs `astro check`; this repo cannot. NARROWED by ADR-0112 — `.astro` frontmatter IS
+      type-checked here now; what remains unchecked is component props at their call sites.
     reason: >-
-      Not a discipline gap — a toolchain one, and it points the opposite way from what the file counts
-      suggest. `@astrojs/check` requires the TypeScript 6.x programmatic API; this repo is on TypeScript
-      7.0.2, whose native compiler does not ship it ("does not expose the programmatic API that `astro check`
-      relies on" — verified by installing it and running it, not by reading). awcms-astro is on `^6.0.3`,
-      which is the only reason its gate runs. Downgrading this repo to 6.x to satisfy one checker would
-      regress the toolchain under 33 gates and ~156,000 lines that `tsc --noEmit` keeps clean today.
-      Mitigation until then is explicit rather than hopeful: `awcms-testing` and `awcms-pr-review` both
-      instruct that any diff touching `.astro` is read for types by eye, naming the class most likely to slip
-      (`withTenant`, which returns `T | Response`, used where `withTenantOrThrow` is meant).
+      Not a discipline gap — a toolchain one. `@astrojs/check` requires the TypeScript 6.x programmatic API;
+      this repo is on TypeScript 7.0.2, whose native compiler does not ship it ("does not expose the
+      programmatic API that `astro check` relies on" — verified by installing it and running it, not by
+      reading). awcms-astro is on `^6.0.3`, which is the only reason its gate runs. Downgrading this repo to
+      6.x to satisfy one checker would regress the toolchain under 33 gates and ~156,000 lines that
+      `tsc --noEmit` keeps clean today.
+      ADR-0112 closed the larger half without that downgrade: `check:astro-frontmatter:check` extracts every
+      `.astro` frontmatter to a sibling `.ts` and runs this repo's own `tsc` over it, so all 61 files are
+      checked for undefined variables, wrong types across every `src/` import, null handling, and statement
+      ordering. Its first run found `/admin/seo` reading three `const`s 130 lines before their declaration —
+      a temporal dead zone that had been answering 500 on every request, with every gate green.
+      What is still NOT checked, and is the whole of what this entry now covers: a component's `Props` at its
+      call sites, because `tsc` cannot parse `.astro` and the imports resolve through a wildcard shim. A
+      misspelled or missing prop still compiles. `awcms-testing` and `awcms-pr-review` continue to instruct
+      that any diff touching `.astro` is read by eye for that class.
     owner: "@ahliweb"
     reviewDate: "2027-02-04"
-    adr: 0068-family-standards-posture-editions-and-recorded-divergences.md
+    adr: 0112-astro-frontmatter-is-type-checked-by-extraction.md
     since: "2026-08-04"
 
   - id: owasp-edition-pin-owned-here

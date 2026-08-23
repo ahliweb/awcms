@@ -91,9 +91,6 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
-const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
-const showNotFoundActions = canUpdateNotFound;
-
 // --- query string (all list state travels in the URL, never in JS state) ---
 const params = Astro.url.searchParams;
 
@@ -227,6 +224,17 @@ const canDeleteRedirect =
   screen.state === "allowed" && screen.data.canDeleteRedirect;
 const canUpdateNotFound =
   screen.state === "allowed" && screen.data.canUpdateNotFound;
+
+// Derived from the four above, and therefore BELOW them. These two sat at the
+// top of the frontmatter reading `const`s declared 130 lines further down, so
+// the component function threw `ReferenceError: Cannot access
+// 'canUpdateRedirect' before initialization` as its third statement and this
+// screen answered 500 on every request. Nothing caught it because `.astro`
+// frontmatter was type-checked by nothing at all; `check:astro-frontmatter:check`
+// now does, and reports exactly this.
+const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
+const showNotFoundActions = canUpdateNotFound;
+
 const seoConfig: SeoTenantSettings =
   screen.state === "allowed" ? screen.data.config : EMPTY_SEO_TENANT_SETTINGS;
 const redirectSettings: RedirectSettings =
