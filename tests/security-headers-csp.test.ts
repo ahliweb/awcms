@@ -25,6 +25,10 @@ import { describe, expect, test } from "bun:test";
 
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
 import { THEME_INIT_SCRIPT_HASH } from "../src/lib/security/theme-init-script";
+import {
+  VIDEO_EMBED_ORIGIN,
+  isVideoEmbedEnabled
+} from "../src/lib/security/video-embed";
 
 /**
  * `mediaPublicBaseUrl` is passed EXPLICITLY (default `""` — the unconfigured
@@ -38,13 +42,15 @@ function cspFor(
   isProduction: boolean,
   turnstileEnabled = false,
   mediaPublicBaseUrl = "",
-  mediaUploadAccountId = ""
+  mediaUploadAccountId = "",
+  videoEmbedEnabled = false
 ): string {
   const header = buildSecurityHeaders({
     isProduction,
     turnstileEnabled,
     mediaPublicBaseUrl,
-    mediaUploadAccountId
+    mediaUploadAccountId,
+    videoEmbedEnabled
   }).find(([name]) => name === "Content-Security-Policy");
 
   if (!header) {
@@ -58,13 +64,15 @@ function directives(
   isProduction = false,
   turnstileEnabled = false,
   mediaPublicBaseUrl = "",
-  mediaUploadAccountId = ""
+  mediaUploadAccountId = "",
+  videoEmbedEnabled = false
 ): string[] {
   return cspFor(
     isProduction,
     turnstileEnabled,
     mediaPublicBaseUrl,
-    mediaUploadAccountId
+    mediaUploadAccountId,
+    videoEmbedEnabled
   )
     .split(";")
     .map((directive) => directive.trim());
@@ -524,5 +532,81 @@ describe("buildSecurityHeaders — media upload connect-src (Issue #595)", () =>
         process.env.NEWS_MEDIA_R2_ACCOUNT_ID = previous;
       }
     }
+  });
+});
+
+describe("video embeds — the second and last opt-in origin (ADR-0110)", () => {
+  test("the flag is OFF unless the value is literally `true`", () => {
+    // `Boolean(env.X)` would make the string "false" enable it, and this switch
+    // decides whether a third-party origin enters the policy.
+    expect(isVideoEmbedEnabled({})).toBe(false);
+    expect(isVideoEmbedEnabled({ BLOG_VIDEO_EMBED_ENABLED: "false" })).toBe(
+      false
+    );
+    expect(isVideoEmbedEnabled({ BLOG_VIDEO_EMBED_ENABLED: "1" })).toBe(false);
+    expect(isVideoEmbedEnabled({ BLOG_VIDEO_EMBED_ENABLED: "TRUE" })).toBe(
+      false
+    );
+    expect(isVideoEmbedEnabled({ BLOG_VIDEO_EMBED_ENABLED: "true" })).toBe(
+      true
+    );
+  });
+
+  test("disabled (the default) adds nothing at all — the policy is byte-for-byte the pre-ADR-0110 one", () => {
+    expect(cspFor(true, false, "", "", false)).toBe(cspFor(true, false));
+    expect(cspFor(true, false, "", "", false)).not.toContain(
+      "youtube-nocookie"
+    );
+    expect(cspFor(true, false, "", "", false)).not.toContain("frame-src");
+  });
+
+  test("enabled adds `frame-src` with exactly ONE origin, and changes nothing else", () => {
+    const disabled = directives(true, false, "", "", false);
+    const enabled = directives(true, false, "", "", true);
+
+    expect(enabled.filter((d) => !disabled.includes(d))).toEqual([
+      `frame-src ${VIDEO_EMBED_ORIGIN}`
+    ]);
+    // Nothing is REMOVED either — the delta is additive in both directions.
+    expect(disabled.every((d) => enabled.includes(d))).toBe(true);
+    // Not `script-src`: the embed is an iframe, and the widget-script opening
+    // Turnstile needs is not something a video block ever asks for.
+    expect(enabled.find((d) => d.startsWith("script-src"))).toBe(
+      disabled.find((d) => d.startsWith("script-src"))
+    );
+  });
+
+  test("with BOTH switches on, `frame-src` lists both origins in a fixed order", () => {
+    const both = directives(true, true, "", "", true);
+    const frameSrc = both.find((d) => d.startsWith("frame-src"));
+
+    // A deterministic string: a header whose text depends on iteration order
+    // makes a cached response and a fresh one differ for no reason.
+    expect(frameSrc).toBe(
+      `frame-src https://challenges.cloudflare.com ${VIDEO_EMBED_ORIGIN}`
+    );
+  });
+
+  test("the video origin never leaks into the Turnstile-only policy", () => {
+    // The guarantee this whole family of tests exists for, restated for the
+    // second origin: enabling one switch must not open the other's origin.
+    expect(cspFor(true, true, "", "", false)).not.toContain("youtube-nocookie");
+    expect(cspFor(true, false, "", "", true)).not.toContain(
+      "challenges.cloudflare.com"
+    );
+  });
+
+  test("frame-ancestors stays 'none' and X-Frame-Options stays DENY", () => {
+    // Opening `frame-src` says what THIS page may embed. It says nothing about
+    // who may embed this page, and the two are easy to conflate.
+    const headers = buildSecurityHeaders({
+      isProduction: true,
+      videoEmbedEnabled: true
+    });
+
+    expect(headers).toContainEqual(["X-Frame-Options", "DENY"]);
+    expect(cspFor(true, false, "", "", true)).toContain(
+      "frame-ancestors 'none'"
+    );
   });
 });
