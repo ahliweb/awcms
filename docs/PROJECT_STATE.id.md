@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a4fa7f7b6cc32152c44ea3d80cc7158b28421cf095c3368ed26942e657de6a60 -->
+<!-- i18n-source-hash: sha256:5397fb3b0200d1d2cefe285a6bbc3e59b7ca713dc27f209b0c0ca31d2337d7c3 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,46 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN BEACON — 23 Agustus 2026: #597 butir 9 sudah DIBANGUN, dan keputusan
+  yang menghalanginya ternyata lebih kecil daripada "analitik: ya atau tidak".**
+
+  Penghalang butir itu adalah ADR privasi di `ahliweb/awcms-astro` — keputusan
+  pemilik repo, bukan sebuah tugas. Keputusannya dibuat, dan fakta yang
+  membukanya dibaca dari collector repo INI alih-alih ditebak: **`fetch`
+  lintas-origin tanpa `credentials` tidak mengirim maupun menyimpan cookie.**
+  Jadi konsumennya sudah memegang sakelarnya, tanpa perubahan apa pun di sini.
+
+  ADR-0044 di sana mengambil **Opsi B**: sebuah situs boleh memanggil beacon,
+  hanya bila ia menyatakannya, dan selalu tanpa kredensial. Cookie
+  `awcms_visitor_key` yang dipasang endpoint ini karena itu dibuang peramban, dan
+  **setiap kunjungan halaman tiba sebagai kunjungan pertama** — hitungan
+  kunjungan nyata bagi konsumen itu, hitungan pengunjung unik tidak. Tidak ada
+  apa pun di sini yang boleh diubah dengan premis bahwa pengunjung berulang bisa
+  dikenali, dan pekerjaan `SameSite=None` di #637 tidak terbuang: ia melayani
+  konsumen yang mengambil pilihan sebaliknya.
+
+  **Di sisi ini perubahannya sekali lagi satu pemindahan kontrak**, dan ia
+  menjadikan kelas peramban-pembaca selebar tiga jalur.
+
+  **Konsekuensi yang pantas dibawa maju: ketiganya TIDAK berbagi satu aturan.**
+  Kedua jalur `site-search` tidak boleh membawa header tambahan, karena tidak ada
+  yang menjawab preflight untuk keduanya — dan itu disengaja. Beacon HARUS
+  membawa `content-type: application/json`, karena `security.checkOrigin` menolak
+  POST lintas-origin yang tipe isinya mirip form, dan handler `OPTIONS` yang
+  ditambahkan #637 ada justru untuk preflight yang menyusul.
+  `navigator.sendBeacon` tidak bisa dipakai di sana sama sekali: ia mengirim
+  `text/plain`, salah satu tipe yang ditolak.
+
+  Menyeragamkan ketiganya — ke arah mana pun, dan itu adalah kerapian yang cepat
+  atau lambat akan diusulkan seseorang — mematikan salah satunya di peramban
+  pembaca dan tidak di log mana pun di sini. Karena itu ia ditulis di docblock
+  `CONSUMED_PATHS` dan di komentar gerbangnya sendiri.
+
+  **Dengan ini #597 selesai di kesembilan butirnya dan #607 di ketiganya.** Yang
+  masih terbuka di keluarga ini adalah #599, dan ia terhalang dua artefak yang
+  tidak ada di kedua repo — `.htaccess` legacy dan URL sitemap yang hidup —
+  alih-alih terhalang kode.
 
 - **PUTARAN KONSUMEN — 23 Agustus 2026: dua butir menghadap-pembaca yang tersisa
   sudah DIBANGUN, di `ahliweb/awcms-astro`. Tidak ada pekerjaan `awcms` yang

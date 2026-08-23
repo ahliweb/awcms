@@ -54,10 +54,17 @@ const FIXTURE_PATH =
  * ## "Calls" stopped meaning "the build calls" on 23 August 2026
  *
  * Seven of these are called by `astro build` over there, from a machine holding
- * a read-only credential. The two `site-search` entries are called by the
- * READER's BROWSER, anonymously and cross-origin, and that difference is
- * invisible from this side — both are `GET`s against this API, and the gate over
- * there extracts string literals from `src/` without knowing who executes them.
+ * a read-only credential. THREE are called by the READER's BROWSER, anonymously
+ * and cross-origin — the two `site-search` entries and the analytics beacon —
+ * and that difference is invisible from this side, because the gate over there
+ * extracts string literals from `src/` without knowing who executes them.
+ *
+ * The three do not even share one rule. The two search paths must carry NO
+ * custom header, because nothing answers a preflight for them. The beacon MUST
+ * carry `content-type: application/json`, because `checkOrigin` refuses the
+ * alternatives — and its `OPTIONS` handler exists for the preflight that
+ * follows. Making them consistent, in either direction, kills one of them in a
+ * reader's browser.
  *
  * It is written here because it changes what breaking one costs. A shape change
  * on a build-called path reddens a build somebody is watching. A shape change on
@@ -117,7 +124,9 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/site-search/query":
     "the reader's search results (#597 item 3, #607, ADR-0107). `src/lib/pencarian.ts` there, and its ADR-0043. THE FIRST CONSUMED PATH THAT IS NOT CALLED BY A BUILD: it runs in a reader's browser, anonymously, cross-origin, so the tenant comes from the request's `Origin` matched against `awcms_tenant_domains` and never from a credential. That changes where a broken shape surfaces — in a stranger's browser rather than in a build somebody is watching — which is precisely why freezing it matters more here, not less. Frozen: the result shape AND the facet payload the filter chips render from. The CORS grant is a header, not a schema, and is documented on the path. Promised as COMMITTED in #681 and moved here when `ahliweb/awcms-astro` published the box.",
   "/api/v1/site-search/suggest":
-    "the typeahead behind the same box, same origin rule, same anonymity (ADR-0107). Consumed through a `<datalist>` there, debounced client-side; this repo still enforces its own `min_query_length` and per-IP limit, because a consumer's debounce is a courtesy and not a control."
+    "the typeahead behind the same box, same origin rule, same anonymity (ADR-0107). Consumed through a `<datalist>` there, debounced client-side; this repo still enforces its own `min_query_length` and per-IP limit, because a consumer's debounce is a courtesy and not a control.",
+  "/api/v1/analytics/collect":
+    "one page view, posted from the READER's browser (#597 item 9; `awcms-astro` ADR-0044 decided WHETHER, and its `src/lib/beacon.ts` is the caller). Third of the reader-browser class and the only one that must carry a HEADER: `security.checkOrigin` refuses a cross-origin POST whose content type is form-like, so only `application/json` gets through — which is what the `OPTIONS` handler added in #637 exists for, and why `navigator.sendBeacon` cannot be used there. The consumer calls it WITHOUT credentials by decision, so the `awcms_visitor_key` cookie this endpoint sets is discarded by the browser and every view arrives as a first visit; nothing here should be changed on the assumption that a repeat visitor is recognisable. Frozen: the request body (`tenantCode`, `path`, optional `referrer`), its bounds, and the always-`202` answer."
 };
 
 /**

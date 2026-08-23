@@ -360,6 +360,44 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BEACON ROUND — 23 August 2026: #597 item 9 is BUILT, and the decision it was
+  blocked on turned out to be smaller than "analytics: yes or no".**
+
+  That item's blocker was a privacy ADR in `ahliweb/awcms-astro` — the repo
+  owner's decision, not a task. It was made, and the fact that unlocked it was
+  read out of this repo's own collector rather than guessed: **a cross-origin
+  `fetch` without `credentials` neither sends nor stores cookies.** So the
+  consumer already held the switch, with no change needed here.
+
+  Its ADR-0044 takes **Option B**: a site may call the beacon, only when it
+  declares it, and always without credentials. The `awcms_visitor_key` cookie
+  this endpoint sets is therefore discarded by the browser, and **every page
+  view arrives as a first visit** — page-view counts are real for that consumer,
+  unique-visitor counts are not. Nothing here should be changed on the premise
+  that a repeat visitor is recognisable, and the `SameSite=None` work in #637 is
+  not wasted: it serves consumers that make the other choice.
+
+  **On this side the change is again one contract move**, and it makes the
+  reader-browser class three paths wide.
+
+  **The consequence worth carrying forward: the three do NOT share one rule.**
+  The two `site-search` paths must carry no custom header, because nothing
+  answers a preflight for them — deliberately. The beacon MUST carry
+  `content-type: application/json`, because `security.checkOrigin` refuses a
+  cross-origin POST whose content type is form-like, and the `OPTIONS` handler
+  added in #637 exists for the preflight that follows. `navigator.sendBeacon`
+  cannot be used there at all: it sends `text/plain`, one of the refused types.
+
+  Making the three consistent — in either direction, and it is the tidying
+  somebody will eventually propose — kills one of them in a reader's browser and
+  in no log here. It is written into `CONSUMED_PATHS`' docblock and the gate's
+  own comment for that reason.
+
+  **With this, #597 is finished across all nine items and #607 across all
+  three.** What remains open in the family is #599, and it is blocked on two
+  artefacts that exist in neither repo — the legacy `.htaccess` and a live
+  sitemap URL — rather than on code.
+
 - **CONSUMER ROUND — 23 August 2026: the two reader-facing items that were left
   are BUILT, in `ahliweb/awcms-astro`. There is no `awcms` work left on #597 or
   #607, and the only `awcms` change in this round is a contract move.**
