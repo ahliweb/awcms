@@ -44,9 +44,24 @@ export default defineConfig({
       : {}
   },
   projects: [
+    // Logs the owner in ONCE and saves the session; see `tests/e2e/auth.setup.ts`
+    // for why (eleven parallel argon2id verifications is what made this suite
+    // intermittently take four minutes and fail at the login step).
+    {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+      use: { ...devices["Desktop Chrome"] }
+    },
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] }
+      dependencies: ["setup"],
+      use: {
+        ...devices["Desktop Chrome"],
+        // Specs that authenticate as somebody else — or as nobody, which is
+        // `login.e2e.ts`'s whole subject — override this per file with
+        // `test.use({ storageState: ... })`.
+        storageState: "playwright/.auth/owner.json"
+      }
     }
   ]
 });

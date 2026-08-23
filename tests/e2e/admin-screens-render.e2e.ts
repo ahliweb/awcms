@@ -59,8 +59,6 @@ import { test, expect, type Page } from "@playwright/test";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
-import { provideTenant } from "./support/e2e-auth";
-
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
 const password = process.env.E2E_PASSWORD;
@@ -111,15 +109,6 @@ export function discoverAdminRoutes(
 const routes = discoverAdminRoutes(ADMIN_PAGES_ROOT);
 const staticRoutes = routes.filter((route) => !route.dynamic);
 const dynamicRoutes = routes.filter((route) => route.dynamic);
-
-async function logIn(page: Page): Promise<void> {
-  await page.goto("/login");
-  await provideTenant(page, tenantId!);
-  await page.locator("#login-identifier").fill(loginIdentifier!);
-  await page.locator("#password").fill(password!);
-  await page.locator("#login-submit").click();
-  await page.waitForURL("**/admin");
-}
 
 /**
  * Load one admin URL and assert it rendered, SOFTLY.
@@ -178,7 +167,8 @@ test.describe("every admin screen renders", () => {
 
   test("every static admin screen renders", async ({ page }) => {
     test.setTimeout(180_000);
-    await logIn(page);
+    // Already authenticated as the owner: the `setup` project logged in once
+    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
     for (const route of staticRoutes) {
       await checkRenders(page, route.url, route.source);
@@ -187,7 +177,8 @@ test.describe("every admin screen renders", () => {
 
   for (const route of dynamicRoutes) {
     test(`${route.url} renders with a real id`, async ({ page }) => {
-      await logIn(page);
+      // Already authenticated as the owner: the `setup` project logged in once
+      // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
       // The id comes from the listing screen that links to this detail page, so
       // the test uses a value the app itself considers real. Deriving beats

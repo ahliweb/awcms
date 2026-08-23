@@ -23,6 +23,10 @@
  */
 import { test, expect } from "@playwright/test";
 
+// The login flow IS this spec's subject, so it must start logged OUT rather
+// than inherit the shared owner session the `chromium` project supplies.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe("login page", () => {
   test("renders the login form with its stable fields", async ({ page }) => {
     const response = await page.goto("/login");

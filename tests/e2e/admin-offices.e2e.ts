@@ -31,14 +31,15 @@ test.describe("admin offices (authenticated)", () => {
   test("logs in, lands on the dashboard, and sees the seeded office", async ({
     page
   }) => {
-    await page.goto("/login");
-    await provideTenant(page, tenantId!);
-    await page.locator("#login-identifier").fill(loginIdentifier!);
-    await page.locator("#password").fill(password!);
-    await page.locator("#login-submit").click();
-
-    // The client script redirects to /admin on success.
-    await page.waitForURL("**/admin");
+    // Already authenticated as the owner: the `setup` project logged in once
+    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
+    //
+    // The navigation is explicit now. It used to be implied by
+    // `waitForURL("**/admin")` after the login form — which was the redirect
+    // landing this test on the dashboard, not just a wait. Removing the login
+    // block removed the navigation with it, and the assertion below then ran
+    // against `about:blank`.
+    await page.goto("/admin");
     await expect(page.locator("#admin-dashboard-heading")).toBeVisible();
     await expect(page.locator("#dashboard-tenant-id")).toHaveText(tenantId!);
 
@@ -53,13 +54,8 @@ test.describe("admin offices (authenticated)", () => {
   test("the other management screens render their tables for the owner", async ({
     page
   }) => {
-    // Log in first (fresh page/context per test).
-    await page.goto("/login");
-    await provideTenant(page, tenantId!);
-    await page.locator("#login-identifier").fill(loginIdentifier!);
-    await page.locator("#password").fill(password!);
-    await page.locator("#login-submit").click();
-    await page.waitForURL("**/admin");
+    // Already authenticated as the owner: the `setup` project logged in once
+    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
     // Modules: the catalog always lists the code-registered core modules, so
     // this is data-seed-free — assert a known core module appears.

@@ -12,7 +12,6 @@
  * the form passes.
  */
 import { test, expect } from "@playwright/test";
-import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -29,14 +28,8 @@ test.describe("admin profiles create (authenticated)", () => {
   test("owner creates a profile and sees the new row in the table", async ({
     page
   }) => {
-    await page.goto("/login");
-    await provideTenant(page, tenantId!);
-    await page.locator("#login-identifier").fill(loginIdentifier!);
-    await page.locator("#password").fill(password!);
-    await page.locator("#login-submit").click();
-
-    // The client script redirects to /admin on success.
-    await page.waitForURL("**/admin");
+    // Already authenticated as the owner: the `setup` project logged in once
+    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
     await page.goto("/admin/profiles");
 

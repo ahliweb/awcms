@@ -360,6 +360,61 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **SESSION ROUND — 23 August 2026: TWO different intermittent e2e failures,
+  and the CI one was SHARED TENANT STATE. Two diagnoses before it were wrong.**
+
+  **The CI flake:** `admin-users.e2e.ts` asserts that re-assigning the role the
+  owner already holds is rejected `409`. It intermittently got `200` — the
+  assign SUCCEEDED. The dropdown lists every role in the tenant, and
+  `admin-roles.e2e.ts` creates one concurrently, so the default selection was
+  sometimes a role the owner did not hold. Fixed by selecting `owner`
+  explicitly. Shared state, not a race, and nothing wrong with the page.
+
+  **Wrong turn 1 — a hydration race.** Delegated listeners bind on `document`
+  inside a deferred module, so a click before that is silently swallowed. That
+  window is REAL and is now observable via `ADMIN_DELEGATION_READY_ATTRIBUTE`,
+  but it caused none of this.
+
+  **Wrong turn 2 — argon2 contention.** Also real, also a DIFFERENT failure:
+
+  Every authenticated spec drove the real `/login` form itself. With
+  `fullyParallel: true` that meant up to five simultaneous `Bun.password.verify`
+  calls — argon2id on Bun's defaults, memory- and CPU-hard BY DESIGN — while the
+  same server rendered admin pages. The suite was bimodal: usually ~15s green,
+  occasionally FOUR MINUTES with six or seven failures, every one a 30s
+  `waitForURL` timeout AT THE LOGIN STEP, in specs unrelated to each other.
+
+  **CI runs 2 workers, not 5, and never showed those login timeouts.** It was a
+  local phenomenon, and calling it the CI flake's cause was the second mistake.
+  The session fix below is kept because it is a genuine improvement, not because
+  it fixed the flake — it did not.
+
+  CI hid the real flake behind `retries: 1`, so it surfaced as one "flaky" line
+  rather than a problem. **A suite that goes green on the second try teaches
+  people to re-run instead of investigate** — and it cost three diagnoses here.
+
+  **The pattern under all of it: specs mutate shared tenant state that other
+  specs read.** Roles created by one spec change another's dropdown; the module
+  toggle disables `reporting`, which `/admin` authorizes on. That is the real
+  harness problem, and it is still open.
+
+  `tests/e2e/auth.setup.ts` logs the owner in once and saves `storageState`;
+  thirteen logins became four. Six consecutive runs at ~18s, zero variance.
+
+  Nothing about argon2's cost is wrong — that cost IS the control. Paying it
+  eleven times to test things that are not authentication was the mistake.
+
+  Held back from this round: a READ-ONLY sweep. It works, but
+  `admin-modules-toggle.e2e.ts` deliberately DISABLES the `reporting` module and
+  `/admin` authorizes on `reporting.dashboard.read` — so a read sweep overlapping
+  that toggle sees the dashboard deny, correctly. Alone it passed 4/4; in the
+  suite it failed about one run in three, always on `/admin`. **Read sweeps must
+  not run concurrently with specs that mutate tenant-wide state**, and that is a
+  harness change worth doing deliberately. The two sweeps already on `main` are
+  ACCIDENTALLY immune, not correct: the render sweep asserts only `200` and a
+  denied screen still returns `200`; the deny sweep expects denial, which a
+  disabled module also produces.
+
 - **DENY ROUND — 23 August 2026: nothing had ever watched an admin screen
   refuse a user holding no permissions, and four screens could not be checked
   at all.**

@@ -104,6 +104,10 @@ const gatedScreens = discoverGatedScreens(ADMIN_PAGES_ROOT).filter(
   (screen) => !screen.url.includes("[")
 );
 
+// This spec authenticates as somebody other than the owner, so it must NOT
+// inherit the shared owner session the `chromium` project supplies.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe("admin screens deny a user holding no permissions", () => {
   test.skip(
     !seeded,

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3fd64e482687c9f6dc86a9e865f88fb1e74b3dbd5eddc3a5d2c20d90e19a5f73 -->
+<!-- i18n-source-hash: sha256:b0e32c0de5a233137606a63dedc540022a769a966268e648f5313cb710f66b04 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,67 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN SESI — 23 Agustus 2026: DUA kegagalan e2e intermiten yang berbeda,
+  dan yang di CI ternyata KEADAAN TENANT BERSAMA. Dua diagnosis sebelumnya salah.**
+
+  **Flake di CI:** `admin-users.e2e.ts` meng-assert bahwa menugaskan ulang peran
+  yang SUDAH dipegang owner ditolak `409`. Ia sesekali mendapat `200` — penugasan
+  BERHASIL. Dropdown-nya mendaftar SETIAP peran di tenant, dan
+  `admin-roles.e2e.ts` membuat satu secara bersamaan, jadi pilihan bawaannya
+  kadang peran yang TIDAK dipegang owner. Diperbaiki dengan memilih `owner`
+  secara eksplisit. Keadaan bersama, bukan balapan, dan tidak ada yang salah
+  pada halamannya.
+
+  **Salah arah 1 — balapan hidrasi.** Listener terdelegasi mengikat pada
+  `document` di dalam modul tertangguh, jadi klik sebelum itu ditelan diam-diam.
+  Jendela itu NYATA dan kini teramati lewat `ADMIN_DELEGATION_READY_ATTRIBUTE`,
+  tetapi tidak menyebabkan apa pun di sini.
+
+  **Salah arah 2 — kontensi argon2.** Juga nyata, juga kegagalan BERBEDA:
+
+  Setiap spec terautentikasi menjalankan sendiri formulir `/login` sungguhan.
+  Dengan `fullyParallel: true`, itu berarti sampai lima `Bun.password.verify`
+  bersamaan — argon2id pada bawaan Bun, berat memori dan CPU SECARA SENGAJA —
+  sementara server yang sama merender halaman admin. Suite-nya bimodal:
+  biasanya ~15 detik hijau, sesekali EMPAT MENIT dengan enam atau tujuh
+  kegagalan, semuanya timeout `waitForURL` 30 detik DI LANGKAH LOGIN, pada spec
+  yang tak berhubungan satu sama lain.
+
+  **CI berjalan dengan 2 worker, bukan 5, dan tidak pernah menunjukkan timeout
+  login itu.** Itu fenomena LOKAL, dan menyebutnya sebagai penyebab flake di CI
+  adalah kekeliruan kedua. Perbaikan sesi di bawah dipertahankan karena ia
+  peningkatan yang nyata, bukan karena ia memperbaiki flake-nya — ia tidak.
+
+  CI menyembunyikan flake yang sebenarnya di balik `retries: 1`, sehingga ia
+  muncul sebagai satu baris "flaky" alih-alih sebuah masalah. **Suite yang hijau
+  pada percobaan kedua mengajari orang untuk mengulang, bukan menyelidiki** — dan
+  di sini itu berharga tiga diagnosis.
+
+  **Pola di balik semuanya: spec memutasi keadaan tenant BERSAMA yang dibaca spec
+  lain.** Peran yang dibuat satu spec mengubah dropdown spec lain; toggle modul
+  mematikan `reporting`, yang justru menjadi otorisasi `/admin`. Itulah masalah
+  harness yang sebenarnya, dan ia MASIH TERBUKA.
+
+  `tests/e2e/auth.setup.ts` me-login owner SEKALI lalu menyimpan `storageState`;
+  tiga belas login menjadi empat. Enam kali jalan berturut-turut ~18 detik,
+  tanpa variansi.
+
+  Tidak ada yang salah dengan biaya argon2 — biaya itu JUSTRU kontrolnya.
+  Membayarnya sebelas kali untuk menguji hal yang bukan autentikasi itulah
+  kekeliruannya.
+
+  DITAHAN dari putaran ini: sapuan READ-ONLY. Ia bekerja, tetapi
+  `admin-modules-toggle.e2e.ts` sengaja MEMATIKAN modul `reporting` dan `/admin`
+  mengotorisasi pada `reporting.dashboard.read` — jadi sapuan baca yang tumpang
+  tindih dengan toggle itu melihat dasbor menolak, dan itu BENAR. Sendirian ia
+  lulus 4/4; di dalam suite ia gagal sekitar satu dari tiga kali, selalu pada
+  `/admin`. **Sapuan baca TIDAK BOLEH berjalan bersamaan dengan spec yang
+  memutasi keadaan se-tenant**, dan itu perubahan harness yang layak dilakukan
+  dengan sengaja. Dua sapuan yang sudah ada di `main` KEBETULAN kebal, bukan
+  benar: sapuan render hanya meng-assert `200` dan layar yang menolak tetap
+  mengembalikan `200`; sapuan deny justru mengharapkan penolakan, yang juga
+  dihasilkan modul yang dimatikan.
 
 - **PUTARAN DENY — 23 Agustus 2026: tidak pernah ada yang menyaksikan layar
   admin MENOLAK pengguna tanpa permission, dan empat layar sama sekali tak bisa
