@@ -68,6 +68,17 @@
  * `script-src` and its challenge iframe needs `frame-src`, both narrowed to
  * that one origin.
  *
+ * VIDEO EMBEDS (ADR-0110) — the second and last opt-in origin, on the same
+ * pattern and for the same reason. `_shared/rendering/video-news-block-
+ * renderer.ts` has emitted a correct `youtube-nocookie.com` iframe since Issue
+ * #639 and the browser has blocked every one of them, because this policy
+ * named no such origin; that renderer's own header records the degradation and
+ * names "a future opt-in flag mirroring Turnstile's pattern" as the fix. With
+ * `videoEmbedEnabled` false (the default, and every deployment that has not
+ * asked for video) the policy is byte-for-byte the pre-ADR-0110 one. The two
+ * switches are INDEPENDENT: either, both, or neither, and `frame-src` appears
+ * when at least one is on, listing exactly the origins that are.
+ *
  * MEDIA IMAGES — `img-src`, and why its absence was invisible. `default-src`
  * governs images too, so until this directive existed the policy said
  * `img-src 'self'` by fall-through. Every article/gallery image is served from
@@ -113,6 +124,7 @@
  * closed.
  */
 import { TURNSTILE_ORIGIN } from "./turnstile";
+import { VIDEO_EMBED_ORIGIN } from "./video-embed";
 import { THEME_INIT_SCRIPT_HASH } from "./theme-init-script";
 import { deriveMediaPublicOrigin } from "../../modules/media-library/domain/media-public-origin";
 import { deriveMediaUploadOrigin } from "../../modules/media-library/domain/media-upload-origin";
@@ -232,8 +244,37 @@ function connectSrcSources(
   return sources.join(" ");
 }
 
+/**
+ * The `frame-src` origins, or `null` when nothing needs the directive at all.
+ *
+ * `null` rather than an empty string on purpose: `frame-src` with no source
+ * list is not "no frames", it is a syntax error, and the LAN/offline guarantee
+ * is that the directive is ABSENT — which is what the CSP test asserts.
+ *
+ * Order is fixed (Turnstile, then video) so the policy string is deterministic:
+ * a header whose text depends on iteration order makes a cached response and a
+ * fresh one differ for no reason, and makes the test that compares them flaky.
+ */
+function frameSrcSources(
+  turnstileEnabled: boolean,
+  videoEmbedEnabled: boolean
+): string | null {
+  const sources: string[] = [];
+
+  if (turnstileEnabled) {
+    sources.push(TURNSTILE_ORIGIN);
+  }
+
+  if (videoEmbedEnabled) {
+    sources.push(VIDEO_EMBED_ORIGIN);
+  }
+
+  return sources.length > 0 ? sources.join(" ") : null;
+}
+
 function buildContentSecurityPolicy(
   turnstileEnabled: boolean,
+  videoEmbedEnabled: boolean,
   mediaPublicBaseUrl: string,
   uploadAccountId: string,
   uploadEndpointOverride: string
@@ -247,8 +288,10 @@ function buildContentSecurityPolicy(
     `connect-src ${connectSrcSources(uploadAccountId, uploadEndpointOverride)}`
   );
 
-  if (turnstileEnabled) {
-    directives.push(`frame-src ${TURNSTILE_ORIGIN}`);
+  const frameSrc = frameSrcSources(turnstileEnabled, videoEmbedEnabled);
+
+  if (frameSrc !== null) {
+    directives.push(`frame-src ${frameSrc}`);
   }
 
   return directives.join("; ");
@@ -263,6 +306,13 @@ export type SecurityHeaderOptions = {
    * pre-#186 LAN/offline policy. Callers pass `isTurnstileRequired()`.
    */
   turnstileEnabled?: boolean;
+  /**
+   * Opens the single `youtube-nocookie.com` origin in `frame-src` (ADR-0110).
+   * Defaults to `false` — omit it and the policy is exactly the pre-ADR-0110
+   * one, with no `frame-src` at all unless Turnstile is on. Callers pass
+   * `isVideoEmbedEnabled()`.
+   */
+  videoEmbedEnabled?: boolean;
   /**
    * The deployment's public media base URL, whose ORIGIN goes into `img-src`.
    *
@@ -309,6 +359,7 @@ export function buildSecurityHeaders(
       "Content-Security-Policy",
       buildContentSecurityPolicy(
         options.turnstileEnabled === true,
+        options.videoEmbedEnabled === true,
         options.mediaPublicBaseUrl ?? resolveNewsMediaR2Config().publicBaseUrl,
         options.mediaUploadAccountId ?? resolveNewsMediaR2Config().accountId,
         options.mediaUploadEndpoint ?? ""
@@ -335,18 +386,22 @@ export function buildSecurityHeaders(
     //
     // This repo serves a different surface, and it has no such resource:
     //   - HTML pages are NAVIGATIONS, which CORP does not govern at all;
-    //   - the JSON API is unreachable cross-origin from a browser with ONE
-    //     deliberate exception. This bullet used to read "nothing here emits
+    //   - the JSON API is unreachable cross-origin from a browser with THREE
+    //     deliberate exceptions. This bullet used to read "nothing here emits
     //     `Access-Control-Allow-Origin` (verified: zero occurrences in
     //     `src/`)", and Issue #637 ended that: the public visit-ingest beacon
-    //     (`api/v1/analytics/collect.ts`) now answers a preflight and echoes
-    //     the grant, for `Origin`s that are active tenant domains and never for
-    //     `*`. CORP is unaffected either way — it governs `no-cors` subresource
-    //     embedding, and a CORS-mode `fetch` is not a `no-cors` request — so
-    //     `same-origin` still removes no capability any browser client has;
-    //     what changed is that the reason is now "CORP does not apply to CORS"
-    //     rather than "there is no CORS here". If a SECOND endpoint ever opts
-    //     in, re-read this bullet before assuming it still holds;
+    //     (`api/v1/analytics/collect.ts`) answers a preflight and echoes the
+    //     grant, for `Origin`s that are active tenant domains and never for
+    //     `*`. ADR-0107 added the other two — `site-search/query` and
+    //     `/suggest`, which echo the same kind of grant to the same kind of
+    //     origin and take no credentials at all.
+    //
+    //     The bullet asked its own successor to re-read it when a SECOND
+    //     endpoint opted in, so: re-read, and it still holds. CORP governs
+    //     `no-cors` subresource embedding, and a CORS-mode `fetch` is not a
+    //     `no-cors` request — so `same-origin` removes no capability any
+    //     browser client has. The reason is "CORP does not apply to CORS",
+    //     which does not get weaker with a fourth endpoint;
     //   - `public/` holds `js/news-share.js`, `css/public-content.css`,
     //     `push-sw.js` and `js/blog-preview-overlay.js` (Issue #592 — the
     //     editor preview's overlay, generated by

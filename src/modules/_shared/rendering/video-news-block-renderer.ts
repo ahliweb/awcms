@@ -1,4 +1,5 @@
 import { escapeHtml } from "../../../lib/html/escape";
+import { VIDEO_EMBED_ORIGIN } from "../../../lib/security/video-embed";
 
 /**
  * Shared, pure `video_news` embed renderer (Issue #639, epic `news_portal`)
@@ -31,28 +32,31 @@ import { escapeHtml } from "../../../lib/html/escape";
  * pattern is a load-bearing constant of the YouTube id format itself, not
  * an implementation detail that could drift between the two files.
  *
- * KNOWN LIMITATION (port-time, awcms base only — not a mini behavior):
- * awcms-mini allow-listed `https://www.youtube-nocookie.com` in its CSP
- * `frame-src` unconditionally (Astro's own `security.csp`, set in
- * `astro.config.mjs`). This base's CSP (`src/lib/security/security-
- * headers.ts`, Issue #148/#186) instead guarantees NO third-party origin
- * is ever allow-listed on a LAN/offline deployment unless an operator
- * explicitly opts in (Cloudflare Turnstile is the one existing precedent,
- * gated behind `TURNSTILE_ENABLED`/deployment profile) — a guarantee
- * `tests/security-headers-csp.test.ts` directly asserts. Adding
- * `youtube-nocookie.com` unconditionally would break that guarantee for
- * every deployment, whether or not it ever uses a `video_news` block; this
- * port deliberately does NOT do that. Net effect: this renderer still
- * builds the exact same safe `<iframe>` markup below, but until a
- * deployment's own CSP is extended to allow `frame-src
- * https://www.youtube-nocookie.com` (e.g. a future opt-in flag mirroring
- * Turnstile's pattern, or a manual reverse-proxy/CSP override), a
- * `video_news` block's embed renders in the HTML but is blocked by the
- * browser — a silent, safe degradation (no video shown, no console
- * error users would see, no XSS), not a server error. Every other block
- * type (`gallery`, `paragraph`, `heading`, `list`, `quote`) is entirely
- * unaffected. See `blog-content/module.ts`'s description field and this
- * port's PR body for the same note.
+ * THE CSP, AND THE FLAG THAT NOW ANSWERS IT (ADR-0110)
+ *
+ * This block used to be inert in practice, and the previous version of this
+ * comment said so at length: awcms-mini allow-listed
+ * `https://www.youtube-nocookie.com` unconditionally, this base's CSP
+ * (`src/lib/security/security-headers.ts`, Issue #148/#186) guarantees NO
+ * third-party origin on a LAN/offline deployment unless an operator opts in,
+ * and the #639 port correctly declined to break that guarantee for every
+ * deployment whether or not it ever places a video. The net effect was that the
+ * iframe below rendered into the HTML and was blocked by the browser — a silent
+ * degradation (no video, no visible error, no XSS) that an editor experienced
+ * as a blank area with no explanation.
+ *
+ * That comment named the fix it was waiting for — "a future opt-in flag
+ * mirroring Turnstile's pattern" — and `lib/security/video-embed.ts` is it.
+ * `BLOG_VIDEO_EMBED_ENABLED=true` adds this one origin to `frame-src` and
+ * nothing else; unset, the policy is byte-for-byte what it was, so the
+ * degradation above is still what a deployment that has not asked for video
+ * gets. Every other block type (`gallery`, `paragraph`, `heading`, `list`,
+ * `quote`) is unaffected either way.
+ *
+ * The embed base is IMPORTED from that file rather than written here a second
+ * time: the origin in the policy and the origin in the markup must be the same
+ * string, and the failure mode of two copies is an iframe blocked by a policy
+ * that claims to permit it.
  */
 
 export type VideoNewsBlockItem = {
@@ -68,7 +72,7 @@ export type VideoNewsBlockItem = {
 /** `mediaObjectId -> public URL` — the SAME map `content-block-rendering.ts` already threads through as `resolvedMediaUrls` for gallery items (Issue #636); a video thumbnail's `mediaObjectId` lives in the same news-media-registry id space, so no second resolution pass/parameter is needed. */
 export type ResolvedVideoNewsThumbnailUrls = ReadonlyMap<string, string>;
 
-const YOUTUBE_EMBED_BASE = "https://www.youtube-nocookie.com/embed/";
+const YOUTUBE_EMBED_BASE = `${VIDEO_EMBED_ORIGIN}/embed/`;
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 function buildEmbedUrl(provider: string, videoId: string): string | null {

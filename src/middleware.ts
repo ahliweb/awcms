@@ -18,6 +18,7 @@ import { log } from "./lib/logging/logger";
 import { resolvePublicTenantByCode } from "./lib/tenant/public-tenant-resolver";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
+import { isVideoEmbedEnabled } from "./lib/security/video-embed";
 import {
   BODY_SIZE_HARD_CEILING_BYTES,
   bodyTooLargeResponse,
@@ -51,7 +52,11 @@ function applyResponseHeaders(
     // Issue #186 — opens the one Cloudflare Turnstile origin in the CSP ONLY on
     // a full-online deployment that requires Turnstile; false (no extra origin)
     // on every LAN/offline deployment.
-    turnstileEnabled: isTurnstileRequired()
+    turnstileEnabled: isTurnstileRequired(),
+    // ADR-0110 — opens the one `youtube-nocookie.com` origin in `frame-src`
+    // ONLY when an operator asked for video embeds; false (no extra origin) on
+    // every deployment that has not.
+    videoEmbedEnabled: isVideoEmbedEnabled()
   })) {
     response.headers.set(name, value);
   }

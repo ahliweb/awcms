@@ -69,6 +69,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { log } from "../logging/logger";
 import { buildSecurityHeaders } from "../security/security-headers";
 import { isTurnstileRequired } from "../security/turnstile";
+import { isVideoEmbedEnabled } from "../security/video-embed";
 
 const DEFAULT_PORT = 4321;
 const DEFAULT_HOST = "localhost";
@@ -108,7 +109,12 @@ export function applySecurityHeaders(
 ): void {
   for (const [name, value] of buildSecurityHeaders({
     isProduction: env.APP_ENV === "production",
-    turnstileEnabled: isTurnstileRequired(env)
+    turnstileEnabled: isTurnstileRequired(env),
+    // ADR-0110 — see `src/middleware.ts`: the same switch, read from the SAME
+    // `env` the rest of this function uses, because these two call sites must
+    // produce the same policy or a static asset and a page would disagree
+    // about what the site permits.
+    videoEmbedEnabled: isVideoEmbedEnabled(env)
   })) {
     res.setHeader(name, value);
   }
