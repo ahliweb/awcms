@@ -25,7 +25,6 @@
  * the same catalog state.
  */
 import { test, expect } from "@playwright/test";
-import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -51,13 +50,8 @@ test.describe("admin modules toggle (authenticated)", () => {
     // fixed reason so the disable branch goes through.
     page.on("dialog", (dialog) => dialog.accept("E2E toggle round-trip"));
 
-    await page.goto("/login");
-    await provideTenant(page, tenantId!);
-    await page.locator("#login-identifier").fill(loginIdentifier!);
-    await page.locator("#password").fill(password!);
-    await page.locator("#login-submit").click();
-
-    await page.waitForURL("**/admin");
+    // Already authenticated as the owner: the `setup` project logged in once
+    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
     await page.goto("/admin/modules");
     await expect(page.locator("#modules-table")).toBeVisible();

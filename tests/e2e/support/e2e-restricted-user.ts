@@ -1,5 +1,5 @@
 /**
- * Seed a tenant user holding a role with ZERO permissions.
+ * Seed a tenant user whose role holds either NOTHING or every read.
  *
  * ## Why this is seeded rather than invited
  *
@@ -14,13 +14,21 @@
  * counter onto the principal, and an identity with no principal counts no
  * failed logins. Every identity writer links, so this one does too.
  *
- * ## The role holds nothing, deliberately
+ * ## Two grants, two mechanical rules
  *
- * Not "read-only" — empty. Every permission-gated admin screen then owes this
- * user the same answer, so a single mechanical rule covers all 47: the denial
- * renders and the contents do not. A partially-permissioned user is a more
- * realistic operator and a much larger question, because the expected result
- * differs per screen; that belongs in its own round.
+ * `none` gives an EMPTY role — not "read-only", nothing at all — so every
+ * permission-gated screen owes the same answer and one rule covers all of them:
+ * the denial renders and the contents do not.
+ *
+ * `read` gives every tenant-scoped read, which is a real minimum-privilege
+ * operator. The rule there is the inverse: every screen must RENDER, because
+ * each one authorizes on a read triple. A screen that denies a user holding
+ * every read is demanding more than it declares.
+ *
+ * What neither covers is which individual WRITE controls a partially-
+ * permissioned user should see. Those expectations differ per screen, so they
+ * are per-screen knowledge rather than one rule — stated here so the gap is
+ * visible rather than assumed closed.
  */
 import { hashPassword } from "../../../src/lib/auth/password";
 import { linkIdentityToPrincipal } from "../../../src/modules/identity-access/application/principal-store";
@@ -32,6 +40,21 @@ export type RestrictedUser = {
 };
 
 /**
+ * What the seeded role holds.
+ *
+ * `none` — the deny-path fixture. Every gated screen owes this user the same
+ * answer, so one mechanical rule covers all of them.
+ *
+ * `read` — every TENANT-scoped permission whose action is `read`, and nothing
+ * else. This is a real read-only operator, and it is derived from the
+ * permission catalogue rather than extracted from each page's `authorize`
+ * block. That matters: 10 of the 47 screens declare an ARRAY of authorize
+ * triples rather than one, so a source extractor would have quietly
+ * under-granted for those and then blamed the screens for denying.
+ */
+export type RestrictedGrant = "none" | "read";
+
+/**
  * Create (or return, if it already exists) the restricted user for `tenantId`.
  *
  * Idempotent on `login_identifier` so a re-run against a database that already
@@ -41,7 +64,10 @@ export type RestrictedUser = {
 export async function seedRestrictedUser(
   databaseUrl: string,
   tenantId: string,
-  loginIdentifier = "e2e-restricted@example.com",
+  grant: RestrictedGrant = "none",
+  loginIdentifier = grant === "read"
+    ? "e2e-readonly@example.com"
+    : "e2e-restricted@example.com",
   password = "E2eRestricted!Passw0rd"
 ): Promise<RestrictedUser> {
   const sql = new Bun.SQL(databaseUrl, { max: 1 });
@@ -95,12 +121,30 @@ export async function seedRestrictedUser(
       // and would not prove that an assigned role holding nothing denies.
       const role = (await tx`
         INSERT INTO awcms_roles (tenant_id, role_code, role_name, is_system)
-        VALUES (${tenantId}, 'e2e_restricted', 'E2E Restricted', false)
+        VALUES (
+          ${tenantId},
+          ${grant === "read" ? "e2e_readonly" : "e2e_restricted"},
+          ${grant === "read" ? "E2E Read Only" : "E2E Restricted"},
+          false
+        )
         RETURNING id
       `) as { id: string }[];
 
+      if (grant === "read") {
+        // Every TENANT-scoped read, and nothing else. The `scope` filter is the
+        // same one the owner bootstrap uses and for the same reason (ADR-0053):
+        // without it a future PLATFORM permission would be handed to an
+        // ordinary tenant role the moment it is declared.
+        await tx`
+          INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+          SELECT ${tenantId}, ${role[0]!.id}, id FROM awcms_permissions
+          WHERE scope = 'tenant' AND action = 'read'
+        `;
+      }
+
       // ADR-0078 — the grant lands in `awcms_access_policies`, tenant-wide,
-      // exactly as the owner's does. Same shape, empty permission set.
+      // exactly as the owner's does. Same shape; the permission set is whatever
+      // `grant` decided above.
       const policy = (await tx`
         INSERT INTO awcms_access_policies
           (tenant_id, subject_type, tenant_user_id, role_id, scope_type, scope_id,

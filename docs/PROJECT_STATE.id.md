@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3fd64e482687c9f6dc86a9e865f88fb1e74b3dbd5eddc3a5d2c20d90e19a5f73 -->
+<!-- i18n-source-hash: sha256:9bf3e510ef902b036d71d3ef95f1c24dd0b61bf57f90c5394cd7d738f4366470 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,36 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN SESI — 23 Agustus 2026: kegagalan e2e yang intermiten ternyata
+  sebelas verifikasi argon2id paralel, dan diagnosis PERTAMA di sini SALAH.**
+
+  Tampaknya seperti balapan hidrasi: listener admin terdelegasi mengikat pada
+  `document` di dalam modul yang ditangguhkan, jadi klik sebelum itu ditelan
+  diam-diam. Jendela itu NYATA dan kini teramati lewat
+  `ADMIN_DELEGATION_READY_ATTRIBUTE` — tetapi bukan penyebabnya.
+
+  Setiap spec terautentikasi menjalankan sendiri formulir `/login` sungguhan.
+  Dengan `fullyParallel: true`, itu berarti sampai lima `Bun.password.verify`
+  bersamaan — argon2id pada bawaan Bun, berat memori dan CPU SECARA SENGAJA —
+  sementara server yang sama merender halaman admin. Suite-nya bimodal:
+  biasanya ~15 detik hijau, sesekali EMPAT MENIT dengan enam atau tujuh
+  kegagalan, semuanya timeout `waitForURL` 30 detik DI LANGKAH LOGIN, pada spec
+  yang tak berhubungan satu sama lain.
+
+  Dua hal menyulitkannya terlihat. Ia bereproduksi meski spec penyapu layar yang
+  baru DIHAPUS, jadi ia mendahului mereka — tersangka yang jelas ternyata tak
+  bersalah. Dan CI menyembunyikannya di balik `retries: 1`, sehingga ia muncul
+  sebagai satu baris "flaky" alih-alih sebuah masalah. **Suite yang hijau pada
+  percobaan kedua mengajari orang untuk mengulang, bukan menyelidiki.**
+
+  `tests/e2e/auth.setup.ts` me-login owner SEKALI lalu menyimpan `storageState`;
+  tiga belas login menjadi empat. Enam kali jalan berturut-turut ~18 detik,
+  tanpa variansi.
+
+  Tidak ada yang salah dengan biaya argon2 — biaya itu JUSTRU kontrolnya.
+  Membayarnya sebelas kali untuk menguji hal yang bukan autentikasi itulah
+  kekeliruannya.
 
 - **PUTARAN DENY — 23 Agustus 2026: tidak pernah ada yang menyaksikan layar
   admin MENOLAK pengguna tanpa permission, dan empat layar sama sekali tak bisa

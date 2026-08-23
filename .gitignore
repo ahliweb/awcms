@@ -114,3 +114,6 @@ graphify-out/*-callflow.html
 # while one exists, which is the part that keeps it from going stale silently.
 src/pages/**/*.astro-script-check.ts
 src/**/*.astro-frontmatter-check.ts
+
+# Playwright session state captured by the auth setup project (see tests/e2e/auth.setup.ts).
+playwright/.auth/

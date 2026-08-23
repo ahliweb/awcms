@@ -397,6 +397,43 @@ export function onAction(
 
     void handler(button);
   });
+
+  markDelegationReady();
+}
+
+/**
+ * The attribute that says at least one delegated listener is attached.
+ *
+ * ## The window it makes visible
+ *
+ * These listeners live on `document` and only exist once the page's module has
+ * run. Astro emits component scripts as `<script type="module">`, which is
+ * deferred — so between first paint and that execution, every delegated admin
+ * control is in the DOM, looks enabled, and does NOTHING when clicked. No
+ * request, no message, no error: the click is discarded by a document that is
+ * not listening yet.
+ *
+ * On a normal connection that window is tens of milliseconds. It is not
+ * nothing: it is why `tests/e2e/admin-users.e2e.ts` was intermittently red, and
+ * a slow connection makes it a real operator experience — press Assign, watch
+ * nothing happen, press it again.
+ *
+ * This marker does not close the window; closing it would mean gating 76
+ * controls that share no selector convention, which risks disabling things that
+ * work without JavaScript. What it does is make the window **observable**, so a
+ * test can wait for readiness instead of racing it, and so the next person to
+ * meet this has something to look at rather than a timeout.
+ */
+export const ADMIN_DELEGATION_READY_ATTRIBUTE = "data-admin-delegation-ready";
+
+function markDelegationReady(): void {
+  // Idempotent: `onAction` is called many times per page (up to a dozen on the
+  // larger screens) and every call attaches a real listener, so the FIRST one
+  // is the honest moment to say the page can hear a click.
+  document.documentElement.setAttribute(
+    ADMIN_DELEGATION_READY_ATTRIBUTE,
+    "true"
+  );
 }
 
 /**
