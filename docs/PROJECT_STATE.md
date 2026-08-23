@@ -360,6 +360,75 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **WAVE ROUND — 24 August 2026: the two admin sweeps were ACCIDENTALLY IMMUNE,
+  and the harness had to be fixed before they could be told the truth.**
+
+  This closes the harness problem the SESSION ROUND below left open, and then
+  fixes what that problem had been hiding.
+
+  **The ordering.** `playwright.config.ts` now runs `setup` → `read` → `write`
+  (`tests/e2e/support/e2e-waves.ts`). Read-wave specs see the tenant as the
+  bootstrap left it; writers run after. Within each wave everything is still
+  parallel — the cost is one barrier, and the suite still finishes in ~19s.
+  Reads run FIRST rather than last deliberately: running them last would depend
+  on every mutator reverting cleanly, and a mutator that fails halfway leaves
+  residue by definition.
+
+  **The classification is checked, not trusted.** A list of filenames is
+  normally the wrong answer here — a gate that checks its own matrix rather than
+  what exists is this repo's recurring failure. So it is held from both ends:
+  `tests/e2e-wave-classification.test.ts` requires every `*.e2e.ts` on disk to
+  be in exactly one wave (an unclassified spec would not run at all), and read
+  membership is enforced AT RUN TIME — read-wave specs import `test` from
+  `tests/e2e/support/e2e-read-wave.ts`, which fails any test issuing a mutating
+  `/api/` request. Mutation-proven: one added `fetch(…, {method:"POST"})` turns
+  that spec red and names the request.
+
+  **What the ordering unlocked, and this is the part worth reading.**
+  `admin-screens-render.e2e.ts` asserted `200` — and **a denied screen also
+  returns `200`**, because denial renders here and never redirects. The sweep
+  would have stayed green if a screen started refusing the owner: a module
+  switched off, a grant dropped from the bootstrap, a tenant-wide `deny`
+  authored. It now asserts the screen rendered its CONTENTS — no denial hook
+  anywhere in the page. Mutation-proven: disabling `reporting` fails on
+  `/admin` AND `/admin/reporting` together. Under the old assertion that
+  scenario was green, which is exactly why it could not be tightened while a
+  mutator might run concurrently.
+
+  **The read-only sweep landed unchanged.** `admin-read-only-access.e2e.ts`
+  drives a user granted every tenant-scoped `read` and nothing else — the grant
+  from the permission catalogue, the expectation from each page's own
+  `authorize` block, so the two halves come from different sources.
+  `/admin/tenants` and `/admin/partner-registry` must refuse it. **This is the
+  only runtime check on ADR-0053 anywhere in the repo.** Mutation-proven:
+  granting that role the two platform reads makes both screens serve their
+  contents and the spec reports cross-tenant disclosure.
+
+  **A wrong first attempt, recorded because it was a real finding.** The
+  ADR-0053 assertion was first written into the OWNER sweep — "these two screens
+  refuse the owner" — and it FAILED against an environment where the seeded
+  tenant IS the platform tenant, whose owner legitimately holds those
+  permissions. What the owner is owed there depends on which tenant was seeded,
+  which the sweep cannot know independently, so those two screens are exempt
+  from the contents-vs-refusal question there and held to `200` + shell. For the
+  read-only user it is unconditional: a `scope = 'tenant'` grant can never
+  include a platform permission, whichever tenant they belong to.
+
+  **Found while working: the browser-test skill described a DIFFERENT REPO.**
+  `.claude/skills/awcms-browser-test/SKILL.md` claimed specs for
+  `/admin/analytics` and `/admin/security`, an `admin-responsive-nav.e2e.ts`, an
+  `admin-a11y-smoke.e2e.ts`, and a `@axe-core/playwright` devDependency. None
+  exists here — all inherited from `awcms-mini` when the skill was ported. It
+  also described the CI job as running in TWO PHASES with
+  `--grep-invert "@full-online-gate"`; `ci.yml` has one phase and neither
+  security spec exists. The Status section now lists the 15 specs that are
+  actually present, and a new mandatory convention covers wave classification.
+
+  **Still open, and named rather than assumed closed:** which individual WRITE
+  controls a partially-permissioned user should see. Those expectations differ
+  per screen — there is no selector all 76 delegated controls share — so it is
+  per-screen work, not one mechanical rule.
+
 - **SESSION ROUND — 23 August 2026: TWO different intermittent e2e failures,
   and the CI one was SHARED TENANT STATE. Two diagnoses before it were wrong.**
 
@@ -396,7 +465,7 @@ pioneered directly here after the ADR-0047 freeze.)
   **The pattern under all of it: specs mutate shared tenant state that other
   specs read.** Roles created by one spec change another's dropdown; the module
   toggle disables `reporting`, which `/admin` authorizes on. That is the real
-  harness problem, and it is still open.
+  harness problem. **CLOSED by the WAVE ROUND above (24 August 2026).**
 
   `tests/e2e/auth.setup.ts` logs the owner in once and saves `storageState`;
   thirteen logins became four. Six consecutive runs at ~18s, zero variance.
@@ -413,7 +482,8 @@ pioneered directly here after the ADR-0047 freeze.)
   harness change worth doing deliberately. The two sweeps already on `main` are
   ACCIDENTALLY immune, not correct: the render sweep asserts only `200` and a
   denied screen still returns `200`; the deny sweep expects denial, which a
-  disabled module also produces.
+  disabled module also produces. **Both DONE in the WAVE ROUND above — the
+  sweep now asserts contents, and the read-only spec landed unchanged.**
 
 - **DENY ROUND — 23 August 2026: nothing had ever watched an admin screen
   refuse a user holding no permissions, and four screens could not be checked

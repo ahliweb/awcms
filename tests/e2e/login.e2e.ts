@@ -21,10 +21,10 @@
  * the tenant read then fails closed to the manual field), then
  * `bun run test:e2e`.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./support/e2e-read-wave";
 
 // The login flow IS this spec's subject, so it must start logged OUT rather
-// than inherit the shared owner session the `chromium` project supplies.
+// than inherit the shared owner session the `read` project supplies.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe("login page", () => {

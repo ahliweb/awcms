@@ -12,7 +12,7 @@
  * `office_management.read` gate on the page passes and the bootstrap's
  * `head_office` row is what the table must show.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./support/e2e-read-wave";
 import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;

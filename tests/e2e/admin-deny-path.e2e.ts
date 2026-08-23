@@ -36,7 +36,7 @@
  * mechanical rule, and it is a larger piece of work. This covers the case where
  * one rule holds for every screen.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./support/e2e-read-wave";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -105,7 +105,7 @@ const gatedScreens = discoverGatedScreens(ADMIN_PAGES_ROOT).filter(
 );
 
 // This spec authenticates as somebody other than the owner, so it must NOT
-// inherit the shared owner session the `chromium` project supplies.
+// inherit the shared owner session the `read` project supplies.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe("admin screens deny a user holding no permissions", () => {

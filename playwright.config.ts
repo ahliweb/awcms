@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import {
+  READ_WAVE,
+  WRITE_WAVE,
+  waveTestMatch
+} from "./tests/e2e/support/e2e-waves";
+
 /**
  * E2E browser test config (Playwright + Bun). See skill
  * `.claude/skills/awcms-browser-test/SKILL.md` for the full setup rationale,
@@ -52,14 +58,33 @@ export default defineConfig({
       testMatch: /auth\.setup\.ts/,
       use: { ...devices["Desktop Chrome"] }
     },
+    // Two waves, ordered — see `tests/e2e/support/e2e-waves.ts` for why. Reads
+    // run against the tenant as the bootstrap left it; writers run afterwards
+    // and may change it. Within each wave everything is still parallel, so the
+    // cost is one barrier rather than serialization.
+    //
+    // This is what lets the sweeps assert something real: while a mutator could
+    // be running, "the owner sees this screen" and "a module was switched off
+    // mid-run" are indistinguishable, so the sweeps could only assert what is
+    // true either way — which is how they ended up accidentally immune.
     {
-      name: "chromium",
+      name: "read",
       dependencies: ["setup"],
+      testMatch: waveTestMatch(READ_WAVE),
       use: {
         ...devices["Desktop Chrome"],
         // Specs that authenticate as somebody else — or as nobody, which is
         // `login.e2e.ts`'s whole subject — override this per file with
         // `test.use({ storageState: ... })`.
+        storageState: "playwright/.auth/owner.json"
+      }
+    },
+    {
+      name: "write",
+      dependencies: ["read"],
+      testMatch: waveTestMatch(WRITE_WAVE),
+      use: {
+        ...devices["Desktop Chrome"],
         storageState: "playwright/.auth/owner.json"
       }
     }

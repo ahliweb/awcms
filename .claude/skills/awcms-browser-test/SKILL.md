@@ -76,20 +76,21 @@ service, `db:migrate`, `bun run build`, `bun run start`, a health
 check, then a real `bun run test:e2e` (not skip-if-the-server-is-not-
 running, because CI does provide a live server+DB). It is **still not**
 part of the local `bun run check` (`check` does not boot a server/DB itself) —
-locally it stays manual as above. Its CI job runs in **two phases**
-(separate server lifecycles): phase 1 with the default config runs
-every spec EXCEPT `admin-security-enabled.e2e.ts` (which is tagged
-`@full-online-gate` on its own `test.describe`, not matched through a
-prose title — `--grep-invert "@full-online-gate"`, resilient to future title
-renames), phase 2 restarts the server
-with `AUTH_ONLINE_SECURITY_ENABLED=true`/`AUTH_ONLINE_SECURITY_PROFILE=full_online`
-then runs only that spec — it was found empirically while wiring this job
-that `admin-security-disabled.e2e.ts` and `admin-security-enabled.e2e.ts`
-test CONTRADICTORY renders of the same page gated by a boot-time env
-var, so they cannot run against one and the same server instance.
-A new spec that needs some other non-default server config (a new env var, etc.)
-will likely need a similar third phase — see `ci.yml`'s `e2e-smoke` job
-for the full pattern before adding one.
+locally it stays manual as above.
+
+The job is **one phase**: start the server, wait for the catch-all 404 to
+answer, seed one tenant + owner + head office through the real
+`POST /api/v1/setup/initialize`, export the returned `E2E_TENANT_ID`, then
+`bun run test:e2e` once. (A previous version of this section described a
+two-phase job with `--grep-invert "@full-online-gate"` and
+`admin-security-enabled.e2e.ts` / `admin-security-disabled.e2e.ts`. **That is
+`awcms-mini`, not this repo** — no such specs exist here and `ci.yml` has no
+second phase. Corrected 2026-08-24.) A spec needing a non-default boot-time
+env var would need a second phase adding — read `ci.yml`'s `e2e-smoke` job
+before writing one, and note that the wave projects
+(`setup` → `read` → `write`) would have to be re-run in that phase too.
+
+Ordering inside the run is not `fullyParallel` alone — see convention 7.
 
 ## Mandatory conventions
 
@@ -160,28 +161,57 @@ for the full pattern before adding one.
    `<style>`. Run E2E against the production build (`build && start`), not
    `dev` (the dev server injects inline HMR which this CSP blocks).
 
+7. **Every new spec must be classified into a WAVE, and the read wave is
+   enforced at run time.** All specs share ONE seeded tenant, so a spec that
+   writes changes what a spec that reads observes. `playwright.config.ts` runs
+   `setup` → `read` → `write`, and `tests/e2e/support/e2e-waves.ts` says which
+   spec is which. A new file that is in neither list **does not run at all**,
+   and `tests/e2e-wave-classification.test.ts` fails until it is added — so the
+   decision cannot be skipped, only made. Ask: does this spec change tenant-wide
+   state (roles, module enablement, ABAC policies, assignments)? Then
+   `WRITE_WAVE`. Otherwise `READ_WAVE`, and it must import `test` from
+   `./support/e2e-read-wave` rather than from `@playwright/test` — that fixture
+   fails the test if it issues any mutating `/api/` request, so the wave label
+   is checked rather than trusted. This is not bureaucracy: interleaving cost
+   three diagnoses (two of them wrong) and kept a working spec off `main` for a
+   full round.
+
 ## Reference files
 
 - `playwright.config.ts` — the main config (testDir, testMatch, baseURL,
-  launchOptions with the `PLAYWRIGHT_CHROMIUM_EXECUTABLE` escape hatch).
+  launchOptions with the `PLAYWRIGHT_CHROMIUM_EXECUTABLE` escape hatch), and
+  the `setup` → `read` → `write` project chain.
+- `tests/e2e/support/e2e-waves.ts` — the wave classification and the reasoning
+  behind it, including the two concrete interference cases.
 - `tests/e2e/login.e2e.ts` — a real working example (not a placeholder),
   already run and passing against a dev server + a real Postgres
   as part of adding this skill.
 
 ## Status
 
-Besides `login.e2e.ts`, there are already specs for `/admin/analytics`,
-`/admin/security` (both gate profiles), and — since Issue #693 (epic #679
-platform-hardening) — `admin-responsive-nav.e2e.ts` (responsive
-sidebar/drawer: toggle, scrim, Escape, focus management, skip link),
-`admin-access-users-migrated.e2e.ts`/`admin-tenant-domains-migrated.e2e.ts`
-(migration to the `DataTable`/`StatusBadge`/`ConfirmDialog` primitives), and
-`admin-a11y-smoke.e2e.ts` (an automated accessibility smoke test based on
-`@axe-core/playwright`, added as a devDependency specifically for
-this issue — see that file's docblock for why this is not a violation of
-"Bun-only", AGENTS.md #14: that rule is about the runtime/build tooling, not about a dependency
-used from inside the `bun --bun playwright test` process that is already
-running on Bun). There is no spec yet for the other admin pages (`blog/*`, etc.) —
-add them as the issue at hand requires, do not retrofit every admin page
-at once without a concrete reason (see this repo's principle: do not build
-coverage outside the scope of the issue being worked on).
+**This section previously described specs that do not exist in this repo**
+(`admin-responsive-nav.e2e.ts`, `admin-a11y-smoke.e2e.ts`, a
+`@axe-core/playwright` devDependency, `/admin/analytics` and `/admin/security`
+gate profiles). They were inherited from `awcms-mini` when the skill was ported.
+None of them is here, and `@axe-core/playwright` is not a dependency of this
+repo. Corrected on 2026-08-24 — a skill that describes the wrong repo is worse
+than no skill, because an agent follows it instead of looking.
+
+What actually exists (15 spec files under `tests/e2e/`):
+
+- **Read wave** — `login.e2e.ts` (the login flow itself), `not-found.e2e.ts`,
+  `cwv-lab.e2e.ts` (env-gated on `E2E_CWV_LAB`), `admin-offices.e2e.ts`, and
+  three whole-fleet sweeps that discover their own targets from
+  `src/pages/admin/**.astro`: `admin-screens-render.e2e.ts` (every screen
+  renders for the owner), `admin-deny-path.e2e.ts` (every gated screen refuses
+  a user holding nothing), `admin-read-only-access.e2e.ts` (a tenant read-only
+  operator — the ADR-0053 platform-scope check at run time).
+- **Write wave** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
+  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, and the
+  `admin-*-create` / `admin-offices-edit` CRUD specs.
+
+The three sweeps cover every admin screen already, so a new screen needs no new
+spec to be _loaded_ — only a spec of its own if it has behaviour worth
+asserting. Do not retrofit per-page specs without a concrete reason (this
+repo's principle: do not build coverage outside the scope of the issue being
+worked on).
