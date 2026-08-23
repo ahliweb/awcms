@@ -197,7 +197,7 @@ None of them is here, and `@axe-core/playwright` is not a dependency of this
 repo. Corrected on 2026-08-24 — a skill that describes the wrong repo is worse
 than no skill, because an agent follows it instead of looking.
 
-What actually exists (15 spec files under `tests/e2e/`):
+What actually exists (16 spec files under `tests/e2e/`):
 
 - **Read wave** — `login.e2e.ts` (the login flow itself), `not-found.e2e.ts`,
   `cwv-lab.e2e.ts` (env-gated on `E2E_CWV_LAB`), `admin-offices.e2e.ts`, and
@@ -207,8 +207,11 @@ What actually exists (15 spec files under `tests/e2e/`):
   a user holding nothing), `admin-read-only-access.e2e.ts` (a tenant read-only
   operator — the ADR-0053 platform-scope check at run time).
 - **Write wave** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
-  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, and the
-  `admin-*-create` / `admin-offices-edit` CRUD specs.
+  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, the
+  `admin-*-create` / `admin-offices-edit` CRUD specs, and
+  `api-body-auth-boundary.e2e.ts` (every body-accepting API route must refuse a
+  bogus bearer token before reading anything — classified by what it ATTEMPTS,
+  since nothing it sends is meant to succeed).
 
 The three sweeps cover every admin screen already, so a new screen needs no new
 spec to be _loaded_ — only a spec of its own if it has behaviour worth

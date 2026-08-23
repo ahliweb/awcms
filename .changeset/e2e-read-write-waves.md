@@ -41,4 +41,4 @@ It now asserts the screen rendered its **contents** — no denial hook anywhere 
 
 It also described the CI job as running in **two phases** with `--grep-invert "@full-online-gate"`, restarting the server under `AUTH_ONLINE_SECURITY_ENABLED=true` for `admin-security-enabled.e2e.ts`. `ci.yml` has no second phase and neither spec exists. Both corrections are stated in place rather than silently overwritten, because the failure mode of a stale skill is that an agent follows it instead of looking — and a confident false description of CI is worse than none.
 
-The Status section now lists the 15 specs that are actually present, and a new mandatory convention covers wave classification, so the next author is told about it by the skill rather than by a failing gate.
+The Status section now lists the 16 specs that are actually present, and a new mandatory convention covers wave classification, so the next author is told about it by the skill rather than by a failing gate.

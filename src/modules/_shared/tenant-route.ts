@@ -715,14 +715,52 @@ export function defineTenantRoute<TPrepared = undefined>(
 
     let prepared = undefined as TPrepared;
 
+    /**
+     * A refusal from `prepare` is HELD, not returned — authorization decides
+     * first.
+     *
+     * `prepare` reads and validates the body, and returning its `400` straight
+     * away meant a caller with no permission for this endpoint learned its
+     * schema — field names, enum values, length limits — and, worse, left no
+     * row behind: `authorizeInTransaction` is what writes the decision log, and
+     * a request that never reached it was never recorded. Endpoint probing was
+     * invisible.
+     *
+     * The obvious fix — authorize before parsing — is wrong here, and the
+     * reason is two doc-blocks up: `await request.json()` waits on the CLIENT,
+     * so parsing inside `withTenant` would hold a reserved connection and its
+     * work-class slot for as long as a caller chooses to take. Holding the
+     * refusal keeps both properties: the body is still parsed outside the
+     * transaction, and the invalid-input answer still comes after the
+     * permission answer.
+     *
+     * Cost: a request with a malformed body from an ALLOWED caller now also
+     * pays the authorization it was always going to pay. Nothing pays twice.
+     */
+    let heldPrepareRefusal: Response | null = null;
+
     if (config.prepare) {
       const prepareResult = await config.prepare(requestContext);
 
       if (prepareResult instanceof Response) {
-        return prepareResult;
+        heldPrepareRefusal = prepareResult;
+      } else {
+        prepared = prepareResult;
       }
+    }
 
-      prepared = prepareResult;
+    /**
+     * The two routes whose guard is a FUNCTION of the body cannot defer:
+     * `POST /api/v1/partners/:id/status` and
+     * `POST /api/v1/access/machine-credentials` pick a stricter permission
+     * based on what was submitted, so with no valid `prepared` there is no
+     * guard to evaluate. They return the refusal early, and the exposure that
+     * leaves is bounded to callers who already hold a live session — the
+     * middleware boundary (`lib/security/api-body-auth-boundary.ts`) refuses
+     * anonymous ones before the body is read at all.
+     */
+    if (heldPrepareRefusal && typeof config.authorize === "function") {
+      return heldPrepareRefusal;
     }
 
     const guard =
@@ -755,6 +793,13 @@ export function defineTenantRoute<TPrepared = undefined>(
 
         if (!auth.allowed) {
           return auth.denied;
+        }
+
+        // Allowed — so the caller is entitled to be told what is wrong with
+        // their input, and the decision log now carries the row saying they
+        // were here.
+        if (heldPrepareRefusal) {
+          return heldPrepareRefusal;
         }
 
         return config.handler({

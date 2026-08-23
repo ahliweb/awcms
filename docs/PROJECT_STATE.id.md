@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1583eb80a49db54fa0416ee150dd408c23fbcc6a0486b23b8f1ac3ade4d64c1f -->
+<!-- i18n-source-hash: sha256:011ac81e62c6c7414fe982fbd4a1246d86a9b30bd685bbc4f13bba39c0104dfa -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,60 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN BATAS — 24 Agustus 2026: 77 endpoint API menyerahkan skema
+  validasinya kepada TOKEN BEARER APA PUN, tanpa meninggalkan baris
+  decision-log sama sekali.**
+
+  Ditemukan dengan MENJALANKAN API, bukan membacanya:
+
+  ```
+  POST /api/v1/blog/institutions   Authorization: Bearer nonsense
+  → 400 VALIDATION_ERROR + setiap nama field, nilai enum, dan batas panjang
+  ```
+
+  Tanpa akun, tanpa sesi — string apa pun. **77 endpoint ber-gate sesi menjawab
+  seperti itu**, terukur terhadap server yang hidup.
+
+  **Pengungkapan itu bagian TERKECILNYA.** `authorizeInTransaction` yang menulis
+  decision log, jadi request yang berhenti sebelum itu tak pernah tercatat:
+  enumerasi API TIDAK MENINGGALKAN JEJAK. Sebabnya urutan — `defineTenantRoute`
+  memeriksa token ADA, lalu menjalankan `prepare`, yang mem-parse dan
+  memvalidasi body.
+
+  **Seluruh gerbang statis HIJAU hari itu**, dan memang tak mungkin lain:
+  urutan antara hook `prepare` dan panggilan chokepoint BUKAN properti teks.
+  Pemindaian tekstual "validasi sebelum otorisasi" melaporkan 297 dari 305 blok
+  rute — salahnya cukup untuk jadi tak berguna, dan nyaris dilaporkan sebelum
+  diperiksa terhadap server.
+
+  **Ditutup dengan SATU batas di `src/middleware.ts`**, bukan 77 suntingan
+  rute: tidak ada body API yang di-parse sampai kredensial pemanggil resolve.
+  63 dari 77 adalah handler tulis-tangan tanpa bentuk bersama, jadi perbaikan
+  per-rute takkan punya mekanisme di belakangnya. Ia juga mengubah "endpoint
+  mana yang bisa dijangkau tanpa sesi" — sampai kini implisit, hanya bisa
+  diketahui dengan membaca 246 handler — menjadi `SESSION_FREE_BODY_ENDPOINTS`,
+  26 entri masing-masing dengan alasannya.
+
+  **Autentikasi SAJA.** Otorisasi tetap di chokepoint ADR-0063 dan TIDAK
+  diduplikasi. Sesi dicari DUA KALI pada request tulis, dan itu disengaja:
+  menyerahkan principal yang di-resolve di transaksi LAIN akan memisahkan
+  keputusan dari pembacaan yang dijaganya. Request baca tak berbadan dan tak
+  pernah sampai ke batas ini.
+
+  **Paruh otorisasinya:** `defineTenantRoute` kini MENAHAN penolakan `prepare`
+  sampai otorisasi menjawab, jadi pemanggil tanpa permission mendapat `403`
+  beserta baris decision-log, bukan `400` beserta skema. Mengotorisasi sebelum
+  mem-parse justru SALAH di sini — `await request.json()` menunggu KLIEN, dan
+  mem-parse di dalam `withTenant` menahan koneksi terpesan selama apa pun yang
+  dipilih pemanggil. Dua rute menghitung guard-nya DARI body dan tak bisa
+  menunda; keduanya disebut namanya di kode.
+
+  Terbukti lewat mutasi: batas dimatikan lalu di-build ulang → **185 kegagalan
+  asersi** di 92 endpoint. Tercatat sebagai **C18** di dokumen standar.
+
+  **Masih terbuka, tak berubah dari PUTARAN GELOMBANG:** kontrol TULIS mana yang
+  boleh dilihat pengguna ber-permission separuh.
+
 - **PUTARAN GELOMBANG — 24 Agustus 2026: dua sapuan admin itu KEBETULAN KEBAL,
   dan harness-nya harus dibereskan DULU sebelum keduanya boleh berkata jujur.**
 
@@ -423,7 +477,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   satu pun ada di sini — semuanya warisan `awcms-mini` saat skill itu di-port.
   Ia juga menggambarkan job CI berjalan DUA FASE dengan
   `--grep-invert "@full-online-gate"`; `ci.yml` hanya satu fase dan kedua spec
-  security itu tidak ada. Bagian Status kini mendaftar 15 spec yang
+  security itu tidak ada. Bagian Status kini mendaftar 16 spec yang
   benar-benar ada, dan satu konvensi wajib baru mencakup klasifikasi gelombang.
 
   **Masih terbuka, dan DISEBUT alih-alih dianggap tertutup:** kontrol TULIS mana

@@ -1,6 +1,7 @@
 import type { APIContext } from "astro";
 import { defineMiddleware } from "astro:middleware";
 
+import { refuseUnauthenticatedApiBody } from "./lib/auth/api-body-authentication";
 import { resolveSsrContext } from "./lib/auth/ssr-session";
 import { getDatabaseClient } from "./lib/database/client";
 import { annotateEdgeCache } from "./lib/edge-cache/runtime";
@@ -16,6 +17,7 @@ import {
 } from "./lib/i18n/request-locale";
 import { log } from "./lib/logging/logger";
 import { resolvePublicTenantByCode } from "./lib/tenant/public-tenant-resolver";
+import { requiresAuthenticatedCallerBeforeBody } from "./lib/security/api-body-auth-boundary";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
 import { isVideoEmbedEnabled } from "./lib/security/video-embed";
@@ -249,6 +251,35 @@ export const onRequest = defineMiddleware(async (context, next) => {
     !checkContentLengthCeiling(context.request)
   ) {
     return finalize(bodyTooLargeResponse(BODY_SIZE_HARD_CEILING_BYTES));
+  }
+
+  /**
+   * Nothing parses an API request body before the caller has been
+   * authenticated (`lib/security/api-body-auth-boundary.ts`).
+   *
+   * It sits here, immediately after the size ceiling and before every other
+   * branch, because those two are the only checks that must precede reading
+   * anything: too big, or nobody. 77 endpoints used to answer `Bearer nonsense`
+   * with their full validation schema and left no decision-log row while doing
+   * it — the ordering was per-route, so it was 77 separate opportunities to get
+   * wrong rather than one place to get right.
+   *
+   * AUTHENTICATION only. The route's own chokepoint still decides what the
+   * caller may do, in its own transaction.
+   */
+  if (
+    requiresAuthenticatedCallerBeforeBody(
+      context.request.method,
+      context.url.pathname
+    )
+  ) {
+    const refusal = await refuseUnauthenticatedApiBody(
+      context.request,
+      context.cookies,
+      new Date()
+    );
+
+    if (refusal) return finalize(refusal);
   }
 
   // Public (non-`/admin`) branch: resolve a `seo_distribution` redirect BEFORE
