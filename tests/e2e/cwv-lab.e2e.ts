@@ -32,7 +32,7 @@
  * `E2E_CWV_LAB=1 bun run perf:cwv:lab` di terminal lain. Job CI `e2e-smoke`
  * men-set env-nya dan menjalankan spec ini sebagai bagian `bun run test:e2e`.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./support/e2e-read-wave";
 
 /**
  * Ambang "baik" Core Web Vitals (https://web.dev/articles/vitals):

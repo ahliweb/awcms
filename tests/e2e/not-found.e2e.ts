@@ -13,7 +13,7 @@
  * Run: `bun run dev` (or `bun run build && bun run start`) in one terminal with
  * `DATABASE_URL` set, then `bun run test:e2e` in another.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./support/e2e-read-wave";
 
 test.describe("catch-all 404 page", () => {
   test("an unknown browser path renders a clean 404 HTML page", async ({

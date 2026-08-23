@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:ddd8f05d80839dac2c927767714ae8d49fe77b74c6cc56d204688f8ef9140ce8 -->
+<!-- i18n-source-hash: sha256:db7c289569f139fe8bc281367eb30bd586d54a9b112a27b8823688114a91002c -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -78,20 +78,21 @@ service terisolasi, `db:migrate`, `bun run build`, `bun run start`, health
 check, lalu `bun run test:e2e` sungguhan (bukan skip-jika-server-tidak-
 jalan, karena CI memang menyediakan server+DB hidup). **Tetap belum**
 bagian dari `bun run check` lokal (`check` tidak boot server/DB sendiri) —
-lokal tetap manual seperti di atas. Job CI-nya berjalan **dua fase**
-(lifecycle server terpisah): fase 1 dengan config default menjalankan
-semua spec KECUALI `admin-security-enabled.e2e.ts` (yang di-tag
-`@full-online-gate` di `test.describe`-nya sendiri, bukan dicocokkan lewat
-judul prosa — `--grep-invert "@full-online-gate"`, tahan terhadap rename
-judul di masa depan), fase 2 me-restart server
-dengan `AUTH_ONLINE_SECURITY_ENABLED=true`/`AUTH_ONLINE_SECURITY_PROFILE=full_online`
-lalu menjalankan hanya spec itu — ditemukan empiris saat mewire job ini
-bahwa `admin-security-disabled.e2e.ts` dan `admin-security-enabled.e2e.ts`
-menguji render YANG BERTENTANGAN dari halaman yang sama digerbangi env var
-boot-time, jadi tidak bisa jalan terhadap satu instance server yang sama.
-Spec baru yang butuh config server non-default lain (var env baru, dsb.)
-kemungkinan butuh fase ketiga serupa — lihat `ci.yml`'s `e2e-smoke` job
-untuk pola lengkapnya sebelum menambah.
+lokal tetap manual seperti di atas.
+
+Job-nya **satu fase**: start server, tunggu catch-all 404 menjawab, seed satu
+tenant + owner + head office lewat `POST /api/v1/setup/initialize` sungguhan,
+ekspor `E2E_TENANT_ID` yang dikembalikan, lalu `bun run test:e2e` sekali.
+(Versi sebelumnya bagian ini menggambarkan job DUA fase dengan
+`--grep-invert "@full-online-gate"` dan `admin-security-enabled.e2e.ts` /
+`admin-security-disabled.e2e.ts`. **Itu `awcms-mini`, bukan repo ini** — spec
+seperti itu tidak ada di sini dan `ci.yml` tidak punya fase kedua. Dikoreksi
+24 Agu 2026.) Spec yang butuh env var boot-time non-default akan butuh fase
+kedua ditambahkan — baca job `e2e-smoke` di `ci.yml` sebelum menulisnya, dan
+catat bahwa project gelombang (`setup` → `read` → `write`) juga harus
+dijalankan ulang di fase itu.
+
+Urutan di dalam satu run BUKAN sekadar `fullyParallel` — lihat konvensi 7.
 
 ## Konvensi wajib
 
@@ -163,28 +164,60 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
    inline. Jalankan E2E terhadap build produksi (`build && start`), bukan
    `dev` (dev server menyuntik HMR inline yang diblokir CSP ini).
 
+7. **Setiap spec baru WAJIB diklasifikasikan ke sebuah GELOMBANG, dan
+   gelombang baca ditegakkan saat RUNTIME.** Semua spec berbagi SATU tenant
+   ter-seed, jadi spec yang menulis mengubah apa yang dilihat spec yang
+   membaca. `playwright.config.ts` menjalankan `setup` → `read` → `write`, dan
+   `tests/e2e/support/e2e-waves.ts` menentukan spec mana yang mana. Berkas baru
+   yang tidak ada di kedua daftar **tidak berjalan sama sekali**, dan
+   `tests/e2e-wave-classification.test.ts` merah sampai ia ditambahkan — jadi
+   keputusannya tak bisa dilewati, hanya bisa diambil. Tanyakan: apakah spec ini
+   mengubah keadaan se-tenant (peran, enablement modul, kebijakan ABAC,
+   penugasan)? Kalau ya → `WRITE_WAVE`. Kalau tidak → `READ_WAVE`, dan ia WAJIB
+   mengimpor `test` dari `./support/e2e-read-wave`, bukan dari
+   `@playwright/test` — fixture itu menggagalkan tes yang mengirim request
+   `/api/` yang memutasi, jadi label gelombangnya DIPERIKSA, bukan dipercaya.
+   Ini bukan birokrasi: tumpang tindihnya berharga TIGA diagnosis (dua di
+   antaranya salah) dan menahan satu spec yang sudah bekerja di luar `main`
+   selama satu putaran penuh.
+
 ## File referensi
 
 - `playwright.config.ts` — config utama (testDir, testMatch, baseURL,
-  launchOptions dengan escape hatch `PLAYWRIGHT_CHROMIUM_EXECUTABLE`).
+  launchOptions dengan escape hatch `PLAYWRIGHT_CHROMIUM_EXECUTABLE`), dan
+  rantai project `setup` → `read` → `write`.
+- `tests/e2e/support/e2e-waves.ts` — klasifikasi gelombang dan alasannya,
+  termasuk dua kasus tumpang tindih yang nyata.
 - `tests/e2e/login.e2e.ts` — contoh kerja nyata (bukan placeholder),
   sudah dijalankan dan lulus terhadap dev server + Postgres sungguhan
   sebagai bagian dari penambahan skill ini.
 
 ## Status
 
-Selain `login.e2e.ts`, sudah ada spec untuk `/admin/analytics`,
-`/admin/security` (kedua profil gate), dan — sejak Issue #693 (epic #679
-platform-hardening) — `admin-responsive-nav.e2e.ts` (sidebar/drawer
-responsif: toggle, scrim, Escape, focus management, skip link),
-`admin-access-users-migrated.e2e.ts`/`admin-tenant-domains-migrated.e2e.ts`
-(migrasi ke primitive `DataTable`/`StatusBadge`/`ConfirmDialog`), dan
-`admin-a11y-smoke.e2e.ts` (smoke test aksesibilitas otomatis berbasis
-`@axe-core/playwright`, ditambahkan sebagai devDependency khusus untuk
-issue ini — lihat docblock file itu untuk kenapa ini bukan pelanggaran
-"Bun-only", AGENTS.md #14: itu soal runtime/tooling build, bukan dependency
-yang dipakai dari dalam proses `bun --bun playwright test` yang sudah
-berjalan di Bun). Belum ada spec untuk admin page lain (`blog/*`, dst) —
-tambahkan sesuai kebutuhan issue, jangan retrofit semua admin page
-sekaligus tanpa alasan konkret (lihat prinsip repo ini: jangan bangun
-cakupan di luar scope issue yang sedang dikerjakan).
+**Bagian ini dulu menyebut spec yang TIDAK ADA di repo ini**
+(`admin-responsive-nav.e2e.ts`, `admin-a11y-smoke.e2e.ts`, devDependency
+`@axe-core/playwright`, profil gate `/admin/analytics` dan `/admin/security`).
+Semuanya warisan `awcms-mini` saat skill ini di-port. Tak satu pun ada di sini,
+dan `@axe-core/playwright` bukan dependency repo ini. Dikoreksi 24 Agu 2026 —
+skill yang menggambarkan repo LAIN lebih buruk daripada tak ada skill, karena
+agen MENGIKUTINYA alih-alih melihat sendiri.
+
+Yang benar-benar ada (15 berkas spec di `tests/e2e/`):
+
+- **Gelombang baca** — `login.e2e.ts` (alur login itu sendiri),
+  `not-found.e2e.ts`, `cwv-lab.e2e.ts` (ber-env-gate `E2E_CWV_LAB`),
+  `admin-offices.e2e.ts`, dan tiga sapuan se-armada yang menemukan sendiri
+  targetnya dari `src/pages/admin/**.astro`: `admin-screens-render.e2e.ts`
+  (setiap layar merender untuk owner), `admin-deny-path.e2e.ts` (setiap layar
+  ber-gate MENOLAK pengguna tanpa permission), `admin-read-only-access.e2e.ts`
+  (operator read-only tenant — pemeriksaan platform-scope ADR-0053 saat
+  runtime).
+- **Gelombang tulis** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
+  `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, serta spec CRUD
+  `admin-*-create` / `admin-offices-edit`.
+
+Ketiga sapuan sudah mencakup SETIAP layar admin, jadi layar baru tidak butuh
+spec baru untuk sekadar DIMUAT — hanya butuh spec sendiri bila ada perilaku
+yang layak diasersi. Jangan retrofit spec per-halaman tanpa alasan konkret
+(prinsip repo ini: jangan bangun cakupan di luar scope issue yang sedang
+dikerjakan).

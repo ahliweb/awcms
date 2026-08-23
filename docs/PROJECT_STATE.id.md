@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b0e32c0de5a233137606a63dedc540022a769a966268e648f5313cb710f66b04 -->
+<!-- i18n-source-hash: sha256:1583eb80a49db54fa0416ee150dd408c23fbcc6a0486b23b8f1ac3ade4d64c1f -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,77 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN GELOMBANG — 24 Agustus 2026: dua sapuan admin itu KEBETULAN KEBAL,
+  dan harness-nya harus dibereskan DULU sebelum keduanya boleh berkata jujur.**
+
+  Ini menutup masalah harness yang ditinggalkan terbuka oleh PUTARAN SESI di
+  bawah, lalu membereskan apa yang selama ini DISEMBUNYIKAN oleh masalah itu.
+
+  **Pengurutannya.** `playwright.config.ts` kini menjalankan
+  `setup` → `read` → `write` (`tests/e2e/support/e2e-waves.ts`). Spec gelombang
+  baca melihat tenant sebagaimana ditinggalkan bootstrap; penulis berjalan
+  sesudahnya. Di DALAM tiap gelombang semuanya tetap paralel — biayanya satu
+  barrier, dan suite tetap selesai ~19 detik. Baca berjalan DULUAN, bukan
+  terakhir, dan itu disengaja: menjalankannya terakhir akan bergantung pada
+  setiap mutator yang membereskan dirinya dengan rapi, sedangkan mutator yang
+  gagal separuh jalan meninggalkan residu menurut definisinya.
+
+  **Klasifikasinya DIPERIKSA, bukan dipercaya.** Daftar nama berkas biasanya
+  jawaban yang SALAH di repo ini — gerbang yang memeriksa matriksnya sendiri
+  alih-alih apa yang ADA adalah kegagalan yang berulang di sini. Jadi ia
+  dipegang dari dua arah: `tests/e2e-wave-classification.test.ts` menuntut
+  setiap `*.e2e.ts` di disk ada di TEPAT SATU gelombang (spec tak terklasifikasi
+  malah tidak berjalan sama sekali), dan keanggotaan gelombang baca ditegakkan
+  SAAT RUNTIME — spec gelombang baca mengimpor `test` dari
+  `tests/e2e/support/e2e-read-wave.ts`, yang menggagalkan tes mana pun yang
+  mengirim request `/api/` yang memutasi. Terbukti lewat mutasi: satu
+  `fetch(…, {method:"POST"})` membuat spec itu merah dan menyebut request-nya.
+
+  **Apa yang dibuka oleh pengurutan itu — bagian yang paling layak dibaca.**
+  `admin-screens-render.e2e.ts` meng-assert `200` — dan **layar yang MENOLAK
+  juga menjawab `200`**, karena penolakan di sini DIRENDER, tidak pernah
+  redirect. Sapuan itu akan tetap hijau seandainya sebuah layar mulai menolak
+  owner: modul dimatikan, sebuah grant hilang dari bootstrap, kebijakan `deny`
+  se-tenant ditulis. Kini ia meng-assert layar merender ISINYA — tanpa hook
+  penolakan di mana pun di halaman. Terbukti lewat mutasi: mematikan modul
+  `reporting` membuatnya gagal di `/admin` DAN `/admin/reporting` sekaligus. Di
+  bawah asersi lama skenario itu HIJAU — persis alasan kenapa ia tak bisa
+  diperketat selagi mutator mungkin berjalan bersamaan.
+
+  **Sapuan read-only mendarat TANPA perubahan.** `admin-read-only-access.e2e.ts`
+  menjalankan pengguna yang diberi SETIAP permission `read` ber-scope tenant dan
+  tidak lebih — grantnya dari KATALOG permission, ekspektasinya dari blok
+  `authorize` milik tiap halaman, jadi kedua paruhnya berasal dari sumber
+  BERBEDA. `/admin/tenants` dan `/admin/partner-registry` WAJIB menolaknya.
+  **Ini satu-satunya pemeriksaan ADR-0053 saat runtime di seluruh repo.**
+  Terbukti lewat mutasi: memberi peran itu dua platform read membuat kedua layar
+  menyajikan isinya dan spec melaporkan pengungkapan lintas-tenant.
+
+  **Percobaan pertama yang SALAH, dicatat karena ia temuan nyata.** Asersi
+  ADR-0053 mula-mula ditulis di sapuan OWNER — "kedua layar ini menolak owner" —
+  dan GAGAL di lingkungan yang tenant ter-seed-nya ADALAH platform tenant, yang
+  owner-nya memang sah memegang permission itu. Apa yang menjadi hak owner di
+  sana bergantung pada tenant mana yang di-seed, yang tak bisa diketahui sapuan
+  itu secara mandiri — jadi kedua layar itu kini dikecualikan dari pertanyaan
+  isi-vs-penolakan di sana dan hanya dipegang pada `200` + shell. Untuk pengguna
+  read-only sifatnya TANPA SYARAT: grant `scope = 'tenant'` tak pernah bisa
+  memuat permission platform, di tenant mana pun ia berada.
+
+  **Ditemukan sambil bekerja: skill browser-test menggambarkan REPO LAIN.**
+  `.claude/skills/awcms-browser-test/SKILL.md` mengklaim ada spec untuk
+  `/admin/analytics` dan `/admin/security`, `admin-responsive-nav.e2e.ts`,
+  `admin-a11y-smoke.e2e.ts`, serta devDependency `@axe-core/playwright`. Tak
+  satu pun ada di sini — semuanya warisan `awcms-mini` saat skill itu di-port.
+  Ia juga menggambarkan job CI berjalan DUA FASE dengan
+  `--grep-invert "@full-online-gate"`; `ci.yml` hanya satu fase dan kedua spec
+  security itu tidak ada. Bagian Status kini mendaftar 15 spec yang
+  benar-benar ada, dan satu konvensi wajib baru mencakup klasifikasi gelombang.
+
+  **Masih terbuka, dan DISEBUT alih-alih dianggap tertutup:** kontrol TULIS mana
+  yang boleh dilihat pengguna ber-permission separuh. Ekspektasinya berbeda
+  per-layar — tak ada selector yang dipakai bersama oleh 76 kontrol terdelegasi
+  — jadi itu pekerjaan per-layar, bukan satu aturan mekanis.
+
 - **PUTARAN SESI — 23 Agustus 2026: DUA kegagalan e2e intermiten yang berbeda,
   dan yang di CI ternyata KEADAAN TENANT BERSAMA. Dua diagnosis sebelumnya salah.**
 
@@ -399,7 +470,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   **Pola di balik semuanya: spec memutasi keadaan tenant BERSAMA yang dibaca spec
   lain.** Peran yang dibuat satu spec mengubah dropdown spec lain; toggle modul
   mematikan `reporting`, yang justru menjadi otorisasi `/admin`. Itulah masalah
-  harness yang sebenarnya, dan ia MASIH TERBUKA.
+  harness yang sebenarnya. **DITUTUP oleh PUTARAN GELOMBANG di atas (24
+  Agustus 2026).**
 
   `tests/e2e/auth.setup.ts` me-login owner SEKALI lalu menyimpan `storageState`;
   tiga belas login menjadi empat. Enam kali jalan berturut-turut ~18 detik,
@@ -419,7 +491,9 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   dengan sengaja. Dua sapuan yang sudah ada di `main` KEBETULAN kebal, bukan
   benar: sapuan render hanya meng-assert `200` dan layar yang menolak tetap
   mengembalikan `200`; sapuan deny justru mengharapkan penolakan, yang juga
-  dihasilkan modul yang dimatikan.
+  dihasilkan modul yang dimatikan. **Keduanya SELESAI di PUTARAN GELOMBANG di
+  atas — sapuan kini meng-assert isi, dan spec read-only mendarat tanpa
+  perubahan.**
 
 - **PUTARAN DENY — 23 Agustus 2026: tidak pernah ada yang menyaksikan layar
   admin MENOLAK pengguna tanpa permission, dan empat layar sama sekali tak bisa

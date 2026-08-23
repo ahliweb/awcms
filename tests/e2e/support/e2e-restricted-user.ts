@@ -20,14 +20,14 @@
  * permission-gated screen owes the same answer and one rule covers all of them:
  * the denial renders and the contents do not.
  *
- * `read` gives every tenant-scoped read, a real minimum-privilege operator.
- * NOTHING USES IT YET: the spec written against it proved flaky for a reason
- * that is not its own — `admin-modules-toggle.e2e.ts` deliberately DISABLES the
- * `reporting` module, and `/admin` authorizes on `reporting.dashboard.read`, so
- * a read-only sweep overlapping that toggle sees the dashboard correctly deny.
- * The fixture is kept because the interference is a harness problem worth
- * solving properly (read sweeps must not overlap global-state mutators), not a
- * reason to throw the grant away.
+ * `read` gives every tenant-scoped read, a real minimum-privilege operator, and
+ * `admin-read-only-access.e2e.ts` is what uses it. That spec was written first
+ * and held back for a full round: it failed roughly one run in three for a
+ * reason that was not its own — `admin-modules-toggle.e2e.ts` deliberately
+ * DISABLES the `reporting` module, and `/admin` authorizes on
+ * `reporting.dashboard.read`, so a read sweep overlapping that toggle saw the
+ * dashboard correctly deny. The read/write waves (`e2e-waves.ts`) fixed the
+ * harness, and the spec landed unchanged.
  *
  * What neither covers is which individual WRITE controls a partially-
  * permissioned user should see. Those expectations differ per screen, so they
