@@ -186,7 +186,7 @@ describe("the live contract", () => {
  * a fourth consumed surface here has to be a deliberate edit in both places.
  */
 describe("consumed vs committed", () => {
-  test("exactly nine surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+  test("exactly ten surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
     // If this fails, one of two things happened, and they need opposite fixes:
     //   - awcms-astro started (or stopped) calling a surface -> update both
     //     this list and the marker block in that repo, in the same change;
@@ -222,6 +222,13 @@ describe("consumed vs committed", () => {
     // a build somebody is watching, while a shape change on these two fails in a
     // stranger's browser, on a site published weeks ago that will not be rebuilt
     // on account of it.
+    //
+    // The tenth, `/analytics/collect`, is in that same reader-browser class and
+    // breaks its rule again: it is the only consumed path that must carry a
+    // HEADER. `security.checkOrigin` refuses a cross-origin POST whose content
+    // type is form-like, so only `application/json` gets through — which is what
+    // the `OPTIONS` handler from #637 exists for. Three reader-browser paths,
+    // two opposite header rules, and no way to tell them apart from this side.
     expect(Object.keys(CONSUMED_PATHS)).toEqual([
       "/api/v1/blog/posts",
       "/api/v1/media/objects",
@@ -231,7 +238,8 @@ describe("consumed vs committed", () => {
       "/api/v1/blog/menus",
       "/api/v1/blog/widgets",
       "/api/v1/site-search/query",
-      "/api/v1/site-search/suggest"
+      "/api/v1/site-search/suggest",
+      "/api/v1/analytics/collect"
     ]);
   });
 

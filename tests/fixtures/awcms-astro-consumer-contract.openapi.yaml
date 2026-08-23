@@ -99,6 +99,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/analytics/collect:
+    post:
+      tags:
+        - Visitor Analytics
+      summary: Public visitor page-view beacon (anonymous)
+      description: "PUBLIC, unauthenticated visit-ingest beacon. Resolves the tenant from the request body's `tenantCode` (the RLS-free tenant root), records a privacy-preserving page-view for `public`-area paths only (IP/user-agent stored as salted hashes; anonymous — no identity). Fire-and-forget: always 202 for a well-formed request whether or not anything was recorded (module disabled, unknown tenant, non-public/non-trackable path all still return 202 without leaking tenant existence). Requires no auth."
+      operationId: analyticsCollect
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectVisitBeaconRequest"
+      responses:
+        "202":
+          description: Beacon accepted (recorded or intentionally ignored — never distinguished).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accepted:
+                        type: boolean
+                        enum:
+                          - true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          description: Request body exceeds the size limit (BODY_TOO_LARGE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/session:
     get:
       operationId: introspectAuthSession
@@ -1495,6 +1538,22 @@ components:
         updatedAt:
           type: string
           format: date-time
+    CollectVisitBeaconRequest:
+      type: object
+      required:
+        - tenantCode
+        - path
+      properties:
+        tenantCode:
+          type: string
+          description: Public tenant code the beacon is reporting for.
+        path:
+          type: string
+          description: The page path being reported (must start with '/'). Sanitized server-side; sensitive query params are stripped.
+        referrer:
+          type: string
+          nullable: true
+          description: Optional referrer URL; only its bare hostname is ever stored.
     ComposedSiteIdentity:
       description: Both halves of site identity in one answer. The four SEO-owned fields are named exactly as seo_distribution names them, so this is visibly a passthrough rather than a second definition that could drift.
       allOf:
