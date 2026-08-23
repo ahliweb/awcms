@@ -360,6 +360,39 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **DECISION ROUND — 23 August 2026: the three items of #597 that were blocked on
+  a WRITTEN DECISION rather than on work.** **DONE — ADR-0107, ADR-0109,
+  ADR-0110.** After that issue's items 1/2/5/6/7 shipped, its own status table
+  split the remainder into "needs a new `awcms` surface" and "needs a decision
+  first". The second group is now empty, and in each case the interesting part
+  was not the feature.
+
+  - **Item 3, the reader's search box ([ADR-0107](adr/0107-a-readers-browser-may-search-and-the-origin-names-the-tenant.md)).**
+    The CORS half was the smaller problem. `withSiteSearchTenant` resolves the
+    tenant from the HOST, so a reader on a statically built site calling this CMS
+    falls through the documented chain (`PUBLIC_DEFAULT_TENANT_ID` ->
+    `PUBLIC_DEFAULT_TENANT_CODE` -> `awcms_setup_state`) and lands on the
+    deployment's DEFAULT tenant — one tenant's site displaying another's articles
+    as its own results, with a 200 and nothing reporting a problem. A
+    cross-origin request now resolves its tenant from the `Origin` and from
+    nothing else, which closes it by CONSTRUCTION: a header-only fix would have
+    left that content in the body for `curl`, a crawler or a proxy.
+  - **Item 4, the byline ([ADR-0109](adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.md)).**
+    Publishing `awcms_profiles.display_name` was one line and no migration, and
+    is refused: it makes every internal account name public the moment an article
+    publishes. `sql/146` adds an opt-in `public_byline_name` where NULL — every
+    existing row — keeps the organisation attribution, so no article changes.
+  - **Item 8, video embeds ([ADR-0110](adr/0110-a-video-embed-origin-is-an-operators-decision.md)).**
+    The renderer has been correct since #639 and every iframe it emitted was
+    BLOCKED, because the CSP allow-lists no third-party origin.
+    `BLOG_VIDEO_EMBED_ENABLED` adds exactly one origin to `frame-src`. Deriving
+    it from tenant data was refused: a CSP header is deployment-wide, so one
+    tenant would open the origin for every tenant sharing the deployment.
+
+  **What remains of #597 and #607 is `ahliweb/awcms-astro` work**, plus item 9,
+  which is blocked on a privacy ADR in that repo — the repo owner's decision,
+  not a task. There is NO `awcms`-side work left on either issue.
+
 - **FOUND WHILE WORKING, 23 August 2026 (while designing the byline of #597 item
   4): an executed ERASURE left the person's name, legal name and login address in
   the database.** **DONE (23 August 2026) —

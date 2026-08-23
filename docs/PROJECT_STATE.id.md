@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1a5d4d641fc8d10a1b1bf0252d4946311b591bdce4887de6132f9d93c6b0ef0d -->
+<!-- i18n-source-hash: sha256:5e146bdbd943b7e914947541d9d67bcf6215ec3f46b2420a6a9dd3418d02f45c -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,42 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN KEPUTUSAN — 23 Agustus 2026: tiga butir #597 yang terhalang KEPUTUSAN
+  TERTULIS, bukan pekerjaan.** **SELESAI — ADR-0107, ADR-0109, ADR-0110.**
+  Setelah butir 1/2/5/6/7 issue itu mendarat, tabel statusnya sendiri membelah
+  sisanya menjadi "butuh permukaan `awcms` baru" dan "butuh keputusan lebih
+  dulu". Kelompok kedua kini kosong, dan di setiap kasus bagian yang menarik
+  bukanlah fiturnya.
+
+  - **Butir 3, kotak pencarian pembaca ([ADR-0107](adr/0107-a-readers-browser-may-search-and-the-origin-names-the-tenant.id.md)).**
+    Separuh CORS-nya masalah yang lebih kecil. `withSiteSearchTenant` meresolusi
+    tenant dari HOST, jadi pembaca di situs yang dibangun statis yang memanggil
+    CMS ini jatuh melalui rantai terdokumentasi (`PUBLIC_DEFAULT_TENANT_ID` ->
+    `PUBLIC_DEFAULT_TENANT_CODE` -> `awcms_setup_state`) dan mendarat di tenant
+    BAWAAN deployment — situs satu tenant menampilkan artikel tenant lain sebagai
+    hasilnya sendiri, dengan 200 dan tanpa apa pun yang melaporkan masalah.
+    Permintaan lintas-origin kini meresolusi tenant-nya dari `Origin` dan tidak
+    dari apa pun yang lain, yang menutupnya secara KONSTRUKSI: perbaikan
+    hanya-header akan meninggalkan konten itu di badan respons bagi `curl`,
+    perayap, atau proxy.
+  - **Butir 4, byline ([ADR-0109](adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.id.md)).**
+    Menerbitkan `awcms_profiles.display_name` cukup satu baris tanpa migrasi, dan
+    ditolak: ia menjadikan setiap nama akun internal publik begitu sebuah artikel
+    terbit. `sql/146` menambahkan `public_byline_name` opt-in di mana NULL —
+    setiap baris yang sudah ada — mempertahankan atribusi organisasi, jadi tidak
+    ada artikel yang berubah.
+  - **Butir 8, embed video ([ADR-0110](adr/0110-a-video-embed-origin-is-an-operators-decision.id.md)).**
+    Renderer-nya sudah benar sejak #639 dan setiap iframe yang dipancarkannya
+    DIBLOKIR, karena CSP tidak memasukkan origin pihak ketiga mana pun.
+    `BLOG_VIDEO_EMBED_ENABLED` menambahkan tepat satu origin ke `frame-src`.
+    Menurunkannya dari data tenant ditolak: header CSP berlaku se-deployment,
+    jadi satu tenant akan membuka origin itu untuk setiap tenant yang berbagi
+    deployment.
+
+  **Sisa #597 dan #607 adalah pekerjaan `ahliweb/awcms-astro`**, ditambah butir 9
+  yang terhalang ADR privasi di repo itu — keputusan pemilik repo, bukan tugas.
+  TIDAK ADA pekerjaan sisi-`awcms` yang tersisa di kedua issue itu.
 
 - **DITEMUKAN SAAT BEKERJA, 23 Agustus 2026 (sambil merancang byline #597 butir
   4): PENGHAPUSAN yang dieksekusi meninggalkan nama, nama legal, dan alamat login
