@@ -16,7 +16,10 @@ import {
   resolveNewsMediaR2Config,
   findMissingNewsMediaR2Vars
 } from "../../../../../../modules/media-library/domain/media-r2-config";
-import { validateCreateNewsMediaUploadSessionInput } from "../../../../../../modules/media-library/domain/media-upload-session-validation";
+import {
+  validateCreateNewsMediaUploadSessionInput,
+  type CreateNewsMediaUploadSessionInput
+} from "../../../../../../modules/media-library/domain/media-upload-session-validation";
 import { createPendingNewsMediaObject } from "../../../../../../modules/media-library/application/media-object-directory";
 import { createNewsMediaR2Client } from "../../../../../../modules/media-library/infrastructure/media-r2-client";
 
@@ -25,6 +28,18 @@ const CREATE_GUARD = {
   activityCode: "media",
   action: "create" as const
 };
+
+/**
+ * The body's outcome, carried past the authorization gate.
+ *
+ * A discriminated union rather than a `Response | null` beside a
+ * `Input | null`: those two nullables are correlated, and only the union lets
+ * the compiler know it — otherwise the code below reads `input!`, which is an
+ * assertion where a proof is available.
+ */
+type HeldBody =
+  | { kind: "refusal"; response: Response }
+  | { kind: "input"; value: CreateNewsMediaUploadSessionInput };
 
 type CreateTxResult =
   | { kind: "response"; response: Response }
@@ -59,37 +74,69 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
   const config = resolveNewsMediaR2Config();
 
-  if (!config.enabled || findMissingNewsMediaR2Vars().length > 0) {
-    return fail(
-      502,
-      "PROVIDER_ERROR",
-      "News media R2 storage is not configured for this deployment."
-    );
-  }
-
   const bodyRead = await readJsonBody(request);
 
+  // The body-size ceiling is a PROTOCOL limit, not a product answer, so it
+  // stays ahead of everything — refusing it costs nothing and tells nobody
+  // anything they did not already send.
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
   }
 
-  const validation = validateCreateNewsMediaUploadSessionInput(
-    bodyRead.value,
-    config.allowedMimeTypes,
-    config.maxUploadBytes
-  );
+  /**
+   * Both refusals below are HELD until authorization has answered.
+   *
+   * They used to return immediately, so a tenant user with no
+   * `media_library.media.create` grant learned whether this deployment has R2
+   * configured (`502`) and, if it does, the exact accepted MIME types and size
+   * ceiling (`400` + field errors) — and, because `authorizeInTransaction`
+   * never ran, the refusal left no row in the decision log. Probing was free
+   * and invisible.
+   *
+   * The body is still read and validated OUT HERE, before the transaction
+   * opens, for the reason `defineTenantRoute` documents: `await request.json()`
+   * waits on the CLIENT, and doing that inside `withTenant` would hold a
+   * reserved connection and its work-class slot for as long as a caller chooses
+   * to take. Holding the refusal keeps both properties — no connection is held
+   * on a slow body, and no answer precedes the permission answer.
+   *
+   * This is the shape the hand-written routes in
+   * `tests/e2e/support/authorization-first-ledger.ts` need; it is written out
+   * here rather than abstracted because each of those routes reaches this point
+   * differently.
+   */
+  const held: HeldBody = ((): HeldBody => {
+    if (!config.enabled || findMissingNewsMediaR2Vars().length > 0) {
+      return {
+        kind: "refusal",
+        response: fail(
+          502,
+          "PROVIDER_ERROR",
+          "News media R2 storage is not configured for this deployment."
+        )
+      };
+    }
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Upload session request is invalid.",
-      {},
-      validation.errors
+    const validation = validateCreateNewsMediaUploadSessionInput(
+      bodyRead.value,
+      config.allowedMimeTypes,
+      config.maxUploadBytes
     );
-  }
 
-  const input = validation.value;
+    return validation.valid
+      ? { kind: "input", value: validation.value }
+      : {
+          kind: "refusal",
+          response: fail(
+            400,
+            "VALIDATION_ERROR",
+            "Upload session request is invalid.",
+            {},
+            validation.errors
+          )
+        };
+  })();
+
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -110,6 +157,14 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       if (!auth.allowed) {
         return { kind: "response", response: auth.denied };
       }
+
+      // Allowed — so the caller is entitled to hear what is actually wrong,
+      // and the decision log now carries the row saying they were here.
+      if (held.kind === "refusal") {
+        return { kind: "response", response: held.response };
+      }
+
+      const input = held.value;
 
       const created = await createPendingNewsMediaObject(
         tx,
