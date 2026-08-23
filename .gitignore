@@ -113,3 +113,4 @@ graphify-out/*-callflow.html
 # a file that git would offer to commit — the check itself refuses to start
 # while one exists, which is the part that keeps it from going stale silently.
 src/pages/**/*.astro-script-check.ts
+src/**/*.astro-frontmatter-check.ts

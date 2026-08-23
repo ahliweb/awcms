@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:7e22a9159e250f3c75d48d12109c307ec0def5364436e09fdd7fc464b8be7e7b -->
+<!-- i18n-source-hash: sha256:8c4dc2134f8af28ab9c06dba490ca9722b7d1676b51bac4902cbcbb5fb79e2fc -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,39 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN FRONTMATTER — 23 Agustus 2026: `/admin/seo` selama ini menjawab 500
+  di setiap permintaan dan tidak pernah sekali pun merender. Temuan standar C4
+  DITUTUP (ADR-0112), dan itu baris terakhir yang terbuka di dokumen itu.**
+
+  Halaman itu menghitung `showRedirectActions` sebagai pernyataan KETIGA
+  frontmatter-nya, dari tiga `const` yang dideklarasikan 130 baris di bawahnya
+  dalam scope yang sama — temporal dead zone, sehingga komponen terkompilasinya
+  melempar `ReferenceError: Cannot access 'canUpdateRedirect' before
+initialization` sebelum merender apa pun. Ia lolos review, `bun run check`,
+  build dan CI, dan chunk produksinya mempertahankan urutan itu.
+
+  **Layar operator yang selalu 500 adalah kegagalan yang paling sulit disadari
+  repo ini**: tidak ada yang mem-poll `/admin/seo`, dan deskriptor modulnya
+  mendaftarkannya di sidebar, jadi ia terbaca sebagai sudah terkirim.
+
+  `astro check` memang TIDAK BISA jalan di sini — `@astrojs/check@0.9.10`
+  menolak di TypeScript 7, diverifikasi dengan MEMASANG dan MENJALANKANNYA —
+  jadi 61 berkas dan ~34.760 baris tidak diperiksa apa pun, dengan ADR-0068 §C
+  mencatat mitigasinya sebagai "reviewer membaca diff `.astro` dengan mata".
+  **Itulah mitigasi yang dilewati cacat ini.** Instruksi untuk membaca dengan
+  teliti bukanlah kontrol; ia gagal diam-diam dan tidak meninggalkan bukti
+  bahwa ia gagal.
+
+  ADR-0112 MEMUTARI blokirnya alih-alih menunggunya:
+  `check:astro-frontmatter:check` mengekstrak tiap frontmatter ke `.ts`
+  bersebelahan lalu menjalankan `tsc` milik repo ini — teknik yang sudah
+  dipakai `check:astro-scripts:check` untuk blok `<script>`. Empat shim membuat
+  blok terekstrak kompilasi dan masing-masing melepaskan sesuatu; bersama-sama
+  menurunkan keluaran mentah dari 920 diagnostik menjadi 6 yang nyata.
+
+  Selisih `astro-files-not-type-checked` DIPERSEMPIT, bukan dihapus: kini ia
+  mencakup `Props` komponen di call site-nya dan tidak lebih.
 
 - **PUTARAN CUTOVER — 23 Agustus 2026: peta redirect #599 sudah lengkap, benar,
   dan TIDAK PERNAH bisa menyala. Presedensinya diperbaiki (ADR-0111) dan

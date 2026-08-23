@@ -14,5 +14,5 @@
     "noUnusedParameters": true
   },
   "include": [".astro/types.d.ts", "scripts/**/*", "src/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "scripts/astro-frontmatter"]
 }

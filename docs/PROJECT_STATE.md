@@ -112,10 +112,10 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **146** (`sql/001`–`146`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0111** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.760 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
-| Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| `.astro` files                    | **61** (34.768 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -359,6 +359,38 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **FRONTMATTER ROUND — 23 August 2026: `/admin/seo` had been answering 500 on
+  every request and had never rendered once. Standards finding C4 is CLOSED
+  (ADR-0112), and it was the last open row in that document.**
+
+  The page computed `showRedirectActions` as the THIRD statement of its
+  frontmatter, from three `const`s declared 130 lines further down in the same
+  scope — a temporal dead zone, so the compiled component threw
+  `ReferenceError: Cannot access 'canUpdateRedirect' before initialization`
+  before rendering anything. It passed review, `bun run check`, the build and
+  CI, and the production chunk preserved the ordering.
+
+  **An always-500 operator screen is the failure this repo is least able to
+  notice**: nothing polls `/admin/seo`, and its module descriptor lists it in
+  the sidebar, so it reads as shipped.
+
+  `astro check` genuinely cannot run here — `@astrojs/check@0.9.10` refuses on
+  TypeScript 7, verified by installing and RUNNING it — so 61 files and ~34,760
+  lines were checked by nothing, with ADR-0068 §C recording the mitigation as
+  "reviewers read `.astro` diffs by eye". **That is the mitigation this defect
+  walked through.** An instruction to read carefully is not a control; it fails
+  silently and leaves no evidence that it failed.
+
+  ADR-0112 goes around the block instead of waiting for it:
+  `check:astro-frontmatter:check` extracts each frontmatter to a sibling `.ts`
+  and runs this repo's own `tsc` — the technique `check:astro-scripts:check`
+  already used for `<script>` blocks. Four shims make an extracted block
+  compile and each gives something up; together they took the raw output from
+  920 diagnostics to the 6 that were real.
+
+  The `astro-files-not-type-checked` divergence is NARROWED, not deleted: it
+  now covers component `Props` at their call sites and nothing else.
 
 - **CUTOVER ROUND — 23 August 2026: #599's redirect map was complete, correct,
   and could never have fired. The precedence is fixed (ADR-0111) and the

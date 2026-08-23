@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ed44424f032d987a2010b29571ba58c46063199c9f42c37ab5ed05fc476d5d58 -->
+<!-- i18n-source-hash: sha256:4ab6adace5860132f1fa4ebf8075e39288e627c5f253d8182d91d774a8d6239f -->
 
 # Scripts AWCMS
 
@@ -60,6 +60,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `build:preview-overlay`                   | `build-preview-overlay.ts`                     | —    |
 | `build:preview-overlay:check`             | `build-preview-overlay.ts`                     | ✅   |
 | `changesets:policy:check`                 | `changeset-policy-check.ts`                    | —    |
+| `check:astro-frontmatter:check`           | `astro-frontmatter-typecheck.ts`               | ✅   |
 | `check:astro-scripts:check`               | `astro-script-typecheck.ts`                    | ✅   |
 | `check:docs`                              | `check-docs.mjs`                               | ✅   |
 | `check:docs:translation`                  | `check-docs-translation.mjs`                   | ✅   |

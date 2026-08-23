@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "shim.d.ts",
+    "../../.astro/types.d.ts",
+    "../../src/env.d.ts",
+    "../../src/**/*.astro-frontmatter-check.ts"
+  ],
+  "exclude": ["../../node_modules", "../../dist"]
+}
