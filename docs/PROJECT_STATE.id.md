@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6682b8223c17be1fdce5dedbe344356037a5c1bfd8e6fc6eef29b06f938e084f -->
+<!-- i18n-source-hash: sha256:3fd64e482687c9f6dc86a9e865f88fb1e74b3dbd5eddc3a5d2c20d90e19a5f73 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,43 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN DENY — 23 Agustus 2026: tidak pernah ada yang menyaksikan layar
+  admin MENOLAK pengguna tanpa permission, dan empat layar sama sekali tak bisa
+  diperiksa.**
+
+  Tes kontrak per-layar adalah grep sumber: ia membuktikan halaman MENYEBUT
+  sebuah permission key, bukan bahwa kontrolnya disembunyikan dari yang tidak
+  memilikinya. Uji asap render memuat setiap layar sebagai OWNER ter-seed, yang
+  memegang segalanya. Jadi jalur deny — separuh otorisasi yang justru penting —
+  tidak pernah dieksekusi.
+
+  `loadAdminScreen` tidak pernah redirect, jadi layar yang ditolak MERENDER,
+  secara konvensi lewat elemen ber-`id="<layar>-denied"`. Empat puluh tiga
+  mengikutinya. **`site-profile`, `blog-settings`, `sidebar-menu`, dan
+  `comments` merender pesan penolakan yang BENAR tanpa id padanya.** Tidak ada
+  yang rusak bagi pengguna; yang rusak adalah KETERVERIFIKASIAN — tak ada
+  pemeriksa yang bisa membedakan keempatnya dari layar yang menampilkan isinya
+  kepada orang tanpa permission. **Penolakan yang tak bisa di-assert siapa pun
+  adalah penolakan yang hilangnya tak akan disadari siapa pun.**
+
+  `tests/e2e/admin-deny-path.e2e.ts` kini login sebagai pengguna yang perannya
+  memegang NOL permission dan menuntut, untuk 46 layar ber-gerbang statis,
+  status `200` (penolakan adalah halaman terender; 404 berarti layarnya
+  MELEMPAR) serta hook penolakan milik layar itu. Id-nya dibaca DARI TIAP
+  HALAMAN, bukan diturunkan dari URL — beberapa layar memakai nama yang bukan
+  rutenya.
+
+  **Build basi nyaris menghasilkan laporan PALSU.** Jalan pertama menyebut
+  keempatnya bocor; servernya menyajikan bundel yang dibangun SEBELUM hook
+  ditambahkan. Menjalankan ulang di atas build segar adalah satu-satunya alasan
+  itu tidak dilaporkan sebagai cacat. Bangun ulang sebelum memercayai temuan
+  e2e.
+
+  **Masih belum tercakup, dengan sengaja:** pengguna ber-permission SEBAGIAN
+  yang melihat subset kontrol yang benar. Hasil yang diharapkan berbeda per
+  layar, jadi itu pengetahuan per-layar, bukan satu aturan mekanis — putarannya
+  sendiri.
 
 - **PUTARAN RENDER — 23 Agustus 2026: 41 dari 48 layar admin tidak pernah
   dimuat apa pun, dan gejala layar rusak adalah 404 — BUKAN 500.**

@@ -121,7 +121,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
 
   {
     !canRead && (
-      <p class="admin-empty">
+      <p class="admin-empty" id="blog-settings-denied">
         {t("You do not have permission to view blog settings.")}
       </p>
     )
