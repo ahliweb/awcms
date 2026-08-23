@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:5397fb3b0200d1d2cefe285a6bbc3e59b7ca713dc27f209b0c0ca31d2337d7c3 -->
+<!-- i18n-source-hash: sha256:7e22a9159e250f3c75d48d12109c307ec0def5364436e09fdd7fc464b8be7e7b -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **146** (`sql/001`–`146`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0110** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0111** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.760 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -359,6 +359,58 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN CUTOVER — 23 Agustus 2026: peta redirect #599 sudah lengkap, benar,
+  dan TIDAK PERNAH bisa menyala. Presedensinya diperbaiki (ADR-0111) dan
+  verifier yang seharusnya menangkapnya kini ada.**
+
+  Butir lingkup 1–3 #599 sudah terbangun — `sql/138` menyimpan provenance,
+  `blog:legacy:import` mengisinya dan mengonversi HTML CKEditor ke Portable Text
+  dengan penolakan per baris, `blog:legacy:redirects:import` menurunkan satu
+  aturan eksak per artikel terbit lengkap dengan pemeriksaan rantai dan prefix
+  locale. Yang tersisa adalah butir 4, validasi crawl pra-cutover, dan
+  membangunnya justru memunculkan alasan mengapa ketiga yang pertama tidak cukup.
+
+  **`resolvePublicRedirect` mengonsultasikan rewrite keluarga `/news` yang
+  dipensiunkan SEBELUM aturan tenant.** Rewrite itu mengklaim setiap jalur
+  `/news/**`, dan URL arsipnya adalah `/news/{id_ber}_{slug}.html`, jadi tak
+  satu pun dari 23.906 aturan yang ditulis importer pernah terbaca — dan
+  jawaban yang tak sempat mereka berikan digantikan 301 ke
+  `/blog/{tenantCode}/{id_ber}_{slug}.html`, yang tidak dimiliki post mana pun.
+  Setiap URL legacy akan mengarah ke 404: persis keadaan yang dilarang
+  Definition of Done issue itu, dihasilkan kode yang ditulis untuk memenuhinya,
+  dengan tabel redirect yang terbaca benar.
+
+  Tidak ada yang menangkapnya karena presedensinya hanya ada sebagai urutan dua
+  `await` di dalam blok `try` — tak terjangkau tanpa basis data, jadi tak
+  seorang pun menulis tes murahnya — dan kedua strategi milik concern berbeda,
+  sehingga tes masing-masing modul tak punya alasan melihat yang lain. Keduanya
+  tetap hijau sementara masing-masing benar tentang separuhnya sendiri.
+  **Pelajarannya melampaui redirect: aturan yang hanya hidup sebagai urutan
+  pernyataan adalah aturan tanpa tes, dan modul di kedua sisinya akan
+  sama-sama terus lulus.**
+
+  ADR-0111 menetapkannya sebagai YANG PALING SPESIFIK MENANG, dan memindahkan
+  keputusannya ke `domain/redirect-precedence.ts` sebagai fungsi murni supaya
+  bisa diuji sama sekali. `tests/redirect-precedence.test.ts` meng-assert
+  terhadap SUMBER service bahwa fungsi itu dipanggil dan bahwa tidak ada
+  `return retired` dini yang merayap kembali ke atasnya; ketiganya merah ketika
+  urutan lama dikembalikan.
+
+  `blog:legacy:cutover:verify` (butir 4) berangkat dari sitemap milik situs
+  legacy sendiri alih-alih dari apa yang terimpor, dan itulah satu-satunya cara
+  melihat URL yang tidak menghasilkan aturan sama sekali. Ia tidak menulis apa
+  pun, menjalankan jalur resolusi yang SEBENARNYA alih-alih mengimplementasikan
+  ulang, dan **MENOLAK sitemap INDEX** alih-alih meratakannya — memeriksa anak
+  sebuah index sebagai halaman akan melaporkan sukses tanpa membaca satu pun URL
+  halaman.
+
+  **Yang tersisa pada #599 bukan kode.** Ketiga job dan verifier-nya sudah
+  terbangun dan digerbangi; menjalankannya butuh `.htaccess` legacy dan ekspor
+  sitemap, yang tidak ada di repo mana pun. Langkah berikutnya bersifat
+  operasional: dapatkan keduanya, jalankan `blog:legacy:import --images=` untuk
+  memperoleh himpunan unggahan, lalu `--media-map=`, lalu impor redirect, lalu
+  verifier — dan verifier itu WAJIB bersih SEBELUM cutover, bukan sesudahnya.
 
 - **PUTARAN BEACON — 23 Agustus 2026: #597 butir 9 sudah DIBANGUN, dan keputusan
   yang menghalanginya ternyata lebih kecil daripada "analitik: ya atau tidak".**

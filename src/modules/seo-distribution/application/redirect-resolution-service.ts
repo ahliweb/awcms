@@ -62,6 +62,7 @@ import {
   resolveRedirectChain,
   type RedirectChainOutcome
 } from "../domain/redirect-chain";
+import { chooseRedirectOutcome } from "../domain/redirect-precedence";
 import { applyRedirectQueryPolicy } from "../domain/redirect-query-policy";
 import { normalizeRedirectPath } from "../domain/redirect-path";
 import type { RedirectStatusCode } from "../domain/redirect-rule";
@@ -283,10 +284,40 @@ async function resolveHostBasedRedirect(
 }
 
 /**
- * Resolve a public redirect for an eligible request. Tries the retired-`/news`
- * redirect first, then tenant-authored host-based rules. Never throws:
- * any error degrades to `{ kind: "skip" }` so a redirect-subsystem fault can never
- * break public content serving.
+ * Resolve a public redirect for an eligible request. Never throws: any error
+ * degrades to `{ kind: "skip" }` so a redirect-subsystem fault can never break
+ * public content serving.
+ *
+ * ## Precedence: a tenant's exact rule beats the retired-`/news` family rewrite
+ *
+ * MOST SPECIFIC WINS. A tenant-authored rule names ONE path and was written on
+ * purpose; the retired-`/news` mapping is a blanket prefix rewrite standing in
+ * for routes this repo itself removed. When both claim a path, the deliberate
+ * instruction is the right answer.
+ *
+ * This order was the other way round, and it silently defeated Issue #599. The
+ * legacy archive being migrated has URLs shaped `/news/{legacyId}_{slug}.html`;
+ * `blog:legacy:redirects:import` writes one exact rule per article, and
+ * `isRedirectEligiblePath` accepts those paths, so the rules were written and
+ * looked correct in the table. But `parseRetiredNewsPath` claims every
+ * `/news/**` path, so strategy 1 answered first and NONE of them was ever
+ * consulted — and the answer it gave was a 301 to
+ * `/blog/{tenantCode}/{legacyId}_{slug}.html`, a path no post has, so every one
+ * of 23,906 indexed URLs would have redirected into a 404. That is the precise
+ * outcome #599's Definition of Done forbids, produced by the code written to
+ * satisfy it.
+ *
+ * Outside `/news/**` this order is unobservable: `resolveRetiredNewsRedirect`
+ * returns `null` for every other path, so nothing else changes.
+ *
+ * The fallback keeps strategy 2's `passthrough` when it has one: that value
+ * carries the 404-capture context, and dropping it would silently retire the
+ * not-found telemetry for the `/news` family.
+ *
+ * The choice itself lives in `domain/redirect-precedence.ts` as a pure
+ * function, because a rule expressed only as the order of two `await`s is a
+ * rule no test can reach without a database — which is exactly how the old
+ * order survived unnoticed.
  */
 export async function resolvePublicRedirect(
   sql: Bun.SQL,
@@ -295,15 +326,26 @@ export async function resolvePublicRedirect(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<RedirectResolution> {
   try {
+    const hostBased = await resolveHostBasedRedirect(
+      sql,
+      request,
+      options,
+      env
+    );
+
+    // Short-circuit: the retired handler opens its own transaction, so asking
+    // it anything once strategy 2 has already answered is a round trip per
+    // eligible public request that cannot change the result.
+    if (hostBased.kind === "redirect") return hostBased;
+
     const retired = await resolveRetiredNewsRedirect(
       sql,
       request,
       options,
       env
     );
-    if (retired && retired.kind === "redirect") return retired;
 
-    return await resolveHostBasedRedirect(sql, request, options, env);
+    return chooseRedirectOutcome(hostBased, retired);
   } catch (error) {
     log("error", "seo_distribution.redirect.resolution_failed", {
       moduleKey: SEO_MODULE_KEY,
