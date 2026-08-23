@@ -15,7 +15,7 @@
  * `/admin/seo` computing `showRedirectActions` from three `const`s declared 130
  * lines further down — a temporal dead zone, so the component function threw
  * `ReferenceError: Cannot access 'canUpdateRedirect' before initialization` as
- * its third statement. The screen answered 500 on every request and had never
+ * its third statement. The screen answered 404 on every request and had never
  * rendered once. Every gate in the chain was green: the page compiled, built,
  * and shipped, because nothing type-checked it.
  *

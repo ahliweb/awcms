@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **146** (`sql/001`–`146`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.768 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **61** (34.770 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -360,6 +360,34 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **RENDER ROUND — 23 August 2026: 41 of 48 admin screens were never loaded by
+  anything, and the symptom of a broken one is a 404 — not a 500.**
+
+  `/admin/seo` had never rendered, and the reason nobody noticed is simply that
+  **nothing requested it**. Seven screens were exercised by the CRUD e2e specs;
+  the other 41 were never loaded in CI, by any gate, in any form.
+  `admin:screen-coverage:check` looks adjacent and answers a different question
+  — whether a screen CLAIMS a permission.
+
+  `tests/e2e/admin-screens-render.e2e.ts` enumerates `src/pages/admin/**.astro`
+  at RUN TIME and loads every screen as the seeded owner. The list is
+  discovered, never written down: a hardcoded one is the failure this repo keeps
+  finding — a gate checking its own matrix rather than what exists. Adding a
+  screen without covering it is now impossible.
+
+  **The correction that came out of verifying it:** reintroducing the
+  `/admin/seo` fault and watching a real server answer showed it returns **404**,
+  not 500. The `ReferenceError` goes to the server log; the browser is told the
+  page does not exist. ADR-0112 and everything repeating it said 500; all of it
+  is corrected, and that ADR carries an amendment.
+
+  That changes how this class is hunted, which is why it is here rather than
+  only in the ADR: **asking "which admin screens 5xx?" finds nothing and
+  concludes the fleet is healthy.** A screen that throws on every render is
+  indistinguishable, by status alone, from a route that was never built. The
+  test therefore asserts `200` exactly, not "not 5xx" — the weaker assertion
+  would have passed straight over the defect it exists for.
+
 - **FRONTMATTER ROUND — 23 August 2026: `/admin/seo` had been answering 500 on
   every request and had never rendered once. Standards finding C4 is CLOSED
   (ADR-0112), and it was the last open row in that document.**
@@ -371,7 +399,7 @@ pioneered directly here after the ADR-0047 freeze.)
   before rendering anything. It passed review, `bun run check`, the build and
   CI, and the production chunk preserved the ordering.
 
-  **An always-500 operator screen is the failure this repo is least able to
+  **An always-404 operator screen is the failure this repo is least able to
   notice**: nothing polls `/admin/seo`, and its module descriptor lists it in
   the sidebar, so it reads as shipped.
 

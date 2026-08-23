@@ -27,9 +27,9 @@ const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
 
 as the third statement of its frontmatter, from three `const`s declared **130 lines further down** in the same scope. That is a temporal dead zone: the compiled component function threw `ReferenceError: Cannot access 'canUpdateRedirect' before initialization` before rendering anything.
 
-**The screen answered 500 on every request and had never worked once.** It passed review, `bun run check`, the build, and CI. The compiled production chunk shows the ordering preserved — statement 3 reads what statement 120 declares — so this was not a theoretical hazard.
+**The screen answered 404 on every request and had never worked once.** It passed review, `bun run check`, the build, and CI. The compiled production chunk shows the ordering preserved — statement 3 reads what statement 120 declares — so this was not a theoretical hazard.
 
-An operator screen that always 500s is the failure mode this repo is least able to notice: nothing polls `/admin/seo`, and its module descriptor lists it in the sidebar, so it looks shipped.
+An operator screen that always 404s is the failure mode this repo is least able to notice: nothing polls `/admin/seo`, and its module descriptor lists it in the sidebar, so it looks shipped.
 
 ## Decision
 
@@ -66,3 +66,21 @@ Together these took the raw output from **920 diagnostics to 6** — and the 6 w
 **Wait for `astro check` to support TypeScript 7.** That is the status quo the divergence records, and it is what let a screen 500 for weeks. Waiting remains correct for the prop-checking half, which is why the entry survives — but it was not correct for the whole.
 
 **Check the whole `.astro` file with a custom parser.** Rejected: a parser that disagrees with Astro's own is a source of errors that are not in the page, and of silence where there are. Extracting a region verbatim and handing it to the real compiler has neither failure mode.
+
+## Amendment — 23 August 2026: the symptom is a 404, not a 500
+
+Building the render smoke test that complements this gate
+(`tests/e2e/admin-screens-render.e2e.ts`) meant reintroducing the `/admin/seo`
+fault and watching a real server answer. It does **not** answer `500`.
+
+When a frontmatter throws, the `ReferenceError` goes to the **server log** and
+the browser is handed a **404**. This ADR originally said 500 throughout, and
+every document repeating it has been corrected.
+
+The correction matters because it changes how the class is hunted. Asking
+"which admin screens return 5xx?" finds nothing and concludes the fleet is
+healthy — a screen that throws on every render is indistinguishable, by status
+alone, from a route that was never built. The smoke test therefore asserts
+`200` exactly (the seeded owner holds every permission, so every admin screen
+owes it a rendered page) rather than merely "not 5xx", which would have passed
+straight over the defect it was written for.
