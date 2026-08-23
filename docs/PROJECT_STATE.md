@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **146** (`sql/001`–`146`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0110** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0111** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.760 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **57** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -359,6 +359,54 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **CUTOVER ROUND — 23 August 2026: #599's redirect map was complete, correct,
+  and could never have fired. The precedence is fixed (ADR-0111) and the
+  verifier that would have caught it now exists.**
+
+  Scope items 1–3 of #599 were already built — `sql/138` stores provenance,
+  `blog:legacy:import` writes it and converts CKEditor HTML to Portable Text
+  with per-row rejections, `blog:legacy:redirects:import` derives one exact rule
+  per published article with chain and locale-prefix checks. What was left was
+  item 4, the pre-cutover crawl validation, and building it surfaced why the
+  first three were not enough.
+
+  **`resolvePublicRedirect` consulted the retired-`/news` family rewrite BEFORE
+  tenant-authored rules.** That rewrite claims every `/news/**` path, and the
+  archive's URLs are `/news/{id_ber}_{slug}.html`, so not one of the 23,906
+  rules the importer writes could ever be read — and the answer they never got
+  to give was replaced by a 301 to `/blog/{tenantCode}/{id_ber}_{slug}.html`,
+  which no post has. Every legacy URL would have redirected into a 404: the
+  exact outcome that issue's Definition of Done exists to forbid, produced by
+  the code written to satisfy it, with a redirect table that read as correct.
+
+  Nothing caught it because the precedence existed only as the order of two
+  `await`s inside a `try` block — unreachable without a database, so nobody
+  wrote the cheap test — and the two strategies belong to different concerns,
+  so neither module's suite had reason to look at the other. Both stayed green
+  while each was right about its own half. **The lesson generalises past
+  redirects: a rule that lives only in statement order is a rule with no test,
+  and the modules on either side of it will each keep passing.**
+
+  ADR-0111 settles it as MOST SPECIFIC WINS, and moves the decision into
+  `domain/redirect-precedence.ts` as a pure function so it is testable at all.
+  `tests/redirect-precedence.test.ts` asserts against the service SOURCE that
+  the function is called and that no early `return retired` has crept back
+  above it; all three of those fail when the old order is restored.
+
+  `blog:legacy:cutover:verify` (item 4) starts from the legacy site's own
+  sitemap rather than from what was imported, which is the only way to see a URL
+  that produces no rule at all. It writes nothing, drives the real resolution
+  path rather than reimplementing it, and **refuses a sitemap INDEX** instead of
+  flattening it — checking an index's children as pages would report success
+  having read no page URL.
+
+  **What remains on #599 is not code.** The three jobs and the verifier are
+  built and gated; running them needs the legacy `.htaccess` and a sitemap
+  export, which exist in neither repo. The next step is operational: obtain
+  those, run `blog:legacy:import --images=` to get the upload set, then
+  `--media-map=`, then the redirect import, then the verifier — and the verifier
+  must come back clean before cutover, not after.
 
 - **BEACON ROUND — 23 August 2026: #597 item 9 is BUILT, and the decision it was
   blocked on turned out to be smaller than "analytics: yes or no".**
