@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:5e146bdbd943b7e914947541d9d67bcf6215ec3f46b2420a6a9dd3418d02f45c -->
+<!-- i18n-source-hash: sha256:a4fa7f7b6cc32152c44ea3d80cc7158b28421cf095c3368ed26942e657de6a60 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,66 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN KONSUMEN — 23 Agustus 2026: dua butir menghadap-pembaca yang tersisa
+  sudah DIBANGUN, di `ahliweb/awcms-astro`. Tidak ada pekerjaan `awcms` yang
+  tersisa pada #597 maupun #607, dan satu-satunya perubahan `awcms` di putaran
+  ini adalah pemindahan kontrak.**
+
+  Dengan ADR-0107/0109/0110 ditulis di hari yang sama, kedua butir sisanya
+  menjadi pekerjaan biasa di repo sebelah. Yang mendarat di sana:
+
+  - **Kotak pencarian pembaca** (#607, #597 butir 3) — `/cari/` dan `/en/cari/`,
+    dengan hasil berperingkat, snippet tersorot, chip facet untuk jenis konten /
+    kanal / topik / instansi / wilayah, "muat lebih banyak" ber-cursor, dan
+    autocomplete. ADR-0043 di sana.
+  - **Byline** (#597 butir 4) — dirender di halaman artikel, di `author` JSON-LD
+    (sebuah `Person` bila ada), dan di entry Atom artikel itu. ADR-0042 di sana.
+
+  **Di sisi ini satu-satunya perubahan adalah `scripts/api-consumer-contract.ts`:**
+  `/api/v1/site-search/query` dan `/suggest` berpindah dari COMMITTED ke
+  CONSUMED, yaitu arah yang dituntut Definition of Done lintas-repo — bekukan di
+  sini dulu, panggil di sana kemudian. Byline tidak butuh pemindahan sama sekali:
+  `authorByline` menumpang `/api/v1/blog/posts`, yang sudah dikonsumsi.
+
+  **Tiga hal yang pantas dibawa maju, karena masing-masing sebuah KELAS dan bukan
+  satu insiden.**
+
+  **1. "CONSUMED" tidak lagi berarti "sebuah build memanggilnya".** Tujuh dari
+  sembilan jalur dipanggil `astro build` dari mesin yang memegang kredensial
+  baca-saja; dua jalur pencarian dipanggil PERAMBAN PEMBACA. Perbedaan itu tidak
+  terlihat dari sini — keduanya `GET`, dan gerbang di sana mengekstrak string
+  literal dari `src/` tanpa tahu siapa yang mengeksekusinya — dan ia menentukan
+  berapa mahal biaya merusaknya. Perubahan bentuk pada jalur yang dipanggil build
+  memerahkan build yang sedang dilihat seseorang. Perubahan bentuk pada dua yang
+  ini gagal **diam-diam di peramban seorang asing**, pada situs yang terbit
+  berminggu-minggu lalu dan tidak akan di-rebuild karenanya. Ditulis di docblock
+  berkas itu sendiri alih-alih dibiarkan ditemukan.
+
+  **2. Ketiadaan handler `OPTIONS` kini sebuah KONTRAK, bukan kelalaian.** Kotak
+  itu memanggil kedua jalur tanpa header tambahan, yang menjaga keduanya tetap
+  permintaan sederhana. Sebuah header yang ditambahkan di SALAH SATU sisi —
+  `accept`, id korelasi, petunjuk tenant — mengubahnya menjadi permintaan
+  ber-preflight dengan tidak ada yang menjawab preflight-nya. Kegagalan itu
+  terjadi di peramban pembaca dan tidak muncul di log mana pun di sini. Hal yang
+  sama berlaku bagi `Access-Control-Allow-Credentials`, yang ketiadaannya membuat
+  `credentials: "include"` tidak terbaca menurut konstruksi.
+
+  **3. Gerbang di sana tidak bisa melihat cacat yang penting, dan
+  MENJALANKANNYA menemukannya dalam satu menit.** Facet jenis konten
+  mengembalikan `resource_type` apa adanya — `blog_post`, `blog_page` — karena ia
+  pengenal registry modul repo ini dan tidak membawa label tulisan redaksi,
+  berbeda dari facet term. Jalannya yang pertama di peramban merender keduanya
+  sebagai chip, dalam kedua bahasa: kunci mesin di layar. Tidak ada yang bisa
+  merah — nilainya ada, tipenya benar, halamannya terbit. Ini kelas
+  `jalankan-jangan-dibaca` lagi, dan perbaikannya di sana adalah nilai facet
+  tanpa label yang bisa dibaca tidak merender chip sama sekali.
+
+  **Yang tersisa terbuka di #597, dan itu bukan pekerjaan:** butir 9, beacon
+  analytics, yang backend-nya sudah diverifikasi di #637/#638 dan yang terhalang
+  ADR privasi di `awcms-astro` — keputusan pemilik repo. #599 juga terhalang dua
+  artefak yang tidak ada di kedua repo (`.htaccess` legacy dan URL sitemap yang
+  hidup), bukan terhalang kode.
 
 - **PUTARAN KEPUTUSAN — 23 Agustus 2026: tiga butir #597 yang terhalang KEPUTUSAN
   TERTULIS, bukan pekerjaan.** **SELESAI — ADR-0107, ADR-0109, ADR-0110.**

@@ -186,7 +186,7 @@ describe("the live contract", () => {
  * a fourth consumed surface here has to be a deliberate edit in both places.
  */
 describe("consumed vs committed", () => {
-  test("exactly seven surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+  test("exactly nine surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
     // If this fails, one of two things happened, and they need opposite fixes:
     //   - awcms-astro started (or stopped) calling a surface -> update both
     //     this list and the marker block in that repo, in the same change;
@@ -209,6 +209,19 @@ describe("consumed vs committed", () => {
     // until #652 gave their responses an actual schema. Freezing an array of
     // bare `object` would have added a path to this list that no change could
     // ever break — a contract entry with no contract in it.
+    //
+    // The eighth and ninth, `/site-search/query` and `/suggest`, took the same
+    // path (COMMITTED in #681 with ADR-0107, moved here when that repo published
+    // its search box) and BROKE ITS PREMISE: they are not called by a build at
+    // all. They run in the READER's browser, anonymously and cross-origin.
+    //
+    // That is invisible from here — both are `GET`s against this API, and the
+    // neighbour's gate extracts string literals from `src/` without knowing who
+    // executes them — so it is written down rather than left to be inferred. It
+    // decides what breaking one costs: a shape change on the seven above reddens
+    // a build somebody is watching, while a shape change on these two fails in a
+    // stranger's browser, on a site published weeks ago that will not be rebuilt
+    // on account of it.
     expect(Object.keys(CONSUMED_PATHS)).toEqual([
       "/api/v1/blog/posts",
       "/api/v1/media/objects",
@@ -216,7 +229,9 @@ describe("consumed vs committed", () => {
       "/api/v1/site-profile/composed",
       "/api/v1/blog/terms",
       "/api/v1/blog/menus",
-      "/api/v1/blog/widgets"
+      "/api/v1/blog/widgets",
+      "/api/v1/site-search/query",
+      "/api/v1/site-search/suggest"
     ]);
   });
 
