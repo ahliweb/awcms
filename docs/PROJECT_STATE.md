@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **146** (`sql/001`–`146`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.770 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **61** (34.774 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -359,6 +359,39 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **DENY ROUND — 23 August 2026: nothing had ever watched an admin screen
+  refuse a user holding no permissions, and four screens could not be checked
+  at all.**
+
+  The per-screen contract tests are source greps: they prove a page MENTIONS a
+  permission key, not that a control is hidden from someone lacking it. The
+  render smoke test loads every screen as the seeded OWNER, who holds
+  everything. So the deny path — the half of authorization that matters — had
+  never been executed.
+
+  `loadAdminScreen` never redirects, so a denied screen RENDERS, by convention
+  an element with `id="<screen>-denied"`. Forty-three followed it.
+  **`site-profile`, `blog-settings`, `sidebar-menu` and `comments` rendered a
+  correct denial message with no id on it.** Nothing was broken for a user; what
+  was broken was VERIFIABILITY — no checker could tell those four from a screen
+  showing its contents to someone with no permission. **A denial nobody can
+  assert on is a denial nobody will notice losing.**
+
+  `tests/e2e/admin-deny-path.e2e.ts` now logs in as a user whose role holds ZERO
+  permissions and requires, for all 46 static gated screens, status `200` (a
+  denial is a rendered page; a 404 would mean the screen THREW) and that
+  screen's own denial hook. The id is read FROM EACH PAGE, not derived from its
+  URL — several screens use a name that is not their route.
+
+  **A stale build nearly produced a false report.** The first run named those
+  four as leaking; the server was serving a bundle built before the hooks were
+  added. Re-running against a fresh build is the only reason it was not
+  reported as a defect. Rebuild before believing an e2e finding.
+
+  **Still uncovered, deliberately:** a PARTIALLY-permissioned user seeing the
+  right subset of controls. Expected results differ per screen, so it is
+  per-screen knowledge rather than one mechanical rule — its own round.
 
 - **RENDER ROUND — 23 August 2026: 41 of 48 admin screens were never loaded by
   anything, and the symptom of a broken one is a 404 — not a 500.**

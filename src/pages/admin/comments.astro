@@ -138,7 +138,11 @@ function formatTimestamp(value: string): string {
 
   {
     !canRead && (
-      <div class="state-notice state-notice--denied" role="status">
+      <div
+        class="state-notice state-notice--denied"
+        role="status"
+        id="comments-denied"
+      >
         <p>
           <strong>{t("Access denied.")}</strong>
           {t("You do not have the")}

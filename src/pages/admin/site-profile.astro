@@ -86,7 +86,7 @@ const profile: SiteProfileView | null =
 
   {
     !canRead && (
-      <p class="admin-empty">
+      <p class="admin-empty" id="site-profile-denied">
         {t("You do not have permission to view the site profile.")}
       </p>
     )
