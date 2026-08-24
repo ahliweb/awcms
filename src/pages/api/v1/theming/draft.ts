@@ -58,13 +58,6 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody(request);
   if (bodyRead.tooLarge) {
@@ -74,31 +67,6 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
   const rawBody = bodyRead.value as { themeKey?: unknown } | null;
   const themeKey =
     typeof rawBody?.themeKey === "string" ? rawBody.themeKey : null;
-  if (!themeKey) {
-    return fail(400, "VALIDATION_ERROR", "A themeKey string is required.");
-  }
-  const descriptor = getThemeDescriptor(themeKey);
-  if (!descriptor) {
-    return fail(
-      400,
-      "UNKNOWN_THEME",
-      `Theme "${themeKey}" is not a registered theme.`
-    );
-  }
-
-  const validation = validateThemeConfig(descriptor, bodyRead.value);
-  if (!validation.ok) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Theme config is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const config = validation.value;
-  const requestHash = computeRequestHash({ themeKey, config });
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -115,6 +83,49 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!themeKey) {
+      return fail(400, "VALIDATION_ERROR", "A themeKey string is required.");
+    }
+
+    const descriptor = getThemeDescriptor(themeKey);
+
+    if (!descriptor) {
+      return fail(
+        400,
+        "UNKNOWN_THEME",
+        `Theme "${themeKey}" is not a registered theme.`
+      );
+    }
+
+    // Resolved here rather than before the transaction because it needs the
+    // descriptor, and the descriptor is only known once the refusals above have
+    // been allowed to speak. Both are pure, in-memory work over a body that was
+    // already read — no connection is held waiting on the client.
+    const validation = validateThemeConfig(descriptor, bodyRead.value);
+
+    if (!validation.ok) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Theme config is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const config = validation.value;
+    const requestHash = computeRequestHash({ themeKey, config });
 
     const existing = await findIdempotencyRecord(
       tx,

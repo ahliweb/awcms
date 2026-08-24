@@ -10,7 +10,10 @@ import {
 } from "../../../../../../../lib/security/request-body-limit";
 import { resolveNewsMediaR2Config } from "../../../../../../../modules/media-library/domain/media-r2-config";
 import { validateFinalizeNewsMediaUploadSessionInput } from "../../../../../../../modules/media-library/domain/media-upload-session-validation";
-import { finalizeNewsMediaUploadSession } from "../../../../../../../modules/media-library/application/media-finalize-upload-session";
+import {
+  finalizeNewsMediaUploadSession,
+  type FinalizeNewsMediaUploadSessionHeld
+} from "../../../../../../../modules/media-library/application/media-finalize-upload-session";
 
 /**
  * `POST /api/v1/media/news-images/upload-sessions/{id}/finalize` (Issue
@@ -43,17 +46,11 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody(request);
 
+  // The body-size ceiling is a PROTOCOL limit, not a product answer, so it
+  // stays ahead of everything — refusing it tells the caller nothing they did
+  // not already send.
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
   }
@@ -62,23 +59,51 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     bodyRead.value
   );
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Finalize request is invalid.",
-      {},
-      validation.errors
-    );
-  }
+  /**
+   * Both refusals are HELD and handed to the application function, which
+   * returns them only after `authorizeInTransaction` has answered.
+   *
+   * The body is still read and validated OUT HERE: `await request.json()` waits
+   * on the CLIENT, and doing that inside `withTenant` would hold a reserved
+   * connection and its work-class slot for as long as a caller chooses to take.
+   * Holding the ANSWER keeps both properties — no connection is held on a slow
+   * body, and no answer precedes the permission answer. Gap C19: refusing out
+   * here refused with no `awcms_access_decision_log` row, so a caller with no
+   * `media_library.media.verify` grant could confirm this endpoint and learn
+   * its checksum contract, invisibly.
+   */
+  const held: FinalizeNewsMediaUploadSessionHeld = !idempotencyKey
+    ? {
+        kind: "refusal",
+        response: fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        )
+      }
+    : validation.valid
+      ? {
+          kind: "input",
+          idempotencyKey,
+          claimedChecksumSha256: validation.value.checksumSha256
+        }
+      : {
+          kind: "refusal",
+          response: fail(
+            400,
+            "VALIDATION_ERROR",
+            "Finalize request is invalid.",
+            {},
+            validation.errors
+          )
+        };
 
   return finalizeNewsMediaUploadSession(
     {
       tenantId,
       objectId,
       tokenHash: hashSessionToken(token),
-      idempotencyKey,
-      claimedChecksumSha256: validation.value.checksumSha256,
+      held,
       now: new Date(),
       correlationId: locals.correlationId
     },

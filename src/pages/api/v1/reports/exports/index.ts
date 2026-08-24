@@ -89,22 +89,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody<CreateScheduledExportBody>(request);
 
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
-  }
-
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
 
   const body = (bodyRead.value ?? {}) as CreateScheduledExportBody;
@@ -122,48 +111,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       ? (body.filter as Record<string, unknown>)
       : {};
 
-  if (!projectionKey) {
-    return fail(400, "VALIDATION_ERROR", "projectionKey is required.");
-  }
-  if (!format) {
-    return fail(400, "VALIDATION_ERROR", 'format must be "csv" or "json".');
-  }
-  if (Object.keys(filter).length > 0) {
-    // `filter` is accepted/persisted/documented in OpenAPI (a deliberately
-    // generic, unspecified shape a future issue would define), but
-    // `generateProjectionExport` does not yet consult it at all — every
-    // export always contains the full metric snapshot regardless of what
-    // was submitted here. Rejecting a non-empty filter (rather than
-    // silently accepting and ignoring it) avoids a false sense of
-    // scoping — reviewer + security-auditor finding, PR #781. Remove this
-    // guard, and wire `filter` into `generateProjectionExport`, together
-    // in the same follow-up issue that defines the filter schema.
-    return fail(
-      400,
-      "NOT_IMPLEMENTED",
-      "filter is not yet applied to generated exports — omit it (or pass an empty object) until this is implemented."
-    );
-  }
-  if (
-    !Number.isInteger(scheduleIntervalMinutes) ||
-    scheduleIntervalMinutes < MIN_EXPORT_INTERVAL_MINUTES ||
-    scheduleIntervalMinutes > MAX_EXPORT_INTERVAL_MINUTES
-  ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `scheduleIntervalMinutes must be an integer between ${MIN_EXPORT_INTERVAL_MINUTES} and ${MAX_EXPORT_INTERVAL_MINUTES}.`
-    );
-  }
-
   const descriptor = findProjectionDescriptor(projectionKey);
-  if (!descriptor || descriptor.scope !== "tenant") {
-    return fail(
-      404,
-      "NOT_FOUND",
-      `No registered projection with key "${projectionKey}".`
-    );
-  }
 
   const requestHash = computeRequestHash(body);
   const sql = getDatabaseClient();
@@ -180,6 +128,65 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (bodyRead.malformed) {
+      return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
+    }
+
+    if (!projectionKey) {
+      return fail(400, "VALIDATION_ERROR", "projectionKey is required.");
+    }
+
+    if (!format) {
+      return fail(400, "VALIDATION_ERROR", 'format must be "csv" or "json".');
+    }
+
+    if (
+      !Number.isInteger(scheduleIntervalMinutes) ||
+      scheduleIntervalMinutes < MIN_EXPORT_INTERVAL_MINUTES ||
+      scheduleIntervalMinutes > MAX_EXPORT_INTERVAL_MINUTES
+    ) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `scheduleIntervalMinutes must be an integer between ${MIN_EXPORT_INTERVAL_MINUTES} and ${MAX_EXPORT_INTERVAL_MINUTES}.`
+      );
+    }
+
+    if (Object.keys(filter).length > 0) {
+      // `filter` is accepted/persisted/documented in OpenAPI (a deliberately
+      // generic, unspecified shape a future issue would define), but
+      // `generateProjectionExport` does not yet consult it at all — every
+      // export always contains the full metric snapshot regardless of what
+      // was submitted here. Rejecting a non-empty filter (rather than
+      // silently accepting and ignoring it) avoids a false sense of
+      // scoping — reviewer + security-auditor finding, PR #781. Remove this
+      // guard, and wire `filter` into `generateProjectionExport`, together
+      // in the same follow-up issue that defines the filter schema.
+      return fail(
+        400,
+        "NOT_IMPLEMENTED",
+        "filter is not yet applied to generated exports — omit it (or pass an empty object) until this is implemented."
+      );
+    }
+
+    if (!descriptor || descriptor.scope !== "tenant") {
+      return fail(
+        404,
+        "NOT_FOUND",
+        `No registered projection with key "${projectionKey}".`
+      );
     }
 
     const existingIdempotency = await findIdempotencyRecord(

@@ -49,22 +49,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const descriptor = findProjectionDescriptor(key);
-  if (!descriptor || descriptor.scope !== "tenant") {
-    return fail(
-      404,
-      "NOT_FOUND",
-      `No registered projection with key "${key}".`
-    );
-  }
 
   const requestHash = computeRequestHash({ key, action: "rebuild_cancel" });
   const sql = getDatabaseClient();
@@ -81,6 +67,24 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!descriptor || descriptor.scope !== "tenant") {
+      return fail(
+        404,
+        "NOT_FOUND",
+        `No registered projection with key "${key}".`
+      );
     }
 
     const existingIdempotency = await findIdempotencyRecord(

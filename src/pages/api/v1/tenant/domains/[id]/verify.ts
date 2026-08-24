@@ -90,14 +90,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const requestHash = computeRequestHash({ domainId, action: "verify" });
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -116,6 +108,16 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     const existingIdempotency = await findIdempotencyRecord(
@@ -185,7 +187,11 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       kind: "lookup" as const,
       recordName: result.recordName,
       recordValue: result.recordValue,
-      actorTenantUserId: auth.context.tenantUserId
+      actorTenantUserId: auth.context.tenantUserId,
+      // Carried forward rather than re-read out here. The refusal above is what
+      // proves it is present, and it is HELD until authorization has answered
+      // (gap C19) — so this is the only place that narrowing exists.
+      idempotencyKey
     };
   });
 
@@ -280,7 +286,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      begun.idempotencyKey
     );
 
     if (replayed && replayed.requestHash === requestHash) {
@@ -340,7 +346,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey,
+      begun.idempotencyKey,
       requestHash,
       passed ? 200 : 409,
       responseBody

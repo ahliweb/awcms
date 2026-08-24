@@ -28,6 +28,15 @@ const IDEMPOTENCY_SCOPE = "reporting_export_trigger";
 
 type TriggerExportBody = { projectionKey?: unknown; format?: unknown };
 
+type HeldTrigger =
+  | { kind: "refusal"; response: Response }
+  | {
+      kind: "input";
+      idempotencyKey: string;
+      format: "csv" | "json";
+      descriptor: NonNullable<ReturnType<typeof findProjectionDescriptor>>;
+    };
+
 /**
  * `POST /api/v1/reports/exports/trigger` (Issue #753) — manually generate
  * an export of a projection's current snapshot. High-risk (`export`),
@@ -59,22 +68,14 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody<TriggerExportBody>(request);
 
+  // The body-size ceiling is a PROTOCOL limit, not a product answer, so it
+  // stays ahead of everything — refusing it tells the caller nothing they did
+  // not already send.
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
-  }
-
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
 
   const body = (bodyRead.value ?? {}) as TriggerExportBody;
@@ -83,22 +84,79 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     typeof body.projectionKey === "string" ? body.projectionKey : "";
   const format =
     body.format === "json" ? "json" : body.format === "csv" ? "csv" : null;
+  const descriptor = projectionKey
+    ? findProjectionDescriptor(projectionKey)
+    : undefined;
 
-  if (!projectionKey) {
-    return fail(400, "VALIDATION_ERROR", "projectionKey is required.");
-  }
-  if (!format) {
-    return fail(400, "VALIDATION_ERROR", 'format must be "csv" or "json".');
-  }
+  /**
+   * Every product answer this route can give is decided out here and HELD until
+   * `authorizeInTransaction` has spoken. The work still happens before the
+   * transaction opens — reading a body waits on the CLIENT, and doing that
+   * inside `withTenant` would hold a reserved connection and its work-class
+   * slot for as long as a caller chooses to take — but the ANSWER waits.
+   *
+   * They used to return straight from here, so a tenant user with no
+   * `reporting.exports.export` grant learned this route's field names, its
+   * accepted formats, and WHICH PROJECTION KEYS THIS DEPLOYMENT HAS REGISTERED
+   * (the `404` names the key back). None of it reached
+   * `authorizeInTransaction`, which ADR-0063 makes the one place a decision is
+   * recorded — so the probing left no `awcms_access_decision_log` row at all.
+   * Gap C19.
+   */
+  const held: HeldTrigger = ((): HeldTrigger => {
+    if (!idempotencyKey) {
+      return {
+        kind: "refusal",
+        response: fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        )
+      };
+    }
 
-  const descriptor = findProjectionDescriptor(projectionKey);
-  if (!descriptor || descriptor.scope !== "tenant") {
-    return fail(
-      404,
-      "NOT_FOUND",
-      `No registered projection with key "${projectionKey}".`
-    );
-  }
+    if (bodyRead.malformed) {
+      return {
+        kind: "refusal",
+        response: fail(
+          400,
+          "VALIDATION_ERROR",
+          "Request body must be valid JSON."
+        )
+      };
+    }
+
+    if (!projectionKey) {
+      return {
+        kind: "refusal",
+        response: fail(400, "VALIDATION_ERROR", "projectionKey is required.")
+      };
+    }
+
+    if (!format) {
+      return {
+        kind: "refusal",
+        response: fail(
+          400,
+          "VALIDATION_ERROR",
+          'format must be "csv" or "json".'
+        )
+      };
+    }
+
+    if (!descriptor || descriptor.scope !== "tenant") {
+      return {
+        kind: "refusal",
+        response: fail(
+          404,
+          "NOT_FOUND",
+          `No registered projection with key "${projectionKey}".`
+        )
+      };
+    }
+
+    return { kind: "input", idempotencyKey, format, descriptor };
+  })();
 
   const requestHash = computeRequestHash(body);
   const sql = getDatabaseClient();
@@ -117,11 +175,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       return { ok: false as const, response: auth.denied };
     }
 
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (held.kind === "refusal") {
+      return { ok: false as const, response: held.response };
+    }
+
     const existingIdempotency = await findIdempotencyRecord(
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      held.idempotencyKey
     );
 
     if (existingIdempotency) {
@@ -143,7 +207,14 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       };
     }
 
-    return { ok: true as const, actorTenantUserId: auth.context.tenantUserId };
+    // The validated input travels back out rather than being re-derived: it was
+    // proven good before the transaction opened, and only this branch has the
+    // narrowing that says so.
+    return {
+      ok: true as const,
+      actorTenantUserId: auth.context.tenantUserId,
+      input: held
+    };
   });
 
   // Pool-gate refusal — forwarded as-is (see the note on `withTenant`).
@@ -157,8 +228,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
   const exportRun = await generateProjectionExport(sql, {
     tenantId,
-    descriptor,
-    format,
+    descriptor: preCheck.input.descriptor,
+    format: preCheck.input.format,
     scheduledExportId: null,
     requestedBy: preCheck.actorTenantUserId,
     correlationId
@@ -173,10 +244,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       resourceType: "reporting_export_run",
       resourceId: exportRun.id,
       severity: exportRun.status === "failed" ? "warning" : "info",
-      message: `Manual export of "${descriptor.key}" (${format}) — ${exportRun.status}.`,
+      message: `Manual export of "${preCheck.input.descriptor.key}" (${preCheck.input.format}) — ${exportRun.status}.`,
       attributes: {
-        projectionKey: descriptor.key,
-        format,
+        projectionKey: preCheck.input.descriptor.key,
+        format: preCheck.input.format,
         status: exportRun.status,
         rowCount: exportRun.rowCount
       },
@@ -190,7 +261,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey,
+      preCheck.input.idempotencyKey,
       requestHash,
       200,
       successBody

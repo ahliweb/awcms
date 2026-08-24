@@ -62,16 +62,11 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody<ReplayRequestBody>(request);
 
+  // The body-size ceiling is a PROTOCOL limit, not a product answer, so it
+  // stays ahead of everything — refusing it tells the caller nothing they did
+  // not already send.
   if (bodyRead.tooLarge) {
     return fail(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
   }
@@ -80,14 +75,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     typeof bodyRead.value?.reason === "string"
       ? bodyRead.value.reason.trim()
       : "";
-
-  if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `reason is required and must be 1-${MAX_REASON_LENGTH} characters.`
-    );
-  }
 
   const requestHash = computeRequestHash({ id, action: "replay", reason });
   const sql = getDatabaseClient();
@@ -106,6 +93,24 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `reason is required and must be 1-${MAX_REASON_LENGTH} characters.`
+      );
     }
 
     const existingIdempotency = await findIdempotencyRecord(

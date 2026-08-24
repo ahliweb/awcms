@@ -60,13 +60,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody(request);
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
@@ -75,20 +68,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const oldPath = typeof body.oldPath === "string" ? body.oldPath : "";
   const newPath = typeof body.newPath === "string" ? body.newPath : "";
   const changeType = body.changeType;
-
-  if (!oldPath || !newPath) {
-    return fail(400, "VALIDATION_ERROR", "oldPath and newPath are required.");
-  }
-  if (
-    typeof changeType !== "string" ||
-    !CHANGE_TYPES.includes(changeType as UrlChangeType)
-  ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `changeType must be one of ${CHANGE_TYPES.join(", ")}.`
-    );
-  }
 
   const policyOverride =
     typeof body.policy === "string" &&
@@ -116,6 +95,31 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       CREATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!oldPath || !newPath) {
+      return fail(400, "VALIDATION_ERROR", "oldPath and newPath are required.");
+    }
+
+    if (
+      typeof changeType !== "string" ||
+      !CHANGE_TYPES.includes(changeType as UrlChangeType)
+    ) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `changeType must be one of ${CHANGE_TYPES.join(", ")}.`
+      );
+    }
 
     const existing = await findIdempotencyRecord(
       tx,

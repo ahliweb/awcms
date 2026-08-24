@@ -47,12 +47,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey)
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
 
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -72,6 +66,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         RECONCILE_GUARD
       );
       if (!auth.allowed) return auth.denied;
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here.
+      if (!idempotencyKey) {
+        return fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        );
+      }
 
       const existing = await findIdempotencyRecord(
         tx,

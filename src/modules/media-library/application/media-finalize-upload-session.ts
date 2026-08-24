@@ -83,12 +83,30 @@ type PrecheckResult =
       actorTenantUserId: string;
     };
 
+/**
+ * What the caller worked out BEFORE this function opened a transaction, and
+ * whether that work produced an answer or a refusal.
+ *
+ * A union rather than nullable fields, because the two states are genuinely
+ * different: a refusal has no idempotency key and no checksum to speak of, and
+ * a shape that let both be absent would need a non-null assertion further down
+ * — which is how the invariant stops being checked. Gap C19: the refusal is
+ * carried in so it can be returned AFTER `authorizeInTransaction` has answered,
+ * never before.
+ */
+export type FinalizeNewsMediaUploadSessionHeld =
+  | { kind: "refusal"; response: Response }
+  | {
+      kind: "input";
+      idempotencyKey: string;
+      claimedChecksumSha256: string | null;
+    };
+
 export type FinalizeNewsMediaUploadSessionInput = {
   tenantId: string;
   objectId: string;
   tokenHash: string;
-  idempotencyKey: string;
-  claimedChecksumSha256: string | null;
+  held: FinalizeNewsMediaUploadSessionHeld;
   now: Date;
   correlationId?: string;
 };
@@ -113,9 +131,10 @@ export async function finalizeNewsMediaUploadSession(
   input: FinalizeNewsMediaUploadSessionInput,
   deps: FinalizeNewsMediaUploadSessionDeps
 ): Promise<Response> {
-  const { tenantId, objectId, tokenHash, idempotencyKey, now, correlationId } =
-    input;
-  const claimedChecksumSha256 = input.claimedChecksumSha256;
+  const { tenantId, objectId, tokenHash, held, now, correlationId } = input;
+  const idempotencyKey = held.kind === "input" ? held.idempotencyKey : "";
+  const claimedChecksumSha256 =
+    held.kind === "input" ? held.claimedChecksumSha256 : null;
   const requestHash = computeRequestHash({ objectId, claimedChecksumSha256 });
   const { sql, config } = deps;
   const createR2Client = deps.createR2Client ?? defaultR2ClientFactory;
@@ -134,6 +153,13 @@ export async function finalizeNewsMediaUploadSession(
 
       if (!auth.allowed) {
         return { kind: "response", response: auth.denied };
+      }
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here. Nothing
+      // below reads the placeholders above, because this returns first.
+      if (held.kind === "refusal") {
+        return { kind: "response", response: held.response };
       }
 
       const existingIdempotency = await findIdempotencyRecord(
