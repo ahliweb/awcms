@@ -23,6 +23,7 @@ import { describe, expect, test } from "bun:test";
 import { stripComments } from "../scripts/access-chokepoint-check";
 
 const MIGRATION = "sql/138_awcms_blog_legacy_provenance.sql";
+const DROP_MIGRATION = "sql/147_awcms_blog_pages_drop_legacy_provenance.sql";
 const DIRECTORY = "src/modules/blog-content/application/blog-post-directory.ts";
 const CREATE_VALIDATION =
   "src/modules/blog-content/domain/blog-post-validation.ts";
@@ -51,13 +52,41 @@ describe("the columns make a second import impossible", () => {
     );
   });
 
-  test("pages get the same treatment as posts", async () => {
-    const sql = await readFile(MIGRATION, "utf8");
+  test("the pages half is DROPPED, and nothing reads it", async () => {
+    // `sql/138` gave pages the same pair on the reasoning that "a legacy
+    // archive has static pages too". Nothing ever wrote or read it. This test
+    // used to assert that the migration's TEXT contained
+    // `ALTER TABLE awcms_blog_pages` — which reads as coverage, and is not:
+    // a test over a migration's source proves a column exists, and cannot
+    // notice the column is dead.
+    //
+    // The real legacy `.htaccess` settled it: the static-page rewrite covers a
+    // CLOSED SET OF THREE urls, which is three hand-authored rules in
+    // `awcms_seo_redirects`, not an importer. `sql/147` drops the pair.
+    const drop = await readFile(DROP_MIGRATION, "utf8");
 
-    // A legacy archive has static pages too, and giving only posts provenance
-    // would make half the 301 map underivable for the same reason.
-    expect(sql).toContain("ALTER TABLE awcms_blog_pages");
-    expect(sql).toContain("awcms_blog_pages_legacy_source_dedup");
+    expect(drop).toContain("ALTER TABLE awcms_blog_pages");
+    expect(drop).toContain("DROP COLUMN IF EXISTS legacy_source_system");
+    expect(drop).toContain("DROP COLUMN IF EXISTS legacy_source_id");
+    expect(drop).toContain(
+      "DROP INDEX IF EXISTS awcms_blog_pages_legacy_source_dedup"
+    );
+
+    // The live half is untouched: dropping both would take the 301 map with it.
+    expect(drop).not.toContain("ALTER TABLE awcms_blog_posts");
+  });
+
+  test("no code reads the dropped columns off a page", async () => {
+    // The assertion the old test could not make. A column with no reader is
+    // how the pages half looked covered for as long as it did, so the guard
+    // against re-adding one is a search for a READER, not for a migration line.
+    const sources = await Promise.all(
+      [DIRECTORY, CREATE_VALIDATION].map((f) => readFile(f, "utf8"))
+    );
+
+    for (const source of sources) {
+      expect(stripComments(source)).not.toContain("awcms_blog_pages");
+    }
   });
 
   test("the id is text, not an integer", async () => {

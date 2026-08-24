@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:df3d80833c0c3f66ea86f26fc1da62c7bb2b771cb849e07c90fb2d79ab643d88 -->
+<!-- i18n-source-hash: sha256:d0d80cd9cd50843b048b769291da2f7782057a1c7567c63a011efea2e4113801 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **146** (`sql/001`–`146`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **147** (`sql/001`–`147`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0111** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.760 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -408,7 +408,9 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   dari URL). Tiga aturan exact-path, yang didukung `awcms_seo_redirects` sejak
   `sql/060` — entri data admin, bukan importer dan bukan backfill. Pasangan kolom
   itu harus dirangkai atau dihapus; membiarkannya adalah yang melahirkan RUPA
-  cakupan tadi.
+  cakupan tadi. **DIHAPUS di `sql/147`** — tak pernah ada yang menulisnya, jadi
+  nilai setiap baris NULL dan tak ada data yang hilang; tes yang meng-assert TEKS
+  migration diganti tes yang mencari PEMBACA.
 
   Satu bentuk yang tercakup terkonfirmasi benar: `berita/index.php:9` membaca
   `(int) $_GET['news']`, jadi id-nya adalah digit terdepan dan slug-nya dekoratif
