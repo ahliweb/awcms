@@ -68,16 +68,6 @@ export const PATCH: APIRoute = async ({ request, cookies }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateUpdateTenantSettingsInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Settings update is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -91,6 +81,16 @@ export const PATCH: APIRoute = async ({ request, cookies }) => {
       UPDATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Settings update is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     const settings = await updateTenantSettings(
       tx,

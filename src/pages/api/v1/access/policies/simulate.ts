@@ -79,17 +79,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const validation = validateAbacSimulationInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Simulation input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-  const input = validation.value;
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -105,6 +94,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Simulation input is invalid.",
+        {},
+        validation.errors
+      );
+    }
+    const input = validation.value;
 
     // Resolving a DIFFERENT tenant user's real roles/effective grants is a
     // horizontal read of that user's access (an enumeration oracle for an

@@ -55,18 +55,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
   const validation = validateAnnouncementInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Announcement request is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const input = validation.value;
-  const isBulk = input.target.type === "role" || input.target.type === "tenant";
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -83,6 +71,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Announcement request is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const input = validation.value;
+    const isBulk =
+      input.target.type === "role" || input.target.type === "tenant";
 
     if (isBulk) {
       const bulkAuth = await authorizeInTransaction(

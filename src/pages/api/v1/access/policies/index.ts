@@ -82,25 +82,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   // unknown attribute/operator, or wrong value type is rejected here before any
   // write — so an invalid policy can never exist, let alone be enabled.
   const validation = validateAbacPolicyInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "ABAC policy is invalid.",
-      {},
-      validation.errors
-    );
-  }
-  const input = validation.value;
-
-  // Create disabled by default (authored, then explicitly enabled) unless the
-  // caller opts into create-and-enable. Enabling is safe because the DSL is
-  // already validated above.
-  const isActive =
-    bodyRead.value && typeof bodyRead.value.isActive === "boolean"
-      ? bodyRead.value.isActive
-      : false;
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -117,6 +98,25 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "ABAC policy is invalid.",
+        {},
+        validation.errors
+      );
+    }
+    const input = validation.value;
+
+    // Create disabled by default (authored, then explicitly enabled) unless the
+    // caller opts into create-and-enable. Enabling is safe because the DSL is
+    // already validated above.
+    const isActive =
+      bodyRead.value && typeof bodyRead.value.isActive === "boolean"
+        ? bodyRead.value.isActive
+        : false;
 
     const duplicate = await tx`
       SELECT 1 FROM awcms_abac_policies

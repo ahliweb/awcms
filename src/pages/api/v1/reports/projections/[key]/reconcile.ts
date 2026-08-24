@@ -31,19 +31,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
   if (!token) {
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
   }
-  if (!key) {
-    return fail(400, "VALIDATION_ERROR", "Projection key is required.");
-  }
-
-  const descriptor = findProjectionDescriptor(key);
-  if (!descriptor || descriptor.scope !== "tenant") {
-    return fail(
-      404,
-      "NOT_FOUND",
-      `No registered projection with key "${key}".`
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -58,6 +45,19 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (!key) {
+      return fail(400, "VALIDATION_ERROR", "Projection key is required.");
+    }
+
+    const descriptor = findProjectionDescriptor(key);
+    if (!descriptor || descriptor.scope !== "tenant") {
+      return fail(
+        404,
+        "NOT_FOUND",
+        `No registered projection with key "${key}".`
+      );
     }
 
     // `ProjectionDescriptor.requiredPermission` gates reading this

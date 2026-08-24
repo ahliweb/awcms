@@ -143,38 +143,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
   const validation = validateCreateBlogPageInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Blog page is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const input = validation.value;
-
-  // Issue #639 — unconditional (not R2-only-mode-gated), pure structural
-  // validation/normalization of any `video_news` blocks in `contentJson`:
-  // provider allowlist, videoId format/normalization. Runs before
-  // `withTenant` since it needs no database access.
-  const videoBlockValidation = validateAndNormalizeContentJsonVideoBlocks(
-    input.contentJson
-  );
-
-  if (!videoBlockValidation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Blog page is invalid.",
-      {},
-      videoBlockValidation.errors
-    );
-  }
-
-  input.contentJson = videoBlockValidation.value;
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -192,6 +160,38 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Blog page is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const input = validation.value;
+
+    // Issue #639 — unconditional (not R2-only-mode-gated), pure structural
+    // validation/normalization of any `video_news` blocks in `contentJson`:
+    // provider allowlist, videoId format/normalization. Runs before
+    // `withTenant` since it needs no database access.
+    const videoBlockValidation = validateAndNormalizeContentJsonVideoBlocks(
+      input.contentJson
+    );
+
+    if (!videoBlockValidation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Blog page is invalid.",
+        {},
+        videoBlockValidation.errors
+      );
+    }
+
+    input.contentJson = videoBlockValidation.value;
 
     if (input.parentPageId) {
       const parentRows = await tx`

@@ -46,21 +46,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     .json()
     .catch(() => null)) as AdminResetBody | null;
 
-  if (
-    !body ||
-    typeof body.identityId !== "string" ||
-    typeof body.reason !== "string" ||
-    body.reason.trim().length === 0
-  ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "identityId and a non-empty reason are required."
-    );
-  }
-
-  const targetIdentityId = body.identityId;
-  const reason = body.reason.trim();
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -74,6 +59,22 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       RESET_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (
+      !body ||
+      typeof body.identityId !== "string" ||
+      typeof body.reason !== "string" ||
+      body.reason.trim().length === 0
+    ) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "identityId and a non-empty reason are required."
+      );
+    }
+
+    const targetIdentityId = body.identityId;
+    const reason = body.reason.trim();
 
     // Step-up gate (Issue #184 F3): even a permission-holding admin must have a
     // FRESH second-factor proof to reset another user's MFA.

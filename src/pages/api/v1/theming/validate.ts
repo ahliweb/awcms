@@ -53,18 +53,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const rawBody = bodyRead.value as { themeKey?: unknown } | null;
   const themeKey =
     typeof rawBody?.themeKey === "string" ? rawBody.themeKey : null;
-  if (!themeKey) {
-    return fail(400, "VALIDATION_ERROR", "A themeKey string is required.");
-  }
-  const descriptor = getThemeDescriptor(themeKey);
-  if (!descriptor) {
-    return fail(
-      400,
-      "UNKNOWN_THEME",
-      `Theme "${themeKey}" is not a registered theme.`
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -79,6 +67,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     );
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (!themeKey) {
+      return fail(400, "VALIDATION_ERROR", "A themeKey string is required.");
+    }
+    const descriptor = getThemeDescriptor(themeKey);
+    if (!descriptor) {
+      return fail(
+        400,
+        "UNKNOWN_THEME",
+        `Theme "${themeKey}" is not a registered theme.`
+      );
     }
 
     const validation = validateThemeConfig(descriptor, bodyRead.value);

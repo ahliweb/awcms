@@ -11,29 +11,32 @@
  * alert on. A tenant user probing endpoints they have no grant for is invisible.
  *
  * Measured against a running server with a session holding ZERO permissions.
- * It started at **121**. It is now **70**:
- *
- * - **61** `400 VALIDATION_ERROR` — the endpoint's field names, enum values and
- *   length limits, handed to someone with no grant for it.
- * - **3** `400 IDEMPOTENCY_REQUIRED` — down from 54. The remaining three are
- *   STRUCTURAL, not leftovers; see the section below.
- * - **3** `404` — an existence lookup ran first.
- * - **2** `422 VALIDATION_FAILED`, **1** `401`.
+ * It started at **121**. It is now **11**, and every one of those eleven is a
+ * NAMED CLASS with a reason, not a leftover — the sections below say which.
  *
  * The rest answer `403 ACCESS_DENIED`, which is correct.
  *
- * ## The 51 that left, and what made them one job rather than 51
+ * ## The 110 that left, and the one sentence that retired them
  *
- * Every one of them refused a MISSING `Idempotency-Key` — a header check, which
- * needs no database and cannot fail — and then, in most cases, a body that did
- * not validate. Both were decided before `withTenant` opened and returned from
- * there, so neither reached `authorizeInTransaction` and neither left a row.
+ * **Move the ANSWER, not the work.** Every one of them decided something before
+ * `withTenant` opened — a missing `Idempotency-Key` (a header check, needing no
+ * database and unable to fail), then a body that did not validate — and RETURNED
+ * from there, so it never reached `authorizeInTransaction` and left no row.
  *
- * The work still happens before the transaction: reading a body waits on the
- * CLIENT, and doing that inside `withTenant` holds a reserved connection and its
- * work-class slot for as long as a caller chooses to take. What moved is the
- * ANSWER, not the work. The body-size ceiling deliberately did NOT move — a
- * PROTOCOL limit tells the caller nothing they did not already send.
+ * The work still happens outside the transaction, because it must: reading a
+ * body waits on the CLIENT, and doing that inside `withTenant` holds a reserved
+ * connection and its work-class slot for as long as a caller chooses to take.
+ * Only the refusal was held, and returned after authorization had spoken. The
+ * caller who is allowed still gets their validation errors, unchanged.
+ *
+ * Two things deliberately did NOT move, and both are the same rule:
+ *
+ * - **The body-size ceiling.** A PROTOCOL limit tells the caller nothing they
+ *   did not already send.
+ * - **Request-SHAPE guards** — a missing tenant header, a missing token, a
+ *   missing path parameter. They are about whether this is a well-formed request
+ *   for this route at all, not about the resource behind it, and a caller who
+ *   omitted their own path segment learns nothing from being told so.
  *
  * This is not an approval. It is the shape this repo already uses for
  * `api:tenant-route:check`: a ledger that may only shrink, so the number is
@@ -93,6 +96,22 @@
  *   being fixed, not a smaller one. Retiring them means splitting the route per
  *   action or checking the union of both permissions first; both are product
  *   decisions, so they wait for one.
+ * - **`POST /api/v1/blog/posts/:id/submit-review`** reads the post before
+ *   authorizing for the same ownership-grant-basis reason as the two `PATCH`
+ *   routes above, and additionally answers `MODULE_DISABLED` first. That one is
+ *   a disclosure of a different kind — whether a MODULE is enabled for this
+ *   tenant — and it is small, but it is still an answer given to somebody with
+ *   no grant. Deferring it means deciding whether a disabled module should
+ *   answer `403` or `409` to a caller who would not have been allowed either
+ *   way, which is a product decision about which of two true things to say.
+ * - **`POST /api/v1/access/evaluate`**, **`POST /api/v1/auth/mfa/step-up`** and
+ *   **`POST /api/v1/auth/delegated-access/redeem`** never call
+ *   `authorizeInTransaction` at all, so there is no chokepoint here to move a
+ *   refusal behind. They are authentication-flow routes whose subject is the
+ *   caller's own session; `evaluate` is a policy simulator. Whether they should
+ *   record anything, and to which log, is a question about the decision log's
+ *   scope rather than about statement order — the one shape in this file that
+ *   the pattern above genuinely cannot express.
  *
  * ## What is genuinely NOT here
  *
@@ -122,68 +141,6 @@ export type AuthorizationFirstDebt = {
  */
 export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
   {
-    endpoint: "DELETE /api/v1/access/assignments",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/auth/sso-providers/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "DELETE /api/v1/blog/ads/:id", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "DELETE /api/v1/blog/menus/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/blog/pages/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/blog/posts/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/blog/templates/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/blog/terms/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/blog/widgets/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/email/templates/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/news-portal/ad-placements/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/news-portal/homepage-sections/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "DELETE /api/v1/profiles/:id", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "DELETE /api/v1/roles/:id/permissions",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/seo/redirects/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "DELETE /api/v1/tenant/domains/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "PATCH /api/v1/abac/policies/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
     endpoint: "PATCH /api/v1/blog/pages/:id",
     answers: "404 RESOURCE_NOT_FOUND"
   },
@@ -191,50 +148,17 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     endpoint: "PATCH /api/v1/blog/posts/:id",
     answers: "404 RESOURCE_NOT_FOUND"
   },
-  { endpoint: "PATCH /api/v1/blog/theme", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "PATCH /api/v1/email/templates/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "PATCH /api/v1/form-drafts/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "PATCH /api/v1/offices/:id", answers: "400 VALIDATION_ERROR" },
   {
     endpoint: "PATCH /api/v1/partners/:partnerTenantId/status",
     answers: "422 VALIDATION_FAILED"
-  },
-  { endpoint: "PATCH /api/v1/profiles/:id", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "PATCH /api/v1/roles/:id", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "PATCH /api/v1/settings", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "PATCH /api/v1/sync/nodes/:id", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "PATCH /api/v1/tenant/domains/:id",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "PATCH /api/v1/users/:id", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/abac/policies", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/access/assignments",
-    answers: "400 VALIDATION_ERROR"
   },
   { endpoint: "POST /api/v1/access/evaluate", answers: "400 VALIDATION_ERROR" },
   {
     endpoint: "POST /api/v1/access/machine-credentials",
     answers: "422 VALIDATION_FAILED"
   },
-  { endpoint: "POST /api/v1/access/policies", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/access/policies/simulate",
-    answers: "400 VALIDATION_ERROR"
-  },
   {
     endpoint: "POST /api/v1/auth/delegated-access/redeem",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/auth/mfa/admin/reset",
     answers: "400 VALIDATION_ERROR"
   },
   {
@@ -242,19 +166,9 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/auth/sso-providers",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "POST /api/v1/blog/menus", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/blog/pages", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/blog/posts", answers: "400 VALIDATION_ERROR" },
-  {
     endpoint: "POST /api/v1/blog/posts/:id/submit-review",
     answers: "401 AUTH_REQUIRED"
   },
-  { endpoint: "POST /api/v1/blog/templates", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/blog/terms", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/blog/widgets", answers: "400 VALIDATION_ERROR" },
   {
     endpoint: "POST /api/v1/comments/admin/:id/moderate",
     answers: "400 IDEMPOTENCY_REQUIRED"
@@ -264,70 +178,8 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 IDEMPOTENCY_REQUIRED"
   },
   {
-    endpoint: "POST /api/v1/data-lifecycle/dry-run",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/domain-events/consumers/:name/pause",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/email/announcements/preview",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/email/suppressions",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "POST /api/v1/email/templates", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/form-drafts", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/news-portal/ad-placements",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/news-portal/homepage-sections",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "POST /api/v1/offices", answers: "400 VALIDATION_ERROR" },
-  { endpoint: "POST /api/v1/profiles", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/profiles/:id/identifiers",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/reports/projections/:key/reconcile",
-    answers: "404 NOT_FOUND"
-  },
-  { endpoint: "POST /api/v1/roles", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/roles/:id/permissions",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
     endpoint: "POST /api/v1/seo/redirects/:id/lifecycle",
     answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/sync/conflicts/:id/resolve",
-    answers: "400 VALIDATION_ERROR"
-  },
-  { endpoint: "POST /api/v1/tenant/domains", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/tenant/modules/:moduleKey/disable",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/theming/validate",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/definitions",
-    answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "PUT /api/v1/access/policies/:id",
-    answers: "400 VALIDATION_ERROR"
   }
 ];
 

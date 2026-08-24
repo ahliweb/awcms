@@ -90,17 +90,6 @@ export const PUT: APIRoute = async ({ request, cookies, params }) => {
   }
 
   const validation = validateAbacPolicyInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "ABAC policy is invalid.",
-      {},
-      validation.errors
-    );
-  }
-  const input = validation.value;
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -117,6 +106,17 @@ export const PUT: APIRoute = async ({ request, cookies, params }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "ABAC policy is invalid.",
+        {},
+        validation.errors
+      );
+    }
+    const input = validation.value;
 
     const existing = await getAbacPolicyById(tx, tenantId, id);
     if (!existing) {

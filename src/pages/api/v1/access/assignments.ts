@@ -59,16 +59,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateAssignmentInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Assignment input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -83,6 +73,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       ASSIGN_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Assignment input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const input = validation.value;
@@ -147,16 +147,6 @@ export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateAssignmentInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Assignment input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -171,6 +161,16 @@ export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
       ASSIGN_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Assignment input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const input = validation.value;

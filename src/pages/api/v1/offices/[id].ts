@@ -81,16 +81,6 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateUpdateOfficeInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Office update input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -105,6 +95,16 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       UPDATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Office update input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     const office = await updateOffice(
       tx,

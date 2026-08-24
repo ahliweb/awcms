@@ -80,16 +80,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateCreateAbacPolicyInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "ABAC policy input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -112,6 +102,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       CREATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "ABAC policy input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const policy = await createPolicy(
