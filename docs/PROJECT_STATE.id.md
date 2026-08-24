@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3ea30d883dca13d217a9db596dfe8b488bfe5be0256808d24573aa7400e01a55 -->
+<!-- i18n-source-hash: sha256:a041e9fbcfa275a9899245a0fb346528d1a0df77e4f156c9b5b28a46753f70e6 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,111 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN SAPUAN — 25 Agustus 2026: sapuan terjadwal berbiaya konstan PER
+  POST, dan indeks yang putaran sebelumnya tinggalkan sebagai tugas pengukuran
+  ternyata TIDAK perlu diubah. Kedua paruh itu sama-sama hasil.**
+
+  PUTARAN PERFORMA di bawah meninggalkan tiga hal yang disebut tetapi tidak
+  diperbaiki. Dua di antaranya kini ditutup.
+
+  **Sapuannya lebih buruk daripada yang dicatat.** Catatan itu menyebut
+  "`blog-scheduled-publish` memanggil `fetchPostTermIds` per-post di dalam loop
+  sapuannya". Per post jatuh tempo, sapuan itu JUGA membaca flag penegakan
+  managed-media SEKALI PER EVALUASI checklist — dan ia mengevaluasi dua kali —
+  me-resolve media post itu per evaluasi, menulis `UPDATE`-nya sendiri,
+  meng-enqueue purge edge-cache-nya sendiri, dan menulis baris auditnya sendiri.
+  Diukur terhadap implementasi sebelumnya:
+
+  | Sapuan (12 post jatuh tempo) | Sebelum | Sesudah |
+  | ---------------------------- | ------- | ------- |
+  | publish, penegakan mati      | 40      | 6       |
+  | publish, penegakan hidup     | 52      | 7       |
+  | unpublish                    | 27      | 4       |
+
+  Kemiringannya yang jadi temuan: `4 + 3N`, `4 + 4N`, dan `3 + 2N` melawan 6, 7,
+  dan 4 yang datar. Pada batas batch 200 itu berarti 604, 804, dan 403 pulang
+  pergi — per tenant, pada SATU koneksi `maintenance` yang job itu pegang, di
+  dalam job yang mendatangi setiap tenant aktif berurutan.
+
+  **Tidak ada yang per-post di sana kecuali putusannya.** Penegakan
+  managed-media adalah properti TENANT; resolusi media berkunci pada id objek
+  media, yang berlaku se-tenant. Me-resolve gabungan seluruh referensi satu
+  batch dalam satu `id = ANY(...)` mengembalikan baris yang identik dengan
+  me-resolve milik tiap post sendiri-sendiri. Evaluasinya sendiri tetap
+  per-post.
+
+  **Cek-ulang TOCTOU menjadi LEBIH KECIL, bukan lebih lemah** — bagian yang
+  paling berisiko hilang oleh "rapi-rapi" berikutnya. Sapuan mengevaluasi ulang
+  tepat sebelum menulis karena objek media yang dirujuk TIDAK dikunci oleh
+  `FOR UPDATE` batch. Membatch menjaga jendela itu tetap satu pulang-pergi dan
+  menghentikannya tumbuh mengikuti seberapa jauh sebuah post berada di dalam
+  batch. Memakai ulang putusan lintasan pertama akan MENGHAPUS mitigasinya
+  sambil tampak seperti pembersihan, jadi lintasan kedua tetap lintasan kedua —
+  dengan dua query untuk seluruh batch, bukan dua per post.
+
+  **`recordAuditEvents` adalah paruh yang bisa dipakai ulang**, dan bentuknya
+  yang layak dibawa ke depan. N baris dalam satu statement dari SATU parameter
+  `jsonb`, BUKAN idiom `INSERT ... SELECT unnest(...)` yang dipakai di tempat
+  lain: `unnest` menuntut satu array per kolom, tabel ini punya delapan kolom
+  nullable plus satu `jsonb`, dan binding array Bun TIDAK BISA membawa NULL — ia
+  menulis string harfiah `null` tanpa melempar. Itu delapan peluang salah secara
+  senyap, melawan satu parameter di mana JSON `null` memetakan ke SQL NULL dan
+  `attributes` tetap objek bersarang sungguhan. `jsonb_to_recordset` adalah
+  idiom untuk batch insert baris dengan kolom nullable atau `jsonb`.
+
+  **Sebuah test asersi-source memerah padahal perilakunya utuh, dan itu
+  pelajarannya sendiri.** `tests/two-sided-attribution.test.ts` menjaga dua kolom
+  atribusi ADR-0091 dengan mencari `${input.actorTenantId ?? null}` di
+  `audit-log.ts`. Penulis batch merakit nilai yang sama ke dalam objek baris
+  jsonb, jadi asersinya patah pada EJAAN. Ia tetap dipertahankan — murah, tanpa
+  basis data, paling cepat menangkap field yang hilang — tetapi bukan lagi
+  satu-satunya saksi: `tests/integration/audit-log-writer.integration.test.ts`
+  membaca kedua kolom itu KEMBALI DARI TABEL, dengan seluruh rantai FK
+  (partner → engagement → grant) di-seed, karena sebuah baris tidak bisa
+  mengklaim grant yang tidak ada.
+
+  **Pertanyaan indeks, diukur terhadap 24.000 post — dan hipotesisnya tidak
+  bertahan.** Catatannya berbunyi: "`awcms_blog_post_terms_tenant_idx` adalah
+  satu kolom berkardinalitas rendah. Arsip kategori memfilter `term_id` di bawah
+  predikat `tenant_id` milik RLS; `(term_id)` melayaninya dan komposit
+  `(tenant_id, term_id)` akan melayani keduanya."
+
+  - Untuk kategori LEBAR arsip tidak memakai satu pun: ia berjalan dari
+    `awcms_blog_posts_tenant_status_published_idx` terbaru-dulu lalu memeriksa
+    indeks UNIQUE `(post_id, term_id)`. 0,09 ms, 67 buffer.
+  - Untuk kategori SEMPIT planner berbalik ke rencana yang digerakkan term dan
+    memakai `(term_id)` — jadi `(term_id)` TIDAK redundan. 27 buffer.
+  - Komposit `(tenant_id, term_id)` melayani rencana sempit itu secara identik
+    (25 buffer) dan lebih lebar per entri. Mengganti KEDUA indeks satu-kolom
+    dengannya akan membuat penghapusan induk di `awcms_blog_terms` memindai
+    tabel join — persis residu yang didokumentasikan `db:fk-index:check` soal
+    komposit `(tenant_id, X)`. Dan `tenant_id` tidak bisa sekadar dibuang: tidak
+    ada query di repo yang memfilter tabel ini dengan `tenant_id` saja, tetapi
+    gerbang FK-index menuntutnya terjangkau indeks.
+  - Bulk insert 5.000 assignment: 110 ms dengan tiga indeks, 115 ms dengan dua.
+    Masih di dalam derau — tidak ada kemenangan tulis terukur untuk diklaim.
+
+    **Kesimpulan: tidak ada perubahan.** Nilainya ada pada penyangkalan dan
+    angkanya, bukan pada sebuah migration.
+
+  **Jebakan pengukuran yang layak dicatat, karena ia menghasilkan jawaban yang
+  salah dengan yakin selama dua puluh menit.** Ditulis dengan term id sebagai
+  subquery — `pt.term_id = (SELECT id FROM awcms_blog_terms WHERE slug = …)` —
+  kategori sempit berbiaya **24,7 ms dan 48.832 buffer**, memindai seluruh
+  24.000 post untuk mengembalikan 8 baris, karena InitPlan tidak di-konstanta-
+  lipat dan planner jatuh ke selektivitas generik (ia menduga 12.003 baris untuk
+  keduanya). Kode nyata mengikat `termId` sebagai PARAMETER, Postgres membangun
+  custom plan, dan query yang sama berbiaya 27 buffer. **Benchmark yang tidak
+  mengikat parameternya seperti pemanggilnya mengukur rencana yang tak pernah
+  didapat pemanggil itu.**
+
+  **Masih terbuka dari putaran di bawah, tidak berubah:** sembilan jalur tulis
+  ber-amplifikasi lebih rendah, masing-masing dibatasi oleh apa yang dikirim
+  SATU request. `enqueuePushToRecipients` yang layak disebut — satu query per
+  penerima plus satu `INSERT` per langganan — tetapi satu-satunya pemanggilnya
+  hari ini adalah `POST /api/v1/push/test` yang self-service, dengan satu
+  penerima. Ia menjadi fan-out sungguhan begitu ada pemanggil broadcast.
 
 - **PUTARAN PERFORMA — 24 Agustus 2026: seluruh anggaran query mengukur
   PEMBACAAN. Setiap N+1 di repo ada di jalur TULIS atau di job — paruh yang

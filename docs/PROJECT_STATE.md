@@ -360,6 +360,108 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **SWEEP ROUND — 25 August 2026: the scheduled sweeps cost a constant PER
+  POST, and the index the previous round left as a measurement task turns out
+  not to want changing. Both halves of that are results.**
+
+  The PERFORMANCE ROUND below left three things named rather than fixed. Two of
+  them are now closed.
+
+  **The sweep was worse than the note said.** It named "`blog-scheduled-publish`
+  calls the per-post `fetchPostTermIds` inside its sweep loop". Per due post the
+  sweep also read the managed-media enforcement flag ONCE PER CHECKLIST
+  EVALUATION — and it evaluates twice — resolved that post's media per
+  evaluation, wrote its own `UPDATE`, enqueued its own edge-cache purge and
+  wrote its own audit row. Measured against the previous implementation:
+
+  | Sweep (12 due posts)     | Before | After |
+  | ------------------------ | ------ | ----- |
+  | publish, enforcement off | 40     | 6     |
+  | publish, enforcement on  | 52     | 7     |
+  | unpublish                | 27     | 4     |
+
+  The slope is the finding: `4 + 3N`, `4 + 4N` and `3 + 2N` against a flat 6, 7
+  and 4. At the batch bound of 200 that is 604, 804 and 403 round trips — per
+  tenant, on the ONE reserved `maintenance` connection the job holds, in a job
+  that visits every active tenant in sequence.
+
+  **Nothing in it was per-post except the verdict.** Managed-media enforcement
+  is a property of the TENANT; media resolution is keyed by media object id,
+  which is tenant-wide. Resolving the union of a batch's references in one
+  `id = ANY(...)` returns byte-identical rows to resolving each post's own.
+  The evaluation itself stays strictly per post.
+
+  **The TOCTOU re-check got SMALLER, not weaker** — the part most at risk of
+  being lost to a later tidy-up. The sweep re-evaluates immediately before it
+  writes because the referenced media objects are not locked by the batch's
+  `FOR UPDATE`. Batching keeps that window at one round trip and stops it
+  growing with how far into the batch a post sits. Reusing the first pass's
+  verdicts would have removed the mitigation while looking like cleanup, so the
+  second pass is still a second pass, at two queries for the batch rather than
+  two per post.
+
+  **`recordAuditEvents` is the reusable half**, and its shape is the part worth
+  carrying forward. N rows in one statement built from a single `jsonb`
+  parameter, NOT the `INSERT ... SELECT unnest(...)` idiom this repo uses
+  elsewhere: `unnest` takes one array per column, this table has eight nullable
+  columns plus a `jsonb` one, and Bun's array binding cannot carry a NULL — it
+  writes the literal string `null` without throwing. That is eight chances to be
+  silently wrong, against one parameter where JSON `null` maps to SQL NULL and
+  `attributes` stays a real nested object. `jsonb_to_recordset` is the idiom for
+  a batch insert of rows with nullable or `jsonb` columns.
+
+  **A source-text test failed while the behaviour was intact, which is its own
+  lesson.** `tests/two-sided-attribution.test.ts` guards the two ADR-0091
+  attribution columns by looking for `${input.actorTenantId ?? null}` in
+  `audit-log.ts`. The batch writer assembles the same value into a jsonb row
+  object instead, so the assertion broke on a spelling. It is kept — cheap, no
+  database, catches a dropped field fastest — but is no longer the only witness:
+  `tests/integration/audit-log-writer.integration.test.ts` reads both columns
+  back OUT OF THE TABLE, with the whole FK chain (partner → engagement → grant)
+  seeded, because a row cannot claim a grant that does not exist.
+
+  **The index question, measured against 24,000 posts — and the hypothesis does
+  not survive.** The note read: "`awcms_blog_post_terms_tenant_idx` is a single
+  low-cardinality column. The category archive filters `term_id` under RLS's
+  `tenant_id` predicate; `(term_id)` serves it and a composite
+  `(tenant_id, term_id)` would serve both, making the single-column index
+  redundant."
+
+  - For a WIDE category the archive uses neither: it drives from
+    `awcms_blog_posts_tenant_status_published_idx` newest-first and probes the
+    `(post_id, term_id)` UNIQUE index. 0.09 ms, 67 buffers.
+  - For a NARROW category the planner flips to a term-driven plan using
+    `(term_id)` — so `(term_id)` is NOT redundant. 27 buffers.
+  - A `(tenant_id, term_id)` composite serves the narrow plan identically (25
+    buffers) and is wider per entry. Replacing BOTH single-column indexes with
+    it would leave `awcms_blog_terms` parent deletes scanning the join table —
+    exactly the residual `db:fk-index:check` documents about `(tenant_id, X)`
+    composites. And `tenant_id` cannot simply be dropped: no query in the repo
+    filters this table by `tenant_id` alone, but the FK-index gate requires it
+    to be index-reachable.
+  - Bulk insert of 5,000 assignments: 110 ms with three indexes, 115 ms with
+    two. Within noise — there is no measured write win to claim.
+
+    **Conclusion: no change.** The value here is the refutation and the numbers,
+    not a migration.
+
+  **A measurement trap worth recording, because it produced a confident wrong
+  answer for twenty minutes.** Written with the term id as a subquery —
+  `pt.term_id = (SELECT id FROM awcms_blog_terms WHERE slug = …)` — the narrow
+  category costs **24.7 ms and 48,832 buffers**, scanning all 24,000 posts to
+  return 8 rows, because an InitPlan is not constant-folded and the planner
+  falls back to generic selectivity (it estimated 12,003 rows either way). The
+  real code binds `termId` as a PARAMETER, Postgres builds a custom plan, and
+  the same query costs 27 buffers. **A benchmark that does not bind its
+  parameters the way the caller does measures a plan the caller never gets.**
+
+  **Still open from the round below, unchanged:** the nine lower-amplification
+  write paths, each bounded by what ONE request submits.
+  `enqueuePushToRecipients` is the one worth naming — a query per recipient plus
+  an `INSERT` per subscription — but its only caller today is the self-service
+  `POST /api/v1/push/test`, with one recipient. It becomes a real fan-out the
+  moment a broadcast caller exists.
+
 - **PERFORMANCE ROUND — 24 August 2026: the query budgets all measure READS.
   Every N+1 in the repo is on a WRITE path or in a job — the half nothing
   counts.**
