@@ -361,12 +361,28 @@ export async function syncPostTermAssignments(
     WHERE tenant_id = ${tenantId} AND post_id = ${postId}
   `;
 
-  for (const termId of termIds) {
-    await tx`
-      INSERT INTO awcms_blog_post_terms (tenant_id, post_id, term_id)
-      VALUES (${tenantId}, ${postId}, ${termId})
-    `;
+  if (termIds.length === 0) {
+    return;
   }
+
+  // ONE round trip, not one per term (`unnest`, the same shape
+  // `comment-retention.ts` and `announcement-directory.ts` use).
+  //
+  // Per save this was a small constant — a post carries a handful of terms —
+  // which is why it stood for as long as it did. What changed is the caller:
+  // `blog:legacy:import` now files every article it inserts, so a 23,906-row
+  // archive turned this into ~24k DELETEs and ~48k INSERTs inside batched
+  // transactions, where two statements per article will do.
+  //
+  // Deliberately NOT deduplicated: `awcms_blog_post_terms_unique` refuses a
+  // repeated (post, term) pair, and it refused one before this change too. A
+  // caller passing the same term twice has a bug, and swallowing it here would
+  // turn a loud constraint error into a silent difference between what was
+  // asked for and what was stored.
+  await tx`
+    INSERT INTO awcms_blog_post_terms (tenant_id, post_id, term_id)
+    SELECT ${tenantId}, ${postId}, unnest(${tx.array([...termIds], "uuid")}::uuid[])
+  `;
 }
 
 export async function fetchPostTermIds(
