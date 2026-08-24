@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 24    |
-| Migrations                          | 146   |
+| Migrations                          | 147   |
 | `awcms_*` tables                    | 152   |
 | Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
@@ -195,6 +195,7 @@
 | 144 | `sql/144_awcms_credential_epoch.sql`                               |
 | 145 | `sql/145_awcms_subject_actor_indexes.sql`                          |
 | 146 | `sql/146_awcms_identity_public_byline.sql`                         |
+| 147 | `sql/147_awcms_blog_pages_drop_legacy_provenance.sql`              |
 
 ### Tables & Row-Level Security
 

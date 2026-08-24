@@ -111,7 +111,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **146** (`sql/001`–`146`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **147** (`sql/001`–`147`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **61** (34.774 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
@@ -405,7 +405,10 @@ pioneered directly here after the ADR-0047 freeze.)
   `/disclimer.html` (the legacy typo is part of the URL). Three exact-path
   rules, which `awcms_seo_redirects` has supported since `sql/060` — admin data
   entry, not an importer and not a backfill. The column pair should be wired or
-  dropped; leaving it is what produced the appearance of coverage.
+  dropped; leaving it is what produced the appearance of coverage. **Dropped in
+  `sql/147`** — nothing had ever written it, so every row's value was NULL and
+  there was no data to lose; the test that asserted the migration's TEXT is
+  replaced by one that searches for a READER.
 
   The one covered shape is confirmed right: `berita/index.php:9` reads
   `(int) $_GET['news']`, so the id is the leading digits and the slug is
