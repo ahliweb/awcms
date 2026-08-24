@@ -69,14 +69,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody<ForceDecisionRequestBody>(request);
 
   if (bodyRead.tooLarge) {
@@ -88,21 +80,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     typeof bodyRead.value?.reason === "string"
       ? bodyRead.value.reason.trim()
       : "";
-
-  if (decisionInput !== "approve" && decisionInput !== "reject") {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      'decision must be "approve" or "reject".'
-    );
-  }
-  if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `reason is required (1-${MAX_REASON_LENGTH} characters).`
-    );
-  }
 
   const decision =
     decisionInput === "approve" ? "force_approve" : "force_reject";
@@ -142,6 +119,32 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
         guardRequest
       );
       if (!auth.allowed) return auth.denied;
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here.
+      if (!idempotencyKey) {
+        return fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        );
+      }
+
+      if (decisionInput !== "approve" && decisionInput !== "reject") {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          'decision must be "approve" or "reject".'
+        );
+      }
+
+      if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          `reason is required (1-${MAX_REASON_LENGTH} characters).`
+        );
+      }
 
       const existingIdempotency = await findIdempotencyRecord(
         tx,

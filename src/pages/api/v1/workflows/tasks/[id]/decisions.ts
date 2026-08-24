@@ -77,14 +77,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody(request);
 
   if (bodyRead.tooLarge) {
@@ -93,18 +85,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const validation = validateWorkflowDecisionRequestBody(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Decision input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const { decision, reason } = validation.value;
-  const requestHash = computeRequestHash({ taskId, decision, reason });
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -141,6 +121,29 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       if (!auth.allowed) {
         return auth.denied;
       }
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here.
+      if (!idempotencyKey) {
+        return fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        );
+      }
+
+      if (!validation.valid) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "Decision input is invalid.",
+          {},
+          validation.errors
+        );
+      }
+
+      const { decision, reason } = validation.value;
+      const requestHash = computeRequestHash({ taskId, decision, reason });
 
       const existingIdempotency = await findIdempotencyRecord(
         tx,

@@ -11,17 +11,29 @@
  * alert on. A tenant user probing endpoints they have no grant for is invisible.
  *
  * Measured against a running server with a session holding ZERO permissions.
- * Of the gated body endpoints the sweep discovers, **121** answer before the
- * chokepoint does:
+ * It started at **121**. It is now **70**:
  *
  * - **61** `400 VALIDATION_ERROR` — the endpoint's field names, enum values and
  *   length limits, handed to someone with no grant for it.
- * - **54** `400 IDEMPOTENCY_REQUIRED` — no schema, but the same missing audit
- *   row, and it still confirms the endpoint exists.
+ * - **3** `400 IDEMPOTENCY_REQUIRED` — down from 54. The remaining three are
+ *   STRUCTURAL, not leftovers; see the section below.
  * - **3** `404` — an existence lookup ran first.
  * - **2** `422 VALIDATION_FAILED`, **1** `401`.
  *
  * The rest answer `403 ACCESS_DENIED`, which is correct.
+ *
+ * ## The 51 that left, and what made them one job rather than 51
+ *
+ * Every one of them refused a MISSING `Idempotency-Key` — a header check, which
+ * needs no database and cannot fail — and then, in most cases, a body that did
+ * not validate. Both were decided before `withTenant` opened and returned from
+ * there, so neither reached `authorizeInTransaction` and neither left a row.
+ *
+ * The work still happens before the transaction: reading a body waits on the
+ * CLIENT, and doing that inside `withTenant` holds a reserved connection and its
+ * work-class slot for as long as a caller chooses to take. What moved is the
+ * ANSWER, not the work. The body-size ceiling deliberately did NOT move — a
+ * PROTOCOL limit tells the caller nothing they did not already send.
  *
  * This is not an approval. It is the shape this repo already uses for
  * `api:tenant-route:check`: a ledger that may only shrink, so the number is
@@ -54,7 +66,7 @@
  *
  * ## Entries with a STRUCTURAL reason, which may never leave
  *
- * Three of these are not sloppiness, and retiring them needs a design decision
+ * Some of these are not sloppiness, and retiring them needs a design decision
  * rather than the pattern above. They are listed rather than exempted, because
  * "there is a reason for it" and "it is fine" are different claims and only the
  * first is true:
@@ -68,6 +80,19 @@
  *   **`POST /api/v1/access/machine-credentials`** compute a stricter permission
  *   FROM the submitted body, so with no valid input there is no guard to
  *   evaluate. Same two routes `defineTenantRoute` names as unable to defer.
+ * - **`POST /api/v1/comments/admin/:id/moderate`**,
+ *   **`POST /api/v1/comments/admin/bulk-moderate`** and
+ *   **`POST /api/v1/seo/redirects/:id/lifecycle`** are the same class, found by
+ *   the pass that retired the other 51: their guard's ACTION is read off the
+ *   body (`decision === "approve" ? "approve" : "reject"`;
+ *   `lifecycleAction === "purge" ? "delete" : "update"`). Moving their refusals
+ *   after authorization would mean authorizing against a GUESSED action —
+ *   whatever the ternary falls back to when the body is invalid — so a
+ *   moderator holding only `approve` who sent a typo would be told `403` for a
+ *   permission the request never needed. That is a worse answer than the one
+ *   being fixed, not a smaller one. Retiring them means splitting the route per
+ *   action or checking the union of both permissions first; both are product
+ *   decisions, so they wait for one.
  *
  * ## What is genuinely NOT here
  *
@@ -155,10 +180,6 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "DELETE /api/v1/workflows/definitions/:id",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "PATCH /api/v1/abac/policies/:id",
     answers: "400 VALIDATION_ERROR"
   },
@@ -209,10 +230,6 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/analytics/retention/purge",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/auth/delegated-access/redeem",
     answers: "400 VALIDATION_ERROR"
   },
@@ -232,30 +249,6 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
   { endpoint: "POST /api/v1/blog/pages", answers: "400 VALIDATION_ERROR" },
   { endpoint: "POST /api/v1/blog/posts", answers: "400 VALIDATION_ERROR" },
   {
-    endpoint: "POST /api/v1/blog/posts/:id/archive",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/blog/posts/:id/publish",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/blog/posts/:id/purge",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/blog/posts/:id/restore",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/blog/posts/:id/revisions/:revisionId/restore",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/blog/posts/:id/schedule",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/blog/posts/:id/submit-review",
     answers: "401 AUTH_REQUIRED"
   },
@@ -263,15 +256,7 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
   { endpoint: "POST /api/v1/blog/terms", answers: "400 VALIDATION_ERROR" },
   { endpoint: "POST /api/v1/blog/widgets", answers: "400 VALIDATION_ERROR" },
   {
-    endpoint: "POST /api/v1/comments/admin/:id/archive",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/comments/admin/:id/moderate",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/comments/admin/:id/restore",
     answers: "400 IDEMPOTENCY_REQUIRED"
   },
   {
@@ -283,24 +268,8 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/data-lifecycle/legal-holds",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/data-lifecycle/legal-holds/:id/release",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/domain-events/consumers/:name/pause",
     answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/domain-events/deliveries/:id/replay",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/email/announcements",
-    answers: "400 IDEMPOTENCY_REQUIRED"
   },
   {
     endpoint: "POST /api/v1/email/announcements/preview",
@@ -312,42 +281,6 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
   },
   { endpoint: "POST /api/v1/email/templates", answers: "400 VALIDATION_ERROR" },
   { endpoint: "POST /api/v1/form-drafts", answers: "400 VALIDATION_ERROR" },
-  {
-    endpoint: "POST /api/v1/form-drafts/:id/submit",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/assignments",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/assignments/:id/revoke",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/exceptions",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/exceptions/:id/approve",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/exceptions/:id/reject",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/identity/business-scope/exceptions/:id/revoke",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/media/enforcement",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/media/news-images/upload-sessions/:id/finalize",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
   {
     endpoint: "POST /api/v1/news-portal/ad-placements",
     answers: "400 VALIDATION_ERROR"
@@ -363,26 +296,6 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/reports/exports",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/reports/exports/:id/disable",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/reports/exports/trigger",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/reports/projections/:key/rebuild",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/reports/projections/:key/rebuild/cancel",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/reports/projections/:key/reconcile",
     answers: "404 NOT_FOUND"
   },
@@ -392,27 +305,7 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/seo/redirects",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/seo/redirects/:id/lifecycle",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/seo/redirects/capture-url-change",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/seo/redirects/import",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/site-search/index/rebuild",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/site-search/index/reconcile",
     answers: "400 IDEMPOTENCY_REQUIRED"
   },
   {
@@ -421,28 +314,8 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
   },
   { endpoint: "POST /api/v1/tenant/domains", answers: "400 VALIDATION_ERROR" },
   {
-    endpoint: "POST /api/v1/tenant/domains/:id/set-primary",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/tenant/domains/:id/verify",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "POST /api/v1/tenant/modules/:moduleKey/disable",
     answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "POST /api/v1/theming/publish",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/theming/retire",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/theming/rollback",
-    answers: "400 IDEMPOTENCY_REQUIRED"
   },
   {
     endpoint: "POST /api/v1/theming/validate",
@@ -453,55 +326,9 @@ export const AUTHORIZATION_FIRST_DEBT: readonly AuthorizationFirstDebt[] = [
     answers: "400 VALIDATION_ERROR"
   },
   {
-    endpoint: "POST /api/v1/workflows/definitions/:id/publish",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/definitions/:id/retire",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/delegations",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/delegations/:id/revoke",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/instances/:id/cancel",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/tasks/:id/decisions",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/tasks/:id/force-decision",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "POST /api/v1/workflows/tasks/:id/reassign",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
     endpoint: "PUT /api/v1/access/policies/:id",
     answers: "400 VALIDATION_ERROR"
-  },
-  {
-    endpoint: "PUT /api/v1/comments/admin/settings",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  { endpoint: "PUT /api/v1/seo/config", answers: "400 IDEMPOTENCY_REQUIRED" },
-  {
-    endpoint: "PUT /api/v1/seo/redirects/settings",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  {
-    endpoint: "PUT /api/v1/site-search/settings",
-    answers: "400 IDEMPOTENCY_REQUIRED"
-  },
-  { endpoint: "PUT /api/v1/theming/draft", answers: "400 IDEMPOTENCY_REQUIRED" }
+  }
 ];
 
 export function isKnownAuthorizationFirstDebt(endpoint: string): boolean {

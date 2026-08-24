@@ -107,23 +107,24 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
-  // Order note: the presence gates above (tenant/token/idempotency-key) run
-  // first; then the cheap, in-memory body read + validation; the ABAC check
-  // (`authorizeInTransaction`) runs INSIDE `withTenant` below. This matches the
-  // established repo pattern (`api/v1/tenant/domains/index.ts` POST validates
-  // before opening `withTenant`) and is deliberate: body validation touches no
-  // database, so it runs before we open a tenant transaction / hold a pooled
-  // connection for the ABAC lookup. A 403 for an authenticated-but-unauthorized
-  // caller therefore only costs an in-memory parse, never a DB round trip, and
-  // no state is ever written before authorization.
+  // Order note: the work runs out here, the ANSWERS wait. The body is read and
+  // validated before the transaction opens — `await request.json()` waits on
+  // the CLIENT, and doing that inside `withTenant` would hold a reserved
+  // connection and its work-class slot for as long as a caller chooses to take.
+  // But every refusal below is HELD until `authorizeInTransaction` has answered
+  // inside the transaction.
+  //
+  // This note used to say the opposite order was deliberate. It was wrong in a
+  // way that cost nothing to a caller who is allowed and everything to the
+  // audit trail: ADR-0063 made `authorizeInTransaction` the one place a
+  // decision is taken AND recorded, so refusing out here refused with NO
+  // `awcms_access_decision_log` row — a tenant user with no `seo.configure`
+  // grant could learn this endpoint's field names and enum values, repeatedly,
+  // and leave no trace. Gap C19.
+  //
+  // The body-size ceiling stays ahead of everything: it is a PROTOCOL limit,
+  // not a product answer, and refusing it tells the caller nothing they did not
+  // already send.
   const bodyRead = await readJsonBody(request);
 
   if (bodyRead.tooLarge) {
@@ -131,19 +132,6 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
   }
 
   const validation = validateSeoTenantSettings(bodyRead.value);
-
-  if (!validation.ok) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "SEO settings are invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const next = validation.value;
-  const requestHash = computeRequestHash(next);
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -161,6 +149,29 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!validation.ok) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "SEO settings are invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const next = validation.value;
+    const requestHash = computeRequestHash(next);
 
     const existingIdempotency = await findIdempotencyRecord(
       tx,

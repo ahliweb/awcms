@@ -93,22 +93,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody<CreateLegalHoldBody>(request);
 
   if (bodyRead.tooLarge) {
     return bodyTooLargeResponse(bodyRead.limitBytes);
-  }
-
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
   }
 
   const body = (bodyRead.value ?? {}) as CreateLegalHoldBody;
@@ -140,6 +129,20 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (bodyRead.malformed) {
+      return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
     }
 
     const existingIdempotency = await findIdempotencyRecord(

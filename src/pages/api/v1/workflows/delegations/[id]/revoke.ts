@@ -62,14 +62,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody<RevokeRequestBody>(request);
 
   if (bodyRead.tooLarge) {
@@ -80,14 +72,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     typeof bodyRead.value?.reason === "string"
       ? bodyRead.value.reason.trim()
       : undefined;
-
-  if (reason !== undefined && reason.length > MAX_REASON_LENGTH) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `reason must be at most ${MAX_REASON_LENGTH} characters.`
-    );
-  }
 
   const requestHash = computeRequestHash({ id, reason });
   const sql = getDatabaseClient();
@@ -106,6 +90,24 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
         REVOKE_GUARD
       );
       if (!auth.allowed) return auth.denied;
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here.
+      if (!idempotencyKey) {
+        return fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        );
+      }
+
+      if (reason !== undefined && reason.length > MAX_REASON_LENGTH) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          `reason must be at most ${MAX_REASON_LENGTH} characters.`
+        );
+      }
 
       const existingIdempotency = await findIdempotencyRecord(
         tx,

@@ -67,13 +67,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody(request);
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
@@ -81,24 +74,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const body = (bodyRead.value ?? {}) as Record<string, unknown>;
   const dryRun = body.dryRun === true;
   const items = body.redirects;
-
-  if (!Array.isArray(items)) {
-    return fail(400, "VALIDATION_ERROR", "redirects must be an array.");
-  }
-  if (items.length === 0) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "redirects must contain at least one item."
-    );
-  }
-  if (items.length > MAX_IMPORT_ITEMS) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `redirects must contain at most ${MAX_IMPORT_ITEMS} items.`
-    );
-  }
 
   const requestHash = computeRequestHash({ dryRun, items });
   const sql = getDatabaseClient();
@@ -115,6 +90,36 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       CREATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!Array.isArray(items)) {
+      return fail(400, "VALIDATION_ERROR", "redirects must be an array.");
+    }
+
+    if (items.length === 0) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "redirects must contain at least one item."
+      );
+    }
+
+    if (items.length > MAX_IMPORT_ITEMS) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `redirects must contain at most ${MAX_IMPORT_ITEMS} items.`
+      );
+    }
 
     if (!dryRun) {
       const existing = await findIdempotencyRecord(

@@ -83,30 +83,11 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody(request);
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateRedirectSettings(bodyRead.value);
-  if (!validation.ok) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Redirect settings are invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const next = validation.value;
-  const requestHash = computeRequestHash(next);
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -121,6 +102,29 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
       UPDATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (!validation.ok) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Redirect settings are invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const next = validation.value;
+    const requestHash = computeRequestHash(next);
 
     const existing = await findIdempotencyRecord(
       tx,

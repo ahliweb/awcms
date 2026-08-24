@@ -47,13 +47,6 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
   }
 
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
 
   const bodyRead = await readJsonBody<DisableBody>(request);
 
@@ -61,20 +54,9 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
     return bodyTooLargeResponse(bodyRead.limitBytes);
   }
 
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
-  }
-
   const body = (bodyRead.value ?? {}) as DisableBody;
 
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-  if (reason.length < MIN_REASON_LENGTH || reason.length > MAX_REASON_LENGTH) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `reason must be ${MIN_REASON_LENGTH}-${MAX_REASON_LENGTH} characters.`
-    );
-  }
 
   const requestHash = computeRequestHash({ ...body, id, action: "disable" });
   const sql = getDatabaseClient();
@@ -91,6 +73,31 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // Allowed — so the caller is entitled to hear what is actually wrong, and
+    // the decision log now carries the row saying they were here.
+    if (!idempotencyKey) {
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
+    }
+
+    if (bodyRead.malformed) {
+      return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
+    }
+
+    if (
+      reason.length < MIN_REASON_LENGTH ||
+      reason.length > MAX_REASON_LENGTH
+    ) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `reason must be ${MIN_REASON_LENGTH}-${MAX_REASON_LENGTH} characters.`
+      );
     }
 
     const existingIdempotency = await findIdempotencyRecord(

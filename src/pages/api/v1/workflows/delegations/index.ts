@@ -123,14 +123,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
   const idempotencyKey = request.headers.get("idempotency-key");
 
-  if (!idempotencyKey) {
-    return fail(
-      400,
-      "IDEMPOTENCY_REQUIRED",
-      "Idempotency-Key header is required."
-    );
-  }
-
   const bodyRead = await readJsonBody(request);
 
   if (bodyRead.tooLarge) {
@@ -153,6 +145,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         CREATE_GUARD
       );
       if (!auth.allowed) return auth.denied;
+
+      // Allowed — so the caller is entitled to hear what is actually wrong, and
+      // the decision log now carries the row saying they were here.
+      if (!idempotencyKey) {
+        return fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        );
+      }
 
       const validation = validateCreateDelegationRequestBody(
         bodyRead.value,
