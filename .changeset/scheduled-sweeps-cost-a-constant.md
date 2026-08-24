@@ -39,6 +39,16 @@ Reusing the first pass's verdicts would have removed the mitigation entirely
 while looking like a tidy-up, so the second pass is still a second pass — it
 just costs two queries for the whole batch instead of two per post.
 
+**And it is now the first thing holding that mitigation.** It was a comment with
+nothing behind it: a budget would be HAPPIER if the second pass were deleted,
+and a correctness test over a stable fixture cannot tell the two passes apart.
+`tests/integration/scheduled-publish-toctou.integration.test.ts` drives a
+`MediaLibraryPort` stub that resolves the featured media on the FIRST call and
+stops on the second — the detachment, made deterministic — and requires the post
+to stay `scheduled`. The control case (media that never goes away) must publish,
+so a test that passed because the checklist never passed at all cannot hide.
+Mutation-proven: reusing the first verdict turns two of its three cases red.
+
 **`recordAuditEvents`** is the reusable half: N audit rows in one statement,
 built from a single `jsonb` parameter rather than one array per column. Bun's
 array binding cannot carry a NULL — it writes the literal string `null` without

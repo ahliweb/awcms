@@ -400,6 +400,18 @@ pioneered directly here after the ADR-0047 freeze.)
   second pass is still a second pass, at two queries for the batch rather than
   two per post.
 
+  **The mitigation had NOTHING holding it, which is why it was easy to nearly
+  lose.** A budget would be HAPPIER if the second pass were deleted — the number
+  drops — and a correctness test over a stable fixture cannot tell the two
+  passes apart, because both see the same media. It was a comment.
+  `scheduled-publish-toctou.integration.test.ts` now drives a `MediaLibraryPort`
+  stub that resolves the featured media on the FIRST call and stops on the
+  second — the detachment, made deterministic — and requires the post to stay
+  `scheduled`; the control case, media that never goes away, must publish, so a
+  test passing because the checklist never passed cannot hide. **The port is
+  what made this testable at all**: the media state is behind a seam, so the
+  race does not have to be raced.
+
   **`recordAuditEvents` is the reusable half**, and its shape is the part worth
   carrying forward. N rows in one statement built from a single `jsonb`
   parameter, NOT the `INSERT ... SELECT unnest(...)` idiom this repo uses

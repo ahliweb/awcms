@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a041e9fbcfa275a9899245a0fb346528d1a0df77e4f156c9b5b28a46753f70e6 -->
+<!-- i18n-source-hash: sha256:4352dc5113fe67a0ba92ff786cc3d12b67cde5cac30734aec721e9e2b035f4df -->
 
 # AWCMS — Project State & Continuation
 
@@ -401,6 +401,19 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   batch. Memakai ulang putusan lintasan pertama akan MENGHAPUS mitigasinya
   sambil tampak seperti pembersihan, jadi lintasan kedua tetap lintasan kedua —
   dengan dua query untuk seluruh batch, bukan dua per post.
+
+  **Mitigasi itu TIDAK dipegang apa pun, dan itulah sebabnya ia nyaris
+  hilang.** Sebuah anggaran justru akan lebih SENANG bila lintasan kedua
+  dihapus — angkanya turun — dan test kebenaran di atas fixture yang stabil
+  tidak bisa membedakan kedua lintasan, karena keduanya melihat media yang
+  sama. Ia hanya sebuah komentar. `scheduled-publish-toctou.integration.test.ts`
+  kini menjalankan stub `MediaLibraryPort` yang me-resolve media unggulan pada
+  panggilan PERTAMA lalu berhenti pada yang kedua — pelepasan itu, dibuat
+  deterministik — dan menuntut post-nya tetap `scheduled`; kasus kontrolnya,
+  media yang tak pernah hilang, WAJIB terbit, sehingga test yang lulus karena
+  checklist-nya tak pernah lulus tidak bisa bersembunyi. **Port-lah yang membuat
+  ini bisa diuji sama sekali**: keadaan media berada di balik satu jahitan,
+  jadi balapannya tak perlu dibalapkan.
 
   **`recordAuditEvents` adalah paruh yang bisa dipakai ulang**, dan bentuknya
   yang layak dibawa ke depan. N baris dalam satu statement dari SATU parameter
