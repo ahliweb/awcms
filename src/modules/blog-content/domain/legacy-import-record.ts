@@ -56,6 +56,15 @@ export type LegacyImportRecord = {
   publishedAt: Date | null;
   seoTitle: string | null;
   metaDescription: string | null;
+  /**
+   * Legacy category names, EXACTLY as the old system spelled them. Resolved to
+   * this tenant's terms through `--term-map`; never created from a name.
+   *
+   * Empty is legitimate — an archive may genuinely file nothing — which is why
+   * the importer refuses only a name it was given no mapping for, rather than
+   * demanding every row carry one.
+   */
+  categories: readonly string[];
 };
 
 export type LegacyImportRecordResult =
@@ -152,6 +161,28 @@ export function parseLegacyImportRecord(
     errors.push("publishedAt is required when status is 'published'");
   }
 
+  // Absent is fine and means "files under nothing". A PRESENT field that is not
+  // a list of names is refused rather than coerced: a single string here almost
+  // certainly means the export writes one category per row and someone will
+  // later add a second, and silently reading it as one name would file every
+  // article of that day under a category called `Politik,Daerah`.
+  const categories: string[] = [];
+  if (record.categories !== undefined && record.categories !== null) {
+    if (!Array.isArray(record.categories)) {
+      errors.push("categories must be an array of category names");
+    } else {
+      for (const entry of record.categories) {
+        if (typeof entry !== "string" || entry.trim().length === 0) {
+          errors.push(
+            `categories contains ${JSON.stringify(entry)}, which is not a category name`
+          );
+          continue;
+        }
+        categories.push(entry.trim());
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -169,7 +200,11 @@ export function parseLegacyImportRecord(
       visibility: visibilityRaw as BlogContentVisibility,
       publishedAt,
       seoTitle: optionalText(record.seoTitle, MAX_LEGACY_TITLE_LENGTH),
-      metaDescription: optionalText(record.metaDescription, 1000)
+      metaDescription: optionalText(record.metaDescription, 1000),
+      // Deduplicated here rather than at assignment time: a legacy row listing
+      // the same rubrik twice is one filing, and `syncPostTermAssignments`
+      // would otherwise try to insert the pair twice.
+      categories: [...new Set(categories)]
     }
   };
 }

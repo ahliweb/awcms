@@ -313,3 +313,89 @@ describe("the redirect map lands in ONE hop", () => {
     expect(source).toContain("statusCode: 301");
   });
 });
+
+describe("categories: the archive is filed, or it is refused", () => {
+  test("absent categories parse as none — an archive may file nothing", () => {
+    const result = parseLegacyImportRecord(record(), DEFAULTS);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.categories).toEqual([]);
+  });
+
+  test("a category listed twice on one row is one filing", () => {
+    const result = parseLegacyImportRecord(
+      record({ categories: ["Daerah", "Daerah"] }),
+      DEFAULTS
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // `syncPostTermAssignments` would otherwise insert the same pair twice.
+    expect(result.value.categories).toEqual(["Daerah"]);
+  });
+
+  test("a bare string is REFUSED, not read as one name", () => {
+    const result = parseLegacyImportRecord(
+      record({ categories: "Politik,Daerah" }),
+      DEFAULTS
+    );
+
+    // Coercing this would file every article of that day under a category
+    // literally called `Politik,Daerah`.
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join(" ")).toContain("array of category names");
+  });
+
+  test("a non-name entry is named in the error", () => {
+    const result = parseLegacyImportRecord(
+      record({ categories: ["Daerah", 7] }),
+      DEFAULTS
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join(" ")).toContain("7");
+  });
+});
+
+describe("the term map is verified as ONE artefact, before anything is written", () => {
+  test("a name is never turned into a term", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // An importer that creates a term because a row mentioned one turns a typo
+    // in a 23,906-row export into a published category nobody chose.
+    expect(source).not.toContain("createBlogTerm");
+  });
+
+  test("every id is checked against the tenant's LIVE taxonomy, and a bad one stops the run", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    expect(source).toContain("findUnknownTermIds");
+    // Not a per-row refusal: a map is one artefact, and a wrong id in it is a
+    // wrong artefact.
+    const gate = source.slice(source.indexOf("findUnknownTermIds"));
+    expect(gate).toContain("process.exitCode = 1");
+  });
+
+  test("an unmapped category refuses the row rather than importing it unfiled", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // An article that imported cleanly and lost its filing looks like a
+    // success, and the category archive it belongs in answers a crawler with a
+    // page that loads and lists nothing — a soft 404.
+    expect(source).toContain("(name) => !termMap.has(name)");
+  });
+
+  test("filing happens in the SAME transaction as the insert", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    const commitBlock = source.slice(source.indexOf("if (commit)"));
+    expect(commitBlock).toContain("syncPostTermAssignments");
+    // Only for a row this run inserted: `ON CONFLICT DO NOTHING` leaves
+    // `postId` null for an article already present, and re-filing it would
+    // DELETE whatever an editor has since corrected by hand.
+    expect(commitBlock).toContain("if (outcome.postId)");
+  });
+});

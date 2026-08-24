@@ -432,6 +432,36 @@ export async function fetchPostTermIdsForPosts(
 }
 
 /** Used before `syncPostTermAssignments` to reject a `termIds` list containing an id that doesn't exist (or belongs to another tenant, or is soft-deleted) — a bare FK violation would otherwise surface as a raw 500. */
+/**
+ * Which of these term ids this tenant does NOT have (Issue #599).
+ *
+ * `countExistingTerms` answers "how many", which is the right shape for a
+ * create/update guard rejecting one bad request. It is the wrong shape for an
+ * operator holding a hand-built `--term-map`: "3 of 40 are unknown" sends them
+ * to diff two lists by eye. This names them.
+ *
+ * Soft-deleted terms count as unknown, matching `countExistingTerms`: filing
+ * 23,906 articles under a category an editor deleted would resurrect it in
+ * every archive listing without anybody choosing to.
+ */
+export async function findUnknownTermIds(
+  tx: Bun.SQL,
+  tenantId: string,
+  termIds: readonly string[]
+): Promise<string[]> {
+  if (termIds.length === 0) {
+    return [];
+  }
+
+  const rows = (await tx`
+    SELECT id FROM awcms_blog_terms
+    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND id = ANY(${tx.array([...termIds], "uuid")})
+  `) as { id: string }[];
+
+  const known = new Set(rows.map((row) => row.id));
+  return [...new Set(termIds)].filter((id) => !known.has(id));
+}
+
 export async function countExistingTerms(
   tx: Bun.SQL,
   tenantId: string,
