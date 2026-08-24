@@ -56,58 +56,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return bodyTooLargeResponse(bodyRead.limitBytes);
   }
 
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
-  }
-
-  const body = (bodyRead.value ?? {}) as DryRunBody;
-
-  if (
-    typeof body.descriptorKey !== "string" ||
-    body.descriptorKey.length === 0
-  ) {
-    return fail(400, "VALIDATION_ERROR", "descriptorKey is required.");
-  }
-
-  const retentionDaysOverride =
-    typeof body.retentionDaysOverride === "number"
-      ? body.retentionDaysOverride
-      : undefined;
-
-  const descriptor = collectHighVolumeTableDescriptors(listModules()).find(
-    (candidate) => candidate.key === body.descriptorKey
-  );
-
-  if (!descriptor) {
-    // An infrastructure descriptor (ADR-0076) is a real, registered key that
-    // this planner cannot serve. Answering 404 "unknown" would send the caller
-    // hunting for a typo that is not there, so the two cases are told apart.
-    const isInfrastructure = INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS.some(
-      (candidate) => candidate.key === body.descriptorKey
-    );
-
-    if (isInfrastructure) {
-      return fail(
-        400,
-        "VALIDATION_ERROR",
-        `Descriptor "${body.descriptorKey}" is owned by infrastructure, not by a module. On-demand dry-run is not available for it: its purge is delegated to \`bun run edge-cache:purge\`, and this planner has no status predicate, so any count it produced would include rows that purge will never touch.`
-      );
-    }
-
-    return fail(
-      404,
-      "NOT_FOUND",
-      `Unknown descriptor key: "${body.descriptorKey}".`
-    );
-  }
-  if (descriptor.scope !== "tenant") {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `Descriptor "${descriptor.key}" has scope "global" — on-demand dry-run is only supported for scope: "tenant" descriptors today.`
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -121,6 +69,58 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (bodyRead.malformed) {
+      return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
+    }
+
+    const body = (bodyRead.value ?? {}) as DryRunBody;
+
+    if (
+      typeof body.descriptorKey !== "string" ||
+      body.descriptorKey.length === 0
+    ) {
+      return fail(400, "VALIDATION_ERROR", "descriptorKey is required.");
+    }
+
+    const retentionDaysOverride =
+      typeof body.retentionDaysOverride === "number"
+        ? body.retentionDaysOverride
+        : undefined;
+
+    const descriptor = collectHighVolumeTableDescriptors(listModules()).find(
+      (candidate) => candidate.key === body.descriptorKey
+    );
+
+    if (!descriptor) {
+      // An infrastructure descriptor (ADR-0076) is a real, registered key that
+      // this planner cannot serve. Answering 404 "unknown" would send the caller
+      // hunting for a typo that is not there, so the two cases are told apart.
+      const isInfrastructure = INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS.some(
+        (candidate) => candidate.key === body.descriptorKey
+      );
+
+      if (isInfrastructure) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          `Descriptor "${body.descriptorKey}" is owned by infrastructure, not by a module. On-demand dry-run is not available for it: its purge is delegated to \`bun run edge-cache:purge\`, and this planner has no status predicate, so any count it produced would include rows that purge will never touch.`
+        );
+      }
+
+      return fail(
+        404,
+        "NOT_FOUND",
+        `Unknown descriptor key: "${body.descriptorKey}".`
+      );
+    }
+    if (descriptor.scope !== "tenant") {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `Descriptor "${descriptor.key}" has scope "global" — on-demand dry-run is only supported for scope: "tenant" descriptors today.`
+      );
     }
 
     const activeHolds = await fetchActiveLegalHoldsForPlanning(tx, tenantId);

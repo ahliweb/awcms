@@ -53,11 +53,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   const body = bodyRead.value;
   const reasonRaw = (body as { reason?: unknown } | null)?.reason;
 
-  if (typeof reasonRaw !== "string" || reasonRaw.trim().length === 0) {
-    return fail(400, "VALIDATION_ERROR", "reason is required.");
-  }
-
-  const reason = reasonRaw.trim();
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -75,6 +70,12 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (typeof reasonRaw !== "string" || reasonRaw.trim().length === 0) {
+      return fail(400, "VALIDATION_ERROR", "reason is required.");
+    }
+
+    const reason = reasonRaw.trim();
 
     const result = await disableTenantModule(
       tx,

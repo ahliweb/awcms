@@ -149,16 +149,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     bodyRead.value
   );
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Definition input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -177,6 +167,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
       if (!auth.allowed) {
         return auth.denied;
+      }
+
+      if (!validation.valid) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "Definition input is invalid.",
+          {},
+          validation.errors
+        );
       }
 
       try {

@@ -107,17 +107,6 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
 
   const validation = validateUpdateEmailTemplateInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Email template update is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const input = validation.value;
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -135,6 +124,18 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Email template update is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const input = validation.value;
 
     const template = await updateEmailTemplate(
       tx,
@@ -195,11 +196,6 @@ export const DELETE: APIRoute = async ({
   const body = bodyRead.value;
   const reasonRaw = (body as { reason?: unknown } | null)?.reason;
 
-  if (typeof reasonRaw !== "string" || reasonRaw.trim().length === 0) {
-    return fail(400, "VALIDATION_ERROR", "reason is required.");
-  }
-
-  const reason = reasonRaw.trim();
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -217,6 +213,12 @@ export const DELETE: APIRoute = async ({
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (typeof reasonRaw !== "string" || reasonRaw.trim().length === 0) {
+      return fail(400, "VALIDATION_ERROR", "reason is required.");
+    }
+
+    const reason = reasonRaw.trim();
 
     const deleted = await softDeleteEmailTemplate(
       tx,

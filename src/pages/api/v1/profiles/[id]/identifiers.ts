@@ -38,16 +38,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateAddIdentifierInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Identifier input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -62,6 +52,16 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       CREATE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Identifier input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const record = await addIdentifierToProfile(

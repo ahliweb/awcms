@@ -87,17 +87,6 @@ export const PATCH: APIRoute = async ({ request, cookies, locals }) => {
 
   const validation = validateUpdateThemeSettingsInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Theme settings are invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const { mode } = validation.value;
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -115,6 +104,18 @@ export const PATCH: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Theme settings are invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const { mode } = validation.value;
 
     const settings = await upsertBlogThemeSettings(tx, tenantId, mode);
 

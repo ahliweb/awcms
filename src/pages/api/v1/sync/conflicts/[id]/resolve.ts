@@ -44,17 +44,6 @@ export const POST: APIRoute = async ({ request, cookies, params }) => {
 
   const validation = validateConflictResolutionRequestBody(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Conflict resolution input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const { resolution, note } = validation.value;
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -74,6 +63,18 @@ export const POST: APIRoute = async ({ request, cookies, params }) => {
       if (!auth.allowed) {
         return auth.denied;
       }
+
+      if (!validation.valid) {
+        return fail(
+          400,
+          "VALIDATION_ERROR",
+          "Conflict resolution input is invalid.",
+          {},
+          validation.errors
+        );
+      }
+
+      const { resolution, note } = validation.value;
 
       const conflictRows = await tx`
       SELECT id, status FROM awcms_sync_conflicts

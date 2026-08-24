@@ -48,16 +48,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validatePermissionRefInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Permission grant input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -72,6 +62,16 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       CONFIGURE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Permission grant input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const result = await grantPermissionToRole(
@@ -146,16 +146,6 @@ export const DELETE: APIRoute = async ({
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validatePermissionRefInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Permission revoke input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -170,6 +160,16 @@ export const DELETE: APIRoute = async ({
       CONFIGURE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Permission revoke input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     const result = await revokePermissionFromRole(
       tx,

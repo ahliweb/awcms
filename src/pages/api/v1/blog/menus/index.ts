@@ -110,34 +110,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const body = bodyRead.value;
   const record = body ?? {};
 
-  if (
-    typeof record.key !== "string" ||
-    !isValidSlug(record.key.trim()) ||
-    typeof record.name !== "string" ||
-    record.name.trim().length === 0
-  ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "key (slug format) and name are required."
-    );
-  }
-
-  const itemsInput = record.items ?? [];
-  const itemsResult = validateMenuItemsInput(itemsInput);
-
-  if (!itemsResult.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Menu items are invalid.",
-      {},
-      itemsResult.errors
-    );
-  }
-
-  const key = record.key.trim();
-  const name = record.name.trim();
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -155,6 +127,35 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (
+      typeof record.key !== "string" ||
+      !isValidSlug(record.key.trim()) ||
+      typeof record.name !== "string" ||
+      record.name.trim().length === 0
+    ) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "key (slug format) and name are required."
+      );
+    }
+
+    const itemsInput = record.items ?? [];
+    const itemsResult = validateMenuItemsInput(itemsInput);
+
+    if (!itemsResult.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Menu items are invalid.",
+        {},
+        itemsResult.errors
+      );
+    }
+
+    const key = record.key.trim();
+    const name = record.name.trim();
 
     let menu;
 

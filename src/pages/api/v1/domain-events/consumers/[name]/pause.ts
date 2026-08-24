@@ -59,14 +59,6 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       ? bodyRead.value.reason.trim()
       : "";
 
-  if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      `reason is required and must be 1-${MAX_REASON_LENGTH} characters.`
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -83,6 +75,14 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (reason.length === 0 || reason.length > MAX_REASON_LENGTH) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `reason is required and must be 1-${MAX_REASON_LENGTH} characters.`
+      );
     }
 
     try {

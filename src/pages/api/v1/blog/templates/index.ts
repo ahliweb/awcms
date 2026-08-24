@@ -87,17 +87,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
   const validation = validateCreateTemplateInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Template is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const input = validation.value;
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -115,6 +104,18 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Template is invalid.",
+        {},
+        validation.errors
+      );
+    }
+
+    const input = validation.value;
 
     let template;
 

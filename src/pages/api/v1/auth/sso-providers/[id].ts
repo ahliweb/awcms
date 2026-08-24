@@ -203,12 +203,6 @@ export const DELETE: APIRoute = async ({
   const body = bodyRead.value;
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
 
-  if (reason.length === 0) {
-    return fail(400, "VALIDATION_ERROR", "reason is required.", {}, [
-      { field: "reason", message: "reason is required." }
-    ]);
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -225,6 +219,12 @@ export const DELETE: APIRoute = async ({
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (reason.length === 0) {
+      return fail(400, "VALIDATION_ERROR", "reason is required.", {}, [
+        { field: "reason", message: "reason is required." }
+      ]);
     }
 
     const deleted = await softDeleteAuthProvider(

@@ -187,17 +187,6 @@ export const DELETE: APIRoute = async ({
 
   const validation = validateDeleteReasonInput(bodyRead.value);
 
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "reason is required.",
-      {},
-      validation.errors
-    );
-  }
-
-  const { reason } = validation.value;
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -215,6 +204,18 @@ export const DELETE: APIRoute = async ({
     if (!auth.allowed) {
       return auth.denied;
     }
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "reason is required.",
+        {},
+        validation.errors
+      );
+    }
+
+    const { reason } = validation.value;
 
     const existing = await fetchHomepageSectionById(tx, tenantId, id);
 

@@ -80,16 +80,6 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
 
   const validation = validateCreateRoleInput(bodyRead.value);
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Role creation input is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -104,6 +94,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       CONFIGURE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (!validation.valid) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Role creation input is invalid.",
+        {},
+        validation.errors
+      );
+    }
 
     try {
       const role = await createRole(

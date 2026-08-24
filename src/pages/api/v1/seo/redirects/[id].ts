@@ -214,21 +214,6 @@ export const DELETE: APIRoute = async ({
 
   const body = (bodyRead.value ?? {}) as Record<string, unknown>;
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-  if (reason.length === 0) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "A non-empty delete reason is required."
-    );
-  }
-  if (reason.length > 500) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Delete reason must be at most 500 characters."
-    );
-  }
-
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -243,6 +228,14 @@ export const DELETE: APIRoute = async ({
       DELETE_GUARD
     );
     if (!auth.allowed) return auth.denied;
+
+    if (reason.length === 0) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "A non-empty delete reason is required."
+      );
+    }
 
     const deleted = await softDeleteRedirect(
       tx,
@@ -266,6 +259,14 @@ export const DELETE: APIRoute = async ({
       attributes: { reason },
       correlationId
     });
+
+    if (reason.length > 500) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Delete reason must be at most 500 characters."
+      );
+    }
 
     return ok(deleted);
   });
