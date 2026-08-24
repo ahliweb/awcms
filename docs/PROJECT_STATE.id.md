@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:d0d80cd9cd50843b048b769291da2f7782057a1c7567c63a011efea2e4113801 -->
+<!-- i18n-source-hash: sha256:3ea30d883dca13d217a9db596dfe8b488bfe5be0256808d24573aa7400e01a55 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,62 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN PERFORMA — 24 Agustus 2026: seluruh anggaran query mengukur
+  PEMBACAAN. Setiap N+1 di repo ada di jalur TULIS atau di job — paruh yang
+  tak dihitung siapa pun.**
+
+  Metode: pemindaian setiap berkas `src/` untuk query yang diterbitkan DI DALAM
+  loop, lalu disilangkan dengan apa yang benar-benar dicakup keempat suite
+  anggaran (`query-budget`, `query-budget-admin`, `middleware-query-budget`, dan
+  pembangun sitemap). Keempatnya mengukur pembacaan. Itu bukan kelalaian
+  melainkan ke mana perhatian tertuju: jalur baca dipukul terus-menerus sehingga
+  biayanya terasa; jalur tulis dipukul sekali per penyimpanan, jadi query
+  per-item di dalamnya tampak bukan apa-apa.
+
+  Ia berhenti tampak bukan apa-apa begitu importer massal menjadi pemanggilnya.
+
+  **DIPERBAIKI — `syncPostTermAssignments` menerbitkan satu `INSERT` per term.**
+  Segelintir statement saat editor menyimpan artikel; sekitar 24rb `DELETE` dan
+  48rb `INSERT` saat `blog:legacy:import` mengarsipkan 23.906 artikel — pemanggil
+  nyata yang baru dibuat #708. Kini satu `DELETE` + satu `INSERT ... unnest`,
+  bentuk yang sudah dipakai `comment-retention.ts` dan
+  `announcement-directory.ts`. TIDAK dideduplikasi di jalan masuk:
+  `awcms_blog_post_terms_unique` menolak pasangan berulang dulu dan sekarang,
+  dan menelannya di sini akan mengubah error constraint yang NYARING menjadi
+  selisih SENYAP antara yang diminta dan yang tersimpan.
+
+  Dipatok `tests/integration/post-term-assignment-budget.integration.test.ts` —
+  **anggaran query PERTAMA pada jalur tulis**. Anggarannya PERSIS (2), bukan
+  plafon: propertinya adalah angkanya TIDAK bergerak mengikuti jumlah term, dan
+  `toBeLessThanOrEqual` akan meloloskan regresi per-term selama fixture-nya tetap
+  kecil. Fixture memasang 12, jadi bentuk lama tak bisa lolos kebetulan.
+  Kebenaran di-assert BERSEBELAHAN dengan tiap hitungan, karena anggaran sendirian
+  dipuaskan oleh fungsi yang tidak menulis apa pun.
+
+  **TIDAK diperbaiki, dicatat agar tak diturunkan ulang:**
+
+  - **Sembilan jalur tulis lain menyisipkan satu baris per item di dalam loop** —
+    item menu, penempatan iklan, institusi, template email, penulis kebijakan
+    ABAC, undangan, konfigurasi sidebar, push enqueue, `sync/push`. Masing-masing
+    dibatasi oleh apa yang dikirim SATU permintaan, jadi konstanta kecil, bukan
+    risiko penskalaan. Layak di-batch bila himpunannya dikendalikan pengguna;
+    tidak mendesak.
+  - **`blog-scheduled-publish` memanggil `fetchPostTermIds` per-post di dalam loop
+    sapuannya.** Dibatasi berapa post jatuh tempo dalam satu sapuan — yang saat
+    cutover tidak kecil. Kembaran ter-batch `fetchPostTermIdsForPosts` sudah ada.
+  - **`awcms_blog_post_terms_tenant_idx` adalah satu kolom berkardinalitas rendah.**
+    Arsip kategori — permukaan yang dinyatakan nyata oleh #708 — memfilter
+    `term_id` di bawah predikat `tenant_id` milik RLS; `(term_id)` melayaninya dan
+    komposit `(tenant_id, term_id)` akan melayani keduanya, membuat index
+    satu-kolom itu mubazir. Butuh `EXPLAIN` terhadap data nyata untuk membenarkan
+    biaya tulisnya, jadi ini tugas PENGUKURAN, bukan perubahan.
+
+  **Yang TIDAK ditemukan pemindaian, dan itulah paruh berguna dari hasil bersih:**
+  tak ada pembacaan publik tanpa batas, dan tak ada N+1 di jalur daftar publik.
+  Sisi baca dari relasi yang sama ini SUDAH diperbaiki dengan sengaja —
+  `fetchPostTermIdsForPosts` membawa komentar "tiga round trip per halaman, bukan
+  lima puluh satu". Sisi tulisnya sekadar tak ada yang menghitung.
 
 - **PUTARAN BENTUK — 24 Agustus 2026: `.htaccess` legacy yang ditunggu #599 ADA
   di mesin pengembangan, dan ia MEMBANTAH rencana yang disusun tanpanya. Lima

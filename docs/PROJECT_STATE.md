@@ -360,6 +360,62 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **PERFORMANCE ROUND — 24 August 2026: the query budgets all measure READS.
+  Every N+1 in the repo is on a WRITE path or in a job — the half nothing
+  counts.**
+
+  Method: a scan of every `src/` file for a query issued inside a loop, then
+  cross-referenced against what the four budget suites actually cover
+  (`query-budget`, `query-budget-admin`, `middleware-query-budget`, and the
+  sitemap builder). All four measure reads. That is not an oversight so much as
+  where the attention went: a read path is hit constantly, so its cost is felt;
+  a write path is hit once per save, so a per-item query inside it looks like
+  nothing.
+
+  It stops looking like nothing the moment a bulk importer becomes the caller.
+
+  **FIXED — `syncPostTermAssignments` issued one `INSERT` per term.** A handful
+  of statements when an editor saves an article; roughly 24k `DELETE`s and 48k
+  `INSERT`s when `blog:legacy:import` files a 23,906-article archive, which
+  #708 made a real caller. Now one `DELETE` + one `INSERT ... unnest`, the shape
+  `comment-retention.ts` and `announcement-directory.ts` already use. NOT
+  deduplicated on the way in: `awcms_blog_post_terms_unique` refused a repeated
+  pair before and still does, and swallowing it here would turn a loud
+  constraint error into a silent difference between what was asked for and what
+  was stored.
+
+  Pinned by `tests/integration/post-term-assignment-budget.integration.test.ts`
+  — **the first query budget on a write path**. The budget is EXACT (2), not a
+  ceiling: the property is that the number does not move with the number of
+  terms, and a `toBeLessThanOrEqual` would pass a per-term regression as long as
+  the fixture stayed small. The fixture assigns 12, so the old shape cannot pass
+  by accident. Correctness is asserted beside every count, because a budget on
+  its own is satisfied by a function that writes nothing.
+
+  **NOT fixed, recorded so they are not re-derived:**
+
+  - **Nine more write paths insert one row per item in a loop** — menu items,
+    ad placements, institutions, email templates, the ABAC policy writer,
+    invitations, sidebar config, push enqueue, `sync/push`. Each is bounded by
+    what ONE request submits, so each is a small constant rather than a scaling
+    risk. Worth batching where the set is user-controlled; not urgent.
+  - **`blog-scheduled-publish` calls the per-post `fetchPostTermIds` inside its
+    sweep loop.** Bounded by how many posts are due in one sweep — which at a
+    cutover is not small. `fetchPostTermIdsForPosts` is the batched twin and
+    already exists.
+  - **`awcms_blog_post_terms_tenant_idx` is a single low-cardinality column.**
+    The category archive — the surface #708 makes real — filters `term_id`
+    under RLS's `tenant_id` predicate; `(term_id)` serves it and a composite
+    `(tenant_id, term_id)` would serve both, making the single-column index
+    redundant. Needs `EXPLAIN` against real data to justify the write cost, so
+    it is a measurement task, not a change.
+
+  **What the scan did NOT find, which is the useful half of a clean result:** no
+  unbounded public read, and no N+1 in the public list path. The read side of
+  this very relationship was fixed deliberately — `fetchPostTermIdsForPosts`
+  carries the comment "three round trips per page, not fifty-one". The write
+  side simply had nobody counting.
+
 - **SHAPE ROUND — 24 August 2026: the legacy `.htaccess` #599 was waiting for
   exists on the development machine, and it contradicts the plan built without
   it. Five URL shapes, not two; one of them was never listed; and the static-page
