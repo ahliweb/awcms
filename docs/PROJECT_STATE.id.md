@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:e6cf46128545c346d88fed45ce77ec683a80a3f8b8a6325bfca10748fba34459 -->
+<!-- i18n-source-hash: sha256:df3d80833c0c3f66ea86f26fc1da62c7bb2b771cb849e07c90fb2d79ab643d88 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,73 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN BENTUK — 24 Agustus 2026: `.htaccess` legacy yang ditunggu #599 ADA
+  di mesin pengembangan, dan ia MEMBANTAH rencana yang disusun tanpanya. Lima
+  bentuk URL, bukan dua; salah satunya tak pernah didaftar; dan separuh
+  halaman-statis `sql/138` adalah sepasang kolom yang TAK ADA penulis maupun
+  pembacanya.**
+
+  PUTARAN CUTOVER di bawah ditutup dengan "yang tersisa pada #599 bukan kode —
+  menjalankan job-nya butuh `.htaccess` legacy dan ekspor sitemap, yang tidak
+  ada di kedua repo". Paruh pertamanya kini TIDAK berlaku lagi. Berkasnya ada di
+  `/home/data/dev_php/seputarborneo.com/.htaccess`, salinan kerja situs legacy
+  yang duduk BERSEBELAHAN dengan repo ini, dan membacanya menggerakkan #599
+  tanpa menggerakkan satu baris kode aplikasi pun.
+
+  **Lima bentuk rewrite.** Artikel `^news/([^/]*)\.html$`; rubrik
+  `^rubrik/([^/]*)\.html$`; **`^([^/]*)/([^/]*)\.html$`**, catch-all dua-segmen
+  telanjang yang memetakan ke `/rubriks/?news=$1&kt=$2`; pencarian
+  `^cari_berita/([^/]*)\.html$`; dan halaman statis `^([^/]*)\.html$`. Hanya
+  yang pertama tercakup. Yang ketiga TIDAK muncul di versi rencana mana pun pada
+  issue itu — dan karena ia catch-all, justru keluarga itulah yang akan dijatuhkan
+  DIAM-DIAM dalam jumlah terbesar oleh peta yang dibangun dari bentuk-bentuk yang
+  terdaftar: persis keluaran yang hendak dicegah catatan "enumerasi setiap bentuk".
+
+  **"Menutupinya cukup satu run lagi, bukan perubahan kode" SALAH untuk tiga dari
+  lima.** `blog:legacy:redirects:import` MENOLAK `--path-template` yang tidak
+  memuat `{legacyId}` dan menurunkan petanya dari
+  `awcms_blog_posts.legacy_source_id`. Daftar rubrik dan halaman statis BUKAN
+  artikel, jadi tak ada template yang bisa menyatakannya; tak ada yang bisa
+  dijalankan. Term bahkan tak punya kolom provenance sama sekali.
+
+  **`awcms_blog_pages.legacy_source_system`/`legacy_source_id` TANPA penulis dan
+  TANPA pembaca.** `blog:legacy:import` hanya mengimpor post, dan
+  `listLegacyRedirectMappings` mengambil `FROM awcms_blog_posts`. Pasangan itu
+  mati sejak `sql/138` mendarat. Yang membuatnya TERBACA tercakup adalah bentuk
+  yang wajib dibawa ke depan: `tests/legacy-redirect-map.test.ts:54-61`, "pages
+  get the same treatment as posts", meng-assert bahwa TEKS BERKAS MIGRATION
+  memuat `ALTER TABLE awcms_blog_pages` dan nama index dedup-nya. Tes atas sumber
+  sebuah migration membuktikan kolomnya ADA; ia tak bisa melihat kolom itu tak
+  pernah dipakai. Komentarnya sendiri menyebut taruhannya — _"memberi provenance
+  hanya pada post akan membuat separuh peta 301 tak dapat diturunkan"_ — dan
+  separuh itu lalu tak pernah dirangkai. Sekeluarga dengan gerbang registry yang
+  memeriksa BENTUK, bukan MAKNA.
+
+  **Kolom mati itu pun bukan obatnya.** `data/index.php:195-212` melakukan switch
+  atas himpunan TERTUTUP berisi tiga: `/tentang_kami.html`,
+  `/pedoman_media_cyber.html`, `/disclimer.html` (salah ketik legacy itu BAGIAN
+  dari URL). Tiga aturan exact-path, yang didukung `awcms_seo_redirects` sejak
+  `sql/060` — entri data admin, bukan importer dan bukan backfill. Pasangan kolom
+  itu harus dirangkai atau dihapus; membiarkannya adalah yang melahirkan RUPA
+  cakupan tadi.
+
+  Satu bentuk yang tercakup terkonfirmasi benar: `berita/index.php:9` membaca
+  `(int) $_GET['news']`, jadi id-nya adalah digit terdepan dan slug-nya dekoratif
+  — `/news/{legacyId}_{slug}.html` memang template yang tepat.
+
+  **Yang MASIH terhalang lebih sempit daripada "artefaknya".** Bentuk rubrik butuh
+  daftar rubrik, yang butuh data yang tak dimiliki salinan kerja itu (dump-nya,
+  `seputa58_sbb.sql`, berukuran 0 byte), DAN rute target yang dirender
+  `ahliweb/awcms-astro`, bukan di sini (ADR-0045/ADR-0070) — pertanyaan kontrak
+  lintas-repo sebelum menjadi pertanyaan impor. Crawl pra-cutover tak berubah:
+  `blog:legacy:cutover:verify` sudah ada dan butuh URL sitemap hidup, pada level
+  halaman karena ia menolak index. URL hasil pencarian TIDAK boleh di-301 ke
+  konten; query sembarang tak punya satu tujuan yang benar.
+
+  Direkomendasikan: PECAH #599 alih-alih menahan satu issue pada artefak
+  terlambatnya. Bentuk 1 plus tiga aturan statis sudah menjadi peta siap-cutover
+  hari ini.
 
 - **PUTARAN LEDGER — 24 Agustus 2026: 121 endpoint MENOLAK pengguna tenant
   TANPA MENCATAT bahwa mereka melakukannya.**

@@ -360,6 +360,69 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **SHAPE ROUND — 24 August 2026: the legacy `.htaccess` #599 was waiting for
+  exists on the development machine, and it contradicts the plan built without
+  it. Five URL shapes, not two; one of them was never listed; and the static-page
+  half of `sql/138` is a column pair nothing writes and nothing reads.**
+
+  The CUTOVER ROUND below closed with "what remains on #599 is not code —
+  running the jobs needs the legacy `.htaccess` and a sitemap export, which
+  exist in neither repo". The first half of that is no longer true. The file is
+  at `/home/data/dev_php/seputarborneo.com/.htaccess`, a working copy of the
+  legacy site sitting beside this repo, and reading it moves #599 without
+  moving a line of application code.
+
+  **Five rewrite shapes.** Articles `^news/([^/]*)\.html$`; rubrik
+  `^rubrik/([^/]*)\.html$`; **`^([^/]*)/([^/]*)\.html$`**, a bare two-segment
+  catch-all mapping to `/rubriks/?news=$1&kt=$2`; search
+  `^cari_berita/([^/]*)\.html$`; and static pages `^([^/]*)\.html$`. Only the
+  first is covered. The third appears in no version of this issue's plan — and
+  being a catch-all, it is the family a map built from the listed shapes would
+  have dropped in the largest number, silently, which is the exact outcome the
+  "enumerate every shape" note existed to prevent.
+
+  **"Covering them is a second run, not a code change" is wrong for three of the
+  five.** `blog:legacy:redirects:import` rejects a `--path-template` that does
+  not contain `{legacyId}` and derives its map from
+  `awcms_blog_posts.legacy_source_id`. Rubrik listings and static pages are not
+  articles, so no template can express them; there is nothing to run. Terms have
+  no provenance column at all.
+
+  **`awcms_blog_pages.legacy_source_system`/`legacy_source_id` have no writer
+  and no reader.** `blog:legacy:import` imports posts only, and
+  `listLegacyRedirectMappings` selects `FROM awcms_blog_posts`. The pair has
+  been dead since `sql/138` landed. What made it read as covered is the shape to
+  carry forward: `tests/legacy-redirect-map.test.ts:54-61`, "pages get the same
+  treatment as posts", asserts that the MIGRATION FILE'S TEXT contains
+  `ALTER TABLE awcms_blog_pages` and the dedup index name. A test over a
+  migration's source proves a column exists; it cannot notice the column is
+  never used. Its own comment names the stakes — _"giving only posts provenance
+  would make half the 301 map underivable"_ — and that half was then never
+  wired. Same family as the registry gates that check SHAPE rather than MEANING.
+
+  **The dead column is not the fix anyway.** `data/index.php:195-212` switches
+  on a closed set of three: `/tentang_kami.html`, `/pedoman_media_cyber.html`,
+  `/disclimer.html` (the legacy typo is part of the URL). Three exact-path
+  rules, which `awcms_seo_redirects` has supported since `sql/060` — admin data
+  entry, not an importer and not a backfill. The column pair should be wired or
+  dropped; leaving it is what produced the appearance of coverage.
+
+  The one covered shape is confirmed right: `berita/index.php:9` reads
+  `(int) $_GET['news']`, so the id is the leading digits and the slug is
+  decorative — `/news/{legacyId}_{slug}.html` is the correct template.
+
+  **What is still blocked is narrower than "the artifacts".** The rubrik shapes
+  need the rubrik list, which needs data the working copy does not have (its
+  dump, `seputa58_sbb.sql`, is 0 bytes), AND a target route rendered by
+  `ahliweb/awcms-astro`, not here (ADR-0045/ADR-0070) — a cross-repo contract
+  question before it is an import question. The pre-cutover crawl is unchanged:
+  `blog:legacy:cutover:verify` is built and needs the live sitemap URL, at page
+  level because it refuses an index. Search-result URLs should NOT 301 onto
+  content; an arbitrary query has no single correct destination.
+
+  Recommended: split #599 rather than keep one issue blocked on its slowest
+  artifact. Shape 1 plus the three static rules is a cutover-ready map today.
+
 - **LEDGER ROUND — 24 August 2026: 121 endpoints refuse a tenant user WITHOUT
   RECORDING that they did.**
 
