@@ -65,6 +65,31 @@
  * A mapped image becomes a one-item `gallery` node in the position it occupied
  * in the article; an unmapped one is refused exactly as before.
  *
+ * ## The categories, and why they are the same handoff again
+ *
+ * `LegacyPostImportInput` carried no taxonomy and this job wrote no join row,
+ * so a real import landed every article with ZERO categories. The redirect map
+ * would then have pointed the legacy rubrik URLs at
+ * `/{locale}/kategori/{slug}` pages that resolve, load, and list nothing — a
+ * SOFT 404, which is worse for the ranking than the hard 404 this issue exists
+ * to prevent, because nothing reports it.
+ *
+ *   `--terms=<path>`      writes the category work list (every legacy category
+ *                         the archive files under, most-used first) and stops.
+ *                         Create the terms you want in `/admin/blog-taxonomy`.
+ *   `--term-map=<path>`   takes the result back as `{ "<name>": "<term uuid>" }`.
+ *                         Every id is checked against this tenant's LIVE
+ *                         taxonomy before a single article is written, and one
+ *                         that is not aborts the run.
+ *
+ * Names are never created from a row. An importer that creates a term because
+ * an export mentioned one turns a single typo into a published category nobody
+ * chose, with no review step where anyone would notice; a newsroom's taxonomy
+ * is an editorial decision, not a side effect of an import. A row naming a
+ * category the map does not cover is refused, for the same reason a row with an
+ * unmanaged `<img>` is: an article that imported cleanly and lost its filing
+ * looks like a success.
+ *
  * ## Roles and transactions
  *
  * Runs as the APP role, not `awcms_worker`. This creates content, which is an
@@ -97,6 +122,16 @@ import {
   findTakenSlugs,
   importLegacyBlogPost
 } from "../src/modules/blog-content/application/legacy-import-directory";
+import {
+  findUnknownTermIds,
+  syncPostTermAssignments
+} from "../src/modules/blog-content/application/blog-taxonomy-directory";
+import {
+  parseLegacyTermMap,
+  summariseLegacyCategoryUsage,
+  termIdsIn
+} from "../src/modules/blog-content/domain/legacy-term-map";
+import type { LegacyCategoryUsage } from "../src/modules/blog-content/domain/legacy-term-map";
 
 /** One transaction per batch — small enough to retry, large enough to be worth a round trip. */
 const BATCH_SIZE = 200;
@@ -124,6 +159,10 @@ function usage(message: string): void {
       "                       references, most-used first — and stop there\n" +
       '  --media-map=<path>   JSON { "<img src>": "<media object uuid>" }; every id is\n' +
       "                       checked against this tenant's registry before anything is written\n" +
+      "  --terms=<path>       write the category work list — every legacy category the\n" +
+      "                       archive files under, most-used first — and stop there\n" +
+      '  --term-map=<path>    JSON { "<legacy category name>": "<term uuid>" }; every id is\n' +
+      "                       checked against this tenant's taxonomy before anything is written\n" +
       "  --commit             write. Without it, nothing is written and you get the report.\n"
   );
   process.exitCode = 1;
@@ -156,6 +195,31 @@ async function writeImageInventory(
   );
 }
 
+/**
+ * The category work list, the other half of the same handoff.
+ *
+ * Written for the operator, and ordered by demand so that mapping the first
+ * twenty covers most of the archive and the long tail is visible as exactly
+ * what it costs.
+ */
+async function writeCategoryInventory(
+  path: string,
+  usage_: readonly LegacyCategoryUsage[]
+): Promise<void> {
+  await Bun.write(path, `${JSON.stringify(usage_, null, 2)}\n`);
+
+  console.log(
+    `\nblog:legacy:import — wrote the category work list to ${path}\n` +
+      `  distinct categories  ${usage_.length}\n\n` +
+      "  Create the terms you want in `/admin/blog-taxonomy` — deliberately not\n" +
+      "  here. A term created because a row mentioned one turns a typo in the\n" +
+      "  export into a published category nobody chose, with no review step\n" +
+      "  where anyone would notice. The taxonomy of a newsroom is an editorial\n" +
+      "  decision, not a side effect of an import.\n\n" +
+      "  Then hand the result back as --term-map=<path>.\n"
+  );
+}
+
 async function main(): Promise<void> {
   const commit = process.argv.includes("--commit");
   const file = flag("file");
@@ -165,6 +229,8 @@ async function main(): Promise<void> {
   const defaultLocale = flag("locale") ?? "id";
   const imagesPath = flag("images");
   const mediaMapPath = flag("media-map");
+  const termsPath = flag("terms");
+  const termMapPath = flag("term-map");
 
   if (!file) return usage("`--file=<path>` is required.");
   if (!tenantId) return usage("`--tenant=<uuid>` is required.");
@@ -183,6 +249,8 @@ async function main(): Promise<void> {
   const seenLegacyIds = new Set<string>();
   /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
   const imageSrcsPerArticle: string[][] = [];
+  /** Same, for categories — collected from EVERY parsed row, importable or not. */
+  const categoriesPerArticle: string[][] = [];
 
   const sql = getDatabaseClient();
   let imported = 0;
@@ -258,6 +326,64 @@ async function main(): Promise<void> {
       ? (src: string): string | null => mediaMap.get(src) ?? null
       : undefined;
 
+    let termMap: ReadonlyMap<string, string> = new Map();
+
+    if (termMapPath) {
+      let rawMap: unknown;
+      try {
+        rawMap = JSON.parse(await Bun.file(termMapPath).text());
+      } catch (error) {
+        console.error(
+          `blog:legacy:import — ${termMapPath} is not valid JSON: ${safeErrorDetail(error)}`
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      const parsedMap = parseLegacyTermMap(rawMap);
+
+      if (!parsedMap.ok) {
+        console.error(
+          `blog:legacy:import — ${termMapPath} is not a usable term map:\n` +
+            parsedMap.errors.map((line) => `  - ${line}`).join("\n")
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      // Every id, against this tenant's taxonomy, BEFORE a single article is
+      // written — and one bad id stops the run rather than becoming a per-row
+      // refusal. A map is ONE artefact: a wrong id in it is a wrong artefact,
+      // and the failure it produces is silent in the worst way. `INSERT` into
+      // `awcms_blog_post_terms` with a term another tenant owns is refused by
+      // the composite foreign key, but a term id that is merely SOFT-DELETED
+      // here would file the whole archive under a category an editor removed
+      // and resurrect it in every listing.
+      const ids = termIdsIn(parsedMap.value);
+      const unknown = await withTenantOrThrow(sql, tenantId, (tx) =>
+        findUnknownTermIds(tx, tenantId, ids)
+      );
+
+      if (unknown.length > 0) {
+        console.error(
+          `blog:legacy:import — ${unknown.length} of ${ids.length} term id(s) in ` +
+            `${termMapPath} are not live terms of this tenant:\n` +
+            unknown.map((id) => `  - ${id}`).join("\n") +
+            "\n\n  Nothing was written. Create the terms in `/admin/blog-taxonomy`\n" +
+            "  first — this job will not create one from a name, because a typo\n" +
+            "  in the export would then become a published category nobody chose.\n"
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(
+        `blog:legacy:import — ${ids.length} term id(s) verified against this tenant's taxonomy.`
+      );
+
+      termMap = parsedMap.value;
+    }
+
     for (const [index, raw] of lines.entries()) {
       const lineNumber = index + 1;
       const trimmed = raw.trim();
@@ -303,6 +429,34 @@ async function main(): Promise<void> {
       }
       seenLegacyIds.add(record.value.legacyId);
 
+      // Collected before any refusal below, for the same reason the image set
+      // is: the work list belongs to the whole archive, and an article refused
+      // for a bad slug still names a category somebody has to map.
+      categoriesPerArticle.push([...record.value.categories]);
+
+      // A category this run cannot resolve is refused, not dropped. Importing
+      // past it produces an article that landed cleanly, reported nothing, and
+      // is filed under nothing — and `/{locale}/kategori/{slug}` then answers a
+      // crawler with a page that loads and lists nothing, which is read as a
+      // soft 404. That is the failure this whole issue exists to prevent,
+      // arriving through the door built to prevent it.
+      const unmapped = record.value.categories.filter(
+        (name) => !termMap.has(name)
+      );
+
+      if (unmapped.length > 0) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: unmapped.map((name) =>
+            termMapPath
+              ? `category ${JSON.stringify(name)} is not in ${termMapPath}`
+              : `category ${JSON.stringify(name)} needs a --term-map (run --terms=<path> to get the work list)`
+          )
+        });
+        continue;
+      }
+
       const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
         resolveImage
       });
@@ -333,6 +487,16 @@ async function main(): Promise<void> {
       acceptedBodies.set(record.value.legacyId, body);
     }
 
+    if (termsPath) {
+      // Before `--images`, because the two are independent and an operator who
+      // asked for both should get both files rather than discovering the order
+      // matters.
+      await writeCategoryInventory(
+        termsPath,
+        summariseLegacyCategoryUsage(categoriesPerArticle)
+      );
+    }
+
     if (imagesPath) {
       // A report, not a run. Writing the upload set and then importing would
       // invite reading the summary and skipping the list it just produced.
@@ -340,8 +504,9 @@ async function main(): Promise<void> {
         imagesPath,
         summariseLegacyImageUsage(imageSrcsPerArticle)
       );
-      return;
     }
+
+    if (termsPath || imagesPath) return;
 
     // One query for every slug in the file, before anything is written.
     const taken = await withTenantOrThrow(sql, tenantId, (tx) =>
@@ -393,8 +558,28 @@ async function main(): Promise<void> {
               }
             );
 
-            if (outcome.postId) imported += 1;
-            else alreadyPresent += 1;
+            if (outcome.postId) {
+              imported += 1;
+
+              // Same transaction as the INSERT. An article that committed and
+              // then failed to be filed is exactly the empty-category outcome
+              // this flag exists to prevent, and it would be invisible: the
+              // import reports success and the archive listing is short.
+              //
+              // Only for a row this run actually inserted — `ON CONFLICT DO
+              // NOTHING` means `postId` is null when the article was already
+              // present, and re-running would otherwise DELETE the filings an
+              // editor has since corrected by hand (`syncPostTermAssignments`
+              // replaces the set rather than adding to it).
+              if (record.categories.length > 0) {
+                await syncPostTermAssignments(
+                  tx,
+                  tenantId,
+                  outcome.postId,
+                  record.categories.map((name) => termMap.get(name)!)
+                );
+              }
+            } else alreadyPresent += 1;
           }
         });
 
