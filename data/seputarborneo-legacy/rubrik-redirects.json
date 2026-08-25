@@ -1,0 +1,681 @@
+{
+  "capturedAt": "2026-08-26",
+  "source": {
+    "phpWorkingCopy": "/home/data/dev_php/seputarborneo.com",
+    "database": "docker volume seputarborneocom_db_data (mariadb:10.6, utf8mb4_unicode_ci)",
+    "table": "seputa58_sbb.berita_red_tayang",
+    "totalArticles": 25029
+  },
+  "entries": [
+    {
+      "sourcePath": "/Daerah/Barito.html",
+      "legacyHref": "Daerah/Barito.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Barito",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Buntok.html",
+      "legacyHref": "Daerah/Buntok.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Buntok",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Gumay.html",
+      "legacyHref": "daerah/Gumay.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Gumay",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Jarai.html",
+      "legacyHref": "daerah/Jarai.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Jarai",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Kahayan.html",
+      "legacyHref": "Daerah/Kahayan.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Kahayan",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Kapuas.html",
+      "legacyHref": "Daerah/Kapuas.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Kapuas",
+      "articlesAtCapture": 227,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Katingan.html",
+      "legacyHref": "Daerah/Katingan.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Katingan",
+      "articlesAtCapture": 7,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Kikim%20Area.html",
+      "legacyHref": "daerah/Kikim%20Area.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Kikim Area",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Kota%20Waringin.html",
+      "legacyHref": "Daerah/Kota Waringin.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Kota Waringin",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Kota%20Agung%20Area.html",
+      "legacyHref": "daerah/Kota%20Agung%20Area.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Kota Agung Area",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Kuala%20Kurun.html",
+      "legacyHref": "Daerah/Kuala Kurun.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Kuala Kurun",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Lahat%20Kota.html",
+      "legacyHref": "daerah/Lahat%20Kota.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Lahat Kota",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Lamandau.html",
+      "legacyHref": "Daerah/Lamandau.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Lamandau",
+      "articlesAtCapture": 274,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Merapi%20Area.html",
+      "legacyHref": "daerah/Merapi%20Area.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Merapi Area",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Muara%20Teweh.html",
+      "legacyHref": "Daerah/Muara Teweh.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Muara Teweh",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Murung%20Raya.html",
+      "legacyHref": "Daerah/Murung Raya.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Murung Raya",
+      "articlesAtCapture": 70,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Pagar%20Agung.html",
+      "legacyHref": "daerah/Pagar%20Agung.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Pagar Agung",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Palangka%20raya.html",
+      "legacyHref": "Daerah/Palangka raya.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Palangka raya",
+      "articlesAtCapture": 309,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Palangka%20Raya.html",
+      "legacyHref": "Daerah/Palangka Raya.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Palangka Raya",
+      "articlesAtCapture": 309,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Pangkalan%20Bun.html",
+      "legacyHref": "Daerah/Pangkalan Bun.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Pangkalan Bun",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Pulang%20pisau.html",
+      "legacyHref": "Daerah/Pulang pisau.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Pulang pisau",
+      "articlesAtCapture": 195,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Sampit.html",
+      "legacyHref": "Daerah/Sampit.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Sampit",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Sukamara.html",
+      "legacyHref": "Daerah/Sukamara.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Sukamara",
+      "articlesAtCapture": 3,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Daerah/Tamiang%20Layang.html",
+      "legacyHref": "Daerah/Tamiang Layang.html",
+      "legacyNews": "Daerah",
+      "legacyKategori": "Tamiang Layang",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/daerah/Tanjung%20Sakti.html",
+      "legacyHref": "daerah/Tanjung%20Sakti.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "Tanjung Sakti",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Barito%20Timur.html",
+      "legacyHref": "Mitra-Borneo/DPRD Barito Timur.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Barito Timur",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Barito%20Utara.html",
+      "legacyHref": "Mitra-Borneo/DPRD Barito Utara.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Barito Utara",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Gunung%20Mas.html",
+      "legacyHref": "Mitra-Borneo/DPRD Gunung Mas.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Gunung Mas",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Kalteng.html",
+      "legacyHref": "Mitra-Borneo/DPRD Kalteng.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Kalteng",
+      "articlesAtCapture": 11,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Kapuas.html",
+      "legacyHref": "Mitra-Borneo/DPRD Kapuas.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Kapuas",
+      "articlesAtCapture": 9,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Katingan.html",
+      "legacyHref": "Mitra-Borneo/DPRD Katingan.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Katingan",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Kotawaringin%20Timur.html",
+      "legacyHref": "Mitra-Borneo/DPRD Kotawaringin Timur.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Kotawaringin Timur",
+      "articlesAtCapture": 9,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Lamandau.html",
+      "legacyHref": "Mitra-Borneo/DPRD Lamandau.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Lamandau",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Murung%20Raya.html",
+      "legacyHref": "Mitra-Borneo/DPRD Murung Raya.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Murung Raya",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Palangka%20Raya.html",
+      "legacyHref": "Mitra-Borneo/DPRD Palangka Raya.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Palangka Raya",
+      "articlesAtCapture": 22,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Pulang%20Pisau.html",
+      "legacyHref": "Mitra-Borneo/DPRD Pulang Pisau.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Pulang Pisau",
+      "articlesAtCapture": 1,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/DPRD%20Seruyan.html",
+      "legacyHref": "Mitra-Borneo/DPRD Seruyan.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "DPRD Seruyan",
+      "articlesAtCapture": 2,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Barito%20Timur.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Barito Timur.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Barito Timur",
+      "articlesAtCapture": 1,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Barito%20Utara.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Barito Utara.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Barito Utara",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Gunung%20Mas.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Gunung Mas.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Gunung Mas",
+      "articlesAtCapture": 1,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Kapuas.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Kapuas.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Kapuas",
+      "articlesAtCapture": 25,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Katingan.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Katingan.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Katingan",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Kotawaringin%20Timur.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Kotawaringin Timur.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Kotawaringin Timur",
+      "articlesAtCapture": 4,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Murung%20Raya.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Murung Raya.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Murung Raya",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Pulang%20Pisau.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Pulang Pisau.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Pulang Pisau",
+      "articlesAtCapture": 21,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemkab%20Seruyan.html",
+      "legacyHref": "Mitra-Borneo/Pemkab Seruyan.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemkab Seruyan",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/Mitra-Borneo/Pemko%20Palangka%20Raya.html",
+      "legacyHref": "Mitra-Borneo/Pemko Palangka Raya.html",
+      "legacyNews": "Mitra-Borneo",
+      "legacyKategori": "Pemko Palangka Raya",
+      "articlesAtCapture": 13,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/mitra-borneo/Pemprov%20Kalteng.html",
+      "legacyHref": "mitra-borneo/Pemprov Kalteng.html",
+      "legacyNews": "mitra-borneo",
+      "legacyKategori": "Pemprov Kalteng",
+      "articlesAtCapture": 14,
+      "parentArticlesAtCapture": 133,
+      "canonicalRubrik": ["MITRA-BORNEO"],
+      "targetPath": "/kategori/mitra-borneo"
+    },
+    {
+      "sourcePath": "/rubrik/bisnis.html",
+      "legacyHref": "rubrik/bisnis.html",
+      "legacyNews": "bisnis",
+      "legacyKategori": "",
+      "articlesAtCapture": 7,
+      "parentArticlesAtCapture": 7,
+      "canonicalRubrik": ["Bisnis"],
+      "targetPath": "/kategori/bisnis"
+    },
+    {
+      "sourcePath": "/rubrik/budaya.html",
+      "legacyHref": "rubrik/budaya.html",
+      "legacyNews": "budaya",
+      "legacyKategori": "",
+      "articlesAtCapture": 12,
+      "parentArticlesAtCapture": 12,
+      "canonicalRubrik": ["Budaya"],
+      "targetPath": "/kategori/budaya"
+    },
+    {
+      "sourcePath": "/rubrik/Budaya.html",
+      "legacyHref": "rubrik/Budaya.html",
+      "legacyNews": "Budaya",
+      "legacyKategori": "",
+      "articlesAtCapture": 12,
+      "parentArticlesAtCapture": 12,
+      "canonicalRubrik": ["Budaya"],
+      "targetPath": "/kategori/budaya"
+    },
+    {
+      "sourcePath": "/rubrik/daerah.html",
+      "legacyHref": "rubrik/daerah.html",
+      "legacyNews": "daerah",
+      "legacyKategori": "",
+      "articlesAtCapture": 2,
+      "parentArticlesAtCapture": 3037,
+      "canonicalRubrik": ["DAERAH"],
+      "targetPath": "/kategori/daerah"
+    },
+    {
+      "sourcePath": "/rubrik/hukum.html",
+      "legacyHref": "rubrik/hukum.html",
+      "legacyNews": "hukum",
+      "legacyKategori": "",
+      "articlesAtCapture": 5183,
+      "parentArticlesAtCapture": 5183,
+      "canonicalRubrik": ["HUKUM"],
+      "targetPath": "/kategori/hukum"
+    },
+    {
+      "sourcePath": "/rubrik/Hukum.html",
+      "legacyHref": "rubrik/Hukum.html",
+      "legacyNews": "Hukum",
+      "legacyKategori": "",
+      "articlesAtCapture": 5183,
+      "parentArticlesAtCapture": 5183,
+      "canonicalRubrik": ["HUKUM"],
+      "targetPath": "/kategori/hukum"
+    },
+    {
+      "sourcePath": "/rubrik/kuliner.html",
+      "legacyHref": "rubrik/kuliner.html",
+      "legacyNews": "kuliner",
+      "legacyKategori": "",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 0,
+      "canonicalRubrik": [],
+      "targetPath": null
+    },
+    {
+      "sourcePath": "/rubrik/nasional.html",
+      "legacyHref": "rubrik/nasional.html",
+      "legacyNews": "nasional",
+      "legacyKategori": "",
+      "articlesAtCapture": 923,
+      "parentArticlesAtCapture": 923,
+      "canonicalRubrik": ["NASIONAL"],
+      "targetPath": "/kategori/nasional"
+    },
+    {
+      "sourcePath": "/rubrik/Nasional.html",
+      "legacyHref": "rubrik/Nasional.html",
+      "legacyNews": "Nasional",
+      "legacyKategori": "",
+      "articlesAtCapture": 923,
+      "parentArticlesAtCapture": 923,
+      "canonicalRubrik": ["NASIONAL"],
+      "targetPath": "/kategori/nasional"
+    },
+    {
+      "sourcePath": "/rubrik/Olah%20Raga.html",
+      "legacyHref": "rubrik/Olah Raga.html",
+      "legacyNews": "Olah Raga",
+      "legacyKategori": "",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 0,
+      "canonicalRubrik": [],
+      "targetPath": null
+    },
+    {
+      "sourcePath": "/rubrik/olahraga.html",
+      "legacyHref": "rubrik/olahraga.html",
+      "legacyNews": "olahraga",
+      "legacyKategori": "",
+      "articlesAtCapture": 149,
+      "parentArticlesAtCapture": 152,
+      "canonicalRubrik": ["OLAHRAGA"],
+      "targetPath": "/kategori/olahraga"
+    },
+    {
+      "sourcePath": "/rubrik/pariwisata.html",
+      "legacyHref": "rubrik/pariwisata.html",
+      "legacyNews": "pariwisata",
+      "legacyKategori": "",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 0,
+      "canonicalRubrik": [],
+      "targetPath": null
+    },
+    {
+      "sourcePath": "/rubrik/politik.html",
+      "legacyHref": "rubrik/politik.html",
+      "legacyNews": "politik",
+      "legacyKategori": "",
+      "articlesAtCapture": 402,
+      "parentArticlesAtCapture": 402,
+      "canonicalRubrik": ["POLITIK"],
+      "targetPath": "/kategori/politik"
+    },
+    {
+      "sourcePath": "/rubrik/Politik.html",
+      "legacyHref": "rubrik/Politik.html",
+      "legacyNews": "Politik",
+      "legacyKategori": "",
+      "articlesAtCapture": 402,
+      "parentArticlesAtCapture": 402,
+      "canonicalRubrik": ["POLITIK"],
+      "targetPath": "/kategori/politik"
+    },
+    {
+      "sourcePath": "/rubrik/provinsi.html",
+      "legacyHref": "rubrik/provinsi.html",
+      "legacyNews": "provinsi",
+      "legacyKategori": "",
+      "articlesAtCapture": 223,
+      "parentArticlesAtCapture": 223,
+      "canonicalRubrik": ["Provinsi"],
+      "targetPath": "/kategori/provinsi"
+    },
+    {
+      "sourcePath": "/rubrik/travel.html",
+      "legacyHref": "rubrik/travel.html",
+      "legacyNews": "travel",
+      "legacyKategori": "",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 0,
+      "canonicalRubrik": [],
+      "targetPath": null
+    },
+    {
+      "sourcePath": "/rubrik/Viral.html",
+      "legacyHref": "rubrik/Viral.html",
+      "legacyNews": "Viral",
+      "legacyKategori": "",
+      "articlesAtCapture": 0,
+      "parentArticlesAtCapture": 0,
+      "canonicalRubrik": [],
+      "targetPath": null
+    },
+    {
+      "sourcePath": "/rubrik/wisata.html",
+      "legacyHref": "rubrik/wisata.html",
+      "legacyNews": "wisata",
+      "legacyKategori": "",
+      "articlesAtCapture": 23,
+      "parentArticlesAtCapture": 23,
+      "canonicalRubrik": ["WISATA", "Wisata"],
+      "targetPath": "/kategori/wisata"
+    },
+    {
+      "sourcePath": "/rubrik/Wisata.html",
+      "legacyHref": "rubrik/Wisata.html",
+      "legacyNews": "Wisata",
+      "legacyKategori": "",
+      "articlesAtCapture": 23,
+      "parentArticlesAtCapture": 23,
+      "canonicalRubrik": ["WISATA", "Wisata"],
+      "targetPath": "/kategori/wisata"
+    }
+  ]
+}

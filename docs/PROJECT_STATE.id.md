@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:d54299cd2c0c9ef930530b9cbd650b5ee366d8b88d129e2292ba0d88164957c7 -->
+<!-- i18n-source-hash: sha256:8142bbd86c5a1213e369eee8225883aed20459d94ac0f0abbb9f512456dd2e2c -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,77 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN CALL-SITE — 26 Agustus 2026: normalisasi ADR-0113 sudah salah tiga
+  hari setelah di-merge, karena ia menyebut fungsi yang tak dipanggil apa pun —
+  dan petanya yang terkoreksi kini di-commit.**
+
+  KEPUTUSAN di ADR-0113 TIDAK berubah. Mekanismenya salah, dan cara ia salah
+  kini sudah terjadi TIGA KALI di repo ini.
+
+  **`seo_title()` adalah KODE MATI.** ADR itu menyatakan peta bentuk-2/3
+  berkunci pada `seo_title(jenis_rubrik)`. Fungsi itu **didefinisikan sembilan
+  kali** di pohon PHP legacy dan **dipanggil NOL kali** — dan kesembilan
+  salinannya bahkan tidak seragam: `index.php` mengganti spasi dengan `_`
+  sementara delapan lainnya memakai `-`. `rubriks/index.php` mengikat segmen URL
+  MENTAH, setelah `trim()`, langsung ke
+  `WHERE jenis_rubrik = ? AND kategori = ?`.
+
+  Jadi segmen URL rubrik legacy adalah NILAI KOLOM, bukan slug darinya — dan
+  peringatan runtuhnya `MITRA BORNEO` / `MITRA-BORNEO`, yang putaran sebelumnya
+  sebut sebagai "satu hal yang ditunjukkan data yang tak mungkin ditunjukkan
+  perencanaan", juga SALAH. Sebagai segmen mentah keduanya path berbeda yang tak
+  pernah runtuh, dan keduanya tak ditautkan dari mana pun, jadi keduanya tak
+  butuh aturan.
+
+  **Polanya, kemunculan KETIGA.** `replaceMenuItems` adalah nama fungsi yang
+  ditulis dari ingatan dan tidak ada. `awcms_blog_pages.legacy_source_*` adalah
+  kolom yang keberadaannya ditegakkan oleh test atas TEKS SUMBER sebuah
+  migration, tanpa pembaca. Kini sebuah fungsi yang dikutip dalam prosa dan tak
+  pernah dipanggil. Ketiganya terbaca persis seperti kode yang bekerja bagi
+  siapa pun yang tidak mencari CALL SITE-nya. **Grep CALL-nya, bukan
+  definisinya.**
+
+  **Sebenarnya URL-nya apa.** Tidak ada apa pun di pohon legacy yang
+  menghasilkan tautan rubrik dari nilai kolom; semuanya literal ketik-tangan.
+  Itu membuat himpunannya **terenumerasi dan LENGKAP, bukan sampel** — crawler
+  hanya bisa menjangkau apa yang ditautkan. Jumlahnya 67, kini di-commit bersama
+  provenance-nya di `data/seputarborneo-legacy/`.
+
+  Dua sifat menentukan pekerjaannya, dan keduanya tak terlihat dari rencana:
+
+  - **Kapitalisasi menanggung beban DI SINI dan tidak di situs legacy.**
+    `utf8mb4_unicode_ci` MariaDB membuat `rubrik/Hukum.html` dan
+    `rubrik/hukum.html` halaman yang SAMA (5.183 artikel masing-masing). Repo
+    ini mencocokkan dengan KESAMAAN dan mempertahankan kapitalisasi, jadi kedua
+    ejaan butuh aturannya sendiri. Lima rubrik ditautkan dalam keduanya.
+  - **32 dari 67 resolve ke NOL artikel** — tautan nav/footer mati
+    bertahun-tahun, menyajikan HTTP 200 dengan listing KOSONG alih-alih 404,
+    jadi kemungkinan terindeks sebagai halaman tipis. Delapan di antaranya sisa
+    template asal situs ini dan menyebut tempat di SUMATERA SELATAN.
+    `rubrik/Olah Raga.html` mati karena nilai kolomnya `OLAHRAGA` tanpa spasi,
+    dan kolasi case-insensitive tidak menutup perbedaan SPASI.
+
+  62 aturan atas 10 kategori tujuan. Karena keputusannya membuang `kt`, setiap
+  URL dari kedua bentuk mendarat di arsip rubrik INDUK-nya, sehingga petanya
+  adalah fungsi dari segmen pertama saja.
+
+  **Petanya di-commit karena ia TAK BISA diturunkan ulang.** Membangunnya butuh
+  salinan kerja PHP legacy dan volume MariaDB terisi, keduanya ada di SATU
+  workstation dan tidak dikirim ke mana pun. Ini pelajaran PUTARAN VOLUME
+  berjalan MAJU alih-alih mundur: putaran itu menemukan artefak yang dikira
+  hilang padahal tidak, dan jawaban atas "ia ada hari ini" adalah MENANGKAPNYA,
+  bukan mencatat bahwa ia ada.
+
+  Test-nya menegakkan apa yang AKAN DILAKUKAN jalur tulis terhadap tiap entri —
+  setiap source path dan target lewat `normalizeRedirectPath`,
+  `validateRedirectTarget` dan `isValidSlug` — bukan bahwa berkasnya ter-parse.
+  Saudara peringatannya, `tests/legacy-redirect-map.test.ts`, menegakkan bahwa
+  TEKS SUMBER sebuah migration memuat `ALTER TABLE awcms_blog_pages`, yang
+  membuktikan sebuah kolom ADA dan tak bisa memperhatikan tak ada yang
+  membacanya; kolom itu dibuang di `sql/147`. `findMapProblems` sendiri diuji
+  terhadap tiga entri yang sengaja dirusak, karena validator yang tak pernah
+  dilihat GAGAL adalah validator yang tak pernah diuji.
 
 - **PUTARAN CAPTURE — 25 Agustus 2026: tulisan telemetri 404 publik TIDAK punya
   rate limit, dan dokumen yang menyebut kardinalitasnya terbatas justru sedang
