@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 24    |
-| Migrations                          | 147   |
+| Migrations                          | 148   |
 | `awcms_*` tables                    | 152   |
 | Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 484   |
-| Route files                         | 382   |
+| Test files                          | 486   |
+| Route files                         | 383   |
 | ADR                                 | 226   |
 
 ### Modules
@@ -196,6 +196,7 @@
 | 145 | `sql/145_awcms_subject_actor_indexes.sql`                          |
 | 146 | `sql/146_awcms_identity_public_byline.sql`                         |
 | 147 | `sql/147_awcms_blog_pages_drop_legacy_provenance.sql`              |
+| 148 | `sql/148_awcms_permission_description_resync.sql`                  |
 
 ### Tables & Row-Level Security
 
@@ -358,9 +359,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 401        |
+| `(root)`      | 402        |
 | `e2e`         | 17         |
-| `integration` | 65         |
+| `integration` | 66         |
 | `unit`        | 1          |
 
 ### Routes
@@ -368,7 +369,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 308   |
-| `/admin/**`     | 49    |
+| `/admin/**`     | 50    |
 | publik / anonim | 25    |
 
 <!-- END GENERATED: repo-inventory -->

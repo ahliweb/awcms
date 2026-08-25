@@ -1,0 +1,334 @@
+---
+/**
+ * The DSL access-policy surface (`/api/v1/access/policies/*`, Issue #179,
+ * ADR-0033) — the policies the evaluator actually CONSUMES, and a simulator
+ * for asking what a decision would be before authoring anything.
+ *
+ * ## Why this screen exists, and why it is not the other one
+ *
+ * `/admin/abac-policies` drives the FLAT #171 CRUD. Rows written there keep
+ * `is_dsl_managed = false`, and `policy-cache.ts` loads `is_active AND
+ * is_dsl_managed` — so nothing authored on that screen is ever compiled or
+ * evaluated. That inertness is a deliberate safety property (a flat row cannot
+ * be scoped or conditioned, so the only shape it can take is a wildcard
+ * always-true policy, and a flat `deny` would deny EVERY request in the tenant
+ * with no in-band recovery — ADR-0033 §3). It is not a bug. But it did mean the
+ * only policy screen in the product edited rows that govern nothing, while the
+ * surface that governs everything had no screen at all.
+ *
+ * ADR-0033 anticipated this one ("authoring adds admin surface
+ * (`identity_access.abac_policies.*`)"). It was never built, and the reason it
+ * was never noticed is worth keeping: `admin:screen-coverage:check` asks "does
+ * each DECLARED permission have a screen?", and these three permissions were
+ * seeded straight into `sql/032` without ever being declared in the module
+ * descriptor — so the gate could not ask the question about them.
+ *
+ * ## Read and simulate, deliberately NOT authoring
+ *
+ * `abac_policies.configure` stays in `DELIBERATELY_UNSCREENED`, on the same
+ * reasoning this repo already accepted for `workflow.definition.*`: authoring a
+ * condition DSL needs a real editor, and a JSON textarea that accepts a
+ * malformed policy until the API rejects it is a worse affordance than none.
+ * The difference here is sharper than for workflows — a malformed ACCESS policy
+ * is not a bad diagram, it is an authorization rule.
+ *
+ * The simulator is the half that can be done well now, and is the one an
+ * operator needs first: "would this role be allowed to do that?" answered
+ * before a rule is written rather than after it bites.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  listAbacPolicies,
+  type AbacPolicyRecord
+} from "../../modules/identity-access/application/abac-policy-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "abac_policies",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One awaited query at a time: concurrent queries on a single transaction
+    // connection leak it.
+    policies: await listAbacPolicies(tx, ssr.tenantId),
+    // `analyze` is its OWN action, held separately from `read` by design
+    // (`sql/032`): previewing decision logic can be granted or withheld
+    // independently of reading the stored rules.
+    canAnalyze: await can({
+      moduleKey: "identity_access",
+      activityCode: "abac_policies",
+      action: "analyze"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/access-policies.astro: failed to list access policies",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "no policies" and NOT a denial. On this
+// screen the difference matters especially: an empty table is the documented
+// default posture, so an unreported load failure would read as normal.
+const loadError = screen.state === "error";
+const policies: AbacPolicyRecord[] =
+  screen.state === "allowed" ? screen.data.policies : [];
+const canAnalyze = screen.state === "allowed" && screen.data.canAnalyze;
+
+/** What the evaluator will actually consult: DSL-managed AND enabled. */
+const inForce = (policy: AbacPolicyRecord): boolean =>
+  policy.isDslManaged && policy.isActive;
+
+/** `null` in any applicability column is a wildcard, not an absence. */
+const scopeOf = (policy: AbacPolicyRecord): string =>
+  [policy.moduleKey ?? "*", policy.activityCode ?? "*", policy.action ?? "*"]
+    .join(".")
+    .concat(policy.resourceType ? ` / ${policy.resourceType}` : "");
+---
+
+<AdminLayout title="Access policies">
+  <header class="page-header fade-in-up">
+    <h1 id="access-policies-heading">{t("Access policies")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="access-policies-denied">
+        {t("You do not have permission to view access policies.")}
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="access-policies-error">
+        {t("Policies could not be loaded right now. Please try again later.")}
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && policies.length === 0 && (
+      <p class="state-notice fade-in-up" id="access-policies-empty">
+        {t(
+          "No access policies are stored. The evaluator is applying its built-in role and permission rules."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && policies.length > 0 && (
+      <table class="admin-table fade-in-up" id="access-policies-table">
+        <thead>
+          <tr>
+            <th scope="col">{t("Policy code")}</th>
+            <th scope="col">{t("Effect")}</th>
+            <th scope="col">{t("Applies to")}</th>
+            <th scope="col">{t("Priority")}</th>
+            <th scope="col">{t("In force")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {policies.map((policy) => (
+            <tr data-policy-id={policy.id}>
+              <td>
+                {policy.policyCode}
+                {policy.description && (
+                  <span class="cell-secondary">{policy.description}</span>
+                )}
+              </td>
+              <td>{policy.effect === "allow" ? t("Allow") : t("Deny")}</td>
+              <td>{scopeOf(policy)}</td>
+              <td>{policy.priority}</td>
+              <td>
+                {inForce(policy)
+                  ? t("Yes")
+                  : policy.isDslManaged
+                    ? t("No — disabled")
+                    : t("No — not evaluated")}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
+  {
+    canRead && canAnalyze && (
+      <section
+        class="admin-create-form fade-in-up"
+        aria-labelledby="simulate-legend"
+      >
+        <p class="form-legend" id="simulate-legend">
+          {t("Simulate a decision")}
+        </p>
+        <p class="page-description">
+          {t(
+            "Ask what the evaluator would answer for a hypothetical subject. Nothing is written and no decision is recorded."
+          )}
+        </p>
+
+        <form id="policy-simulate-form">
+          <p
+            id="simulate-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="simulate-roles">
+            {t("Role codes (comma-separated)")}
+          </label>
+          <input
+            id="simulate-roles"
+            name="roles"
+            type="text"
+            autocomplete="off"
+          />
+
+          <label for="simulate-module">{t("Module key")}</label>
+          <input
+            id="simulate-module"
+            name="moduleKey"
+            type="text"
+            required
+            autocomplete="off"
+          />
+
+          <label for="simulate-activity">{t("Activity code")}</label>
+          <input
+            id="simulate-activity"
+            name="activityCode"
+            type="text"
+            required
+            autocomplete="off"
+          />
+
+          <label for="simulate-action">{t("Action")}</label>
+          <input
+            id="simulate-action"
+            name="action"
+            type="text"
+            required
+            autocomplete="off"
+          />
+
+          <button type="submit">{t("Simulate")}</button>
+        </form>
+
+        {/*
+          `aria-live` so the answer is announced: the result replaces itself in
+          place and a screen-reader user would otherwise get no signal that the
+          button did anything.
+        */}
+        <p
+          id="simulate-result"
+          class="state-notice"
+          role="status"
+          aria-live="polite"
+          hidden
+        />
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is what makes Astro bundle this EXTERNALLY — an import-free
+  // script is inlined, and inline scripts are blocked by this app's CSP.
+  import {
+    field,
+    lockElement,
+    messageBox,
+    onSubmit,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+
+  type SimulationResponse = {
+    decision: {
+      allowed: boolean;
+      reason: string | null;
+      matchedPolicy: string | null;
+    };
+  };
+
+  const simulateError = messageBox("simulate-error");
+
+  onSubmit("policy-simulate-form", async ({ data, submit }) => {
+    const result = document.getElementById("simulate-result");
+    const roles = field(data, "roles")
+      .split(",")
+      .map((role) => role.trim())
+      .filter((role) => role.length > 0);
+
+    simulateError.clear();
+
+    if (result) {
+      result.hidden = true;
+    }
+
+    // `submit` is null only if the markup lost its submit button, which cannot
+    // happen while this handler is running — a submit event needs one. Guarded
+    // anyway rather than asserted, so a markup change degrades to "no busy
+    // label" instead of a dead form.
+    const unlock = submit ? lockElement(submit, "Simulating…") : () => {};
+
+    try {
+      const response = await sendJsonForData<SimulationResponse>(
+        "POST",
+        "/api/v1/access/policies/simulate",
+        {
+          subject: { roles },
+          request: {
+            moduleKey: field(data, "moduleKey"),
+            activityCode: field(data, "activityCode"),
+            action: field(data, "action")
+          }
+        }
+      );
+
+      if (!response.ok || !response.data) {
+        // Generic message only — never surface internal detail (Issue #540).
+        simulateError.show(
+          "The simulation could not be run. Check the module, activity and action and try again."
+        );
+        return;
+      }
+
+      const { decision } = response.data;
+
+      if (result) {
+        // The matched policy is the useful half: "deny" alone does not say
+        // whether a rule refused or nothing allowed.
+        result.textContent = `${decision.allowed ? "Allow" : "Deny"} — ${
+          decision.matchedPolicy ?? "no policy matched"
+        }`;
+        result.hidden = false;
+      }
+    } finally {
+      unlock();
+    }
+  });
+</script>

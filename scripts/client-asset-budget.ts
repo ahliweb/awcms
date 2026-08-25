@@ -311,8 +311,27 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * 192,000 is measured + ~0.4%, the same deliberately tight margin the last two
  * raises argued for.
+ *
+ * ## 193,500 (2026-08-25) — `/admin/access-policies`
+ *
+ * The DSL policy screen's own handler: parse role codes, POST the simulation,
+ * render the decision. **767 B**, which was very nearly the whole 724 B
+ * overage on its own.
+ *
+ * The failure message asks whether the growth is per-screen duplication, and
+ * the answer was checked rather than assumed. The built chunk opens
+ * `import{c as e,d as t,…}from"./admin-form-client.dRVcYtE0.js"` — it REFERENCES
+ * the shared 2,321 B helper chunk instead of inlining a copy, which is what the
+ * 767 B figure is evidence of: an inlined lifecycle would have made this chunk
+ * several kB, the Issue #552 shape. For scale it is the smallest admin script
+ * in the build (`approvals` is 2,926 B, `business-scope` 3,563 B, `blog`
+ * 12,686 B).
+ *
+ * So this is a new screen paying its own way, not accretion. 193,500 is
+ * measured + ~0.4%, holding the same tight margin rather than buying room for
+ * the next one.
  */
-export const APP_BUDGET_BYTES = 192_000;
+export const APP_BUDGET_BYTES = 193_500;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

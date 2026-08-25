@@ -88,6 +88,24 @@ const canUpdate = canConfigure;
         )
       }
     </p>
+    {
+      /*
+        The screen used to say only that the table is empty by default, which
+        reads as "nothing here yet" rather than "nothing written here takes
+        effect". Policies authored on THIS screen keep `is_dsl_managed = false`
+        and `policy-cache.ts` never loads them (ADR-0033 \u00a73) \u2014 deliberate, since
+        a flat row cannot be scoped or conditioned and a flat `deny` would deny
+        every request in the tenant. But an operator writing a rule here and
+        expecting it to bite deserves to be told, not to discover it.
+      */
+    }
+    <p class="state-notice" id="abac-policies-inert-notice">
+      {
+        t(
+          "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
+        )
+      }
+    </p>
   </header>
 
   {

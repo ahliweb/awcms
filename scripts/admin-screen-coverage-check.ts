@@ -58,6 +58,20 @@ const SCREEN_GLOB = "src/pages/admin/**/*.astro";
  * rather than with silence.
  */
 export const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
+  // Authoring a condition DSL needs a real editor, and the same objection the
+  // six `workflow.definition.*` entries below record applies with more force
+  // here: a malformed workflow graph is a bad diagram, a malformed ACCESS
+  // policy is an authorization rule. A JSON textarea that accepts one until
+  // `POST /api/v1/access/policies` rejects it is a worse affordance than none.
+  //
+  // `read` and `analyze` ARE screened — `/admin/access-policies` lists the
+  // evaluated policy set and simulates a decision against it. This entry is
+  // about the write half only, and it is a DECISION rather than a backlog
+  // item: the surface stays API-and-script until someone builds an editor
+  // worth trusting with a deny rule.
+  "identity_access.abac_policies.configure":
+    "no condition-DSL editor; /admin/access-policies covers read + simulate",
+
   // Six permissions, one decision: authoring a node/transition graph needs a
   // real editor, and a JSON textarea that accepts a malformed graph until
   // `publish` rejects it is a worse affordance than none.

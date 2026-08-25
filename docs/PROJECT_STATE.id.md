@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:82ce9e2bfc81bb41c8780ddc983e71c1256fc3a799f2198418c26f084b2e3637 -->
+<!-- i18n-source-hash: sha256:eb78b6a2fd718095696c90deb15ca7d49f5d327edd534139a4311ce88f7b9817 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,7 +111,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **147** (`sql/001`–`147`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0111** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **61** (34.760 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
@@ -359,6 +359,99 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN REGISTER — 25 Agustus 2026: dua register menggambarkan permission
+  yang sama, tak ada yang membandingkannya, dan gara-gara itu SATU permukaan
+  otorisasi utuh tidak punya layar.**
+
+  `awcms_permissions` adalah yang dibaca `authorizeInTransaction`. Deskriptor
+  modul adalah register KEDUA atas fakta yang sama, dan register itulah yang
+  dipercaya setiap gerbang statis: `access:permissions:enforcement:check`
+  bertanya "apakah tiap permission TERDEKLARASI punya penegak?",
+  `admin:screen-coverage:check` bertanya "apakah tiap permission TERDEKLARASI
+  punya layar?". Keduanya mengiterasi apa yang DIDEKLARASIKAN modul. **Tidak ada
+  yang membandingkan kedua register itu, ke arah mana pun.**
+
+  **Tiga permission hanya hidup di salah satunya.**
+  `identity_access.abac_policies.{read,configure,analyze}`, di-seed langsung ke
+  `sql/032`, tidak dideklarasikan di mana pun — dengan alasan yang tertulis di
+  migration itu, _"rather than via a module descriptor `permissions` array which
+  this module does not use"_, benar saat ditulis dan salah sesudahnya.
+  Endpoint-nya berfungsi, jadi tak ada yang tampak rusak. Yang rusak: ketiganya
+  menjadi **TAK TERLIHAT oleh setiap gerbang yang seharusnya menginterogasinya**
+  — dikecualikan dari pemeriksaan repo karena KELALAIAN, bukan karena keputusan,
+  dan tak ada register yang menyatakannya.
+
+  **Yang disembunyikannya.** Permukaan kebijakan DSL yang dijaga ketiganya —
+  `/api/v1/access/policies/*`, SATU-SATUNYA permukaan yang menghasilkan
+  kebijakan yang dikonsumsi evaluator (`policy-cache.ts` memfilter
+  `is_dsl_managed`) — **sama sekali tidak punya layar admin**, sepanjang
+  hidupnya. ADR-0033 sudah mengantisipasinya. Gerbang yang ada persis untuk
+  mengatakan itu tidak bisa: ia tak pernah diberi pertanyaannya.
+
+  Sementara itu satu-satunya layar kebijakan yang ADA, `/admin/abac-policies`,
+  menulis baris flat yang tak pernah dievaluasi. Keinertan itu disengaja dan
+  benar — baris flat tak bisa di-scope maupun dikondisikan, jadi sebuah `deny`
+  flat akan menolak SETIAP request tenant tanpa pemulihan in-band — tetapi
+  layarnya hanya pernah berkata tabelnya kosong secara bawaan, yang terbaca
+  "belum ada apa-apa" alih-alih "tak ada yang berlaku". Kini ia menyatakannya.
+
+  **Enam penyimpangan deskripsi ikut keluar, dan itu HIDUP.** Setiap migration
+  seed permission berakhir `ON CONFLICT DO NOTHING`, jadi deskripsi ditulis
+  SEKALI dan suntingan deskriptor sesudahnya tak pernah sampai ke katalog.
+  `comparePermissions` menyebutnya `mismatched_description` dan sinyal health
+  modul menghitungnya sebagai kegagalan — sehingga `blog_content`,
+  `identity_access`, `tenant_admin`, dan `idn_admin_regions` SEMUANYA melaporkan
+  `permission_catalog_synced = fail` di setiap deployment ter-migrasi. **Diukur
+  terhadap basis data nyata, lalu diukur ulang hijau sesudah `sql/148`.** Lima
+  dikoreksi di katalog; yang keenam di DESKRIPTOR, karena di sana katalog punya
+  kalimat yang lebih baik. Aturannya "buat kedua register mengatakan kalimat
+  yang lebih baik", bukan "buat katalog menuruti kode".
+
+  **Gerbangnya sebuah TEST, bukan `scripts/*-check.ts`, dan itu keputusan
+  desainnya.** Gerbang murni yang jelas akan mem-parse `sql/*.sql`: dua bentuk
+  kolom INSERT, plus lima migration yang MENGHAPUS baris katalog dalam
+  setidaknya dua bentuk predikat, diterapkan kumulatif menurut urutan migration.
+  Regex yang salah-parse satu saja menghasilkan gerbang yang salah dengan
+  yakin — kegagalan yang sudah dicatat repo ini lebih dari sekali. Basis data
+  ter-migrasi sudah menerapkan semuanya dengan tepat, jadi
+  `permission-catalogue-parity.integration.test.ts` MEMBACA jawabannya alih-alih
+  menurunkannya ulang, dan memakai ulang `comparePermissions` supaya CI dan
+  endpoint health tak bisa berselisih soal dua register yang sama.
+  Dibuktikan-mutasi.
+
+  **`/admin/access-policies`** memberi permukaan itu layarnya: daftar kebijakan
+  yang dievaluasi dengan kolom **Berlaku**, dan simulator keputusan. Juga
+  `isDslManaged` pada record dan pada respons API — daftar ini mengembalikan
+  baris flat dan DSL sekaligus, jadi tanpanya baik klien maupun layar tak bisa
+  membedakan kebijakan yang TERSIMPAN dari yang BERLAKU. Keduanya fakta berbeda
+  tentang sebuah aturan akses, dan yang lebih berkonsekuensi justru yang tak
+  bisa dilihat siapa pun.
+
+  `abac_policies.configure` masuk `DELIBERATELY_UNSCREENED`, dengan preseden
+  `workflow.definition.*`: menulis DSL kondisi butuh editor sungguhan, dan
+  textarea JSON yang menerima kebijakan cacat sampai API menolaknya adalah
+  afordansi yang LEBIH BURUK daripada tidak ada. Di sini lebih tajam daripada
+  untuk workflow — graf workflow cacat itu diagram buruk, kebijakan akses cacat
+  itu aturan otorisasi.
+
+  **Satu salah-belok yang layak dicatat, karena ia bertahan melewati dua putaran
+  penalaran.** Versi pertama temuan ini berbunyi "layar ABAC menggerbangi
+  `access_control.*` padahal rute yang digerakkannya menggerbangi
+  `abac_policies.*`" — sebuah afordansi palsu. Itu SALAH: layar tersebut
+  mem-POST ke `/api/v1/abac/policies`, yang MEMANG dijaga `access_control.*`.
+  Ada dua permukaan di atas satu tabel, namanya beda satu kata, dan yang keliru
+  dibaca sebagai satu-satunya.
+  `tests/admin-access-policies-page-contract.test.ts` kini memaku nyaris-miss itu
+  dari sisi sebaliknya: layar baru TIDAK BOLEH menyebut `access_control.*`.
+
+  **Masih terbuka:** sinyal health melaporkan orphan tanpa menggagalkannya —
+  disengaja, karena orphan itu celah tata kelola, bukan kesalahan runtime — dan
+  `access:permissions:enforcement:check` tetap hanya berarah
+  deklarasi→penegakan. Test paritas membuat arah kedua tak diperlukan untuk
+  KATALOG, tetapi rute yang menyebut permission yang tak dideklarasikan modul
+  mana pun masih hanya tertangkap untuk `src/pages/admin/**`, bukan untuk rute
+  API.
 
 - **#599 SUDAH DIPECAH — 25 Agustus 2026. Rekomendasi PUTARAN BENTUK
   dijalankan, dan ini mencatat hasilnya supaya rekomendasi itu tidak dibaca

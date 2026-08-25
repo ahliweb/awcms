@@ -19,7 +19,7 @@ As a shipped template, the base provides **reusable foundation modules + neutral
 ERP domain modules (finance, inventory, procurement, manufacturing, hr-payroll, etc.)
 are **added directly in this template's `src/modules/`** when it is used, not in a separate
 extension/derived repo (the derived-application pathway was REMOVED — see §Module composition
-below). This repo has **24 registered modules**, migrations `sql/001`-`sql/147`, RLS
+below). This repo has **24 registered modules**, migrations `sql/001`-`sql/148`, RLS
 `FORCE` on every tenant-scoped table, database role separation, and a read+write admin UI
 (Issue #166, #171). This document describes what is **in the code today**. For per-module
 detail, see each `README.md` under `src/modules/<module>/`.

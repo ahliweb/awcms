@@ -111,10 +111,10 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **147** (`sql/001`–`147`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
-| Admin screens                     | **48** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **61** (34.774 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -359,6 +359,95 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **REGISTER ROUND — 25 August 2026: two registers describe the same
+  permissions, nothing compared them, and an entire authorization surface had
+  no screen because of it.**
+
+  `awcms_permissions` is what `authorizeInTransaction` reads. The module
+  descriptors are a SECOND register of the same facts, and they are the one
+  every static gate trusts: `access:permissions:enforcement:check` asks "does
+  each DECLARED permission have an enforcer?",
+  `admin:screen-coverage:check` asks "does each DECLARED permission have a
+  screen?". Both iterate what modules declare. **Nothing compared the two
+  registers, in either direction.**
+
+  **Three permissions lived in only one of them.**
+  `identity_access.abac_policies.{read,configure,analyze}`, seeded straight into
+  `sql/032`, declared nowhere — on the reasoning written into that migration,
+  _"rather than via a module descriptor `permissions` array which this module
+  does not use"_, true when written and false afterwards. The endpoints worked,
+  so nothing looked broken. What broke is that the three became **invisible to
+  every gate that would have interrogated them**: exempt from the repository's
+  checks by omission rather than by decision, with no register saying so.
+
+  **What that concealed.** The DSL policy surface those three guard —
+  `/api/v1/access/policies/*`, the ONLY surface producing policies the evaluator
+  consumes (`policy-cache.ts` filters `is_dsl_managed`) — has had **no admin
+  screen at all**, for its whole life. ADR-0033 anticipated one. The gate that
+  exists to say precisely that could not: it was never given the question.
+
+  Meanwhile the one policy screen that DOES exist, `/admin/abac-policies`,
+  authors flat rows that are never evaluated. That inertness is deliberate and
+  correct — a flat row cannot be scoped or conditioned, so a flat `deny` would
+  deny EVERY request in the tenant with no in-band recovery — but the screen only
+  ever said the table is empty by default, which reads as "nothing here yet"
+  rather than "nothing here takes effect". It now says so.
+
+  **Six description drifts came out with them, and they were live.** Every
+  permission-seed migration ends `ON CONFLICT DO NOTHING`, so a description is
+  written ONCE and a later descriptor edit never reaches the catalogue.
+  `comparePermissions` calls that `mismatched_description` and the module health
+  signal counts it as a failure — so `blog_content`, `identity_access`,
+  `tenant_admin` and `idn_admin_regions` had all been reporting
+  `permission_catalog_synced = fail` on every migrated deployment. **Measured
+  against a real database, then re-measured green after `sql/148`.** Five
+  corrected in the catalogue; the sixth in the DESCRIPTOR, because there the
+  catalogue had the better sentence. The rule was "make both registers say the
+  better sentence", not "make the catalogue obey the code".
+
+  **The gate is a TEST, not a `scripts/*-check.ts`, and that was the design
+  decision.** The obvious pure gate parses `sql/*.sql`: two INSERT column
+  shapes, plus five migrations that DELETE catalogue rows in at least two
+  predicate shapes (`(activity_code = … AND action = …) OR …`, and
+  `activity_code IN (…)` with no action), applied cumulatively in migration
+  order. A regex that silently mis-parses one produces a gate that is
+  confidently wrong — the failure this repo has recorded more than once. The
+  migrated database has already applied all of it exactly, so
+  `permission-catalogue-parity.integration.test.ts` READS the answer instead of
+  re-deriving it, and reuses `comparePermissions` so CI and the health endpoint
+  cannot drift apart about the same two registers. Mutation-proven.
+
+  **`/admin/access-policies`** gives the surface its screen: the evaluated
+  policy list with an **In force** column, and a decision simulator. Also
+  `isDslManaged` on the record and in the API response — this list returns flat
+  and DSL rows alike, so without it neither a client nor a screen could tell a
+  stored policy from one in force. "Stored" and "in force" are different facts
+  about an access rule and the more consequential one was the one nobody could
+  see.
+
+  `abac_policies.configure` is `DELIBERATELY_UNSCREENED`, on the
+  `workflow.definition.*` precedent: authoring a condition DSL needs a real
+  editor, and a JSON textarea that accepts a malformed policy until the API
+  rejects it is a worse affordance than none. Sharper here than for workflows —
+  a malformed workflow graph is a bad diagram, a malformed access policy is an
+  authorization rule.
+
+  **A wrong turn worth recording, because it survived two rounds of reasoning.**
+  The first version of this finding was "the ABAC screen gates on
+  `access_control.*` while the routes it drives gate on `abac_policies.*`" — a
+  fake affordance. It was wrong: that screen posts to `/api/v1/abac/policies`,
+  which IS guarded by `access_control.*`. Two surfaces exist over one table,
+  their names are one word apart, and the wrong one was read as the only one.
+  `tests/admin-access-policies-page-contract.test.ts` now pins the near-miss
+  from the other side: the new screen must NOT name `access_control.*`.
+
+  **Still open:** the health signal reports orphans without failing on them —
+  deliberate, since an orphan is a governance gap rather than a runtime fault —
+  and `access:permissions:enforcement:check` remains declared→enforced only. The
+  parity test makes the second direction unnecessary for the CATALOGUE, but a
+  route naming a permission no module declares is still only caught for
+  `src/pages/admin/**`, not for API routes.
 
 - **#599 IS SPLIT — 25 August 2026. The SHAPE ROUND's recommendation was
   carried out, and this records the outcome so the recommendation is not read
