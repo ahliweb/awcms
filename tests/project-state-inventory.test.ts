@@ -33,6 +33,8 @@ import {
   formatRibuan,
   parseAdrStatus,
   renderInventoryBlock,
+  INVENTORY_LOCALES,
+  inventoryDocPath,
   type ProjectStateInventory
 } from "../scripts/project-state-inventory";
 
@@ -191,5 +193,76 @@ describe("cross-artefact: the real document is in sync", () => {
     // The gate this suite belongs to is itself in the chain it counts.
     expect(data.checkGateCount).toBeGreaterThanOrEqual(34);
     expect(data.adrHighestStatus.length).toBeGreaterThan(0);
+  });
+});
+
+describe("both language copies are generated, not hand-maintained (#727)", () => {
+  test("every locale renders the same VALUES from one inventory", () => {
+    // The whole point of a label table rather than a second renderer: the two
+    // documents can differ in wording and cannot differ in fact. Before this,
+    // `PROJECT_STATE.id.md` reported the ADR range ending at 0111 against a
+    // real 0113 and `MODULE_CONTRACT_VERSION` 4.0.0 against a real 4.1.0.
+    const byLocale = INVENTORY_LOCALES.map((locale) =>
+      parseInventoryRows(renderInventoryBlock(SAMPLE, locale))
+    );
+
+    for (const rows of byLocale) {
+      expect(rows).toHaveLength(byLocale[0]!.length);
+    }
+
+    // Column 2 is the VALUE column. It carries some translated prose, so
+    // compare the facts embedded in it rather than the whole string.
+    for (const rows of byLocale) {
+      // `parseInventoryRows` already drops the `---` separator, so data starts
+      // at index 1. Slicing from 2 silently skipped the Version row.
+      const values = rows.slice(1).map((cells) => cells[1] ?? "");
+      const joined = values.join(" ");
+
+      expect(joined).toContain(`**${SAMPLE.version}**`);
+      expect(joined).toContain(`**${SAMPLE.moduleCount}**`);
+      expect(joined).toContain(`**${SAMPLE.migrationCount}**`);
+      expect(joined).toContain(`**${SAMPLE.adrHighest}**`);
+      expect(joined).toContain(`**${SAMPLE.adminScreenCount}**`);
+      expect(joined).toContain(`**${SAMPLE.astroFileCount}**`);
+      expect(joined).toContain(`**${SAMPLE.checkGateCount}**`);
+      expect(joined).toContain(`**${SAMPLE.contractVersion}**`);
+    }
+  });
+
+  test("the locales differ in WORDING, or one of them is not a translation", () => {
+    // Guards the opposite mistake: quietly emitting the English block into the
+    // Indonesian file would make the gate green and the mirror wrong in a new
+    // way.
+    const en = renderInventoryBlock(SAMPLE, "en");
+    const id = renderInventoryBlock(SAMPLE, "id");
+
+    expect(en).not.toBe(id);
+    expect(en).toContain("| Aspect |");
+    expect(id).toContain("| Aspek |");
+    expect(en).toContain("DO NOT hand-edit");
+    expect(id).toContain("JANGAN diedit tangan");
+  });
+
+  test("each locale names its own document", () => {
+    expect(inventoryDocPath("en")).toBe("docs/PROJECT_STATE.md");
+    expect(inventoryDocPath("id")).toBe("docs/PROJECT_STATE.id.md");
+    expect(INVENTORY_LOCALES.length).toBeGreaterThan(1);
+  });
+
+  test("a stale MIRROR is caught, which is the defect this closes", () => {
+    // `diffAgainstFresh` is locale-aware only in its message; the real
+    // regression risk is comparing an Indonesian document against an English
+    // render, which would report every row as stale and teach people to ignore
+    // it. Same locale in and out: clean. Cross-locale: noisy. Assert both.
+    const idFresh = renderInventoryBlock(SAMPLE, "id");
+    expect(diffAgainstFresh(docWith(idFresh), idFresh, "id")).toEqual([]);
+
+    const staleId = idFresh.replace(
+      `**${SAMPLE.contractVersion}**`,
+      "**0.0.1**"
+    );
+    const problems = diffAgainstFresh(docWith(staleId), idFresh, "id");
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.join(" ")).toContain("0.0.1");
   });
 });

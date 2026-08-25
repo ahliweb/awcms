@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:8142bbd86c5a1213e369eee8225883aed20459d94ac0f0abbb9f512456dd2e2c -->
+<!-- i18n-source-hash: sha256:46dd3bc5e40012e45a78318f4f7c93c4efb16248a3d0840d0de8af462d755f96 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,11 +112,11 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0111** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
-| Layar admin                        | **48** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **61** (34.760 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **57** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| ADR                                | **0000**–**0113** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **58** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -359,6 +359,63 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN MIRROR — 26 Agustus 2026: blok yang berbunyi "JANGAN diedit tangan"
+  ternyata tidak ada yang menghasilkannya, dan gerbang yang seharusnya
+  menyadarinya memang sedang menanyakan pertanyaan LAIN — dengan sengaja.**
+
+  `scripts/README.md` dan `docs/PROJECT_STATE.md` §2 ter-generate dan
+  ter-gerbang. Mirror Indonesianya membawa blok yang SAMA, banner sekalian,
+  dirawat tangan, tak tercakup apa pun — dan keduanya sudah melenceng: 107/48
+  terhadap 121/54 yang sebenarnya, rentang ADR berakhir `0111` terhadap `0113`,
+  48/61/57 terhadap 49/62/58, dan `MODULE_CONTRACT_VERSION` **4.0.0** terhadap
+  **4.1.0**.
+
+  Sebuah VERSI KONTRAK, dinyatakan salah, di dokumen yang seluruh tugasnya
+  adalah menjadi titik lanjut yang akurat.
+
+  **Mengapa tak ada gerbang yang bisa melihatnya — itu paruh yang menarik, dan
+  itu BUKAN kelalaian.** `check:docs:translation` membandingkan sha256 SUMBER
+  INGGRIS dengan penanda di mirror. Itu menjawab "apakah bahasa Inggrisnya
+  berubah sejak ini diterjemahkan?" — pertanyaan yang persis tepat untuk PROSA,
+  yang hanya menua saat sumbernya berubah. Konten TURUNAN menua saat REPO-nya
+  berubah, dengan kedua berkas tak tersentuh, dan tak ada hash dari berkas mana
+  pun yang bisa melihat itu.
+
+  Lebih buruk: me-restamp setelah suntingan Inggris yang tak berhubungan
+  diam-diam MEMBERKATINYA lagi. Saya nyaris mengirimkannya DUA KALI karena itu —
+  menyinkronkan `scripts/README.id.md` dengan tangan di #726 lalu me-restamp
+  menandai pasangan itu mutakhir sementara `PROJECT_STATE.id.md` masih salah.
+
+  **Obatnya tabel LABEL, bukan renderer kedua.** Kedua generator kini merender
+  setiap locale dari SATU kali pengumpulan, sehingga kedua dokumen boleh berbeda
+  KATA dan tak bisa berbeda FAKTA. Dua renderer bisa saling bertentangan, dan
+  dua salinan yang bertentangan adalah keseluruhan cacatnya. Permukaan
+  terjemahannya ternyata mungil: sepuluh label baris, tiga header kolom, dua
+  string prosa, dan satu sel sumber-kebenaran yang berupa prosa alih-alih
+  perintah telanjang.
+
+  Terbukti-mutasi DUA ARAH — merusak nilai di mirror memerahkan gerbangnya, dan
+  membuat renderer mengabaikan locale-nya (memancarkan Inggris ke berkas
+  Indonesia, cara BARU untuk salah yang diperkenalkan desain ini) memerahkan
+  test yang ditulis untuk itu.
+
+  **Audit yang diminta #727 menemukan sesuatu yang LEBIH BESAR dari #727.**
+  Kelasnya bukan "blok ter-generate di mirror"; kelasnya "setiap gerbang yang
+  hanya membaca paruh Inggris". Diverifikasi dengan membaca tiap gerbang:
+
+  - `checkAdrIndexCoverage` hanya membaca `docs/adr/README.md`.
+  - `skills:check` mem-glob `SKILL.md` dan `src/modules/*/README.md` — **55
+    `SKILL.id.md` dan 21 `README.id.md` modul** tidak diperiksa apa pun,
+    sehingga sebuah mirror bisa menyebut target `bun run` yang tidak ada. Itu
+    persis bahaya yang sudah tercatat sebagai "skill basi membalik arah".
+  - `graph:artifacts:check` meng-hardcode `docs/awcms/knowledge-graph.md`.
+  - `memory:docs:check` ADA, aman-CI secara konstruksi, dan TIDAK ada di
+    `scripts.check` maupun workflow mana pun — **gerbang yang belum pernah
+    berjalan sekali pun.** Ia GAGAL hari ini.
+
+  Yang terakhir kategorinya sendiri dan layak disebut terpisah: bukan gerbang
+  dengan titik buta, melainkan gerbang tanpa PEMANGGIL.
 
 - **PUTARAN CALL-SITE — 26 Agustus 2026: normalisasi ADR-0113 sudah salah tiga
   hari setelah di-merge, karena ia menyebut fungsi yang tak dipanggil apa pun —

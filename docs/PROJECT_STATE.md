@@ -360,6 +360,60 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **MIRROR ROUND — 26 August 2026: a block that says "do not hand-edit" had
+  nothing generating it, and the gate that should have noticed was asking a
+  different question on purpose.**
+
+  `scripts/README.md` and `docs/PROJECT_STATE.md` §2 are generated and gated.
+  Their Indonesian mirrors carried the SAME block, banner included, maintained
+  by hand, covered by nothing — and both had drifted: 107/48 against a real
+  121/54, and an ADR range ending `0111` against `0113`, 48/61/57 against
+  49/62/58, and `MODULE_CONTRACT_VERSION` **4.0.0** against **4.1.0**.
+
+  A contract version, stated wrong, in the document whose whole job is to be an
+  accurate continuation point.
+
+  **Why no gate could see it is the interesting half, and it is not oversight.**
+  `check:docs:translation` compares a sha256 of the ENGLISH source against a
+  marker in the mirror. That answers "has the English changed since this was
+  translated?" — exactly the right question for PROSE, which only goes stale
+  when its source changes. DERIVED content goes stale when the REPO changes,
+  with both files untouched, and no hash of either file can see that.
+
+  Worse: re-stamping after any unrelated English edit silently re-blesses it. I
+  nearly shipped it twice for that reason — syncing `scripts/README.id.md` by
+  hand in #726 and re-stamping marked the pair current while
+  `PROJECT_STATE.id.md` was still wrong.
+
+  **The fix is a label table, not a second renderer.** Both generators now
+  render every locale from ONE collection pass, so the two documents can differ
+  in wording and cannot differ in fact. Two renderers can disagree, and two
+  copies disagreeing is the entire defect. The translated surface turns out to
+  be tiny: ten row labels, three column headers, two prose strings and the one
+  source-of-truth cell that is prose rather than a bare command.
+
+  Mutation-proven in BOTH directions — corrupting a mirror value reddens the
+  gate, and making a renderer ignore its locale (emitting English into the
+  Indonesian file, the NEW way to be wrong this design introduces) reddens the
+  test written for it.
+
+  **The audit #727 asked for found something bigger than #727.** The class is
+  not "generated blocks in mirrors"; it is "every gate that reads only the
+  English half". Verified by reading each gate:
+
+  - `checkAdrIndexCoverage` reads `docs/adr/README.md` only.
+  - `skills:check` globs `SKILL.md` and `src/modules/*/README.md` — **55
+    `SKILL.id.md` and 21 module `README.id.md`** are checked by nothing, so a
+    mirror can name a `bun run` target that does not exist. That is precisely
+    the hazard already recorded as "a stale skill flips direction".
+  - `graph:artifacts:check` hardcodes `docs/awcms/knowledge-graph.md`.
+  - `memory:docs:check` exists, is CI-safe by construction, and is in NEITHER
+    `scripts.check` nor any workflow — **a gate that has never run once.** It
+    fails today.
+
+  The last one is its own category and worth naming separately: not a gate with
+  a blind spot, a gate with no caller.
+
 - **CALL-SITE ROUND — 26 August 2026: ADR-0113's normalisation was wrong three
   days after it merged, because it named a function nothing calls — and the
   corrected map is now committed.**

@@ -29,7 +29,9 @@ import {
   parseInventoryBlock,
   readPackageScripts,
   renderInventory,
-  replaceInventoryBlock
+  replaceInventoryBlock,
+  INVENTORY_LOCALES,
+  inventoryReadmePath
 } from "../scripts/scripts-inventory";
 
 const SCRIPTS = {
@@ -279,5 +281,56 @@ describe("the real repository", () => {
 
     expect(scripts["scripts:inventory:generate"]).toBeDefined();
     expect(scripts.check).toContain("scripts:inventory:check");
+  });
+});
+
+describe("both language copies are generated, not hand-maintained (#727)", () => {
+  test("every locale renders the SAME rows", async () => {
+    // Targets and script filenames are not translated, so the table must be
+    // byte-identical across locales. Before this, `scripts/README.id.md` was
+    // hand-maintained and drifted to "107 target / 48 gerbang" against a real
+    // 121/54.
+    const rows = buildInventory(await readPackageScripts());
+    const parsed = INVENTORY_LOCALES.map((locale) =>
+      parseInventoryBlock(renderInventory(rows, locale))
+    );
+
+    for (const one of parsed) {
+      expect(one).toEqual(parsed[0]!);
+    }
+  });
+
+  test("the locales differ in WORDING, or one of them is not a translation", async () => {
+    const rows = buildInventory(await readPackageScripts());
+    const en = renderInventory(rows, "en");
+    const id = renderInventory(rows, "id");
+
+    expect(en).not.toBe(id);
+    expect(en).toContain("DO NOT hand-edit");
+    expect(id).toContain("JANGAN diedit tangan");
+    expect(en).toContain("targets run a file in");
+    expect(id).toContain("target menjalankan berkas di");
+  });
+
+  test("the MIRROR's live block matches a fresh render too", async () => {
+    // The sibling assertion above this block only ever looked at the English
+    // file. That is precisely how the mirror drifted while the gate stayed
+    // green, so the check now runs per locale.
+    const rows = buildInventory(await readPackageScripts());
+
+    for (const locale of INVENTORY_LOCALES) {
+      const readmePath = inventoryReadmePath(locale);
+      const readme = await Bun.file(readmePath).text();
+
+      expect(
+        normalizeInventoryBlock(extractInventoryBlock(readme, readmePath)),
+        `${readmePath} is stale against a fresh render`
+      ).toBe(normalizeInventoryBlock(renderInventory(rows, locale)));
+    }
+  });
+
+  test("each locale names its own README", () => {
+    expect(inventoryReadmePath("en")).toBe("scripts/README.md");
+    expect(inventoryReadmePath("id")).toBe("scripts/README.id.md");
   });
 });
