@@ -46,6 +46,7 @@ import {
 } from "../../src/modules/identity-access/application/business-scope-assignment-service";
 import { resolveBusinessScopeFacts } from "../../src/modules/identity-access/application/business-scope-facts";
 import { runBusinessScopeExpiry } from "../../src/modules/identity-access/application/business-scope-expiry-job";
+import { countPoolQueries } from "./query-budget";
 import { evaluateAccess } from "../../src/modules/identity-access/domain/access-control";
 import {
   createDummyBusinessScopeHierarchyResolver,
@@ -569,6 +570,66 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
       WHERE assignment_id = ${assignmentId}
     `) as { event_type: string }[];
     expect(events.map((e) => e.event_type)).toContain("expired");
+  });
+
+  test("the expiry job costs the same whether one assignment elapsed or twelve", async () => {
+    // Both passes are capped at 500, and the old shape issued one INSERT per
+    // expired item — so the worst case was 500 sequential statements inside one
+    // transaction, per tenant, per pass. A bound of 500 is not a defence
+    // against a per-item query; it is the size at which one starts to matter.
+    //
+    // Measured through `countPoolQueries` because a JOB reaches its transaction
+    // itself, via `withTenantOrThrow` -> `sql.begin`. Counting only the pool's
+    // own tagged templates would see none of the statements that matter.
+    const admin = getAdminSql();
+    const past = new Date(Date.now() - 60_000);
+    const older = new Date(Date.now() - 120_000);
+
+    const ctx = {
+      runId: "test-expiry-budget",
+      correlationId: "test-expiry-budget",
+      dryRun: false,
+      signal: new AbortController().signal
+    };
+
+    // ONE elapsed assignment: establishes the fixed cost of a run — tenant
+    // enumeration, both passes, the gauges refresh, the backlog count.
+    await admin`
+      INSERT INTO awcms_business_scope_assignments
+        (tenant_id, tenant_user_id, scope_type, scope_id, effective_from, effective_to,
+         is_temporary, granted_by_tenant_user_id, status)
+      VALUES (${TENANT_A}, ${A_SUBJECT}, 'office', ${OFFICE_A}, ${older}, ${past},
+              true, ${A_ACTOR}, 'active')
+    `;
+
+    const one = await countPoolQueries(getRuntimeSql(), (sql) =>
+      runBusinessScopeExpiry(sql, ctx)
+    );
+    expect(one.result.assignmentsExpired).toBe(1);
+
+    // TWELVE, seeded the same way.
+    await admin`
+      INSERT INTO awcms_business_scope_assignments
+        (tenant_id, tenant_user_id, scope_type, scope_id, effective_from, effective_to,
+         is_temporary, granted_by_tenant_user_id, status)
+      SELECT ${TENANT_A}, ${A_SUBJECT}, 'office', ${OFFICE_A}, ${older}, ${past},
+             true, ${A_ACTOR}, 'active'
+      FROM generate_series(1, 12) AS n
+    `;
+
+    const twelve = await countPoolQueries(getRuntimeSql(), (sql) =>
+      runBusinessScopeExpiry(sql, ctx)
+    );
+    expect(twelve.result.assignmentsExpired).toBe(12);
+
+    // The whole property, asserted as a RELATION rather than an absolute: the
+    // run costs the same for twelve as for one. An absolute budget here would
+    // have to encode the fixed per-tenant overhead of every pass in this job,
+    // and would move for reasons that have nothing to do with the defect.
+    //
+    // Under the per-item shape the second run costs eleven more than the first,
+    // so this cannot pass by accident.
+    expect(twelve.queries).toBe(one.queries);
   });
 
   test("performance: resolving one scope over a wide+deep hierarchy stays within a realistic bound", async () => {

@@ -818,5 +818,29 @@ suite("segregation of duties (Issue #181)", () => {
       SELECT status FROM awcms_sod_conflict_exceptions WHERE tenant_id = ${TENANT_A}
     `) as { status: string }[];
     expect(rows[0]!.status).toBe("expired");
+
+    // The audit row, which nothing here used to check. An SoD exception lapsing
+    // is a control coming off, and this pass deliberately writes ONE
+    // `critical` entry per exception rather than a summary — so "the status
+    // flipped" is only half of what the job promises. Asserted now because the
+    // write moved to `recordAuditEvents`: a batch writer that dropped its rows
+    // would have left every existing assertion in this file green.
+    const audit = (await admin`
+      SELECT severity, resource_id, attributes
+      FROM awcms_audit_events
+      WHERE tenant_id = ${TENANT_A}
+        AND resource_type = 'sod_conflict_exception'
+        AND action = 'expire'
+    `) as {
+      severity: string;
+      resource_id: string | null;
+      attributes: { ruleKey?: string } | null;
+    }[];
+
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.severity).toBe("critical");
+    expect(audit[0]!.resource_id).not.toBeNull();
+    // A jsonb OBJECT, not a jsonb string — the `recordAuditEvents` trap.
+    expect(audit[0]!.attributes?.ruleKey).toBe(RULE_VENDOR_PAYMENT);
   });
 });

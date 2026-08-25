@@ -26,13 +26,31 @@
  * already treats an `approved` row past its `effective_to` as ineffective at
  * decision time, so expiry takes effect IMMEDIATELY (issue #181).
  *
+ * ## Rows per pass, round trips per pass
+ *
+ * Which rows get written is unchanged by the batching below. HOW MANY
+ * STATEMENTS write them is: each pass used to issue one INSERT per expired
+ * item, and both passes are capped at 500, so the worst case was 500 sequential
+ * statements inside one transaction — per tenant, per pass, across every
+ * tenant `iterateTenantsInBatches` visits. A bound of 500 is not a defence
+ * against a per-item query; it is the size at which one starts to matter.
+ *
+ * Now two statements per pass regardless: the assignment pass writes its event
+ * rows with one `unnest`, and the exception pass writes its audit rows with
+ * `recordAuditEvents`. Note that the second is the batch form of the SAME
+ * writer the per-row loop used — the individually addressable entries the
+ * paragraph above insists on are all still written, one row each.
+ *
  * Flipping `status` to `expired` here is a BACKGROUND CLEANUP, not the
  * authorization gate: `isBusinessScopeAssignmentCurrentlyActive` already
  * treats an `active` row past its `effective_to` as not-in-force at decision
  * time (`business-scope-facts.ts`), so revocation/expiry takes effect
  * immediately regardless of when this job runs.
  */
-import { recordAuditEvent } from "../../logging/application/audit-log";
+import {
+  recordAuditEvent,
+  recordAuditEvents
+} from "../../logging/application/audit-log";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   recordCounter,
@@ -73,15 +91,28 @@ async function expireAssignmentsPass(
         RETURNING id
       `) as { id: string }[];
 
-      for (const row of expiredRows) {
+      // ONE round trip, not one per expired assignment. The UPDATE above is
+      // capped at `ASSIGNMENT_EXPIRY_BATCH_LIMIT`, so the old loop's worst case
+      // was 500 sequential INSERTs inside this transaction, for every tenant,
+      // on every pass — the same magnitude as the scheduled sweeps before they
+      // were flattened. A bound of 500 is not a defence against a per-item
+      // query; it is the exact size at which one starts to matter.
+      //
+      // Append-only event log with no conflict target, so the batch is a plain
+      // `unnest` over the ids and every other column is constant for the pass.
+      if (expiredRows.length > 0) {
         await tx`
           INSERT INTO awcms_business_scope_assignment_events
             (tenant_id, assignment_id, event_type, reason)
-          VALUES (${tenantId}, ${row.id}, 'expired', 'Automatic expiry (effective_to elapsed)')
+          SELECT ${tenantId},
+                 unnest(${tx.array(
+                   expiredRows.map((row) => row.id),
+                   "uuid"
+                 )}::uuid[]),
+                 'expired',
+                 'Automatic expiry (effective_to elapsed)'
         `;
-      }
 
-      if (expiredRows.length > 0) {
         await recordAuditEvent(tx, {
           tenantId,
           moduleKey: IDENTITY_ACCESS_MODULE_KEY,
@@ -126,18 +157,28 @@ async function expireSoDConflictExceptionsPass(
         RETURNING id, rule_key
       `) as { id: string; rule_key: string }[];
 
-      for (const row of expiredRows) {
-        await recordAuditEvent(tx, {
+      // One INSERT for the whole pass. Each expiry keeps its OWN audit row —
+      // a `critical` event naming the rule that lapsed is exactly what an
+      // auditor reads one at a time, so this is not a place to collapse 500
+      // events into a summary. `recordAuditEvents` exists for precisely this:
+      // the same rows, one round trip.
+      //
+      // The assignment pass above writes a single SUMMARY event instead, and
+      // the asymmetry is deliberate — an assignment expiring on schedule is
+      // routine, an SoD exception lapsing is a control coming off.
+      await recordAuditEvents(
+        tx,
+        expiredRows.map((row) => ({
           tenantId,
           moduleKey: IDENTITY_ACCESS_MODULE_KEY,
           action: "expire",
           resourceType: "sod_conflict_exception",
           resourceId: row.id,
-          severity: "critical",
+          severity: "critical" as const,
           message: `SoD conflict exception for rule "${row.rule_key}" expired automatically.`,
           attributes: { ruleKey: row.rule_key }
-        });
-      }
+        }))
+      );
 
       if (expiredRows.length > 0) {
         recordCounter(
