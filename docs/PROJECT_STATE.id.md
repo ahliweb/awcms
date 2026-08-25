@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:fc50a36528152e21a63527e88441ddbede97a270341847e6f5febe4570ee220b -->
+<!-- i18n-source-hash: sha256:9688f2c46f03420d53d4fb0a8cac1c9b46ac344acfb38af74616f4b60e658975 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,49 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN KOSONG — 25 Agustus 2026: suite integrasi punya NOL tes gagal, dan
+  sembilan yang dua kali saya laporkan sebagai pre-existing itu LINGKUNGAN SAYA
+  SENDIRI.**
+
+  Dinyatakan terang-terangan karena dua kali dinyatakan keliru, sekali di badan
+  PR yang sudah ter-merge (#716: _"the integration suite shows 9 failures both
+  with and without this branch"_). Benar sebagaimana ditulis — memang gagal di
+  kedua sisi, jadi perbandingan tanpa-regresi tetap sahih — tetapi terbaca
+  sebagai kerusakan repo, dan tidak ada. Dengan lingkungan yang benar suite-nya
+  **567 lolos, 0 gagal**.
+
+  Tujuh dari sembilan berasal dari `export A=... B=$A` di shell saya sendiri:
+  **`$A` diekspansi SEBELUM `A` di-assign**, jadi `SETUP_DATABASE_URL`/
+  `WORKER_DATABASE_URL` ter-set ke STRING KOSONG, bukan ke URL-nya. Dua sisanya
+  dari `APP_URL=http://localhost:4321` lokal — `site-origin` mengambil skema
+  dari `APP_URL`, dan dua tes menegakkan URL host-absolut `https://`. Tak satu
+  pun cacat, kecuali pada cara saya memanggilnya.
+
+  **Paruh string-kosongnya MEMANG cacat nyata, di kodenya.**
+  `getNamedDatabaseClient` menyelesaikan
+  `process.env[name] ?? process.env.DATABASE_URL`, dan `??` hanya jatuh-balik
+  pada null/undefined — jadi nilai kosong itu "terkonfigurasi", menutupi
+  fallback-nya, dan menghasilkan
+
+  > `WORKER_DATABASE_URL (or DATABASE_URL as a fallback) is required to connect
+to the database.`
+
+  dengan `DATABASE_URL` ter-set dan benar. **Pesan galat yang menyebut fallback
+  yang baru saja ia tolak pakai** — nyaris pesan terburuk yang mungkin, karena
+  ia mengirim pembacanya memeriksa variabel yang sudah benar. URL per-kind
+  didokumentasikan OPT-IN (tak-diset berarti jatuh-balik), dan KOSONG persis
+  yang dihasilkan operator saat mencoba menyatakan itu: kunci compose tanpa isi,
+  baris PaaS tersimpan kosong (deployment ini memakai Coolify), atau bentuk
+  shell di atas. `readConfiguredUrl` kini memperlakukan kosong dan
+  hanya-spasi sebagai tak-diset.
+
+  Bagian yang bisa dipindahkan bukan soal `??`-nya. Melainkan bahwa **kegagalan
+  yang SUDAH saya tulis ke memori sendiri sebagai jebatan diketahui tetap
+  memakan dua putaran pelaporan yang salah**, karena pesan galatnya tegas dan
+  menunjuk ke tempat yang masuk akal. Galat yang dengan percaya diri menyebut
+  sebab yang KELIRU lebih buruk daripada yang kabur; ia merekrut pembacanya
+  untuk mengonfirmasinya.
 
 - **PUTARAN NAMA — 25 Agustus 2026: jalur tulis N+1 ketiga ditutup, dan alasan
   ia tampak sulit adalah cacat di TRIASE SAYA SENDIRI, bukan di kodenya.**

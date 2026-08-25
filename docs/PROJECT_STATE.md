@@ -360,6 +360,45 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BLANK ROUND — 25 August 2026: the integration suite has ZERO failing tests,
+  and the nine I twice reported as pre-existing were my own environment.**
+
+  Stated plainly because it was stated wrongly twice, once in a merged PR body
+  (#716: _"the integration suite shows 9 failures both with and without this
+  branch"_). True as written — they did fail both ways, so the no-regression
+  comparison held — but it reads as repo breakage and there was none. With the
+  environment set correctly the suite is **567 pass, 0 fail**.
+
+  Seven of the nine came from `export A=... B=$A` in my own shell: **`$A` is
+  expanded before `A` is assigned**, so `SETUP_DATABASE_URL`/
+  `WORKER_DATABASE_URL` were set to the EMPTY STRING rather than to the URL.
+  The other two came from local `APP_URL=http://localhost:4321` — `site-origin`
+  takes the scheme from `APP_URL`, and two tests assert host-absolute `https://`
+  URLs. Neither is a defect in anything but the way I invoked it.
+
+  **The empty-string half WAS a real defect, in the code.**
+  `getNamedDatabaseClient` resolved
+  `process.env[name] ?? process.env.DATABASE_URL`, and `??` falls back only on
+  null/undefined — so a blank value is "configured", shadows the fallback, and
+  produces
+
+  > `WORKER_DATABASE_URL (or DATABASE_URL as a fallback) is required to connect
+to the database.`
+
+  with `DATABASE_URL` set and correct. **An error that names the fallback it has
+  just refused to use** — close to the worst possible message, because it sends
+  the reader to check the variable that is already right. The per-kind URLs are
+  documented as OPT-IN (unset means fall back), and blank is exactly what an
+  operator produces trying to express that: a compose key with nothing after it,
+  a PaaS row saved empty (this deployment uses Coolify), or the shell form
+  above. `readConfiguredUrl` now treats blank and whitespace-only as unset.
+
+  The transferable part is not the `??`. It is that **a failure I had already
+  written into my own memory as a known trap still cost me two rounds of wrong
+  reporting**, because the error message was assertive and pointed somewhere
+  plausible. An error that confidently names the wrong cause is worse than a
+  vague one; it recruits the reader into confirming it.
+
 - **NAME ROUND — 25 August 2026: the third N+1 write path is closed, and the
   reason it looked hard was a defect in MY OWN triage rather than in the code.**
 
