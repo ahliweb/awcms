@@ -360,6 +360,51 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **VOLUME ROUND — 25 August 2026: #711's first blocker does not exist, and the
+  0-byte file everyone read as the evidence is inert.**
+
+  Two entries below say the rubrik shapes are blocked because "the rubrik list
+  needs data the working copy does not have (`seputa58_sbb.sql` is 0 bytes)".
+  The file IS 0 bytes. It is also **not where the data lives**, and has not been
+  since the first time that container started.
+
+  `docker-compose.yml` mounts it only as an initdb seed
+  (`/docker-entrypoint-initdb.d/`), while the datadir is a named volume. On this
+  machine `seputarborneocom_db_data` holds **411 MB** with a populated
+  `seputa58_sbb`. An initdb script runs ONLY against an empty datadir, so the
+  empty file has been inert ever since — which is exactly why nobody noticed it
+  was empty: nothing ever depended on it.
+
+  **And there is no rubrik table because there was never meant to be one.**
+  `include/rubrik.php` answers `/rubriks/?news=X&kt=Y` with
+  `SELECT ... FROM berita_red_tayang WHERE jenis_rubrik = ? AND kategori = ?` —
+  `jenis_rubrik` and `kategori` are COLUMNS on `berita_red`. Measured against a
+  throwaway copy of the volume: **25,029 articles, 47 distinct `jenis_rubrik`,
+  46 distinct `kategori`, 102 distinct pairs.** The list was a `SELECT DISTINCT`
+  away for as long as the issue has said it was missing.
+
+  **One thing the data shows that no amount of planning could have.** Both
+  `MITRA BORNEO` (11,767 articles) and `MITRA-BORNEO` (133) exist. Shape 3's URL
+  segments are `seo_title()` output — punctuation stripped, spaces to `-` — so
+  the two collapse to the SAME slug while a plain `DISTINCT` reports two
+  rubriks. A map built from the distinct list without normalising through the
+  same `seo_title()` mis-keys the LARGEST rubrik in the archive. That is the
+  shape-3 warning one level down: enumerating the shapes is not enough if the
+  values inside them are not normalised the way the legacy code normalised them.
+
+  **The second blocker stands and is the real one.** Where `/rubrik/x.html`
+  should 301 to is a cross-repo contract question (ADR-0045/0070: the news
+  archive is rendered by `ahliweb/awcms-astro`). Having the list does not answer
+  it, and guessing the destination vocabulary produces exactly the
+  mass-wrong-301 outcome the issue exists to prevent. So no map was built —
+  #711 is now blocked on ONE thing, and it is a decision rather than a missing
+  artefact.
+
+  The transferable part: **"the artefact is missing" is a claim about a
+  filesystem, and a filesystem is not the only place an artefact can be.** The
+  0-byte dump was checked, correctly, and the conclusion drawn from it was
+  wrong because the check stopped at the file the compose entry named first.
+
 - **BLANK ROUND — 25 August 2026: the integration suite has ZERO failing tests,
   and the nine I twice reported as pre-existing were my own environment.**
 
@@ -740,9 +785,10 @@ to the database.`
     the old title had become misleading. What remains is running them: the
     article map, three exact-path rules typed into `awcms_seo_redirects`, and
     the pre-cutover crawl against a live sitemap URL.
-  - **#711, new** — the rubrik shapes (2 and 3) and the search shape (4). Two
-    blockers, both outside this repo: the rubrik list needs data the working
-    copy does not have (`seputa58_sbb.sql` is 0 bytes), and the TARGET route is
+  - **#711, new** — the rubrik shapes (2 and 3) and the search shape (4). Filed
+    with two blockers; the VOLUME ROUND above found the FIRST one does not
+    exist (the rubrik list is 102 pairs in a populated Docker volume, not
+    missing data), leaving one: the TARGET route is
     rendered by `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — a cross-repo
     contract question before it is an import question. Terms also have no
     provenance column, so there is nothing a `--path-template` could express.
@@ -979,9 +1025,12 @@ to the database.`
   `(int) $_GET['news']`, so the id is the leading digits and the slug is
   decorative — `/news/{legacyId}_{slug}.html` is the correct template.
 
-  **What is still blocked is narrower than "the artifacts".** The rubrik shapes
-  need the rubrik list, which needs data the working copy does not have (its
-  dump, `seputa58_sbb.sql`, is 0 bytes), AND a target route rendered by
+  **What is still blocked is narrower than "the artifacts", and narrower again
+  since the VOLUME ROUND.** This paragraph originally said the rubrik shapes
+  need a rubrik list "which needs data the working copy does not have (its dump,
+  `seputa58_sbb.sql`, is 0 bytes)". The dump is 0 bytes and it is INERT — the
+  data is in the `seputarborneocom_db_data` volume, and the list is 102
+  `(jenis_rubrik, kategori)` pairs. What remains is a target route rendered by
   `ahliweb/awcms-astro`, not here (ADR-0045/ADR-0070) — a cross-repo contract
   question before it is an import question. The pre-cutover crawl is unchanged:
   `blog:legacy:cutover:verify` is built and needs the live sitemap URL, at page
