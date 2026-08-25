@@ -360,6 +360,60 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **NAME ROUND — 25 August 2026: the third N+1 write path is closed, and the
+  reason it looked hard was a defect in MY OWN triage rather than in the code.**
+
+  The BOUND ROUND below deferred one site with a stated reason. Both halves of
+  that reason were wrong, and the way they were wrong is the point.
+
+  **It was called `replaceMenuItems`. No such function exists.** The real one is
+  `syncMenuItems`. The name was written from memory rather than read from the
+  signature, and it propagated into a GitHub issue, a merged PR body, a merged
+  changeset and BOTH copies of this document before anything caught it —
+  because nothing checks a function name that appears only in prose. This is the
+  rule already recorded as "cite the FILE, not a note about the file", and this
+  time the note was my own from ten minutes earlier.
+
+  **And "its callers depend on the order of its `RETURNING`" is false.** It has
+  two callers, and `blog/menus/[id].ts` fills the SAME response field from
+  `syncMenuItems` (roots-then-children) or from `fetchMenuItems`
+  (`ORDER BY sort_order`) depending only on whether the request supplied
+  `items`. The endpoint already answers in two different orders, so no client
+  can be depending on either. The claim was never verified; it was inferred from
+  the presence of a `RETURNING` clause.
+
+  What was left once both were checked: **nothing needing a decision.**
+
+  - The self-FK is `NOT DEFERRABLE`, and a `NOT DEFERRABLE` foreign key is
+    checked by an AFTER ROW trigger firing at the end of the STATEMENT, not
+    after each row. Verified against a real Postgres with the child listed
+    FIRST — the arrangement that must fail if checking were per-row. So one
+    multi-row INSERT is safe whatever the order within it.
+  - `RETURNING` was not needed at all. `MenuItemInput` carries all seven
+    columns, `tenantId`/`menuId` are parameters, the table has no user triggers,
+    and no `DEFAULT` applies to a column that is always given a value — so the
+    clause read back exactly what had just been sent.
+
+  Now two statements. The roots-before-children order is kept, but its docstring
+  no longer claims to be load-bearing: it is retained because it is what the
+  function RETURNS, and changing that would be a silent API change riding along
+  with a performance fix.
+
+  **One test in the first draft asserted something false, and it passed.** A
+  case named "a child listed BEFORE its parent still lands" claimed the old code
+  "could not have done this at all". It could: `syncMenuItems` filters roots and
+  children itself, so the caller's order never reaches the INSERT and the case
+  passed under the per-item loop too. Green, and proving nothing it said it
+  proved. Rewritten to assert what it actually covers — that input order changes
+  neither what lands nor what returns — and the header now says outright that
+  the FK property is NOT reproducible through this function, so no future reader
+  mistakes the case for evidence of it.
+
+  Both real properties are mutation-proven: dropping a field from the batch so
+  the stored row diverges from the input reddens "what it RETURNS is what the
+  table holds" (the check that makes building the answer from input safe at
+  all), and restoring the per-item loop reddens the budget.
+
 - **BOUND ROUND — 25 August 2026: one API endpoint accepted an unbounded batch,
   and a function that calls itself a twin of a fixed one kept the defect.**
 
@@ -420,13 +474,13 @@ pioneered directly here after the ADR-0047 freeze.)
   the loop reddens the ten-institution case and leaves the one-institution case
   passing, because `1 + 1 = 2` either way.
 
-  **`replaceMenuItems` has the same shape and was deliberately NOT changed.** It
-  carries a self-referencing FK (the loop inserts roots before children on
-  purpose) and its callers depend on the order of its `RETURNING`, which
-  Postgres does not specify. Those are contract questions, not a mechanical
-  substitution. Recorded with the full triage in **#715**, which also carries
-  the sites not yet read — the backfill jobs are the ones worth taking together,
-  since they iterate TENANTS at the outer level and their cost is a product.
+  The third instance, `syncMenuItems`, was deferred here and is closed by the
+  NAME ROUND above. **Two things this entry originally said about it were
+  wrong**, and both are corrected there: it was named `replaceMenuItems`, a
+  function that does not exist, and its callers were said to depend on the order
+  of its `RETURNING`. The full triage of the sites not yet read is **#715** —
+  the backfill jobs are the ones worth taking together, since they iterate
+  TENANTS at the outer level and their cost is a product.
 
 - **DIRECTION ROUND — 25 August 2026: the enforcement gate asked its question
   one way round, and the missing direction is the one with the dead endpoint

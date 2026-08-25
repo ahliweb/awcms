@@ -60,7 +60,10 @@ A sibling that advertises itself as a sibling is the easiest kind of defect to
 miss: whoever fixed the first one had already read the second and remembered
 agreeing with it.
 
-`replaceMenuItems` has the same shape and is deliberately NOT changed here — it
-carries a self-referencing FK and its callers depend on the order of its
-`RETURNING`, so it needs a decision rather than a drive-by. Recorded with the
-rest of the sweep.
+`syncMenuItems` has the same shape and is not changed here — it carries a
+self-referencing FK and returns its rows, so it was deferred rather than done as
+a drive-by. Recorded with the rest of the sweep. (Two corrections to an earlier
+draft of this note, which named it `replaceMenuItems` — a function that does not
+exist — and said its callers depend on the order of its `RETURNING`. The
+endpoint already returns two different orderings depending on whether `items`
+was supplied, so no caller can depend on either.)
