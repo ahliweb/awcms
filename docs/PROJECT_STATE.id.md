@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:01ee89ccc6e05c400cc7f53ceeb4a148d2fec6106e5e46aca3202af0b6b26315 -->
+<!-- i18n-source-hash: sha256:808f8cb71620561e7c0502410cad7ac5b7b961101f34759c3b5558d80e43c113 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,81 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN BATAS — 25 Agustus 2026: satu endpoint API menerima batch TANPA
+  batas, dan fungsi yang menyebut dirinya kembaran fungsi yang sudah diperbaiki
+  justru menyimpan cacatnya.**
+
+  Pemindaian `src/**/*.ts` atas `await` bertag-template di dalam badan loop
+  menemukan **34 loop**. Mayoritas terbatas — oleh registry kode, oleh cap yang
+  dideklarasikan (`MAX_NODE_ACTIVATIONS = 128`, `MAX_SIDEBAR_ROWS`), atau oleh
+  ukuran batch sebuah job — dan beberapa sudah ter-batch atau memang false
+  positive pemindai. Dua tidak, dan keduanya jenis temuan yang berbeda.
+
+  **`POST /api/v1/sync/push` sama sekali tak punya batas jumlah.** Validator
+  memeriksa setiap event dalam array `events` dan TIDAK PERNAH panjang
+  array-nya; satu-satunya batas adalah `readTextBody(request, "large")` di 5 MB.
+  Event minimal terserialisasi beberapa ratus byte, jadi satu request
+  terautentikasi bisa membawa sekitar **30.000 event** — tiap yang diterima
+  berbiaya compare-and-set pada versi agregat plus INSERT inbox, tiap yang
+  konflik satu INSERT konflik, semuanya berurutan, semuanya di dalam SATU
+  transaksi yang memegang koneksi dan mengunci setiap baris agregat yang sudah
+  dimajukan sampai commit. Biayanya bukan perjalanan pulang-perginya; melainkan
+  berapa lama semua hal lain menunggu di belakangnya.
+
+  Sementara itu `/sync/pull` sudah menjepit baca di 500 sejak dikirim. **Dua
+  paruh dari SATU protokol punya batas asimetris, dan paruh yang tak terbatas
+  adalah yang MENULIS.** `MAX_SYNC_PUSH_EVENTS` kini didefinisikan SEBAGAI
+  `MAX_SYNC_PULL_EVENTS`, bukan sebagai `500` kedua, dan `pull.ts` mengimpor
+  konstanta yang sama — alasan angkanya adalah RELASINYA, dan dua literal
+  independen yang kebetulan sama hari ini adalah cara asimetri itu kembali saat
+  salah satunya disetel. Tesnya menegakkan relasinya, bukan nilainya.
+
+  DITOLAK, tak pernah dipotong (postur #180): sebuah node memperlakukan batch
+  yang diterima sebagai diterima UTUH dan akan memajukan cursor-nya melewati
+  event yang tak pernah mendarat. Dilaporkan sebagai SATU error, bukan satu per
+  event — badan error yang memuat error field untuk tiap dari 30.000 event
+  adalah denial of service-nya sendiri.
+
+  **Gerbang yang membuat ini jujur.** Menambahkan `maxItems: 500` ke skema
+  OpenAPI memerahkan `openapi-bundle.test.ts`, yang membekukan setiap path
+  pra-migrasi. Daftar izin yang menuntut entri itu bernama
+  `INTENTIONALLY_EVOLVED_PATHS` dan dua entri lamanya sama-sama berbunyi
+  "backward-compatible". Yang ini TIDAK: ia aditif secara dokumen tetapi
+  PENYEMPITAN nyata bagi pemanggil, dan entrinya menyatakan begitu. Test kontrak
+  beku membuktikan nilainya persis di sini — bukan dengan memblokir
+  perubahannya, melainkan dengan menolak membiarkannya diarsipkan dengan
+  deskripsi yang salah.
+
+  **Dan temuan kedua, yang soal BAGAIMANA cacat kembaran bertahan hidup.**
+  `syncPostInstitutionAssignments` mengeluarkan satu INSERT per institusi.
+  Docstring-nya sendiri menyatakan ia "exactly like `syncPostTermAssignments`" —
+  dan memang begitu, dalam KONTRAK dan bukan dalam BIAYA. Jalur term diratakan
+  jadi dua statement di PUTARAN PERFORMA saat `blog:legacy:import` menjadikan
+  arsip 23.906 artikel sebagai pemanggilnya; jalur INI, yang digerakkan importer
+  yang SAMA lewat payload post yang SAMA, menyimpan loop-nya. Kini memakai
+  `DELETE` + `INSERT ... unnest` yang sama.
+
+  Layak disimpan: **saudara kembar yang MENGIKLANKAN dirinya sebagai kembaran
+  adalah jenis cacat yang paling mudah terlewat**, karena orang yang memperbaiki
+  yang pertama sudah membaca yang kedua dan ingat menyetujuinya. Docstring yang
+  seharusnya menuntun pembaca ke sana justru yang membuatnya terasa sudah
+  ditangani.
+
+  Anggarannya berkas TERPISAH dari anggaran term, sengaja: dua anggaran dalam
+  satu berkas menjadi hijau begitu salah satunya regresi dan yang lain
+  menyerapnya. Dan bukti-mutasinya memperlihatkan kenapa fixture WAJIB melebihi
+  anggaran — mengembalikan loop memerahkan kasus sepuluh-institusi dan
+  meninggalkan kasus satu-institusi tetap lolos, karena `1 + 1 = 2` di kedua
+  bentuk.
+
+  **`replaceMenuItems` berbentuk sama dan sengaja TIDAK diubah.** Ia membawa FK
+  yang menunjuk dirinya sendiri (loop-nya menyisipkan root sebelum child dengan
+  sengaja) dan pemanggilnya bergantung pada urutan `RETURNING`-nya, yang tidak
+  dijamin Postgres. Itu pertanyaan KONTRAK, bukan substitusi mekanis. Dicatat
+  bersama triase lengkapnya di **#715**, yang juga memuat situs yang belum
+  dibaca — job backfill paling layak diambil bersama, karena mereka mengiterasi
+  TENANT di lapis terluar sehingga biayanya adalah PERKALIAN.
 
 - **PUTARAN ARAH — 25 Agustus 2026: gerbang enforcement menanyakan
   pertanyaannya SATU arah saja, dan arah yang hilang justru yang berakibat

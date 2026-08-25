@@ -220,7 +220,19 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "/api/v1/auth/login":
         "#186 optional turnstileToken (backward-compatible)",
       "/api/v1/setup/initialize":
-        "#186 optional turnstileToken (backward-compatible)"
+        "#186 optional turnstileToken (backward-compatible)",
+      // The one entry here that is NOT backward-compatible, and is listed as
+      // such on purpose. `events` gains `maxItems: 500` — a document-additive
+      // change (no field removed, no type changed, so `isAdditiveSuperset`
+      // holds) that is a genuine NARROWING for a caller: a node pushing more
+      // than 500 events in one batch now gets VALIDATION_ERROR where it used to
+      // be accepted. Accepted deliberately. The write side had no count bound
+      // at all behind a 5 MB body, so one request could carry ~30,000 events,
+      // each costing a compare-and-set plus an INSERT, sequentially, inside one
+      // transaction holding the aggregate rows it had advanced. `minItems: 1`
+      // in the same schema documents a refusal that already existed.
+      "/api/v1/sync/push":
+        "maxItems: 500 on events — a deliberate NARROWING, not an addition; matches the /sync/pull page cap"
     };
 
     // Per-operation contract: every pre-migration path is byte-identical now,

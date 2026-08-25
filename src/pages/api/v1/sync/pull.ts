@@ -14,9 +14,12 @@ import {
   SYNC_REPLICABLE_EVENT_TYPES,
   syncReplicationIsDisabled
 } from "../../../../modules/sync-storage/domain/sync-replication";
+import { MAX_SYNC_PULL_EVENTS } from "../../../../modules/sync-storage/domain/sync-validation";
 
 const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 500;
+// Shared with the push bound so the two halves of this protocol cannot drift
+// apart — see `MAX_SYNC_PUSH_EVENTS`.
+const MAX_LIMIT = MAX_SYNC_PULL_EVENTS;
 
 export const POST: APIRoute = async ({ request }) => {
   const tenantId = request.headers.get("x-awcms-tenant-id");

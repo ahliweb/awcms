@@ -16028,6 +16028,8 @@ paths:
                   type: string
                 events:
                   type: array
+                  minItems: 1
+                  maxItems: 500
                   items:
                     type: object
                     required:
