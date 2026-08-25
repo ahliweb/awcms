@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6a3b7e6effa19b3a0cd0081dd154660ad6d45eea717eff62d0c133ff167c8204 -->
+<!-- i18n-source-hash: sha256:de83cb124eaac909251212c418985fe24841546e781e4ab99f6bda0f5924109c -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,37 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN KEPUTUSAN — 25 Agustus 2026: pemblokir tersisa #711 adalah sebuah
+  KEPUTUSAN, dan keputusan itu sudah diambil (ADR-0113).**
+  Bentuk 2 dan 3 keduanya 301 ke
+  `/kategori/{seo_title(jenis_rubrik)}` dengan `kt` dibuang; bentuk 4 301 ke
+  `/cari?q={kueri ter-percent-encode}`. Penalarannya ada di ADR itu; tiga hal
+  yang diselesaikannya layak diulang di sini.
+
+  - **Meratakan dipilih karena jawaban yang LUAS mengalahkan jawaban yang
+    SALAH.** Alternatif yang juga tak butuh rute baru — `jenis_rubrik` sebagai
+    kategori, `kategori` sebagai tag — membuang AND-nya, sehingga
+    `/hukum/pidana.html` akan mendarat di artikel `pidana` dari SEMUA rubrik.
+    Itu halaman yang salah. Meratakan mendaratkan pembaca di daftar yang lebih
+    luas, dan itu jenis ketidaksempurnaan yang berbeda.
+  - **Provenance term MELARUT alih-alih dibangun.** Butir DoD ketiga #711
+    menawarkan pilihan antara menambah `legacy_source_id` pada
+    `awcms_blog_terms` dan menulis tangan `--term-map`. Di bawah keputusan ini
+    bentuk 2/3 adalah aturan path-eksak → path-eksak yang tak pernah mencari
+    baris term, jadi keduanya tak dibutuhkan. Ini penting karena `sql/147` baru
+    saja menghapus pasangan provenance `awcms_blog_pages` yang ditambahkan atas
+    penalaran yang SAMA dan tak pernah dikawatkan ke pembaca: menjawab sebuah
+    kebutuhan dengan membangun kolom mati KEDUA akan mengulanginya persis.
+  - **Dua kendala mekanis diperiksa terhadap KODE alih-alih diasumsikan**, dan
+    salah satunya akan merusak impor secara SENYAP: `/cari?q=banjir%20sampit`
+    diterima dan `/cari?q=banjir sampit` DITOLAK oleh penjaga CRLF/spasi — dan
+    `seo_title()` legacy menaruh `-` persis di tempat spasinya, sehingga setiap
+    aturan kueri multi-kata gagal kecuali un-slugify diikuti encoding.
+
+  Yang tersisa di #711 adalah pekerjaan DATA. Ke-47-atau-kurang kategori tujuan
+  WAJIB sudah ada di tenant SEBELUM petanya dimuat, atau setiap aturan 301 ke
+  404 — kegagalan ADR-0111 satu langkah bergeser.
 
 - **PUTARAN VOLUME — 25 Agustus 2026: pemblokir PERTAMA #711 tidak ada, dan
   berkas 0-byte yang dibaca semua orang sebagai buktinya justru INERT.**
