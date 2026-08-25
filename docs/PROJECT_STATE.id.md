@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:9688f2c46f03420d53d4fb0a8cac1c9b46ac344acfb38af74616f4b60e658975 -->
+<!-- i18n-source-hash: sha256:6a3b7e6effa19b3a0cd0081dd154660ad6d45eea717eff62d0c133ff167c8204 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,53 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN VOLUME — 25 Agustus 2026: pemblokir PERTAMA #711 tidak ada, dan
+  berkas 0-byte yang dibaca semua orang sebagai buktinya justru INERT.**
+
+  Dua entri di bawah menyatakan bentuk rubrik terhalang karena "daftar rubrik
+  butuh data yang tak dimiliki salinan kerja (`seputa58_sbb.sql` 0 byte)".
+  Berkas itu MEMANG 0 byte. Ia juga **bukan tempat datanya berada**, dan sudah
+  begitu sejak container itu pertama kali jalan.
+
+  `docker-compose.yml` memasangnya HANYA sebagai seed initdb
+  (`/docker-entrypoint-initdb.d/`), sedangkan datadir-nya volume bernama. Di
+  mesin ini `seputarborneocom_db_data` memuat **411 MB** dengan `seputa58_sbb`
+  yang TERISI. Skrip initdb hanya jalan pada datadir KOSONG, jadi berkas kosong
+  itu inert sejak saat itu — dan justru itulah sebabnya tak ada yang sadar ia
+  kosong: tak pernah ada yang bergantung padanya.
+
+  **Dan tak ada tabel rubrik karena memang tak pernah dimaksudkan ada.**
+  `include/rubrik.php` menjawab `/rubriks/?news=X&kt=Y` dengan
+  `SELECT ... FROM berita_red_tayang WHERE jenis_rubrik = ? AND kategori = ?` —
+  `jenis_rubrik` dan `kategori` adalah KOLOM di `berita_red`. Terukur terhadap
+  salinan sekali-pakai volume itu: **25.029 artikel, 47 `jenis_rubrik` distinct,
+  46 `kategori` distinct, 102 pasangan distinct.** Daftarnya cuma sejauh satu
+  `SELECT DISTINCT` selama ini, sepanjang issue-nya menyatakan ia hilang.
+
+  **Satu hal yang diperlihatkan DATANYA dan tak mungkin diperlihatkan
+  perencanaan.** Ada `MITRA BORNEO` (11.767 artikel) DAN `MITRA-BORNEO` (133).
+  Segmen URL bentuk-3 adalah keluaran `seo_title()` — tanda baca dibuang, spasi
+  jadi `-` — jadi keduanya runtuh ke slug yang SAMA sementara `DISTINCT` polos
+  melaporkan dua rubrik. Peta yang dibangun dari daftar distinct tanpa
+  menormalkan lewat `seo_title()` yang sama akan SALAH-KUNCI rubrik TERBESAR di
+  arsip. Itu peringatan bentuk-3 satu tingkat lebih dalam: mengenumerasi
+  bentuknya tidak cukup bila NILAI di dalamnya tak dinormalkan sebagaimana kode
+  legacy menormalkannya.
+
+  **Pemblokir kedua TETAP berlaku dan itulah yang sebenarnya.** Ke mana
+  `/rubrik/x.html` harus 301 adalah pertanyaan kontrak lintas-repo
+  (ADR-0045/0070: arsip berita dirender `ahliweb/awcms-astro`). Memiliki
+  daftarnya tidak menjawabnya, dan menebak kosakata tujuannya menghasilkan
+  persis akibat 301-salah-massal yang issue itu ada untuk mencegahnya. Jadi
+  tidak ada peta yang dibangun — #711 kini terhalang SATU hal, dan itu
+  keputusan, bukan artefak yang hilang.
+
+  Bagian yang bisa dipindahkan: **"artefaknya hilang" adalah klaim tentang
+  SISTEM BERKAS, dan sistem berkas bukan satu-satunya tempat sebuah artefak bisa
+  berada.** Dump 0-byte itu diperiksa, dengan benar, dan kesimpulan yang ditarik
+  darinya keliru karena pemeriksaannya berhenti di berkas yang disebut pertama
+  oleh entri compose.
 
 - **PUTARAN KOSONG — 25 Agustus 2026: suite integrasi punya NOL tes gagal, dan
   sembilan yang dua kali saya laporkan sebagai pre-existing itu LINGKUNGAN SAYA
@@ -766,9 +813,10 @@ to the database.`
     menjalankannya: peta artikel, tiga aturan path-eksak yang diketikkan ke
     `awcms_seo_redirects`, dan crawl pra-cutover terhadap URL sitemap yang
     hidup.
-  - **#711, baru** — bentuk rubrik (2 dan 3) dan bentuk pencarian (4). Dua
-    pemblokir, keduanya di luar repo ini: daftar rubrik butuh data yang tidak
-    dimiliki salinan kerja (`seputa58_sbb.sql` 0 byte), dan rute TUJUAN dirender
+  - **#711, baru** — bentuk rubrik (2 dan 3) dan bentuk pencarian (4). Diajukan
+    dengan dua pemblokir; PUTARAN VOLUME di atas menemukan yang PERTAMA tidak
+    ada (daftar rubriknya 102 pasangan di volume Docker yang terisi, bukan data
+    yang hilang), menyisakan satu: rute TUJUAN dirender
     oleh `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — pertanyaan kontrak
     lintas-repo lebih dulu, baru pertanyaan impor. Term juga tidak punya kolom
     provenance, jadi tidak ada yang bisa diungkapkan `--path-template`.
@@ -1012,9 +1060,13 @@ to the database.`
   `(int) $_GET['news']`, jadi id-nya adalah digit terdepan dan slug-nya dekoratif
   — `/news/{legacyId}_{slug}.html` memang template yang tepat.
 
-  **Yang MASIH terhalang lebih sempit daripada "artefaknya".** Bentuk rubrik butuh
-  daftar rubrik, yang butuh data yang tak dimiliki salinan kerja itu (dump-nya,
-  `seputa58_sbb.sql`, berukuran 0 byte), DAN rute target yang dirender
+  **Yang MASIH terhalang lebih sempit daripada "artefaknya", dan lebih sempit
+  lagi sejak PUTARAN VOLUME.** Paragraf ini semula menyatakan bentuk rubrik
+  butuh daftar rubrik "yang butuh data yang tak dimiliki salinan kerja itu
+  (dump-nya, `seputa58_sbb.sql`, berukuran 0 byte)". Dump-nya 0 byte dan ia
+  INERT — datanya ada di volume `seputarborneocom_db_data`, dan daftarnya 102
+  pasangan `(jenis_rubrik, kategori)`. Yang tersisa adalah rute target yang
+  dirender
   `ahliweb/awcms-astro`, bukan di sini (ADR-0045/ADR-0070) — pertanyaan kontrak
   lintas-repo sebelum menjadi pertanyaan impor. Crawl pra-cutover tak berubah:
   `blog:legacy:cutover:verify` sudah ada dan butuh URL sitemap hidup, pada level
