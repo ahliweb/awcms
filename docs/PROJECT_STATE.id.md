@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f5f916e6d5ecd048b19eca3f149152fa58b93195073ea8ed4b2bb6a614137aba -->
+<!-- i18n-source-hash: sha256:fc50a36528152e21a63527e88441ddbede97a270341847e6f5febe4570ee220b -->
 
 # AWCMS — Project State & Continuation
 
@@ -487,9 +487,37 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   di atas. **Dua hal yang semula dinyatakan entri ini tentangnya SALAH**, dan
   keduanya dikoreksi di sana: ia dinamai `replaceMenuItems`, fungsi yang tidak
   ada, dan pemanggilnya disebut bergantung pada urutan `RETURNING`-nya. Triase
-  lengkap situs yang belum dibaca ada di **#715** — job backfill paling layak
-  diambil bersama, karena mereka mengiterasi TENANT di lapis terluar sehingga
-  biayanya adalah PERKALIAN.
+  lengkap situs yang belum dibaca ada di **#715**.
+
+  **Sapuan itu kini ditutup di #715, dan DUA klaimnya lagi ternyata salah.**
+  "Job backfill mengiterasi TENANT di lapis terluar sehingga biayanya PERKALIAN"
+  — benar, dan BUKAN cacat: `withTenantOrThrow` membuka transaksi dengan GUC
+  tenant ter-set, jadi mem-batch lintas tenant berarti MELEWATI RLS, dan KEDUA
+  job menyatakannya di komentarnya sendiri (`entitlement-backfill-job.ts:94`:
+  _"a single cross-tenant SELECT would return nothing at all rather than
+  everything"_). Temuan kedua yang saya ajukan di sana — bahwa backfill
+  entitlement melebih-lapor jumlah grant dan membuat grant satu tenant
+  tak-atomik — juga BERLEBIHAN dan dikoreksi di issue-nya: plan-nya sudah
+  melewati `already_held`, dan job-nya idempoten serta bisa dijalankan ulang,
+  jadi hitungannya akurat di luar race dan keadaan separuh menyatu pada
+  jalannya berikutnya.
+
+  Dari 34 situs, **empat layak ditindaklanjuti**. Tiga ada di atas; keempat
+  adalah `business-scope-expiry-job`, yang kedua pass-nya masing-masing
+  mengeluarkan satu INSERT per item kedaluwarsa di bawah cap **500** — dua kali
+  lebih besar dari batas sapuan blog. Pass exception-nya kini memakai
+  `recordAuditEvents`, bentuk batch dari writer yang loop-nya sendiri panggil,
+  dengan BARISNYA tak berubah. Sisanya terbatas oleh registry, disengaja dengan
+  alasan tertulis, atau butuh penulisan ulang alih-alih batch
+  (`module-usage-report` adalah 21 query BERBEDA lewat `switch`, jadi
+  `UNION ALL`, bukan batch).
+
+  Satu hal yang disingkap pass itu dan BUKAN soal performa: **tes kedaluwarsa
+  SoD menegakkan perpindahan status dan tidak lebih.** Memindahkan tulisan itu
+  ke batch writer akan membiarkan setiap asersi di berkas itu hijau bahkan bila
+  batch-nya membuang seluruh baris auditnya. Bentuk yang berulang — tes yang
+  mencakup PERPINDAHAN keadaan dan bukan CATATAN atas perpindahan itu persis tes
+  yang tak bisa menyadari writer-nya ditukar di bawahnya.
 
 - **PUTARAN ARAH — 25 Agustus 2026: gerbang enforcement menanyakan
   pertanyaannya SATU arah saja, dan arah yang hilang justru yang berakibat

@@ -478,9 +478,36 @@ pioneered directly here after the ADR-0047 freeze.)
   NAME ROUND above. **Two things this entry originally said about it were
   wrong**, and both are corrected there: it was named `replaceMenuItems`, a
   function that does not exist, and its callers were said to depend on the order
-  of its `RETURNING`. The full triage of the sites not yet read is **#715** —
-  the backfill jobs are the ones worth taking together, since they iterate
-  TENANTS at the outer level and their cost is a product.
+  of its `RETURNING`.
+
+  **The sweep is now closed out in #715, and two more of its claims were
+  wrong.** "The backfill jobs iterate TENANTS at the outer level, so their cost
+  is a product" — true, and not a defect: `withTenantOrThrow` opens a
+  transaction with the tenant GUC set, so batching across tenants would mean
+  bypassing RLS, and BOTH jobs say so in their own comments
+  (`entitlement-backfill-job.ts:94`: _"a single cross-tenant SELECT would return
+  nothing at all rather than everything"_). A second finding filed there — that
+  the entitlement backfill over-reports its grant count and leaves a tenant's
+  grants non-atomic — was also overstated and is corrected in the issue: the
+  plan already skips `already_held`, and the job is idempotent and re-runnable,
+  so the count is accurate outside a race and partial state converges on the
+  next run.
+
+  Of 34 sites, **four were worth acting on**. Three are above; the fourth is
+  `business-scope-expiry-job`, whose two passes each issued one INSERT per
+  expired item under a cap of **500** — more than twice the blog sweeps' bound.
+  Its exception pass now uses `recordAuditEvents`, the batch form of the writer
+  its own loop was calling, with the rows unchanged. Everything else is bounded
+  by a registry, deliberate with a written rationale, or needs a rewrite rather
+  than a batch (`module-usage-report` is 21 DIFFERENT queries via a `switch`, so
+  a `UNION ALL`, not a batch).
+
+  One thing that pass exposed which is not about performance: **the SoD expiry
+  test asserted the status flip and nothing else.** Moving that write to a batch
+  writer would have left every assertion in the file green even if the batch had
+  dropped its audit rows entirely. Recurring shape — a test that covers the
+  state transition and not the record OF the transition is exactly the test that
+  cannot notice a writer being swapped underneath it.
 
 - **DIRECTION ROUND — 25 August 2026: the enforcement gate asked its question
   one way round, and the missing direction is the one with the dead endpoint
