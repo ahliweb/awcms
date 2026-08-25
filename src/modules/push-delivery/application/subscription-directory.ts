@@ -165,16 +165,56 @@ export async function fetchActiveSubscriptionIds(
   tenantId: string,
   tenantUserId: string
 ): Promise<string[]> {
+  const byUser = await fetchActiveSubscriptionIdsForUsers(tx, tenantId, [
+    tenantUserId
+  ]);
+
+  return byUser.get(tenantUserId) ?? [];
+}
+
+/**
+ * The same question for many users in ONE round trip.
+ *
+ * `enqueuePushToRecipients` asked it per recipient, so fanning a notification
+ * out to R recipients cost R queries before a single row was written. The
+ * single-user form above is now a batch of one, so the two cannot drift: a
+ * predicate fixed in one and not the other is the way a batch path quietly
+ * stops matching the path everything was tested against.
+ *
+ * Users with no active subscription are ABSENT from the map rather than present
+ * with an empty array — the caller distinguishes "skipped" from "queued" by
+ * exactly that, and materialising empty entries would make the two look alike.
+ */
+export async function fetchActiveSubscriptionIdsForUsers(
+  tx: Bun.TransactionSQL,
+  tenantId: string,
+  tenantUserIds: readonly string[]
+): Promise<Map<string, string[]>> {
+  const byUser = new Map<string, string[]>();
+
+  if (tenantUserIds.length === 0) return byUser;
+
   const rows = (await tx`
-    SELECT id
+    SELECT tenant_user_id, id
     FROM awcms_push_subscriptions
     WHERE tenant_id = ${tenantId}
-      AND tenant_user_id = ${tenantUserId}
+      AND tenant_user_id = ANY(${tx.array([...new Set(tenantUserIds)], "uuid")})
       AND status = 'active'
-    ORDER BY created_at
-  `) as { id: string }[];
+    ORDER BY tenant_user_id, created_at
+  `) as { tenant_user_id: string; id: string }[];
 
-  return rows.map((row) => row.id);
+  for (const row of rows) {
+    const existing = byUser.get(row.tenant_user_id);
+
+    if (existing) {
+      existing.push(row.id);
+      continue;
+    }
+
+    byUser.set(row.tenant_user_id, [row.id]);
+  }
+
+  return byUser;
 }
 
 type TargetRow = {

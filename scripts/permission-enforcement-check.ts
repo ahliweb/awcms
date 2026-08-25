@@ -1,15 +1,25 @@
 /**
  * permission-enforcement-check.ts — `bun run access:permissions:enforcement:check`.
  *
- * ADR-0057 §F. Every permission a module descriptor declares must have an
- * `authorizeInTransaction` guard somewhere in `src/`, or a recorded reason why
- * it does not. Pure: registry + source text, no database, no network.
+ * ADR-0057 §F. The descriptors and the code must name the same permissions, in
+ * both directions:
+ *
+ * - every permission a module descriptor DECLARES has an
+ *   `authorizeInTransaction` guard somewhere in `src/`, or a recorded reason;
+ * - every guard `src/` builds NAMES a permission some descriptor declares, or a
+ *   recorded reason.
+ *
+ * Pure: registry + source text, no database, no network.
  *
  * The gate exists because two modules shipped seeded-but-unchecked permissions
  * and both were caught by hand, months later, only when someone tried to build
  * their admin screen. For `blog_content` the consequence was that a page could
- * never be published at all. See `permission-enforcement-coverage.ts` for what
- * this can and cannot prove.
+ * never be published at all.
+ *
+ * The second direction was added later and catches the worse failure: a key no
+ * descriptor declares has no catalogue row, no role can hold it, and the
+ * endpoint denies everyone forever while looking exactly like a legitimate 403.
+ * See `permission-enforcement-coverage.ts` for what this can and cannot prove.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -79,12 +89,13 @@ function main(): void {
   const result = evaluateEnforcementCoverage(
     listModules(),
     sources,
-    EXCEPTIONS
+    EXCEPTIONS,
+    files
   );
 
   if (result.valid) {
     console.log(
-      `access:permissions:enforcement:check OK — ${result.enforcedCount}/${result.declaredCount} declared permission(s) have an authorizeInTransaction guard; ${EXCEPTIONS.length} recorded exception(s).`
+      `access:permissions:enforcement:check OK — ${result.enforcedCount}/${result.declaredCount} declared permission(s) have an authorizeInTransaction guard, and every guard names a declared permission; ${EXCEPTIONS.length} recorded exception(s).`
     );
     return;
   }
@@ -94,6 +105,12 @@ function main(): void {
   for (const permission of result.unenforced) {
     console.error(
       `  ${permission.key} — declared by module "${permission.moduleKey}" and enforced by nothing. Add an authorizeInTransaction guard, or record the reason in EXCEPTIONS in this script (with the ADR that decided it).`
+    );
+  }
+
+  for (const guard of result.undeclaredGuards) {
+    console.error(
+      `  ${guard.key} — guarded by ${guard.sources.join(", ") || "a scanned source"} and declared by no module. No catalogue row backs this key, so no role can hold it and authorizeInTransaction denies EVERY actor, including the tenant owner, in every deployment. Fix the spelling, declare it in the module descriptor with a seed migration, or record the reason in EXCEPTIONS in this script.`
     );
   }
 
