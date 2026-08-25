@@ -112,6 +112,34 @@ function buildClient(databaseUrl: string, kind: ClientKind): Bun.SQL {
 }
 
 /**
+ * One connection-string variable, or `undefined` when it is not CONFIGURED.
+ *
+ * Blank counts as unset, and the distinction is not academic. The fallback
+ * above was written as `process.env[name] ?? process.env.DATABASE_URL`, and
+ * `??` only falls back on null/undefined — so `WORKER_DATABASE_URL=""` is
+ * "present" and shadows the fallback entirely. What the operator then sees is
+ *
+ *     WORKER_DATABASE_URL (or DATABASE_URL as a fallback) is required
+ *
+ * while `DATABASE_URL` is set and correct: an error that names the fallback it
+ * just refused to use. A blank value is what you get from a compose file with
+ * `WORKER_DATABASE_URL:` and nothing after it, from a PaaS UI row saved empty,
+ * and from `export A=1 B=$A` (where `$A` expands before `A` is assigned) — none
+ * of which look like "unset" to the person who wrote them.
+ *
+ * Trimmed, because a variable holding only whitespace is the same mistake with
+ * an invisible cause: `new Bun.SQL(" ")` fails somewhere far from here.
+ */
+export function readConfiguredUrl(name: string): string | undefined {
+  const raw = process.env[name];
+
+  if (raw === undefined) return undefined;
+
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
  * Resolves the connection string for one named client kind.
  *
  * ROLE MAPPING — what this repo actually ships (Issues #141, #160, #163;
@@ -167,7 +195,8 @@ function getNamedDatabaseClient(kind: ClientKind): Bun.SQL {
       : kind === "worker"
         ? "WORKER_DATABASE_URL"
         : "SETUP_DATABASE_URL";
-  const databaseUrl = process.env[envVarName] ?? process.env.DATABASE_URL;
+  const databaseUrl =
+    readConfiguredUrl(envVarName) ?? readConfiguredUrl("DATABASE_URL");
 
   if (!databaseUrl) {
     throw new Error(
