@@ -23,9 +23,50 @@ import {
 } from "../application/redirect-resolution-service";
 import { recordNotFoundObservation } from "../application/not-found-directory";
 import { extractReferrerDomain } from "../../_shared/referrer";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../lib/security/rate-limit";
 import type { RedirectStatusCode } from "../domain/redirect-rule";
 
 export type { NotFoundCaptureContext };
+
+/**
+ * Per-IP rate-limit backstop for the 404 observation write (Issue #722).
+ *
+ * This is a PUBLIC, unauthenticated database write — one `INSERT … ON CONFLICT`
+ * per 404 — and its aggregation key is `(tenant, normalized_path,
+ * referrer_domain, locale, domain_host)`, of which the caller controls the
+ * first two freely: the path is whatever they request (up to the 2048
+ * `normalizeRedirectPath` allows) and `referrer_domain` is the hostname of
+ * whatever `Referer` header they send. So `/a1`, `/a2`, … `/aN` is N rows, and
+ * each one can be multiplied again by varying `Referer`.
+ *
+ * `POST /api/v1/analytics/collect` is the same kind of endpoint — public,
+ * anonymous, one row per request — and it has had exactly this backstop since
+ * it shipped, for a threat its own comment states in terms that transfer here
+ * word for word: *"anyone holding a public tenantCode could flood the endpoint
+ * with unbounded session/event writes and poison a tenant's aggregates."* This
+ * path had no equivalent.
+ *
+ * Keyed on IP ONLY, never the tenant: the decision is driven purely by request
+ * volume from one source and reveals nothing about whether any tenant exists.
+ * Nothing is refused to the visitor either — the 404 response has already been
+ * produced and returned unchanged; only the telemetry write is skipped.
+ *
+ * 120/min matches the beacon's default. A reader 404s rarely, so this bounds an
+ * abusive client while leaving real traffic untouched. A fast crawler after a
+ * cutover can exceed it, which is accepted: the first 120 missing rules a
+ * minute tell an operator the same thing the next 5,000 would, and
+ * `blog:legacy:cutover:verify` is the purpose-built check for that question
+ * rather than incidental telemetry.
+ */
+const NOT_FOUND_RATE_LIMIT_MAX = Number(
+  process.env.SEO_NOT_FOUND_RATE_LIMIT_MAX ?? 120
+);
+const NOT_FOUND_RATE_LIMIT_WINDOW_SEC = Number(
+  process.env.SEO_NOT_FOUND_RATE_LIMIT_WINDOW_SEC ?? 60
+);
 
 export type MiddlewareRedirectResult =
   { redirect: Response } | { capture: NotFoundCaptureContext } | null;
@@ -113,12 +154,41 @@ export async function resolvePublicRedirectForRequest(
  * tenant but 404'd. Only a sanitized path (already query-free) and a bare referrer
  * DOMAIN are stored. Best-effort: never throws, never delays the response beyond
  * its own await (called after the response is already produced).
+ *
+ * Rate-limited per client IP (`NOT_FOUND_RATE_LIMIT_MAX`) — see that constant
+ * for why a public write path needs one. Over budget, the observation is
+ * dropped silently: the visitor's 404 has already been produced and is returned
+ * unchanged either way, so refusing here would only mean refusing to write
+ * telemetry, which is what dropping it already does.
  */
 export async function recordPublicNotFound(
   request: Request,
-  capture: NotFoundCaptureContext
+  capture: NotFoundCaptureContext,
+  clientAddress?: string
 ): Promise<void> {
   try {
+    const budget = await checkSharedRateLimit(
+      `seo-not-found:${resolveClientIp(request, clientAddress)}`,
+      {
+        maxAttempts:
+          Number.isFinite(NOT_FOUND_RATE_LIMIT_MAX) &&
+          NOT_FOUND_RATE_LIMIT_MAX > 0
+            ? NOT_FOUND_RATE_LIMIT_MAX
+            : 120,
+        windowMs:
+          (Number.isFinite(NOT_FOUND_RATE_LIMIT_WINDOW_SEC) &&
+          NOT_FOUND_RATE_LIMIT_WINDOW_SEC > 0
+            ? NOT_FOUND_RATE_LIMIT_WINDOW_SEC
+            : 60) * 1000
+      }
+    );
+
+    if (!budget.allowed) {
+      // Not a warning: being over budget is the mechanism working, and logging
+      // per refused write would hand the same flood a second amplifier.
+      return;
+    }
+
     const sql = getDatabaseClient();
     const referrerDomain = extractReferrerDomain(
       request.headers.get("referer")

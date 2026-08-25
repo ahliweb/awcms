@@ -269,7 +269,7 @@ export const seoDistributionModule = defineModule({
       partition: {
         eligible: false,
         rationale:
-          "Aggregate table (one upsert row per distinct tenant+path+referrer+locale+host, not one row per hit), so cardinality is bounded by distinct 404 paths, not by traffic — the volume that would justify range-partitioning is already collapsed by the upsert. A short retention window (30d default) plus the tenant+last_seen_at index keeps the age-based purge cheap without partitioning."
+          "Aggregate table (one upsert row per distinct tenant+path+referrer+locale+host, not one row per hit), so REPEATS of one 404 collapse to a single row. This used to say cardinality is 'bounded by distinct 404 paths, not by traffic' — corrected in #722, because there is no fixed set of 404 paths: the path is whatever a caller requests and `referrer_domain` is the hostname of whatever `Referer` they send, so distinct keys are produced BY traffic and the upsert bounds nothing about them. Still not partitioned, but on the honest reason: a per-IP rate limit now fronts every write (`presentation/redirect-middleware.ts`) and the 30d default retention window plus the tenant+last_seen_at index keeps the age-based purge cheap, so the steady-state volume stays far below what range-partitioning is for. If that rate limit is ever raised substantially, re-examine this decision rather than assuming it still holds."
       },
       archive: {
         archivable: false,

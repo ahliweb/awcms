@@ -360,6 +360,72 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **CAPTURE ROUND — 25 August 2026: the public 404 telemetry write had no rate
+  limit, and the document that called its cardinality bounded was justifying a
+  partitioning decision with it.**
+
+  The audit started from the two open issues rather than from a scan. #599 takes
+  `awcms_seo_redirects` from near-empty to **23,906** rules per tenant and
+  ADR-0113 adds ~150 more, on a path that runs for every reader and every
+  crawler — so that path was the thing worth measuring.
+
+  **The resolve half is sound**, and worth recording so nobody re-audits it:
+  `MAX_REDIRECT_HOPS = 5` bounds the chain walker, and
+  `awcms_seo_redirects_resolve_idx` is a partial index on exactly
+  `(tenant_id, normalized_source_path) WHERE deleted_at IS NULL AND state =
+'active'`. 23,906 rules is a B-tree point lookup, not a scan.
+
+  **The capture half was not.** `recordPublicNotFound` fires after ANY public
+  request that resolves to a tenant and 404s — unauthenticated, its own
+  transaction, one `INSERT … ON CONFLICT` per request. Its aggregation key is
+  `(tenant_id, normalized_path, referrer_domain, locale, domain_host)`, and the
+  caller controls two of the five: the path is whatever they request, and
+  `referrer_domain` is the hostname of whatever `Referer` they send, with no
+  allow-list. `/a1 … /aN` is N rows, each multipliable again by varying
+  `Referer`.
+
+  **What made it look handled is the interesting part.** Two documents called it
+  bounded:
+
+  - `not-found-directory.ts` — "bounded cardinality + bounded retention";
+  - `module.ts` — "cardinality is bounded by distinct 404 paths, not by traffic",
+    which is the stated justification for `partition.eligible: false`.
+
+  The upsert collapses REPEATS of one key and does nothing about distinct keys,
+  and there is no fixed set of "404 paths" — the set is whatever anyone
+  requests, so distinct keys are produced BY traffic, exactly what the rationale
+  denies. **A false claim in a rationale is worse than a false claim in a
+  comment, because a rationale is load-bearing for a decision** — here, not
+  partitioning. The decision survives; the reason it survives is now the true
+  one, and it says outright that raising the rate limit substantially means
+  re-examining it.
+
+  Worth noting the `sql/060` DDL comment is CORRECT as written: it says "a bot
+  probing the **same** 404 a million times is one row". The claim only became
+  false where it was paraphrased into the application layer and the registry.
+
+  **The sibling already had the answer.** `POST /api/v1/analytics/collect` is
+  the same kind of endpoint — public, anonymous, one row per request — and has
+  carried a per-IP `checkSharedRateLimit` backstop since it shipped, for a
+  threat its own comment states in terms that transfer word for word. This path
+  had none. It now uses the same limiter at the same 120/60 s default, keyed on
+  **IP only, never the tenant**, so the beacon's no-oracle contract is kept and
+  a refusal reveals nothing about whether a tenant exists. Nothing is refused to
+  the visitor — the 404 is already produced — and the skip is silent, because
+  logging per refused write hands the same flood a second amplifier.
+
+  **A per-tenant distinct-row cap was considered and NOT taken.** It bounds
+  storage harder, and it introduces a failure mode that does not exist today: an
+  attacker who fills it makes real 404s invisible. The rate limit plus the
+  already-declared age-based purge (30d default, 7d floor) bounds the steady
+  state without buying that.
+
+  The proof is a differential rather than an assertion, because the function is
+  fail-open by contract and "it did not throw" is true whether it refused early
+  or tried and failed: with `DATABASE_URL` unset the DB step logs
+  `seo_distribution.not_found.capture_failed`, so within budget logs it once and
+  over budget logs nothing at all.
+
 - **BOUND-AND-BATCH ROUND — 25 August 2026: the one uncapped batch in the API
   sat next to the one N+1 the last sweep could not see.**
 
