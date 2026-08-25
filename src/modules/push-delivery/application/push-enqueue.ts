@@ -13,7 +13,7 @@
  */
 import { log } from "../../../lib/logging/logger";
 import { validatePushTargetPath } from "../domain/push-target-path";
-import { fetchActiveSubscriptionIds } from "./subscription-directory";
+import { fetchActiveSubscriptionIdsForUsers } from "./subscription-directory";
 
 const MODULE_KEY = "push_delivery";
 
@@ -39,6 +39,53 @@ export type EnqueuePushResult = {
 export class PushTargetPathError extends Error {}
 
 /**
+ * One INSERT for the whole fan-out.
+ *
+ * `jsonb_to_recordset` rather than `INSERT ... SELECT unnest(...)` for the same
+ * reason `recordAuditEvents` uses it: this table has four nullable columns and
+ * a `jsonb` one, and a Bun.SQL array cannot carry NULL — it writes the literal
+ * string `'null'` without throwing. JSON `null` maps to SQL NULL natively, and
+ * `data` arrives as a jsonb object rather than a jsonb STRING.
+ *
+ * `ORDER BY entry.ordinal` makes the insert order deterministic. It is NOT a
+ * promise about `RETURNING`: Postgres does not specify the order rows come back
+ * in, and no caller may treat `messageIds` as positionally aligned with the
+ * recipients — it is a set of receipts. The ordering is here so that two runs
+ * of the same batch write rows in the same sequence, which is what makes the
+ * `created_at` tiebreak in the dispatcher's claim stable.
+ */
+async function insertMessages(
+  tx: Bun.TransactionSQL,
+  rows: readonly Record<string, unknown>[]
+): Promise<string[]> {
+  const inserted = (await tx`
+    INSERT INTO awcms_push_messages
+      (tenant_id, correlation_id, category, subscription_id, priority,
+       title, body, target_path, data, created_by)
+    SELECT entry.tenant_id, entry.correlation_id, entry.category,
+           entry.subscription_id, entry.priority, entry.title, entry.body,
+           entry.target_path, entry.data, entry.created_by
+    FROM jsonb_to_recordset(${rows}::jsonb) AS entry (
+      ordinal integer,
+      tenant_id uuid,
+      correlation_id text,
+      category text,
+      subscription_id uuid,
+      priority text,
+      title text,
+      body text,
+      target_path text,
+      data jsonb,
+      created_by uuid
+    )
+    ORDER BY entry.ordinal
+    RETURNING id
+  `) as { id: string }[];
+
+  return inserted.map((row) => row.id);
+}
+
+/**
  * Fans one notification out to every ACTIVE subscription of every recipient.
  *
  * One row per (message, subscription) — the "one row per delivery unit" shape
@@ -50,6 +97,20 @@ export class PushTargetPathError extends Error {}
  * Most users will never enable push, and a notification helper that throws for
  * the common case would push every caller into a try/catch that swallows real
  * failures too.
+ *
+ * ## Cost: 2 queries, whatever the fan-out
+ *
+ * It was `R + (R x S)` — one subscription lookup per recipient, then one INSERT
+ * per device — inside a single transaction. The only caller today passes ONE
+ * recipient, so nothing in production ever paid it; the shape is what mattered,
+ * because the function's entire contract is "every recipient" and the first
+ * caller that broadcasts would have inherited it. A notification to 500 users
+ * with two devices each cost 1,500 round trips on one connection.
+ *
+ * Now: one batched lookup, one batched INSERT. Zero recipients costs zero
+ * queries and every-recipient-skipped costs one, so the cheap cases did not get
+ * more expensive to make the expensive case cheap. Pinned by an exact query
+ * budget in `tests/integration/push-enqueue-budget.integration.test.ts`.
  */
 export async function enqueuePushToRecipients(
   tx: Bun.TransactionSQL,
@@ -72,38 +133,64 @@ export async function enqueuePushToRecipients(
     targetPath = validation.path;
   }
 
-  const messageIds: string[] = [];
   const skippedRecipients: string[] = [];
 
-  for (const tenantUserId of recipientTenantUserIds) {
-    const subscriptionIds = await fetchActiveSubscriptionIds(
-      tx,
-      tenantId,
-      tenantUserId
-    );
+  if (recipientTenantUserIds.length === 0) {
+    return { messageIds: [], skippedRecipients };
+  }
 
-    if (subscriptionIds.length === 0) {
+  const subscriptionsByUser = await fetchActiveSubscriptionIdsForUsers(
+    tx,
+    tenantId,
+    recipientTenantUserIds
+  );
+
+  const rows: {
+    ordinal: number;
+    tenant_id: string;
+    correlation_id: string | null;
+    category: string;
+    subscription_id: string;
+    priority: string;
+    title: string;
+    body: string;
+    target_path: string | null;
+    data: Record<string, string> | null;
+    created_by: string | null;
+  }[] = [];
+
+  // Walks the caller's list AS GIVEN rather than the map, which keeps two
+  // things the per-recipient loop did: recipients are fanned out in the order
+  // they were passed, and a caller that passes the same id twice still gets two
+  // notifications. The second is arguably a caller bug, but changing it here
+  // would be a silent behaviour change riding along with a performance fix.
+  for (const tenantUserId of recipientTenantUserIds) {
+    const subscriptionIds = subscriptionsByUser.get(tenantUserId);
+
+    if (!subscriptionIds || subscriptionIds.length === 0) {
       skippedRecipients.push(tenantUserId);
       continue;
     }
 
     for (const subscriptionId of subscriptionIds) {
-      const rows = (await tx`
-        INSERT INTO awcms_push_messages
-          (tenant_id, correlation_id, category, subscription_id, priority,
-           title, body, target_path, data, created_by)
-        VALUES (
-          ${tenantId}, ${input.correlationId ?? null}, ${input.category},
-          ${subscriptionId}, ${input.priority ?? "normal"}, ${input.title},
-          ${input.body}, ${targetPath}, ${input.data ?? null},
-          ${input.createdBy ?? null}
-        )
-        RETURNING id
-      `) as { id: string }[];
-
-      messageIds.push(rows[0]!.id);
+      rows.push({
+        ordinal: rows.length,
+        tenant_id: tenantId,
+        correlation_id: input.correlationId ?? null,
+        category: input.category,
+        subscription_id: subscriptionId,
+        priority: input.priority ?? "normal",
+        title: input.title,
+        body: input.body,
+        target_path: targetPath,
+        data: input.data ?? null,
+        created_by: input.createdBy ?? null
+      });
     }
   }
+
+  // Every recipient skipped is a normal outcome and must not cost a write.
+  const messageIds = rows.length === 0 ? [] : await insertMessages(tx, rows);
 
   log("info", "push.enqueue.queued", {
     tenantId,

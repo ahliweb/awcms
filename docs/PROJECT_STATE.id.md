@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:eb78b6a2fd718095696c90deb15ca7d49f5d327edd534139a4311ce88f7b9817 -->
+<!-- i18n-source-hash: sha256:01ee89ccc6e05c400cc7f53ceeb4a148d2fec6106e5e46aca3202af0b6b26315 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,100 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN ARAH — 25 Agustus 2026: gerbang enforcement menanyakan
+  pertanyaannya SATU arah saja, dan arah yang hilang justru yang berakibat
+  endpoint MATI.** Dicatat sebagai terbuka oleh PUTARAN REGISTER di bawah;
+  ditutup di sini.
+
+  Sejak ADR-0057 §F, `access:permissions:enforcement:check` menanyakan apakah
+  setiap permission yang DIDEKLARASIKAN deskriptor punya guard
+  `authorizeInTransaction`. Ia membangun himpunan setiap guard yang dibentuk
+  teks sumber lalu TIDAK PERNAH membaca himpunan itu kembali. Pertanyaan
+  sebaliknya — apakah setiap guard MENYEBUT permission yang dideklarasikan
+  suatu deskriptor? — berbiaya satu loop tambahan dan menangkap kegagalan yang
+  jelas lebih buruk.
+
+  **Kenapa lebih buruk.** `authorizeInTransaction` menjawab dari
+  `grantedPermissionKeys`, hasil join role grant aktif ke `awcms_permissions`.
+  Kunci yang tak dideklarasikan deskriptor mana pun tak punya baris katalog
+  untuk di-join, sehingga TIDAK ADA role yang bisa memegangnya, sehingga
+  `evaluateAccess` mengembalikan `default_deny` — untuk owner tenant, untuk
+  tenant platform, untuk setiap aktor di setiap deployment, selamanya. Endpoint
+  itu bukan berpenjagaan lemah; ia MATI, dan menjawab 403 dalam bentuk yang tak
+  bisa dibedakan dari penolakan yang sah. Repo ini sudah mengirimkan cacat itu
+  DUA KALI: `POST /api/v1/identity/business-scope/assignments` menolak setiap
+  input di setiap deployment (#180 F2), dan `blog_content.pages.publish` berarti
+  tak ada halaman yang bisa dipublikasikan oleh jalur kode mana pun sementara
+  pencarian publik memfilter `status = 'published'` sehingga selalu
+  mengembalikan kosong (ADR-0057). Keduanya ditemukan dengan tangan, berbulan
+  kemudian, oleh orang yang hendak membangun layar.
+
+  **Celahnya NYATA, dan pemindai gerbang itu sendiri yang membuktikannya.**
+  Ditanya terbalik, repo menghasilkan tepat satu pelanggaran:
+  `seo_distribution.redirect.purge`. Route itu menjaga dengan
+  `action: (lifecycleAction === "purge" ? "delete" : "update")`, dan
+  `readActionValues` mengumpulkan SETIAP literal string dalam ekspresi —
+  termasuk yang justru DIBANDINGKAN oleh ternary. Pemindai mengarang permission
+  yang tak pernah dituntut route itu, dan ia duduk di himpunan enforced tanpa
+  disorot selama tak ada yang membaca himpunan itu kembali.
+
+  Layak disimpan, karena inilah alasan gerbang satu-arah bukan sekadar setengah
+  gerbang: **false positive yang tak berbahaya di satu arah adalah KEGAGALAN di
+  arah lain.** Kunci ENFORCED karangan tak cocok dengan apa pun dan diabaikan
+  loop maju. Kunci yang sama, dibaca sebagai "permission yang dituntut repo
+  ini", adalah cacat yang dilaporkan. Gerbang mana pun yang mengakumulasi
+  himpunan untuk satu tujuan WAJIB diaudit ulang sebelum himpunan itu dibaca
+  untuk tujuan kedua.
+
+  Kedua sisi diperbaiki. Operand pembanding dibuang sebelum literal
+  dikumpulkan — hanya OPERAND-nya, tak pernah seluruh kondisi, karena route
+  comments menulis `decision === "approve" ? "approve" : "reject"` di mana
+  `approve` sekaligus dibandingkan DAN dihasilkan. Dibuang UTUH, berikut tanda
+  kutipnya: mengosongkannya jadi `""` memasangkan ulang kutip di sekitarnya
+  sehingga CELAH antar-literal asli (`" ? "`, `" : "`) mulai cocok sebagai
+  literal. Draf pertama perbaikan ini sendiri melakukan itu dan mengarang empat
+  permission per route — itulah sebabnya ia dipatok tes, bukan diserahkan pada
+  bentuk sebuah regex.
+
+  Aturan basi ikut berubah. "Basi bila permission tak dideklarasikan" membuat
+  exception yang memaafkan guard TAK-TERDEKLARASI mustahil ditulis — mencatat
+  satu akan langsung melaporkannya basi. Exception kini basi hanya bila ia tak
+  memaafkan apa pun.
+
+  Dikirim dengan daftar exception tetap KOSONG di kedua arah: 244/244 permission
+  terdeklarasi punya guard, dan setiap guard menyebut permission terdeklarasi.
+  Terbukti-mutasi dua kali di gerbang (kembalikan perbaikan pemindai → phantom
+  dilaporkan; salah-ketik satu activity code → kedua action-nya dilaporkan) dan
+  sekali per tes baru.
+
+  Ditutup di sini juga, item lain yang ditinggalkan terbuka PUTARAN REGISTER:
+  **fan-out push berbiaya `R + (R x S)` query.** `enqueuePushToRecipients`
+  melakukan satu lookup subscription per penerima lalu satu `INSERT` per
+  perangkat, di dalam SATU transaksi pada satu koneksi — 1.500 perjalanan
+  pulang-pergi untuk 500 pengguna dengan dua perangkat. Tak ada di produksi yang
+  pernah membayarnya: satu-satunya pemanggil, `POST /api/v1/push/test`, mengirim
+  satu penerima. Justru itu alasan memperbaikinya — biayanya bukan properti
+  fungsi SEBAGAIMANA DIPAKAI melainkan properti KONTRAK-nya ("setiap penerima"),
+  menunggu pemanggil pertama yang menyiarkan, dan akan tiba sebagai insiden
+  bukan komentar review. Kini satu lookup ter-batch dan satu
+  `INSERT ... jsonb_to_recordset`. Kasus murah TIDAK jadi lebih mahal: nol
+  penerima tetap nol query, dan semua-penerima-dilewati — kasus UMUM, karena
+  kebanyakan pengguna tak pernah mengaktifkan push — berbiaya satu. Perilaku tak
+  berubah, sengaja termasuk bagian ganjilnya (id duplikat tetap menghasilkan
+  notifikasi duplikat); mengubahnya berarti perubahan perilaku senyap yang
+  menumpang pada perbaikan performa. Dipatok anggaran terhadap fixture 4
+  penerima dan 9 perangkat — 13 query di bentuk lama — dan tesnya membaca
+  barisnya kembali dari tabel karena penulisan ulang `jsonb_to_recordset`
+  memuaskan penghitung sambil merusak apa yang mendarat.
+
+  **Masih terbuka setelah putaran ini** (keduanya disebut PUTARAN REGISTER dan
+  tak satu pun ditutup olehnya): route API yang menyebut permission yang tak
+  dideklarasikan modul mana pun KINI tertangkap, tetapi route yang menyebut
+  permission TERDEKLARASI sambil menegakkannya pada resource yang SALAH tidak,
+  dan tak bisa ditangkap pemindaian sintaktik — tes kontrak per-layar adalah
+  lapisan untuk itu, dan ia hanya ada untuk layar admin. #599 dan #711 tetap
+  terblokir artefak eksternal, bukan kode.
 
 - **PUTARAN REGISTER — 25 Agustus 2026: dua register menggambarkan permission
   yang sama, tak ada yang membandingkannya, dan gara-gara itu SATU permukaan

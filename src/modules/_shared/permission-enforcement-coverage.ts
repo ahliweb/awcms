@@ -18,10 +18,23 @@ import { stripComments } from "../../../scripts/lib/source-text";
  * them asks whether a DECLARED permission has an enforcer at all, which is why
  * both gaps sat in `main` with `bun run check` green.
  *
- * This module answers exactly that, and nothing more: for every permission a
- * module descriptor declares, does some source file build an
- * `authorizeInTransaction` guard for it — or is its absence recorded as a
- * decision?
+ * This module answers exactly that: for every permission a module descriptor
+ * declares, does some source file build an `authorizeInTransaction` guard for
+ * it — or is its absence recorded as a decision?
+ *
+ * ## And the same question backwards
+ *
+ * It shipped asking only the forward half, and the reverse half is the one with
+ * the worse failure behind it: a guard naming a permission NO descriptor
+ * declares has no catalogue row, so no role can hold it, so every actor is
+ * denied in every deployment (`evaluateEnforcementCoverage` has the full
+ * argument). The forward loop cannot see it — it walks the declared set, and an
+ * undeclared key is by definition not in it.
+ *
+ * The proof that this was a live gap and not a tidy symmetry: the repo's own
+ * scanner invented `seo_distribution.redirect.purge` out of a ternary's
+ * comparison operand, and that phantom sat in the enforced set unremarked for
+ * as long as nothing ever read that set back.
  *
  * ## What counts as an enforcer, and why the shape is the whole test
  *
@@ -67,11 +80,24 @@ export type UnenforcedPermission = {
   moduleKey: string;
 };
 
+/** A guard built in `src/` for a permission no module descriptor declares. */
+export type UndeclaredGuard = {
+  key: string;
+  /** Every scanned source that builds it, so the report names the route to fix. */
+  sources: string[];
+};
+
 export type EnforcementCoverageResult = {
   valid: boolean;
   declaredCount: number;
   enforcedCount: number;
   unenforced: UnenforcedPermission[];
+  /**
+   * The other direction: guards that demand a permission nothing declares.
+   * See `evaluateEnforcementCoverage` for why an entry here is a dead endpoint
+   * rather than an untidy name.
+   */
+  undeclaredGuards: UndeclaredGuard[];
   /** Exceptions whose permission is no longer declared, or has since gained an enforcer — a stale allow-list entry is how a gate quietly stops asking. */
   staleExceptions: string[];
 };
@@ -120,6 +146,17 @@ function readStringField(
 }
 
 /**
+ * A string compared against, rather than assigned — `lifecycleAction === "purge"`.
+ *
+ * Removed WHOLE, quotes included, rather than blanked to `""`. Blanking looks
+ * equivalent and is not: `("" ? "delete" : "update")` re-pairs the quotes, so
+ * the GAPS between the real literals (`" ? "`, `" : "`) start matching as
+ * literals themselves. The first draft of this fix did exactly that and
+ * invented four permissions per route.
+ */
+const COMPARISON_OPERAND = /(?:===|!==|==|!=)\s*"[^"]*"/g;
+
+/**
  * `action` is the one guard field that is not always a single value. Two
  * comments routes decide it per request:
  *
@@ -129,6 +166,26 @@ function readStringField(
  * `comments.moderation.approve` and `.reject` as unenforced while the route
  * gates every request on one of them. So every string literal in the
  * expression counts — the guard really can require any of them.
+ *
+ * Every literal in a VALUE position, that is. The string a ternary tests
+ * against is not one of the actions the guard can require:
+ *
+ *     action: (lifecycleAction === "purge" ? "delete" : "update") as ...
+ *
+ * requires `delete` or `update` and never `purge`, but reading every literal
+ * alike invented a third permission, `seo_distribution.redirect.purge`, that no
+ * module declares and no catalogue row backs. That phantom was harmless only
+ * for as long as this file asked its question in one direction: an invented
+ * ENFORCED key that matches nothing simply never gets looked at. It stops being
+ * harmless the moment a phantom collides with a declared-but-genuinely-
+ * unenforced permission — the gate would then report it covered — and it stops
+ * being harmless immediately for `undeclaredGuards` below, which reads the
+ * enforced set as the set of permissions this repo actually demands.
+ *
+ * Note the two routes above are the reason to drop only the OPERAND and not the
+ * whole condition: `approve` is both what the request is tested against and
+ * what the guard requires, and it survives here because it also appears in a
+ * value position.
  *
  * The expression ends at the field separator, and the scan is over a literal
  * with nested objects already blanked, so a comma inside a nested value cannot
@@ -143,7 +200,7 @@ function readActionValues(
   );
   if (!match) return [];
 
-  const expression = match[1]!;
+  const expression = match[1]!.replace(COMPARISON_OPERAND, "");
   const literals = [...expression.matchAll(/"([^"]+)"/g)].map(
     (found) => found[1]!
   );
@@ -363,19 +420,67 @@ export function collectGuardTriples(
   return triples;
 }
 
+/**
+ * Both directions between the two things that must agree about a permission:
+ * what the descriptors DECLARE, and what the code DEMANDS.
+ *
+ * The forward direction — a declared permission nothing enforces — is the one
+ * this file was written for, and its consequence is a catalogue row that grants
+ * nothing.
+ *
+ * The reverse direction costs one more loop and catches the strictly worse
+ * failure. `authorizeInTransaction` answers from `grantedPermissionKeys`, built
+ * by joining the actor's active role grants to `awcms_permissions`. A key that
+ * no descriptor declares has no catalogue row to join to, so no role can hold
+ * it, so `evaluateAccess` returns `default_deny` — for the tenant owner, for
+ * the platform tenant, for every actor in every deployment, permanently. The
+ * endpoint is not weakly guarded; it is DEAD, and it answers 403 in a shape
+ * indistinguishable from a legitimate refusal.
+ *
+ * This repo has shipped that exact defect twice. `POST /api/v1/identity/
+ * business-scope/assignments` refused every input in every deployment (#180
+ * F2), and `blog_content.pages.publish` meant no page could be published by any
+ * code path while public search filtered on `status = 'published'` and
+ * therefore always returned nothing (ADR-0057). Both were found by hand, months
+ * later, by someone who set out to build a screen. Neither is visible to the
+ * forward question: a guard whose key matches no declaration is simply not in
+ * the set the forward loop iterates.
+ *
+ * `undeclaredGuards` shares the EXCEPTIONS list with the forward direction, and
+ * deliberately so — an entry there asserts that a permission key and its
+ * enforcement may legitimately disagree, which is the same claim in both
+ * directions and should be argued once, in an ADR.
+ */
 export function evaluateEnforcementCoverage(
   modules: readonly ModuleDescriptor[],
   sources: readonly string[],
-  exceptions: readonly EnforcementException[]
+  exceptions: readonly EnforcementException[],
+  /**
+   * Paths parallel to `sources`, used only to name the offending file in the
+   * reverse report. Absent for callers that scan text they built themselves.
+   */
+  sourceNames: readonly string[] = []
 ): EnforcementCoverageResult {
   const crossFileConstants = collectStringConstants(sources);
   const enforced = new Set<string>();
+  const guardSources = new Map<string, string[]>();
 
-  for (const source of sources) {
+  for (const [index, source] of sources.entries()) {
     const constants = resolveConstantsForSource(source, crossFileConstants);
 
     for (const triple of collectGuardTriples(source, constants)) {
-      enforced.add(permissionTripleKey(triple));
+      const key = permissionTripleKey(triple);
+      enforced.add(key);
+
+      const name = sourceNames[index];
+      if (name === undefined) continue;
+
+      const seen = guardSources.get(key);
+      if (seen) {
+        if (!seen.includes(name)) seen.push(name);
+        continue;
+      }
+      guardSources.set(key, [name]);
     }
   }
 
@@ -401,22 +506,41 @@ export function evaluateEnforcementCoverage(
     unenforced.push({ key, moduleKey });
   }
 
+  const undeclaredGuards: UndeclaredGuard[] = [];
+
+  for (const key of enforced) {
+    if (declared.has(key) || excused.has(key)) continue;
+    undeclaredGuards.push({ key, sources: guardSources.get(key) ?? [] });
+  }
+
   // An exception for a permission that is gone, or that now HAS an enforcer,
   // is worse than no exception: it is a documented reason that no longer
   // applies to anything, and it keeps the gate from asking again.
+  //
+  // "Gone" cannot mean "not declared" alone once the reverse direction exists:
+  // an exception excusing an UNDECLARED guard is doing its job precisely
+  // because the permission is undeclared, and calling it stale would make that
+  // kind of exception impossible to write.
   const staleExceptions = [...excused].filter(
-    (key) => !declared.has(key) || enforced.has(key)
+    (key) =>
+      (!declared.has(key) && !enforced.has(key)) ||
+      (declared.has(key) && enforced.has(key))
   );
 
   unenforced.sort((left, right) => left.key.localeCompare(right.key));
+  undeclaredGuards.sort((left, right) => left.key.localeCompare(right.key));
   staleExceptions.sort();
 
   return {
-    valid: unenforced.length === 0 && staleExceptions.length === 0,
+    valid:
+      unenforced.length === 0 &&
+      undeclaredGuards.length === 0 &&
+      staleExceptions.length === 0,
     declaredCount: declared.size,
     enforcedCount: [...declared.keys()].filter((key) => enforced.has(key))
       .length,
     unenforced,
+    undeclaredGuards,
     staleExceptions
   };
 }

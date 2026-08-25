@@ -36,6 +36,13 @@ function guard(
   return permissionTripleKey({ moduleKey, activityCode, action });
 }
 
+/** Sorted, de-duplicated permission keys a source builds guards for. */
+function distinctKeys(source: string): string[] {
+  return [
+    ...new Set(collectGuardTriples(source).map(permissionTripleKey))
+  ].sort();
+}
+
 function moduleWith(
   key: string,
   permissions: { activityCode: string; action: string }[]
@@ -254,6 +261,70 @@ describe("collectGuardTriples", () => {
 
     expect(collectGuardTriples(source)).toEqual([]);
   });
+
+  test("does not mistake the string a ternary TESTS for one it yields", () => {
+    // `src/pages/api/v1/seo/redirects/[id]/lifecycle.ts`, verbatim in shape.
+    // The guard can require `delete` or `update`; `purge` is what the request
+    // is compared against. Reading it as a third action invented
+    // `seo_distribution.redirect.purge` — a permission no module declares and
+    // no catalogue row backs.
+    const source = `
+      const guard = {
+        moduleKey: "seo_distribution",
+        activityCode: "redirect",
+        action: (lifecycleAction === "purge" ? "delete" : "update") as
+          "delete" | "update"
+      };
+    `;
+
+    // Distinct keys, because the captured expression runs on to the end of the
+    // `as "delete" | "update"` annotation and every action is therefore seen
+    // twice. Every consumer collects into a Set, so the repetition is inert —
+    // but asserting an exact array here would be pinning that accident rather
+    // than the rule under test.
+    expect(distinctKeys(source)).toEqual([
+      "seo_distribution.redirect.delete",
+      "seo_distribution.redirect.update"
+    ]);
+  });
+
+  test("keeps a literal that is both tested for AND yielded", () => {
+    // The comments routes: `approve` appears in the condition and again as a
+    // value. Dropping the whole CONDITION rather than just the operand would
+    // lose it, and report a fully enforced permission as unenforced.
+    const source = `
+      const guard = {
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: (decision === "approve" ? "approve" : "reject") as
+          "approve" | "reject"
+      };
+    `;
+
+    expect(distinctKeys(source)).toEqual([
+      "comments.moderation.approve",
+      "comments.moderation.reject"
+    ]);
+  });
+
+  test("removing an operand does not re-pair the quotes around it", () => {
+    // Blanking `=== "purge"` to `=== ""` looks equivalent and is not: the empty
+    // pair shifts which quotes match, so the GAPS between the real literals
+    // (`" ? "`, `" : "`) start matching as literals themselves. That is a
+    // defect this fix's own first draft shipped, so it is pinned here rather
+    // than left to the shape of a regex.
+    const source = `
+      const guard = {
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: (decision === "approve" ? "approve" : "reject")
+      };
+    `;
+
+    for (const triple of collectGuardTriples(source)) {
+      expect(triple.action).toMatch(/^[a-z_]+$/);
+    }
+  });
 });
 
 describe("evaluateEnforcementCoverage", () => {
@@ -367,5 +438,111 @@ describe("evaluateEnforcementCoverage", () => {
 
     expect(result.valid).toBe(false);
     expect(result.staleExceptions).toEqual(["media_library.media.attach"]);
+  });
+
+  test("reports a guard for a permission no module declares, and names the file", () => {
+    // The reverse direction, and the worse of the two failures: no catalogue
+    // row backs the key, so no role can hold it and every actor is denied.
+    // Invisible to the forward question, which only ever iterates DECLARED
+    // permissions — a key nobody declared is not in the set being walked.
+    const result = evaluateEnforcementCoverage(
+      modules,
+      [
+        `const A = { moduleKey: "blog_content", activityCode: "pages", action: "publish" };`,
+        `const B = { moduleKey: "blog_content", activityCode: "pages", action: "unpublish" };`
+      ],
+      [
+        {
+          key: "blog_content.posts.export",
+          reason: "No endpoint; ADR pending."
+        }
+      ],
+      [
+        "src/pages/api/v1/blog/pages/publish.ts",
+        "src/pages/api/v1/blog/pages/unpublish.ts"
+      ]
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.undeclaredGuards).toEqual([
+      {
+        key: "blog_content.pages.unpublish",
+        sources: ["src/pages/api/v1/blog/pages/unpublish.ts"]
+      }
+    ]);
+    // The forward direction stays silent about it — which is the whole reason
+    // the reverse one had to be added rather than assumed covered.
+    expect(result.unenforced).toEqual([]);
+  });
+
+  test("collects every file that builds the same undeclared guard", () => {
+    const result = evaluateEnforcementCoverage(
+      modules,
+      [
+        `const A = { moduleKey: "blog_content", activityCode: "pages", action: "archive" };`,
+        `const B = { moduleKey: "blog_content", activityCode: "pages", action: "archive" };`
+      ],
+      [],
+      ["src/one.ts", "src/two.ts"]
+    );
+
+    expect(result.undeclaredGuards[0]?.sources).toEqual([
+      "src/one.ts",
+      "src/two.ts"
+    ]);
+  });
+
+  test("an exception can excuse an UNDECLARED guard, and is not stale for being one", () => {
+    // Staleness had one rule — "not declared" — and the reverse direction makes
+    // that rule wrong: an exception excusing an undeclared guard is doing its
+    // job precisely BECAUSE the permission is undeclared. Left alone, it would
+    // have been impossible to write such an exception at all: recording one
+    // would immediately report it stale.
+    const result = evaluateEnforcementCoverage(
+      modules,
+      [
+        `const A = { moduleKey: "blog_content", activityCode: "pages", action: "publish" };`,
+        `const B = { moduleKey: "blog_content", activityCode: "pages", action: "unpublish" };`
+      ],
+      [
+        {
+          key: "blog_content.posts.export",
+          reason: "No endpoint; ADR pending."
+        },
+        {
+          key: "blog_content.pages.unpublish",
+          reason: "Guarded ahead of its seed migration; ADR-XXXX."
+        }
+      ],
+      ["src/a.ts", "src/b.ts"]
+    );
+
+    expect(result.undeclaredGuards).toEqual([]);
+    expect(result.staleExceptions).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  test("the source list is optional, and its absence costs only the file name", () => {
+    // Callers that scan text they built themselves pass no paths. The finding
+    // must still be reported — a gate that needs a filename to notice a defect
+    // would be a gate with an off switch.
+    const result = evaluateEnforcementCoverage(
+      modules,
+      [
+        `const B = { moduleKey: "blog_content", activityCode: "pages", action: "unpublish" };`
+      ],
+      [
+        {
+          key: "blog_content.posts.export",
+          reason: "No endpoint; ADR pending."
+        },
+        { key: "blog_content.pages.publish", reason: "Not yet built." }
+      ]
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.undeclaredGuards).toEqual([
+      { key: "blog_content.pages.unpublish", sources: [] }
+    ]);
   });
 });

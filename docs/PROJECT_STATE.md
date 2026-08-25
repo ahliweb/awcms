@@ -360,6 +360,93 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **DIRECTION ROUND — 25 August 2026: the enforcement gate asked its question
+  one way round, and the missing direction is the one with the dead endpoint
+  behind it.** Recorded as open by the REGISTER ROUND below; closed here.
+
+  `access:permissions:enforcement:check` has asked, since ADR-0057 §F, whether
+  every permission a descriptor DECLARES has an `authorizeInTransaction` guard.
+  It builds a set of every guard the source text constructs and then never reads
+  that set back. The reverse question — does every guard NAME a permission some
+  descriptor declares? — costs one more loop and catches the strictly worse
+  failure.
+
+  **Why it is worse.** `authorizeInTransaction` answers from
+  `grantedPermissionKeys`, built by joining the actor's active role grants to
+  `awcms_permissions`. A key no descriptor declares has no catalogue row to join
+  to, so no role can hold it, so `evaluateAccess` returns `default_deny` — for
+  the tenant owner, for the platform tenant, for every actor in every
+  deployment, permanently. The endpoint is not weakly guarded; it is DEAD, and
+  it answers 403 in a shape indistinguishable from a legitimate refusal. This
+  repo has shipped that twice: `POST /api/v1/identity/business-scope/assignments`
+  refused every input in every deployment (#180 F2), and
+  `blog_content.pages.publish` meant no page could be published by any code path
+  while public search filtered on `status = 'published'` and therefore always
+  returned nothing (ADR-0057). Both were found by hand, months later, by
+  someone building a screen.
+
+  **The gap was live, and the gate's own scanner is what proved it.** Asked
+  backwards, the repo produced exactly one violation:
+  `seo_distribution.redirect.purge`. That route guards on
+  `action: (lifecycleAction === "purge" ? "delete" : "update")`, and
+  `readActionValues` collected every string literal in the expression —
+  including the one the ternary tests AGAINST. The scanner invented a permission
+  the route never demands, and it sat in the enforced set unremarked for as long
+  as nothing read that set back.
+
+  Worth keeping, because it is the reason a one-directional gate is not merely
+  half a gate: **a false positive that is harmless in one direction is a
+  failure in the other.** An invented ENFORCED key matches nothing and is
+  ignored by the forward loop. The same key, read as "a permission this repo
+  demands", is a reported defect. Any gate that accumulates a set for one
+  purpose has to be re-audited before that set is read for a second.
+
+  Both halves fixed. Comparison operands are dropped before literals are
+  collected — only the operand, never the whole condition, because the comments
+  routes write `decision === "approve" ? "approve" : "reject"` where `approve` is
+  both tested for and yielded. Removed WHOLE, quotes included: blanking to `""`
+  re-pairs the surrounding quotes so the GAPS between real literals (`" ? "`,
+  `" : "`) start matching as literals. This fix's own first draft did that and
+  invented four permissions per route, which is why it is pinned by a test
+  rather than left to the shape of a regex.
+
+  The staleness rule changed with it. "Stale if the permission is not declared"
+  makes an exception excusing an UNDECLARED guard impossible to write —
+  recording one would immediately report it stale. An exception is now stale
+  only when it excuses nothing.
+
+  Ships with the exception list still EMPTY in both directions: 244/244 declared
+  permissions have a guard, and every guard names a declared permission.
+  Mutation-proven twice at the gate (revert the scanner fix → the phantom is
+  reported; typo an activity code → both its actions are reported) and once per
+  new test.
+
+  Also closed here, the other item the REGISTER ROUND left open: **the push
+  fan-out was `R + (R x S)` queries.** `enqueuePushToRecipients` did one
+  subscription lookup per recipient and then one `INSERT` per device, inside a
+  single transaction on one connection — 1,500 round trips for 500 users with
+  two devices each. Nothing in production ever paid it: the only caller,
+  `POST /api/v1/push/test`, passes one recipient. That is the reason to fix it
+  rather than leave it — the cost is not a property of the function as used but
+  of its contract ("every recipient"), waiting for the first caller that
+  broadcasts, and it would arrive as an incident rather than a review comment.
+  Now one batched lookup and one `INSERT ... jsonb_to_recordset`. The cheap
+  cases did not get more expensive: zero recipients still costs zero queries,
+  and every-recipient-skipped — the COMMON case, since most users never enable
+  push — costs one. Behaviour is unchanged deliberately including the odd part
+  (duplicate ids still produce duplicate notifications); changing it would be a
+  silent behaviour change riding along with a performance fix. Budget-pinned
+  against a fixture of 4 recipients and 9 devices, which is 13 queries under the
+  old shape, and the tests read the rows back out because a
+  `jsonb_to_recordset` rewrite satisfies a counter while corrupting what lands.
+
+  **Still open after this round** (both were named in the REGISTER ROUND and
+  neither is closed by it): an API route naming a permission no module declares
+  is NOW caught, but a route naming one that IS declared while enforcing it on
+  the wrong resource is not, and cannot be by a syntactic scan — the per-screen
+  contract tests are the layer for that, and they exist only for admin screens.
+  #599 and #711 remain blocked on external artefacts, not on code.
+
 - **REGISTER ROUND — 25 August 2026: two registers describe the same
   permissions, nothing compared them, and an entire authorization surface had
   no screen because of it.**
