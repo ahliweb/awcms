@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0112** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0113** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -359,6 +359,37 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **DECISION ROUND — 25 August 2026: #711's remaining blocker was a decision,
+  and it has been taken (ADR-0113).**
+
+  Shapes 2 and 3 both 301 to `/kategori/{seo_title(jenis_rubrik)}` with `kt`
+  dropped; shape 4 301s to `/cari?q={percent-encoded query}`. The reasoning is in
+  the ADR; three things it settles are worth repeating here.
+
+  - **Flattening was chosen because a wide answer beats a wrong one.** The
+    alternative that also needed no new routes — `jenis_rubrik` as category,
+    `kategori` as tag — drops the AND, so `/hukum/pidana.html` would land on
+    `pidana` articles from every rubrik. That is a wrong page. Flattening lands
+    the reader on a broader list, which is a different kind of imperfect.
+  - **Term provenance DISSOLVED instead of being built.** #711's third DoD item
+    offered a choice between adding `legacy_source_id` to `awcms_blog_terms` and
+    hand-writing a `--term-map`. Under this decision shapes 2/3 are exact-path →
+    exact-path rules that never look up a term row, so neither is needed. That
+    matters because `sql/147` has just deleted the `awcms_blog_pages`
+    provenance pair added on the same reasoning and never wired to a reader:
+    answering a requirement by building a second dead column would have repeated
+    it exactly.
+  - **Two mechanical constraints were checked against the code rather than
+    assumed**, and one of them would have broken the import silently:
+    `/cari?q=banjir%20sampit` is accepted and `/cari?q=banjir sampit` is
+    REJECTED by the CRLF/whitespace guard — and legacy `seo_title()` puts `-`
+    exactly where the spaces were, so every multi-word query rule fails unless
+    un-slugifying is followed by encoding.
+
+  What is left on #711 is data work. The 47-or-fewer destination categories must
+  exist in the tenant BEFORE the map is loaded, or every rule 301s into a 404 —
+  ADR-0111's failure one step over.
 
 - **VOLUME ROUND — 25 August 2026: #711's first blocker does not exist, and the
   0-byte file everyone read as the evidence is inert.**
