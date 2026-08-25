@@ -1,4 +1,8 @@
-import type { MenuItemInput, MenuLinkType } from "../domain/menu-policy";
+import {
+  MAX_MENU_ITEMS,
+  type MenuItemInput,
+  type MenuLinkType
+} from "../domain/menu-policy";
 
 /** Read/write query module for `awcms_blog_menus`/`_menu_items` (Issue #542) — same "one directory, reads and writes" convention as `blog-taxonomy-directory.ts`. */
 export type BlogMenuView = {
@@ -270,17 +274,116 @@ export async function syncMenuItems(
   );
 }
 
+/**
+ * One menu's items, plus whether the read hit its bound (Issue #721).
+ *
+ * `truncated` is not decoration and not pagination metadata. `syncMenuItems`
+ * has FULL-REPLACE semantics, so a client that reads a menu, edits it and
+ * writes it back sends exactly what it was shown — and a read that quietly
+ * stopped at the cap would make that round trip DELETE every item past it. A
+ * bare `LIMIT` on this query would therefore have converted an unbounded read
+ * into silent data loss. The flag is the reason the bound is safe to add: a
+ * caller can see that what it holds is not the whole menu, before it writes.
+ *
+ * For everything written after `MAX_MENU_ITEMS` began being enforced the flag
+ * is always `false`; it can only be `true` for a menu stored before it.
+ */
+export type BlogMenuItemsPage = {
+  items: BlogMenuItemView[];
+  truncated: boolean;
+};
+
+/**
+ * Items for MANY menus in one round trip (Issue #721).
+ *
+ * `GET /api/v1/blog/menus` embeds each menu's items, and did it with one query
+ * per menu inside the request transaction — `1 + N`, N up to the 100
+ * `listMenus` returns. The loop was written sequentially on purpose (one
+ * Postgres connection serves one query at a time, so `Promise.all` over `tx`
+ * deadlocks rather than parallelising), which made the cost 100 SERIAL round
+ * trips holding a pooled connection and a work-class slot for their whole
+ * duration. The fix is not concurrency; it is asking once.
+ *
+ * Worth naming why the earlier sweep missed it: that scan looked for a tagged
+ * template `await` inside a loop body, and this call site is
+ * `await fetchMenuItems(tx, …)` — a plain function call. Matching the SQL
+ * SYNTAX rather than the query made every N+1 that goes through a helper
+ * invisible to it.
+ *
+ * ## The bound is per menu, which is why there is a window function
+ *
+ * A single `LIMIT` across the whole result set would spend the entire budget on
+ * the first menu and return nothing for the rest, and the truncation could not
+ * be attributed to any particular menu. `row_number()` partitioned by `menu_id`
+ * bounds each menu independently and still costs one query. Reading
+ * `MAX_MENU_ITEMS + 1` rows per partition is what makes `truncated` knowable:
+ * with exactly the cap there is no way to tell "full" from "overflowing".
+ *
+ * `ORDER BY sort_order, id` — `sort_order` is not unique (nothing constrains
+ * two siblings from sharing one), so ordering by it alone left equal-ordered
+ * items in whatever order the scan produced, varying between identical calls.
+ * That was survivable while the read was unbounded and is not once a bound can
+ * cut the list: an arbitrary order makes an arbitrary 200 of 250 items.
+ */
+export async function fetchMenuItemsForMenus(
+  tx: Bun.SQL,
+  tenantId: string,
+  menuIds: readonly string[]
+): Promise<Map<string, BlogMenuItemsPage>> {
+  const byMenu = new Map<string, BlogMenuItemsPage>();
+  const unique = [...new Set(menuIds)];
+
+  if (unique.length === 0) {
+    return byMenu;
+  }
+
+  // `tx.array(...)` rather than interpolating the array: Bun's tagged template
+  // delivers a plain JS array as a comma-joined string, which PostgreSQL
+  // rejects as `22P02` against a `uuid[]`.
+  const rows = (await tx`
+    SELECT id, tenant_id, menu_id, parent_item_id, label, link_type, target_id, url, sort_order
+    FROM (
+      SELECT id, tenant_id, menu_id, parent_item_id, label, link_type,
+             target_id, url, sort_order,
+             row_number() OVER (
+               PARTITION BY menu_id ORDER BY sort_order ASC, id ASC
+             ) AS row_index
+      FROM awcms_blog_menu_items
+      WHERE tenant_id = ${tenantId}
+        AND menu_id = ANY(${tx.array(unique, "uuid")})
+    ) ranked
+    WHERE ranked.row_index <= ${MAX_MENU_ITEMS + 1}
+    ORDER BY ranked.menu_id ASC, ranked.sort_order ASC, ranked.id ASC
+  `) as BlogMenuItemRow[];
+
+  for (const row of rows) {
+    const page = byMenu.get(row.menu_id);
+
+    if (page) {
+      page.items.push(toItemView(row));
+    } else {
+      byMenu.set(row.menu_id, { items: [toItemView(row)], truncated: false });
+    }
+  }
+
+  // The `+ 1` row is the probe, never part of the answer.
+  for (const page of byMenu.values()) {
+    if (page.items.length > MAX_MENU_ITEMS) {
+      page.items.length = MAX_MENU_ITEMS;
+      page.truncated = true;
+    }
+  }
+
+  return byMenu;
+}
+
+/** One menu's items. Delegates to {@link fetchMenuItemsForMenus} so the single-menu and list paths cannot drift to different bounds or a different order. */
 export async function fetchMenuItems(
   tx: Bun.SQL,
   tenantId: string,
   menuId: string
-): Promise<BlogMenuItemView[]> {
-  const rows = (await tx`
-    SELECT id, tenant_id, menu_id, parent_item_id, label, link_type, target_id, url, sort_order
-    FROM awcms_blog_menu_items
-    WHERE tenant_id = ${tenantId} AND menu_id = ${menuId}
-    ORDER BY sort_order ASC
-  `) as BlogMenuItemRow[];
+): Promise<BlogMenuItemsPage> {
+  const byMenu = await fetchMenuItemsForMenus(tx, tenantId, [menuId]);
 
-  return rows.map(toItemView);
+  return byMenu.get(menuId) ?? { items: [], truncated: false };
 }

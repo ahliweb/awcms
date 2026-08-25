@@ -109,8 +109,16 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       return fail(404, "RESOURCE_NOT_FOUND", "Menu not found.");
     }
 
+    // A write returns what it just stored (capped by `validateMenuItemsInput`,
+    // so never truncated); a read returns the bounded page and says whether it
+    // hit the bound. The distinction matters because this endpoint REPLACES the
+    // item set: a client that read a truncated list and saved it back would
+    // delete the items it was not shown.
     const currentItems = items
-      ? await syncMenuItems(tx, tenantId, id, items)
+      ? {
+          items: await syncMenuItems(tx, tenantId, id, items),
+          truncated: false
+        }
       : await fetchMenuItems(tx, tenantId, id);
 
     await recordAuditEvent(tx, {
@@ -133,7 +141,11 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       key: updated.key
     });
 
-    return ok({ ...updated, items: currentItems });
+    return ok({
+      ...updated,
+      items: currentItems.items,
+      itemsTruncated: currentItems.truncated
+    });
   });
 };
 

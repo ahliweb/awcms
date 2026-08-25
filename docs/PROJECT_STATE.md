@@ -360,6 +360,55 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BOUND-AND-BATCH ROUND — 25 August 2026: the one uncapped batch in the API
+  sat next to the one N+1 the last sweep could not see.**
+
+  **The scanner was looking for backticks.** The BOUND ROUND below scanned
+  `src/**/*.ts` for a tagged-template `await` inside a loop body and found 34
+  loops. `GET /api/v1/blog/menus` contains
+  `for (const menu of menus) { … await fetchMenuItems(tx, …) }` — a plain
+  function call, so it was never a candidate. Re-run against the set of
+  functions that _transitively_ issue SQL rather than against SQL syntax, the
+  same scan surfaces 45 sites. **Matching the syntax rather than the query hid
+  every N+1 routed through a helper**, which in a repo with an application layer
+  is most of them.
+
+  The endpoint cost 1 + N queries, N up to the 100 `listMenus` returns, all
+  serial by necessity — one Postgres connection serves one query at a time, so
+  the `Promise.all` the code explicitly warns against would hang rather than
+  parallelise. Now one `menu_id = ANY(…)` grouped in memory.
+
+  **And the write it reads from had no count bound at all.** Checked against all
+  18 routes that accept a body array: every other one declares a cap
+  (`MAX_IMPORT_ITEMS = 200`, `MAX_IDS`, `MAX_NODE_ACTIVATIONS = 128`,
+  `/sync/push`'s new one), and menu `items` was the only exception. The 128 KB
+  body tier allowed roughly 1,250 items per menu, so 100 menus × 1,250 was a
+  125,000-row response. `MAX_MENU_ITEMS = 200` now sits in the one validator
+  both routes already reach the database through.
+
+  **The bound could not be a bare `LIMIT`, and this is the transferable part.**
+  `syncMenuItems` is a FULL REPLACE. A client that reads a menu, edits it and
+  saves it back sends what it was shown — so a read that quietly stopped at the
+  cap would make that round trip DELETE everything past it. Adding the obvious
+  `LIMIT` would have converted an unbounded read into silent data loss. The
+  read returns `{ items, truncated }`, reads cap + 1 rows to know which it is,
+  and both endpoints surface `itemsTruncated`.
+
+  Two smaller things fell out. `sort_order` is not unique and the read ordered
+  by it alone, which was survivable while the read was unbounded and is not once
+  a bound can cut the list — an undefined order makes an arbitrary 200 of 250.
+  And the count is checked BEFORE the per-item pass, because after it an
+  oversized array of invalid entries would still be walked in full and emit
+  several errors per entry; asserting the error COUNT, not just `valid: false`,
+  is what separates the two orderings in the test.
+
+  `GET /api/v1/blog/menus` is consumed by `ahliweb/awcms-astro`, and the frozen
+  consumer contract still passes WITHOUT regeneration — the change is additive
+  for a reader, and that repo reads menus at build time and never writes them.
+  Its `Menu` type does not carry `itemsTruncated`, so a tenant whose menu
+  exceeds 200 items would render 200 there with no warning. That is a cross-repo
+  question, not a regression introduced here.
+
 - **DECISION ROUND — 25 August 2026: #711's remaining blocker was a decision,
   and it has been taken (ADR-0113).**
 

@@ -2215,6 +2215,8 @@ paths:
                   type: string
                 items:
                   type: array
+                  maxItems: 200
+                  description: At most 200 entries; a longer array is refused with `VALIDATION_ERROR` before any entry is validated.
                   items:
                     $ref: "#/components/schemas/BlogMenuItem"
       responses:
@@ -2255,7 +2257,13 @@ paths:
         - Blog Content
       operationId: blogUpdateMenu
       summary: Update a navigation menu (name and/or its items tree)
-      description: Gated by blog_content.menus.configure. Providing items replaces the whole tree.
+      description: |
+        Gated by blog_content.menus.configure. Providing items REPLACES the
+        whole tree — a partial list deletes the rest. At most 200 items.
+
+        Read `itemsTruncated` on whatever you are editing before sending
+        `items`: a menu stored before the cap existed reads back bounded, and
+        saving that list back would delete everything past the bound.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
@@ -2269,6 +2277,8 @@ paths:
                   type: string
                 items:
                   type: array
+                  maxItems: 200
+                  description: At most 200 entries; a longer array is refused with `VALIDATION_ERROR` before any entry is validated. Omit the field entirely to leave the existing tree untouched — an empty array CLEARS it.
                   items:
                     $ref: "#/components/schemas/BlogMenuItem"
       responses:
@@ -3919,7 +3929,7 @@ components:
         `footer`); `name` is the editorial label and may be renamed at any time.
         A consumer that keys off `name` breaks the first time somebody fixes a
         typo.
-      required: [id, tenantId, key, name, items]
+      required: [id, tenantId, key, name, items, itemsTruncated]
       properties:
         id:
           type: string
@@ -3935,9 +3945,26 @@ components:
           description: Editorial label. NOT an identifier.
         items:
           type: array
+          maxItems: 200
           description: Already sorted by `sortOrder`. One level of nesting at most — an item whose parent itself has a parent is refused at write time.
           items:
             $ref: "#/components/schemas/BlogMenuItem"
+        itemsTruncated:
+          type: boolean
+          description: |
+            `true` when the menu holds more than the 200 items `items` is
+            bounded at, and `items` is only the first 200 of them.
+
+            **Do not save a truncated list back.** `PATCH /api/v1/blog/menus/{id}`
+            REPLACES the whole item set, so writing back what you were shown
+            would delete every item past the bound. Only a menu written before
+            the 200-item cap existed can report `true`; on a write response it
+            is always `false`, because the request that produced it was itself
+            capped.
+
+            Ties are broken by `id`, so items sharing a `sortOrder` keep the
+            same order between identical reads — without that the 200 kept
+            would be an arbitrary 200.
         createdAt:
           type: string
           format: date-time

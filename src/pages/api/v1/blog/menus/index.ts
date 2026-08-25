@@ -16,7 +16,7 @@ import { log } from "../../../../../lib/logging/logger";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import {
   createMenu,
-  fetchMenuItems,
+  fetchMenuItemsForMenus,
   listMenus,
   syncMenuItems
 } from "../../../../../modules/blog-content/application/menu-directory";
@@ -66,24 +66,37 @@ export const GET: APIRoute = async ({ request, cookies }) => {
 
     const menus = await listMenus(tx, tenantId);
 
-    // Sequential loop, NOT `Promise.all(menus.map(async …))` — every iteration
-    // issues a query on the SAME transaction/connection (`tx`), and one Postgres
-    // connection serves one query at a time; running them concurrently produced
-    // a real hang in this repo (see
-    // `reporting/application/projection-reconciliation.ts:89-94`). This fan-out
-    // was also UNBOUNDED — one concurrent query per menu the tenant has.
-    const withItems: Array<
-      (typeof menus)[number] & {
-        items: Awaited<ReturnType<typeof fetchMenuItems>>;
-      }
-    > = [];
+    // TWO queries for the whole page, whatever the menu count (Issue #721).
+    //
+    // This was a per-menu `await fetchMenuItems(tx, …)` in a loop — sequential
+    // by necessity, since one Postgres connection serves one query at a time
+    // and `Promise.all` over a shared `tx` hangs rather than parallelises. So
+    // the cost was up to 100 SERIAL round trips, each holding the pooled
+    // connection and the work-class slot. Concurrency was never the fix; the
+    // fix is one `menu_id = ANY(…)` read grouped in memory.
+    //
+    // A menu absent from the map has no items — `[]`, never `undefined`: "this
+    // menu has no navigation" and "this payload does not carry navigation" are
+    // different facts, and a consumer cannot act on the second if it is
+    // rendered as the first.
+    const itemsByMenu = await fetchMenuItemsForMenus(
+      tx,
+      tenantId,
+      menus.map((menu) => menu.id)
+    );
 
-    for (const menu of menus) {
-      withItems.push({
+    const withItems = menus.map((menu) => {
+      const page = itemsByMenu.get(menu.id);
+
+      return {
         ...menu,
-        items: await fetchMenuItems(tx, tenantId, menu.id)
-      });
-    }
+        items: page?.items ?? [],
+        // Surfaced rather than swallowed: `PATCH .../menus/{id}` REPLACES the
+        // whole item set, so a client that saved back a truncated list would
+        // delete what it was never shown.
+        itemsTruncated: page?.truncated ?? false
+      };
+    });
 
     return ok({ menus: withItems });
   });
@@ -197,6 +210,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       key: menu.key
     });
 
-    return ok({ ...menu, items });
+    // Always `false` here: what came back is what this request just wrote, and
+    // `validateMenuItemsInput` refused anything above `MAX_MENU_ITEMS`. Stated
+    // rather than omitted so the field means the same thing on every menu
+    // response a client can receive.
+    return ok({ ...menu, items, itemsTruncated: false });
   });
 };
