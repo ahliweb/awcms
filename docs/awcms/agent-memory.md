@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 116.**
+**Jumlah memory saat snapshot terakhir: 117.**
 
 ## Sengaja TIDAK disertakan
 
@@ -44,6 +44,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [PENGEMBANGAN hanya di awcms + awcms-astro](awcms-mini-freeze-foundation-here.md) — ADR-0055: mini/micro = ARSIP; kapabilitas dibangun di sini lewat ADR admission
 - [WAJIB: otorisasi lewat authorizeInTransaction](awcms-authorize-chokepoint-rule.md) — ADR-0063 gerbang per-HANDLER; `ownershipGrant` MELEBARKAN; `blog/posts/[id].ts` BUKAN pola benar
 - [Token bearer APA PUN dapat skema 77 endpoint](awcms-api-body-auth-boundary.md) — `prepare` sebelum otorisasi; gerbang STATIS buta (297/305 palsu); sapuan API bisa me-LOGOUT dirinya
+- [Cari gerbang yang membaca SATU dari sepasang](awcms-gate-reads-one-of-a-pair.md) — #727/#729: hash i18n tak lihat isi mirror; `memory:docs:check` TANPA PEMANGGIL; label ≠ identitas
 - [Grep CALL-nya, bukan DEFINISInya](awcms-grep-the-call-not-the-definition.md) — 3× berulang: `seo_title()` 9 definisi/0 panggilan masuk ADR ter-merge; kolasi ci MySQL vs kesamaan Postgres
 - [Cari SAUDARA endpoint-nya dulu](awcms-check-the-sibling-endpoint.md) — 2× berulang (#716 sync, #722 analytics): satu kembar diperkeras, satunya tidak; rasional registry MEMBENARKAN keputusan
 - [Sapuan N+1 berbasis SINTAKS itu buta](awcms-n1-scanner-syntax-blind-spot.md) — pindai fungsi penerbit SQL transitif (34→45); `LIMIT` telanjang pada baca ganti-seluruhnya = DATA HILANG; gerbang kontrak konsumen membekukan PROSA
@@ -3192,6 +3193,81 @@ di dalamnya.
 Terkait: [[awcms-micro-arch-remediation-ahead]], [[awcms-test-and-txn-traps]],
 [[awcms-permission-seed-existing-tenant-gap]], [[awcms-paas-superuser-rls-inert]],
 [[awcms-standards-anchor-and-second-pass]], [[awcms-gate-checks-matrix-not-need]].
+`````
+
+<!-- memory-file: awcms-gate-reads-one-of-a-pair.md -->
+
+`````markdown
+---
+name: awcms-gate-reads-one-of-a-pair
+description: "Cari gerbang yang membaca SATU dari sepasang berkas (mis. hanya `.md`, bukan `.id.md`). 4 temuan #727/#729 — termasuk `memory:docs:check` yang TIDAK PUNYA PEMANGGIL. Hash i18n TIDAK melihat isi mirror"
+metadata: 
+  node_type: memory
+  type: feedback
+  modified: 2026-08-25T23:30:15.370Z
+---
+
+## Pertanyaan audit yang berhasil
+
+Untuk SETIAP `:check` di rantai `bun run check`, tanyakan: **"apakah ada berkas
+KEDUA yang memuat klaim yang sama?"** Tiga dari empat temuan #727/#729
+ditemukan begitu — bukan karena ada yang gagal.
+
+Yang ditemukan (semua sudah diperbaiki):
+
+| Gerbang | Dulu membaca | Mirror yang buta |
+| --- | --- | --- |
+| `project-state:inventory:check` | `PROJECT_STATE.md` | `.id.md` §2 (salah: ADR 0111 vs 0113, `MODULE_CONTRACT_VERSION` 4.0.0 vs 4.1.0) |
+| `scripts:inventory:check` | `scripts/README.md` | `.id.md` (107/48 vs 121/54) |
+| `skills:check` | `SKILL.md`, `src/modules/*/README.md` | **55 + 21** mirror |
+| `checkAdrIndexCoverage` | `docs/adr/README.md` | `.id.md` — **kehilangan ADR-0100** |
+
+## Hash i18n TIDAK bisa melihat drift TURUNAN
+
+`check:docs:translation` membandingkan **sha256 SUMBER INGGRIS** dengan penanda
+di mirror. Ia menjawab *"apakah Inggrisnya berubah sejak diterjemahkan?"* —
+pertanyaan yang TEPAT untuk PROSA (prosa hanya menua saat sumbernya berubah).
+
+**Konten TURUNAN menua saat REPO berubah, kedua berkas tak tersentuh.** Tak ada
+hash dari berkas mana pun yang bisa melihatnya. Lebih buruk: `docs:i18n:stamp`
+setelah suntingan Inggris yang tak berhubungan **MEMBERKATI ULANG** mirror basi
+secara senyap. Saya nyaris mengirimnya dua kali karena ini.
+
+Obatnya ada di GENERATOR, bukan di gerbang terjemahan: render setiap locale dari
+SATU kali pengumpulan, pakai **tabel label** bukan renderer kedua (dua renderer
+bisa saling bertentangan, dan dua salinan bertentangan itulah cacatnya).
+
+## Gerbang yang TIDAK PUNYA PEMANGGIL
+
+`memory:docs:check` ada di `package.json`, TIDAK ada di `scripts.check` maupun
+`.github/workflows/*`, jadi **belum pernah berjalan sekali pun** — dan ia sedang
+GAGAL. Petunjuknya ada di headernya sendiri: ia mendokumentasikan skip aman-CI,
+catatan desain yang hanya masuk akal bagi sesuatu yang dimaksudkan dikawatkan.
+
+**Cek berkala:** `node -e 'const p=require("./package.json"); for (const k of
+Object.keys(p.scripts)) if (/:check$/.test(k) && !p.scripts.check.includes(k))
+console.log(k)'` lalu adu dengan `.github/workflows/`.
+
+## LABEL bukan IDENTITAS
+
+Draf pertama perluasan `skills:check` mengoper `"skill (SKILL.id.md)"` sebagai
+argumen pertama `checkCitedPaths` — yang dipakai SEKALIGUS sebagai label laporan
+DAN kunci `ASPIRATIONAL_SKILLS`/`subjectModuleKey`. Kedua pengecualian mati
+diam-diam → **19 kegagalan PALSU pada berkas INGGRIS yang baik-baik saja**.
+Pisahkan parameternya, dan uji bahwa pengecualiannya bertahan saat label
+diberikan.
+
+## Tegakkan CAKUPAN, bukan KEBIJAKAN
+
+`docs/adr/README.id.md` menaut berkas INGGRIS untuk 98 barisnya dan `.id.md`
+untuk sisanya. Menuntut satu bentuk akan mengubah gerbang cakupan nyata menjadi
+tuntutan pemformatan-ulang 98 baris — **dan kebisingan itulah cara sebuah
+gerbang dimatikan orang.** Gerbangnya menegakkan "tidak ada ADR yang hilang" dan
+membiarkan bentuk tautan sebagai keputusan editorial.
+
+Terkait: [[awcms-check-the-sibling-endpoint]],
+[[awcms-grep-the-call-not-the-definition]], [[awcms-gate-design-lessons]],
+[[awcms-stale-skill-flips-direction]].
 `````
 
 <!-- memory-file: awcms-gelombang-2-session-surface-complete.md -->
