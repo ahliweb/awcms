@@ -360,6 +360,37 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **#599 IS SPLIT — 25 August 2026. The SHAPE ROUND's recommendation was
+  carried out, and this records the outcome so the recommendation is not read
+  again as still-pending.**
+
+  The SHAPE ROUND below closed with: "split #599 rather than keep one issue
+  blocked on its slowest artifact. Shape 1 plus the three static rules is a
+  cutover-ready map today." Done:
+
+  - **#599, retitled** — "Cutover 301 SeputarBorneo: jalankan peta artikel +
+    tiga aturan halaman statis (kodenya sudah ada; sisanya artefak)". Its
+    ORIGINAL three complaints — no legacy id column, no bulk redirect import, no
+    way to store CKEditor bodies — are all BUILT (`sql/138`,
+    `blog:legacy:redirects:import`, `legacy-html-conversion.ts`), which is why
+    the old title had become misleading. What remains is running them: the
+    article map, three exact-path rules typed into `awcms_seo_redirects`, and
+    the pre-cutover crawl against a live sitemap URL.
+  - **#711, new** — the rubrik shapes (2 and 3) and the search shape (4). Two
+    blockers, both outside this repo: the rubrik list needs data the working
+    copy does not have (`seputa58_sbb.sql` is 0 bytes), and the TARGET route is
+    rendered by `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — a cross-repo
+    contract question before it is an import question. Terms also have no
+    provenance column, so there is nothing a `--path-template` could express.
+
+  **What the split is actually protecting.** Shape 3 is a bare two-segment
+  catch-all, so it is the family a map built from the LISTED shapes would drop
+  in the largest number, silently. Keeping it in the same issue as the
+  cutover-ready half is what would let the cutover ship believing it was
+  complete. Separately, `cari_berita/*.html` must NOT 301 onto content at all —
+  an arbitrary query has no single correct destination — and that is a decision
+  written into #711 rather than something derived from a map.
+
 - **SWEEP ROUND — 25 August 2026: the scheduled sweeps cost a constant PER
   POST, and the index the previous round left as a measurement task turns out
   not to want changing. Both halves of that are results.**
@@ -595,6 +626,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
   Recommended: split #599 rather than keep one issue blocked on its slowest
   artifact. Shape 1 plus the three static rules is a cutover-ready map today.
+  **Done on 25 August 2026 — see the entry at the top of this section.**
 
 - **LEDGER ROUND — 24 August 2026: 121 endpoints refuse a tenant user WITHOUT
   RECORDING that they did.**
