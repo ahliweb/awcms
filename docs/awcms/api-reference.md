@@ -5922,7 +5922,12 @@ Gated by blog_content.menus.configure. Optionally seeds its initial items tree (
 - **operationId**: `blogUpdateMenu`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.menus.configure. Providing items replaces the whole tree.
+Gated by blog_content.menus.configure. Providing items REPLACES the
+whole tree — a partial list deletes the rest. At most 200 items.
+
+Read `itemsTruncated` on whatever you are editing before sending
+`items`: a menu stored before the cap existed reads back bounded, and
+saving that list back would delete everything past the bound.
 
 **Parameters**
 

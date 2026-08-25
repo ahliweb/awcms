@@ -46,6 +46,7 @@ import {
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   fetchMenuItems,
+  fetchMenuItemsForMenus,
   listMenus
 } from "../../src/modules/blog-content/application/menu-directory";
 import { listWidgets } from "../../src/modules/blog-content/application/widget-directory";
@@ -112,11 +113,25 @@ suite("menu and widget response shapes match their schemas", () => {
 
     const runtime = getRuntimeSql();
     const assembled = await withTenantOrThrow(runtime, TENANT, async (tx) => {
-      // Exactly what `src/pages/api/v1/blog/menus/index.ts` assembles.
+      // Exactly what `src/pages/api/v1/blog/menus/index.ts` assembles — the
+      // BATCHED read it uses since Issue #721, not the per-menu one it used to.
+      // This block is a hand-copy of the route, so it can drift from it; it
+      // caught its own drift once, when `itemsTruncated` became required and
+      // the copy did not have it.
       const menus = await listMenus(tx, TENANT);
       const first = menus[0]!;
+      const itemsByMenu = await fetchMenuItemsForMenus(
+        tx,
+        TENANT,
+        menus.map((menu) => menu.id)
+      );
+      const page = itemsByMenu.get(first.id);
 
-      return { ...first, items: await fetchMenuItems(tx, TENANT, first.id) };
+      return {
+        ...first,
+        items: page?.items ?? [],
+        itemsTruncated: page?.truncated ?? false
+      };
     });
 
     const row = assembled as unknown as AnyRecord;
@@ -149,9 +164,11 @@ suite("menu and widget response shapes match their schemas", () => {
     `;
 
     const runtime = getRuntimeSql();
-    const items = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, menu[0]!.id)
-    );
+    const items = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, menu[0]!.id)
+      )
+    ).items;
 
     const item = items[0]! as unknown as AnyRecord;
 
@@ -183,9 +200,11 @@ suite("menu and widget response shapes match their schemas", () => {
     `;
 
     const runtime = getRuntimeSql();
-    const items = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, menu[0]!.id)
-    );
+    const items = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, menu[0]!.id)
+      )
+    ).items;
 
     expect(items.map((item) => item.label)).toEqual([
       "Pertama",

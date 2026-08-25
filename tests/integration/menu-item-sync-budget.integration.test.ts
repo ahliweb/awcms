@@ -152,9 +152,11 @@ suite("syncing a menu costs two queries, whatever the item count", () => {
     expect(queries).toBe(SYNC_QUERY_BUDGET);
     expect(result).toHaveLength(items.length);
 
-    const stored = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, MENU)
-    );
+    const stored = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, MENU)
+      )
+    ).items;
     expect(stored).toHaveLength(items.length);
   });
 
@@ -169,9 +171,11 @@ suite("syncing a menu costs two queries, whatever the item count", () => {
     const returned = await withTenantOrThrow(runtime, TENANT, (tx) =>
       syncMenuItems(tx, TENANT, MENU, items)
     );
-    const stored = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, MENU)
-    );
+    const stored = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, MENU)
+      )
+    ).items;
 
     const byId = (list: typeof stored) =>
       [...list].sort((left, right) => left.id.localeCompare(right.id));
@@ -204,9 +208,11 @@ suite("syncing a menu costs two queries, whatever the item count", () => {
 
     expect(queries).toBe(SYNC_QUERY_BUDGET);
 
-    const stored = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, MENU)
-    );
+    const stored = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, MENU)
+      )
+    ).items;
     expect(stored).toHaveLength(items.length);
 
     // Every child still points at a real parent row.
@@ -272,9 +278,11 @@ suite("syncing a menu costs two queries, whatever the item count", () => {
     expect(queries).toBe(1);
     expect(result).toEqual([]);
 
-    const stored = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, MENU)
-    );
+    const stored = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, MENU)
+      )
+    ).items;
     expect(stored).toEqual([]);
   });
 
@@ -289,9 +297,11 @@ suite("syncing a menu costs two queries, whatever the item count", () => {
       syncMenuItems(tx, TENANT, MENU, items.slice(0, 1))
     );
 
-    const stored = await withTenantOrThrow(runtime, TENANT, (tx) =>
-      fetchMenuItems(tx, TENANT, MENU)
-    );
+    const stored = (
+      await withTenantOrThrow(runtime, TENANT, (tx) =>
+        fetchMenuItems(tx, TENANT, MENU)
+      )
+    ).items;
 
     expect(stored).toHaveLength(1);
     expect(stored[0]!.id).toBe(items[0]!.id);

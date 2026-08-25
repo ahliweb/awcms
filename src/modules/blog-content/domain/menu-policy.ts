@@ -35,6 +35,31 @@ export type MenuItemInput = {
   sortOrder: number;
 };
 
+/**
+ * How many items one menu may carry, on write and on read (Issue #721).
+ *
+ * Every other batch surface in this API declares a count bound —
+ * `MAX_IMPORT_ITEMS = 200` on the redirect import, `MAX_IDS` on bulk comment
+ * moderation, `MAX_NODE_ACTIVATIONS = 128` on sync — and this one declared
+ * none. The only limit was the 128 KB `default` body tier, which a minimal
+ * item (`{"id":…uuid…,"label":"a","linkType":"url","url":"http://a.co",
+ * "sortOrder":0}` ≈ 105 bytes) turns into roughly **1,250 items per menu**.
+ * `listMenus` returns up to 100 menus and `GET /api/v1/blog/menus` embeds
+ * every one's items, so the uncapped write is really a bound on a READ:
+ * 100 × 1,250 ≈ 125,000 rows in one response.
+ *
+ * 200 matches `MAX_IMPORT_ITEMS`, and site navigation authored by a human does
+ * not approach it — a 200-entry mega-menu is already past what any reader can
+ * use. The number is enforced HERE rather than in the two routes because both
+ * `POST /api/v1/blog/menus` and `PATCH /api/v1/blog/menus/{id}` reach the
+ * database through this one validator; a per-route check would have two places
+ * to drift apart, which is the shape #695 had to unpick across 77 handlers.
+ *
+ * `menu-directory.ts` bounds the READ at the same number, deliberately: a cap
+ * on new writes says nothing about rows already stored.
+ */
+export const MAX_MENU_ITEMS = 200;
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -161,6 +186,23 @@ export function validateMenuItemsInput(
     return {
       valid: false,
       errors: [{ field: "items", message: "items must be an array." }]
+    };
+  }
+
+  // Counted BEFORE the per-item pass, not after it. Validating first would walk
+  // every element of an oversized array and could emit several field errors per
+  // element, so a request the server is about to refuse would still decide how
+  // much work it does and how large the refusal is — the request-amplification
+  // half of an uncapped batch, which a cap applied afterwards does not close.
+  if (body.length > MAX_MENU_ITEMS) {
+    return {
+      valid: false,
+      errors: [
+        {
+          field: "items",
+          message: `items must contain at most ${MAX_MENU_ITEMS} entries (received ${body.length}).`
+        }
+      ]
     };
   }
 

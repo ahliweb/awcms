@@ -6,6 +6,7 @@ import {
   validateUpdateTemplateInput
 } from "../src/modules/blog-content/domain/template-policy";
 import {
+  MAX_MENU_ITEMS,
   validateMenuItemsInput,
   isMenuLinkType
 } from "../src/modules/blog-content/domain/menu-policy";
@@ -203,6 +204,64 @@ describe("menu-policy", () => {
     };
     const result = validateMenuItemsInput([item, { ...item, label: "B" }]);
     expect(result.valid).toBe(false);
+  });
+
+  describe("the item count is bounded (Issue #721)", () => {
+    function validItem(n: number) {
+      return {
+        id: `11111111-1111-1111-1111-${String(n).padStart(12, "0")}`,
+        parentItemId: null,
+        label: `Item ${n}`,
+        linkType: "url",
+        url: "https://example.com",
+        sortOrder: n
+      };
+    }
+
+    test("exactly MAX_MENU_ITEMS is accepted", () => {
+      // The boundary belongs to the accepting side: a cap that rejects its own
+      // documented maximum is a different (and quieter) defect.
+      const result = validateMenuItemsInput(
+        Array.from({ length: MAX_MENU_ITEMS }, (_, n) => validItem(n))
+      );
+
+      expect(result.valid).toBe(true);
+    });
+
+    test("one over the cap is rejected, and the message names both numbers", () => {
+      const result = validateMenuItemsInput(
+        Array.from({ length: MAX_MENU_ITEMS + 1 }, (_, n) => validItem(n))
+      );
+
+      expect(result.valid).toBe(false);
+
+      if (result.valid) return;
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]!.field).toBe("items");
+      // An operator who sent 1,250 items needs to know the limit AND what they
+      // sent; "too many items" sends them to count an array by hand.
+      expect(result.errors[0]!.message).toContain(String(MAX_MENU_ITEMS));
+      expect(result.errors[0]!.message).toContain(String(MAX_MENU_ITEMS + 1));
+    });
+
+    test("an oversized batch is refused WITHOUT validating every entry", () => {
+      // The count is checked before the per-item pass, so an oversized array of
+      // entirely invalid items yields ONE error rather than several per item.
+      // This is the request-amplification half: without it, a 128 KB body of
+      // garbage decides how much validation work the server does and how large
+      // its refusal is. A cap applied after the per-item pass would still
+      // return `valid: false` here and would not close that, so asserting the
+      // error COUNT is what separates the two orderings.
+      const junk = Array.from({ length: MAX_MENU_ITEMS + 500 }, () => ({}));
+      const result = validateMenuItemsInput(junk);
+
+      expect(result.valid).toBe(false);
+
+      if (result.valid) return;
+
+      expect(result.errors).toHaveLength(1);
+    });
   });
 });
 

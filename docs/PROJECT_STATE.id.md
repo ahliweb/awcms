@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:de83cb124eaac909251212c418985fe24841546e781e4ab99f6bda0f5924109c -->
+<!-- i18n-source-hash: sha256:6982d377c1ba2343501cb24e540cd5f1a4f9bc2857f71829c3cc4a5bb0424b43 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,61 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN BATAS-DAN-BATCH — 25 Agustus 2026: satu-satunya batch tanpa cap di
+  API ini duduk persis di sebelah satu-satunya N+1 yang tak terlihat oleh
+  sapuan sebelumnya.**
+
+  **Pemindainya mencari BACKTICK.** PUTARAN BOUND di bawah memindai
+  `src/**/*.ts` untuk `await` tagged-template di dalam badan loop dan menemukan
+  34 loop. `GET /api/v1/blog/menus` memuat
+  `for (const menu of menus) { … await fetchMenuItems(tx, …) }` — sebuah
+  panggilan fungsi biasa, jadi ia tak pernah jadi kandidat. Dijalankan ulang
+  terhadap himpunan fungsi yang secara _transitif_ menerbitkan SQL alih-alih
+  terhadap sintaks SQL, sapuan yang sama memunculkan 45 lokasi. **Mencocokkan
+  SINTAKS alih-alih KUERI menyembunyikan setiap N+1 yang lewat helper**, yang di
+  repo ber-application-layer berarti sebagian besarnya.
+
+  Endpoint itu berbiaya 1 + N kueri, N sampai 100 yang dikembalikan `listMenus`,
+  seluruhnya serial karena keharusan — satu koneksi Postgres melayani satu kueri
+  pada satu waktu, jadi `Promise.all` yang justru diperingatkan kodenya akan
+  HANG alih-alih memparalelkan. Kini satu `menu_id = ANY(…)` yang dikelompokkan
+  di memori.
+
+  **Dan tulisan yang dibacanya TIDAK punya batas jumlah sama sekali.** Diperiksa
+  terhadap seluruh 18 rute yang menerima array di body: setiap rute lain
+  mendeklarasikan cap (`MAX_IMPORT_ITEMS = 200`, `MAX_IDS`,
+  `MAX_NODE_ACTIVATIONS = 128`, dan milik `/sync/push` yang baru), dan `items`
+  menu satu-satunya pengecualian. Tier body 128 KB mengizinkan sekitar 1.250
+  item per menu, jadi 100 menu × 1.250 adalah respons 125.000 baris.
+  `MAX_MENU_ITEMS = 200` kini duduk di SATU validator yang sudah dilalui kedua
+  rute menuju database.
+
+  **Batasnya TIDAK BISA berupa `LIMIT` telanjang, dan inilah bagian yang bisa
+  dipindahkan.** `syncMenuItems` adalah GANTI-SELURUHNYA. Klien yang membaca
+  sebuah menu, menyuntingnya lalu menyimpannya kembali mengirim apa yang
+  ditunjukkan kepadanya — sehingga baca yang diam-diam berhenti di cap akan
+  membuat perjalanan itu MENGHAPUS segala sesuatu di baliknya. Menambahkan
+  `LIMIT` yang tampak jelas akan mengubah baca tak-terbatas menjadi kehilangan
+  data yang senyap. Bacanya mengembalikan `{ items, truncated }`, membaca
+  cap + 1 baris agar tahu yang mana, dan kedua endpoint memunculkan
+  `itemsTruncated`.
+
+  Dua hal kecil ikut terjatuh. `sort_order` TIDAK unik dan bacanya mengurutkan
+  hanya dengannya, yang selamat selama bacanya tak terbatas dan tidak lagi
+  begitu setelah sebuah batas bisa memotong daftar — urutan tak terdefinisi
+  membuat 200-dari-250 yang sembarang. Dan jumlahnya diperiksa SEBELUM lintasan
+  per-item, karena sesudahnya array kelebihan berisi entri tak-valid tetap akan
+  dijelajahi penuh dan memancarkan beberapa galat per entri; menegakkan JUMLAH
+  galat, bukan sekadar `valid: false`, itulah yang memisahkan kedua urutan itu
+  di tesnya.
+
+  `GET /api/v1/blog/menus` dikonsumsi `ahliweb/awcms-astro`, dan kontrak
+  konsumen beku tetap LULUS TANPA regenerasi — perubahannya aditif bagi pembaca,
+  dan repo itu membaca menu saat build dan tak pernah menulisnya. Tipe `Menu`-nya
+  tidak membawa `itemsTruncated`, jadi tenant yang menunya melampaui 200 item
+  akan merender 200 di sana tanpa peringatan. Itu pertanyaan lintas-repo, bukan
+  regresi yang diperkenalkan di sini.
 
 - **PUTARAN KEPUTUSAN — 25 Agustus 2026: pemblokir tersisa #711 adalah sebuah
   KEPUTUSAN, dan keputusan itu sudah diambil (ADR-0113).**
