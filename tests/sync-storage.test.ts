@@ -8,7 +8,9 @@ import {
 import { evaluatePushEventConflict } from "../src/modules/sync-storage/domain/sync-conflict";
 import {
   validateConflictResolutionRequestBody,
-  validateSyncPushRequestBody
+  validateSyncPushRequestBody,
+  MAX_SYNC_PUSH_EVENTS,
+  MAX_SYNC_PULL_EVENTS
 } from "../src/modules/sync-storage/domain/sync-validation";
 import {
   evaluateObjectRetry,
@@ -172,6 +174,59 @@ describe("validateSyncPushRequestBody", () => {
 
   test("rejects a null body", () => {
     expect(validateSyncPushRequestBody(null).valid).toBe(false);
+  });
+
+  test("accepts a batch of exactly MAX_SYNC_PUSH_EVENTS", () => {
+    const result = validateSyncPushRequestBody({
+      batchId: "b1",
+      events: Array.from({ length: MAX_SYNC_PUSH_EVENTS }, () => ({
+        eventType: "created",
+        aggregateType: "example",
+        payload: {}
+      }))
+    });
+
+    // The boundary is inclusive. Asserted alongside the refusal below, because
+    // an off-by-one here refuses a batch a well-behaved node is entitled to
+    // send and would read as an outage on the node's side.
+    expect(result.valid).toBe(true);
+  });
+
+  test("refuses a batch of one more than the maximum, and does not truncate it", () => {
+    // The write side had NO count bound: `readTextBody(request, "large")` allows
+    // 5 MB, so one authenticated request could carry on the order of 30,000
+    // events, each costing a compare-and-set plus an INSERT, all sequential and
+    // all inside one transaction holding the aggregate rows it had advanced.
+    const events = Array.from({ length: MAX_SYNC_PUSH_EVENTS + 1 }, () => ({
+      eventType: "created",
+      aggregateType: "example",
+      payload: {}
+    }));
+
+    const result = validateSyncPushRequestBody({ batchId: "b1", events });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors).toContainEqual({
+        field: "events",
+        message: `events may contain at most ${MAX_SYNC_PUSH_EVENTS} entries per batch; received ${MAX_SYNC_PUSH_EVENTS + 1}. Split the batch.`
+      });
+
+      // ONE error, not one per event. An error body carrying a field error for
+      // each of 30,000 events is its own denial of service, and the verdict
+      // does not depend on their contents.
+      expect(result.errors).toHaveLength(1);
+    }
+  });
+
+  test("the push bound IS the pull page size, not a second number equal to it", () => {
+    // A node must not be able to push more in one batch than it can pull in one
+    // page. `pull.ts` has clamped reads since it shipped; the write side was
+    // uncapped. Asserting the RELATIONSHIP rather than the literal 500 is the
+    // point — two independent constants that happen to agree today are how the
+    // asymmetry comes back the next time one of them is tuned.
+    expect(MAX_SYNC_PUSH_EVENTS).toBe(MAX_SYNC_PULL_EVENTS);
+    expect(MAX_SYNC_PUSH_EVENTS).toBeGreaterThan(0);
   });
 
   test("accepts an event with a valid baseVersion", () => {

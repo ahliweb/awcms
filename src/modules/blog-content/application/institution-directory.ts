@@ -355,13 +355,28 @@ export async function syncPostInstitutionAssignments(
     WHERE tenant_id = ${tenantId} AND post_id = ${postId}
   `;
 
-  for (const institutionId of institutionIds) {
-    await tx`
-      INSERT INTO awcms_blog_post_institutions
-        (tenant_id, post_id, institution_id)
-      VALUES (${tenantId}, ${postId}, ${institutionId})
-    `;
+  if (institutionIds.length === 0) {
+    return;
   }
+
+  // ONE round trip, not one per institution — the same `unnest` shape
+  // `syncPostTermAssignments` uses, and the docstring above already claimed
+  // this function was "exactly like" it. It was, in contract and not in cost:
+  // the term path was flattened to two statements when `blog:legacy:import`
+  // made a 23,906-article archive its caller, and THIS path, which the same
+  // importer drives through the same post payload, kept the loop. A twin that
+  // declares itself a twin is the easiest kind of sibling defect to miss,
+  // because the reader who fixed one has already read the other and remembers
+  // agreeing with it.
+  //
+  // Deliberately NOT deduplicated, for the reason its twin records: the unique
+  // constraint refuses a repeated (post, institution) pair and refused one
+  // before this change too. Swallowing it here would turn a loud constraint
+  // error into a silent difference between what was asked for and what landed.
+  await tx`
+    INSERT INTO awcms_blog_post_institutions (tenant_id, post_id, institution_id)
+    SELECT ${tenantId}, ${postId}, unnest(${tx.array([...institutionIds], "uuid")}::uuid[])
+  `;
 }
 
 export async function fetchPostInstitutionIds(

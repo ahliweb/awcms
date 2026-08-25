@@ -470,6 +470,13 @@ paths:
                   type: string
                 events:
                   type: array
+                  minItems: 1
+                  # The same page size /sync/pull returns, so a node cannot push
+                  # more in one batch than it can pull in one page. Over the
+                  # limit is REFUSED with VALIDATION_ERROR, never truncated: a
+                  # node treats an accepted batch as accepted in full and would
+                  # otherwise advance its cursor past events that never landed.
+                  maxItems: 500
                   items:
                     type: object
                     required:

@@ -360,6 +360,74 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BOUND ROUND — 25 August 2026: one API endpoint accepted an unbounded batch,
+  and a function that calls itself a twin of a fixed one kept the defect.**
+
+  A scan of `src/**/*.ts` for a tagged-template `await` inside a loop body found
+  **34 loops**. Most are bounded — by a code registry, by a declared cap
+  (`MAX_NODE_ACTIVATIONS = 128`, `MAX_SIDEBAR_ROWS`), or by a job's batch size —
+  and several were already batched or were scanner false positives. Two were
+  not, and they are different kinds of finding.
+
+  **`POST /api/v1/sync/push` had no count bound at all.** The validator checked
+  every event in the `events` array and never the array's length; the only limit
+  was `readTextBody(request, "large")` at 5 MB. A minimal event serialises to a
+  couple of hundred bytes, so one authenticated request could carry on the order
+  of **30,000 events** — each accepted one costing a compare-and-set on the
+  aggregate version plus an inbox INSERT, each conflicted one a conflict INSERT,
+  all sequential, all inside a single transaction that holds a connection and
+  keeps every aggregate row it has advanced locked until commit. The cost is not
+  the round trips; it is how long everything else waits behind them.
+
+  Meanwhile `/sync/pull` has clamped reads to 500 since it shipped. **The two
+  halves of one protocol had asymmetric bounds, and the unbounded half was the
+  one that writes.** `MAX_SYNC_PUSH_EVENTS` is now defined AS
+  `MAX_SYNC_PULL_EVENTS` rather than as a second `500`, and `pull.ts` imports
+  the same constant — the reason for the number is the relationship, and two
+  independent literals that agree today are how the asymmetry returns the next
+  time one is tuned. The test asserts the relationship, not the value.
+
+  REFUSED, never truncated (the #180 posture): a node treats an accepted batch
+  as accepted in full and would advance its cursor past events that never
+  landed. Reported as ONE error, not one per event — an error body carrying a
+  field error for each of 30,000 events is its own denial of service.
+
+  **The gate that made this honest.** Adding `maxItems: 500` to the OpenAPI
+  schema reddened `openapi-bundle.test.ts`, which freezes every pre-migration
+  path. The allow-list it wanted the entry in is called
+  `INTENTIONALLY_EVOLVED_PATHS` and its two existing entries both read
+  "backward-compatible". This one is not: it is document-additive but a genuine
+  NARROWING for a caller, and the entry says so. A frozen-contract test earns
+  its keep exactly here — not by blocking the change, but by refusing to let it
+  be filed under the wrong description.
+
+  **And the second finding, which is about how sibling defects survive.**
+  `syncPostInstitutionAssignments` issued one INSERT per institution. Its own
+  docstring says it is "exactly like `syncPostTermAssignments`" — and it was, in
+  contract and not in cost. The term path was flattened to two statements in the
+  PERFORMANCE ROUND when `blog:legacy:import` made a 23,906-article archive its
+  caller; this path, which the SAME importer drives through the SAME post
+  payload, kept the loop. It now uses the same `DELETE` + `INSERT ... unnest`.
+
+  Worth keeping: **a sibling that advertises itself as a sibling is the easiest
+  kind of defect to miss**, because whoever fixed the first one had already read
+  the second and remembers agreeing with it. The docstring that should have led
+  a reader there is the very thing that made it feel already handled.
+
+  Its budget is a SEPARATE file from the term one, deliberately: two budgets in
+  one file go green the moment either regresses and the other absorbs it. And
+  the mutation proof shows why the fixture must exceed the budget — restoring
+  the loop reddens the ten-institution case and leaves the one-institution case
+  passing, because `1 + 1 = 2` either way.
+
+  **`replaceMenuItems` has the same shape and was deliberately NOT changed.** It
+  carries a self-referencing FK (the loop inserts roots before children on
+  purpose) and its callers depend on the order of its `RETURNING`, which
+  Postgres does not specify. Those are contract questions, not a mechanical
+  substitution. Recorded with the full triage in **#715**, which also carries
+  the sites not yet read — the backfill jobs are the ones worth taking together,
+  since they iterate TENANTS at the outer level and their cost is a product.
+
 - **DIRECTION ROUND — 25 August 2026: the enforcement gate asked its question
   one way round, and the missing direction is the one with the dead endpoint
   behind it.** Recorded as open by the REGISTER ROUND below; closed here.
