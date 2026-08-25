@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:4352dc5113fe67a0ba92ff786cc3d12b67cde5cac30734aec721e9e2b035f4df -->
+<!-- i18n-source-hash: sha256:82ce9e2bfc81bb41c8780ddc983e71c1256fc3a799f2198418c26f084b2e3637 -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,39 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **#599 SUDAH DIPECAH — 25 Agustus 2026. Rekomendasi PUTARAN BENTUK
+  dijalankan, dan ini mencatat hasilnya supaya rekomendasi itu tidak dibaca
+  lagi sebagai masih-tertunda.**
+
+  PUTARAN BENTUK di bawah ditutup dengan: "pecah #599 alih-alih menahan satu
+  issue pada artefaknya yang paling lambat. Bentuk 1 plus tiga aturan statis
+  adalah peta yang siap cutover hari ini." Sudah dikerjakan:
+
+  - **#599, diganti judulnya** — "Cutover 301 SeputarBorneo: jalankan peta
+    artikel + tiga aturan halaman statis (kodenya sudah ada; sisanya artefak)".
+    Ketiga keluhan ASLINYA — tak ada kolom id legacy, tak ada impor redirect
+    massal, badan CKEditor tak bisa disimpan — semuanya SUDAH DIBANGUN
+    (`sql/138`, `blog:legacy:redirects:import`, `legacy-html-conversion.ts`),
+    dan itulah sebabnya judul lamanya menyesatkan. Yang tersisa adalah
+    menjalankannya: peta artikel, tiga aturan path-eksak yang diketikkan ke
+    `awcms_seo_redirects`, dan crawl pra-cutover terhadap URL sitemap yang
+    hidup.
+  - **#711, baru** — bentuk rubrik (2 dan 3) dan bentuk pencarian (4). Dua
+    pemblokir, keduanya di luar repo ini: daftar rubrik butuh data yang tidak
+    dimiliki salinan kerja (`seputa58_sbb.sql` 0 byte), dan rute TUJUAN dirender
+    oleh `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — pertanyaan kontrak
+    lintas-repo lebih dulu, baru pertanyaan impor. Term juga tidak punya kolom
+    provenance, jadi tidak ada yang bisa diungkapkan `--path-template`.
+
+  **Yang sebenarnya dilindungi oleh pemecahan ini.** Bentuk 3 adalah catch-all
+  dua segmen telanjang, jadi ia keluarga yang akan dijatuhkan dalam jumlah
+  TERBESAR oleh peta yang dibangun dari bentuk-bentuk yang DISEBUT — secara
+  senyap. Menahannya di issue yang sama dengan paruh yang siap cutover justru
+  yang akan membuat cutover-nya berangkat sambil mengira dirinya lengkap.
+  Terpisah dari itu, `cari_berita/*.html` sama sekali TIDAK boleh 301 ke konten
+  — query sembarang tidak punya satu tujuan yang benar — dan itu keputusan yang
+  ditulis di #711, bukan sesuatu yang diturunkan dari peta.
+
 - **PUTARAN SAPUAN — 25 Agustus 2026: sapuan terjadwal berbiaya konstan PER
   POST, dan indeks yang putaran sebelumnya tinggalkan sebagai tugas pengukuran
   ternyata TIDAK perlu diubah. Kedua paruh itu sama-sama hasil.**
@@ -601,7 +634,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   Direkomendasikan: PECAH #599 alih-alih menahan satu issue pada artefak
   terlambatnya. Bentuk 1 plus tiga aturan statis sudah menjadi peta siap-cutover
-  hari ini.
+  hari ini. **Dikerjakan 25 Agustus 2026 — lihat entri di puncak bagian ini.**
 
 - **PUTARAN LEDGER — 24 Agustus 2026: 121 endpoint MENOLAK pengguna tenant
   TANPA MENCATAT bahwa mereka melakukannya.**
