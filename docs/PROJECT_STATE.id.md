@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:46dd3bc5e40012e45a78318f4f7c93c4efb16248a3d0840d0de8af462d755f96 -->
+<!-- i18n-source-hash: sha256:a0a76a46d1a4c0b31a6cea3b10fe1b065c06ae3336b1fc3e003226be4557c057 -->
 
 # AWCMS — Project State & Continuation
 
@@ -115,7 +115,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ADR                                | **0000**–**0113** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **58** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -359,6 +359,61 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN SEAM — 26 Agustus 2026: tiga gerbang hanya membaca paruh Inggris,
+  dan gerbang keempat sama sekali tidak punya PEMANGGIL.**
+
+  Tindak lanjut yang dituntut audit #728. Kelasnya tak pernah "blok ter-generate
+  di mirror" — kelasnya **setiap gerbang yang membaca berkas Inggris lalu
+  berhenti**, dan kedua paruhnya selalu masing-masing benar tentang sisinya
+  sendiri.
+
+  **76 berkas mirror membuat klaim tentang KODE yang tak dibaca apa pun.**
+  `skills:check` ada justru karena skill yang salah lebih buruk daripada dokumen
+  basi — agen MENGIKUTI skill — dan ia mem-glob `SKILL.md` serta
+  `src/modules/*/README.md`. Jadi 55 `SKILL.id.md` dan 21 `README.id.md` modul
+  bisa menyebut target `bun run` yang tidak ada, atau path yang sudah diganti
+  nama, dengan setiap gerbang hijau. Kedua korpus diperlebar, dan tiga
+  kerusakan nyata kini menyebut mirror-nya dengan tepat.
+
+  **Draf pertamanya MERUSAK berkas INGGRIS, dan itu bagian yang layak
+  disimpan.** `checkCitedPaths` memakai argumen pertamanya SEKALIGUS sebagai
+  label laporan DAN sebagai kunci `ASPIRATIONAL_SKILLS`/`subjectModuleKey`.
+  Mengoper label berhias mematikan kedua pengecualian itu dan mengubah gerbang
+  hijau menjadi 19 kegagalan PALSU pada berkas yang baik-baik saja. Identitas
+  dan label kini parameter terpisah, dan sebuah test menegakkan bahwa
+  pengecualiannya bertahan saat label diberikan. **Label BUKAN identitas**, dan
+  mencampurnya tak terlihat sampai pengecualian yang diam-diam ia matikan
+  justru yang sedang diuji.
+
+  **Indeks ADR mirror kehilangan ADR-0100 sama sekali** — 113 baris di Inggris,
+  112 di mirror. `check-docs.mjs` bahkan menjelaskan kebutaannya sendiri:
+  _"mirror Indonesianya dipegang oleh `i18n-source-hash`, bukan oleh salinan
+  kedua gerbang ini."_ Hash itu menjawab "apakah Inggrisnya berubah sejak
+  diterjemahkan?", bukan "apakah mirror-nya mendaftar SETIAP ADR?".
+
+  **Yang ditegakkan CAKUPAN, bukan CARA MENAUT**, dan bedanya menanggung beban
+  alih-alih rewel. Mirror-nya menaut berkas INGGRIS untuk 98 barisnya dan
+  salinan `.id.md` untuk sisanya, padahal mirror-nya ada untuk semuanya.
+  Menuntut satu bentuk akan mengubah gerbang cakupan yang nyata menjadi
+  tuntutan pemformatan-ulang 98 baris — dan kebisingan itulah cara sebuah
+  gerbang dimatikan orang. Mirror boleh menaut salinan mana pun dan tak boleh
+  MELEWATKAN sebuah ADR; indeks Inggris tetap wajib menaut Inggris, atau sebuah
+  baris bisa diam-diam menunjuk terjemahan dan lolos.
+
+  **Dan satu gerbang tak punya pemanggil.** `memory:docs:check` bukan gerbang
+  bertitik-buta — target-nya ADA, tidak ada di `scripts.check` MAUPUN workflow
+  mana pun, jadi ia tak pernah berjalan sekali pun. Ia sedang GAGAL. Headernya
+  sendiri mendokumentasikan skip aman-CI _"supaya gerbang ini menangkap drift di
+  device yang memang punya memory alih-alih memaksa CI memilikinya"_ — catatan
+  desain yang hanya masuk akal bagi sesuatu yang dimaksudkan untuk dikawatkan.
+  Kini ia dikawatkan, kedua paruhnya terverifikasi: snapshot rusak keluar 1,
+  `HOME` kosong melewati dan keluar 0. Rantainya 58 → **59**.
+
+  Bentuk yang bisa dipindahkan: **cari gerbang yang membaca SATU dari
+  sepasang.** Tiga dari keempatnya ditemukan dengan bertanya, atas tiap `:check`
+  di rantai, "apakah ada berkas KEDUA yang memuat klaim yang sama?" — bukan
+  karena salah satunya gagal.
 
 - **PUTARAN MIRROR — 26 Agustus 2026: blok yang berbunyi "JANGAN diedit tangan"
   ternyata tidak ada yang menghasilkannya, dan gerbang yang seharusnya

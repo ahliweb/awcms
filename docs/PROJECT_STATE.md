@@ -115,7 +115,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | ADR                               | **0000**–**0113** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
-| Gates                             | **58** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **59** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -359,6 +359,56 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **SEAM ROUND — 26 August 2026: three gates read only the English half, and a
+  fourth gate had no caller at all.**
+
+  The follow-up #728's audit demanded. The class was never "generated blocks in
+  mirrors" — it is **every gate that reads the English file and stops**, and the
+  two halves are always each correct about their own side.
+
+  **76 mirror files were making claims about code that nothing read.**
+  `skills:check` exists precisely because a wrong skill is worse than a stale
+  doc — an agent FOLLOWS a skill — and it globbed `SKILL.md` and
+  `src/modules/*/README.md`. So 55 `SKILL.id.md` and 21 module `README.id.md`
+  could name a `bun run` target that does not exist, or a path that was renamed,
+  with every gate green. Both corpora are widened, and three real corruptions
+  now name the exact mirror.
+
+  **The first draft of that broke the ENGLISH files, and that is the part worth
+  keeping.** `checkCitedPaths` used its first argument as BOTH the report label
+  AND the key for `ASPIRATIONAL_SKILLS`/`subjectModuleKey`. Passing a decorated
+  label defeated both exemptions and turned a green gate into 19 false failures
+  on files that were fine. Identity and label are separate parameters now, and a
+  test asserts the exemption survives a supplied label. **A label is not an
+  identity**, and conflating them is invisible until the exemption it silently
+  disables is the thing under test.
+
+  **The ADR index mirror was missing ADR-0100 outright** — 113 rows in English,
+  112 in the mirror. `check-docs.mjs` explained its own blindness: _"Its
+  Indonesian mirror is held to it by `i18n-source-hash`, not by a second copy of
+  this gate."_ That hash answers "has the English changed since translation?",
+  not "does the mirror list every ADR?".
+
+  **Coverage is asserted; LINKING is not**, and the distinction was load-bearing
+  rather than pedantic. The mirror links the English file for 98 of its rows and
+  the `.id.md` copy for the rest, though a mirror exists for all of them.
+  Demanding one form would have turned a real coverage gate into a 98-row
+  reformatting demand — and that noise is how a gate gets switched off. The
+  mirror may link either copy and may not omit an ADR; the English index must
+  still link English, or a row could quietly point at the translation and pass.
+
+  **And one gate had no caller.** `memory:docs:check` is not a gate with a blind
+  spot — the target existed, was in NEITHER `scripts.check` nor any workflow,
+  and had therefore never run once. It was failing. Its own header documents a
+  CI-safe skip _"so this gate catches drift on a device that has memory rather
+  than forcing CI to have one"_ — a design note that only makes sense for
+  something meant to be wired in. Now it is, both halves verified: a corrupted
+  snapshot exits 1, an empty `HOME` skips and exits 0. The chain is 58 → **59**.
+
+  The transferable shape: **look for the gate that reads one of a pair.** Three
+  of these four were found by asking, of every `:check` in the chain, "is there
+  a second file holding the same claim?" — not by any of them failing.
 
 - **MIRROR ROUND — 26 August 2026: a block that says "do not hand-edit" had
   nothing generating it, and the gate that should have noticed was asking a

@@ -19,7 +19,8 @@ import {
   classifyLink,
   splitTarget,
   parseComposeServiceNames,
-  checkComposeServiceNames
+  checkComposeServiceNames,
+  checkAdrIndexCoverage
 } from "../scripts/lib/docs-checks.mjs";
 
 /** @param {string} s */
@@ -549,5 +550,82 @@ describe("checkComposeServiceNames", () => {
   test("build --env-file: -f override tetap khusus subcommand logs, tidak bocor ke subcommand lain", () => {
     const md = "`docker compose build --env-file .env.ci app`";
     expect(checkComposeServiceNames("f.md", md, services)).toEqual([]);
+  });
+});
+
+describe("checkAdrIndexCoverage covers BOTH indexes (#729)", () => {
+  const FILES = [
+    "0000-template.md",
+    "0100-portable-text-is-the-canonical-body-format.md",
+    "0100-portable-text-is-the-canonical-body-format.id.md",
+    "0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md",
+    "README.md"
+  ];
+
+  test("the English index must link the English copy", () => {
+    const listed =
+      "| [0100](0100-portable-text-is-the-canonical-body-format.md) | x |\n| [0113](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md) | y |";
+
+    expect(checkAdrIndexCoverage(FILES, "docs/adr/README.md", listed)).toEqual(
+      []
+    );
+  });
+
+  test("an English index linking only the TRANSLATION does not count", () => {
+    // Otherwise an English row could quietly point at the mirror and pass.
+    const mirrorOnly =
+      "| [0100](0100-portable-text-is-the-canonical-body-format.id.md) | x |\n| [0113](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md) | y |";
+    const problems = checkAdrIndexCoverage(
+      FILES,
+      "docs/adr/README.md",
+      mirrorOnly
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.message).toContain("0100");
+  });
+
+  test("the mirror may link EITHER copy — linking is not coverage", () => {
+    // `docs/adr/README.id.md` links the English file for most of its rows and
+    // the `.id.md` mirror for the rest. Demanding one form would turn a
+    // coverage gate into a 98-row reformatting demand, and that noise is how a
+    // gate gets switched off.
+    const mixed =
+      "| [0100](0100-portable-text-is-the-canonical-body-format.id.md) | x |\n| [0113](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md) | y |";
+
+    expect(
+      checkAdrIndexCoverage(FILES, "docs/adr/README.id.md", mixed, [
+        ".id.md",
+        ".md"
+      ])
+    ).toEqual([]);
+  });
+
+  test("a mirror that OMITS an ADR is caught — the defect this closes", () => {
+    // `docs/adr/README.id.md` was missing ADR-0100 entirely, and could not be
+    // caught: the gate read only the English index, and the i18n hash answers
+    // "has the English changed since translation?" rather than "does the mirror
+    // list every ADR?".
+    const missing0100 =
+      "| [0113](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md) | y |";
+    const problems = checkAdrIndexCoverage(
+      FILES,
+      "docs/adr/README.id.md",
+      missing0100,
+      [".id.md", ".md"]
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.file).toBe("docs/adr/README.id.md");
+    expect(problems[0]?.message).toContain("0100");
+  });
+
+  test("a `.id.md` ADR file is never demanded as a separate ADR row", () => {
+    // ADR-0097: the mirror is the same decision, not a second one.
+    const both =
+      "| [0100](0100-portable-text-is-the-canonical-body-format.md) | x |\n| [0113](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md) | y |";
+    const problems = checkAdrIndexCoverage(FILES, "docs/adr/README.md", both);
+
+    expect(problems.map((p) => p.message).join(" ")).not.toContain(".id.md");
   });
 });

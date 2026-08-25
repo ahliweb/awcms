@@ -175,7 +175,8 @@ export function checkCitedRunTargets(
   skill: string,
   citedTargets: readonly string[],
   packageScripts: ReadonlySet<string>,
-  skillIsAspirational: boolean
+  skillIsAspirational: boolean,
+  label: string = skill
 ): SkillProblem[] {
   if (skillIsAspirational) {
     return [];
@@ -184,7 +185,7 @@ export function checkCitedRunTargets(
   return citedTargets
     .filter((target) => !isKnownRunTarget(target, packageScripts))
     .map((target) => ({
-      skill,
+      skill: label,
       message:
         `tells the reader to run \`bun run ${target}\`, which is not in package.json and is not ` +
         "listed as a deferred target in `scripts/README.md` §Deferred. Name the real mechanism, or " +
@@ -358,7 +359,8 @@ export function adminPageExists(
 export function checkCitedAdminPaths(
   skill: string,
   citedPaths: readonly string[],
-  fileExists: (candidate: string) => boolean
+  fileExists: (candidate: string) => boolean,
+  label: string = skill
 ): SkillProblem[] {
   const missing = citedPaths.filter(
     (cited) => !adminPageExists(cited, fileExists)
@@ -370,7 +372,7 @@ export function checkCitedAdminPaths(
 
   return [
     {
-      skill,
+      skill: label,
       message:
         `names admin screens that do not exist: ${missing.join(", ")}. ` +
         "Point at the page that ships (check `src/pages/admin/`), or — if the " +
@@ -423,7 +425,13 @@ export function checkCitedPaths(
   skill: string,
   citedPaths: readonly string[],
   moduleIsLive: boolean,
-  pathExists: (candidate: string) => boolean
+  pathExists: (candidate: string) => boolean,
+  /**
+   * What a failure is REPORTED as. Separate from `skill`, which stays the
+   * identity used for `ASPIRATIONAL_SKILLS` and `subjectModuleKey` — passing a
+   * decorated label as the key silently defeats both exemptions (Issue #729).
+   */
+  label: string = skill
 ): SkillProblem[] {
   const missing = citedPaths.filter((cited) => !pathExists(cited));
 
@@ -433,7 +441,7 @@ export function checkCitedPaths(
 
   if (moduleIsLive) {
     return missing.map((cited) => ({
-      skill,
+      skill: label,
       message:
         `cites \`${cited}\`, which does not exist — and \`${subjectModuleKey(skill)}\` IS in the module ` +
         `registry, so this skill describes shipped code. Point it at the real path or delete the claim.`
@@ -443,7 +451,7 @@ export function checkCitedPaths(
   if (!(skill in ASPIRATIONAL_SKILLS)) {
     return [
       {
-        skill,
+        skill: label,
         message:
           `cites ${missing.length} path(s) that do not exist (e.g. \`${missing[0]}\`) and is not listed in ` +
           `ASPIRATIONAL_SKILLS. If it describes code worth building or code that was removed, add it there ` +
@@ -459,12 +467,13 @@ export function checkCitedPaths(
 export function checkCitedAdrs(
   skill: string,
   citedAdrs: readonly string[],
-  knownAdrNumbers: ReadonlySet<string>
+  knownAdrNumbers: ReadonlySet<string>,
+  label: string = skill
 ): SkillProblem[] {
   return citedAdrs
     .filter((number) => !knownAdrNumbers.has(number))
     .map((number) => ({
-      skill,
+      skill: label,
       message: `cites ADR-${number}, which has no file in \`${ADR_ROOT}/\`.`
     }));
 }
@@ -478,13 +487,40 @@ export function checkCitedAdrs(
 export async function moduleReadmePaths(): Promise<string[]> {
   const files: string[] = [];
 
-  for await (const file of new Bun.Glob("src/modules/*/README.md").scan({
+  // `README.id.md` as well as `README.md` (Issue #729). The mirror makes the
+  // same claims about the same module and was read by nothing, so it could
+  // point at an admin screen that no longer exists while every gate stayed
+  // green. The glob covers both because `*` matches the `.id` segment too.
+  for await (const file of new Bun.Glob("src/modules/*/README*.md").scan({
     cwd: process.cwd()
   })) {
     files.push(file);
   }
 
   return files.sort();
+}
+
+/**
+ * Every language copy of one skill's `SKILL.md`, English first (Issue #729).
+ *
+ * `skills:check` exists because a wrong skill is worse than a stale doc — an
+ * agent FOLLOWS a skill. It read `SKILL.md` only, so all 55 `SKILL.id.md`
+ * mirrors could cite a `bun run` target that does not exist, or a path that was
+ * renamed, and nothing would say so.
+ *
+ * The English file is required; a mirror is checked when present and never
+ * demanded, because which skills carry a translation is a separate decision
+ * from whether the ones that do are correct.
+ */
+export function skillSourcePaths(
+  skillsRoot: string,
+  skill: string,
+  exists: (candidate: string) => boolean = existsSync
+): string[] {
+  return [
+    path.join(skillsRoot, skill, "SKILL.md"),
+    path.join(skillsRoot, skill, "SKILL.id.md")
+  ].filter(exists);
 }
 
 async function main(): Promise<void> {
@@ -511,48 +547,64 @@ async function main(): Promise<void> {
     .sort();
 
   for (const skill of skillDirs) {
-    const file = path.join(SKILLS_ROOT, skill, "SKILL.md");
+    const sources = skillSourcePaths(SKILLS_ROOT, skill);
 
-    if (!existsSync(file)) {
+    if (!existsSync(path.join(SKILLS_ROOT, skill, "SKILL.md"))) {
       problems.push({ skill, message: "has no SKILL.md." });
       continue;
     }
 
-    const source = await readFile(file, "utf8");
     const moduleIsLive = liveModuleKeys.has(subjectModuleKey(skill));
 
-    // Rules 1 and 4 read the body with marked aspirational passages removed;
-    // rule 2 reads the WHOLE body on purpose. An ADR citation is checkable no
-    // matter which passage it sits in — a target spec that cites ADR-9999 is
-    // still pointing its reader at a decision nobody can read.
-    const gated = stripAspirationalBlocks(source);
+    // Every language copy, same rules. The label names the FILE rather than the
+    // skill once a mirror exists, so a failure says which copy is wrong instead
+    // of sending the reader to diff two files by eye.
+    for (const file of sources) {
+      const label =
+        sources.length > 1 ? `${skill} (${path.basename(file)})` : skill;
+      const source = await readFile(file, "utf8");
 
-    problems.push(
-      ...checkCitedPaths(
-        skill,
-        extractCitedSourcePaths(gated),
-        moduleIsLive,
-        existsSync
-      ),
-      ...checkCitedAdrs(skill, extractCitedAdrNumbers(source), adrNumbers),
-      ...checkCitedRunTargets(
-        skill,
-        extractCitedRunTargets(gated),
-        packageScripts,
-        skill in ASPIRATIONAL_SKILLS
-      )
-    );
+      // Rules 1 and 4 read the body with marked aspirational passages removed;
+      // rule 2 reads the WHOLE body on purpose. An ADR citation is checkable no
+      // matter which passage it sits in — a target spec that cites ADR-9999 is
+      // still pointing its reader at a decision nobody can read.
+      const gated = stripAspirationalBlocks(source);
 
-    // Rule 5. Aspirational skills are exempt for the same reason rule 1 exempts
-    // them: their subject does not exist, so neither do its screens.
-    if (!(skill in ASPIRATIONAL_SKILLS)) {
       problems.push(
-        ...checkCitedAdminPaths(
+        ...checkCitedPaths(
           skill,
-          extractCitedAdminPaths(stripHistoricalBlocks(gated)),
-          existsSync
+          extractCitedSourcePaths(gated),
+          moduleIsLive,
+          existsSync,
+          label
+        ),
+        ...checkCitedAdrs(
+          skill,
+          extractCitedAdrNumbers(source),
+          adrNumbers,
+          label
+        ),
+        ...checkCitedRunTargets(
+          skill,
+          extractCitedRunTargets(gated),
+          packageScripts,
+          skill in ASPIRATIONAL_SKILLS,
+          label
         )
       );
+
+      // Rule 5. Aspirational skills are exempt for the same reason rule 1
+      // exempts them: their subject does not exist, so neither do its screens.
+      if (!(skill in ASPIRATIONAL_SKILLS)) {
+        problems.push(
+          ...checkCitedAdminPaths(
+            skill,
+            extractCitedAdminPaths(stripHistoricalBlocks(gated)),
+            existsSync,
+            label
+          )
+        );
+      }
     }
   }
 

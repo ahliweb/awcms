@@ -773,7 +773,28 @@ export const ADR_FILE_PATTERN = /^(\d{4})-.+\.md$/;
  * @param {string} indexContent - the index markdown.
  * @returns {Problem[]}
  */
-export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
+export function checkAdrIndexCoverage(
+  adrFileNames,
+  indexFile,
+  indexContent,
+  /**
+   * Which link forms count as "listed" (Issue #729).
+   *
+   * COVERAGE is the question this function is named for: does the index carry a
+   * row for every ADR? Which language copy that row LINKS is a separate,
+   * editorial question, and this gate deliberately does not decide it.
+   *
+   * That distinction is load-bearing rather than pedantic. `docs/adr/README.id.md`
+   * links the ENGLISH file for 98 of its rows and the `.id.md` mirror for the
+   * rest, even though a mirror exists for all of them. Demanding one form would
+   * turn a real coverage gate into a 98-row reformatting demand, and the noise
+   * would be the reason somebody turns it off.
+   *
+   * `.md` alone for the English index — accepting `.id.md` there would let an
+   * English row link the translation and still pass.
+   */
+  linkSuffixes = [".md"]
+) {
   /** @type {Problem[]} */
   const problems = [];
   for (const name of adrFileNames) {
@@ -788,7 +809,11 @@ export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
     if (match[1] === "0000") continue; // the template is intentionally not indexed
     // The index links each ADR by filename, e.g. `[0027](0027-...md)` — a plain
     // substring check on the filename is robust to column re-alignment.
-    if (!indexContent.includes(name)) {
+    const accepted = linkSuffixes.map((suffix) =>
+      name.replace(/\.md$/, suffix)
+    );
+
+    if (!accepted.some((linked) => indexContent.includes(linked))) {
       problems.push({
         file: indexFile,
         line: 1,
