@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:808f8cb71620561e7c0502410cad7ac5b7b961101f34759c3b5558d80e43c113 -->
+<!-- i18n-source-hash: sha256:f5f916e6d5ecd048b19eca3f149152fa58b93195073ea8ed4b2bb6a614137aba -->
 
 # AWCMS — Project State & Continuation
 
@@ -360,6 +360,62 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN NAMA — 25 Agustus 2026: jalur tulis N+1 ketiga ditutup, dan alasan
+  ia tampak sulit adalah cacat di TRIASE SAYA SENDIRI, bukan di kodenya.**
+
+  PUTARAN BATAS di bawah menunda satu situs dengan alasan tertulis. Kedua paruh
+  alasan itu salah, dan CARA salahnya justru intinya.
+
+  **Ia disebut `replaceMenuItems`. Fungsi itu tidak ada.** Yang asli
+  `syncMenuItems`. Namanya ditulis dari INGATAN, bukan dibaca dari signature-nya,
+  dan menyebar ke sebuah issue GitHub, badan PR yang sudah ter-merge, changeset
+  yang sudah ter-merge, dan KEDUA salinan dokumen ini sebelum ada yang
+  menangkapnya — karena tak ada yang memeriksa nama fungsi yang hanya muncul di
+  prosa. Ini persis aturan yang sudah tercatat, "kutip BERKAS, bukan catatan
+  tentang berkas", dan kali ini catatannya milik saya sendiri sepuluh menit
+  sebelumnya.
+
+  **Dan "pemanggilnya bergantung pada urutan `RETURNING`" itu KELIRU.** Ia punya
+  dua pemanggil, dan `blog/menus/[id].ts` mengisi field respons yang SAMA dari
+  `syncMenuItems` (root-lalu-anak) ATAU dari `fetchMenuItems`
+  (`ORDER BY sort_order`) hanya bergantung apakah request mengirim `items`.
+  Endpoint-nya SUDAH menjawab dalam dua urutan berbeda, jadi tak ada klien yang
+  bisa bergantung pada salah satunya. Klaim itu tak pernah diverifikasi; ia
+  DISIMPULKAN dari adanya klausa `RETURNING`.
+
+  Yang tersisa setelah keduanya diperiksa: **tak ada yang butuh keputusan.**
+
+  - FK-diri itu `NOT DEFERRABLE`, dan foreign key `NOT DEFERRABLE` diperiksa
+    trigger AFTER ROW yang menyala di akhir STATEMENT, bukan sesudah tiap baris.
+    Diverifikasi terhadap Postgres nyata dengan anak diletakkan PERTAMA — susunan
+    yang WAJIB gagal bila pemeriksaannya per-baris. Jadi satu INSERT multi-baris
+    aman apa pun urutan di dalamnya.
+  - `RETURNING` sama sekali tak diperlukan. `MenuItemInput` membawa ketujuh
+    kolomnya, `tenantId`/`menuId` adalah parameter, tabelnya tak punya trigger
+    pengguna, dan tak ada `DEFAULT` yang berlaku pada kolom yang selalu diberi
+    nilai — jadi klausa itu membaca balik persis apa yang baru saja dikirim.
+
+  Kini dua statement. Urutan root-sebelum-anak dipertahankan, tetapi
+  docstring-nya tak lagi mengklaim menanggung beban: ia dipertahankan karena
+  itulah yang DIKEMBALIKAN fungsi ini, dan mengubahnya berarti perubahan API
+  senyap yang menumpang pada perbaikan performa.
+
+  **Satu tes di draf pertama menegakkan hal yang SALAH, dan ia LOLOS.** Kasus
+  bernama "anak diletakkan SEBELUM induknya tetap mendarat" mengklaim kode lama
+  "tak mungkin bisa melakukan ini". Bisa: `syncMenuItems` menyaring root dan anak
+  sendiri, jadi urutan pemanggil tak pernah sampai ke INSERT dan kasus itu lolos
+  di loop per-item juga. Hijau, dan tak membuktikan apa pun yang diakuinya.
+  Ditulis ulang agar menegakkan yang benar-benar dicakupnya — bahwa urutan input
+  tak mengubah apa yang mendarat maupun apa yang dikembalikan — dan header-nya
+  kini menyatakan terang-terangan bahwa properti FK itu TIDAK bisa direproduksi
+  lewat fungsi ini, supaya pembaca berikutnya tak menyalahartikan kasus itu
+  sebagai buktinya.
+
+  Kedua properti nyata terbukti-mutasi: membuang satu field dari batch sehingga
+  baris tersimpan menyimpang dari input memerahkan "apa yang DIKEMBALIKAN adalah
+  isi tabel" (pemeriksaan yang membuat membangun jawaban dari input aman sama
+  sekali), dan mengembalikan loop per-item memerahkan anggarannya.
+
 - **PUTARAN BATAS — 25 Agustus 2026: satu endpoint API menerima batch TANPA
   batas, dan fungsi yang menyebut dirinya kembaran fungsi yang sudah diperbaiki
   justru menyimpan cacatnya.**
@@ -427,13 +483,13 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   meninggalkan kasus satu-institusi tetap lolos, karena `1 + 1 = 2` di kedua
   bentuk.
 
-  **`replaceMenuItems` berbentuk sama dan sengaja TIDAK diubah.** Ia membawa FK
-  yang menunjuk dirinya sendiri (loop-nya menyisipkan root sebelum child dengan
-  sengaja) dan pemanggilnya bergantung pada urutan `RETURNING`-nya, yang tidak
-  dijamin Postgres. Itu pertanyaan KONTRAK, bukan substitusi mekanis. Dicatat
-  bersama triase lengkapnya di **#715**, yang juga memuat situs yang belum
-  dibaca — job backfill paling layak diambil bersama, karena mereka mengiterasi
-  TENANT di lapis terluar sehingga biayanya adalah PERKALIAN.
+  Instans ketiga, `syncMenuItems`, ditunda di sini dan ditutup oleh PUTARAN NAMA
+  di atas. **Dua hal yang semula dinyatakan entri ini tentangnya SALAH**, dan
+  keduanya dikoreksi di sana: ia dinamai `replaceMenuItems`, fungsi yang tidak
+  ada, dan pemanggilnya disebut bergantung pada urutan `RETURNING`-nya. Triase
+  lengkap situs yang belum dibaca ada di **#715** — job backfill paling layak
+  diambil bersama, karena mereka mengiterasi TENANT di lapis terluar sehingga
+  biayanya adalah PERKALIAN.
 
 - **PUTARAN ARAH — 25 Agustus 2026: gerbang enforcement menanyakan
   pertanyaannya SATU arah saja, dan arah yang hilang justru yang berakibat

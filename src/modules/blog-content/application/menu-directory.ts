@@ -165,9 +165,39 @@ export async function softDeleteMenu(
  * above, so `parentItemId` can only ever resolve against ids the caller
  * itself provides in this same payload (`domain/menu-policy.ts`'s
  * `validateMenuItemsInput` already checked every `parentItemId` resolves
- * within the batch and nests at most one level deep). Inserted
- * roots-before-children so a child's FK to its parent is always satisfied
- * by the time it's inserted.
+ * within the batch and nests at most one level deep).
+ *
+ * ## Cost: 2 queries, whatever the item count
+ *
+ * It was one `INSERT` per item — the third instance of the shape
+ * `syncPostTermAssignments` and `syncPostInstitutionAssignments` already had
+ * fixed, and the one that looked hardest because of the self-FK.
+ *
+ * The roots-before-children ordering was there so "a child's FK to its parent
+ * is always satisfied by the time it's inserted", which is true of separate
+ * statements and NOT the constraint it appears to be for one. The FK is
+ * `NOT DEFERRABLE`, and a `NOT DEFERRABLE` foreign key is checked by an AFTER
+ * ROW trigger that fires at the end of the STATEMENT, not after each row — so a
+ * single multi-row `INSERT` satisfies a child that references a parent in the
+ * same statement regardless of their order within it. Verified against a real
+ * Postgres with the child listed FIRST, which is the arrangement that must fail
+ * if the checking were per-row.
+ *
+ * The order is preserved anyway, because it is what this function RETURNS and
+ * changing that would be a silent API change riding along with a performance
+ * fix.
+ *
+ * ## Why the rows come from the input rather than from `RETURNING`
+ *
+ * Every column this statement writes is caller-supplied — `MenuItemInput`
+ * carries all seven, and `tenantId`/`menuId` are parameters. The table has no
+ * user triggers and no `DEFAULT` can apply to a column that is always given a
+ * value, so a `RETURNING` clause here reads back exactly what was just sent.
+ * Dropping it removes the only reason this function would have needed to care
+ * about the order `RETURNING` emits, which Postgres does not specify.
+ *
+ * The integration test asserts the returned views against a fresh read of the
+ * table, so "the input equals what landed" is checked rather than assumed.
  */
 export async function syncMenuItems(
   tx: Bun.SQL,
@@ -182,23 +212,62 @@ export async function syncMenuItems(
 
   const roots = items.filter((item) => item.parentItemId === null);
   const children = items.filter((item) => item.parentItemId !== null);
-  const inserted: BlogMenuItemRow[] = [];
+  const ordered = [...roots, ...children];
 
-  for (const item of [...roots, ...children]) {
-    const rows = (await tx`
-      INSERT INTO awcms_blog_menu_items
-        (id, tenant_id, menu_id, parent_item_id, label, link_type, target_id, url, sort_order)
-      VALUES (
-        ${item.id}, ${tenantId}, ${menuId}, ${item.parentItemId}, ${item.label},
-        ${item.linkType}, ${item.targetId}, ${item.url}, ${item.sortOrder}
-      )
-      RETURNING id, tenant_id, menu_id, parent_item_id, label, link_type, target_id, url, sort_order
-    `) as BlogMenuItemRow[];
-
-    inserted.push(rows[0]!);
+  if (ordered.length === 0) {
+    return [];
   }
 
-  return inserted.map(toItemView);
+  const rows = ordered.map((item, index) => ({
+    ordinal: index,
+    id: item.id,
+    tenant_id: tenantId,
+    menu_id: menuId,
+    parent_item_id: item.parentItemId,
+    label: item.label,
+    link_type: item.linkType,
+    target_id: item.targetId,
+    url: item.url,
+    sort_order: item.sortOrder
+  }));
+
+  // `jsonb_to_recordset` rather than `unnest`: this row has four nullable
+  // columns, and a Bun.SQL array cannot carry NULL — it writes the literal
+  // string `'null'` without throwing. JSON `null` maps to SQL NULL natively.
+  await tx`
+    INSERT INTO awcms_blog_menu_items
+      (id, tenant_id, menu_id, parent_item_id, label, link_type, target_id, url, sort_order)
+    SELECT entry.id, entry.tenant_id, entry.menu_id, entry.parent_item_id,
+           entry.label, entry.link_type, entry.target_id, entry.url,
+           entry.sort_order
+    FROM jsonb_to_recordset(${rows}::jsonb) AS entry (
+      ordinal integer,
+      id uuid,
+      tenant_id uuid,
+      menu_id uuid,
+      parent_item_id uuid,
+      label text,
+      link_type text,
+      target_id uuid,
+      url text,
+      sort_order integer
+    )
+    ORDER BY entry.ordinal
+  `;
+
+  return ordered.map((item) =>
+    toItemView({
+      id: item.id,
+      tenant_id: tenantId,
+      menu_id: menuId,
+      parent_item_id: item.parentItemId,
+      label: item.label,
+      link_type: item.linkType,
+      target_id: item.targetId,
+      url: item.url,
+      sort_order: item.sortOrder
+    })
+  );
 }
 
 export async function fetchMenuItems(
