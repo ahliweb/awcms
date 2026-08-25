@@ -36,9 +36,18 @@ describe("penulisnya benar-benar menulis kolomnya", () => {
     // …dan benar-benar sampai ke INSERT. Parameter yang diterima lalu diabaikan
     // adalah bug yang lulus setiap typecheck dan setiap test yang hanya
     // memanggilnya.
+    //
+    // Ejaannya berubah ketika penulis tunggal menjadi penulis BATCH: nilainya
+    // kini dirakit ke dalam satu parameter jsonb, bukan diinterpolasi langsung
+    // ke `VALUES`. Yang dijaga tetap sama — field-nya DIBACA dari input dan
+    // kolomnya DISEBUT di INSERT — tetapi test teks tidak bisa membuktikan
+    // barisnya. Sejak sekarang buktinya ada di
+    // `tests/integration/audit-log-writer.integration.test.ts`, yang membaca
+    // kedua kolom itu kembali dari tabel; yang di sini tinggal jaring cepat
+    // tanpa basis data, bukan satu-satunya saksi.
     expect(source).toContain("actor_tenant_id, delegated_grant_id");
-    expect(source).toContain("${input.actorTenantId ?? null}");
-    expect(source).toContain("${input.delegatedGrantId ?? null}");
+    expect(source).toContain("input.actorTenantId ?? null");
+    expect(source).toContain("input.delegatedGrantId ?? null");
   });
 
   test("decision log menerima DAN meneruskan `delegatedGrantId`", async () => {

@@ -1,10 +1,14 @@
 import { enqueueModuleContentPurge } from "../../../lib/edge-cache/content-purge";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
-import { recordAuditEvent } from "../../logging/application/audit-log";
-import { fetchPostTermIds } from "./blog-taxonomy-directory";
+import {
+  recordAuditEvent,
+  recordAuditEvents,
+  type AuditEventInput
+} from "../../logging/application/audit-log";
+import { fetchPostTermIdsForPosts } from "./blog-taxonomy-directory";
 import { fetchBlogSettings } from "./blog-settings-directory";
-import { evaluateContentQualityChecklistForContent } from "./content-quality-checklist-gate";
+import { evaluateContentQualityChecklistForBatch } from "./content-quality-checklist-gate";
 import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 import type { SocialPublishingPort } from "../../_shared/ports/social-publishing-port";
 
@@ -141,64 +145,94 @@ export async function publishDueScheduledPosts(
       }
 
       const blogSettings = await fetchBlogSettings(tx, tenantId);
-      const publishedPostIds: string[] = [];
-      const blockedPostIds: string[] = [];
 
-      for (const post of due) {
-        const termIds = await fetchPostTermIds(tx, tenantId, post.id);
-        const evaluateChecklist = () =>
-          evaluateContentQualityChecklistForContent(
-            tx,
-            tenantId,
-            "post",
-            {
-              title: post.title,
-              slug: post.slug,
-              excerpt: post.excerpt,
-              metaDescription: post.meta_description,
-              contentText: post.content_text,
-              contentJson: post.content_json,
-              featuredMediaId: post.featured_media_id,
-              seoImageMediaId: post.seo_image_media_id
-            },
-            termIds.length,
-            mediaPort,
-            blogSettings.contentQualityChecklistPolicy,
-            {
-              socialPreviewFallback: {
-                tenantFallbackImageMediaId:
-                  blogSettings.socialPreviewFallbackImageMediaId,
-                contentImageFallbackEnabled:
-                  blogSettings.socialPreviewContentImageFallbackEnabled
-              }
+      // One query for the whole batch, not one per post. The read side of this
+      // relationship was batched long ago (`fetchPostTermIdsForPosts` — "three
+      // round trips per page, not fifty-one"); this sweep was still asking per
+      // post, which at the batch bound is two hundred round trips on the one
+      // reserved `maintenance` connection the job holds for its duration. A
+      // post with no assignments is absent from the map, not an error: the
+      // checklist's term rule reads the count, and zero IS the count.
+      const termIdsByPost = await fetchPostTermIdsForPosts(
+        tx,
+        tenantId,
+        due.map((post) => post.id)
+      );
+
+      const checklistItems = due.map((post) => ({
+        key: post.id,
+        content: {
+          title: post.title,
+          slug: post.slug,
+          excerpt: post.excerpt,
+          metaDescription: post.meta_description,
+          contentText: post.content_text,
+          contentJson: post.content_json,
+          featuredMediaId: post.featured_media_id,
+          seoImageMediaId: post.seo_image_media_id
+        },
+        termCount: (termIdsByPost.get(post.id) ?? []).length
+      }));
+
+      const evaluateChecklists = (
+        items: readonly (typeof checklistItems)[number][]
+      ) =>
+        evaluateContentQualityChecklistForBatch(
+          tx,
+          tenantId,
+          "post",
+          items,
+          mediaPort,
+          blogSettings.contentQualityChecklistPolicy,
+          {
+            socialPreviewFallback: {
+              tenantFallbackImageMediaId:
+                blogSettings.socialPreviewFallbackImageMediaId,
+              contentImageFallbackEnabled:
+                blogSettings.socialPreviewContentImageFallbackEnabled
             }
-          );
+          }
+        );
 
-        let checklist = await evaluateChecklist();
+      const firstPass = await evaluateChecklists(checklistItems);
+      const candidates = checklistItems.filter(
+        (item) => firstPass.get(item.key)!.passed
+      );
 
-        /**
-         * TOCTOU mitigation (security-auditor Medium finding, PR #725): the
-         * post row itself is protected by the batch's own `FOR UPDATE` lock
-         * (above), but the R2 media objects it references are NOT locked —
-         * an editor could detach/invalidate the featured/gallery media
-         * between this first evaluation and the `UPDATE` below, especially
-         * for a large due-batch where earlier posts' evaluations/updates
-         * push that gap out further. Re-running the evaluation immediately
-         * before the `UPDATE` shrinks that window from "the rest of this
-         * tenant's whole batch" down to one query round-trip — it doesn't
-         * eliminate the race outright (that would need locking the
-         * referenced media rows too, a bigger change touching the shared
-         * `MediaLibraryPort` every read-only preview endpoint also uses), but
-         * closes the realistic exposure at negligible cost.
-         */
-        if (checklist.passed) {
-          checklist = await evaluateChecklist();
-        }
+      /**
+       * TOCTOU mitigation (security-auditor Medium finding, PR #725): the
+       * post rows themselves are protected by the batch's own `FOR UPDATE`
+       * lock (above), but the R2 media objects they reference are NOT locked
+       * — an editor could detach/invalidate the featured/gallery media
+       * between the first evaluation and the `UPDATE` below. Re-evaluating
+       * immediately before the write keeps that window at one query round
+       * trip. It does not eliminate the race outright (that would need
+       * locking the referenced media rows too, a bigger change touching the
+       * shared `MediaLibraryPort` every read-only preview endpoint also
+       * uses), but closes the realistic exposure at negligible cost.
+       *
+       * Batching made this window SMALLER, not larger, and that is the whole
+       * reason the two passes are still two passes: the second pass re-reads
+       * every candidate's media in one statement and the publish follows it
+       * immediately, so the gap no longer grows with how far into the batch a
+       * post happens to sit. Reusing the first pass's verdicts here would
+       * have removed the mitigation entirely while looking like a tidy-up.
+       */
+      const secondPass = await evaluateChecklists(candidates);
+
+      const publishedPosts: DuePostRow[] = [];
+      const blockedPostIds: string[] = [];
+      const auditEvents: AuditEventInput[] = [];
+
+      // Iterated in due order (`scheduled_at ASC`, from the SELECT) so the
+      // audit trail reads in the same sequence the per-post loop wrote it.
+      for (const post of due) {
+        const checklist = secondPass.get(post.id) ?? firstPass.get(post.id)!;
 
         if (!checklist.passed) {
           blockedPostIds.push(post.id);
 
-          await recordAuditEvent(tx, {
+          auditEvents.push({
             tenantId,
             moduleKey: "blog_content",
             action: "blog.post.scheduled_publish_blocked",
@@ -225,30 +259,9 @@ export async function publishDueScheduledPosts(
           continue;
         }
 
-        await tx`
-          UPDATE awcms_blog_posts
-          SET status = 'published',
-              published_at = COALESCE(published_at, ${now}),
-              scheduled_at = NULL,
-              version = version + 1,
-              updated_at = ${now}
-          WHERE tenant_id = ${tenantId} AND id = ${post.id}
-        `;
+        publishedPosts.push(post);
 
-        publishedPostIds.push(post.id);
-
-        // ADR-0042: invalidate this tenant's cached blog surfaces in the SAME
-        // transaction as the publish, so a rolled-back publish leaves no stray
-        // purge and a committed one can never lose its invalidation. No-op when
-        // the edge cache is disabled.
-        await enqueueModuleContentPurge(
-          tx,
-          tenantId,
-          "blog_content",
-          "blog.post.published"
-        );
-
-        await recordAuditEvent(tx, {
+        auditEvents.push({
           tenantId,
           moduleKey: "blog_content",
           action: "blog.post.published",
@@ -258,34 +271,75 @@ export async function publishDueScheduledPosts(
           message: `Blog post published by scheduled publish: ${post.slug}.`,
           correlationId
         });
+      }
 
-        log("info", "blog-content.post.published", {
-          correlationId,
+      const publishedPostIds = publishedPosts.map((post) => post.id);
+
+      if (publishedPostIds.length > 0) {
+        await tx`
+          UPDATE awcms_blog_posts
+          SET status = 'published',
+              published_at = COALESCE(published_at, ${now}),
+              scheduled_at = NULL,
+              version = version + 1,
+              updated_at = ${now}
+          WHERE tenant_id = ${tenantId}
+            AND id = ANY(${tx.array(publishedPostIds, "uuid")})
+        `;
+
+        // AFTER the write, not while classifying: a log line saying a post
+        // published is a claim about a statement that ran. Emitting it during
+        // classification would report every candidate as published even when
+        // the `UPDATE` below it threw.
+        for (const post of publishedPosts) {
+          log("info", "blog-content.post.published", {
+            correlationId,
+            tenantId,
+            moduleKey: "blog_content",
+            postId: post.id,
+            slug: post.slug,
+            trigger: "scheduled_publish"
+          });
+        }
+
+        // ADR-0042: invalidate this tenant's cached blog surfaces in the SAME
+        // transaction as the publish, so a rolled-back publish leaves no stray
+        // purge and a committed one can never lose its invalidation. No-op when
+        // the edge cache is disabled. ONE enqueue for the batch: the scope is
+        // the tenant's `blog_content` surfaces, so enqueueing it per post
+        // produced identical duplicate rows for the purge worker to collapse.
+        await enqueueModuleContentPurge(
+          tx,
           tenantId,
-          moduleKey: "blog_content",
-          postId: post.id,
-          slug: post.slug,
-          trigger: "scheduled_publish"
-        });
+          "blog_content",
+          "blog.post.published"
+        );
 
         if (socialPublishingPort) {
-          await socialPublishingPort.onArticlePublished(
-            tx,
-            tenantId,
-            {
-              articleId: post.id,
-              title: post.title,
-              slug: post.slug,
-              excerpt: post.excerpt,
-              featuredMediaId: post.featured_media_id,
-              trigger: "scheduled_published"
-            },
-            correlationId
-          );
+          // Per article by contract — `onArticlePublished` takes one. Kept
+          // after the publish `UPDATE`, as before, so a port that reads the
+          // row back sees it published.
+          for (const post of publishedPosts) {
+            await socialPublishingPort.onArticlePublished(
+              tx,
+              tenantId,
+              {
+                articleId: post.id,
+                title: post.title,
+                slug: post.slug,
+                excerpt: post.excerpt,
+                featuredMediaId: post.featured_media_id,
+                trigger: "scheduled_published"
+              },
+              correlationId
+            );
+          }
         }
       }
 
-      await recordAuditEvent(tx, {
+      // The per-post rows and the run summary in ONE statement, the summary
+      // last so the trail reads in the order the sweep decided things.
+      auditEvents.push({
         tenantId,
         moduleKey: "blog_content",
         action: "blog.post.scheduled_publish_executed",
@@ -298,6 +352,8 @@ export async function publishDueScheduledPosts(
         },
         correlationId
       });
+
+      await recordAuditEvents(tx, auditEvents);
 
       return {
         publishedCount: publishedPostIds.length,
@@ -381,51 +437,58 @@ export async function unpublishDuePosts(
       `) as DueUnpublishRow[];
 
       const partial = due.length === SCHEDULED_UNPUBLISH_BATCH_LIMIT;
-      const unpublishedPostIds: string[] = [];
+      const unpublishedPostIds = due.map((post) => post.id);
+      const auditEvents: AuditEventInput[] = [];
 
-      for (const post of due) {
+      if (unpublishedPostIds.length > 0) {
+        // One `UPDATE` and one audit `INSERT` for the batch, not two
+        // statements per post. Nothing here is per-post CONDITIONAL — every
+        // due row is archived, the checklist deliberately does not run (see
+        // above) — so the per-post loop was only ever a way of writing the
+        // same two statements two hundred times.
+        //
+        // `unpublish_at` is deliberately LEFT SET rather than nulled the way
+        // `scheduled_at` is cleared on publish. The two are not symmetric:
+        // `scheduled_at` describes an intent that has been carried out and
+        // would re-fire if kept, whereas `unpublish_at` is the RECORD of why
+        // this post is archived — clearing it would erase the only trace
+        // distinguishing "withdrawn on schedule" from "an editor archived
+        // it", and the CHECK keeps it consistent if the post is ever
+        // republished with a new window.
         await tx`
           UPDATE awcms_blog_posts
           SET status = 'archived',
               version = version + 1,
               updated_at = ${now}
-          WHERE tenant_id = ${tenantId} AND id = ${post.id}
+          WHERE tenant_id = ${tenantId}
+            AND id = ANY(${tx.array(unpublishedPostIds, "uuid")})
         `;
 
-        unpublishedPostIds.push(post.id);
+        for (const post of due) {
+          auditEvents.push({
+            tenantId,
+            moduleKey: "blog_content",
+            action: "blog.post.unpublished",
+            resourceType: "blog_post",
+            resourceId: post.id,
+            // `warning`, not `info`: content LEAVING the public surface
+            // without a human in the loop is the kind of event an operator
+            // should be able to find when a reader asks where an article went.
+            severity: "warning",
+            message: `Blog post unpublished by schedule: ${post.slug}.`,
+            correlationId
+          });
 
-        await recordAuditEvent(tx, {
-          tenantId,
-          moduleKey: "blog_content",
-          action: "blog.post.unpublished",
-          resourceType: "blog_post",
-          resourceId: post.id,
-          // `warning`, not `info`: content LEAVING the public surface without a
-          // human in the loop is the kind of event an operator should be able
-          // to find when a reader asks where an article went.
-          severity: "warning",
-          message: `Blog post unpublished by schedule: ${post.slug}.`,
-          correlationId
-        });
+          log("info", "blog-content.post.unpublished", {
+            correlationId,
+            tenantId,
+            moduleKey: "blog_content",
+            postId: post.id,
+            slug: post.slug,
+            trigger: "scheduled_unpublish"
+          });
+        }
 
-        log("info", "blog-content.post.unpublished", {
-          correlationId,
-          tenantId,
-          moduleKey: "blog_content",
-          postId: post.id,
-          slug: post.slug,
-          trigger: "scheduled_unpublish"
-        });
-      }
-
-      // `unpublish_at` is deliberately LEFT SET rather than nulled the way
-      // `scheduled_at` is cleared on publish. The two are not symmetric:
-      // `scheduled_at` describes an intent that has been carried out and would
-      // re-fire if kept, whereas `unpublish_at` is the RECORD of why this post
-      // is archived — clearing it would erase the only trace distinguishing
-      // "withdrawn on schedule" from "an editor archived it", and the CHECK
-      // keeps it consistent if the post is ever republished with a new window.
-      if (unpublishedPostIds.length > 0) {
         // ADR-0042 — same transaction as the transition, so a rollback leaves
         // no stray purge and a commit cannot lose its invalidation. This is the
         // half that matters most: a withdrawn article still sitting in the edge
@@ -438,7 +501,7 @@ export async function unpublishDuePosts(
         );
       }
 
-      await recordAuditEvent(tx, {
+      auditEvents.push({
         tenantId,
         moduleKey: "blog_content",
         action: "blog.post.scheduled_unpublish_executed",
@@ -448,6 +511,8 @@ export async function unpublishDuePosts(
         attributes: { unpublishedCount: unpublishedPostIds.length },
         correlationId
       });
+
+      await recordAuditEvents(tx, auditEvents);
 
       return {
         unpublishedCount: unpublishedPostIds.length,
