@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:06dba8d97c813053a6214466e52b5b199decffceeafaf6b1e69ef511914eaaaf -->
+<!-- i18n-source-hash: sha256:4dd9d37888fb57ebbf7b5cd120105a2e6d365cc5ca6a6598f28408d028bb00c7 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-121 target menjalankan berkas di `scripts/`; 54 di antaranya
+121 target menjalankan berkas di `scripts/`; 55 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -116,7 +116,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `jobs:env-allowlist:generate`             | `jobs-env-allowlist.ts`                        | —    |
 | `logging:lint:check`                      | `logging-lint-check.ts`                        | ✅   |
 | `logs:audit:purge`                        | `audit-log-purge.ts`                           | —    |
-| `memory:docs:check`                       | `sync-agent-memory.ts`                         | —    |
+| `memory:docs:check`                       | `sync-agent-memory.ts`                         | ✅   |
 | `memory:docs:restore`                     | `sync-agent-memory.ts`                         | —    |
 | `memory:docs:sync`                        | `sync-agent-memory.ts`                         | —    |
 | `modules:compose:check`                   | `validate-module-composition.ts`               | ✅   |

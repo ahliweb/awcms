@@ -24,6 +24,7 @@ import {
   extractCitedSourcePaths,
   isKnownRunTarget,
   moduleReadmePaths,
+  skillSourcePaths,
   stripAspirationalBlocks,
   stripHistoricalBlocks,
   subjectModuleKey
@@ -415,5 +416,72 @@ describe("the live skill set", () => {
     const result = Bun.spawnSync(["bun", "scripts/skills-check.ts"]);
 
     expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("mirrors are checked too (#729)", () => {
+  test("skillSourcePaths returns the English copy and its mirror, English first", () => {
+    const present = new Set([
+      ".claude/skills/x/SKILL.md",
+      ".claude/skills/x/SKILL.id.md"
+    ]);
+
+    expect(
+      skillSourcePaths(".claude/skills", "x", (p) => present.has(p))
+    ).toEqual([".claude/skills/x/SKILL.md", ".claude/skills/x/SKILL.id.md"]);
+  });
+
+  test("a mirror is checked when present and never DEMANDED", () => {
+    // Which skills carry a translation is a separate decision from whether the
+    // ones that do are correct. Requiring a mirror would turn this gate into a
+    // translation mandate.
+    const englishOnly = new Set([".claude/skills/x/SKILL.md"]);
+
+    expect(
+      skillSourcePaths(".claude/skills", "x", (p) => englishOnly.has(p))
+    ).toEqual([".claude/skills/x/SKILL.md"]);
+  });
+
+  test("the module README corpus includes the mirrors", async () => {
+    const readmes = await moduleReadmePaths();
+
+    expect(readmes.some((f) => f.endsWith("/README.md"))).toBe(true);
+    expect(readmes.some((f) => f.endsWith("/README.id.md"))).toBe(true);
+    // A corpus that silently lost one half would make the wider rule pass
+    // vacuously for it — the failure mode this repo has shipped once already.
+    expect(readmes.filter((f) => f.endsWith("/README.id.md")).length).toBe(
+      readmes.filter((f) => f.endsWith("/README.md")).length
+    );
+  });
+
+  test("the LABEL names the file while the KEY stays the skill", () => {
+    // The exemption lookups (`ASPIRATIONAL_SKILLS`, `subjectModuleKey`) are
+    // keyed on the skill name. Passing a decorated label as that key silently
+    // defeats both — which is exactly what happened in the first draft of this
+    // change, turning a green gate into 19 false failures on the ENGLISH files.
+    const problems = checkCitedRunTargets(
+      "awcms-testing",
+      ["nope:does:not:exist"],
+      new Set<string>(),
+      false,
+      "awcms-testing (SKILL.id.md)"
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.skill).toBe("awcms-testing (SKILL.id.md)");
+  });
+
+  test("an aspirational skill stays exempt when a label is supplied", () => {
+    // The regression above, stated as a property: the exemption must key off
+    // the skill, not off however the failure is being reported.
+    expect(
+      checkCitedRunTargets(
+        "awcms-testing",
+        ["nope:does:not:exist"],
+        new Set<string>(),
+        true,
+        "awcms-testing (SKILL.id.md)"
+      )
+    ).toEqual([]);
   });
 });

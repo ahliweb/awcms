@@ -224,18 +224,35 @@ export function runChecks() {
     const adrFileNames = readdirSync(adrDir).filter((name) =>
       name.endsWith(".md")
     );
-    // The ENGLISH index is authoritative (ADR-0097). Its Indonesian mirror is
-    // held to it by `i18n-source-hash`, not by a second copy of this gate.
-    const indexRel = "docs/adr/README.md";
-    const indexAbs = join(ROOT, indexRel);
-    if (existsSync(indexAbs)) {
-      problems.push(
-        ...checkAdrIndexCoverage(
-          adrFileNames,
-          indexRel,
-          readFileSync(indexAbs, "utf8")
-        )
-      );
+    // The ENGLISH index is authoritative (ADR-0097), and BOTH copies are
+    // checked (Issue #729). This used to say the mirror was "held to it by
+    // `i18n-source-hash`, not by a second copy of this gate" — but that hash
+    // answers "has the English changed since translation?", not "does the
+    // mirror list every ADR?". An ADR could be added to one index and not the
+    // other with every gate green, which is how the Indonesian index is
+    // maintained: by hand, alongside the English one.
+    //
+    // Each index links its own language copy, so the suffix differs.
+    /** @type {{ rel: string; linkSuffixes: string[] }[]} */
+    const adrIndexes = [
+      { rel: "docs/adr/README.md", linkSuffixes: [".md"] },
+      // The mirror may link either copy — see `checkAdrIndexCoverage`. What it
+      // may not do is omit an ADR.
+      { rel: "docs/adr/README.id.md", linkSuffixes: [".id.md", ".md"] }
+    ];
+
+    for (const { rel: indexRel, linkSuffixes } of adrIndexes) {
+      const indexAbs = join(ROOT, indexRel);
+      if (existsSync(indexAbs)) {
+        problems.push(
+          ...checkAdrIndexCoverage(
+            adrFileNames,
+            indexRel,
+            readFileSync(indexAbs, "utf8"),
+            linkSuffixes
+          )
+        );
+      }
     }
   }
 
