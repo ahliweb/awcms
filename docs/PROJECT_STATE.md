@@ -360,6 +360,74 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **CALL-SITE ROUND — 26 August 2026: ADR-0113's normalisation was wrong three
+  days after it merged, because it named a function nothing calls — and the
+  corrected map is now committed.**
+
+  The DECISION in ADR-0113 is unchanged. Its mechanics were wrong, and the way
+  they were wrong has now happened three times in this repo.
+
+  **`seo_title()` is dead code.** The ADR said the shape-2/3 map keys on
+  `seo_title(jenis_rubrik)`. That function is **defined nine times** across the
+  legacy PHP tree and **called ZERO times** — and the nine copies do not even
+  agree: `index.php` replaces spaces with `_` while the other eight use `-`.
+  `rubriks/index.php` binds the URL segments RAW, after a `trim()`, straight
+  into `WHERE jenis_rubrik = ? AND kategori = ?`.
+
+  So a legacy rubrik URL segment is the COLUMN VALUE, not a slug of it — and the
+  `MITRA BORNEO` / `MITRA-BORNEO` collapse warning, which the previous round
+  called "one thing the data shows that no amount of planning could have", was
+  wrong as well. As raw segments they are different paths that never collapse,
+  and neither is linked from anywhere, so neither needs a rule.
+
+  **The pattern, third occurrence.** `replaceMenuItems` was a function name
+  written from memory that did not exist. `awcms_blog_pages.legacy_source_*`
+  were columns asserted to exist by a test over a migration's source text, with
+  no reader. Now a function quoted in prose and never called. All three read
+  exactly like working code to anyone who does not go looking for the call site.
+  **Grep for the CALL, not the definition.**
+
+  **What the URLs actually are.** Nothing in the legacy tree generates a rubrik
+  link from a column value; every one is a hand-typed literal. That makes the
+  set **enumerable and COMPLETE rather than a sample** — a crawler could only
+  reach what was linked. There are 67, now committed with provenance at
+  `data/seputarborneo-legacy/`.
+
+  Two properties decide the work, and neither was visible from the plan:
+
+  - **Casing is load-bearing HERE and was not on the legacy site.** MariaDB's
+    `utf8mb4_unicode_ci` made `rubrik/Hukum.html` and `rubrik/hukum.html` the
+    same page (5,183 articles each). This repo matches by EQUALITY and preserves
+    case, so both spellings need their own rule. Five rubriks were linked in
+    both.
+  - **32 of the 67 resolved to ZERO articles** — dead nav/footer links for
+    years, serving HTTP 200 with an empty listing rather than a 404, so they are
+    likely indexed as thin pages. Eight are leftovers from the template this
+    site was built from and name places in SOUTH SUMATRA.
+    `rubrik/Olah Raga.html` is dead because the column value is `OLAHRAGA` with
+    no space, and a case-insensitive collation does not close a whitespace
+    difference.
+
+  62 rules over 10 destination categories. Because the decision drops `kt`,
+  every URL of either shape lands on its parent rubrik's archive, so the map is
+  a function of the first segment alone.
+
+  **The map is committed because it CANNOT be re-derived.** Building it needed
+  the legacy PHP working copy and the populated MariaDB volume, both of which
+  exist on one workstation and ship nowhere. This is the VOLUME ROUND's lesson
+  running forward instead of backward: that round found an artefact that was
+  presumed missing and was not, and the answer to "it exists today" is to
+  capture it, not to note that it exists.
+
+  The tests assert what the write path would DO with each entry — every source
+  path and target through `normalizeRedirectPath`, `validateRedirectTarget` and
+  `isValidSlug` — rather than that the file parses. Its cautionary sibling
+  `tests/legacy-redirect-map.test.ts` asserted that a migration's SOURCE TEXT
+  contained `ALTER TABLE awcms_blog_pages`, which proved a column existed and
+  could not notice nothing read it; those columns were dropped in `sql/147`.
+  `findMapProblems` is itself tested against three corrupted entries, because a
+  validator nobody has seen fail is a validator nobody has tested.
+
 - **CAPTURE ROUND — 25 August 2026: the public 404 telemetry write had no rate
   limit, and the document that called its cardinality bounded was justifying a
   partitioning decision with it.**

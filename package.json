@@ -63,6 +63,7 @@
     "blog:legacy:import": "bun scripts/blog-legacy-import.ts",
     "blog:legacy:redirects:import": "bun scripts/blog-legacy-redirects-import.ts",
     "blog:legacy:cutover:verify": "bun scripts/blog-legacy-cutover-verify.ts",
+    "blog:legacy:rubrik-redirects": "bun scripts/blog-legacy-rubrik-redirects.ts",
     "blog:ads:ingest": "bun scripts/blog-ads-ingest.ts",
     "blog:ads:drop-readiness": "bun scripts/blog-ads-drop-readiness.ts",
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",

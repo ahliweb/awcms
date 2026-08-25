@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4ab6adace5860132f1fa4ebf8075e39288e627c5f253d8182d91d774a8d6239f -->
+<!-- i18n-source-hash: sha256:06dba8d97c813053a6214466e52b5b199decffceeafaf6b1e69ef511914eaaaf -->
 
 # Scripts AWCMS
 
@@ -27,11 +27,11 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-107 target menjalankan berkas di `scripts/`; 48 di antaranya
+121 target menjalankan berkas di `scripts/`; 54 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
-| Target                                    | Skrip                                          | Gate |
+| Target                                    | Script                                         | Gate |
 | ----------------------------------------- | ---------------------------------------------- | ---- |
 | `access:chokepoint:check`                 | `access-chokepoint-check.ts`                   | ✅   |
 | `access:decision-log:coverage:check`      | `access-decision-log-coverage-check.ts`        | ✅   |
@@ -53,6 +53,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `blog:legacy:cutover:verify`              | `blog-legacy-cutover-verify.ts`                | —    |
 | `blog:legacy:import`                      | `blog-legacy-import.ts`                        | —    |
 | `blog:legacy:redirects:import`            | `blog-legacy-redirects-import.ts`              | —    |
+| `blog:legacy:rubrik-redirects`            | `blog-legacy-rubrik-redirects.ts`              | —    |
 | `blog:portable-text:backfill`             | `blog-portable-text-backfill.ts`               | —    |
 | `blog:publish:scheduled`                  | `blog-scheduled-publish.ts`                    | —    |
 | `build:asset-budget:check`                | `client-asset-budget.ts`                       | —    |
