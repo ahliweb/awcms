@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6982d377c1ba2343501cb24e540cd5f1a4f9bc2857f71829c3cc4a5bb0424b43 -->
+<!-- i18n-source-hash: sha256:d54299cd2c0c9ef930530b9cbd650b5ee366d8b88d129e2292ba0d88164957c7 -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,74 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN CAPTURE — 25 Agustus 2026: tulisan telemetri 404 publik TIDAK punya
+  rate limit, dan dokumen yang menyebut kardinalitasnya terbatas justru sedang
+  memakai klaim itu untuk membenarkan keputusan partisi.**
+
+  Auditnya berangkat dari kedua issue terbuka, bukan dari sapuan. #599 membawa
+  `awcms_seo_redirects` dari nyaris kosong ke **23.906** aturan per tenant dan
+  ADR-0113 menambah ~150 lagi, di jalur yang berjalan untuk setiap pembaca dan
+  setiap crawler — jadi jalur itulah yang layak diukur.
+
+  **Paruh RESOLVE-nya sehat**, dan layak dicatat supaya tak diaudit ulang:
+  `MAX_REDIRECT_HOPS = 5` membatasi penelusur rantai, dan
+  `awcms_seo_redirects_resolve_idx` adalah index parsial atas persis
+  `(tenant_id, normalized_source_path) WHERE deleted_at IS NULL AND state =
+'active'`. 23.906 aturan adalah point lookup B-tree, bukan scan.
+
+  **Paruh CAPTURE-nya tidak.** `recordPublicNotFound` menyala setelah SETIAP
+  request publik yang resolve ke sebuah tenant lalu 404 — tanpa autentikasi,
+  transaksinya sendiri, satu `INSERT … ON CONFLICT` per request. Kunci
+  agregasinya `(tenant_id, normalized_path, referrer_domain, locale,
+domain_host)`, dan pemanggil menguasai dua dari lima: path-nya apa pun yang ia
+  minta, dan `referrer_domain` adalah hostname dari `Referer` apa pun yang ia
+  kirim, tanpa allow-list. `/a1 … /aN` adalah N baris, masing-masing bisa
+  dikalikan lagi dengan memvariasikan `Referer`.
+
+  **Yang membuatnya TAMPAK tertangani itulah bagian menariknya.** Dua dokumen
+  menyebutnya terbatas:
+
+  - `not-found-directory.ts` — "bounded cardinality + bounded retention";
+  - `module.ts` — "cardinality is bounded by distinct 404 paths, not by
+    traffic", yang merupakan alasan tertulis bagi `partition.eligible: false`.
+
+  Upsert-nya meruntuhkan PENGULANGAN satu kunci dan tidak melakukan apa pun
+  terhadap kunci-kunci berbeda, dan tidak ada himpunan tetap "path 404" —
+  himpunannya adalah apa pun yang diminta siapa pun, jadi kunci berbeda
+  DIHASILKAN oleh trafik, persis yang disangkal rasionalnya. **Klaim salah di
+  sebuah RASIONAL lebih buruk daripada klaim salah di komentar, karena rasional
+  itu menanggung beban sebuah keputusan** — di sini, tidak mem-partisi.
+  Keputusannya bertahan; alasan ia bertahan kini yang benar, dan alasan itu
+  menyatakan terang-terangan bahwa menaikkan rate limit secara substansial
+  berarti memeriksa ulang keputusan itu.
+
+  Layak dicatat komentar DDL `sql/060` BENAR sebagaimana tertulis: ia berkata
+  "bot yang menyelidik 404 yang **SAMA** sejuta kali adalah satu baris". Klaimnya
+  baru menjadi salah ketika diparafrasakan ke lapisan aplikasi dan ke registry.
+
+  **Saudaranya sudah punya jawabannya.** `POST /api/v1/analytics/collect` adalah
+  endpoint sejenis — publik, anonim, satu baris per request — dan sudah membawa
+  backstop `checkSharedRateLimit` per-IP sejak ia dirilis, untuk ancaman yang
+  komentarnya sendiri nyatakan dalam kalimat yang berpindah kata demi kata.
+  Jalur ini tidak punya. Kini ia memakai limiter yang sama pada default 120/60 d
+  yang sama, berkunci **IP SAJA, tidak pernah tenant**, sehingga kontrak
+  tanpa-orakel milik beacon terjaga dan sebuah penolakan tak mengungkap apakah
+  suatu tenant ada. Tidak ada yang ditolak kepada pengunjung — 404-nya sudah
+  diproduksi — dan pelewatannya SENYAP, karena mencatat log per tulisan yang
+  ditolak memberi banjir yang sama sebuah penguat kedua.
+
+  **Cap baris-berbeda per tenant DIPERTIMBANGKAN dan TIDAK diambil.** Ia
+  membatasi penyimpanan lebih keras, dan ia memperkenalkan mode gagal yang hari
+  ini tidak ada: penyerang yang memenuhinya membuat 404 yang NYATA tak terlihat.
+  Rate limit plus purge berbasis usia yang sudah dideklarasikan (default 30h,
+  lantai 7h) membatasi keadaan tunaknya tanpa membeli itu.
+
+  Buktinya berupa DIFERENSIAL alih-alih asersi, karena fungsinya fail-open
+  menurut kontrak dan "ia tidak melempar" benar baik ketika ia menolak lebih awal
+  maupun ketika ia mencoba lalu gagal: dengan `DATABASE_URL` tak diset, langkah
+  DB mencatat `seo_distribution.not_found.capture_failed`, jadi dalam anggaran ia
+  mencatatnya sekali dan di luar anggaran ia tidak mencatat apa pun.
 
 - **PUTARAN BATAS-DAN-BATCH — 25 Agustus 2026: satu-satunya batch tanpa cap di
   API ini duduk persis di sebelah satu-satunya N+1 yang tak terlihat oleh

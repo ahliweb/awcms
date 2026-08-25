@@ -370,7 +370,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
         : await next();
 
     if (notFoundCapture && response.status === 404) {
-      await recordPublicNotFound(context.request, notFoundCapture);
+      await recordPublicNotFound(
+        context.request,
+        notFoundCapture,
+        context.clientAddress
+      );
     }
 
     return finalize(response);

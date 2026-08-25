@@ -11,8 +11,26 @@
  * normalization) and the referrer with `visitor-analytics`'s `extractReferrerDomain`
  * before calling in. A full URL, query string, or secret can never reach this table.
  * Writes are AGGREGATE upserts (one row per distinct tenant+path+referrer+locale+host,
- * `hit_count` incremented), so probing a 404 a million times is one row, not a
- * million — bounded cardinality + bounded retention (data_lifecycle registry).
+ * `hit_count` incremented), so probing the SAME 404 a million times is one row, not
+ * a million.
+ *
+ * ## What the upsert does NOT bound (Issue #722)
+ *
+ * This used to claim "bounded cardinality". It is not bounded, and the word was
+ * doing real work: the same claim in `module.ts` is the stated justification for
+ * `partition.eligible: false`.
+ *
+ * The upsert collapses REPEATS of one key. It does nothing about distinct keys, and
+ * the caller controls two of the five columns that make one — the path is whatever
+ * they request (up to `MAX_REDIRECT_PATH_LENGTH`), and `referrer_domain` is the
+ * hostname of whatever `Referer` header they send, with no allow-list. So `/a1 … /aN`
+ * is N rows, each multipliable again by varying `Referer`. Cardinality is bounded by
+ * distinct REQUESTS, which is to say by traffic.
+ *
+ * What actually bounds it is the pair outside this function: a per-IP rate limit in
+ * `presentation/redirect-middleware.ts` fronting every call, and the age-based purge
+ * from the data_lifecycle registry (30d default). Neither is visible from here,
+ * which is why they are named here.
  */
 
 export type NotFoundObservation = {
