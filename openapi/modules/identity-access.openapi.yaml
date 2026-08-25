@@ -6153,6 +6153,15 @@ components:
           $ref: "#/components/schemas/AbacDslPolicyConditions"
         isActive:
           type: boolean
+        isDslManaged:
+          type: boolean
+          description: >-
+            Whether the evaluator CONSUMES this policy (ADR-0033). The cache
+            loads `is_active AND is_dsl_managed`, so `false` — every row
+            authored through the flat /api/v1/abac/policies CRUD — is stored but
+            never compiled and never affects a decision. This list returns every
+            policy row for the tenant, flat and DSL alike, so without this field
+            a client cannot tell an inert policy from one in force.
         createdAt:
           type: string
           format: date-time

@@ -141,18 +141,49 @@ async function permissionCatalogSyncedSignal(
 ): Promise<ReadinessSignal> {
   try {
     const report = await fetchModulePermissionSyncReport(tx, moduleKey);
-    const unsynced = (report?.entries ?? []).filter(
+    const entries = report?.entries ?? [];
+
+    /**
+     * `missing` and `mismatched_description` FAIL: the first means a declared
+     * permission has no catalog row, so no role can hold it and its guard
+     * refuses everyone; the second means the catalog is telling operators
+     * something the module no longer says.
+     *
+     * `orphaned` — a catalog row no descriptor declares — is REPORTED but does
+     * not fail, and the distinction is deliberate rather than an oversight.
+     * Nothing is broken at runtime: the catalog row is what
+     * `authorizeInTransaction` reads, so the permission works. What is broken
+     * is that it is invisible to every gate whose authority is the descriptor,
+     * which is a repository-governance problem and belongs in CI, where
+     * `tests/integration/permission-catalogue-parity.integration.test.ts` now
+     * fails on it. Failing a DEPLOYMENT's readiness for it would block a
+     * release over a declaration gap that harms nobody's request.
+     *
+     * It was previously filtered out of this signal entirely, and three
+     * orphans (`identity_access.abac_policies.*`, seeded by `sql/032`) sat
+     * unreported for long enough that the screen driving those endpoints came
+     * to gate on a different permission family altogether. Computing a status
+     * and then dropping it is how that stayed quiet, so it is named here now.
+     */
+    const failing = entries.filter(
       (entry) =>
         entry.status === "missing" || entry.status === "mismatched_description"
     );
+    const orphaned = entries.filter((entry) => entry.status === "orphaned");
+
+    const details = [
+      failing.length > 0
+        ? `${failing.length} declared permission(s) missing or mismatched in the catalog.`
+        : null,
+      orphaned.length > 0
+        ? `${orphaned.length} catalog permission(s) no descriptor declares (not a runtime fault; see the catalogue parity test).`
+        : null
+    ].filter((line): line is string => line !== null);
 
     return {
       name: "permission_catalog_synced",
-      status: unsynced.length === 0 ? "pass" : "fail",
-      detail:
-        unsynced.length > 0
-          ? `${unsynced.length} declared permission(s) missing or mismatched in the catalog.`
-          : undefined
+      status: failing.length === 0 ? "pass" : "fail",
+      detail: details.length > 0 ? details.join(" ") : undefined
     };
   } catch (error) {
     log("error", "health-registry: permission_catalog_synced check failed", {

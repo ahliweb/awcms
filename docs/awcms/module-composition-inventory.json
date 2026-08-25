@@ -141,8 +141,8 @@
           "optional": false
         }
       ],
-      "permissionCount": 44,
-      "navigationCount": 11,
+      "permissionCount": 47,
+      "navigationCount": 12,
       "jobCount": 4,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

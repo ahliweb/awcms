@@ -203,7 +203,12 @@ export const idnAdminRegionsModule = defineModule({
       activityCode: IDN_DATASET_ACTIVITY_CODE,
       action: "read",
       description:
-        "Read imported dataset versions and their upstream provenance (repository, commit, checksum, decree reference)"
+        // Verbatim from the catalog row (`sql/080`), which names the domain
+        // where this had shortened it to "dataset versions". `sql/148` fixed
+        // the other five description drifts the other way round — the rule was
+        // "make both registers say the better sentence", not "make the catalog
+        // obey the code".
+        "Read imported Indonesia administrative region dataset versions and their upstream provenance (repository, commit, checksum, decree reference)"
     },
     // `dataset.configure` (activate) and `dataset.restore` (rollback) are back
     // — but as PLATFORM-scoped permissions (ADR-0053, seeded by `sql/085`),

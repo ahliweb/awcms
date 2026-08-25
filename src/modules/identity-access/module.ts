@@ -114,6 +114,18 @@ export const identityAccessModule = defineModule({
       order: 22,
       requiredPermission: "identity_access.access_control.read"
     },
+    // The DSL surface (ADR-0033), gated on its OWN permission rather than the
+    // broad `access_control.read` above: `sql/032` created `abac_policies.*`
+    // precisely so reading and simulating the evaluated policy set can be
+    // granted or withheld independently of access-control administration.
+    // 23, not 22.5 or a shared 22: two entries with the same order leave the
+    // sidebar's sequence to whatever that build's sort happened to do.
+    {
+      labelKey: "admin.layout.nav_access_policies",
+      path: "/admin/access-policies",
+      order: 23,
+      requiredPermission: "identity_access.abac_policies.read"
+    },
     // Gated on `user_groups.read`, not the shared `access_control.read`: a group
     // is a subject with its own membership, and seeing who is in which group is
     // a different authority from reading the RBAC catalog (ADR-0081).
@@ -266,6 +278,48 @@ export const identityAccessModule = defineModule({
     }
   ],
   permissions: [
+    /**
+     * The DSL ABAC policy surface (`sql/032`, Issue #179). These three were
+     * seeded straight into `awcms_permissions` and NEVER declared here, on the
+     * reasoning recorded in that migration's header: "rather than via a module
+     * descriptor `permissions` array which this module does not use". That was
+     * true when it was written and stopped being true afterwards — this array
+     * now declares every other identity_access permission.
+     *
+     * The cost of the omission was not that the endpoints broke. They work:
+     * the catalog row is what `authorizeInTransaction` reads. It was that the
+     * three became INVISIBLE to every gate whose authority is the descriptor —
+     * `access:permissions:enforcement:check` (does each declared permission
+     * have an enforcer?) and `admin:screen-coverage:check` (does each declared
+     * permission have a screen?) both iterate what modules DECLARE, so a
+     * permission that exists only in SQL is never asked either question.
+     *
+     * That blind spot is what let `/admin/abac-policies` gate on
+     * `access_control.*` while the routes it drives gate on `abac_policies.*`
+     * — a divergence a screen-coverage gate exists to catch and structurally
+     * could not see. `access:permission-catalogue:check` now holds the two
+     * registers to each other so the next one cannot hide the same way.
+     *
+     * Descriptions are copied VERBATIM from `sql/032`: `comparePermissions`
+     * reports `mismatched_description` on any difference, so paraphrasing here
+     * would turn a module's health signal red for a text edit.
+     */
+    {
+      activityCode: "abac_policies",
+      action: "read",
+      description: "Read stored ABAC policies (DSL surface)"
+    },
+    {
+      activityCode: "abac_policies",
+      action: "configure",
+      description:
+        "Author (create/update/enable/disable) ABAC policies (DSL surface)"
+    },
+    {
+      activityCode: "abac_policies",
+      action: "analyze",
+      description: "Run the read-only ABAC policy simulation/preview"
+    },
     {
       activityCode: "business_scope_assignments",
       action: "read",

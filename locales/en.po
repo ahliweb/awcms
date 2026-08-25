@@ -4455,3 +4455,54 @@ msgstr ""
 
 msgid "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
 msgstr ""
+
+msgid "Access policies"
+msgstr ""
+
+msgid "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
+msgstr ""
+
+msgid "You do not have permission to view access policies."
+msgstr ""
+
+msgid "No access policies are stored. The evaluator is applying its built-in role and permission rules."
+msgstr ""
+
+msgid "Applies to"
+msgstr ""
+
+msgid "In force"
+msgstr ""
+
+msgid "Allow"
+msgstr ""
+
+msgid "Deny"
+msgstr ""
+
+msgid "Yes"
+msgstr ""
+
+msgid "No — disabled"
+msgstr ""
+
+msgid "No — not evaluated"
+msgstr ""
+
+msgid "Simulate a decision"
+msgstr ""
+
+msgid "Ask what the evaluator would answer for a hypothetical subject. Nothing is written and no decision is recorded."
+msgstr ""
+
+msgid "Role codes (comma-separated)"
+msgstr ""
+
+msgid "Activity code"
+msgstr ""
+
+msgid "Simulate"
+msgstr ""
+
+msgid "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
+msgstr ""

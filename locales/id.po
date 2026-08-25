@@ -4443,3 +4443,54 @@ msgstr "Dikirim dan tidak pernah dikonfirmasi. Angka yang hanya bertambah biasan
 
 msgid "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
 msgstr "Siapa yang meminta menerima newsletter tenant ini, kapan mereka mengonfirmasi, dan siapa yang sudah berhenti. Alamat hanya masuk lewat formulir publik dan baru menjadi aktif ketika seseorang mengikuti tautan konfirmasi — memang sengaja tidak ada cara menambahkannya dari sini."
+
+msgid "Access policies"
+msgstr "Kebijakan akses"
+
+msgid "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
+msgstr "Kebijakan yang dikonsultasikan evaluator akses. Sebuah kebijakan hanya dikonsultasikan bila ia dikelola-DSL dan aktif — kebijakan yang ditulis di layar Kebijakan ABAC lama tersimpan tetapi tidak pernah dievaluasi."
+
+msgid "You do not have permission to view access policies."
+msgstr "Anda tidak punya izin untuk melihat kebijakan akses."
+
+msgid "No access policies are stored. The evaluator is applying its built-in role and permission rules."
+msgstr "Tidak ada kebijakan akses tersimpan. Evaluator menerapkan aturan peran dan permission bawaannya."
+
+msgid "Applies to"
+msgstr "Berlaku untuk"
+
+msgid "In force"
+msgstr "Berlaku"
+
+msgid "Allow"
+msgstr "Izinkan"
+
+msgid "Deny"
+msgstr "Tolak"
+
+msgid "Yes"
+msgstr "Ya"
+
+msgid "No — disabled"
+msgstr "Tidak — dinonaktifkan"
+
+msgid "No — not evaluated"
+msgstr "Tidak — tidak dievaluasi"
+
+msgid "Simulate a decision"
+msgstr "Simulasikan sebuah keputusan"
+
+msgid "Ask what the evaluator would answer for a hypothetical subject. Nothing is written and no decision is recorded."
+msgstr "Tanyakan apa jawaban evaluator untuk subjek hipotetis. Tidak ada yang ditulis dan tidak ada keputusan yang dicatat."
+
+msgid "Role codes (comma-separated)"
+msgstr "Kode peran (dipisah koma)"
+
+msgid "Activity code"
+msgstr "Kode aktivitas"
+
+msgid "Simulate"
+msgstr "Simulasikan"
+
+msgid "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
+msgstr "Kebijakan yang dibuat di sini tersimpan tetapi tidak pernah dievaluasi. Kebijakan yang dikonsultasikan evaluator ada di layar Kebijakan akses."

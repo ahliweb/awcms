@@ -26,6 +26,21 @@ export type AbacPolicyRecord = {
   priority: number;
   conditions: unknown;
   isActive: boolean;
+  /**
+   * Whether the evaluator CONSUMES this policy (ADR-0033). `policy-cache.ts`
+   * loads `is_active AND is_dsl_managed`, so a row with this `false` — every
+   * row authored through the flat `/api/v1/abac/policies` CRUD — is never
+   * compiled and never affects a decision.
+   *
+   * It is on the record because BOTH readers were unable to tell the
+   * difference without it: this list returns every row for the tenant, flat
+   * and DSL alike, so `GET /api/v1/access/policies` presented inert rows
+   * indistinguishably from governing ones, and an admin screen built on it
+   * would have repeated that. "Stored" and "in force" are different facts
+   * about an access policy and the more consequential one was the one nobody
+   * could see.
+   */
+  isDslManaged: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,6 +58,7 @@ type PolicyDbRow = {
   priority: number;
   conditions: unknown;
   is_active: boolean;
+  is_dsl_managed: boolean;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -61,6 +77,7 @@ function mapRow(row: PolicyDbRow): AbacPolicyRecord {
     priority: row.priority,
     conditions: row.conditions,
     isActive: row.is_active,
+    isDslManaged: row.is_dsl_managed,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString()
   };
@@ -73,7 +90,7 @@ export async function listAbacPolicies(
   const rows = (await tx`
     SELECT id, policy_code, effect, description, module_key, activity_code,
            action, resource_type, dsl_version, priority, conditions, is_active,
-           created_at, updated_at
+           is_dsl_managed, created_at, updated_at
     FROM awcms_abac_policies
     WHERE tenant_id = ${tenantId}
     ORDER BY priority ASC, policy_code ASC
@@ -89,7 +106,7 @@ export async function getAbacPolicyById(
   const rows = (await tx`
     SELECT id, policy_code, effect, description, module_key, activity_code,
            action, resource_type, dsl_version, priority, conditions, is_active,
-           created_at, updated_at
+           is_dsl_managed, created_at, updated_at
     FROM awcms_abac_policies
     WHERE tenant_id = ${tenantId} AND id = ${id}
   `) as PolicyDbRow[];
@@ -119,7 +136,7 @@ export async function insertAbacPolicy(
     )
     RETURNING id, policy_code, effect, description, module_key, activity_code,
               action, resource_type, dsl_version, priority, conditions, is_active,
-              created_at, updated_at
+              is_dsl_managed, created_at, updated_at
   `) as PolicyDbRow[];
   return mapRow(rows[0]!);
 }
@@ -151,7 +168,7 @@ export async function updateAbacPolicy(
     WHERE tenant_id = ${tenantId} AND id = ${id}
     RETURNING id, policy_code, effect, description, module_key, activity_code,
               action, resource_type, dsl_version, priority, conditions, is_active,
-              created_at, updated_at
+              is_dsl_managed, created_at, updated_at
   `) as PolicyDbRow[];
   const row = rows[0];
   return row ? mapRow(row) : null;
@@ -169,7 +186,7 @@ export async function setAbacPolicyActive(
     WHERE tenant_id = ${tenantId} AND id = ${id}
     RETURNING id, policy_code, effect, description, module_key, activity_code,
               action, resource_type, dsl_version, priority, conditions, is_active,
-              created_at, updated_at
+              is_dsl_managed, created_at, updated_at
   `) as PolicyDbRow[];
   const row = rows[0];
   return row ? mapRow(row) : null;
