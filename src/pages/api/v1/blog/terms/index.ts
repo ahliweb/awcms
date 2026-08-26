@@ -53,6 +53,10 @@ const CONFIGURE_GUARD = {
  * Issue #599 it means a site that builds a hundred tag pages out of thousands,
  * green, with every article filed under a later tag linking into a 404.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * So a caller that needs the whole vocabulary asks for `?order=created_at`,
  * which is immutable, and follows `nextCursor`. Passing `?cursor=` without it
  * is refused rather than quietly honoured — see `blog-term-list-query.ts`.

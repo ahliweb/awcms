@@ -15,6 +15,10 @@
  * One line per article also means the reader never holds 23,906 articles in
  * memory, and a malformed line costs one row rather than the run.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * ## Rejection is per-row and reported, never silent
  *
  * FR-DSC of this issue is explicit: the converter must REJECT rather than
@@ -42,6 +46,13 @@ const IMPORTABLE_VISIBILITIES = new Set<BlogContentVisibility>([
 export const MAX_LEGACY_ID_LENGTH = 128;
 export const MAX_LEGACY_TITLE_LENGTH = 500;
 export const MAX_LEGACY_SLUG_LENGTH = 200;
+/**
+ * A `src` longer than this is refused rather than truncated. Every other
+ * optional text field here is `slice`d to its cap, which is right for prose and
+ * wrong for a reference: a truncated `src` is a DIFFERENT file, and it would go
+ * on to miss the media map silently instead of loudly.
+ */
+export const MAX_LEGACY_IMAGE_SRC_LENGTH = 2048;
 
 export type LegacyImportRecord = {
   legacyId: string;
@@ -65,6 +76,25 @@ export type LegacyImportRecord = {
    * demanding every row carry one.
    */
   categories: readonly string[];
+  /**
+   * The LEAD photograph's `src`, EXACTLY as the legacy row spells it — for
+   * SeputarBorneo that is the `foto_berita` column, and all 25,029 rows have
+   * one. Resolved to a managed media object through `--media-map`, the same
+   * handoff a body `<img>` goes through and against the same registry check;
+   * never fetched, never stored as a URL.
+   *
+   * It has to be its own field because it is not in the body: `--images` used
+   * to scan body HTML only, so the upload set it wrote was the archive's 2
+   * inline images and none of its 25,029 lead photographs (ADR-0114, and the
+   * ORIGIN ROUND in `docs/PROJECT_STATE.md` §4).
+   *
+   * NOT trimmed and not normalised, for the reason `legacy-media-map.ts` gives
+   * at length: the map is keyed on the literal string, and a wrong match loses
+   * the photograph exactly as quietly as a missing one. Absent, `null` and `""`
+   * all mean "this row has no lead photograph" — an export writes the empty
+   * string for that, and refusing it would refuse the rows that are FINE.
+   */
+  featuredImageSrc: string | null;
 };
 
 export type LegacyImportRecordResult =
@@ -115,9 +145,15 @@ export function parseLegacyImportRecord(
 
   const slug = typeof record.slug === "string" ? record.slug.trim() : "";
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    // The slug is half of the legacy URL and half of the new one. A legacy
-    // export that carries capitals or underscores must be normalized by whoever
-    // wrote the export, where the original is still available to check against.
+    // This slug is the NEW URL's slug and only that. It is NOT "half of the
+    // legacy URL" — an earlier comment here said so, and ADR-0114 records why
+    // that was false: the SeputarBorneo legacy segment is
+    // `rawurlencode(str_replace(' ', '_', title))`, so every one of 25,029 of
+    // them carries `_` and most carry capitals, both of which this pattern
+    // forbids. The two slugs are disjoint BY CONSTRUCTION, so no export can
+    // ever be "normalized" into a slug that also matches the indexed path.
+    // Legacy URLs are resolved by their leading id (ADR-0114 §Decision 2), not
+    // by matching this value.
     errors.push(
       "slug must be lowercase alphanumeric words separated by hyphens"
     );
@@ -183,6 +219,32 @@ export function parseLegacyImportRecord(
     }
   }
 
+  // The lead photograph. Absent/null/blank is legitimate and means the row has
+  // none; a PRESENT value that is not a string is refused rather than coerced,
+  // for the same reason `categories` refuses a bare string — `String(0)` is
+  // `"0"`, and an export that writes `0` for "no photo" would otherwise send
+  // every one of those rows looking for a media map entry called `0`.
+  let featuredImageSrc: string | null = null;
+  if (
+    record.featuredImageSrc !== undefined &&
+    record.featuredImageSrc !== null
+  ) {
+    if (typeof record.featuredImageSrc !== "string") {
+      errors.push(
+        `featuredImageSrc must be the image's src as a string (got ${JSON.stringify(record.featuredImageSrc)})`
+      );
+    } else if (record.featuredImageSrc.trim().length === 0) {
+      featuredImageSrc = null;
+    } else if (record.featuredImageSrc.length > MAX_LEGACY_IMAGE_SRC_LENGTH) {
+      // Refused, not sliced — see MAX_LEGACY_IMAGE_SRC_LENGTH.
+      errors.push(
+        `featuredImageSrc must be at most ${MAX_LEGACY_IMAGE_SRC_LENGTH} characters`
+      );
+    } else {
+      featuredImageSrc = record.featuredImageSrc;
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -190,6 +252,7 @@ export function parseLegacyImportRecord(
   return {
     ok: true,
     value: {
+      featuredImageSrc,
       legacyId,
       title,
       slug,

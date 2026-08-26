@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 117.**
+**Jumlah memory saat snapshot terakhir: 118.**
 
 ## Sengaja TIDAK disertakan
 
@@ -65,7 +65,8 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Aturan dalam URUTAN pernyataan = aturan TANPA tes](awcms-rule-in-statement-order-has-no-test.md) — ADR-0111: presedensi 2 `await` menelan 23.906 redirect
 - [Kesiapan CMS berita /news/](awcms-news-site-readiness.md) — backend matang, AUTHORING & PRESENTASI putus; 9 pemblokir
 - [Putaran gap portal berita 19 Agu 2026](awcms-news-portal-gap-round-2026-08-19.md) — 132 fitur legacy → #588–#599; TipTap menabrak postur 2-dependency
-- [Situs legacy SeputarBorneo ADA di mesin ini](seputarborneo-legacy-site-is-on-this-machine.md) — LIMA bentuk URL; dump 0-byte UMPAN PALSU, data di volume `seputarborneocom_db_data`
+- [Situs legacy SeputarBorneo ADA di mesin ini](seputarborneo-legacy-site-is-on-this-machine.md) — EMPAT bentuk URL hidup (`cari_berita` dibayangi catch-all); dump 0-byte UMPAN PALSU, data di volume `seputarborneocom_db_data`
+- [Tanya: pemanggilnya ADA di jalur permintaan?](awcms-is-the-caller-even-in-the-request-path.md) — ADR-0114: `awcms_seo_redirects` 1 call site di `src/middleware.ts`, targetnya disajikan `awcms-astro`; TEPI yang memikul 301
 - [PRD LenteraKalteng menggerakkan kerja awcms](lenterakalteng-prd-drives-awcms-work.md) — PRD di ~/Downloads BUKAN di repo; awcms-astro TIDAK boleh jadi situs Lentera
 - [Rekomendasi WAJIB ditulis ke PROJECT_STATE §4](awcms-recommendation-rounds-live-in-project-state.md) — termasuk penolakan DAN pelaksanaannya; menurunkan ulang = satu audit penuh
 - [State proyek → docs/PROJECT_STATE.md](awcms-project-state-doc.md) — baca §4 DULU; §2 + 5 artefak ter-generate, jangan disunting tangan
@@ -3666,6 +3667,57 @@ Lihat juga [[bun-sql-array-binding-trap]] untuk `assertRejected` (wajib;
 `expect().rejects` MENG-HANG di pool harness) dan binding array.
 `````
 
+<!-- memory-file: awcms-is-the-caller-even-in-the-request-path.md -->
+
+`````markdown
+---
+name: awcms-is-the-caller-even-in-the-request-path
+description: "Satu tingkat DI ATAS 'grep CALL-nya': simbolnya dipanggil, tapi pemanggilnya tidak berada di jalur permintaan target — ADR-0113 benar soal tujuan, salah soal siapa yang me-redirect"
+metadata: 
+  node_type: memory
+  type: feedback
+  modified: 2026-08-26T05:59:04.498Z
+---
+
+## Polanya
+
+[[awcms-grep-the-call-not-the-definition]] bertanya "apakah simbol ini
+DIPANGGIL?". Pertanyaan ini SATU TINGKAT di atasnya: **apakah pemanggilnya berada
+di jalur permintaan yang sedang dibicarakan?**
+
+Kasus asalnya (#711/ADR-0114, 26 Agu 2026). `awcms_seo_redirects` diterapkan di
+**tepat satu** call site: `resolvePublicRedirectForRequest` dari
+`src/middleware.ts:341`. Call site itu ADA, hidup, ter-test. Tetapi ADR-0113
+memilih `/kategori/**` sebagai tujuan 62 aturan redirect — dan `/kategori/**`
+disajikan `ahliweb/awcms-astro` (`output: "static"`, TANPA middleware, tanpa
+kunci `redirects:`, `server/penyaji.mjs` NOL `301`/`Location`).
+
+Permintaannya tidak pernah tiba di aplikasi yang memegang tabelnya. 67 entri
+diputar ulang ke server build sungguhan: **404 semua, 0 header `Location`.**
+
+## Kenapa tak ada gerbang yang bisa melihatnya
+
+**Jawabannya hidup di REPO LAIN.** Semua gerbang di sini memindai repo ini, dan
+di repo ini semuanya konsisten dan benar. Yang salah adalah asumsi tentang siapa
+yang menerima permintaannya.
+
+## Aturannya
+
+Sebelum menulis aturan/handler untuk sebuah PATH, jawab dulu:
+
+1. Siapa yang menyajikan path itu hari ini? (`curl`, bukan tebakan)
+2. Apakah kode yang mau kutulis berjalan pada permintaan ke path itu?
+3. Kalau ada lebih dari satu origin di belakang satu domain, lapis mana yang
+   berada di DEPAN keduanya?
+
+Untuk redirect legacy, jawaban (3) hampir selalu **TEPI**: hanya tepi yang bisa
+meruntuhkan `http→https` + `www→apex` + `legacy→baru` menjadi SATU hop.
+
+Terkait: [[awcms-grep-the-call-not-the-definition]],
+[[awcms-astro-cross-repo-contract-dance]], [[awcms-run-it-dont-read-it]],
+[[awcms-gate-design-lessons]].
+`````
+
 <!-- memory-file: awcms-jualanku-porting.md -->
 
 `````markdown
@@ -7063,7 +7115,7 @@ description: "Artefak legacy SeputarBorneo ADA di /home/data/dev_php/seputarborn
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-25T09:20:35.642Z
+  modified: 2026-08-26T08:43:41.880Z
 ---
 
 **#599 dan `docs/PROJECT_STATE.md` sama-sama menyatakan artefak legacy "tidak ada
@@ -7073,13 +7125,33 @@ apa pun di dalam repo). Diverifikasi 24 Agustus 2026.
 
 Isi yang berguna:
 
-- `.htaccess` — **LIMA** bentuk rewrite, bukan dua yang didaftar issue:
-  `^news/([^/]*)\.html$` (artikel, SATU-SATUNYA yang tercakup),
-  `^rubrik/([^/]*)\.html$`, **`^([^/]*)/([^/]*)\.html$`** (catch-all dua-segmen
-  → `/rubriks/?news=$1&kt=$2`, TAK PERNAH didaftar di rencana mana pun),
-  `^cari_berita/([^/]*)\.html$`, `^([^/]*)\.html$` (halaman statis).
+- `.htaccess` — lima BARIS rewrite tetapi hanya **EMPAT** bentuk HIDUP:
+  `^news/([^/]*)\.html$` (artikel), `^rubrik/([^/]*)\.html$`,
+  **`^([^/]*)/([^/]*)\.html$`** (catch-all dua-segmen → `/rubriks/?news=$1&kt=$2`,
+  TAK PERNAH didaftar di rencana mana pun), `^([^/]*)\.html$` (halaman statis).
+- **`^cari_berita/([^/]*)\.html$` TAK PERNAH MENYALA** (#711, 26 Agu 2026).
+  Catch-all-nya BARIS 6, `cari_berita` BARIS 7, dan bahasa bentuk-4 adalah SUBSET
+  ketat catch-all → baris 7 mati sejak commit pertama yang menyentuh berkas itu.
+  Ini **URUTAN**, bukan `[L]`: pada baris 7 URL-nya sudah
+  `/rubriks/?news=cari_berita&kt=…`. Brute-force 3.375 path = 0 kecocokan (dengan
+  self-test yang menemukan counterexample saat bentuk 4 dilebarkan); 0 dari 5.170
+  URL Wayback berbentuk itu (korpus ter-commit
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`; semula dicatat 5.174,
+  kesimpulannya TIDAK berubah). `/cari_berita/X.html` tetap 200 — sebagai **bentuk
+  3** — dan TIDAK BOLEH dijadikan `/cari?q=`. Keputusan bentuk-4 ADR-0113
+  DICABUT.
 - `berita/index.php:9` = `(int) $_GET['news']` → id artikel adalah DIGIT
-  TERDEPAN, slug dekoratif. Mengonfirmasi `--path-template=/news/{legacyId}_{slug}.html`.
+  TERDEPAN, slug dekoratif. **Itu benar tentang router LEGACY dan TIDAK
+  mengonfirmasi `--path-template`** — kunci aturan awcms adalah string EKSAK, dan
+  template `/news/{legacyId}_{slug}.html` mencocoki **0 dari 25.029** URL: setiap
+  judul berspasi → setiap segmen ber-`_`, yang dilarang regex slug **INLINE**
+  importer legacy di `legacy-import-record.ts` — **BUKAN** `SLUG_PATTERN`, yang
+  const PRIVAT di `slug-policy.ts` di balik `isValidSlug` dan TIDAK dipanggil
+  importer itu (melonggarkannya melebarkan slug setiap tenant tanpa membuka satu
+  baris pun impor). ADR-0114:
+  resolusi artikel BERKUNCI-ID, dan 301-nya dieksekusi di **TEPI**, bukan lewat
+  `awcms_seo_redirects` (satu-satunya call site-nya `src/middleware.ts:341`, yang
+  TIDAK berada di jalur permintaan `/kategori/**`).
 - `data/index.php:195-212` → halaman statis = himpunan TERTUTUP berisi TIGA:
   `tentang_kami`, `pedoman_media_cyber`, `disclimer` (salah ketik itu bagian
   URL). Tiga aturan tangan, BUKAN importer.
@@ -7111,25 +7183,51 @@ Password dari `docker-compose.yml` (`root_local`), BUKAN dari env var — datadi
 yang sudah punya schema `mysql` mengabaikan `MARIADB_ROOT_PASSWORD`. Salinannya
 dimiliki uid 999, jadi hapus lewat container, bukan `rm` biasa.
 
-**Jebakan data untuk peta URL:** ada `MITRA BORNEO` (11.767) DAN `MITRA-BORNEO`
-(133). Segmen URL bentuk-3 adalah keluaran `seo_title()` (buang tanda baca,
-spasi→`-`), jadi keduanya runtuh ke slug yang SAMA sementara `DISTINCT` polos
-menganggapnya dua rubrik. Peta yang dibangun tanpa menormalkan lewat
-`seo_title()` yang sama akan salah-kunci rubrik TERBESAR di arsip.
+**KOREKSI 26 Agustus 2026 — jebakan `MITRA BORNEO`/`MITRA-BORNEO` yang dulu
+kutulis di sini SALAH.** Ia bertumpu pada `seo_title()`, yang didefinisikan 9×
+dan dipanggil 0× (lihat [[awcms-grep-the-call-not-the-definition]]). Segmen URL
+rubrik adalah NILAI KOLOM mentah, jadi `/rubrik/MITRA%20BORNEO.html` dan
+`/rubrik/MITRA-BORNEO.html` adalah path BERBEDA yang tak pernah runtuh — dan
+keduanya tidak ditautkan dari mana pun, jadi tak butuh aturan.
 
 Pemblokir #711 yang TERSISA cuma satu dan ia keputusan, bukan artefak: tujuan
 301 untuk `/rubrik/x.html` milik `ahliweb/awcms-astro` (ADR-0045/0070).
+**Diputuskan ADR-0114 (26 Agu 2026): yang mengeksekusi 301 adalah TEPI
+(Coolify/Varnish)**, karena hanya tepi yang bisa meruntuhkan
+`http→https` + `www→apex` + `legacy→baru` jadi SATU hop (PRD §9.2).
 
 **Konsekuensi yang mengubah rencana:** klaim "menutupinya cukup satu run lagi
-dengan `--path-template` lain" SALAH untuk 3 dari 5 bentuk —
+dengan `--path-template` lain" SALAH untuk SEMUA bentuk, bukan 3 dari 5 —
 `blog:legacy:redirects:import` menolak template tanpa `{legacyId}` dan menurunkan
-peta dari `awcms_blog_posts`; rubrik & halaman statis bukan artikel. Lihat
+peta dari `awcms_blog_posts`; rubrik & halaman statis bukan artikel; dan bahkan
+bentuk artikelnya mencocoki NOL URL. `awcms_seo_redirects` + `--path-template`
+kini **INERT** untuk cutover ini. Lihat
 [[awcms-declared-but-never-read-fields]]: `awcms_blog_pages.legacy_source_*`
 punya NOL penulis & NOL pembaca, dan
 `tests/legacy-redirect-map.test.ts:54-61` membuatnya tampak tercakup dengan
 meng-assert TEKS berkas migration, bukan pemakaiannya.
 
-Ditulis ke PROJECT_STATE §4 sebagai PUTARAN BENTUK (PR #704) + komentar #599.
+**Angka yang salah di seluruh catatan:** "23.906 artikel" ada di badan #599, 4
+changeset, ADR-0111, 2 header migration dan 20-an komentar sumber. Snapshot
+terukur = **25.029**; situs hidup sudah di id ≥ 25.474. Dokumen ber-klaim HIDUP
+dikoreksi; changeset & ADR ter-merge TIDAK ditulis ulang — koreksi tunggalnya di
+ADR-0114 §Konsekuensi.
+
+**Importer membuang SETIAP foto utama:** `featured_media_id` ada (`sql/035`) tapi
+`LegacyPostImportInput` tak punya field media; 25.029 dari 25.029 artikel punya
+`foto_berita`, dan `--images` hanya memindai HTML badan (2 body ber-`<img>`).
+Tugas nyatanya ~25.031 unggahan / 4,1 GB.
+
+**Tidak ADA sitemap legacy** dan tak pernah ada — tapi `--sitemap` menerima
+BERKAS LOKAL, jadi korpus sintetis membukanya tanpa perubahan kode. Wayback CDX =
+**5.170** URL (semula dicatat 5.174), di-commit sebagai
+`data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` — bukti eksternal yang
+MELURUH. Cakupannya artikel: 2.219 id artikel berbeda = 8,87% dari 25.029; dari
+2.301 URL `/news/*` di dalamnya, 2.224 berbentuk underscore dan **NOL** berbentuk
+hyphen.
+
+Ditulis ke PROJECT_STATE §4 sebagai PUTARAN BENTUK (PR #704) + komentar #599;
+dikoreksi oleh PUTARAN ORIGIN (26 Agu 2026).
 `````
 
 <!-- END GENERATED MEMORY -->

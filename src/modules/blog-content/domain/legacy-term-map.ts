@@ -12,6 +12,11 @@
  * and list nothing, which a crawler reads as a soft 404 rather than as the
  * moved-permanently it was promised.
  *
+ * NOTE ON "23,906" (both occurrences below): the measured snapshot is 25,029 —
+ * see ADR-0114 §Consequences, which is the single correction the figure points
+ * at. Left standing because this is an argument about scale, and it does not
+ * move.
+ *
  * ## Why a map rather than ids in the rows, or names created on sight
  *
  * The same shape as `legacy-media-map.ts`, deliberately, because the operator

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:88ca257fc6f41430c03be58a738354369006f4c9657dd5fb42f746c8828fe9f0 -->
+<!-- i18n-source-hash: sha256:d8b6be94cad358824a79ffb75d09e175a09ce3b63ef651a61e620bda6a234035 -->
 
 # Blog Content
 
@@ -178,7 +178,7 @@ Satu permission (`configure`) menggerbangi create/update/delete sekaligus — sa
 
 ### `?order=created_at` — membaca SELURUH kosakata (Issue #597)
 
-List default-nya `name ASC` dengan `LIMIT` berbatas (100, maks 200 lewat `?limit=`) — persis yang diinginkan layar taksonomi admin, dan persis yang membuat endpoint ini tak terpakai untuk hal lain. Sebuah array telanjang tidak membawa field apa pun yang bisa berkata "masih ada lagi", jadi pemanggil yang butuh setiap term menerima seratus pertama menurut abjad dan tidak punya cara mengetahuinya. Untuk `category` atau `channel` itu tak berbahaya — sebuah redaksi punya belasan. Untuk `tag` pada arsip 23.906 artikel di Issue #599 artinya build statis membangkitkan seratus halaman tag dari ribuan, `200 OK`, dan setiap artikel yang berada di tag berabjad belakang menaut ke halaman yang tak pernah dibangkitkan siapa pun.
+List default-nya `name ASC` dengan `LIMIT` berbatas (100, maks 200 lewat `?limit=`) — persis yang diinginkan layar taksonomi admin, dan persis yang membuat endpoint ini tak terpakai untuk hal lain. Sebuah array telanjang tidak membawa field apa pun yang bisa berkata "masih ada lagi", jadi pemanggil yang butuh setiap term menerima seratus pertama menurut abjad dan tidak punya cara mengetahuinya. Untuk `category` atau `channel` itu tak berbahaya — sebuah redaksi punya belasan. Untuk `tag` pada arsip 25.029 artikel di Issue #599 (README ini menyebut 23.906; snapshot terukurnya 25.029 — lihat `docs/adr/0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md` §Konsekuensi) artinya build statis membangkitkan seratus halaman tag dari ribuan, `200 OK`, dan setiap artikel yang berada di tag berabjad belakang menaut ke halaman yang tak pernah dibangkitkan siapa pun.
 
 `?order=created_at` memilih traversal stabil dan responsnya mendapat `nextCursor`; ikuti sampai `null`. `?cursor=` tanpa `?order=created_at` adalah `400`, karena `name` dapat disunting dan penggantian nama memindahkan term melintasi batas halaman — penalaran yang sama persis dicatat `GET /api/v1/blog/posts` untuk `updated_at`. `listBlogTermsPage` (`application/blog-taxonomy-directory.ts`) adalah query-nya; `domain/blog-term-list-query.ts` permukaan penolakannya, dan `tests/integration/blog-term-cursor.integration.test.ts` menegakkan traversal MAUPUN pemotongan senyap list default terhadap PostgreSQL nyata.
 

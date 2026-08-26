@@ -7,8 +7,15 @@
  * deployment stores images as registry references, and an import that kept the
  * `src` would smuggle unmanaged media past the enforcement `media_library`
  * exists to apply. That refusal names the `src` — and until now that was where
- * the trail ended, which for an archive of 23,906 CKEditor articles meant
- * essentially every row was residue and nothing could be imported at all.
+ * the trail ended.
+ *
+ * This paragraph used to say that for a real CKEditor archive that meant
+ * essentially every row was residue. Measured against the SeputarBorneo
+ * snapshot it is 4 rows in 25,029 (0.02%), of which 2 contain an `<img>` at
+ * all. The residue was never the volume here. The volume is the LEAD
+ * photograph, which is a column of the legacy row and not part of the body:
+ * 25,029 of 25,029 articles have one, and no body scan can see it — hence
+ * `LegacyArticleImageRefs` below, and `featuredImageSrc` on the record.
  *
  * The missing half is NOT "fetch the image and register it". That would mean
  * the server pulling third-party bytes from an address somebody else chose — a
@@ -105,35 +112,97 @@ export function parseLegacyMediaMap(raw: unknown): LegacyMediaMapResult {
   return { ok: true, value };
 }
 
+/**
+ * What ONE article still needs uploaded, from both places an image can live.
+ *
+ * Two fields rather than one flat list because the two arrive by completely
+ * different routes and had completely different bugs. `body` comes from the
+ * converter's own `unmanaged_image` rejections; `featured` is a COLUMN of the
+ * legacy row (`foto_berita`) that no body scan can ever see. The upload set was
+ * built from `body` alone, so for the SeputarBorneo archive it reported the 2
+ * inline images and missed all 25,029 lead photographs — an upload set wrong by
+ * the whole archive, and wrong in the direction that reads as "almost nothing
+ * to do" (ADR-0114).
+ */
+export type LegacyArticleImageRefs = {
+  /** Every `<img src>` in the body this run could not resolve. */
+  body: readonly string[];
+  /** The lead photograph's `src`, or `null` when the row has none / it resolved. */
+  featured: string | null;
+};
+
 export type LegacyImageUsage = {
   src: string;
-  /** How many articles in the file reference it. */
+  /**
+   * Articles referencing it at all. Never more than `bodyArticles +
+   * featuredArticles`, and less when one article uses the same file both ways.
+   */
   articles: number;
+  /** …of which, referencing it from the body HTML. */
+  bodyArticles: number;
+  /** …of which, carrying it as the lead photograph. */
+  featuredArticles: number;
 };
 
 /**
- * The upload set: every `src` the archive references, most-used first.
+ * The upload set: every `src` the archive still needs uploaded, most-used
+ * first, split by where it came from.
  *
  * Built from the converter's own `unmanaged_image` rejections rather than by
  * scanning the HTML again — a second scanner would be a second answer to "what
  * counts as an image reference", and the two would drift exactly where it
- * matters least visibly.
+ * matters least visibly. The lead photograph is not scanned for at all; it is
+ * read from the field the export supplies.
+ *
+ * "Still needs uploaded" is the one meaning of this file, for both halves: a
+ * `src` the current `--media-map` already resolves is not listed, because the
+ * operator has nothing left to do with it.
  */
 export function summariseLegacyImageUsage(
-  srcsPerArticle: readonly (readonly string[])[]
+  refsPerArticle: readonly LegacyArticleImageRefs[]
 ): LegacyImageUsage[] {
-  const counts = new Map<string, number>();
+  const counts = new Map<
+    string,
+    { articles: number; bodyArticles: number; featuredArticles: number }
+  >();
 
-  for (const srcs of srcsPerArticle) {
+  const bump = (
+    src: string,
+    field: "bodyArticles" | "featuredArticles",
+    countedThisArticle: Set<string>
+  ): void => {
+    if (src.trim().length === 0) return;
+
+    let entry = counts.get(src);
+    if (!entry) {
+      entry = { articles: 0, bodyArticles: 0, featuredArticles: 0 };
+      counts.set(src, entry);
+    }
+
+    entry[field] += 1;
+    // `articles` is the UNION: one article using the same file as its lead and
+    // again in its body is one article to upload for, not two.
+    if (!countedThisArticle.has(src)) {
+      countedThisArticle.add(src);
+      entry.articles += 1;
+    }
+  };
+
+  for (const refs of refsPerArticle) {
+    const countedThisArticle = new Set<string>();
+
     // One article referencing the same file twice is one article, not two —
     // this is an upload list, and the count exists to order it.
-    for (const src of new Set(srcs)) {
-      if (src.trim().length === 0) continue;
-      counts.set(src, (counts.get(src) ?? 0) + 1);
+    for (const src of new Set(refs.body)) {
+      bump(src, "bodyArticles", countedThisArticle);
+    }
+
+    if (refs.featured !== null) {
+      bump(refs.featured, "featuredArticles", countedThisArticle);
     }
   }
 
   return [...counts.entries()]
-    .map(([src, articles]) => ({ src, articles }))
+    .map(([src, entry]) => ({ src, ...entry }))
     .sort((a, b) => b.articles - a.articles || a.src.localeCompare(b.src));
 }

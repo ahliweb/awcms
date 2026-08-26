@@ -44,7 +44,10 @@ import {
   findTakenSlugs,
   importLegacyBlogPost
 } from "../../src/modules/blog-content/application/legacy-import-directory";
-import { listLegacyRedirectMappings } from "../../src/modules/blog-content/application/blog-post-directory";
+import {
+  listLegacyArticlePaths,
+  listLegacyRedirectMappings
+} from "../../src/modules/blog-content/application/blog-post-directory";
 import { convertLegacyHtmlToPortableText } from "../../src/modules/blog-content/domain/legacy-html-conversion";
 import { mediaLibraryPortAdapter } from "../../src/modules/media-library/application/media-library-port-adapter";
 import type { LegacyPostImportInput } from "../../src/modules/blog-content/application/legacy-import-directory";
@@ -80,6 +83,10 @@ function input(
     publishedAt: ORIGINAL_PUBLISHED_AT,
     seoTitle: null,
     metaDescription: null,
+    featuredMediaId: null,
+    // Defaults to the no-`--section-map` state, so the existing cases keep
+    // asserting what that envelope looks like; the section cases opt in.
+    section: null,
     ...overrides
   };
 }
@@ -132,6 +139,214 @@ suite("legacy article import (integration, Issue #599)", () => {
     expect(rows[0]!.status).toBe("published");
     expect(rows[0]!.legacy_source_system).toBe(SYSTEM);
     expect(rows[0]!.legacy_source_id).toBe("48213");
+  });
+
+  test("content_json arrives with a DERIVED projection and the section sidecar", async () => {
+    // The half no pure test can reach, and the reason this case exists at all.
+    //
+    // `tests/legacy-section-map.test.ts` proves `legacyContentJson` builds the
+    // right envelope. It passes just as happily over a function the INSERT does
+    // not call — which is exactly the state this file shipped in: a hard-coded
+    // `{ blocks: [] }` sat in the INSERT under a docblock claiming it was "the
+    // same lossy projection every other write path produces". Only reading the
+    // column back out of Postgres can tell the two apart.
+    //
+    // Both halves are what `ahliweb/awcms-astro` reads:
+    //   - `renderContentBlocks(post.contentJson)` reads `blocks`, and returns
+    //     "" for an empty array — a blank page for every article.
+    //   - `getArticles` keeps a post only when `readBlock(post).kategori ===
+    //     tab`, reading `awcmsAstro` — with no key, NO page is built at all,
+    //     and no category archive either.
+    await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ section: "hukum" })
+      )
+    );
+
+    const rows = (await getAdminSql()`
+      SELECT content_json FROM awcms_blog_posts WHERE tenant_id = ${TENANT}
+    `) as { content_json: Record<string, unknown> }[];
+
+    expect(rows).toHaveLength(1);
+    const envelope = rows[0]!.content_json;
+
+    // An OBJECT, not the scalar string `"{\"blocks\":[]}"`. Bun JSON-encodes a
+    // string bound to a jsonb slot (Issue #641), and a round trip is the only
+    // thing that can catch it.
+    expect(typeof envelope).toBe("object");
+
+    expect(Array.isArray(envelope.blocks)).toBe(true);
+    expect((envelope.blocks as unknown[]).length).toBeGreaterThan(0);
+    expect(JSON.stringify(envelope.blocks)).toContain("Air naik.");
+
+    expect(envelope.awcmsAstro).toEqual({
+      schemaVersion: 1,
+      kategori: "hukum"
+    });
+  });
+
+  test("no section still stores a real body projection, and omits the sidecar", async () => {
+    // The default path — no `--section-map`. It must not regress into the empty
+    // envelope just because the sidecar is absent: an archive imported for a
+    // tenant THIS repo serves still needs `blocks` for any later consumer, and
+    // the two halves were broken by one line together.
+    await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      importLegacyBlogPost(tx, TENANT, AUTHOR, SYSTEM, input())
+    );
+
+    const rows = (await getAdminSql()`
+      SELECT content_json FROM awcms_blog_posts WHERE tenant_id = ${TENANT}
+    `) as { content_json: Record<string, unknown> }[];
+
+    const envelope = rows[0]!.content_json;
+    expect((envelope.blocks as unknown[]).length).toBeGreaterThan(0);
+    expect("awcmsAstro" in envelope).toBe(false);
+  });
+
+  test("the redirect map applies the SERVING route's full predicate", async () => {
+    // The docblock on `listLegacyRedirectMappings` promises exactly this, and
+    // before this case existed it promised it over nothing: the function's four
+    // integration call sites cover one-hop/locale-prefix, draft+soft-deleted,
+    // unsupported-locale and cross-tenant, and not one of them seeds a
+    // `private`, `unlisted`, unpublished or future-dated post.
+    //
+    // The function had said "only PUBLISHED, non-deleted posts: a redirect
+    // pointing at a draft sends a search engine to a 404" over exactly those
+    // two conditions, while `fetchPublicBlogPostBySlug` requires four. So a
+    // `private` post and a future-dated one each got a rule whose destination
+    // 404s — the failure the paragraph names, produced by its own function.
+    const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+      await importLegacyBlogPost(tx, TENANT, AUTHOR, SYSTEM, input());
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ legacyId: "2", slug: "private-post", visibility: "private" })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ legacyId: "3", slug: "unlisted-post", visibility: "unlisted" })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ legacyId: "4", slug: "future-post", publishedAt: future })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({
+          legacyId: "5",
+          slug: "never-published",
+          status: "draft",
+          publishedAt: null
+        })
+      );
+    });
+
+    const mappings = await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      listLegacyRedirectMappings(tx, TENANT, {
+        system: SYSTEM,
+        tenantCode: "lentera",
+        pathTemplate: "/news/{legacyId}_{slug}.html"
+      })
+    );
+
+    const ids = mappings.map((entry) => entry.legacyId).sort();
+
+    // `unlisted` IS served by this repo's public route, so it keeps its rule.
+    // `private`, future-dated and never-published do not, and must not.
+    // "48213" is the fixture default; "3" is the unlisted one.
+    expect(ids).toEqual(["3", "48213"]);
+  });
+
+  test("listLegacyArticlePaths reads the SECTION back out of the jsonb envelope", async () => {
+    // The query that decides all 25,029 redirect destinations, and it had no
+    // test at all — while `tests/blog-legacy-article-paths.test.ts` said in its
+    // own header that "the query behind it is exercised" here. A comment
+    // asserting a binding no call makes, in a file added to fix an instance of
+    // that. This is the call.
+    //
+    // Three things only Postgres can answer:
+    //   - `content_json -> 'awcmsAstro' ->> 'kategori'` really extracts the
+    //     section from the envelope `legacyContentJson` wrote;
+    //   - it yields SQL NULL for a row with no sidecar, rather than throwing or
+    //     returning the string "null";
+    //   - the predicate deliberately DIVERGES from its sibling by excluding
+    //     `unlisted`, because the consuming site builds pages only for
+    //     `visibility === 'public'`.
+    const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ section: "hukum" })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ legacyId: "2", slug: "no-section-post", section: null })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({
+          legacyId: "3",
+          slug: "unlisted-post",
+          visibility: "unlisted",
+          section: "hukum"
+        })
+      );
+      await importLegacyBlogPost(
+        tx,
+        TENANT,
+        AUTHOR,
+        SYSTEM,
+        input({ legacyId: "4", slug: "future-post", publishedAt: future })
+      );
+    });
+
+    const rows = await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      listLegacyArticlePaths(tx, TENANT, { system: SYSTEM })
+    );
+
+    // `unlisted` and the future-dated row are BOTH absent: the artefact must
+    // describe the pages the consuming site actually generates, and one that is
+    // more generous than its consumer is a 301 into a 404 wearing a green
+    // report. That is the deliberate divergence from
+    // `listLegacyRedirectMappings`, which keeps `unlisted` because THIS repo's
+    // route serves it.
+    expect(rows.map((row) => row.legacyId).sort()).toEqual(["2", "48213"]);
+
+    const withSection = rows.find((row) => row.legacyId === "48213");
+    const withoutSection = rows.find((row) => row.legacyId === "2");
+
+    expect(withSection?.section).toBe("hukum");
+    // `->>` yields SQL NULL for a missing key, and the driver must hand that
+    // back as `null` — not as the four-character string "null", which
+    // `isValidSlug` would happily accept as a path segment.
+    expect(withoutSection?.section).toBeNull();
   });
 
   test("a re-run inserts nothing, and says so", async () => {

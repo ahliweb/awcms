@@ -47,6 +47,23 @@ export const ALLOWED_REDIRECT_ORIGINS: readonly RedirectOrigin[] = [
 export const MAX_REDIRECT_REASON_LENGTH = 500;
 export const MAX_LOCALE_SCOPE_LENGTH = 35;
 
+/**
+ * Items `POST /api/v1/seo/redirects/import` accepts in ONE call. The endpoint
+ * is all-or-nothing inside a single transaction, and every item costs a
+ * conflict/loop/chain check against the existing rules, so the cap is what
+ * keeps one request from holding that transaction open unboundedly.
+ *
+ * It lives HERE, in the domain, because it is not only the endpoint's business:
+ * anything that BUILDS an import payload has to split it to the same size, and
+ * `scripts/blog-legacy-rubrik-redirects.ts` does. That script used to carry its
+ * own `200` under the comment "Mirrors `MAX_IMPORT_ITEMS` in
+ * src/pages/api/v1/seo/redirects/import.ts" — and a comment cannot mirror
+ * anything. Lowering the endpoint's cap would have left the builder emitting
+ * chunks the endpoint rejects, with nothing failing until an operator posted
+ * one. Both sides now read this binding, so they cannot disagree.
+ */
+export const MAX_REDIRECT_IMPORT_ITEMS = 200;
+
 /** BCP-47-ish locale tag shape (letters, digits, hyphen) — bounded, no pattern engine risk. */
 const LOCALE_SCOPE_PATTERN = /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/;
 

@@ -41,10 +41,12 @@ Do not load this archive under the same system name as a real import.
 
 ## What it does NOT set
 
-- **No images.** Every article is text, headings, lists and quotes. The importer
-  refuses an `<img>` whose `src` is not already a verified media object, and the
-  right way to add pictures is `/admin/media` plus `--media-map`, not a fetcher
-  reaching for third-party bytes. See `scripts/blog-legacy-import.ts`.
+- **No images.** Every article is text, headings, lists and quotes, and no row
+  carries the optional `featuredImageSrc` (the lead photograph). The importer
+  refuses either kind — a body `<img>` or a lead photograph — whose `src` is not
+  already a verified media object of this tenant, and the right way to add
+  pictures is `/admin/media` plus `--media-map`, not a fetcher reaching for
+  third-party bytes. One map covers both. See `scripts/blog-legacy-import.ts`.
 - **No taxonomy terms.** The rows carry no `category`/`channel`/`topic`, so they
   will not appear under a section on an `awcms-astro` build until an editor files
   them — that template resolves a section from the post's own stored `kategori`.

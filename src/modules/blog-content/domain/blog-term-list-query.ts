@@ -16,6 +16,10 @@
  * a hundred pages, and every article filed under a tag later in the alphabet
  * points at a page nobody generated.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * That is the shape of failure this module exists to end, and the fix is the
  * one `GET /api/v1/blog/posts` already established: an explicit
  * `?order=created_at` traversal with an opaque cursor, so a caller that needs

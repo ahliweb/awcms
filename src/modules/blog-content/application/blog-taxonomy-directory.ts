@@ -374,6 +374,10 @@ export async function syncPostTermAssignments(
   // archive turned this into ~24k DELETEs and ~48k INSERTs inside batched
   // transactions, where two statements per article will do.
   //
+  // NOTE ON "23,906" (both occurrences in this file): the measured snapshot is
+  // 25,029 — see ADR-0114 §Consequences, which is the single correction the
+  // figure points at. Left standing because this is an argument about scale.
+  //
   // Deliberately NOT deduplicated: `awcms_blog_post_terms_unique` refuses a
   // repeated (post, term) pair, and it refused one before this change too. A
   // caller passing the same term twice has a bug, and swallowing it here would
