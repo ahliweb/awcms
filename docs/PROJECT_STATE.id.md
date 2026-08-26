@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:d0614fd07157de0ee5ede46ec948681b16e398bc94154684033ca0935f187d03 -->
+<!-- i18n-source-hash: sha256:43b45dc2cc26ad94e97344e0b9c72201e45493daf84693fc409ea90610863bc7 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0115** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0116** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -359,6 +359,78 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN LINGKUP — 26 Agustus 2026: premis yang dipijak kedua issue cutover
+  terbuka DICABUT, dan kewajiban 301-nya ikut bersamanya.**
+
+  Pemilik produk mencabut kebutuhan migrasi PRD §41: **tidak semua artikel dari
+  situs legacy perlu dimigrasikan atau diimpor, dan situsnya dipakai sebagai
+  rujukan untuk fitur dan fungsionalitasnya.** Dicatat sebagai
+  **[ADR-0116](adr/0116-the-legacy-site-is-a-feature-reference-not-a-migration-source.id.md)**,
+  yang MENGAMANDEMEN ADR-0113/0114/0115 alih-alih men-supersede-nya.
+
+  **Impornya paruh yang kecil. Kewajiban 301-nya yang memikul beban.** Melewati
+  impor adalah keputusan penjadwalan; mencabut cutover-nya keputusan kebenaran,
+  dan ia perlu ditulis karena konsekuensi jujurnya berlawanan intuisi: **301
+  adalah JANJI bahwa kontennya pindah**, jadi ia tak bisa diterbitkan untuk
+  konten yang tidak pindah. Repo ini sudah menolak pertukaran itu persis sekali
+  — ADR-0113 menolak mengarahkan URL pencarian legacy ke artikel mana pun,
+  karena _"mengarahkannya ke artikel mana pun adalah 301 yang berbohong"_.
+  Diterapkan konsisten, kalimat yang sama memutuskan seluruh cutover: **URL tak
+  bisa dibawa tanpa membawa kontennya.** Untuk artikel yang sengaja tidak
+  diimpor, status jujurnya 410 — tak pernah 301 ke indeks kategori: 25.029 dari
+  itu adalah ladang soft-404, dibangun dengan perkakas yang justru ditulis repo
+  ini untuk membuat redirect berbohong itu sulit.
+
+  **Tak ada yang dihapus, dan tak ada yang perlu diubah.** Keenam job tetap, dan
+  alasan impor selektif tak butuh kode baru adalah properti yang sudah ada di
+  kuerinya: `listLegacyRedirectMappings` menyeleksi `WHERE legacy_source_id IS
+NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
+  artikel dan ia memancarkan sepuluh aturan; impor nol dan ia memancarkan nol.
+  **Impor parsial TIDAK BISA menghasilkan aturan menggantung** — secara
+  konstruksi, bukan disiplin. Satu properti itulah yang membuat kewajibannya
+  aman dicabut tanpa menyentuh satu baris pun pipeline-nya.
+
+  **Diverifikasi, bukan diasumsikan, karena "bisa ditutup" itu sebuah KLAIM.**
+  Setiap butir DoD kedua issue diperiksa terhadap pohon kode sebelum keduanya
+  ditutup, bukan dibantah dari ingatan: bentuk ke-4 SUDAH diputuskan di ADR-0113
+  (ditarik — aturannya duduk di bawah catch-all dan tak pernah menyala); daftar
+  rubriknya SUDAH diperoleh dan di-commit (68 entri, **63** membawa target ke
+  **10** kategori tujuan); tujuannya SUDAH disepakati dan tertulis (ADR-0113 +
+  ADR-0115); converter, dry-run, dan laporan pemetaan semuanya ADA. Yang tersisa
+  di kedua issue hanyalah klausa yang bergantung migrasi, dan hanya itu.
+
+  **Perubahan lingkup ini membalik SATU docblock, dan itu satu-satunya berkas
+  kode yang tersentuh.** `blog:legacy:cutover:verify` ADA karena _"URL legacy
+  yang TIDAK diimpor tidak menghasilkan aturan sama sekali … ia menjawab 404 di
+  hari cutover, dan peringkatnya tidak kembali"_. Di bawah ADR-0116, 404 itu
+  keadaan yang DIINGINKAN, jadi run korpus penuh kini melaporkan hasil yang
+  diinginkan sebagai gagal. Itu properti korpus yang diberikan kepadanya —
+  diberi baris yang benar-benar diimpor, yang dipancarkan
+  `blog:legacy:article-paths`, setiap verdict tetap berarti apa yang
+  dikatakannya. Premisnya DILINGKUPI di tempat alih-alih dihapus, karena ia
+  tetap persis benar untuk URL yang SEHARUSNYA pindah dan diam-diam tidak.
+  **Tak ada anggota `CutoverVerdict` untuk "sengaja hilang" yang ditambahkan**,
+  dan penahanan diri itu disengaja: tak ada kewajiban yang kini menuntut run
+  korpus penuh yang akan membutuhkannya, dan melebarkan union demi run yang tak
+  diminta siapa pun adalah cara kosakata melampaui pemanggilnya.
+
+  **Kewajiban itu dipikul berminggu-minggu di atas DUA angka berbeda tentang
+  subjeknya sendiri.** #599, #597 dan beberapa dokumen menyebut **23.906**
+  artikel; basis data legacy menyebut **25.029**. Keduanya dikutip sebagai
+  besaran kewajibannya, di repo yang sama, dan tak ada yang mendamaikannya.
+  Kewajiban yang cukup mahal untuk membenarkan enam job tak pernah cukup mahal
+  bagi siapa pun untuk menghitung apa yang dikenainya.
+
+  **Apa yang ini tinggalkan.** Issue #599 dan #711 DITUTUP — butir DoD keduanya
+  terbelah menjadi terkirim dan tercabut, dirinci di masing-masing issue.
+  Pemblokir media ~25.031 unggahan / 4,1 GB larut, karena secara bawaan tak ada
+  yang diimpor. Sepuluh kategori tujuan menjadi prasyarat impor selektif alih-
+  alih prasyarat platform. `data/seputarborneo-legacy/` dipertahankan sebagai
+  bahan rujukan. **Nasib domain legacy TIDAK diputuskan di sini** — itu
+  infrastruktur, di luar kedua repositori, dan ADR-0114 sudah menaruh 301-nya di
+  tepi; bila domainnya disajikan, ADR-0116 §2 memberi aturan yang wajib diikuti
+  konfigurasinya.
 
 - **PUTARAN KONSUMEN — 26 Agustus 2026: importer menghasilkan 25.029 artikel
   yang repo PENYAJINYA tidak membangun satu halaman pun untuknya, dan tujuan yang
