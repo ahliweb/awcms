@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0113** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0114** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **59** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -360,6 +360,119 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **ORIGIN ROUND — 26 August 2026: the cutover map was right about where to send
+  a reader and wrong about WHO would send them, and no gate in this repo could
+  see it because the answer lived in another repo.**
+
+  **A merged ADR is false.** ADR-0113 §Consequences said, in both languages,
+  _"`awcms-astro` needs no change for this… the redirect is resolved in this repo
+  before its routes are reached."_ `awcms_seo_redirects` is applied at **exactly
+  one call site** — `resolvePublicRedirectForRequest`, from
+  `src/middleware.ts:341` — which runs HERE. The 62 rubrik rules target
+  `/kategori/**`, which is served by `ahliweb/awcms-astro`: `output: "static"`,
+  **no middleware file at all**, no `redirects:` key, and a production entrypoint
+  `server/penyaji.mjs` containing zero occurrences of `301` or `Location`.
+  `grep -rn seputarborneo` over its whole `src/` and `docs/` returns nothing.
+
+  Not argued — run. All 67 committed entries were replayed against that repo's
+  real built server: **404 on every one, zero `Location` headers.**
+
+  Two decisions follow, recorded as **ADR-0114**. The **edge** (Coolify/Varnish)
+  owns the legacy 301s, because it is the only layer that can collapse
+  `http→https` + `www→apex` + `legacy→new` into the ONE hop PRD §9.2 demands —
+  an application only sees a request after the edge has already acted on scheme
+  and host, so any rule it writes is at best hop two. And article resolution is
+  **id-keyed**, not exact-path: `/news/{id}_{Title}.html` matches on its leading
+  digits against `legacy_source_id`.
+
+  **The shipped article template matches 0 of 25,029 URLs, and fails worse than
+  a 404.** Every legacy title contains a space, so every legacy URL segment
+  carries `_` — which `SLUG_PATTERN` at `legacy-import-record.ts:117` forbids,
+  while `normalizeRedirectPath` preserves case, decodes nothing, and matches by
+  equality. **No slug that can pass the validator can ever equal the indexed
+  segment**; the two slugs are disjoint by construction. Confirmed externally:
+  2,297 of 2,297 archived `/news/*.html` URLs use the underscore form. And an
+  unmatched `/news/**` does not 404 — it falls through to
+  `resolveRetiredNewsRedirect` and 301s into `/blog/{code}/{id}_{Raw_Slug}.html`,
+  which is `CUTOVER_VERDICT_REASON.target_missing` in its own words: _"a 301 into
+  a 404, which is worse than the 404 it replaces"._ The inference error is worth
+  naming: **"the id is the leading digits" is true of the LEGACY router and says
+  nothing about awcms, whose rule keys are exact strings.**
+
+  **Shape 4 has never existed.** `^cari_berita/([^/]*)\.html$` is `.htaccess`
+  line 7 and the two-segment catch-all is line 6, and shape 4's language is a
+  strict SUBSET of the catch-all's — so it has never been reached, in any commit
+  that ever touched the file, and both docker vhosts carry the same pair in the
+  same order. It is rule ORDER, not the `[L]` flag: by line 7 the URL is already
+  `/rubriks/?news=cari_berita&kt=…`. Brute-forced over 3,375 candidate paths (0
+  matches, with a self-test that DID find a counterexample when shape 4 was
+  artificially widened), confirmed live (`/cari_berita/sampit.html` and
+  `/rubriks/?news=cari_berita&kt=sampit` differ on one line, `og:url`), and
+  confirmed against 5,174 archived URLs of which zero are `/cari_berita/*.html`.
+  So ADR-0113's shape-4 decision decided an empty set, and #711's open item
+  _"`cari_berita` rules — needs the live sitemap"_ is dissolved twice over. The
+  residual matters: `/cari_berita/X.html` still serves 200 **as a shape-3 URL**
+  and must never become a `/cari?q=` redirect, which would send readers somewhere
+  the legacy site never sent them.
+
+  **Two gates would have reported green over all of it.**
+  `blog:legacy:cutover:verify` exits **0 on every usage error** — `usage()` at
+  `scripts/blog-legacy-cutover-verify.ts:82-93` omits `process.exitCode = 1`,
+  reproduced for no args, each missing required flag, and `--limit=abc`, so
+  `bun run blog:legacy:cutover:verify --sitemap=$F && deploy` deploys when the
+  flag is misspelled. And `classifyCutoverOutcome`
+  (`cutover-verification.ts:137`) handles only `targetLive === false`;
+  `targetLive === null` falls through to `return "ok"`, and the script's
+  `postSlugFromPath` returns `null` for anything that is not
+  `/blog/{tenantCode}/{slug}` — which is **every one** of ADR-0113's 62
+  `/kategori/*` targets. Combined, the gate would have printed _"All N legacy
+  URL(s) resolve in one hop to a page this deployment serves"_ while the origin
+  404'd all 67. **A gate that is green while its answer is wrong is the failure
+  mode**, and this is the clearest instance the repo has produced.
+
+  **The importer silently drops every lead photograph.** `featured_media_id`
+  exists (`sql/035:46`) and is served to `awcms-astro`, but
+  `LegacyPostImportInput` has 12 fields and none is media, and the INSERT names
+  16 columns without it. **25,029 of 25,029 articles have a featured image** in
+  `foto_berita`, and `--images` scans body HTML only, so it will never mention
+  them: the real media task is ~25,031 uploads / 4.1 GB, not the 2 that body
+  scanning finds. Three smaller defects sit beside it — `--images` collection
+  sits BELOW the category gate (`blog-legacy-import.ts:443-458`), so a run
+  without `--term-map` reports zero images, the same ordering bug already fixed
+  one function up at `:435`; there is a `seenLegacyIds` set and no `seenSlugs`,
+  and the real archive has 84 collision groups across 171 rows, so a real run
+  dies on a 23505 mid-batch; and the docstring claiming _"EVERY row of a real
+  CKEditor archive was residue"_ is measured at **4 of 25,029 (0.02%)**.
+
+  **`IMPORT_CHUNK_SIZE = 200` is tied to `MAX_IMPORT_ITEMS` by a COMMENT ONLY** —
+  no import, no test. This repo's recurring class, stated again: **a comment is
+  not a call.**
+
+  **Three record corrections.** The archive is **25,029**, not 23,906 (live is at
+  id ≥ 25,474); ADR-0114 carries the single correction and merged changesets are
+  deliberately not rewritten. The committed rubrik map has one real gap —
+  `/Mitra-Borneo/Pemkab%20Lamandau.html` returns 200 with a real listing and is
+  not among the 67, because the homepage emits it without `.html` and the capture
+  keyed on the suffix. And **Wayback CDX holds 5,174 distinct URLs** for the
+  domain (verified untruncated: two pages, 2,975 + 2,200), which is ~8.86% of the
+  corpus — real external evidence that decays and cannot be reconstructed, so it
+  is worth committing WITH that caveat, and it is not a substitute for the
+  indexed set.
+
+  **What this round leaves as work:** ADR-0114's generated id→path artefact and
+  the edge wiring; the two `cutover:verify` defects; the featured-image handoff
+  and the three importer defects; the `IMPORT_CHUNK_SIZE` coupling; the map's
+  Lamandau gap; and capturing the CDX corpus. This entry is the record; none of
+  it is code yet.
+
+  The transferable shape, and it is a genuinely new one: **every previous round
+  here asked "is this symbol called?" — this one found a decision whose target
+  was served by a different ORIGIN entirely.** ADR-0113 was correct about what to
+  redirect to and wrong about who would do the redirecting, and no gate in this
+  repo could see that, because the answer was a build configuration in another
+  repository. The check is not only "is it called" but **"is the caller even in
+  the request path"**.
+
 - **SEAM ROUND — 26 August 2026: three gates read only the English half, and a
   fourth gate had no caller at all.**
 
@@ -536,16 +649,20 @@ pioneered directly here after the ADR-0047 freeze.)
   limit, and the document that called its cardinality bounded was justifying a
   partitioning decision with it.**
 
-  The audit started from the two open issues rather than from a scan. #599 takes
-  `awcms_seo_redirects` from near-empty to **23,906** rules per tenant and
-  ADR-0113 adds ~150 more, on a path that runs for every reader and every
-  crawler — so that path was the thing worth measuring.
+  The audit started from the two open issues rather than from a scan. #599 was
+  expected to take `awcms_seo_redirects` from near-empty to **25,029** rules per
+  tenant (this entry said 23,906 — see ADR-0114 for the count correction) with
+  ADR-0113 adding ~60 more, on a path that runs for every reader and every
+  crawler — so that path was the thing worth measuring. **ADR-0114 has since
+  removed that load entirely**: the SeputarBorneo 301s execute at the edge, so
+  this table does not grow by 25,029 rows. The measurement below stands on its
+  own for any tenant that does author rules at that scale.
 
   **The resolve half is sound**, and worth recording so nobody re-audits it:
   `MAX_REDIRECT_HOPS = 5` bounds the chain walker, and
   `awcms_seo_redirects_resolve_idx` is a partial index on exactly
   `(tenant_id, normalized_source_path) WHERE deleted_at IS NULL AND state =
-'active'`. 23,906 rules is a B-tree point lookup, not a scan.
+'active'`. 25,029 rules is a B-tree point lookup, not a scan.
 
   **The capture half was not.** `recordPublicNotFound` fires after ANY public
   request that resolves to a tenant and 404s — unauthenticated, its own
@@ -650,9 +767,11 @@ pioneered directly here after the ADR-0047 freeze.)
 - **DECISION ROUND — 25 August 2026: #711's remaining blocker was a decision,
   and it has been taken (ADR-0113).**
 
-  Shapes 2 and 3 both 301 to `/kategori/{seo_title(jenis_rubrik)}` with `kt`
-  dropped; shape 4 301s to `/cari?q={percent-encoded query}`. The reasoning is in
-  the ADR; three things it settles are worth repeating here.
+  Shapes 2 and 3 both 301 to `/kategori/{jenis_rubrik}` with `kt` dropped. The
+  reasoning is in the ADR; three things it settles are worth repeating here.
+  **Two claims in this entry as first written have since been retracted** — the
+  `seo_title()` normalisation (CALL-SITE ROUND above) and the shape-4 decision,
+  which decides a URL family that has never existed (ORIGIN ROUND above).
 
   - **Flattening was chosen because a wide answer beats a wrong one.** The
     alternative that also needed no new routes — `jenis_rubrik` as category,
@@ -667,16 +786,16 @@ pioneered directly here after the ADR-0047 freeze.)
     provenance pair added on the same reasoning and never wired to a reader:
     answering a requirement by building a second dead column would have repeated
     it exactly.
-  - **Two mechanical constraints were checked against the code rather than
-    assumed**, and one of them would have broken the import silently:
-    `/cari?q=banjir%20sampit` is accepted and `/cari?q=banjir sampit` is
-    REJECTED by the CRLF/whitespace guard — and legacy `seo_title()` puts `-`
-    exactly where the spaces were, so every multi-word query rule fails unless
-    un-slugifying is followed by encoding.
+  - **A trailing slash is not stored**: `/kategori/hukum/` normalises to
+    `/kategori/hukum`, checked against the code rather than assumed. (The second
+    constraint recorded here, percent-encoding a query target, existed only to
+    serve the retracted shape-4 rule and now has no caller.)
 
-  What is left on #711 is data work. The 47-or-fewer destination categories must
-  exist in the tenant BEFORE the map is loaded, or every rule 301s into a 404 —
-  ADR-0111's failure one step over.
+  What is left on #711 is data work. The **ten** destination categories must
+  exist in the tenant BEFORE the map is used, or every rule 301s into a 404 —
+  ADR-0111's failure one step over. This entry said "47-or-fewer"; 47 was an
+  upper bound on `jenis_rubrik` under MariaDB's case-insensitive collation
+  (a JS map keyed by exact name sees 48/45), never a count of destinations.
 
 - **VOLUME ROUND — 25 August 2026: #711's first blocker does not exist, and the
   0-byte file everyone read as the evidence is inert.**
@@ -1093,7 +1212,10 @@ to the database.`
 
   The SHAPE ROUND below closed with: "split #599 rather than keep one issue
   blocked on its slowest artifact. Shape 1 plus the three static rules is a
-  cutover-ready map today." Done:
+  cutover-ready map today." **That last sentence is now known to be false** —
+  the shape-1 template matches 0 of 25,029 URLs and the map's carrier was the
+  wrong layer; see the ORIGIN ROUND above and ADR-0114. The split itself was
+  still right. Done:
 
   - **#599, retitled** — "Cutover 301 SeputarBorneo: jalankan peta artikel +
     tiga aturan halaman statis (kodenya sudah ada; sisanya artefak)". Its
@@ -1110,14 +1232,19 @@ to the database.`
     rendered by `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — a cross-repo
     contract question before it is an import question. Terms also have no
     provenance column, so there is nothing a `--path-template` could express.
+    **Under ADR-0114 `--path-template` is not the mechanism for any of this** —
+    it writes into a table these requests never reach.
 
   **What the split is actually protecting.** Shape 3 is a bare two-segment
   catch-all, so it is the family a map built from the LISTED shapes would drop
   in the largest number, silently. Keeping it in the same issue as the
-  cutover-ready half is what would let the cutover ship believing it was
-  complete. Separately, `cari_berita/*.html` must NOT 301 onto content at all —
-  an arbitrary query has no single correct destination — and that is a decision
-  written into #711 rather than something derived from a map.
+  supposedly cutover-ready half is what would let the cutover ship believing it
+  was complete. Separately, `cari_berita/*.html` must NOT 301 onto content at
+  all — an arbitrary query has no single correct destination. **That instruction
+  stands and its subject does not:** shape 4 has never fired, because the
+  two-segment catch-all on the line above it already claims every path it could
+  match, so `/cari_berita/X.html` is served as a SHAPE-3 URL and is already
+  covered by ADR-0113's rule 1.
 
 - **SWEEP ROUND — 25 August 2026: the scheduled sweeps cost a constant PER
   POST, and the index the previous round left as a measurement task turns out
@@ -1308,7 +1435,10 @@ to the database.`
   first is covered. The third appears in no version of this issue's plan — and
   being a catch-all, it is the family a map built from the listed shapes would
   have dropped in the largest number, silently, which is the exact outcome the
-  "enumerate every shape" note existed to prevent.
+  "enumerate every shape" note existed to prevent. **This round counted the
+  shapes and did not read their ORDER**, which is how it missed that the
+  catch-all it had just found sits ABOVE `cari_berita` and has always shadowed
+  it — there are four live shapes, not five. See the ORIGIN ROUND above.
 
   **"Covering them is a second run, not a code change" is wrong for three of the
   five.** `blog:legacy:redirects:import` rejects a `--path-template` that does
@@ -1342,6 +1472,10 @@ to the database.`
   The one covered shape is confirmed right: `berita/index.php:9` reads
   `(int) $_GET['news']`, so the id is the leading digits and the slug is
   decorative — `/news/{legacyId}_{slug}.html` is the correct template.
+  **Correct about the LEGACY router, and carried across as though it were also
+  true here, which it is not.** This repo's rule keys are exact strings, and the
+  template matches 0 of 25,029 URLs; ADR-0114 makes article resolution id-keyed
+  for exactly this reason. See the ORIGIN ROUND above.
 
   **What is still blocked is narrower than "the artifacts", and narrower again
   since the VOLUME ROUND.** This paragraph originally said the rubrik shapes
@@ -1352,12 +1486,18 @@ to the database.`
   `ahliweb/awcms-astro`, not here (ADR-0045/ADR-0070) — a cross-repo contract
   question before it is an import question. The pre-cutover crawl is unchanged:
   `blog:legacy:cutover:verify` is built and needs the live sitemap URL, at page
-  level because it refuses an index. Search-result URLs should NOT 301 onto
-  content; an arbitrary query has no single correct destination.
+  level because it refuses an index. **There is no legacy sitemap and there
+  never was one** — not in the tree, not in git history; the live site 404s
+  `/robots.txt` and every conventional sitemap path while serving 200 itself.
+  `--sitemap` takes a LOCAL FILE, so a synthesised corpus unblocks it with no
+  code change. Search-result URLs should NOT 301 onto content; an arbitrary
+  query has no single correct destination — and shape 4 never fired anyway.
 
   Recommended: split #599 rather than keep one issue blocked on its slowest
   artifact. Shape 1 plus the three static rules is a cutover-ready map today.
-  **Done on 25 August 2026 — see the entry at the top of this section.**
+  **Done on 25 August 2026 — see the entry at the top of this section.** The
+  "cutover-ready" half of that sentence did not survive: shape 1's template
+  matches nothing (ORIGIN ROUND).
 
 - **LEDGER ROUND — 24 August 2026: 121 endpoints refuse a tenant user WITHOUT
   RECORDING that they did.**

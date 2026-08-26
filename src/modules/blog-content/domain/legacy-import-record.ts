@@ -115,9 +115,15 @@ export function parseLegacyImportRecord(
 
   const slug = typeof record.slug === "string" ? record.slug.trim() : "";
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    // The slug is half of the legacy URL and half of the new one. A legacy
-    // export that carries capitals or underscores must be normalized by whoever
-    // wrote the export, where the original is still available to check against.
+    // This slug is the NEW URL's slug and only that. It is NOT "half of the
+    // legacy URL" — an earlier comment here said so, and ADR-0114 records why
+    // that was false: the SeputarBorneo legacy segment is
+    // `rawurlencode(str_replace(' ', '_', title))`, so every one of 25,029 of
+    // them carries `_` and most carry capitals, both of which this pattern
+    // forbids. The two slugs are disjoint BY CONSTRUCTION, so no export can
+    // ever be "normalized" into a slug that also matches the indexed path.
+    // Legacy URLs are resolved by their leading id (ADR-0114 §Decision 2), not
+    // by matching this value.
     errors.push(
       "slug must be lowercase alphanumeric words separated by hyphens"
     );

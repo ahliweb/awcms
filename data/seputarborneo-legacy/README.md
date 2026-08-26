@@ -1,8 +1,10 @@
 # SeputarBorneo legacy rubrik redirect map
 
 `rubrik-redirects.json` is the complete set of legacy rubrik/listing URLs for the
-SeputarBorneo archive (Issue #711, [ADR-0113](../../docs/adr/0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md)),
-each resolved against the legacy database and mapped to its destination.
+SeputarBorneo archive (Issue #711, [ADR-0113](../../docs/adr/0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md)
+for the destinations, [ADR-0114](../../docs/adr/0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)
+for who executes the 301), each resolved against the legacy database and mapped
+to its destination.
 
 **It is committed because it cannot be re-derived later.** Producing it needed
 two things that exist only on the migration workstation: the legacy PHP working
@@ -90,11 +92,35 @@ bun run blog:legacy:rubrik-redirects --emit     # write import payload chunks
 The script only _builds_ the payload. Loading it is
 `POST /api/v1/seo/redirects/import` (200 rules per call, `dryRun` by default).
 
-**Do not load it before the destination categories exist in the tenant.** All
+**Do not use it before the destination categories exist in the tenant.** All
 ten (`bisnis`, `budaya`, `daerah`, `hukum`, `mitra-borneo`, `nasional`,
 `olahraga`, `politik`, `provinsi`, `wisata`) must resolve, or every rule 301s
 into a 404 — [ADR-0111](../../docs/adr/0111-a-tenants-exact-redirect-beats-a-retired-family-rewrite.md)'s
 failure one step over, and the outcome #711's Definition of Done forbids.
+
+**That precondition governs the targets in THIS map and nothing else**, and
+under [ADR-0114](../../docs/adr/0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)
+those targets are **pending**: the ten categories do not exist in the tenant
+yet, and the 301s are executed at the **edge**, not by `awcms_seo_redirects`.
+`bun run blog:legacy:rubrik-redirects` still builds a
+`POST /api/v1/seo/redirects/import` payload, and that payload is no longer the
+mechanism for this cutover — the rules would be written into a table consulted
+by a middleware these requests never reach, because `/kategori/**` is served by
+`ahliweb/awcms-astro`. Read the script's output as a validated map, not as a
+load instruction.
+
+## One known gap
+
+`https://seputarborneo.com/Mitra-Borneo/Pemkab%20Lamandau.html` returns 200 with
+a real listing and is **not** among the 67. The homepage emits it **without**
+`.html`, and step 1 above keyed the extraction on that suffix, so the capture
+skipped it. Two further URLs exist in Wayback only —
+`/aerah/Pulang pisau.html` and `/rubrik/Olah Raya.html`, both typos — and appear
+in neither the PHP tree nor the database.
+
+Separately, Wayback CDX holds **5,174 distinct URLs** for this domain (verified
+untruncated). That is roughly **8.86%** of the archive: real external evidence
+about what was indexed, and **not** a substitute for the indexed set itself.
 
 `articlesAtCapture` and `parentArticlesAtCapture` are a snapshot, not a
 contract. They are recorded so a future reader can see which URLs mattered and

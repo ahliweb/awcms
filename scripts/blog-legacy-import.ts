@@ -44,9 +44,16 @@
  *
  * ## The images, and the two flags that make the archive importable at all
  *
- * Gate 2 above meant that in practice EVERY row of a real CKEditor archive was
- * residue: `<img>` is refused because a managed-media deployment stores images
- * as registry references, and nothing here can turn a legacy URL into one.
+ * Gate 2 refuses a raw `<img>`, because a managed-media deployment stores images
+ * as registry references and nothing here can turn a legacy URL into one.
+ *
+ * This paragraph used to say that in practice EVERY row of a real CKEditor
+ * archive was residue. **Measured, it is 4 of 25,029 — 0.02%** — and only 2
+ * bodies contain an `<img>` at all. The handoff below is still the right shape;
+ * what was wrong was the scale it implied. The real media task is the LEAD
+ * photograph, which lives in the `foto_berita` column and not in the body: all
+ * 25,029 articles have one, and body scanning will never mention them (see
+ * ADR-0114 and the ORIGIN ROUND in `docs/PROJECT_STATE.md` §4).
  * That is not a gap to close by fetching the file — see
  * `legacy-media-map.ts` and `legacy-ad-ingest.ts` for why the server must not.
  * It is a handoff, and it now has both halves:

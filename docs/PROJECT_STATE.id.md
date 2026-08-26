@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a0a76a46d1a4c0b31a6cea3b10fe1b065c06ae3336b1fc3e003226be4557c057 -->
+<!-- i18n-source-hash: sha256:4ae9307b3775ecc9452e9d80c68340e9adc88ebefa06e8e037e682affdd53e06 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0113** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0114** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -360,6 +360,129 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN ORIGIN — 26 Agustus 2026: peta cutover-nya BENAR soal ke mana
+  pembaca dikirim dan SALAH soal SIAPA yang mengirimnya, dan tak ada gerbang di
+  repo ini yang bisa melihatnya karena jawabannya hidup di repo lain.**
+
+  **Sebuah ADR yang sudah di-merge itu SALAH.** ADR-0113 §Konsekuensi menyatakan,
+  dalam kedua bahasa, _"`awcms-astro` tidak butuh perubahan untuk ini… redirect-nya
+  diselesaikan di repo ini sebelum rute-rutenya tercapai."_ `awcms_seo_redirects`
+  diterapkan di **tepat SATU call site** — `resolvePublicRedirectForRequest`, dari
+  `src/middleware.ts:341` — yang berjalan DI SINI. Ke-62 aturan rubrik menyasar
+  `/kategori/**`, yang disajikan `ahliweb/awcms-astro`: `output: "static"`,
+  **tanpa berkas middleware sama sekali**, tanpa kunci `redirects:`, dan
+  entrypoint produksi `server/penyaji.mjs` yang memuat NOL kemunculan `301`
+  maupun `Location`. `grep -rn seputarborneo` atas seluruh `src/` dan `docs/`-nya
+  mengembalikan nihil.
+
+  Bukan diperdebatkan — DIJALANKAN. Seluruh 67 entri yang di-commit diputar ulang
+  terhadap server hasil build repo itu: **404 pada setiap satunya, NOL header
+  `Location`.**
+
+  Dua keputusan mengikut, tercatat sebagai **ADR-0114**. **TEPI**
+  (Coolify/Varnish) memikul 301 legacy-nya, karena hanya ia yang bisa meruntuhkan
+  `http→https` + `www→apex` + `legacy→baru` menjadi SATU hop yang dituntut PRD
+  §9.2 — sebuah aplikasi baru melihat permintaan setelah tepi bertindak atas skema
+  dan host, jadi aturan apa pun yang ditulisnya paling baik adalah hop kedua. Dan
+  resolusi artikel menjadi **berkunci-ID**, bukan path-eksak:
+  `/news/{id}_{Judul}.html` dicocokkan pada digit terdepannya terhadap
+  `legacy_source_id`.
+
+  **Template artikel yang sudah dikirim mencocoki 0 dari 25.029 URL, dan gagal
+  lebih buruk daripada 404.** Setiap judul legacy memuat spasi, jadi setiap segmen
+  URL legacy membawa `_` — yang dilarang `SLUG_PATTERN` di
+  `legacy-import-record.ts:117`, sementara `normalizeRedirectPath` mempertahankan
+  kapitalisasi, tidak men-decode apa pun, dan mencocokkan dengan KESAMAAN.
+  **Tidak ada slug lolos-validator yang bisa sama dengan segmen terindeks itu**;
+  kedua slug itu terpisah secara KONSTRUKSI. Dikonfirmasi dari luar: 2.297 dari
+  2.297 URL `/news/*.html` terarsip memakai bentuk underscore. Dan `/news/**` yang
+  tak cocok tidak menjadi 404 — ia jatuh ke `resolveRetiredNewsRedirect` lalu 301
+  ke `/blog/{code}/{id}_{Raw_Slug}.html`, yang persis
+  `CUTOVER_VERDICT_REASON.target_missing` dengan kata-katanya sendiri: _"301 ke
+  dalam 404, yang lebih buruk daripada 404 yang digantikannya"._ Kekeliruan
+  penalarannya layak dinamai: **"id-nya adalah digit terdepan" itu benar tentang
+  router LEGACY dan tidak berkata apa pun tentang awcms, yang kunci aturannya
+  string EKSAK.**
+
+  **Bentuk 4 TAK PERNAH ADA.** `^cari_berita/([^/]*)\.html$` adalah baris 7
+  `.htaccess` dan catch-all dua-segmen baris 6, dan bahasa bentuk 4 adalah SUBSET
+  ketat dari bahasa catch-all — jadi ia tak pernah tercapai, di setiap commit yang
+  pernah menyentuh berkas itu, dan kedua vhost docker membawa pasangan yang sama
+  dalam urutan yang sama. Ini soal URUTAN aturan, bukan flag `[L]`: pada baris 7,
+  URL-nya sudah `/rubriks/?news=cari_berita&kt=…`. Di-brute-force atas 3.375 path
+  kandidat (0 kecocokan, dengan self-test yang MEMANG menemukan counterexample
+  saat bentuk 4 sengaja dilebarkan), dikonfirmasi hidup
+  (`/cari_berita/sampit.html` dan `/rubriks/?news=cari_berita&kt=sampit` berbeda
+  pada satu baris, `og:url`), dan dikonfirmasi terhadap 5.174 URL terarsip yang
+  NOL di antaranya `/cari_berita/*.html`. Jadi keputusan bentuk-4 ADR-0113
+  memutuskan himpunan KOSONG, dan butir terbuka #711 _"aturan `cari_berita` —
+  butuh sitemap hidup"_ larut DUA KALI. Sisanya penting: `/cari_berita/X.html`
+  tetap menyajikan 200 **sebagai URL bentuk-3** dan TIDAK BOLEH menjadi redirect
+  `/cari?q=`, yang akan mengirim pembaca ke tempat yang tak pernah dituju situs
+  legacy.
+
+  **Dua gerbang akan melaporkan HIJAU atas semua itu.**
+  `blog:legacy:cutover:verify` keluar dengan **0 pada SETIAP kesalahan
+  penggunaan** — `usage()` di `scripts/blog-legacy-cutover-verify.ts:82-93` tidak
+  memuat `process.exitCode = 1`, direproduksi untuk tanpa argumen, untuk setiap
+  flag wajib yang hilang, dan untuk `--limit=abc`, sehingga
+  `bun run blog:legacy:cutover:verify --sitemap=$F && deploy` tetap men-deploy
+  saat flag-nya salah ketik. Dan `classifyCutoverOutcome`
+  (`cutover-verification.ts:137`) hanya menangani `targetLive === false`;
+  `targetLive === null` jatuh ke `return "ok"`, sementara `postSlugFromPath` milik
+  skrip itu mengembalikan `null` untuk apa pun yang bukan
+  `/blog/{tenantCode}/{slug}` — yaitu **SETIAP SATU** dari 62 target `/kategori/*`
+  ADR-0113. Digabung, gerbang itu akan mencetak _"All N legacy URL(s) resolve in
+  one hop to a page this deployment serves"_ sementara origin-nya 404 untuk
+  ke-67-nya. **Gerbang yang HIJAU sementara jawabannya SALAH adalah
+  mode kegagalannya**, dan ini instansi paling jelas yang pernah dihasilkan repo
+  ini.
+
+  **Importer-nya membuang SETIAP foto utama secara senyap.** `featured_media_id`
+  ADA (`sql/035:46`) dan disajikan ke `awcms-astro`, tetapi
+  `LegacyPostImportInput` punya 12 field dan tak satu pun media, dan INSERT-nya
+  menyebut 16 kolom tanpanya. **25.029 dari 25.029 artikel punya gambar utama** di
+  `foto_berita`, dan `--images` hanya memindai HTML badan, jadi ia tak akan pernah
+  menyebutnya: tugas media yang sesungguhnya ~25.031 unggahan / 4,1 GB, bukan 2
+  yang ditemukan pemindaian badan. Tiga cacat lebih kecil duduk di sebelahnya —
+  pengumpulan `--images` duduk DI BAWAH gerbang kategori
+  (`blog-legacy-import.ts:443-458`), jadi run tanpa `--term-map` melaporkan NOL
+  gambar, bug urutan yang sama yang sudah diperbaiki satu fungsi di atasnya pada
+  `:435`; ada himpunan `seenLegacyIds` dan tidak ada `seenSlugs`, sedangkan arsip
+  nyatanya punya 84 grup tabrakan atas 171 baris, jadi run sungguhan mati oleh
+  23505 di tengah batch; dan docstring yang mengklaim _"SETIAP baris arsip
+  CKEditor nyata adalah residu"_ terukur **4 dari 25.029 (0,02%)**.
+
+  **`IMPORT_CHUNK_SIZE = 200` diikat ke `MAX_IMPORT_ITEMS` HANYA OLEH KOMENTAR** —
+  tanpa import, tanpa test. Kelas berulang repo ini, dinyatakan lagi: **komentar
+  BUKAN panggilan.**
+
+  **Tiga koreksi catatan.** Arsipnya **25.029**, bukan 23.906 (yang hidup sudah di
+  id ≥ 25.474); ADR-0114 memikul koreksi tunggalnya dan changeset ter-merge
+  SENGAJA tidak ditulis ulang. Peta rubrik yang di-commit punya satu celah nyata —
+  `/Mitra-Borneo/Pemkab%20Lamandau.html` mengembalikan 200 dengan listing
+  sungguhan dan TIDAK termasuk 67-nya, karena homepage memancarkannya tanpa
+  `.html` sementara penangkapannya berkunci pada sufiks itu. Dan **Wayback CDX
+  memuat 5.174 URL berbeda** untuk domain ini (diverifikasi tanpa terpotong: dua
+  halaman, 2.975 + 2.200), yaitu ~8,86% korpus — bukti eksternal nyata yang MELURUH
+  dan tak bisa direkonstruksi, jadi layak di-commit BESERTA caveat itu, dan ia
+  bukan pengganti himpunan terindeks.
+
+  **Yang ditinggalkan putaran ini sebagai pekerjaan:** artefak id→path ter-generate
+  milik ADR-0114 dan pengawatan tepinya; dua cacat `cutover:verify`; serah-terima
+  gambar utama dan tiga cacat importer; kopling `IMPORT_CHUNK_SIZE`; celah
+  Lamandau pada petanya; dan penangkapan korpus CDX. Entri ini adalah CATATANNYA;
+  belum satu pun menjadi kode.
+
+  Bentuk yang bisa dipakai ulang, dan ini benar-benar baru: **setiap putaran
+  sebelumnya di sini bertanya "apakah simbol ini DIPANGGIL?" — putaran ini
+  menemukan sebuah keputusan yang targetnya disajikan ORIGIN yang sama sekali
+  BERBEDA.** ADR-0113 benar soal harus me-redirect ke mana dan salah soal siapa
+  yang akan melakukan redirect-nya, dan tak ada gerbang di repo ini yang bisa
+  melihat itu, karena jawabannya adalah konfigurasi build di repositori lain.
+  Pemeriksaannya bukan hanya "apakah ia dipanggil" tetapi **"apakah pemanggilnya
+  bahkan berada di jalur permintaan"**.
+
 - **PUTARAN SEAM — 26 Agustus 2026: tiga gerbang hanya membaca paruh Inggris,
   dan gerbang keempat sama sekali tidak punya PEMANGGIL.**
 
@@ -547,16 +670,20 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   rate limit, dan dokumen yang menyebut kardinalitasnya terbatas justru sedang
   memakai klaim itu untuk membenarkan keputusan partisi.**
 
-  Auditnya berangkat dari kedua issue terbuka, bukan dari sapuan. #599 membawa
-  `awcms_seo_redirects` dari nyaris kosong ke **23.906** aturan per tenant dan
-  ADR-0113 menambah ~150 lagi, di jalur yang berjalan untuk setiap pembaca dan
-  setiap crawler — jadi jalur itulah yang layak diukur.
+  Auditnya berangkat dari kedua issue terbuka, bukan dari sapuan. #599 DIKIRA
+  akan membawa `awcms_seo_redirects` dari nyaris kosong ke **25.029** aturan per
+  tenant (entri ini menulis 23.906 — lihat ADR-0114 untuk koreksi hitungannya)
+  dengan ADR-0113 menambah ~60 lagi, di jalur yang berjalan untuk setiap pembaca
+  dan setiap crawler — jadi jalur itulah yang layak diukur. **ADR-0114 sejak itu
+  MENGHAPUS beban itu seluruhnya**: 301 SeputarBorneo dieksekusi di tepi,
+  sehingga tabel ini tidak bertambah 25.029 baris. Pengukuran di bawah tetap
+  berdiri sendiri bagi tenant mana pun yang memang menulis aturan sebanyak itu.
 
   **Paruh RESOLVE-nya sehat**, dan layak dicatat supaya tak diaudit ulang:
   `MAX_REDIRECT_HOPS = 5` membatasi penelusur rantai, dan
   `awcms_seo_redirects_resolve_idx` adalah index parsial atas persis
   `(tenant_id, normalized_source_path) WHERE deleted_at IS NULL AND state =
-'active'`. 23.906 aturan adalah point lookup B-tree, bukan scan.
+'active'`. 25.029 aturan adalah point lookup B-tree, bukan scan.
 
   **Paruh CAPTURE-nya tidak.** `recordPublicNotFound` menyala setelah SETIAP
   request publik yang resolve ke sebuah tenant lalu 404 — tanpa autentikasi,
@@ -668,10 +795,11 @@ domain_host)`, dan pemanggil menguasai dua dari lima: path-nya apa pun yang ia
 
 - **PUTARAN KEPUTUSAN — 25 Agustus 2026: pemblokir tersisa #711 adalah sebuah
   KEPUTUSAN, dan keputusan itu sudah diambil (ADR-0113).**
-  Bentuk 2 dan 3 keduanya 301 ke
-  `/kategori/{seo_title(jenis_rubrik)}` dengan `kt` dibuang; bentuk 4 301 ke
-  `/cari?q={kueri ter-percent-encode}`. Penalarannya ada di ADR itu; tiga hal
-  yang diselesaikannya layak diulang di sini.
+  Bentuk 2 dan 3 keduanya 301 ke `/kategori/{jenis_rubrik}` dengan `kt` dibuang.
+  Penalarannya ada di ADR itu; tiga hal yang diselesaikannya layak diulang di
+  sini. **Dua klaim di entri ini sebagaimana pertama ditulis kini DICABUT** —
+  normalisasi `seo_title()` (PUTARAN CALL-SITE di atas) dan keputusan bentuk-4,
+  yang memutuskan keluarga URL yang tak pernah ada (PUTARAN ORIGIN di atas).
 
   - **Meratakan dipilih karena jawaban yang LUAS mengalahkan jawaban yang
     SALAH.** Alternatif yang juga tak butuh rute baru — `jenis_rubrik` sebagai
@@ -687,15 +815,17 @@ domain_host)`, dan pemanggil menguasai dua dari lima: path-nya apa pun yang ia
     saja menghapus pasangan provenance `awcms_blog_pages` yang ditambahkan atas
     penalaran yang SAMA dan tak pernah dikawatkan ke pembaca: menjawab sebuah
     kebutuhan dengan membangun kolom mati KEDUA akan mengulanginya persis.
-  - **Dua kendala mekanis diperiksa terhadap KODE alih-alih diasumsikan**, dan
-    salah satunya akan merusak impor secara SENYAP: `/cari?q=banjir%20sampit`
-    diterima dan `/cari?q=banjir sampit` DITOLAK oleh penjaga CRLF/spasi — dan
-    `seo_title()` legacy menaruh `-` persis di tempat spasinya, sehingga setiap
-    aturan kueri multi-kata gagal kecuali un-slugify diikuti encoding.
+  - **Garis miring akhir TIDAK disimpan**: `/kategori/hukum/` dinormalisasi
+    menjadi `/kategori/hukum`, diperiksa terhadap KODE alih-alih diasumsikan.
+    (Kendala kedua yang tercatat di sini, percent-encoding target ber-query, ada
+    semata untuk melayani aturan bentuk-4 yang dicabut dan kini tanpa pemanggil.)
 
-  Yang tersisa di #711 adalah pekerjaan DATA. Ke-47-atau-kurang kategori tujuan
-  WAJIB sudah ada di tenant SEBELUM petanya dimuat, atau setiap aturan 301 ke
-  404 — kegagalan ADR-0111 satu langkah bergeser.
+  Yang tersisa di #711 adalah pekerjaan DATA. **KESEPULUH** kategori tujuan
+  WAJIB sudah ada di tenant SEBELUM petanya dipakai, atau setiap aturan 301 ke
+  404 — kegagalan ADR-0111 satu langkah bergeser. Entri ini berbunyi
+  "47-atau-kurang"; 47 adalah batas ATAS `jenis_rubrik` di bawah kolasi
+  case-insensitive MariaDB (map JS berkunci nama eksak melihat 48/45), tidak
+  pernah jumlah tujuan.
 
 - **PUTARAN VOLUME — 25 Agustus 2026: pemblokir PERTAMA #711 tidak ada, dan
   berkas 0-byte yang dibaca semua orang sebagai buktinya justru INERT.**
@@ -1139,7 +1269,10 @@ to the database.`
 
   PUTARAN BENTUK di bawah ditutup dengan: "pecah #599 alih-alih menahan satu
   issue pada artefaknya yang paling lambat. Bentuk 1 plus tiga aturan statis
-  adalah peta yang siap cutover hari ini." Sudah dikerjakan:
+  adalah peta yang siap cutover hari ini." **Kalimat terakhir itu kini diketahui
+  SALAH** — template bentuk-1 mencocoki 0 dari 25.029 URL dan pemikul petanya
+  adalah lapis yang keliru; lihat PUTARAN ORIGIN di atas dan ADR-0114.
+  Pemecahannya sendiri tetap benar. Sudah dikerjakan:
 
   - **#599, diganti judulnya** — "Cutover 301 SeputarBorneo: jalankan peta
     artikel + tiga aturan halaman statis (kodenya sudah ada; sisanya artefak)".
@@ -1157,15 +1290,20 @@ to the database.`
     oleh `ahliweb/awcms-astro` (ADR-0045/ADR-0070) — pertanyaan kontrak
     lintas-repo lebih dulu, baru pertanyaan impor. Term juga tidak punya kolom
     provenance, jadi tidak ada yang bisa diungkapkan `--path-template`.
+    **Di bawah ADR-0114 `--path-template` BUKAN mekanisme untuk semua ini** — ia
+    menulis ke tabel yang tak pernah dicapai permintaan-permintaan itu.
 
   **Yang sebenarnya dilindungi oleh pemecahan ini.** Bentuk 3 adalah catch-all
   dua segmen telanjang, jadi ia keluarga yang akan dijatuhkan dalam jumlah
   TERBESAR oleh peta yang dibangun dari bentuk-bentuk yang DISEBUT — secara
-  senyap. Menahannya di issue yang sama dengan paruh yang siap cutover justru
-  yang akan membuat cutover-nya berangkat sambil mengira dirinya lengkap.
+  senyap. Menahannya di issue yang sama dengan paruh yang DIKIRA siap cutover
+  justru yang akan membuat cutover-nya berangkat sambil mengira dirinya lengkap.
   Terpisah dari itu, `cari_berita/*.html` sama sekali TIDAK boleh 301 ke konten
-  — query sembarang tidak punya satu tujuan yang benar — dan itu keputusan yang
-  ditulis di #711, bukan sesuatu yang diturunkan dari peta.
+  — query sembarang tidak punya satu tujuan yang benar. **Instruksi itu tetap
+  berlaku dan subjeknya tidak ada:** bentuk 4 tak pernah menyala, karena
+  catch-all dua-segmen di baris atasnya sudah mengklaim setiap path yang bisa
+  dicocokinya, sehingga `/cari_berita/X.html` disajikan sebagai URL BENTUK-3 dan
+  sudah tercakup aturan 1 ADR-0113.
 
 - **PUTARAN SAPUAN — 25 Agustus 2026: sapuan terjadwal berbiaya konstan PER
   POST, dan indeks yang putaran sebelumnya tinggalkan sebagai tugas pengukuran
@@ -1362,6 +1500,10 @@ to the database.`
   issue itu — dan karena ia catch-all, justru keluarga itulah yang akan dijatuhkan
   DIAM-DIAM dalam jumlah terbesar oleh peta yang dibangun dari bentuk-bentuk yang
   terdaftar: persis keluaran yang hendak dicegah catatan "enumerasi setiap bentuk".
+  **Putaran ini MENGHITUNG bentuknya dan tidak membaca URUTANNYA**, dan itulah
+  sebabnya ia luput melihat bahwa catch-all yang baru saja ditemukannya duduk DI
+  ATAS `cari_berita` dan selalu membayanginya — bentuk hidupnya EMPAT, bukan
+  lima. Lihat PUTARAN ORIGIN di atas.
 
   **"Menutupinya cukup satu run lagi, bukan perubahan kode" SALAH untuk tiga dari
   lima.** `blog:legacy:redirects:import` MENOLAK `--path-template` yang tidak
@@ -1396,6 +1538,10 @@ to the database.`
   Satu bentuk yang tercakup terkonfirmasi benar: `berita/index.php:9` membaca
   `(int) $_GET['news']`, jadi id-nya adalah digit terdepan dan slug-nya dekoratif
   — `/news/{legacyId}_{slug}.html` memang template yang tepat.
+  **Benar tentang router LEGACY, dan terbawa seolah juga benar DI SINI, padahal
+  tidak.** Kunci aturan repo ini adalah string EKSAK, dan template itu mencocoki
+  0 dari 25.029 URL; ADR-0114 membuat resolusi artikel berkunci-ID justru karena
+  ini. Lihat PUTARAN ORIGIN di atas.
 
   **Yang MASIH terhalang lebih sempit daripada "artefaknya", dan lebih sempit
   lagi sejak PUTARAN VOLUME.** Paragraf ini semula menyatakan bentuk rubrik
@@ -1407,12 +1553,19 @@ to the database.`
   `ahliweb/awcms-astro`, bukan di sini (ADR-0045/ADR-0070) — pertanyaan kontrak
   lintas-repo sebelum menjadi pertanyaan impor. Crawl pra-cutover tak berubah:
   `blog:legacy:cutover:verify` sudah ada dan butuh URL sitemap hidup, pada level
-  halaman karena ia menolak index. URL hasil pencarian TIDAK boleh di-301 ke
-  konten; query sembarang tak punya satu tujuan yang benar.
+  halaman karena ia menolak index. **Tidak ADA sitemap legacy dan tak pernah
+  ada** — tidak di pohon, tidak di riwayat git; situs hidupnya 404 pada
+  `/robots.txt` dan setiap path sitemap konvensional sambil menyajikan 200 untuk
+  dirinya sendiri. `--sitemap` menerima BERKAS LOKAL, jadi korpus sintetis
+  membukanya TANPA perubahan kode. URL hasil pencarian TIDAK boleh di-301 ke
+  konten; query sembarang tak punya satu tujuan yang benar — dan bentuk 4 pun tak
+  pernah menyala.
 
   Direkomendasikan: PECAH #599 alih-alih menahan satu issue pada artefak
   terlambatnya. Bentuk 1 plus tiga aturan statis sudah menjadi peta siap-cutover
   hari ini. **Dikerjakan 25 Agustus 2026 — lihat entri di puncak bagian ini.**
+  Paruh "siap-cutover" dari kalimat itu tidak bertahan: template bentuk 1
+  mencocoki NIHIL (PUTARAN ORIGIN).
 
 - **PUTARAN LEDGER — 24 Agustus 2026: 121 endpoint MENOLAK pengguna tenant
   TANPA MENCATAT bahwa mereka melakukannya.**
