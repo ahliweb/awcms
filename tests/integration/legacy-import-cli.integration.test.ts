@@ -47,7 +47,7 @@ import {
   expect,
   test
 } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -58,6 +58,14 @@ import {
   resetHandlerDatabase,
   teardownHandlerDatabase
 } from "./harness";
+
+const ARTICLE_PATHS = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "scripts",
+  "blog-legacy-article-paths.ts"
+);
 
 const SCRIPT = join(
   import.meta.dir,
@@ -162,6 +170,17 @@ async function seedUploader(
     INSERT INTO awcms_tenant_users (id, tenant_id, identity_id)
     VALUES (${userId}, ${tenantId}, ${identity[0]!.id})
   `;
+}
+
+/** A live category term, so a row carrying a category can pass the term gate. */
+async function seedTerm(tenantId: string, slug: string): Promise<string> {
+  const rows = (await getHandlerAdminSql()`
+    INSERT INTO awcms_blog_terms (tenant_id, taxonomy_type, slug, name)
+    VALUES (${tenantId}, 'category', ${slug}, ${slug})
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows[0]!.id;
 }
 
 async function seedMedia(
@@ -369,5 +388,133 @@ suite("blog:legacy:import driven end to end (integration, Issue #599)", () => {
       'slug "banjir" is already used by another post in this tenant'
     );
     expect(await posts()).toHaveLength(1);
+  });
+
+  test("a run with no --section-map WARNS on stdout, and imports anyway", async () => {
+    if (!ready) return;
+
+    // The whole point of ADR-0115's warning: this is the state the importer
+    // shipped in, and it is invisible from this repo because
+    // `/blog/{code}/{slug}` renders these rows perfectly. `ahliweb/awcms-astro`
+    // builds NO page for any of them and no category archive either.
+    const result = run(
+      importArgs(
+        writeArchive("no-section.ndjson", [
+          row({ legacyId: "1", slug: "banjir-kobar" })
+        ])
+      )
+    );
+
+    expect(result.code).toBe(0);
+    // On STDOUT, not stderr. This file's own contract is that stderr means the
+    // run FAILED — "a refusal is not a failure of the run" — and a warning
+    // there would make `stderr === ""` stop meaning "clean".
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("no --section-map");
+    expect(result.stdout).toContain("content_json.awcmsAstro.kategori");
+    // The row still lands: a tenant this repo serves needs no sidecar.
+    expect(await posts()).toHaveLength(1);
+  });
+
+  test("blog:legacy:article-paths REFUSES to emit while any row lacks a section", async () => {
+    if (!ready) return;
+
+    // ADR-0115's headline consequence, and property 3 of
+    // `tests/blog-legacy-article-paths.test.ts`'s own header — "a partial
+    // artefact is refused, not truncated" — was gated by nothing: that file
+    // imports the pure builder and never invokes `main()`, so deleting the
+    // `process.exitCode = 1; return;` from the refusal branch left the whole
+    // DB-free suite green while the run wrote the artefact anyway.
+    //
+    // It needs a tenant, so it lives here rather than beside the pure tests.
+    const emitted = join(
+      import.meta.dir,
+      "..",
+      "..",
+      "data",
+      "seputarborneo-legacy",
+      "article-paths.json"
+    );
+    rmSync(emitted, { force: true });
+
+    // One row WITH a section and one WITHOUT: the artefact must be refused for
+    // the second even though the first is perfectly emittable, because a map
+    // that is 96% right is one nobody audits.
+    const termId = await seedTerm(TENANT, "hukum");
+    run(
+      importArgs(
+        writeArchive("mixed.ndjson", [
+          row({ legacyId: "1", slug: "with-section", categories: ["Hukum"] })
+        ]),
+        [
+          `--term-map=${writeJson("t1.map.json", { Hukum: termId })}`,
+          `--section-map=${writeJson("s1.map.json", { Hukum: "hukum" })}`
+        ]
+      )
+    );
+    run(
+      importArgs(
+        writeArchive("bare.ndjson", [
+          row({ legacyId: "2", slug: "no-section" })
+        ])
+      )
+    );
+
+    const result = Bun.spawnSync(
+      [
+        "bun",
+        ARTICLE_PATHS,
+        `--tenant=${TENANT}`,
+        `--system=${SYSTEM}`,
+        "--default-locale=id",
+        "--emit"
+      ],
+      { env: process.env, stdout: "pipe", stderr: "pipe" }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("awcmsAstro.kategori");
+    expect(result.stdout.toString()).not.toContain("wrote ");
+    // The refusal is the point: nothing on disk.
+    expect(existsSync(emitted)).toBe(false);
+  });
+
+  test("a --section-map places the row, and the envelope proves it reached the INSERT", async () => {
+    if (!ready) return;
+
+    const termId = await seedTerm(TENANT, "hukum");
+
+    const result = run(
+      importArgs(
+        writeArchive("sectioned.ndjson", [
+          row({ legacyId: "1", slug: "banjir-kobar", categories: ["Hukum"] })
+        ]),
+        [
+          `--term-map=${writeJson("terms.map.json", { Hukum: termId })}`,
+          `--section-map=${writeJson("sections.map.json", { Hukum: "hukum" })}`
+        ]
+      )
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("section(s): hukum");
+    // The warning must NOT appear once a map is supplied.
+    expect(result.stdout).not.toContain("no --section-map");
+
+    // Read the COLUMN, not the report. The report proves the flag parsed; only
+    // the column proves the value reached the INSERT — and a builder nothing
+    // calls is exactly the state this whole change is fixing.
+    const rows = (await getHandlerAdminSql()`
+      SELECT content_json FROM awcms_blog_posts WHERE tenant_id = ${TENANT}
+    `) as { content_json: Record<string, unknown> }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.content_json.awcmsAstro).toEqual({
+      schemaVersion: 1,
+      kategori: "hukum"
+    });
+    expect((rows[0]!.content_json.blocks as unknown[]).length).toBeGreaterThan(
+      0
+    );
   });
 });

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:eb43b9dc3bc3aba912f6c8d45e9f31e33684514d9c7552977cac9427115cfe22 -->
+<!-- i18n-source-hash: sha256:d0614fd07157de0ee5ede46ec948681b16e398bc94154684033ca0935f187d03 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0114** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0115** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -360,6 +360,230 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN KONSUMEN — 26 Agustus 2026: importer menghasilkan 25.029 artikel
+  yang repo PENYAJINYA tidak membangun satu halaman pun untuknya, dan tujuan yang
+  dituju artikel-artikel itu tak pernah dipilih.**
+
+  PUTARAN ORIGIN di bawah ditutup dengan leave-list berisi dua item kode dan tiga
+  item operasional. Kedua item kode itu kini SUDAH dibangun. Yang ditemukan
+  sambil membangunnya lebih besar daripada keduanya: **arsipnya akan terimpor
+  bersih ke dalam situs yang tidak merender satu pun darinya.**
+
+  **`content_json` adalah `{ blocks: [] }` yang di-hardcode, di bawah docblock
+  yang menyatakan sebaliknya.** Komentar `importLegacyBlogPost` sendiri berbunyi
+  _"proyeksi lossy yang sama dengan yang dihasilkan setiap jalur tulis lain …
+  sehingga baris hasil impor tak terbedakan bentuknya dari baris hasil
+  penulisan"_. `blog-post-directory.ts:235` dan `blog-page-directory.ts:201`
+  sama-sama memanggil `withProjectedBlocks`; berkas ini tidak memanggil apa pun.
+  **Komentar bukan panggilan** — kelas yang kini sudah empat kali dicatat repo
+  ini, dan instans ini menentukan seluruh cutover.
+
+  Satu literal itu mengendalikan DUA hal terpisah di `ahliweb/awcms-astro`:
+
+  - `renderContentBlocks(post.contentJson)` membaca `contentJson.blocks` dan
+    mengembalikan `""` untuk non-array atau array kosong. Setiap artikel hasil
+    impor akan menjadi **halaman KOSONG**.
+  - `getArticles(tab, locale)` hanya menyimpan post ketika
+    `readBlock(post).kategori === tab`, membaca `contentJson.awcmsAstro`. Tanpa
+    kunci itu ia `undefined === tab` untuk setiap tab terkonfigurasi, jadi
+    post-nya **tidak dibangun sama sekali** — dan arsip kategori pun tidak,
+    karena `artikelSemuaSeksi` menyusunnya dari himpunan ter-filter-tab yang sama.
+
+  **Dijalankan, bukan dinalar.** Sebuah probe sekali-pakai didirikan di dalam
+  harness test repo itu sendiri lalu dihapus: post yang membawa sidecar membangun
+  **1** artikel; post yang ditulis persis seperti importer ini menulisnya
+  membangun **0**, di setiap tab terkonfigurasi. Jadi 63 aturan rubrik ADR-0113
+  DAN peta artikel ber-kunci-id ADR-0114 masing-masing akan me-redirect ke
+  halaman yang tak pernah dibangkitkan — `CUTOVER_VERDICT_REASON.target_missing`
+  dengan kata-katanya sendiri, dan itulah satu hasil yang DoD kedua issue larang.
+  Fixture repo itu sendiri tak mungkin menangkapnya: `buatPost` di
+  `tests/kontrak-awcms.test.mjs` menulis
+  `contentJson: { awcmsAstro: { … kategori: "panduan" } }` pada setiap baris,
+  jadi suite-nya tak pernah melihat post tanpa itu.
+
+  **Mengapa tak ada gerbang di sini yang bisa melihatnya, dan ini ANAK TANGGA
+  BARU pada tangga yang sudah didaki dokumen ini.** `/blog/{code}/{slug}`
+  merender dari `body_portable_text` dan hanya jatuh ke proyeksi untuk baris yang
+  belum di-backfill (`blog-body-rendering.ts`), jadi post hasil impor tampak
+  SEMPURNA DI SINI. Pelajaran yang bisa dipindahkan dari PUTARAN ORIGIN adalah
+  _"apakah pemanggilnya ada di jalur permintaan?"_. Yang ini satu langkah lebih
+  jauh: **apakah repo yang MENYAJIKAN ini membaca field yang dilewatkan penulis
+  ini?** Tiga putaran, tiga anak tangga — apakah ia dipanggil, apakah pemanggilnya
+  di jalur, apakah konsumennya membacanya.
+
+  **Tujuannya tak pernah diputuskan, dan kedua paruhnya berselisih.** ADR-0113
+  mengirim listing rubrik ke `/kategori/{slug}` di `awcms-astro`; tidak ada yang
+  menyebut ke mana ARTIKELNYA pergi, dan satu-satunya penurunan artikel di repo
+  ini membangun `` `/blog/${tenantCode}/${row.slug}` `` — permukaan repo ini.
+  Satu cutover, **dua origin**, dan setiap tautan keluar dari sebuah arsip
+  kategori akan meninggalkan origin yang merendernya. **ADR-0115** memutuskan
+  satu origin: `/{section}/{slug}/` di `awcms-astro`, sesuai paruh yang sudah
+  di-commit.
+
+  **Aturan prefix yang benar di sini dan salah di sana.**
+  `withPublicLocalePrefix` (ADR-0098) mem-prefix SETIAP locale termasuk yang
+  bawaan; `localePath` milik `awcms-astro` mengembalikan path apa adanya untuk
+  locale bawaannya dan hanya mem-prefix selainnya. Seluruh 25.029 artikel berada
+  di locale bawaan, jadi artefak yang dibangun dengan aturan repo ini akan
+  me-301 setiap satunya ke dalam 404. Tertangkap oleh test yang ditulis
+  berdasarkan asumsinya lalu DIJALANKAN — peta rubrik ter-commit sudah
+  mengatakannya sejak awal (`/kategori/daerah`, bukan `/id/kategori/daerah`).
+  Karena itu `--default-locale` adalah flag WAJIB pada generator-nya, bukan
+  konstanta: ia nilai milik repo penyaji, dan jawaban salahnya senyap.
+
+  **Kedua item kode leave-list SUDAH dibangun.**
+
+  1. `bun run blog:legacy:article-paths` — artefak id→path ADR-0114, diturunkan
+     dari tenant, preview secara bawaan, beserta provenance. Ia MENOLAK
+     memancarkan selama masih ada baris tanpa section: artefak yang 96% benar
+     adalah artefak yang tak diaudit siapa pun. Ia tidak memancarkan VCL, nginx
+     `map`, maupun CSV bulk-redirect — `infra/varnish/default.vcl` adalah berkas
+     yang berjalan di produksi dan meng-`import std` dan tidak lebih, jadi 25.029
+     lookup ber-kunci tidak terekspresikan di dalamnya, dan memilih tier atas nama
+     operator adalah kelas tebakan yang sama dengan yang menjadi alasan
+     keberadaan ADR-0114.
+  2. `bun run blog:legacy:edge:verify` — verifier tingkat-HTTP. Ia meminta setiap
+     URL legacy dengan `redirect: "manual"`, menyusuri rantainya, dan memakai
+     ulang `classifyCutoverOutcome` sehingga run tepi dan run basis data
+     melaporkan dalam satu kosakata. **Inilah pemutaran ulang yang memfalsifikasi
+     ADR-0113, dibuat dapat diulang.** Sengaja TIDAK ada di rantai
+     `bun run check`, dan memang tidak bisa: ia baru bermakna setelah tepinya
+     diawatkan, yang oleh ADR-0114 disebut langkah operasional yang tak bisa
+     ditutup repo ini. Ia perintah OPERATOR yang keluar non-nol, bukan gerbang
+     — inventaris skrip ter-generate repo ini punya kolom Gate, dan baris ini
+     berisi `—`. Diuji terhadap `Bun.serve` sungguhan, tidak
+     pernah `fetch` tiruan, dengan alasan yang diberikan
+     `edge-cache-purge-client.test.ts`: tiruan yang menegakkan
+     `init.redirect === "manual"` lulus selamanya di atas klien yang tetap
+     mengikuti redirect, dan laporannya lalu menunjukkan satu hop untuk rantai
+     tiga hop.
+
+  **Dua cacat yang ditemukan test baru di kode yang SUDAH ada.**
+
+  - `listLegacyRedirectMappings` menjanjikan _"hanya post PUBLISHED dan tidak
+    terhapus: redirect yang menunjuk draft mengirim mesin pencari ke 404"_ di atas
+    persis dua kondisi itu, sementara rute yang menyajikan tujuannya menuntut
+    EMPAT (`visibility IN ('public','unlisted')` dan `published_at <= now()`
+    juga). Post `private` dan post bertanggal masa depan masing-masing mendapat
+    aturan yang tujuannya 404 — paragraf yang menamai kegagalan yang dihasilkan
+    fungsinya sendiri.
+  - `CutoverFacts` tak punya cara mengatakan "tidak ada yang teramati". Kegagalan
+    DNS, koneksi ditolak, timeout dan 502 semuanya tiba dengan nol hop, dan
+    `hops === 0` satu-satunya yang dibaca `no_rule` — yang teks alasannya berbunyi
+    percaya diri _"URL ini akan menjawab 404 setelah cutover, dan peringkatnya
+    hilang"_. Sebuah 502 saat origin sedang restart akan mengirim operator
+    membetulkan aturan yang sudah benar. Verdict baru: `unreachable`, argumen
+    `target_unverifiable` satu baris ke samping. **Ditemukan dengan menulis
+    testnya lebih dulu lalu menjalankannya**, bukan dengan membaca classifier-nya.
+
+  **Sebuah review adversarial atas putaran ini menemukan TIGA cacat nyata di
+  dalamnya, dan yang paling berguna adalah koreksi yang merusak dirinya sendiri.**
+
+  - **Verifier tepi MENGIKUTI `Location` bermusuhan ke mana pun.** `probeUrlFor`
+    menyaring KORPUS ke `http:`/`https:`; walker-nya lalu MEMBUANG keputusan itu
+    untuk setiap hop yang benar-benar diterbitkannya. Terukur:
+    `file:///etc/hostname` dan `data:text/plain,hi` sama-sama resolve dan
+    tercatat sebagai 200, redirect ke port loopback mencapai server yang
+    mendengarkan di sana, dan semuanya terklasifikasi **`ok`** — "resolve dalam
+    satu hop ke halaman yang disajikan deployment ini". `hopRefusalFor` kini
+    berjalan SEBELUM setiap permintaan, termasuk yang pertama, dan verdict baru
+    `unsafe_redirect` MENGUNGGULI `loop` dan `chain_too_long` karena origin
+    bermusuhan bisa menghasilkan keduanya. Ia mengimpor `isBlockedAddress`
+    alih-alih menyatakannya ulang; `validateOutboundUrl` tidak bisa dipakai apa
+    adanya karena ia MENOLAK `http:`, yang justru bentuk yang dipegang crawler,
+    dan `ssrfSafeFetch` mengikuti redirect secara internal, yang memusnahkan
+    visibilitas per-hop yang menjadi alasan keberadaan job ini. Hostname sengaja
+    TIDAK di-resolve, dan itu ditulis sebagai BATAS alih-alih dibiarkan sebagai
+    lubang.
+  - **`buildArticlePaths` memvalidasi DUA dari TIGA segmen yang dibangunnya.**
+    Locale-nya masuk mentah di bawah komentar berbunyi "Kedua paruhnya menjadi
+    segmen URL, dan keduanya diperiksa" — **komentar yang menyatakan pengikatan
+    yang tak dilakukan panggilan mana pun, di dalam berkas yang ditambahkan untuk
+    memperbaiki instans persis itu.** `awcms_blog_posts.locale` tidak punya
+    CHECK constraint.
+  - **Koreksi simbol itu merusak dirinya sendiri, dan itulah paruh yang bisa
+    dipindahkan.** Rename-nya diterapkan atas keempat berkas TERMASUK satu
+    kemunculan yang harus tetap salah supaya kalimatnya bermakna, sehingga kedua
+    salinan menyatakan bahwa nama yang BENAR tidak ada. **Cari-dan-ganti atas
+    prosa tidak tahu kemunculan mana yang KUTIPAN dan mana yang KLAIM** — nama
+    yang salah kini dieja sebagai dua penggalan tersambung supaya yang berikutnya
+    tak bisa menjangkaunya.
+
+  Review itu juga menemukan dua array verdict tulisan-tangan di
+  `tests/cutover-verification.test.ts` tertinggal dari union-nya: satu mendaftar
+  tujuh anggota dan satunya enam (ia sengaja menghilangkan `ok`) terhadap union
+  berisi delapan. Keduanya kini DITURUNKAN dari kunci `CUTOVER_VERDICT_REASON` — yang
+  dibuat ekshaustif oleh `Record<CutoverVerdict, string>` — dan perubahan itu
+  membuktikan dirinya dalam hitungan jam dengan MEMERAH saat `unsafe_redirect`
+  mendarat.
+
+  **Setiap perbaikan membawa mutasi yang TERBUKTI gagal pada cacat yang
+  sesungguhnya**, dan pelajaran GRAIN yang dicatat PUTARAN ORIGIN diterapkan
+  alih-alih diulang. Mutasi diterapkan dan dijalankan — **23 di sepanjang putaran
+  ini**, masing-masing pada GRAIN terkecil yang menyisakan setiap identifier yang
+  disebut test-nya.
+
+  Tidak ada daftar yang diberi angka di depannya di sini, dengan sengaja. Draf
+  pertama paragraf ini berbunyi "sembilan mutasi" lalu mengenumerasi SEPULUH,
+  yang merupakan kelas yang sama dengan segala hal lain yang dicatat putaran ini:
+  sebuah angka dan sebuah daftar, yang dijaga tetap sepakat oleh TIDAK SIAPA PUN.
+  Angka di atas bisa diperiksa sendiri; ketiga contoh di bawah adalah CONTOH.
+
+  **Salah satunya adalah SELURUH argumen bagi test integrasi.** Biarkan
+  `legacyContentJson` benar dan tetap ter-ekspor, lalu ubah HANYA INSERT-nya
+  supaya berhenti memanggilnya: suite DB-free **13 pass / 0 fail** — hijau di
+  atas builder yang tak dipanggil siapa pun, yang persis keadaan yang dikirim —
+  sementara `tests/integration/legacy-import.integration.test.ts` memerah pada
+  kolom yang dibacanya kembali dari Postgres. Test murni atas fungsi murni tak
+  bisa membedakan "ini benar" dari "ini benar dan tak terpakai".
+
+  **Sebuah ADR ter-merge MENYEBUT simbol yang TIDAK ADA, di dalam paragraf yang
+  menyuruh pembacanya jangan.** ADR-0114 dan kedua salinan PROJECT_STATE
+  menempatkan regex slug inline itu di dalam fungsi yang mereka sebut
+  `validate`+`LegacyPostImportRecord` — tidak ada simbol semacam itu di mana pun
+  di repo ini. Fungsi yang diekspor adalah `parseLegacyImportRecord`
+  (`src/modules/blog-content/domain/legacy-import-record.ts`). Paragraf yang
+  membawa kekeliruan itu dibuka dengan _"Sebut simbol itu dengan TEPAT, karena
+  nama yang salah mengirim agen ke berkas yang salah."_ Dikoreksi di keempat
+  berkas; changeset ter-merge sengaja tidak ditulis ulang.
+
+  **Dan koreksinya merusak dirinya sendiri lebih dulu, dan itulah bagian yang
+  layak disimpan.** Perbaikannya diterapkan sebagai rename menyeluruh atas
+  keempat berkas — TERMASUK satu kemunculan yang HARUS tetap salah supaya
+  kalimatnya bermakna. Kedua salinan lalu berbunyi "mereka menyebutnya di dalam
+  X; fungsi yang diekspor adalah X, dan tidak ada simbol semacam itu",
+  menyatakan bahwa nama yang BENAR tidak ada. Sebuah review menangkapnya. Nama
+  yang salah dieja di sini sebagai dua penggalan yang disambung justru supaya
+  rename menyeluruh berikutnya tidak bisa menjangkaunya: **cari-dan-ganti atas
+  prosa tidak tahu kemunculan mana yang KUTIPAN dan mana yang KLAIM.**
+
+  **Yang tersisa, dan repo ini TETAP tidak bisa menutup cutover-nya.**
+
+  - **KODE:** tidak ada dari leave-list sebelumnya. Duplikasi slug yang
+    disebut-tapi-ditunda (`legacy-import-record.ts` membawa salinannya sendiri
+    atas regex `slug-policy.ts`, dan atas batas 200 karakternya) masih terbuka
+    dan masih sengaja di luar lingkup di sini — meruntuhkannya menuntut
+    `slug-policy.ts` mengekspor keduanya, yang merupakan perubahan pada simbol
+    dengan **14 call site di sembilan berkas pada tree tempat entri ini dikirim**
+    — 10 di 7 berkas pada HEAD, ditambah empat yang ditambahkan putaran ini di
+    `legacy-section-map.ts` dan `blog-legacy-article-paths.ts`. ADR-0114
+    menghitung delapan. Angka yang diukur SEBELUM sebuah perubahan lalu dikutip
+    SESUDAHNYA adalah kelas yang sama dengan komentar yang bukan panggilan.
+  - **OPERASIONAL, tidak berubah:** kesepuluh kategori tujuan; ~25.031 unggahan /
+    4,1 GB, masih pemblokir KERAS karena importer menolak baris yang
+    `featuredImageSrc`-nya tak terpetakan dan 25.029 dari 25.029 memilikinya;
+    pengawatan tepi. **Dan DUA yang ditambahkan putaran ini.** (1) `awcms-astro`
+    membangun halaman STATIS, jadi kesepuluh kategori yang ada itu perlu dan
+    TIDAK cukup: arsipnya harus diimpor _dan_ situs itu di-rebuild serta
+    di-redeploy sebelum satu pun tujuan benar-benar ada. (2) Bahkan sebelum itu,
+    **kesepuluh slug section WAJIB ditambahkan ke `siteConfig.tabs` yang
+    di-hardcode di repo itu** — `getArticles` berjalan sekali per tab
+    terkonfigurasi dan hanya menyimpan post ketika
+    `readBlock(post).kategori === tab`, jadi section yang tidak menamai satu pun
+    tab terkonfigurasi membangun NOL, hasil nol-halaman yang sama dengan tanpa
+    sidecar sama sekali. Sebuah perubahan KODE di repositori lain, berurutan
+    sebelum rebuild-nya, dan tak ada apa pun di sini yang bisa memeriksanya.
+
 - **PUTARAN ORIGIN — 26 Agustus 2026: peta cutover-nya BENAR soal ke mana
   pembaca dikirim dan SALAH soal SIAPA yang mengirimnya, dan tak ada gerbang di
   repo ini yang bisa melihatnya karena jawabannya hidup di repo lain.**
@@ -392,7 +616,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   lebih buruk daripada 404.** Setiap judul legacy memuat spasi, jadi setiap segmen
   URL legacy membawa `_` — yang dilarang regex slug **INLINE** importer legacy di
   `legacy-import-record.ts` (`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` di
-  dalam `validateLegacyPostImportRecord`; **TIDAK ADA** simbol bernama
+  dalam `parseLegacyImportRecord`; **TIDAK ADA** simbol bernama
   `SLUG_PATTERN` di berkas itu — satu-satunya yang ada adalah const PRIVAT di
   `slug-policy.ts`, yang diekspos sebagai `isValidSlug`, yang tak pernah dipanggil
   importer itu dan kedelapan call site-nya adalah post, page, term serta kunci

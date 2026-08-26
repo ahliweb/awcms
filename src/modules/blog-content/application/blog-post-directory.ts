@@ -928,8 +928,19 @@ export const LEGACY_REDIRECT_MAP_LIMIT = 500;
  * `/news/{id_ber}_{slug}.html`, the next archive will serve something else, and
  * hard-coding one of them here would make the second migration a code change.
  *
- * Only PUBLISHED, non-deleted posts: a redirect pointing at a draft sends a
- * search engine to a 404, which is worse than the 404 it already had.
+ * Only posts this deployment would actually SERVE to an anonymous reader: a
+ * redirect pointing at anything else sends a search engine to a 404, which is
+ * worse than the 404 it already had.
+ *
+ * That sentence used to read "only PUBLISHED, non-deleted posts", over a
+ * predicate that was exactly those two things — and the route that serves the
+ * target requires four (`fetchPublicBlogPostBySlug`:
+ * `status = 'published' AND visibility IN ('public','unlisted') AND deleted_at
+ * IS NULL AND published_at IS NOT NULL AND published_at <= now()`). So a
+ * `private` post and a future-dated one each got a rule whose destination
+ * answers 404 — the failure the paragraph names, produced by the paragraph's
+ * own function. The predicate below is now the route's, and the two are held
+ * together by an integration test rather than by these two comments agreeing.
  *
  * ## The target carries a LOCALE prefix (Issue #599 follow-up)
  *
@@ -965,7 +976,10 @@ export async function listLegacyRedirectMappings(
       AND legacy_source_system = ${options.system}
       AND legacy_source_id IS NOT NULL
       AND status = 'published'
+      AND visibility IN ('public', 'unlisted')
       AND deleted_at IS NULL
+      AND published_at IS NOT NULL
+      AND published_at <= now()
       AND (${after}::text IS NULL OR legacy_source_id > ${after})
     ORDER BY legacy_source_id ASC
     LIMIT ${LEGACY_REDIRECT_MAP_LIMIT}
@@ -986,4 +1000,89 @@ export async function listLegacyRedirectMappings(
         : barePath
     };
   });
+}
+
+export type LegacyArticlePath = {
+  legacyId: string;
+  slug: string;
+  locale: string;
+  /**
+   * The SECTION the consuming site files this article under, read back out of
+   * `content_json.awcmsAstro.kategori` — the field `blog:legacy:import`'s
+   * `--section-map` writes.
+   *
+   * `null` means the row carries no sidecar, which means `ahliweb/awcms-astro`
+   * builds no page for it. The caller REPORTS those rather than emitting a
+   * path for them; see `scripts/blog-legacy-article-paths.ts`.
+   */
+  section: string | null;
+};
+
+/**
+ * The rows behind ADR-0114's id→path artefact, in keyset pages.
+ *
+ * ## Why this is not `listLegacyRedirectMappings` with a different template
+ *
+ * That function answers "what rule should `awcms_seo_redirects` hold", and its
+ * target is hard-coded `/blog/{tenantCode}/{slug}` — THIS repo's surface.
+ * ADR-0115 puts the migrated archive's articles on `ahliweb/awcms-astro`
+ * alongside the category archives ADR-0113 already sent there, so the artefact
+ * needs a different destination built from a field that function does not read.
+ *
+ * Keeping them separate rather than adding a flag is deliberate: one is a
+ * writer into a table this application consults, the other is a FILE handed to
+ * the edge, and ADR-0114 declares the first inert for this cutover. A single
+ * function that did both would be one `if` away from writing the inert rules
+ * again.
+ *
+ * ## The predicate is the SERVING repo's, not this one's
+ *
+ * `status = 'published'`, `visibility = 'public'`, `published_at <= now()` and
+ * `deleted_at IS NULL` are what `awcms-astro`'s adapter requires before it will
+ * build a page (`fetchPublishedPosts`: status, visibility and a `publishedAt`
+ * that exists). `unlisted` is accepted by THIS repo's route and is deliberately
+ * NOT accepted here — the artefact must describe the pages the consuming site
+ * actually generates, and an artefact that is more generous than its consumer
+ * is a 301 into a 404 wearing a green report.
+ */
+export async function listLegacyArticlePaths(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: { system: string; afterLegacyId?: string | null }
+): Promise<LegacyArticlePath[]> {
+  const after = options.afterLegacyId ?? null;
+
+  const rows = (await tx`
+    SELECT
+      legacy_source_id,
+      slug,
+      locale,
+      content_json -> 'awcmsAstro' ->> 'kategori' AS section
+    FROM awcms_blog_posts
+    WHERE tenant_id = ${tenantId}
+      AND legacy_source_system = ${options.system}
+      AND legacy_source_id IS NOT NULL
+      AND status = 'published'
+      AND visibility = 'public'
+      AND deleted_at IS NULL
+      AND published_at IS NOT NULL
+      AND published_at <= now()
+      AND (${after}::text IS NULL OR legacy_source_id > ${after})
+    ORDER BY legacy_source_id ASC
+    LIMIT ${LEGACY_REDIRECT_MAP_LIMIT}
+  `) as {
+    legacy_source_id: string;
+    slug: string;
+    locale: string;
+    section: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    legacyId: row.legacy_source_id,
+    slug: row.slug,
+    locale: row.locale,
+    // `->>` yields SQL NULL for a missing key AND for a JSON null, which is the
+    // same answer here: no section was written, so no page is built.
+    section: row.section
+  }));
 }

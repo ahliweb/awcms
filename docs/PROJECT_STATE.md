@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0114** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0115** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **59** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -360,6 +360,215 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **CONSUMER ROUND — 26 August 2026: the importer produced 25,029 articles that
+  the repo which SERVES them builds no page for, and the destination those
+  articles were bound for had never been chosen.**
+
+  The ORIGIN ROUND below closed on a leave-list of two code items and three
+  operational ones. Both code items are now built. What was found while building
+  them is bigger than either: **the archive would have imported cleanly into a
+  site that renders none of it.**
+
+  **`content_json` was a hard-coded `{ blocks: [] }`, under a docblock saying it
+  was not.** `importLegacyBlogPost`'s own comment read _"the same lossy
+  projection every other write path produces … so an imported row is
+  indistinguishable in shape from an authored one"_. `blog-post-directory.ts:235`
+  and `blog-page-directory.ts:201` both call `withProjectedBlocks`; this file
+  called nothing. **A comment is not a call** — the class this repo has now
+  recorded four times, and this instance decided the whole cutover.
+
+  That single literal controls two separate things in `ahliweb/awcms-astro`:
+
+  - `renderContentBlocks(post.contentJson)` reads `contentJson.blocks` and
+    returns `""` for a non-array or an empty one. Every imported article would
+    have been a **blank page**.
+  - `getArticles(tab, locale)` keeps a post only when
+    `readBlock(post).kategori === tab`, reading `contentJson.awcmsAstro`. With no
+    such key that is `undefined === tab` for every configured tab, so the post is
+    **not built at all** — and no category archive is built either, because
+    `artikelSemuaSeksi` assembles those from the same tab-filtered set.
+
+  **Run, not reasoned about.** A throwaway probe was stood up inside that repo's
+  own test harness and deleted afterwards: a post carrying the sidecar builds
+  **1** article; a post written exactly as this importer wrote it builds **0**,
+  across every configured tab. So ADR-0113's 63 rubrik rules AND ADR-0114's
+  id-keyed article map would each have redirected onto a page that was never
+  generated — `CUTOVER_VERDICT_REASON.target_missing` in its own words, and the
+  one outcome both issues' DoD forbids. That repo's own fixtures could not have
+  caught it: `buatPost` in `tests/kontrak-awcms.test.mjs` writes
+  `contentJson: { awcmsAstro: { … kategori: "panduan" } }` on every row, so the
+  suite has never seen a post without one.
+
+  **Why no gate here could see it, and it is a NEW rung on a ladder this
+  document is already climbing.** `/blog/{code}/{slug}` renders from
+  `body_portable_text` and falls back to the projection only for un-backfilled
+  rows (`blog-body-rendering.ts`), so an imported post looks perfect HERE. The
+  ORIGIN ROUND's transferable lesson was _"is the caller even in the request
+  path?"_. This one is one further out: **does the repo that SERVES this read the
+  field this writer skipped?** Three rounds, three rungs — is it called, is the
+  caller in the path, does the consumer read it.
+
+  **The destination had never been decided, and the two halves disagreed.**
+  ADR-0113 sent the rubrik listings to `/kategori/{slug}` on `awcms-astro`;
+  nothing said where the ARTICLES go, and the only article derivation in the
+  repo builds `` `/blog/${tenantCode}/${row.slug}` `` — this repo's surface. One
+  cutover, **two origins**, and every link out of a category archive would have
+  left the origin that rendered it. **ADR-0115** decides one origin:
+  `/{section}/{slug}/` on `awcms-astro`, matching the half already committed.
+
+  **A prefix rule that is right here and wrong there.** `withPublicLocalePrefix`
+  (ADR-0098) prefixes EVERY locale including the default; `awcms-astro`'s
+  `localePath` returns the path unchanged for its default and prefixes only the
+  others. All 25,029 articles are in the default locale, so an artefact built
+  with this repo's rule would have 301'd every one of them into a 404. Caught by
+  a test written against the assumption and then run — the committed rubrik map
+  had been saying it all along (`/kategori/daerah`, not `/id/kategori/daerah`).
+  `--default-locale` is therefore a REQUIRED flag on the generator rather than a
+  constant: it is the consuming repo's value, and its wrong answer is silent.
+
+  **Both leave-list code items are built.**
+
+  1. `bun run blog:legacy:article-paths` — ADR-0114's id→path artefact,
+     derived from the tenant, preview by default, with provenance. It REFUSES to
+     emit while any row lacks a section: an artefact that is 96% right is one
+     nobody audits. It emits no VCL, no nginx `map` and no bulk-redirect CSV —
+     `infra/varnish/default.vcl` is the file that runs in production and imports
+     `std` and nothing else, so 25,029 keyed lookups are not expressible in it,
+     and choosing a tier on the operator's behalf is the same class of guess
+     ADR-0114 exists to record.
+  2. `bun run blog:legacy:edge:verify` — the HTTP-level verifier. It requests
+     each legacy URL with `redirect: "manual"`, walks the chain, and reuses
+     `classifyCutoverOutcome` so an edge run and a database run report in one
+     vocabulary. **This is the replay that falsified ADR-0113, made
+     repeatable.** Deliberately NOT in the `bun run check` chain, and it
+     cannot be: it only means anything once the edge is wired, which ADR-0114
+     names as an operational step this repo cannot close. It is an operator
+     command that exits non-zero, not a gate — this repo's generated script
+     inventory has a Gate column, and this row is `—`. Tested against a real `Bun.serve`, never a mocked `fetch`, for the
+     reason `edge-cache-purge-client.test.ts` gives: a fake asserting
+     `init.redirect === "manual"` passes forever over a client that follows
+     redirects anyway, and the report then shows one hop for a three-hop chain.
+
+  **Two defects the new tests found in code that already existed.**
+
+  - `listLegacyRedirectMappings` promised _"only PUBLISHED, non-deleted posts: a
+    redirect pointing at a draft sends a search engine to a 404"_ over exactly
+    those two conditions, while the route that serves the target requires four
+    (`visibility IN ('public','unlisted')` and `published_at <= now()` as well).
+    A `private` post and a future-dated one each got a rule whose destination
+    404s — the paragraph naming the failure its own function produced.
+  - `CutoverFacts` had no way to say "nothing was observed". A DNS failure, a
+    refused connection, a timeout and a 502 all arrive with zero hops, and
+    `hops === 0` was the only thing `no_rule` read — whose reason text is the
+    confident _"this URL will answer 404 after cutover, and its ranking is
+    lost"_. A 502 while the origin restarted would have sent an operator to fix
+    a correct rule. New verdict: `unreachable`, the `target_unverifiable`
+    argument one row over. **Found by writing the test first and running it**,
+    not by reading the classifier.
+
+  **An adversarial review of this round found three real defects in it, and the
+  most useful one is the correction that broke itself.**
+
+  - **The edge verifier followed a hostile `Location` anywhere.** `probeUrlFor`
+    screened the CORPUS to `http:`/`https:`; the walker then dropped that
+    decision for every hop it actually issued. Measured: `file:///etc/hostname`
+    and `data:text/plain,hi` both resolved and recorded as a 200, a redirect to
+    a loopback port reached the server listening on it, and all of them
+    classified **`ok`** — "resolves in one hop to a page this deployment
+    serves". `hopRefusalFor` now runs before every request, the first included,
+    and a new `unsafe_redirect` verdict OUTRANKS `loop` and `chain_too_long`
+    because a hostile origin can produce either. It imports `isBlockedAddress`
+    rather than restating it; `validateOutboundUrl` could not be reused as-is
+    because it refuses `http:`, which is exactly the shape a crawler holds, and
+    `ssrfSafeFetch` follows redirects internally, which destroys the hop-by-hop
+    visibility this job exists to produce. Hostnames are deliberately not
+    resolved, and that is written down as a boundary rather than left as a hole.
+  - **`buildArticlePaths` validated two of the three segments it builds.** The
+    locale went in raw under a comment reading "Both halves become URL segments,
+    and both are checked" — **a comment asserting a binding no call makes, in a
+    file added to fix an instance of exactly that.** `awcms_blog_posts.locale`
+    has no CHECK constraint.
+  - **The symbol correction broke itself, and that is the transferable half.**
+    The rename was applied across all four files including the one occurrence
+    that had to stay wrong for the sentence to mean anything, leaving both
+    copies asserting that the CORRECT name does not exist. **A
+    search-and-replace over prose does not know which occurrences are the
+    quotation and which are the claim** — the wrong name is now spelled as two
+    joined fragments so the next one cannot reach it.
+
+  The review also found the two hand-written verdict arrays in
+  `tests/cutover-verification.test.ts` falling behind the union: one listed
+  seven members and the other six (it omitted `ok` on purpose) against a union
+  of eight. They are DERIVED from `CUTOVER_VERDICT_REASON`'s keys now — which
+  `Record<CutoverVerdict, string>` makes exhaustive by construction — and the
+  change earned itself within the hour by going red when `unsafe_redirect`
+  landed.
+
+  **Every fix carries a mutation proven to fail on the real defect**, and the
+  grain lesson the ORIGIN ROUND recorded was applied rather than repeated. Nine
+  mutations were applied and run — **23 of them across this round**, each at the
+  smallest grain that leaves every identifier the test names in place.
+
+  No list is given a count in front of it here, deliberately. The first draft of
+  this paragraph said "nine mutations" and then enumerated ten, which is the
+  same class as everything else this round records: a number and a list, kept in
+  agreement by nobody. The count above is checkable on its own; the three
+  examples below are examples.
+
+  **One of them is the whole argument for the integration test.** Leave
+  `legacyContentJson` correct and exported, and change ONLY the INSERT so it
+  stops calling it: the DB-free suite is **13 pass / 0 fail** — green over a
+  builder nothing calls, which is exactly the state that shipped — while
+  `tests/integration/legacy-import.integration.test.ts` goes red on the column it
+  reads back out of Postgres. A pure test of a pure function cannot tell "this is
+  right" from "this is right and unused".
+
+  **A merged ADR named a symbol that does not exist, in the paragraph telling
+  the reader not to.** ADR-0114 and both PROJECT_STATE copies placed the inline
+  slug regex inside a function they called
+  `validate`+`LegacyPostImportRecord` — no such symbol exists anywhere in this
+  repo. The exported function is `parseLegacyImportRecord`
+  (`src/modules/blog-content/domain/legacy-import-record.ts`). The paragraph
+  carrying the error opens _"Name that symbol precisely, because the wrong name
+  sends an agent to the wrong file."_ Corrected in all four files; the merged
+  changeset is deliberately not rewritten.
+
+  **And the correction broke itself first, which is the part worth keeping.** The
+  fix was applied as a blanket rename across all four files — including the one
+  occurrence that had to stay wrong for the sentence to mean anything. Both
+  copies then read "they say it sits inside X; the exported function is X, and
+  there is no such symbol", asserting that the CORRECT name does not exist. A
+  review caught it. The wrong name is spelled here as two joined fragments
+  precisely so the next blanket rename cannot reach it: **a
+  search-and-replace over prose does not know which occurrences are the
+  quotation and which are the claim.**
+
+  **What this leaves, and this repo still cannot close the cutover.**
+
+  - **CODE:** nothing on the previous leave-list. The named-but-deferred slug
+    duplication (`legacy-import-record.ts` carries its own copy of
+    `slug-policy.ts`'s regex, and of its 200-character cap) is still open and is
+    still deliberately out of scope here — collapsing it needs `slug-policy.ts`
+    to export both, which is a change to a symbol with **14 call sites across
+    nine files in the tree this entry ships in** — 10 across 7 at HEAD, plus the
+    four this round adds in `legacy-section-map.ts` and
+    `blog-legacy-article-paths.ts`. ADR-0114 counted eight. A count measured
+    before a change and quoted after it is the same class as a comment that is
+    not a call.
+  - **OPERATIONAL, unchanged:** the ten destination categories; ~25,031 uploads /
+    4.1 GB, still a hard blocker because the importer refuses a row whose
+    `featuredImageSrc` is unmapped and 25,029 of 25,029 have one; the edge
+    wiring. **And two this round adds.** (1) `awcms-astro` builds STATIC
+    pages, so the ten categories existing is necessary and NOT sufficient: the
+    archive must be imported _and_ that site rebuilt and redeployed before a
+    single destination exists. (2) Before even that, **the ten section slugs have
+    to be added to that repo's hard-coded `siteConfig.tabs`** — `getArticles`
+    runs once per configured tab and keeps a post only when
+    `readBlock(post).kategori === tab`, so a section naming no configured tab
+    builds nothing, which is the same zero-page outcome as no sidecar at all. A
+    code change in the other repository, ordered before the rebuild, and nothing
+    here can check it.
+
 - **ORIGIN ROUND — 26 August 2026: the cutover map was right about where to send
   a reader and wrong about WHO would send them, and no gate in this repo could
   see it because the answer lived in another repo.**
@@ -389,7 +598,7 @@ pioneered directly here after the ADR-0047 freeze.)
   a 404.** Every legacy title contains a space, so every legacy URL segment
   carries `_` — which the legacy importer's **inline** slug regex in
   `legacy-import-record.ts` forbids (`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))`
-  inside `validateLegacyPostImportRecord`; there is **no** symbol called
+  inside `parseLegacyImportRecord`; there is **no** symbol called
   `SLUG_PATTERN` in that file — the only one is a private const in
   `slug-policy.ts`, exposed as `isValidSlug`, which the importer never calls and
   whose eight call sites are every OTHER tenant's posts, pages, terms and menu

@@ -30,7 +30,7 @@
  *
  * ## What gets refused, and why refusal is the feature
  *
- * Four independent gates, all reported per row, none of which silently repairs
+ * Five independent gates, all reported per row, none of which silently repairs
  * anything:
  *
  * 1. **The record** — a line with no `legacyId` cannot be part of a redirect
@@ -50,6 +50,8 @@
  * 4. **The slug** — checked against what this tenant already has, up front and
  *    in one query, so a collision is a line in the report rather than a
  *    constraint error 12,000 rows into a run.
+ * 5. **The section** — and only once `--section-map` is supplied. See below;
+ *    it is the one gate whose absence is a WARNING rather than a refusal.
  *
  * ## The images, and the two flags that make the archive importable at all
  *
@@ -115,6 +117,41 @@
  * unmanaged `<img>` is: an article that imported cleanly and lost its filing
  * looks like a success.
  *
+ * ## The sections, and why they are NOT the categories again (ADR-0115)
+ *
+ * `content_json` was written as a hard-coded `{ blocks: [] }`, and that one
+ * literal decided two things in `ahliweb/awcms-astro`, the repo that renders
+ * this archive. Measured against that repo's real adapter rather than argued:
+ * a post carrying the sidecar builds **1** article; a post written the way this
+ * importer wrote it builds **0**, in every configured tab — no article page,
+ * and no category archive either, because those are assembled from the same
+ * tab-filtered set. So ADR-0113's 63 rubrik rules and ADR-0114's id-keyed
+ * article map would BOTH have redirected onto pages that were never generated.
+ *
+ * Two halves fix it, and they are independent:
+ *
+ *  - `blocks` is now the DERIVED projection (`withProjectedBlocks`, the same
+ *    call `blog-post-directory.ts` makes) rather than an empty array, so a body
+ *    renders. That needs no flag and applies to every run.
+ *  - `content_json.awcmsAstro.kategori` carries the SECTION, and that needs one:
+ *
+ *   `--section-map=<path>` JSON `{ "<legacy category name>": "<section slug>" }`.
+ *                         The same work list `--terms` already writes, with a
+ *                         different right-hand column.
+ *
+ * **Why a third map instead of deriving it from `--term-map`.** A term is a row
+ * in THIS database; a section is a tab slug in the consuming repo's
+ * `siteConfig.tabs`. Different vocabularies, in different repositories, and
+ * nothing here can read that file — so the section map is the ONE map with no
+ * verification sweep behind it, and the run PRINTS the vocabulary it was handed
+ * instead of pretending to check it.
+ *
+ * **Why a missing map warns rather than refuses.** A tenant served by this repo
+ * at `/blog/{tenantCode}/{slug}` needs no sidecar at all, and refusing 25,029
+ * rows over a repository the operator may not be using would be the wrong
+ * failure. A row that names no section under a map that WAS supplied is refused,
+ * because supplying one is the declaration that the sibling site serves this.
+ *
  * ## Roles and transactions
  *
  * Runs as the APP role, not `awcms_worker`. This creates content, which is an
@@ -160,6 +197,11 @@ import {
   termIdsIn
 } from "../src/modules/blog-content/domain/legacy-term-map";
 import type { LegacyCategoryUsage } from "../src/modules/blog-content/domain/legacy-term-map";
+import {
+  parseLegacySectionMap,
+  resolveLegacySection,
+  sectionsIn
+} from "../src/modules/blog-content/domain/legacy-section-map";
 
 /** One transaction per batch — small enough to retry, large enough to be worth a round trip. */
 const BATCH_SIZE = 200;
@@ -193,6 +235,11 @@ function usage(message: string): void {
       "                       archive files under, most-used first — and stop there\n" +
       '  --term-map=<path>    JSON { "<legacy category name>": "<term uuid>" }; every id is\n' +
       "                       checked against this tenant's taxonomy before anything is written\n" +
+      '  --section-map=<path> JSON { "<legacy category name>": "<section slug>" }, written to\n' +
+      "                       content_json.awcmsAstro.kategori. Required if `ahliweb/awcms-astro`\n" +
+      "                       serves this archive: without it that repo builds NO page for any\n" +
+      "                       imported article and no category archive either. A row whose\n" +
+      "                       categories resolve to no section, or to more than one, is refused.\n" +
       "  --commit             write. Without it, nothing is written and you get the report.\n"
   );
   process.exitCode = 1;
@@ -303,6 +350,24 @@ export type LegacyImportPlanInput = {
   termMap: ReadonlyMap<string, string>;
   /** Null when `--term-map` was not passed, for the same two reasons. */
   termMapPath: string | null;
+  /**
+   * Legacy category name -> SECTION slug on the consuming site.
+   *
+   * Unlike the two maps above there is nothing to verify it against: a section
+   * is a tab slug in `ahliweb/awcms-astro`'s `siteConfig.tabs`, and no query
+   * here can ask that file anything. `parseLegacySectionMap` has already proved
+   * every value is a valid slug, which is the whole of what this repo can know.
+   */
+  sectionMap: ReadonlyMap<string, string>;
+  /**
+   * Null when `--section-map` was not passed.
+   *
+   * The distinction decides whether an unresolvable section is a REFUSAL or
+   * simply an article with no sidecar: with no map the operator has not claimed
+   * the archive is destined for `awcms-astro` at all, and refusing every row
+   * would break the tenant this repo serves directly.
+   */
+  sectionMapPath: string | null;
 };
 
 export type LegacyImportPlan = {
@@ -314,6 +379,14 @@ export type LegacyImportPlan = {
   >;
   /** Resolved lead photograph per accepted row, keyed by `legacyId` like `acceptedBodies`. */
   acceptedFeaturedMediaIds: Map<string, string | null>;
+  /**
+   * Resolved section per accepted row, keyed the same way.
+   *
+   * `null` for every row when no `--section-map` was supplied, which is the
+   * state the summary WARNS about: those rows import correctly here and are
+   * built by nothing in `ahliweb/awcms-astro`.
+   */
+  acceptedSections: Map<string, string | null>;
   refusals: Refusal[];
   /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
   imageRefsPerArticle: LegacyArticleImageRefs[];
@@ -327,7 +400,9 @@ export function planLegacyImportRows({
   mediaMap,
   mediaMapPath,
   termMap,
-  termMapPath
+  termMapPath,
+  sectionMap,
+  sectionMapPath
 }: LegacyImportPlanInput): LegacyImportPlan {
   const accepted: LegacyImportRecord[] = [];
   const acceptedBodies = new Map<
@@ -335,6 +410,7 @@ export function planLegacyImportRows({
     ReturnType<typeof convertLegacyHtmlToPortableText>
   >();
   const acceptedFeaturedMediaIds = new Map<string, string | null>();
+  const acceptedSections = new Map<string, string | null>();
   const refusals: Refusal[] = [];
   const imageRefsPerArticle: LegacyArticleImageRefs[] = [];
   const categoriesPerArticle: string[][] = [];
@@ -483,6 +559,44 @@ export function planLegacyImportRows({
       continue;
     }
 
+    // The SECTION, and it is only a gate when the operator asked for one.
+    //
+    // With a `--section-map` the operator has declared that this archive is
+    // destined for `ahliweb/awcms-astro`, where an article whose
+    // `content_json.awcmsAstro.kategori` names no configured tab is not built
+    // at ALL — no article page, and no category archive, because those are
+    // assembled from the same tab-filtered set. Importing past an unresolvable
+    // section under that declaration produces exactly the outcome #599/#711
+    // forbid: a 301 onto a page that was never generated.
+    //
+    // With no map there is no such declaration, so a row simply carries no
+    // sidecar. That is correct for a tenant this repo serves at
+    // `/blog/{code}/{slug}` directly, and the summary says plainly what it
+    // costs on the other site rather than refusing 25,029 rows over a repo the
+    // operator may not be using.
+    let section: string | null = null;
+    if (sectionMapPath) {
+      const resolved = resolveLegacySection(
+        record.value.categories,
+        sectionMap
+      );
+
+      if (!resolved.ok) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: [
+            resolved.reason === "ambiguous"
+              ? `categories name more than one section (${resolved.sections.join(", ")}) in ${sectionMapPath} — one article belongs to one section, and the order of \`categories\` is whatever the export emitted`
+              : `no category of this row is in ${sectionMapPath}, so nothing says which section it belongs to`
+          ]
+        });
+        continue;
+      }
+
+      section = resolved.section;
+    }
+
     if (!body.ok) {
       refusals.push({
         line: lineNumber,
@@ -517,12 +631,14 @@ export function planLegacyImportRows({
     accepted.push(record.value);
     acceptedBodies.set(record.value.legacyId, body);
     acceptedFeaturedMediaIds.set(record.value.legacyId, featuredMediaId);
+    acceptedSections.set(record.value.legacyId, section);
   }
 
   return {
     accepted,
     acceptedBodies,
     acceptedFeaturedMediaIds,
+    acceptedSections,
     refusals,
     imageRefsPerArticle,
     categoriesPerArticle
@@ -540,6 +656,7 @@ async function main(): Promise<void> {
   const mediaMapPath = flag("media-map");
   const termsPath = flag("terms");
   const termMapPath = flag("term-map");
+  const sectionMapPath = flag("section-map");
 
   if (!file) return usage("`--file=<path>` is required.");
   if (!tenantId) return usage("`--tenant=<uuid>` is required.");
@@ -696,10 +813,59 @@ async function main(): Promise<void> {
       termMap = parsedMap.value;
     }
 
+    let sectionMap: ReadonlyMap<string, string> = new Map();
+
+    if (sectionMapPath) {
+      let rawMap: unknown;
+      try {
+        rawMap = JSON.parse(await Bun.file(sectionMapPath).text());
+      } catch (error) {
+        console.error(
+          `blog:legacy:import — ${sectionMapPath} is not valid JSON: ${safeErrorDetail(error)}`
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      const parsedMap = parseLegacySectionMap(rawMap);
+
+      if (!parsedMap.ok) {
+        console.error(
+          `blog:legacy:import — ${sectionMapPath} is not a usable section map:\n` +
+            parsedMap.errors.map((line) => `  - ${line}`).join("\n")
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      // NO verification sweep, and that asymmetry is the point rather than an
+      // omission. The media and term maps are checked against tables in THIS
+      // database; a section is a tab slug in `ahliweb/awcms-astro`'s
+      // `siteConfig.tabs`, and there is no query that can ask that file
+      // anything. Inventing a check here — against term slugs, say — would
+      // assert a correspondence between two vocabularies that nothing
+      // maintains, and pass while being wrong.
+      //
+      // So the declared vocabulary is PRINTED instead. An operator who can see
+      // the ten section slugs this run will write can compare them with the
+      // tabs that repo is configured for, which is the only place the answer
+      // exists.
+      sectionMap = parsedMap.value;
+
+      console.log(
+        `blog:legacy:import — ${sectionMap.size} category name(s) map to ` +
+          `${sectionsIn(sectionMap).length} section(s): ${sectionsIn(sectionMap).join(", ")}\n` +
+          "  These are NOT verified — a section is a tab slug in `ahliweb/awcms-astro`'s\n" +
+          "  siteConfig.tabs, which no query here can read. Compare the list above with that\n" +
+          "  file: an article whose section names no configured tab is not built at all."
+      );
+    }
+
     const {
       accepted,
       acceptedBodies,
       acceptedFeaturedMediaIds,
+      acceptedSections,
       refusals,
       imageRefsPerArticle,
       categoriesPerArticle
@@ -709,7 +875,9 @@ async function main(): Promise<void> {
       mediaMap,
       mediaMapPath,
       termMap,
-      termMapPath
+      termMapPath,
+      sectionMap,
+      sectionMapPath
     });
 
     if (termsPath) {
@@ -785,7 +953,11 @@ async function main(): Promise<void> {
                 // `isMediaReferenceSafe` sweep the body images went through.
                 // There is deliberately no second check here.
                 featuredMediaId:
-                  acceptedFeaturedMediaIds.get(record.legacyId) ?? null
+                  acceptedFeaturedMediaIds.get(record.legacyId) ?? null,
+                // `?? null` and not `!`: with no `--section-map` every entry is
+                // genuinely null, which is a supported state rather than a
+                // missing lookup.
+                section: acceptedSections.get(record.legacyId) ?? null
               }
             );
 
@@ -828,10 +1000,43 @@ async function main(): Promise<void> {
         `  lines read       ${lines.filter((l) => l.trim().length > 0).length}\n` +
         `  importable       ${importable.length}\n` +
         `  refused          ${refusals.length}\n` +
+        `  sections         ${sectionMapPath ? `${new Set([...acceptedSections.values()].filter(Boolean)).size} distinct, from ${sectionMapPath}` : "NONE — no --section-map"}\n` +
         (commit
           ? `  inserted         ${imported}\n  already present  ${alreadyPresent}\n`
           : "")
     );
+
+    // The loudest thing this job can say without refusing, and it is placed
+    // BEFORE the refusal list so it is not read as one more line of it.
+    //
+    // A run with no `--section-map` writes no `content_json.awcmsAstro`, and
+    // `ahliweb/awcms-astro` then builds NOTHING for these rows — not the
+    // article pages, and not the category archives, which are assembled from
+    // the same tab-filtered set. That is precisely the state this importer
+    // shipped in for its whole life, and it is invisible from here because
+    // `/blog/{code}/{slug}` renders these rows perfectly.
+    //
+    // It is a warning and not a refusal because a tenant served by THIS repo
+    // needs no sidecar, and refusing 25,029 rows over a repository the operator
+    // may not be using would be the wrong failure.
+    //
+    // `console.log`, deliberately, and it was `console.warn` first. This
+    // script's CLI tests assert `stderr === ""` on a run that exits 0 — the
+    // contract is "stderr means the run FAILED", stated in their own comment as
+    // "a refusal is not a failure of the run". A warning on stderr makes
+    // `stderr === ""` stop meaning "clean", which is a signal a shell can act
+    // on and this would have quietly taken away. It goes on stdout, with the
+    // rest of the report it belongs to.
+    if (!sectionMapPath && importable.length > 0) {
+      console.log(
+        `  WARNING: no --section-map, so none of these ${importable.length} article(s) will carry\n` +
+          "  content_json.awcmsAstro.kategori. If `ahliweb/awcms-astro` serves this archive, it\n" +
+          "  builds NO page for any of them and NO category archive either — every legacy 301\n" +
+          "  would then land on a page that was never generated, which is the one outcome\n" +
+          "  Issues #599 and #711 forbid. Harmless only if this repo serves the archive itself\n" +
+          "  at /blog/{tenantCode}/{slug}.\n"
+      );
+    }
 
     if (refusals.length > 0) {
       console.log("Refused rows — fix the export and re-run:\n");

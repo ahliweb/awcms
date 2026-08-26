@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4dd9d37888fb57ebbf7b5cd120105a2e6d365cc5ca6a6598f28408d028bb00c7 -->
+<!-- i18n-source-hash: sha256:a30f6abb78ceda9a5366a3090c1c1e3ac2a452a904529e50311d47adce6c8f8d -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-121 target menjalankan berkas di `scripts/`; 55 di antaranya
+123 target menjalankan berkas di `scripts/`; 55 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -50,7 +50,9 @@ terjadwal, atau oleh workflow CI tertentu.
 | `api:tenant-route:check`                  | `tenant-route-factory-check.ts`                | ✅   |
 | `blog:ads:drop-readiness`                 | `blog-ads-drop-readiness.ts`                   | —    |
 | `blog:ads:ingest`                         | `blog-ads-ingest.ts`                           | —    |
+| `blog:legacy:article-paths`               | `blog-legacy-article-paths.ts`                 | —    |
 | `blog:legacy:cutover:verify`              | `blog-legacy-cutover-verify.ts`                | —    |
+| `blog:legacy:edge:verify`                 | `blog-legacy-edge-verify.ts`                   | —    |
 | `blog:legacy:import`                      | `blog-legacy-import.ts`                        | —    |
 | `blog:legacy:redirects:import`            | `blog-legacy-redirects-import.ts`              | —    |
 | `blog:legacy:rubrik-redirects`            | `blog-legacy-rubrik-redirects.ts`              | —    |

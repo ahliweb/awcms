@@ -38,19 +38,70 @@
  * published would put them back on the internet.
  */
 import type { PortableTextDocument } from "../domain/portable-text";
-import { portableTextToPlainText } from "../domain/portable-text-conversion";
+import {
+  portableTextToPlainText,
+  withProjectedBlocks
+} from "../domain/portable-text-conversion";
 import type {
   BlogContentStatus,
   BlogContentVisibility
 } from "../domain/post-status";
 
 /**
- * The lossy projection every write path stores alongside the canonical body
- * (ADR-0100). Bound as a VALUE, not `JSON.stringify` of one: Bun JSON-encodes a
- * string parameter bound to a jsonb slot, which stores the scalar string
- * `"{\"blocks\":[]}"` instead of the object (Issue #641).
+ * The `content_json` envelope for one imported row.
+ *
+ * ## It used to be a constant, and the constant was the bug
+ *
+ * This was `const EMPTY_CONTENT_JSON = { blocks: [] }`, bound directly into the
+ * INSERT, under a docblock on `importLegacyBlogPost` claiming `content_json`
+ * was "written as the same lossy projection every other write path produces …
+ * so an imported row is indistinguishable in shape from an authored one".
+ *
+ * It was not the same projection. `blog-post-directory.ts:235` and
+ * `blog-page-directory.ts:201` both call `withProjectedBlocks`; this file
+ * called nothing and shipped a literal empty array. **A comment is not a
+ * call** — this repo's recurring class, and here it cost the whole cutover:
+ *
+ *  - `ahliweb/awcms-astro` renders an article body with
+ *    `renderContentBlocks(post.contentJson)`, which reads `contentJson.blocks`
+ *    and returns `""` for anything that is not a non-empty array. Every
+ *    imported article was a blank page.
+ *  - The same repo decides whether an article is built at ALL with
+ *    `readBlock(post).kategori === tab`, reading `contentJson.awcmsAstro`. With
+ *    no such key that is `undefined === tab` for every configured tab, so no
+ *    article page was generated — and no category archive either, because
+ *    those are built from the same tab-filtered set. The 63 rubrik rules of
+ *    ADR-0113 and the id-keyed article map of ADR-0114 would both have
+ *    redirected onto pages that were never generated.
+ *
+ * Nothing in THIS repo could see either one: `/blog/{code}/{slug}` renders from
+ * `body_portable_text` and only falls back to this projection for
+ * un-backfilled rows (`blog-body-rendering.ts`), so an imported post looked
+ * correct here while the repo that actually serves this archive built nothing.
+ *
+ * ## Bound as a VALUE
+ *
+ * Never `JSON.stringify` of one: Bun JSON-encodes a string parameter bound to a
+ * jsonb slot, which stores the scalar string `"{\"blocks\":[]}"` instead of the
+ * object (Issue #641).
+ *
+ * `awcmsAstro` is written only when a section was resolved, and the key is
+ * OMITTED rather than set to `null` when it was not. `readBlock` treats a
+ * non-object as absent, so the two behave identically on the consumer — but an
+ * envelope that carries the key with no value reads, to the next person, like a
+ * section that was chosen and came out empty.
  */
-const EMPTY_CONTENT_JSON = { blocks: [] as unknown[] };
+export function legacyContentJson(
+  bodyPortableText: PortableTextDocument,
+  section: string | null
+): Record<string, unknown> {
+  return withProjectedBlocks(
+    section === null
+      ? {}
+      : { awcmsAstro: { schemaVersion: 1, kategori: section } },
+    bodyPortableText
+  );
+}
 
 export type LegacyPostImportInput = {
   /** The id the legacy system used — what makes the redirect map derivable. */
@@ -83,6 +134,23 @@ export type LegacyPostImportInput = {
    * check. Do not add a second, weaker one here — one chokepoint or none.
    */
   featuredMediaId: string | null;
+  /**
+   * The SECTION this article belongs to on the consuming site, resolved from
+   * `--section-map` by the caller, or `null` when no map was supplied.
+   *
+   * It is written to `content_json.awcmsAstro.kategori`, which is the field
+   * `ahliweb/awcms-astro` filters on to decide whether an article is built at
+   * all (`getArticles`: `readBlock(post).kategori === tab`). `null` means the
+   * article imports correctly here and is invisible there — a legitimate state
+   * for a tenant this repo serves directly, and the reason the importer WARNS
+   * rather than refuses. See `domain/legacy-section-map.ts`.
+   *
+   * Deliberately NOT verified here: a section is a tab slug in the consuming
+   * repo's `siteConfig.tabs`, a vocabulary in another repository that nothing
+   * in this database can be checked against. `parseLegacySectionMap` proves it
+   * is a valid slug; nothing can prove it is a configured one.
+   */
+  section: string | null;
 };
 
 export type LegacyPostImportOutcome = {
@@ -95,10 +163,12 @@ export type LegacyPostImportOutcome = {
  * Inserts one legacy article, or does nothing if this `(system, legacyId)` is
  * already present for this tenant.
  *
- * `content_json` is written as the same lossy projection every other write path
- * produces (ADR-0100: the canonical body is `body_portable_text`), and
- * `content_text` is derived rather than supplied, so an imported row is
- * indistinguishable in shape from an authored one.
+ * `content_json` is written by `legacyContentJson`, which calls the SAME
+ * `withProjectedBlocks` the two authoring directories call (ADR-0100: the
+ * canonical body is `body_portable_text`), and `content_text` is derived rather
+ * than supplied, so an imported row is indistinguishable in shape from an
+ * authored one. That sentence used to be here over a hard-coded `{ blocks: [] }`
+ * that made it false — see `legacyContentJson` for what it cost.
  */
 export async function importLegacyBlogPost(
   tx: Bun.SQL,
@@ -116,7 +186,7 @@ export async function importLegacyBlogPost(
     VALUES (
       ${tenantId}, ${authorTenantUserId}, ${input.title}, ${input.slug},
       ${input.excerpt},
-      ${EMPTY_CONTENT_JSON}::jsonb,
+      ${legacyContentJson(input.bodyPortableText, input.section)}::jsonb,
       ${portableTextToPlainText(input.bodyPortableText)},
       ${input.bodyPortableText}::jsonb,
       ${input.status}, ${input.visibility}, ${input.locale},

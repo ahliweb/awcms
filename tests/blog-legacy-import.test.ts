@@ -79,6 +79,11 @@ function plan_(
     mediaMapPath: null,
     termMap: new Map(),
     termMapPath: null,
+    // Defaults to "no --section-map", which is the state the importer shipped
+    // in — so every pre-existing test keeps exercising exactly that path, and
+    // the section tests are the ones that opt IN.
+    sectionMap: new Map(),
+    sectionMapPath: null,
     ...overrides
   });
 }
@@ -673,5 +678,94 @@ describe("the term map is verified as ONE artefact, before anything is written",
     // `postId` null for an article already present, and re-filing it would
     // DELETE whatever an editor has since corrected by hand.
     expect(commitBlock).toContain("if (outcome.postId)");
+  });
+});
+
+describe("sections: the row is placed on the consuming site, or it is refused", () => {
+  const MAP = new Map([
+    ["HUKUM", "hukum"],
+    ["PIDANA", "hukum"],
+    ["DAERAH", "daerah"]
+  ]);
+
+  /**
+   * Every case here carries a term map too, because the section gate sits
+   * BELOW the category gate on purpose: a category with no term is the more
+   * fundamental problem and reporting both would say the same thing twice.
+   * Without this the rows would be refused one gate earlier and these tests
+   * would be asserting about the term map.
+   */
+  const TERMS = {
+    termMap: new Map([
+      ["HUKUM", TERM_ID],
+      ["PIDANA", TERM_ID],
+      ["DAERAH", TERM_ID],
+      ["UNKNOWN", TERM_ID]
+    ]),
+    termMapPath: "terms.json"
+  };
+
+  test("with no --section-map every row imports and carries NO section", () => {
+    // The state this importer shipped in, kept working on purpose: a tenant
+    // this repo serves at /blog/{code}/{slug} needs no sidecar, and refusing
+    // 25,029 rows over a repository the operator may not be using would be the
+    // wrong failure. The warning is what makes the cost visible.
+    const result = plan_(
+      [record({ legacyId: "1", slug: "a", categories: ["HUKUM"] })],
+      TERMS
+    );
+
+    expect(result.refusals).toEqual([]);
+    expect(result.accepted).toHaveLength(1);
+    expect(result.acceptedSections.get("1")).toBeNull();
+  });
+
+  test("with a --section-map the resolved section reaches the write", () => {
+    const result = plan_(
+      [record({ legacyId: "1", slug: "a", categories: ["HUKUM", "PIDANA"] })],
+      { ...TERMS, sectionMap: MAP, sectionMapPath: "sections.json" }
+    );
+
+    expect(result.refusals).toEqual([]);
+    expect(result.acceptedSections.get("1")).toBe("hukum");
+  });
+
+  test("a row no section covers is REFUSED once a map is supplied", () => {
+    // Under a declared map the operator has said this archive is destined for
+    // `ahliweb/awcms-astro`, where an article with no configured tab is not
+    // built at all — no page, and no category archive. Importing past it
+    // produces exactly the 301-into-a-404 both issues forbid.
+    const result = plan_(
+      [record({ legacyId: "1", slug: "a", categories: ["UNKNOWN"] })],
+      { ...TERMS, sectionMap: MAP, sectionMapPath: "sections.json" }
+    );
+
+    expect(result.accepted).toEqual([]);
+    expect(result.refusals).toHaveLength(1);
+    expect(result.refusals[0]!.reasons.join(" ")).toContain("sections.json");
+  });
+
+  test("two sections on one row is refused, and the refusal names both", () => {
+    const result = plan_(
+      [record({ legacyId: "1", slug: "a", categories: ["HUKUM", "DAERAH"] })],
+      { ...TERMS, sectionMap: MAP, sectionMapPath: "sections.json" }
+    );
+
+    expect(result.accepted).toEqual([]);
+    const reason = result.refusals[0]!.reasons.join(" ");
+    expect(reason).toContain("daerah");
+    expect(reason).toContain("hukum");
+  });
+
+  test("the section gate does not eat the category work list", () => {
+    // Same ordering rule the images and categories collection already follow:
+    // a row refused for its section still names categories somebody has to
+    // map, and `--terms` is how the operator gets the list in the first place.
+    const result = plan_(
+      [record({ legacyId: "1", slug: "a", categories: ["UNKNOWN"] })],
+      { ...TERMS, sectionMap: MAP, sectionMapPath: "sections.json" }
+    );
+
+    expect(result.categoriesPerArticle).toEqual([["UNKNOWN"]]);
   });
 });

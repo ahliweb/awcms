@@ -98,6 +98,15 @@ file**, not into the working directory. Loading them is
 the script now imports as `MAX_REDIRECT_IMPORT_ITEMS` rather than restating in
 a comment — all 63 rules fit in one call either way.
 
+**Three things must be true before these rules point anywhere, and only the
+first is in this repo.** (1) The ten destination categories exist in the tenant.
+(2) The ten section slugs are in `ahliweb/awcms-astro`'s hard-coded
+`siteConfig.tabs` — `getArticles` runs once per configured tab and keeps a post
+only when `readBlock(post).kategori === tab`, so a section naming no configured
+tab builds nothing. (3) The archive is imported **with a `--section-map`** and
+that site is rebuilt and redeployed: its pages are STATIC, and a category
+archive is generated only from articles that were built.
+
 **Do not use it before the destination categories exist in the tenant.** All
 ten (`bisnis`, `budaya`, `daerah`, `hukum`, `mitra-borneo`, `nasional`,
 `olahraga`, `politik`, `provinsi`, `wisata`) must resolve, or every rule 301s
@@ -252,8 +261,25 @@ bun run blog:legacy:cutover:verify --tenant=… --tenant-code=… \
 resolves `/news/{id}_{Title}.html` on its **leading digits** against
 `awcms_blog_posts.legacy_source_id`, never on a title-derived slug. The artefact
 that serves that at the edge is an **id → post path** table, generated from the
-tenant and **regenerated, not committed**. The generator is not built yet; it
-needs a live tenant to generate against.
+tenant and **regenerated, not committed**.
+
+**The generator now exists** — `bun run blog:legacy:article-paths` (preview by
+default, `--emit` writes `article-paths.json` and `article-paths.tsv` beside this
+file, both gitignored). It needs a live tenant to generate AGAINST, which is not
+the same as being unbuilt.
+
+Its destination is [ADR-0115](../../docs/adr/0115-the-migrated-archive-lands-on-one-origin-and-the-importer-must-say-where.md):
+`/{section}/{slug}/` on `ahliweb/awcms-astro`, the same origin the rubrik map
+already targets. Two things about it are not obvious and both are load-bearing:
+
+- **`--default-locale` is required.** That site serves its DEFAULT locale
+  unprefixed and prefixes only the others, which is the opposite of this repo's
+  `withPublicLocalePrefix`. All 25,029 articles are in the default locale, so
+  getting it wrong 301s every one of them into a 404.
+- **A row with no `content_json.awcmsAstro.kategori` gets no path, and the run
+  refuses to emit while any remain.** That field is what decides whether the
+  consuming site builds a page for an article at all; the fix is upstream, a
+  `--section-map` on `blog:legacy:import`.
 
 The justification is the exact inverse of the rubrik map's. That map is
 committed because it cannot be re-derived: it came from a PHP working copy and

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)
 
-<!-- i18n-source-hash: sha256:a97eac2aee23b7398457e2e92848f9a1421fb6b39da15c89eb1fc3aedbdf52cb -->
+<!-- i18n-source-hash: sha256:eb6a536c0876d1e44c6b54916f028ac8caa835264a215de8723f8239971a0389 -->
 
 # ADR-0114 — Tepi (edge) yang memikul 301 legacy, dan artikel legacy dicari lewat ID-nya
 
@@ -57,7 +57,7 @@ URL artikel legacy adalah `rawurlencode(str_replace(' ', '_', judul))`, jadi
 setiap segmennya membawa `_`. Seluruh **25.029** judul legacy memuat sedikitnya
 satu spasi, jadi seluruh 25.029 segmen membawa sedikitnya satu `_`. Aturan yang
 menolaknya adalah **literal regex INLINE** di dalam
-`validateLegacyPostImportRecord` —
+`parseLegacyImportRecord` —
 `if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` pada
 `src/modules/blog-content/domain/legacy-import-record.ts` — dan ia **MELARANG**
 `_` serta melarang kapital. `normalizeRedirectPath` mempertahankan kapitalisasi

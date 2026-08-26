@@ -53,7 +53,7 @@ nothing.
 The legacy article URL is `rawurlencode(str_replace(' ', '_', judul))`, so every
 segment carries `_`. All **25,029** legacy titles contain at least one space, so
 all 25,029 segments carry at least one `_`. The rule that refuses them is an
-**inline regex literal** inside `validateLegacyPostImportRecord` —
+**inline regex literal** inside `parseLegacyImportRecord` —
 `if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` in
 `src/modules/blog-content/domain/legacy-import-record.ts` — and it **forbids**
 `_` and forbids capitals. `normalizeRedirectPath` preserves case and decodes

@@ -263,32 +263,54 @@ describe("classifyCutoverOutcome", () => {
     ).toBe("target_missing");
   });
 
+  /**
+   * DERIVED from the reason map, never re-listed by hand.
+   *
+   * Both tests below used to carry their own literal array of seven verdicts.
+   * They passed over the members they listed and said nothing about a member
+   * they did not — so `unreachable` was added to the union, `Record<CutoverVerdict,
+   * string>` forced a reason for it at COMPILE time, and these two runtime
+   * gates stayed green while covering six of seven. A list a human maintains
+   * beside a union a compiler maintains falls behind on the first addition,
+   * and it falls behind silently, which is this repo's named failure mode.
+   *
+   * `Record<CutoverVerdict, string>` is what makes this exhaustive: the type
+   * cannot compile with a missing key, so its keys ARE the union.
+   */
+  const ALL_VERDICTS = Object.keys(CUTOVER_VERDICT_REASON) as CutoverVerdict[];
+
+  test("the derived list really is every verdict, and it grew", () => {
+    // Pins the count so a DELETION is as visible as an addition — a union that
+    // silently shrinks takes its gate's coverage with it.
+    //
+    // This assertion has already earned its place once: it went red the moment
+    // `unsafe_redirect` was added, which is precisely what the seven-entry
+    // hand-written arrays it replaced could never do.
+    expect(ALL_VERDICTS).toHaveLength(9);
+    expect(ALL_VERDICTS).toContain("unreachable");
+    expect(ALL_VERDICTS).toContain("unsafe_redirect");
+  });
+
   test("every verdict has a reason an operator can act on", () => {
-    const verdicts: CutoverVerdict[] = [
-      "ok",
-      "no_rule",
-      "ineligible",
-      "chain_too_long",
-      "loop",
-      "target_missing",
-      "target_unverifiable"
-    ];
-    for (const verdict of verdicts) {
+    for (const verdict of ALL_VERDICTS) {
       expect(CUTOVER_VERDICT_REASON[verdict]?.length ?? 0).toBeGreaterThan(20);
     }
   });
 
   test("only `ok` is clean", () => {
-    const verdicts: CutoverVerdict[] = [
-      "no_rule",
-      "ineligible",
-      "chain_too_long",
-      "loop",
-      "target_missing",
-      "target_unverifiable"
-    ];
-    for (const verdict of verdicts) {
-      expect(isCutoverClean(verdict)).toBe(false);
+    for (const verdict of ALL_VERDICTS) {
+      expect(isCutoverClean(verdict)).toBe(verdict === "ok");
     }
+  });
+
+  test("`no_rule`'s reason is true at BOTH layers that produce it", () => {
+    // It used to read "this URL will answer 404 after cutover, and its ranking
+    // is lost" — a prediction the database resolver can make and an HTTP probe
+    // cannot. Found by running the probe against a real built server: a legacy
+    // URL answering 200 with no redirect gets this same verdict, and telling an
+    // operator that a page they can open will answer 404 is the
+    // confidently-wrong message this repo keeps recording.
+    expect(CUTOVER_VERDICT_REASON.no_rule).not.toContain("will answer 404");
+    expect(CUTOVER_VERDICT_REASON.no_rule).toContain("no redirect matches");
   });
 });

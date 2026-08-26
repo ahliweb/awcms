@@ -146,15 +146,52 @@ export type CutoverVerdict =
   | "chain_too_long"
   | "loop"
   | "target_missing"
-  | "target_unverifiable";
+  | "target_unverifiable"
+  /**
+   * Nothing about this URL was observed at all.
+   *
+   * Only an HTTP probe can produce it — a database lookup cannot fail this way
+   * — and it exists because without it a request that never completed
+   * classified as `no_rule`, whose reason text is the confident sentence "this
+   * URL will answer 404 after cutover, and its ranking is lost". A DNS failure,
+   * a refused connection, a timeout and a 502 all arrive with zero hops, and
+   * `hops === 0` was the ONLY thing `no_rule` was reading.
+   *
+   * That is the same defect `target_unverifiable` was added to close, one row
+   * over: a verdict that means "I did not check this" printed as one that means
+   * "I checked this and it is broken". The second sends an operator to fix a
+   * rule; here there may be nothing wrong with the rule at all.
+   */
+  | "unreachable"
+  /**
+   * A hop in this chain pointed somewhere the probe will not follow — a
+   * non-HTTP scheme, a URL carrying credentials, or a literal private,
+   * loopback or link-local address.
+   *
+   * Also probe-only, and it is a SECURITY finding rather than a cutover one:
+   * the `Location` header comes from whatever answered the previous request,
+   * so an origin that has been taken over can point this tool at anything the
+   * machine running it can reach. Folding it into `target_unverifiable` would
+   * have been accurate about the destination ("nothing checked the page at the
+   * end") and silent about the thing an operator has to act on.
+   */
+  | "unsafe_redirect";
 
 export type CutoverFacts = {
   /** `isRedirectEligiblePath` — false means a tenant rule can never fire here. */
   eligible: boolean;
   /** How many rules the chain walked. 0 when nothing matched. */
   hops: number;
-  /** The chain resolver's own refusal, when it refused. */
-  refusal: "loop" | "chain_too_long" | null;
+  /**
+   * The resolver's own refusal, when it refused.
+   *
+   * `unreachable` is reachable only from an HTTP probe: the database resolver
+   * has no way to fail to observe a rule. It is in this union rather than
+   * derived from the other fields because "no hop was seen" and "no hop
+   * exists" are the same three fields with opposite meanings, and the only
+   * component that can tell them apart is the one that made the request.
+   */
+  refusal: "loop" | "chain_too_long" | "unreachable" | "unsafe_redirect" | null;
   /**
    * Whether the final destination is a page this deployment actually serves.
    *
@@ -213,11 +250,24 @@ export function isCutoverClean(verdict: CutoverVerdict): boolean {
   return verdict === "ok";
 }
 
-/** One line of operator-facing explanation per verdict. */
+/**
+ * One line of operator-facing explanation per verdict.
+ *
+ * Every line has to be true at BOTH layers that produce these verdicts — the
+ * database resolver and the HTTP probe. `no_rule` used to read "this URL will
+ * answer 404 after cutover, and its ranking is lost", which is a prediction the
+ * database can make and the probe cannot: a legacy URL that answers **200**
+ * today with no redirect gets the same verdict, and telling an operator that a
+ * page they can open will answer 404 is the confidently-wrong message this
+ * repo keeps recording. Found by running the probe against a real built server,
+ * not by reading the map. The per-row report prints the observed final status
+ * beside the verdict, so the two cases stay distinguishable without a second
+ * vocabulary — which is the thing to avoid, because two vocabularies drift.
+ */
 export const CUTOVER_VERDICT_REASON: Record<CutoverVerdict, string> = {
   ok: "resolves in one hop to a page this deployment serves",
   no_rule:
-    "no redirect rule matches — this URL will answer 404 after cutover, and its ranking is lost",
+    "no redirect matches this URL — nothing sends a reader from it to the new page, so its ranking stays with the old address",
   ineligible:
     "the path is excluded from tenant redirects (admin/api/asset/discovery family) and nothing else claims it",
   chain_too_long:
@@ -226,5 +276,9 @@ export const CUTOVER_VERDICT_REASON: Record<CutoverVerdict, string> = {
   target_missing:
     "redirects to a path this deployment does not serve — a 301 into a 404, which is worse than the 404 it replaces",
   target_unverifiable:
-    "resolves in one hop, but to a destination outside the surface this job can look up — nothing here checked that the page at the end of it exists, and unchecked is not verified"
+    "resolves in one hop, but to a destination outside the surface this job can look up — nothing here checked that the page at the end of it exists, and unchecked is not verified",
+  unreachable:
+    "the request never produced an answer (DNS failure, refused connection, timeout, or a 5xx) — nothing about this URL was observed, so neither its rule nor its destination has been judged",
+  unsafe_redirect:
+    "a hop pointed at a scheme, a credentialed URL or a private/loopback/link-local address this probe refuses to follow — the Location came from whatever answered the previous request, so treat it as a compromised or misconfigured origin, not as a cutover defect"
 };
