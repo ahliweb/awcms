@@ -1,5 +1,15 @@
 # SeputarBorneo legacy rubrik redirect map
 
+> **Status, 26 August 2026 ([ADR-0116](../../docs/adr/0116-the-legacy-site-is-a-feature-reference-not-a-migration-source.md)): reference material, not a pending work order.**
+> The bulk migration this map was built for is withdrawn — the legacy site is a
+> reference for its FEATURES, and the archive is not imported wholesale. Nothing
+> here is stale and nothing is deleted: the map and the Wayback export are
+> evidence about a site still being used as a reference, they cost 565 kB, and
+> they cannot be re-derived once the workstation below is gone. What changed is
+> that executing these 63 rules is now **conditional on a selective import**
+> rather than a prerequisite of it. A 301 may only be issued for an article that
+> actually moved; for one deliberately left behind the honest answer is 410.
+
 `rubrik-redirects.json` is the complete set of legacy rubrik/listing URLs for the
 SeputarBorneo archive (Issue #711, [ADR-0113](../../docs/adr/0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md)
 for the destinations, [ADR-0114](../../docs/adr/0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)

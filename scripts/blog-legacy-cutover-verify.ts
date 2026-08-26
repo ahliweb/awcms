@@ -4,6 +4,26 @@
  * Issue #599 scope item 4, and the only tool in the set that can fail the
  * Definition of Done's first half.
  *
+ * ## SCOPE, amended 26 August 2026 (ADR-0116) — read this before the rest
+ *
+ * Everything below was written for a BULK migration, where every legacy URL was
+ * obliged to resolve. That obligation is withdrawn: the archive is not migrated
+ * wholesale, and the legacy site is a feature reference. An article that is
+ * deliberately not imported is SUPPOSED to stop answering.
+ *
+ * Nothing in this file changes, because nothing in it was wrong — but the
+ * question it answers is now set by the CORPUS you hand it, and the corpus is
+ * no longer "every URL the legacy site ever published":
+ *
+ *  - Feed it the URLs of the rows actually imported — which
+ *    `bun run blog:legacy:article-paths` emits — and every verdict below still
+ *    means what it says.
+ *  - Feed it the whole legacy site and it reports `no_rule` for each article
+ *    left behind ON PURPOSE, i.e. the intended outcome as a failing one. That
+ *    is not a defect in this job. `CutoverVerdict` has no member meaning
+ *    "deliberately gone" and ADR-0116 deliberately did not add one, since no
+ *    obligation now requires the full-corpus run that would need it.
+ *
  * ## What the other two jobs structurally cannot see
  *
  * `blog:legacy:import` writes provenance; `blog:legacy:redirects:import`
@@ -12,6 +32,10 @@
  * a deleted article, a paginated index, a tag page, a section feed — produces
  * no rule at all, and nothing in the pipeline notices. It answers 404 on
  * cutover day, and the ranking does not come back.
+ *
+ * That last sentence is the one the amendment above scopes. It is still exactly
+ * right for a URL that was MEANT to move and silently did not — which is the
+ * failure a selective import can still produce, one row at a time.
  *
  * This job starts from the other end: a corpus of the URLs the legacy site
  * actually published — its own sitemap (`--sitemap`), or a plain list of URLs

@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0115** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0116** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **59** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -359,6 +359,77 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **SCOPE ROUND — 26 August 2026: the premise both open cutover issues stood on
+  was withdrawn, and the 301 obligation went with it.**
+
+  The product owner withdrew PRD §41's migration requirement: **not all articles
+  from the legacy site need to be migrated or imported, and the site is to be
+  used as a reference for its features and functionality.** Recorded as
+  **[ADR-0116](adr/0116-the-legacy-site-is-a-feature-reference-not-a-migration-source.md)**,
+  which AMENDS ADR-0113/0114/0115 rather than superseding them.
+
+  **The import is the small half. The 301 obligation is the load-bearing one.**
+  Skipping an import is a scheduling decision; withdrawing the cutover is a
+  correctness one, and it needed writing down because the honest consequence is
+  counter-intuitive: **a 301 is a promise that the content moved**, so it cannot
+  be issued for content that did not. This repo had already refused exactly that
+  trade once — ADR-0113 declined to redirect legacy search URLs to any article,
+  because _"mengarahkannya ke artikel mana pun adalah 301 yang berbohong"_.
+  Applied consistently, the same sentence decides the whole cutover: **you
+  cannot carry the URLs without carrying the content.** For an article
+  deliberately not imported the honest status is 410, never a 301 to a category
+  index — 25,029 of those is a soft-404 farm, built with tooling this repo wrote
+  specifically to make lying redirects hard.
+
+  **Nothing was deleted, and nothing needed changing.** The six jobs stay, and
+  the reason a selective import needs no new code is a property already in the
+  query: `listLegacyRedirectMappings` selects `WHERE legacy_source_id IS NOT
+NULL`, so it derives the map **from rows that exist**. Import ten articles and
+  it emits ten rules; import none and it emits none. **A partial import cannot
+  produce a dangling rule** — by construction, not by discipline. That single
+  property is what made the obligation safe to withdraw without touching a line
+  of the pipeline.
+
+  **Verified rather than assumed, because "closable" is a claim.** Every DoD
+  item on both issues was checked against the tree before either was closed, not
+  argued from memory: shape 4 IS decided in ADR-0113 (retracted — the rule sits
+  below a catch-all and never fired); the rubrik list IS obtained and committed
+  (68 entries, **63** carrying a target across **10** destination categories);
+  the destination IS agreed and written (ADR-0113 + ADR-0115); the converter,
+  the dry-run and the mapping report all exist. What remained on both issues was
+  the migration-dependent clause, and only that.
+
+  **The scope change inverted one docblock, and that was the only code file
+  touched.** `blog:legacy:cutover:verify` exists because _"a legacy URL that was
+  NOT imported produces no rule at all … it answers 404 on cutover day, and the
+  ranking does not come back"_. Under ADR-0116 that 404 is the INTENDED state,
+  so a full-corpus run now reports the desired outcome as failing. That is a
+  property of the corpus you hand it — fed the rows actually imported, which
+  `blog:legacy:article-paths` emits, every verdict still means what it says. The
+  premise is scoped in place rather than deleted, because it stays exactly right
+  for a URL that was MEANT to move and silently did not. **No `CutoverVerdict`
+  member for "deliberately gone" was added**, and that restraint is deliberate:
+  no obligation now requires the full-corpus run that would need one, and
+  widening a union to serve a run nobody is asked to make is how vocabulary
+  outgrows its callers.
+
+  **The requirement was carried for weeks on two different counts of its own
+  subject.** #599, #597 and several documents say **23,906** articles; the
+  legacy database says **25,029**. Both were quoted as the size of the
+  obligation, in the same repo, and nobody reconciled them. A requirement
+  expensive enough to justify six jobs was never expensive enough for anyone to
+  count what it applied to.
+
+  **What this leaves.** Issues #599 and #711 are CLOSED — their DoD items divide
+  into delivered and withdrawn, enumerated on each issue. The ~25,031 uploads /
+  4.1 GB media blocker dissolves, because nothing is imported by default. The
+  ten destination categories become a prerequisite of a selective import rather
+  than of the platform. `data/seputarborneo-legacy/` is kept as reference
+  material. **The fate of the legacy domain is not decided here** — that is
+  infrastructure, outside both repositories, and ADR-0114 already put the 301s
+  at the edge; if the domain is served, ADR-0116 §2 gives the rule its config
+  must follow.
 
 - **CONSUMER ROUND — 26 August 2026: the importer produced 25,029 articles that
   the repo which SERVES them builds no page for, and the destination those
