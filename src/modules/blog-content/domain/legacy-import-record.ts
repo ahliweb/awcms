@@ -42,6 +42,13 @@ const IMPORTABLE_VISIBILITIES = new Set<BlogContentVisibility>([
 export const MAX_LEGACY_ID_LENGTH = 128;
 export const MAX_LEGACY_TITLE_LENGTH = 500;
 export const MAX_LEGACY_SLUG_LENGTH = 200;
+/**
+ * A `src` longer than this is refused rather than truncated. Every other
+ * optional text field here is `slice`d to its cap, which is right for prose and
+ * wrong for a reference: a truncated `src` is a DIFFERENT file, and it would go
+ * on to miss the media map silently instead of loudly.
+ */
+export const MAX_LEGACY_IMAGE_SRC_LENGTH = 2048;
 
 export type LegacyImportRecord = {
   legacyId: string;
@@ -65,6 +72,25 @@ export type LegacyImportRecord = {
    * demanding every row carry one.
    */
   categories: readonly string[];
+  /**
+   * The LEAD photograph's `src`, EXACTLY as the legacy row spells it — for
+   * SeputarBorneo that is the `foto_berita` column, and all 25,029 rows have
+   * one. Resolved to a managed media object through `--media-map`, the same
+   * handoff a body `<img>` goes through and against the same registry check;
+   * never fetched, never stored as a URL.
+   *
+   * It has to be its own field because it is not in the body: `--images` used
+   * to scan body HTML only, so the upload set it wrote was the archive's 2
+   * inline images and none of its 25,029 lead photographs (ADR-0114, and the
+   * ORIGIN ROUND in `docs/PROJECT_STATE.md` §4).
+   *
+   * NOT trimmed and not normalised, for the reason `legacy-media-map.ts` gives
+   * at length: the map is keyed on the literal string, and a wrong match loses
+   * the photograph exactly as quietly as a missing one. Absent, `null` and `""`
+   * all mean "this row has no lead photograph" — an export writes the empty
+   * string for that, and refusing it would refuse the rows that are FINE.
+   */
+  featuredImageSrc: string | null;
 };
 
 export type LegacyImportRecordResult =
@@ -189,6 +215,32 @@ export function parseLegacyImportRecord(
     }
   }
 
+  // The lead photograph. Absent/null/blank is legitimate and means the row has
+  // none; a PRESENT value that is not a string is refused rather than coerced,
+  // for the same reason `categories` refuses a bare string — `String(0)` is
+  // `"0"`, and an export that writes `0` for "no photo" would otherwise send
+  // every one of those rows looking for a media map entry called `0`.
+  let featuredImageSrc: string | null = null;
+  if (
+    record.featuredImageSrc !== undefined &&
+    record.featuredImageSrc !== null
+  ) {
+    if (typeof record.featuredImageSrc !== "string") {
+      errors.push(
+        `featuredImageSrc must be the image's src as a string (got ${JSON.stringify(record.featuredImageSrc)})`
+      );
+    } else if (record.featuredImageSrc.trim().length === 0) {
+      featuredImageSrc = null;
+    } else if (record.featuredImageSrc.length > MAX_LEGACY_IMAGE_SRC_LENGTH) {
+      // Refused, not sliced — see MAX_LEGACY_IMAGE_SRC_LENGTH.
+      errors.push(
+        `featuredImageSrc must be at most ${MAX_LEGACY_IMAGE_SRC_LENGTH} characters`
+      );
+    } else {
+      featuredImageSrc = record.featuredImageSrc;
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -196,6 +248,7 @@ export function parseLegacyImportRecord(
   return {
     ok: true,
     value: {
+      featuredImageSrc,
       legacyId,
       title,
       slug,

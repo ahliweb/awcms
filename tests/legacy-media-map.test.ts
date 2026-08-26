@@ -30,6 +30,7 @@ import {
   parseLegacyMediaMap,
   summariseLegacyImageUsage
 } from "../src/modules/blog-content/domain/legacy-media-map";
+import type { LegacyArticleImageRefs } from "../src/modules/blog-content/domain/legacy-media-map";
 
 const ID_A = "11111111-1111-4111-8111-111111111111";
 const ID_B = "22222222-2222-4222-8222-222222222222";
@@ -103,30 +104,84 @@ describe("the map is refused as a whole, or accepted as a whole", () => {
 });
 
 describe("the upload set", () => {
+  const article = (
+    body: string[],
+    featured: string | null = null
+  ): LegacyArticleImageRefs => ({ body, featured });
+
   test("counts ARTICLES, not tags, and orders by demand", () => {
     const usage = summariseLegacyImageUsage([
-      ["a.jpg", "a.jpg", "b.jpg"],
-      ["a.jpg"],
-      ["c.jpg"]
+      article(["a.jpg", "a.jpg", "b.jpg"]),
+      article(["a.jpg"]),
+      article(["c.jpg"])
     ]);
 
     // `a.jpg` twice in one article is one article: this is an upload list, and
     // the count exists only to order it.
     expect(usage).toEqual([
-      { src: "a.jpg", articles: 2 },
-      { src: "b.jpg", articles: 1 },
-      { src: "c.jpg", articles: 1 }
+      { src: "a.jpg", articles: 2, bodyArticles: 2, featuredArticles: 0 },
+      { src: "b.jpg", articles: 1, bodyArticles: 1, featuredArticles: 0 },
+      { src: "c.jpg", articles: 1, bodyArticles: 1, featuredArticles: 0 }
     ]);
   });
 
   test("an `<img>` with no `src` contributes nothing", () => {
-    expect(summariseLegacyImageUsage([["", "  ", "a.jpg"]])).toEqual([
-      { src: "a.jpg", articles: 1 }
+    expect(summariseLegacyImageUsage([article(["", "  ", "a.jpg"])])).toEqual([
+      { src: "a.jpg", articles: 1, bodyArticles: 1, featuredArticles: 0 }
     ]);
   });
 
   test("an archive with no images produces an empty set, not an error", () => {
     expect(summariseLegacyImageUsage([])).toEqual([]);
-    expect(summariseLegacyImageUsage([[], []])).toEqual([]);
+    expect(summariseLegacyImageUsage([article([]), article([])])).toEqual([]);
+  });
+
+  test("the LEAD photograph is in the set even when no body mentions an image", () => {
+    // This is the defect the split exists for. The SeputarBorneo archive has 2
+    // body images and 25,029 lead photographs; a set built from bodies alone
+    // reported "2 distinct images", which reads as "almost nothing to upload"
+    // and was wrong by the entire archive (ADR-0114).
+    const usage = summariseLegacyImageUsage([
+      article([], "foto_1.jpg"),
+      article([], "foto_2.jpg"),
+      article([], "foto_1.jpg")
+    ]);
+
+    expect(usage).toEqual([
+      { src: "foto_1.jpg", articles: 2, bodyArticles: 0, featuredArticles: 2 },
+      { src: "foto_2.jpg", articles: 1, bodyArticles: 0, featuredArticles: 1 }
+    ]);
+  });
+
+  test("body and lead are counted separately, and the total is the UNION", () => {
+    // An operator uploads a FILE once. An article that leads with the same
+    // photograph it also embeds is one upload, so `articles` must not be the
+    // sum — but the breakdown still has to say it arrived both ways, because
+    // that is what tells you the body scan alone would have found it.
+    const usage = summariseLegacyImageUsage([
+      article(["shared.jpg"], "shared.jpg"),
+      article(["body-only.jpg"], "lead-only.jpg")
+    ]);
+
+    // Equal demand, so the tie-break is the `src` itself.
+    expect(usage).toEqual([
+      {
+        src: "body-only.jpg",
+        articles: 1,
+        bodyArticles: 1,
+        featuredArticles: 0
+      },
+      {
+        src: "lead-only.jpg",
+        articles: 1,
+        bodyArticles: 0,
+        featuredArticles: 1
+      },
+      { src: "shared.jpg", articles: 1, bodyArticles: 1, featuredArticles: 1 }
+    ]);
+  });
+
+  test("a blank lead photograph contributes nothing", () => {
+    expect(summariseLegacyImageUsage([article([], "   ")])).toEqual([]);
   });
 });

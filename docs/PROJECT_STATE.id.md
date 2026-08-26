@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f2a201e8b989b8affe414b83cbd6ab9e4ca1801c673a8b8b990ce2495e23b78e -->
+<!-- i18n-source-hash: sha256:f555f1531e2e880d2606e07604c05b9aa5189616606c8d1fd77a2fe625eed193 -->
 
 # AWCMS — Project State & Continuation
 
@@ -473,6 +473,34 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   nyatanya punya 84 grup tabrakan atas 171 baris, jadi run sungguhan mati oleh
   23505 di tengah batch; dan docstring yang mengklaim _"SETIAP baris arsip
   CKEditor nyata adalah residu"_ terukur **4 dari 25.029 (0,02%)**.
+
+  **Keempatnya KINI diperbaiki** (branch yang sama, setelah pekerjaan gerbang di
+  atas). Record-nya membawa `featuredImageSrc`, ia diselesaikan lewat serah
+  terima `--media-map` yang SAMA dan sapuan `isMediaReferenceSafe` yang SAMA
+  seperti `<img>` badan — satu peta, satu gerbang, sengaja TANPA pemeriksaan
+  kedua yang lebih lemah — yang terpetakan ditulis ke `featured_media_id`, dan
+  yang tak terpetakan DITOLAK dengan baris laporan alih-alih diimpor tanpa
+  fotonya. `--images` kini melaporkan foto utama dan gambar badan sebagai
+  hitungan TERPISAH, karena satu total tunggal itulah yang membuat "2" terbaca
+  sebagai "hampir tidak ada pekerjaan". Pengumpulannya pindah ke ATAS KEDUA
+  gerbang yang `continue`, dan `--terms`/`--images` kini tidak membuka klien
+  basis data sama sekali, sehingga flag yang dijalankan operator PALING AWAL tak
+  lagi mati oleh `DATABASE_URL … is required` — yang sekaligus membuat urutannya
+  bisa dibuktikan di suite tanpa-DB, bukan hanya melawan Postgres hidup. Peta
+  `seenSlugs` duduk di sebelah `seenLegacyIds` dan menyebut baris yang
+  ditabrak oleh baris kedua.
+
+  Lima mutasi DITERAPKAN dan DIJALANKAN, bukan dinalar: urutannya dikembalikan
+  (upload set → 0), `src` foto utama dibuang dari pengumpulan, klien dibuka
+  eager, `featured_media_id` dihapus dari INSERT, dan `seenSlugs` dihapus — yang
+  terakhir mereproduksi crash aslinya,
+  `duplicate key value violates unique constraint "awcms_blog_posts_slug_dedup"`
+  pada exit 1, yang kini menjadi baris laporan pada exit 0. **Bagian yang bisa
+  dipindahkan:** tiga dari empat adalah URUTAN dan KELALAIAN, bukan logika —
+  sebuah pernyataan yang ADA dan BENAR, duduk setelah `continue` yang
+  melewatinya, dan sebuah kolom yang ADA di skema, di pembaca dan di port, tanpa
+  penulis. Kedua bentuk itu tak terlihat oleh tes fungsi murni, dan begitulah
+  keempatnya tetap hijau.
 
   **`IMPORT_CHUNK_SIZE = 200` diikat ke `MAX_IMPORT_ITEMS` HANYA OLEH KOMENTAR** —
   tanpa import, tanpa test. Kelas berulang repo ini, dinyatakan lagi: **komentar

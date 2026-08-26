@@ -80,6 +80,7 @@ function input(
     publishedAt: ORIGINAL_PUBLISHED_AT,
     seoTitle: null,
     metaDescription: null,
+    featuredMediaId: null,
     ...overrides
   };
 }

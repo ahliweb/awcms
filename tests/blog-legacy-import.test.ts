@@ -27,7 +27,10 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 
 import { stripComments } from "../scripts/access-chokepoint-check";
-import { parseLegacyImportRecord } from "../src/modules/blog-content/domain/legacy-import-record";
+import {
+  MAX_LEGACY_IMAGE_SRC_LENGTH,
+  parseLegacyImportRecord
+} from "../src/modules/blog-content/domain/legacy-import-record";
 
 const DIRECTORY =
   "src/modules/blog-content/application/legacy-import-directory.ts";
@@ -116,8 +119,11 @@ describe("parsing one legacy line", () => {
   });
 
   test("a slug that is not already URL-safe is refused", () => {
-    // The slug is half of the legacy URL and half of the new one. Normalizing
-    // it here would silently change what the redirect points at.
+    // This slug is the NEW URL's slug and only that — ADR-0114 records why the
+    // older claim here ("half of the legacy URL") was false. Normalizing it
+    // would silently change what the new URL is, and it could still never match
+    // a legacy segment: those are `rawurlencode(str_replace(' ', '_', title))`,
+    // so every one of the 25,029 carries `_` and most carry capitals.
     for (const slug of ["Banjir Kobar", "banjir_kobar", "banjir/kobar", ""]) {
       expect(parseLegacyImportRecord(record({ slug }), DEFAULTS).ok).toBe(
         false
@@ -154,7 +160,103 @@ describe("parsing one legacy line", () => {
   });
 });
 
+describe("the lead photograph is a field, not something to scan for", () => {
+  test("a row with no featuredImageSrc parses as none", () => {
+    const result = parseLegacyImportRecord(record(), DEFAULTS);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.featuredImageSrc).toBeNull();
+  });
+
+  test("`\"\"` and whitespace mean 'this row has no photo', not an error", () => {
+    // A legacy export writes the empty string for a row without a picture.
+    // Refusing it would refuse the rows that are FINE.
+    for (const value of ["", "   ", null]) {
+      const result = parseLegacyImportRecord(
+        record({ featuredImageSrc: value }),
+        DEFAULTS
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.featuredImageSrc).toBeNull();
+    }
+  });
+
+  test("the src is kept LITERALLY — not trimmed, not normalised", () => {
+    // It is a key into `--media-map`, and `parseLegacyMediaMap` matches keys
+    // literally on purpose: a wrong match loses the photograph exactly as
+    // quietly as a missing one, and only the missing one is reported.
+    const result = parseLegacyImportRecord(
+      record({ featuredImageSrc: " /Foto/Banjir%20Kobar.JPG " }),
+      DEFAULTS
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.featuredImageSrc).toBe(" /Foto/Banjir%20Kobar.JPG ");
+  });
+
+  test("a present non-string is refused, not coerced", () => {
+    // `String(0)` is `"0"`. An export that writes `0` for "no photo" would
+    // otherwise send every one of those rows hunting for a map entry called
+    // `0` — the same argument that makes `categories` refuse a bare string.
+    for (const value of [0, 1, {}, ["a.jpg"], true]) {
+      const result = parseLegacyImportRecord(
+        record({ featuredImageSrc: value }),
+        DEFAULTS
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.errors.join(" ")).toContain("featuredImageSrc");
+    }
+  });
+
+  test("an over-long src is REFUSED rather than truncated", () => {
+    // Every other optional text field is `slice`d to its cap, which is right
+    // for prose and wrong for a reference: a truncated `src` is a DIFFERENT
+    // file, and it would then miss the media map silently instead of loudly.
+    const long = `/foto/${"a".repeat(MAX_LEGACY_IMAGE_SRC_LENGTH)}.jpg`;
+    const result = parseLegacyImportRecord(
+      record({ featuredImageSrc: long }),
+      DEFAULTS
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join(" ")).toContain(
+      "featuredImageSrc must be at most"
+    );
+  });
+});
+
 describe("the importer preserves what makes the archive worth moving", () => {
+  test("the INSERT names featured_media_id", async () => {
+    const source = stripComments(await readFile(DIRECTORY, "utf8"));
+
+    // The column has existed since `sql/035:46` and `public-content-port-
+    // adapter.ts` serves it to awcms-astro; this INSERT named 16 columns and
+    // not this one, so every imported article arrived without the picture its
+    // legacy page led with — 25,029 of 25,029 for SeputarBorneo (ADR-0114).
+    const insert = source.slice(
+      source.indexOf("INSERT INTO awcms_blog_posts"),
+      source.indexOf("ON CONFLICT (tenant_id, legacy_source_system")
+    );
+
+    expect(insert).toContain("featured_media_id");
+    expect(insert).toContain("${input.featuredMediaId}");
+  });
+
+  test("there is no SECOND, weaker media check in the write path", async () => {
+    const source = stripComments(await readFile(DIRECTORY, "utf8"));
+
+    // One chokepoint or none. The caller sweeps every distinct id in the map
+    // through `isMediaReferenceSafe` before converting anything; a check here
+    // would be a second answer to "is this id safe", and the two would drift.
+    expect(source).not.toContain("isMediaReferenceSafe");
+    expect(source).not.toContain("awcms_news_media_objects");
+  });
+
   test("published_at is written from the record, never now()", async () => {
     const source = stripComments(await readFile(DIRECTORY, "utf8"));
 
@@ -235,6 +337,71 @@ describe("the import script refuses rather than repairs", () => {
     expect(source.indexOf("findTakenSlugs")).toBeLessThan(
       source.indexOf("if (commit) {")
     );
+  });
+
+  test("a duplicate SLUG inside one file is reported too, not left to the constraint", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // `findTakenSlugs` asks the DATABASE, so it cannot see two rows of this
+    // file claiming one slug — and the real archive has 84 such groups across
+    // 171 rows, which raised 23505 mid-batch, after earlier batches committed.
+    // The behaviour is proved by running it in
+    // `tests/integration/legacy-import-cli.integration.test.ts`; this only
+    // pins that the check sits beside `seenLegacyIds` rather than after the
+    // gates that `continue`.
+    expect(source).toContain("seenSlugs");
+    expect(source.indexOf("seenSlugs")).toBeLessThan(
+      source.indexOf("categoriesPerArticle.push")
+    );
+  });
+
+  test("an unmapped LEAD photograph refuses the row, like an unmanaged <img>", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    const start = source.indexOf("if (record.value.featuredImageSrc &&");
+    expect(start).not.toBe(-1);
+
+    const block = source.slice(start, source.indexOf("accepted.push(", start));
+    expect(block).toContain("refusals.push");
+    expect(block).toContain("continue;");
+  });
+
+  test("the lead photograph goes through the SAME registry sweep as a body image", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // One map, one sweep, one chokepoint. `mediaObjectIdsIn` collects every
+    // value in the map — body and featured alike — and `isMediaReferenceSafe`
+    // is called exactly once per distinct id, before any conversion.
+    expect(source).toContain("mediaObjectIdsIn(parsedMap.value)");
+    expect([...source.matchAll(/isMediaReferenceSafe/g)]).toHaveLength(1);
+    // …and the resolution reads that same verified map, never a second source.
+    expect(source).toContain("mediaMap.get(record.value.featuredImageSrc)");
+  });
+
+  test("the image work list is collected ABOVE the gates that refuse a row", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // The regression: `--images` is the flag you run FIRST, before you have a
+    // `--term-map` — and the collection sat below the category gate's
+    // `continue`, so a first run reported zero images. Behaviour is proved by
+    // running it in `tests/blog-legacy-import-cli.test.ts`; the ordering is
+    // pinned here because it is the whole defect.
+    const collect = source.indexOf("imageRefsPerArticle.push({");
+    const categoryGate = source.indexOf("(name) => !termMap.has(name)");
+    const bodyGate = source.indexOf("if (!body.ok) {");
+
+    expect(collect).not.toBe(-1);
+    expect(collect).toBeLessThan(categoryGate);
+    expect(collect).toBeLessThan(bodyGate);
+  });
+
+  test("a report-only run opens no database client", async () => {
+    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+
+    // `--terms`/`--images` issue no query. Opening the pool up front made the
+    // one flag an operator runs first die on `DATABASE_URL … is required`.
+    expect(source).toContain("sql ??= getDatabaseClient()");
+    expect([...source.matchAll(/getDatabaseClient\(\)/g)]).toHaveLength(1);
   });
 });
 

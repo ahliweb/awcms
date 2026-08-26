@@ -461,6 +461,32 @@ pioneered directly here after the ADR-0047 freeze.)
   dies on a 23505 mid-batch; and the docstring claiming _"EVERY row of a real
   CKEditor archive was residue"_ is measured at **4 of 25,029 (0.02%)**.
 
+  **All four are now fixed** (same branch, after the gate work above). The
+  record carries `featuredImageSrc`, it resolves through the SAME `--media-map`
+  handoff and the SAME `isMediaReferenceSafe` sweep a body `<img>` goes through
+  — one map, one chokepoint, deliberately no second and weaker check — a mapped
+  one is written to `featured_media_id`, and an unmapped one is refused with a
+  report line rather than imported without the photograph. `--images` now
+  reports lead photographs and body images as separate counts, because a single
+  total is exactly what let "2" read as "almost nothing to do". The collection
+  moved above BOTH gates that `continue`, and `--terms`/`--images` now open no
+  database client at all, so the flag an operator runs first no longer dies on
+  `DATABASE_URL … is required` — which is also what makes the ordering
+  provable in the DB-free suite rather than only against a live Postgres. A
+  `seenSlugs` map sits beside `seenLegacyIds` and names the line the second row
+  collides with.
+
+  Five mutations were applied and run rather than reasoned about: the ordering
+  reverted (upload set → 0), the featured `src` dropped from collection, the
+  client opened eagerly, `featured_media_id` removed from the INSERT, and
+  `seenSlugs` deleted — the last reproducing the real crash,
+  `duplicate key value violates unique constraint "awcms_blog_posts_slug_dedup"`
+  at exit 1, which is now a report line at exit 0. **The transferable half:**
+  three of the four were ORDER and OMISSION, not logic — a statement present and
+  correct, sitting after the `continue` that skips it, and a column present in
+  the schema, in the reader and in the port, with no writer. Neither shape is
+  visible to a test of a pure function, which is how all four stayed green.
+
   **`IMPORT_CHUNK_SIZE = 200` is tied to `MAX_IMPORT_ITEMS` by a COMMENT ONLY** —
   no import, no test. This repo's recurring class, stated again: **a comment is
   not a call.**

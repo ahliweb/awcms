@@ -61,6 +61,23 @@ export type LegacyPostImportInput = {
   publishedAt: Date | null;
   seoTitle: string | null;
   metaDescription: string | null;
+  /**
+   * The lead photograph, already resolved to a managed media object and already
+   * checked against THIS tenant's registry by the caller
+   * (`isMediaReferenceSafe`, once per distinct id, before any conversion).
+   *
+   * This type had no media field at all and the INSERT below named 16 columns
+   * without `featured_media_id`, so every imported article arrived without the
+   * photograph the legacy page led with — 25,029 of 25,029 for SeputarBorneo,
+   * silently, because `--images` scanned body HTML only and never mentioned
+   * them (ADR-0114). The column has existed since `sql/035:46` and
+   * `public-content-port-adapter.ts` has been serving it to `awcms-astro` the
+   * whole time; the writer was the missing half.
+   *
+   * No FK by design (`sql/035`), so this value is only as good as the caller's
+   * check. Do not add a second, weaker one here — one chokepoint or none.
+   */
+  featuredMediaId: string | null;
 };
 
 export type LegacyPostImportOutcome = {
@@ -89,7 +106,7 @@ export async function importLegacyBlogPost(
     INSERT INTO awcms_blog_posts
       (tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
        content_text, body_portable_text, status, visibility, locale,
-       seo_title, meta_description, published_at,
+       featured_media_id, seo_title, meta_description, published_at,
        legacy_source_system, legacy_source_id)
     VALUES (
       ${tenantId}, ${authorTenantUserId}, ${input.title}, ${input.slug},
@@ -98,6 +115,7 @@ export async function importLegacyBlogPost(
       ${portableTextToPlainText(input.bodyPortableText)},
       ${input.bodyPortableText}::jsonb,
       ${input.status}, ${input.visibility}, ${input.locale},
+      ${input.featuredMediaId}::uuid,
       ${input.seoTitle}, ${input.metaDescription}, ${input.publishedAt},
       ${system}, ${input.legacyId}
     )

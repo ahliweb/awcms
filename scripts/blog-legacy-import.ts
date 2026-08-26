@@ -26,19 +26,24 @@
  *
  * ## What gets refused, and why refusal is the feature
  *
- * Three independent gates, all reported per row, none of which silently
- * repairs anything:
+ * Four independent gates, all reported per row, none of which silently repairs
+ * anything:
  *
  * 1. **The record** — a line with no `legacyId` cannot be part of a redirect
  *    map and is refused rather than imported under a generated one; a
  *    `published` row with no `publishedAt` is refused rather than re-dated to
- *    the cutover afternoon.
+ *    the cutover afternoon. A `legacyId` or a `slug` appearing TWICE in one
+ *    file is the export script's bug and is refused on its second occurrence.
  * 2. **The body** — `convertLegacyHtmlToPortableText` rejects `<script>`,
  *    `<iframe>`, event handlers, `javascript:` hrefs and unmanaged `<img>`
  *    sources. This job does NOT import the sanitized remainder: a body whose
  *    images were dropped is a broken article that looks imported, and finding
  *    that out from a report beats finding it out from a reader.
- * 3. **The slug** — checked against what this tenant already has, up front and
+ * 3. **The lead photograph** — a `featuredImageSrc` the `--media-map` does not
+ *    cover is refused for the same reason as an unmanaged `<img>`: an article
+ *    that imported cleanly and lost the picture the legacy page led with looks
+ *    like a success.
+ * 4. **The slug** — checked against what this tenant already has, up front and
  *    in one query, so a collision is a line in the report rather than a
  *    constraint error 12,000 rows into a run.
  *
@@ -52,25 +57,34 @@
  * bodies contain an `<img>` at all. The handoff below is still the right shape;
  * what was wrong was the scale it implied. The real media task is the LEAD
  * photograph, which lives in the `foto_berita` column and not in the body: all
- * 25,029 articles have one, and body scanning will never mention them (see
- * ADR-0114 and the ORIGIN ROUND in `docs/PROJECT_STATE.md` §4).
- * That is not a gap to close by fetching the file — see
+ * 25,029 articles have one, and body scanning never mentioned them (see
+ * ADR-0114 and the ORIGIN ROUND in `docs/PROJECT_STATE.md` §4). That gap is now
+ * closed — the record carries `featuredImageSrc`, `--images` reports it beside
+ * the body images with the two counted separately, and a mapped one is written
+ * to `awcms_blog_posts.featured_media_id`, the column `sql/035:46` has had
+ * since the schema was created and `public-content-port-adapter.ts` has been
+ * serving to `awcms-astro` all along.
+ *
+ * It is still not a gap to close by fetching the file — see
  * `legacy-media-map.ts` and `legacy-ad-ingest.ts` for why the server must not.
- * It is a handoff, and it now has both halves:
+ * It is a handoff, and it has both halves:
  *
- *   `--images=<path>`     writes the upload set (every distinct `<img src>` in
- *                         the archive, most-used first) and stops. Upload those
- *                         through `/admin/media`.
+ *   `--images=<path>`     writes the upload set — every distinct `src` the
+ *                         archive still needs uploaded, body images and lead
+ *                         photographs alike, most-used first — and stops.
+ *                         Upload those through `/admin/media`.
  *   `--media-map=<path>`  takes the result back as `{ "<src>": "<uuid>" }`.
- *                         Every id is checked against THIS tenant's registry
- *                         before a single article is converted, and one that is
- *                         not verified media aborts the run — an unresolvable
- *                         media reference renders as nothing, so importing past
- *                         it would produce articles that look fine and have
- *                         lost their photographs.
+ *                         ONE map for both kinds. Every id in it is checked
+ *                         against THIS tenant's registry before a single
+ *                         article is converted, and one that is not verified
+ *                         media aborts the run — an unresolvable media
+ *                         reference renders as nothing, so importing past it
+ *                         would produce articles that look fine and have lost
+ *                         their photographs.
  *
- * A mapped image becomes a one-item `gallery` node in the position it occupied
- * in the article; an unmapped one is refused exactly as before.
+ * A mapped body image becomes a one-item `gallery` node in the position it
+ * occupied in the article; a mapped lead photograph becomes
+ * `featured_media_id`; an unmapped one of either kind is refused.
  *
  * ## The categories, and why they are the same handoff again
  *
@@ -123,7 +137,10 @@ import {
   parseLegacyMediaMap,
   summariseLegacyImageUsage
 } from "../src/modules/blog-content/domain/legacy-media-map";
-import type { LegacyImageUsage } from "../src/modules/blog-content/domain/legacy-media-map";
+import type {
+  LegacyArticleImageRefs,
+  LegacyImageUsage
+} from "../src/modules/blog-content/domain/legacy-media-map";
 import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
 import {
   findTakenSlugs,
@@ -162,10 +179,12 @@ function usage(message: string): void {
       "  --author=<uuid>      awcms_tenant_users.id recorded as the author (required)\n" +
       "  --system=<name>      legacy_source_system value, e.g. seputarborneo (required)\n" +
       "  --locale=<tag>       default locale for lines that carry none (default: id)\n" +
-      "  --images=<path>      write the upload set — every <img src> the archive\n" +
-      "                       references, most-used first — and stop there\n" +
-      '  --media-map=<path>   JSON { "<img src>": "<media object uuid>" }; every id is\n' +
-      "                       checked against this tenant's registry before anything is written\n" +
+      "  --images=<path>      write the upload set — every src the archive still needs\n" +
+      "                       uploaded, body images AND lead photographs, most-used\n" +
+      "                       first — and stop there\n" +
+      '  --media-map=<path>   JSON { "<src>": "<media object uuid>" }, one map for body\n' +
+      "                       images and lead photographs alike; every id is checked\n" +
+      "                       against this tenant's registry before anything is written\n" +
       "  --terms=<path>       write the category work list — every legacy category the\n" +
       "                       archive files under, most-used first — and stop there\n" +
       '  --term-map=<path>    JSON { "<legacy category name>": "<term uuid>" }; every id is\n' +
@@ -179,9 +198,14 @@ function usage(message: string): void {
  * The upload set, written for the operator and nothing else.
  *
  * This is the first half of the handoff `legacy-media-map.ts` describes: the
- * converter refuses a raw `<img>` and names its `src`, and an archive of 23,906
+ * converter refuses a raw `<img>` and names its `src`, and an archive of 25,029
  * articles turns that into a refusal log nobody can act on. The same
  * information, deduplicated and ordered, is a work list.
+ *
+ * The body/lead split is printed, not just the total, because the total on its
+ * own is what hid the real task: body scanning found 2 images in the
+ * SeputarBorneo archive and the honest number is ~25,031. A summary that cannot
+ * be read as "almost nothing to do" is the whole point of the two extra lines.
  */
 async function writeImageInventory(
   path: string,
@@ -189,9 +213,21 @@ async function writeImageInventory(
 ): Promise<void> {
   await Bun.write(path, `${JSON.stringify(usage_, null, 2)}\n`);
 
+  const fromBody = usage_.filter((entry) => entry.bodyArticles > 0).length;
+  const leadPhotographs = usage_.filter(
+    (entry) => entry.featuredArticles > 0
+  ).length;
+  const articlesWithLead = usage_.reduce(
+    (total, entry) => total + entry.featuredArticles,
+    0
+  );
+
   console.log(
     `\nblog:legacy:import — wrote the upload set to ${path}\n` +
-      `  distinct images  ${usage_.length}\n\n` +
+      `  distinct images       ${usage_.length}\n` +
+      `    lead photographs    ${leadPhotographs}  (featuredImageSrc, in ${articlesWithLead} article(s))\n` +
+      `    body images         ${fromBody}  (<img src> the converter refused)\n` +
+      "  (an image used both ways is counted in both lines and once in the total)\n\n" +
       "  Upload these through the media library (`/admin/media`), which is the\n" +
       "  one path with upload validation, MIME sniffing and size caps. This job\n" +
       "  deliberately does not fetch them: pulling third-party bytes from the\n" +
@@ -254,12 +290,31 @@ async function main(): Promise<void> {
   >();
   const refusals: Refusal[] = [];
   const seenLegacyIds = new Set<string>();
+  /**
+   * Line number of the row that first claimed each slug, so the refusal can
+   * name the row it collides with rather than just saying "duplicate".
+   */
+  const seenSlugs = new Map<string, number>();
   /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
-  const imageSrcsPerArticle: string[][] = [];
+  const imageRefsPerArticle: LegacyArticleImageRefs[] = [];
   /** Same, for categories — collected from EVERY parsed row, importable or not. */
   const categoriesPerArticle: string[][] = [];
+  /** Resolved lead photograph per accepted row, keyed by `legacyId` like `acceptedBodies`. */
+  const acceptedFeaturedMediaIds = new Map<string, string | null>();
 
-  const sql = getDatabaseClient();
+  /**
+   * Opened on first USE, not up front.
+   *
+   * `--terms` and `--images` read one file and write one file; they issue no
+   * query and stop before the slug check. Calling `getDatabaseClient()`
+   * unconditionally made them throw `DATABASE_URL … is required` for a run that
+   * needs no database — and the two flags exist precisely to be run FIRST, by
+   * somebody who does not yet have the tenant wired up. It also meant the
+   * ordering fix below could only be proved against a live Postgres, which is
+   * how the ordering bug survived in the first place.
+   */
+  let sql: Bun.SQL | null = null;
+  const db = (): Bun.SQL => (sql ??= getDatabaseClient());
   let imported = 0;
   let alreadyPresent = 0;
 
@@ -296,7 +351,7 @@ async function main(): Promise<void> {
       // reader. That cannot be a per-row refusal either: a map is one artefact,
       // and a wrong id in it is a wrong artefact.
       const ids = mediaObjectIdsIn(parsedMap.value);
-      const unsafe = await withTenantOrThrow(sql, tenantId, async (tx) => {
+      const unsafe = await withTenantOrThrow(db(), tenantId, async (tx) => {
         const found: string[] = [];
         for (const id of ids) {
           const safe = await mediaLibraryPortAdapter.isMediaReferenceSafe(
@@ -367,7 +422,7 @@ async function main(): Promise<void> {
       // here would file the whole archive under a category an editor removed
       // and resurrect it in every listing.
       const ids = termIdsIn(parsedMap.value);
-      const unknown = await withTenantOrThrow(sql, tenantId, (tx) =>
+      const unknown = await withTenantOrThrow(db(), tenantId, (tx) =>
         findUnknownTermIds(tx, tenantId, ids)
       );
 
@@ -436,10 +491,61 @@ async function main(): Promise<void> {
       }
       seenLegacyIds.add(record.value.legacyId);
 
+      // The same argument as `seenLegacyIds`, against a different constraint.
+      // `findTakenSlugs` asks the DATABASE which slugs are taken, so it cannot
+      // see two rows of THIS file claiming one — and `awcms_blog_posts` has its
+      // own slug uniqueness, so the second one raises 23505 in the middle of a
+      // committing batch, after earlier batches have already landed. The real
+      // SeputarBorneo archive has 84 such collision groups across 171 rows, so
+      // this is not a hypothetical: without this set the first real run dies
+      // part-imported.
+      const collidesWith = seenSlugs.get(record.value.slug);
+      if (collidesWith !== undefined) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: [
+            `slug "${record.value.slug}" is already claimed by line ${collidesWith} of this file`
+          ]
+        });
+        continue;
+      }
+      seenSlugs.set(record.value.slug, lineNumber);
+
       // Collected before any refusal below, for the same reason the image set
       // is: the work list belongs to the whole archive, and an article refused
       // for a bad slug still names a category somebody has to map.
       categoriesPerArticle.push([...record.value.categories]);
+
+      const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
+        resolveImage
+      });
+
+      const featuredMediaId = record.value.featuredImageSrc
+        ? (mediaMap.get(record.value.featuredImageSrc) ?? null)
+        : null;
+
+      // Collected from the converter's own findings plus the record's own lead
+      // photograph, for every article, whether or not it is importable — the
+      // upload set is the whole archive's, and an article refused for a bad
+      // slug still needs its photographs uploaded.
+      //
+      // This sits ABOVE the category gate, not below it. It used to sit below,
+      // so a first run — which by definition has no `--term-map` yet, because
+      // `--terms` is how you get one — refused every categorised row before
+      // reaching this line and reported ZERO images. The whole point of
+      // `--images` is to be run BEFORE you have everything else. Exactly the
+      // same ordering bug was already fixed for `categoriesPerArticle` above.
+      imageRefsPerArticle.push({
+        body: body.rejections
+          .filter((rejection) => rejection.reason === "unmanaged_image")
+          .map((rejection) => rejection.detail ?? ""),
+        // Only when it still needs uploading — one meaning for this file, the
+        // same one the body half has: a `src` the current map already resolves
+        // is not work.
+        featured:
+          featuredMediaId === null ? record.value.featuredImageSrc : null
+      });
 
       // A category this run cannot resolve is refused, not dropped. Importing
       // past it produces an article that landed cleanly, reported nothing, and
@@ -464,19 +570,6 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
-        resolveImage
-      });
-
-      // Collected from the converter's own findings, for every article, whether
-      // or not it is importable — the upload set is the whole archive's, and an
-      // article refused for a bad slug still needs its photographs uploaded.
-      imageSrcsPerArticle.push(
-        body.rejections
-          .filter((rejection) => rejection.reason === "unmanaged_image")
-          .map((rejection) => rejection.detail ?? "")
-      );
-
       if (!body.ok) {
         refusals.push({
           line: lineNumber,
@@ -490,8 +583,27 @@ async function main(): Promise<void> {
         continue;
       }
 
+      // The lead photograph gets the same answer as an unmanaged `<img>`, and
+      // for the same reason: `foto_berita` is the picture the legacy page led
+      // with, and an article that imported cleanly without it is a broken
+      // article that looks imported. Every one of the 25,029 SeputarBorneo rows
+      // has one, so silently importing past this would strip the archive.
+      if (record.value.featuredImageSrc && featuredMediaId === null) {
+        refusals.push({
+          line: lineNumber,
+          legacyId: record.value.legacyId,
+          reasons: [
+            mediaMapPath
+              ? `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} is not in ${mediaMapPath}`
+              : `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} needs a --media-map (run --images=<path> to get the upload set)`
+          ]
+        });
+        continue;
+      }
+
       accepted.push(record.value);
       acceptedBodies.set(record.value.legacyId, body);
+      acceptedFeaturedMediaIds.set(record.value.legacyId, featuredMediaId);
     }
 
     if (termsPath) {
@@ -509,14 +621,14 @@ async function main(): Promise<void> {
       // invite reading the summary and skipping the list it just produced.
       await writeImageInventory(
         imagesPath,
-        summariseLegacyImageUsage(imageSrcsPerArticle)
+        summariseLegacyImageUsage(imageRefsPerArticle)
       );
     }
 
     if (termsPath || imagesPath) return;
 
     // One query for every slug in the file, before anything is written.
-    const taken = await withTenantOrThrow(sql, tenantId, (tx) =>
+    const taken = await withTenantOrThrow(db(), tenantId, (tx) =>
       findTakenSlugs(
         tx,
         tenantId,
@@ -542,7 +654,7 @@ async function main(): Promise<void> {
       for (let offset = 0; offset < importable.length; offset += BATCH_SIZE) {
         const batch = importable.slice(offset, offset + BATCH_SIZE);
 
-        await withTenantOrThrow(sql, tenantId, async (tx) => {
+        await withTenantOrThrow(db(), tenantId, async (tx) => {
           for (const record of batch) {
             const body = acceptedBodies.get(record.legacyId)!;
             const outcome = await importLegacyBlogPost(
@@ -561,7 +673,13 @@ async function main(): Promise<void> {
                 visibility: record.visibility,
                 publishedAt: record.publishedAt,
                 seoTitle: record.seoTitle,
-                metaDescription: record.metaDescription
+                metaDescription: record.metaDescription,
+                // Already verified against this tenant's registry, once per
+                // distinct id, before any article was converted — the same
+                // `isMediaReferenceSafe` sweep the body images went through.
+                // There is deliberately no second check here.
+                featuredMediaId:
+                  acceptedFeaturedMediaIds.get(record.legacyId) ?? null
               }
             );
 
@@ -631,7 +749,8 @@ async function main(): Promise<void> {
     logScriptFailure("blog:legacy:import", error);
     process.exitCode = 1;
   } finally {
-    await sql.close({ timeout: 5 });
+    // Only if something opened it — a `--terms`/`--images` run never does.
+    if (sql) await sql.close({ timeout: 5 });
   }
 }
 
