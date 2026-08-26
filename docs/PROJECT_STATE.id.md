@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f555f1531e2e880d2606e07604c05b9aa5189616606c8d1fd77a2fe625eed193 -->
+<!-- i18n-source-hash: sha256:9f5218c10801eb40ff05f9520c28e199422b14c71a88a323633468f0eb280bb4 -->
 
 # AWCMS — Project State & Continuation
 
@@ -517,11 +517,57 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   dan tak bisa direkonstruksi, jadi layak di-commit BESERTA caveat itu, dan ia
   bukan pengganti himpunan terindeks.
 
-  **Yang ditinggalkan putaran ini sebagai pekerjaan:** artefak id→path ter-generate
-  milik ADR-0114 dan pengawatan tepinya; dua cacat `cutover:verify`; serah-terima
-  gambar utama dan tiga cacat importer; kopling `IMPORT_CHUNK_SIZE`; celah
-  Lamandau pada petanya; dan penangkapan korpus CDX. Entri ini adalah CATATANNYA;
-  belum satu pun menjadi kode.
+  **Higienenya SELESAI, dan dua klaim pada paragraf di atas SALAH.**
+  `IMPORT_CHUNK_SIZE` kini `MAX_REDIRECT_IMPORT_ITEMS`, didefinisikan SEKALI di
+  `seo-distribution/domain/redirect-rule.ts` dan di-import oleh endpoint MAUPUN
+  pembangun payload-nya, dengan test yang menegaskan keduanya lewat IDENTITAS;
+  mutasi pembuktinya — hardcode ulang `200` di pembangun, geser cap endpoint ke
+  150 — diterapkan dan dijalankan MERAH. `--emit` kini menulis DI SAMPING
+  petanya, bukan ke direktori kerja, dan path petanya diangkurkan ke skripnya,
+  jadi satu run tak lagi bergantung pada tempat operatornya berdiri.
+
+  **Celah Lamandau NYATA dan DESKRIPSINYA SALAH.**
+  `/Mitra-Borneo/Pemkab%20Lamandau.html` mengembalikan 200 dengan listing
+  **KOSONG**, bukan listing sungguhan: diambil langsung, ia identik byte dengan
+  `Pemkab%20Seruyan.html` yang sudah diketahui nol kecuali nama kategorinya, dan
+  probe ulang atas snapshot yang SAMA menjawab **0** baris melawan **133** untuk
+  induknya. Yang ditautkan navigasinya adalah `Mitra-Borneo/Pemkab Lamandau`
+  **tanpa `.html`**, dan bentuk itu **404** — `.htaccess` hanya menulis ulang
+  `…\.html$`, jadi item nav itu sudah rusak bertahun-tahun. Entrinya menjadi yang
+  ke-68 dan mendapat perlakuan PERSIS seperti 23 saudaranya
+  (`/kategori/mitra-borneo`; destinasinya tetap sepuluh), ditandai
+  `hrefLacksHtmlSuffix: true` dengan test yang memeriksa penanda itu TERHADAP
+  href-nya. KELASNYA yang disapu, bukan instansnya: tepat satu literal tautan
+  listing di pohon itu tak ber-`.html`, dan satu-satunya tautan relatif
+  tanpa-ekstensi lainnya adalah `./video/?video=5`, yang memang di luar cakupan.
+
+  **Tarikan CDX-nya 5.170, bukan 5.174** — di-commit apa adanya sebagai
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`. `showNumPages=true`
+  MEMANG menjawab **2**, tetapi hanya pada query telanjang; tambahkan `collapse`
+  atau `pageSize` dan ia menjawab `-`. Kedua halaman memuat 2.975 dan 2.196,
+  berjumlah 5.171 karena `collapse` diterapkan per halaman, dan gabungannya
+  identik dengan tarikan tanpa-paginasi itu. "~8,86% korpus" sebenarnya angka
+  CAKUPAN ARTIKEL: **2.219 id artikel berbeda, 8,87% dari 25.029**. Dua caveat
+  yang belum dimiliki putaran itu: banyak capture-nya HTTP 200 di atas halaman
+  tantangan bot, jadi 200 dalam korpus ini TIDAK berarti sebuah halaman
+  tersajikan; dan **22 dari 68 URL peta ini TIDAK ADA dalam korpus**, yang
+  merupakan alasan konkret bahwa ia bukti dan bukan himpunan terindeks. Paruh
+  eksternal ADR-0114 bertahan pada tarikan ini — 2.224 URL artikel terarsip
+  berbentuk garis-bawah, **nol** berbentuk tanda-hubung.
+
+  **URL yang TIDAK mendapat aturan, diputuskan alih-alih dibiarkan terbuka.** Dua
+  typo yang hanya ada di Wayback BUKAN entri: `jenis_rubrik = 'aerah'` dan
+  `'Olah Raya'` sama-sama mengembalikan 0 baris, jadi ADR-0113 menjadikannya
+  yatim, dan menambahkannya berarti menukar aturan keanggotaan MEKANIS peta itu
+  dengan yang sewenang-wenang. Jawaban dan alasan yang sama untuk 75 URL terarsip
+  bersegmen ganda `/news/news/{id}_…`, yang 404 saat dirayapi dan 404 hari ini.
+  Dan peta ARTIKEL tetap TIDAK di-commit atas kebalikan justifikasi peta rubrik —
+  25.029 baris yang bisa diturunkan dari `legacy_source_id` dan masih bertambah,
+  melawan himpunan yang sama sekali tak bisa diturunkan ulang.
+
+  **Yang kini ditinggalkan putaran ini:** artefak id→path ter-generate milik
+  ADR-0114 dan pengawatan tepinya, keduanya butuh tenant hidup. Selebihnya, semua
+  yang ia buka sudah ditutup.
 
   Bentuk yang bisa dipakai ulang, dan ini benar-benar baru: **setiap putaran
   sebelumnya di sini bertanya "apakah simbol ini DIPANGGIL?" — putaran ini

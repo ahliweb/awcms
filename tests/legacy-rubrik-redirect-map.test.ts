@@ -10,7 +10,7 @@
  * nothing ever read it. The columns were dead for months and were dropped in
  * `sql/147`.
  *
- * So this file does not assert that the map has 67 rows and move on. It pushes
+ * So this file does not assert that the map has 68 rows and move on. It pushes
  * every entry through `normalizeRedirectPath`, `validateRedirectTarget` and
  * `isValidSlug` — the same three the write path uses — because the failure this
  * map can actually produce is a rule that is silently unreachable, filed under a
@@ -31,8 +31,10 @@ import {
   buildImportItems,
   chunk,
   findMapProblems,
+  IMPORT_CHUNK_SIZE,
   type LegacyRubrikMap
 } from "../scripts/blog-legacy-rubrik-redirects";
+import { MAX_REDIRECT_IMPORT_ITEMS } from "../src/modules/seo-distribution/domain/redirect-rule";
 
 const MAP_PATH = "data/seputarborneo-legacy/rubrik-redirects.json";
 
@@ -56,22 +58,88 @@ describe("SeputarBorneo legacy rubrik redirect map", () => {
   });
 
   test("the entry count is the COMPLETE link set, not a sample", () => {
-    // 67 is not a target; it is how many `.html` listing links exist in the
-    // legacy PHP tree. Nothing generates a rubrik URL from a column value, so
-    // a crawler could only ever reach what was hand-typed. If this number
-    // changes, the derivation changed and the README must say why.
-    expect(map.entries).toHaveLength(67);
+    // 68 is not a target; it is how many listing links exist in the legacy PHP
+    // tree. Nothing generates a rubrik URL from a column value, so a crawler
+    // could only ever reach what was hand-typed. If this number changes, the
+    // derivation changed and the README must say why.
+    //
+    // It was 67 until the sweep that produced ADR-0114: the original
+    // extraction keyed on the `.html` suffix, and one nav link — `Pemkab
+    // Lamandau` — is written without it in five templates. Finding it by hand
+    // fixes one URL; the count is honest only because the tree was then
+    // re-swept for the CLASS (every relative link literal lacking `.html`),
+    // which returned that one plus `./video/?video=5`, already out of scope.
+    expect(map.entries).toHaveLength(68);
   });
 
-  test("62 entries carry a rule and exactly 5 deliberately do not", () => {
+  test("63 entries carry a rule and exactly 5 deliberately do not", () => {
     const withRule = map.entries.filter((entry) => entry.targetPath !== null);
     const withoutRule = map.entries.filter(
       (entry) => entry.targetPath === null
     );
 
-    expect(withRule).toHaveLength(62);
+    expect(withRule).toHaveLength(63);
     expect(withoutRule.map((entry) => entry.sourcePath).sort()).toEqual(
       ORPHANS
+    );
+  });
+
+  test("sourcePath is the encoded legacyHref — with ONE flagged exception", () => {
+    // The map's quiet invariant, never asserted until now: a rule is filed
+    // under the URL a browser sends for the link that was written, which is
+    // the href with its spaces percent-encoded. An entry that drifts from its
+    // own href is a rule for a URL nobody links to.
+    //
+    // Exactly one entry breaks it, and breaks it on purpose. The nav writes
+    // `Mitra-Borneo/Pemkab Lamandau` with no `.html`; the legacy `.htaccess`
+    // rewrites only `…\.html$`, so the linked form 404s while the `.html` form
+    // serves. `sourcePath` is the form that SERVES. `hrefLacksHtmlSuffix`
+    // marks it, and is checked against the href here rather than trusted —
+    // a flag nothing verifies is a comment with a colon in it.
+    const flagged = map.entries.filter((entry) => entry.hrefLacksHtmlSuffix);
+
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]!.legacyHref).toBe("Mitra-Borneo/Pemkab Lamandau");
+    expect(flagged[0]!.legacyHref.endsWith(".html")).toBe(false);
+
+    for (const entry of map.entries) {
+      const encoded = `/${entry.legacyHref.replaceAll(" ", "%20")}`;
+
+      expect(entry.sourcePath).toBe(
+        entry.hrefLacksHtmlSuffix ? `${encoded}.html` : encoded
+      );
+      // And the flag is never a way to hide a plain `.html` href.
+      expect(entry.legacyHref.endsWith(".html")).toBe(
+        entry.hrefLacksHtmlSuffix !== true
+      );
+    }
+  });
+
+  test("the recovered gap gets its SIBLINGS' treatment, not a new one", () => {
+    // `Pemkab Lamandau` was missing for a year of this map's short life. When
+    // a late entry arrives, the temptation is to give it a destination of its
+    // own; the check that it did not is that `/kategori/mitra-borneo` still
+    // serves all 24 `Mitra-Borneo/*` pairs and the destination set stayed at
+    // ten. Its zero is measured, not assumed: the same snapshot answers 0 for
+    // (`Mitra-Borneo`, `Pemkab Lamandau`) and 133 for the parent, and the live
+    // page returns 200 with a listing byte-identical to a known-empty sibling.
+    const entry = map.entries.find(
+      (candidate) =>
+        candidate.sourcePath === "/Mitra-Borneo/Pemkab%20Lamandau.html"
+    );
+
+    expect(entry).toBeDefined();
+    expect(entry!.articlesAtCapture).toBe(0);
+    expect(entry!.parentArticlesAtCapture).toBe(133);
+    expect(entry!.targetPath).toBe("/kategori/mitra-borneo");
+
+    const siblings = map.entries.filter(
+      (candidate) => candidate.legacyNews.toLowerCase() === "mitra-borneo"
+    );
+
+    expect(siblings).toHaveLength(24);
+    expect(new Set(siblings.map((candidate) => candidate.targetPath))).toEqual(
+      new Set(["/kategori/mitra-borneo"])
     );
   });
 
@@ -142,7 +210,7 @@ describe("SeputarBorneo legacy rubrik redirect map", () => {
       expect(target.slice("/kategori/".length)).not.toContain("/");
     }
 
-    // Ten destinations for 62 rules is the flatten working; one per pair would
+    // Ten destinations for 63 rules is the flatten working; one per pair would
     // be dozens.
     expect(targets.size).toBe(10);
   });
@@ -163,10 +231,18 @@ describe("SeputarBorneo legacy rubrik redirect map", () => {
   test("import items chunk to the endpoint's own cap", () => {
     const items = buildImportItems(map);
 
-    expect(items).toHaveLength(62);
+    expect(items).toHaveLength(63);
 
-    for (const batch of chunk(items, 200)) {
-      expect(batch.length).toBeLessThanOrEqual(200);
+    // Identity, not equality of two literals: the builder's chunk size IS
+    // `MAX_REDIRECT_IMPORT_ITEMS`, imported from the domain module the import
+    // endpoint validates against. It was a local `200` under a comment saying
+    // it mirrored the endpoint — which is the one thing a comment cannot do.
+    // Lower the endpoint's cap with the old code in place and this stays
+    // green while the builder emits chunks the endpoint rejects.
+    expect(IMPORT_CHUNK_SIZE).toBe(MAX_REDIRECT_IMPORT_ITEMS);
+
+    for (const batch of chunk(items, IMPORT_CHUNK_SIZE)) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_REDIRECT_IMPORT_ITEMS);
     }
 
     // Every item is a permanent redirect carrying a reason — the import

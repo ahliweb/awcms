@@ -502,11 +502,55 @@ pioneered directly here after the ADR-0047 freeze.)
   is worth committing WITH that caveat, and it is not a substitute for the
   indexed set.
 
-  **What this round leaves as work:** ADR-0114's generated id→path artefact and
-  the edge wiring; the two `cutover:verify` defects; the featured-image handoff
-  and the three importer defects; the `IMPORT_CHUNK_SIZE` coupling; the map's
-  Lamandau gap; and capturing the CDX corpus. This entry is the record; none of
-  it is code yet.
+  **The hygiene is done, and two claims in the paragraph above were wrong.**
+  `IMPORT_CHUNK_SIZE` is now `MAX_REDIRECT_IMPORT_ITEMS`, defined once in
+  `seo-distribution/domain/redirect-rule.ts` and imported by both the endpoint
+  and the builder, with a test that asserts the two by identity; the mutation
+  proving it — re-hardcode the builder's `200`, move the endpoint's cap to 150 —
+  was applied and run red. `--emit` writes beside the map now rather than into
+  the working directory, and the map path is anchored to the script, so a run no
+  longer depends on where the operator was standing.
+
+  **The Lamandau gap is real and was described wrongly.**
+  `/Mitra-Borneo/Pemkab%20Lamandau.html` returns 200 with an **EMPTY** listing,
+  not a real one: fetched live it is byte-identical to the known-zero
+  `Pemkab%20Seruyan.html` apart from the category name, and a re-probe of the
+  same snapshot answers **0** rows against **133** for the parent. What the nav
+  links is `Mitra-Borneo/Pemkab Lamandau` with **no `.html`**, and that form
+  **404s** — `.htaccess` rewrites only `…\.html$`, so the nav item has been
+  broken for years. The entry is the 68th and gets its 23 siblings' treatment
+  exactly (`/kategori/mitra-borneo`; destinations still ten), flagged
+  `hrefLacksHtmlSuffix: true` with a test that checks the flag AGAINST the href.
+  The class was swept, not the instance: exactly one listing link literal in the
+  tree lacks `.html`, the only other extensionless relative link being
+  `./video/?video=5`, already out of scope.
+
+  **The CDX pull is 5,170, not 5,174** — committed verbatim as
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`. `showNumPages=true`
+  does answer **2**, but only on the bare query; add `collapse` or `pageSize`
+  and it answers `-`. The pages hold 2,975 and 2,196, summing to 5,171 because
+  `collapse` is applied per page, and their union matches the un-paginated pull
+  exactly. "~8.86% of the corpus" is really an article-coverage figure: **2,219
+  distinct article ids, 8.87% of 25,029**. Two caveats the round did not have:
+  many captures are HTTP 200 over a bot-challenge interstitial, so a 200 in this
+  corpus does not mean a page was served; and **22 of the map's 68 URLs are
+  absent from the corpus**, which is the concrete reason it is evidence and not
+  the indexed set. ADR-0114's external half holds on this pull — 2,224 archived
+  article URLs in the underscore form, **zero** in a hyphen form.
+
+  **The URLs that get no rule, decided rather than left open.** The two
+  Wayback-only typos are not entries: `jenis_rubrik = 'aerah'` and `'Olah Raya'`
+  both return 0 rows, so ADR-0113 makes them orphans and adding them would trade
+  the map's mechanical membership rule for an arbitrary one. Same answer and the
+  same reason for the 75 archived `/news/news/{id}_…` doubled-segment URLs,
+  which 404'd when they were crawled and 404 today. And the ARTICLE map stays
+  uncommitted on the inverse of the rubrik map's justification — 25,029 rows
+  derivable from `legacy_source_id` and still growing, against a set that cannot
+  be re-derived at all.
+
+  **What this round now leaves:** ADR-0114's generated id→path artefact and the
+  edge wiring, both of which need a live tenant. Everything else it opened is
+  closed.
 
   The transferable shape, and it is a genuinely new one: **every previous round
   here asked "is this symbol called?" — this one found a decision whose target
