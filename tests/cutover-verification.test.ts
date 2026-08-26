@@ -15,6 +15,7 @@ import {
   classifyCutoverOutcome,
   isCutoverClean,
   parseSitemapLocations,
+  parseUrlListLocations,
   sitemapLocationPath,
   type CutoverVerdict
 } from "../src/modules/seo-distribution/domain/cutover-verification";
@@ -70,6 +71,68 @@ describe("parseSitemapLocations", () => {
   });
 });
 
+describe("parseUrlListLocations", () => {
+  test("a --urls list yields the SAME locations as the equivalent <urlset>", () => {
+    // The whole justification for the flag: there is no legacy sitemap for
+    // SeputarBorneo and there never was one, in the tree or in git history.
+    // `--sitemap` always read a local file, so the "needs the live sitemap"
+    // blocker was only ever the XML wrapper — and the two paths must produce
+    // identical evidence, or the flag is a second, weaker check wearing the
+    // first one's name.
+    const fromSitemap = parseSitemapLocations(urlset);
+    const fromList = parseUrlListLocations(
+      [
+        "# SeputarBorneo legacy corpus — assembled from a crawl, not a sitemap",
+        "",
+        "https://seputarborneo.test/news/48213_banjir-kobar.html",
+        "   https://seputarborneo.test/news/1_a.html?utm=x&b=2   ",
+        ""
+      ].join("\n")
+    );
+
+    expect(fromList.kind).toBe("urlset");
+    expect(fromList.kind === "urlset" && fromList.locations).toEqual(
+      fromSitemap.kind === "urlset" ? fromSitemap.locations : []
+    );
+  });
+
+  test("a `#` INSIDE a URL is a fragment, not a comment", () => {
+    // Stripping from the first `#` would truncate a real entry into a shorter
+    // URL that still parses — a silently different check.
+    const parsed = parseUrlListLocations("/news/1_a.html#komentar");
+    expect(parsed.kind === "urlset" && parsed.locations).toEqual([
+      "/news/1_a.html#komentar"
+    ]);
+  });
+
+  test("CRLF line endings do not leave a stray carriage return", () => {
+    const parsed = parseUrlListLocations("/a.html\r\n/b.html\r\n");
+    expect(parsed.kind === "urlset" && parsed.locations).toEqual([
+      "/a.html",
+      "/b.html"
+    ]);
+  });
+
+  test("a file of nothing but blanks and comments is REFUSED, not called clean", () => {
+    // Otherwise a mistyped corpus prints "All 0 legacy URL(s) resolve" and the
+    // run exits 0 having checked nothing at all.
+    expect(parseUrlListLocations("").kind).toBe("empty");
+    expect(parseUrlListLocations("\n\n  \n# only a note\n").kind).toBe("empty");
+  });
+
+  test("an oversized list is refused rather than parsed", () => {
+    expect(parseUrlListLocations("/a.html\n".repeat(100), 16).kind).toBe(
+      "too_large"
+    );
+  });
+
+  test("never reports an index — a list of URLs cannot be one", () => {
+    // Even when a line happens to look like sitemap XML.
+    const parsed = parseUrlListLocations("<sitemapindex> https://x.test/a.xml");
+    expect(parsed.kind).toBe("urlset");
+  });
+});
+
 describe("sitemapLocationPath", () => {
   test("keeps the path and discards the legacy host", () => {
     // The legacy host is not this deployment's host. Comparing them would
@@ -122,11 +185,47 @@ describe("classifyCutoverOutcome", () => {
     );
   });
 
-  test("an undecidable target is NOT reported as broken", () => {
-    // `targetLive: null` means the destination is an archive or an external
-    // URL this job cannot check. Calling that a failure would train an
-    // operator to ignore the report, which costs more than the check is worth.
-    expect(classifyCutoverOutcome({ ...base, targetLive: null })).toBe("ok");
+  test("an UNCHECKED target is not `ok` — the defect this verdict exists for", () => {
+    // THE regression. `targetLive: null` on a resolved chain means "this job
+    // could not look the destination up", and it used to fall through to `ok`.
+    // Under that reading the 62 `/kategori/**` rules of ADR-0113 were reported
+    // clean by a job that could not check one of them — they are served by a
+    // different deployment entirely (ADR-0114), which no lookup here can reach.
+    //
+    // Delete the `target_unverifiable` line from `classifyCutoverOutcome` and
+    // this assertion fails.
+    expect(classifyCutoverOutcome({ ...base, targetLive: null })).toBe(
+      "target_unverifiable"
+    );
+    expect(isCutoverClean("target_unverifiable")).toBe(false);
+  });
+
+  test("an unchecked target is still distinguished from a MISSING one", () => {
+    // Two different operator actions. `target_missing` means fix the map;
+    // `target_unverifiable` means go and check the layer this job cannot see.
+    expect(classifyCutoverOutcome({ ...base, targetLive: false })).toBe(
+      "target_missing"
+    );
+    expect(classifyCutoverOutcome({ ...base, targetLive: null })).toBe(
+      "target_unverifiable"
+    );
+  });
+
+  test("`targetLive: null` with NOTHING resolved stays no_rule/ineligible", () => {
+    // The ordering trap the new branch had to avoid: `null` also means "there
+    // was no destination to check". Reporting an unresolved URL as
+    // unverifiable would hide a plain 404 behind a softer-sounding word.
+    expect(classifyCutoverOutcome({ ...base, hops: 0, targetLive: null })).toBe(
+      "no_rule"
+    );
+    expect(
+      classifyCutoverOutcome({
+        eligible: false,
+        hops: 0,
+        refusal: null,
+        targetLive: null
+      })
+    ).toBe("ineligible");
   });
 
   test("the resolver's own refusals are surfaced verbatim", () => {
@@ -171,7 +270,8 @@ describe("classifyCutoverOutcome", () => {
       "ineligible",
       "chain_too_long",
       "loop",
-      "target_missing"
+      "target_missing",
+      "target_unverifiable"
     ];
     for (const verdict of verdicts) {
       expect(CUTOVER_VERDICT_REASON[verdict]?.length ?? 0).toBeGreaterThan(20);
@@ -184,7 +284,8 @@ describe("classifyCutoverOutcome", () => {
       "ineligible",
       "chain_too_long",
       "loop",
-      "target_missing"
+      "target_missing",
+      "target_unverifiable"
     ];
     for (const verdict of verdicts) {
       expect(isCutoverClean(verdict)).toBe(false);
