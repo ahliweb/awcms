@@ -117,3 +117,11 @@ src/**/*.astro-frontmatter-check.ts
 
 # Playwright session state captured by the auth setup project (see tests/e2e/auth.setup.ts).
 playwright/.auth/
+
+# `bun run blog:legacy:rubrik-redirects --emit` writes its import payload
+# chunks BESIDE the map they are built from — which puts a derived file inside
+# a committed data directory, where `git add -A` would sweep it up. Ignored
+# rather than moved: an operator wants the payload next to its map and its
+# provenance, not in whatever directory they happened to be standing in, and
+# the chunks are one command away from the committed `rubrik-redirects.json`.
+data/seputarborneo-legacy/seputarborneo-rubrik-redirects.*.json

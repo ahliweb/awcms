@@ -26,6 +26,7 @@ import { createRedirect } from "../../../../../modules/seo-distribution/applicat
 import { checkRedirectSafety } from "../../../../../modules/seo-distribution/application/redirect-safety";
 import { resolveTenantAllowedHosts } from "../../../../../modules/seo-distribution/application/tenant-allowed-hosts";
 import {
+  MAX_REDIRECT_IMPORT_ITEMS,
   validateRedirectInput,
   type RedirectRuleInput
 } from "../../../../../modules/seo-distribution/domain/redirect-rule";
@@ -50,7 +51,6 @@ const CREATE_GUARD = {
   action: "create" as const
 };
 const IDEMPOTENCY_SCOPE = "seo_distribution_redirect_import";
-const MAX_IMPORT_ITEMS = 200;
 
 type ItemReport = {
   index: number;
@@ -113,11 +113,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       );
     }
 
-    if (items.length > MAX_IMPORT_ITEMS) {
+    if (items.length > MAX_REDIRECT_IMPORT_ITEMS) {
       return fail(
         400,
         "VALIDATION_ERROR",
-        `redirects must contain at most ${MAX_IMPORT_ITEMS} items.`
+        `redirects must contain at most ${MAX_REDIRECT_IMPORT_ITEMS} items.`
       );
     }
 

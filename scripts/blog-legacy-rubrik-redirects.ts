@@ -23,7 +23,8 @@
  *
  * It does not write. It builds the payload and prints it; loading is
  * `POST /api/v1/seo/redirects/import`, which is itself `dryRun` by default and
- * caps a call at `MAX_IMPORT_ITEMS`. Two reasons to keep the write out of here:
+ * caps a call at `MAX_REDIRECT_IMPORT_ITEMS` — the constant this script chunks
+ * by, imported rather than copied. Two reasons to keep the write out of here:
  * the import endpoint already owns conflict/loop/chain safety and the audit
  * row, and a bulk redirect load is an authoring action that should carry an
  * operator's credential rather than a script's database role.
@@ -37,16 +38,35 @@
  * hop 4,000 of a cutover. `--emit` refuses outright when anything fails.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { isValidSlug } from "../src/modules/blog-content/domain/slug-policy";
 import { normalizeRedirectPath } from "../src/modules/seo-distribution/domain/redirect-path";
+import { MAX_REDIRECT_IMPORT_ITEMS } from "../src/modules/seo-distribution/domain/redirect-rule";
 import { validateRedirectTarget } from "../src/modules/seo-distribution/domain/redirect-target";
 
-/** Mirrors `MAX_IMPORT_ITEMS` in `src/pages/api/v1/seo/redirects/import.ts`. */
-const IMPORT_CHUNK_SIZE = 200;
+/**
+ * The chunk size IS the endpoint's cap — the same binding, not a copy of its
+ * value. It used to be a local `200` under the comment "Mirrors
+ * `MAX_IMPORT_ITEMS` in src/pages/api/v1/seo/redirects/import.ts", and a
+ * comment mirrors nothing: lowering the endpoint's cap would have left this
+ * script emitting chunks the endpoint refuses, with no test, no import and no
+ * gate noticing until an operator posted one mid-cutover.
+ */
+export const IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS;
 
-const MAP_PATH = "data/seputarborneo-legacy/rubrik-redirects.json";
+/**
+ * Anchored to this file, not to the working directory: the map is a committed
+ * artefact at a fixed place in the repo, and `--emit` writes its chunks BESIDE
+ * it for the same reason — the payload belongs next to the map it was built
+ * from, not wherever the operator happened to be standing.
+ */
+const MAP_PATH = path.resolve(
+  import.meta.dir,
+  "../data/seputarborneo-legacy/rubrik-redirects.json"
+);
+const EMIT_DIR = path.dirname(MAP_PATH);
 
 export type LegacyRubrikEntry = {
   sourcePath: string;
@@ -58,6 +78,17 @@ export type LegacyRubrikEntry = {
   canonicalRubrik: string[];
   /** `null` = deliberately no rule (no resolvable destination). */
   targetPath: string | null;
+  /**
+   * `true` only where `legacyHref` is NOT the URL that serves. Exactly one
+   * entry needs it: the site-wide nav links `Mitra-Borneo/Pemkab Lamandau`
+   * with no `.html`, and the legacy `.htaccess` rewrites nothing without that
+   * suffix — the linked form 404s, while the `.html` form it OMITS serves the
+   * (empty) listing. `sourcePath` is therefore the served form, not the encoded
+   * href, and this flag is what stops that looking like a typo. The whole tree
+   * was re-swept for the class: it is the only listing link literal missing
+   * `.html`. See `data/seputarborneo-legacy/README.md` §"One known gap".
+   */
+  hrefLacksHtmlSuffix?: boolean;
 };
 
 export type LegacyRubrikMap = {
@@ -214,7 +245,10 @@ async function main(): Promise<void> {
   }
 
   chunks.forEach((batch, index) => {
-    const file = `seputarborneo-rubrik-redirects.${index + 1}.json`;
+    const file = path.join(
+      EMIT_DIR,
+      `seputarborneo-rubrik-redirects.${index + 1}.json`
+    );
 
     writeFileSync(
       file,
