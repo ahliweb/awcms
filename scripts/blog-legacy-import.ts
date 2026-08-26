@@ -164,7 +164,7 @@ import type { LegacyCategoryUsage } from "../src/modules/blog-content/domain/leg
 /** One transaction per batch — small enough to retry, large enough to be worth a round trip. */
 const BATCH_SIZE = 200;
 
-type Refusal = {
+export type Refusal = {
   line: number;
   legacyId: string;
   reasons: string[];
@@ -267,6 +267,268 @@ async function writeCategoryInventory(
   );
 }
 
+/**
+ * The whole per-row decision, with no database in it.
+ *
+ * ## Why this is a function and not just the middle of `main`
+ *
+ * It used to be the middle of `main`, and the only way to observe what it
+ * decided was to run the CLI against a live Postgres. That made the DB-free
+ * test for the in-file slug guard a SOURCE-TEXT test — it asserted that the
+ * identifier `seenSlugs` appeared, and appeared before
+ * `categoriesPerArticle.push`. Delete only the `continue;` from the collision
+ * branch and every one of those assertions still held: the Map was still
+ * there, the refusal was still pushed, the ordering was still right, and the
+ * second colliding row sailed on into `accepted` to raise 23505 mid-batch —
+ * after earlier batches had already committed. `DATABASE_URL="" bun run check`
+ * was green on a dedupe that did not dedupe.
+ *
+ * Everything this needs is already RESOLVED before the first line is read: the
+ * media map has been verified against this tenant's registry and the term map
+ * against its taxonomy, both by `main`, both before any row is parsed. So the
+ * row decisions need no connection, and pulling them out makes the refusals
+ * and the accepted set ordinary return values that a test can read.
+ *
+ * `main` keeps what genuinely needs the database: the two verification sweeps
+ * above it, the one `findTakenSlugs` query below it, and the batched write.
+ */
+export type LegacyImportPlanInput = {
+  lines: readonly string[];
+  defaultLocale: string;
+  /** Already verified against this tenant's media registry by the caller. */
+  mediaMap: ReadonlyMap<string, string>;
+  /** Null when `--media-map` was not passed — which changes the refusal wording AND whether body images resolve at all. */
+  mediaMapPath: string | null;
+  /** Already verified against this tenant's live taxonomy by the caller. */
+  termMap: ReadonlyMap<string, string>;
+  /** Null when `--term-map` was not passed, for the same two reasons. */
+  termMapPath: string | null;
+};
+
+export type LegacyImportPlan = {
+  /** Rows that passed every gate, in file order. */
+  accepted: LegacyImportRecord[];
+  acceptedBodies: Map<
+    string,
+    ReturnType<typeof convertLegacyHtmlToPortableText>
+  >;
+  /** Resolved lead photograph per accepted row, keyed by `legacyId` like `acceptedBodies`. */
+  acceptedFeaturedMediaIds: Map<string, string | null>;
+  refusals: Refusal[];
+  /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
+  imageRefsPerArticle: LegacyArticleImageRefs[];
+  /** Same, for categories — collected from EVERY parsed row, importable or not. */
+  categoriesPerArticle: string[][];
+};
+
+export function planLegacyImportRows({
+  lines,
+  defaultLocale,
+  mediaMap,
+  mediaMapPath,
+  termMap,
+  termMapPath
+}: LegacyImportPlanInput): LegacyImportPlan {
+  const accepted: LegacyImportRecord[] = [];
+  const acceptedBodies = new Map<
+    string,
+    ReturnType<typeof convertLegacyHtmlToPortableText>
+  >();
+  const acceptedFeaturedMediaIds = new Map<string, string | null>();
+  const refusals: Refusal[] = [];
+  const imageRefsPerArticle: LegacyArticleImageRefs[] = [];
+  const categoriesPerArticle: string[][] = [];
+  const seenLegacyIds = new Set<string>();
+  /**
+   * Line number of the row that first claimed each slug, so the refusal can
+   * name the row it collides with rather than just saying "duplicate".
+   */
+  const seenSlugs = new Map<string, number>();
+
+  /**
+   * `undefined` rather than a function returning null when there is no map:
+   * the converter distinguishes "no resolver was supplied" from "the resolver
+   * did not know this src", and only the first is a run that was never asked
+   * to place images.
+   */
+  const resolveImage = mediaMapPath
+    ? (src: string): string | null => mediaMap.get(src) ?? null
+    : undefined;
+
+  for (const [index, raw] of lines.entries()) {
+    const lineNumber = index + 1;
+    const trimmed = raw.trim();
+
+    if (trimmed.length === 0) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      refusals.push({
+        line: lineNumber,
+        legacyId: "(unparseable)",
+        reasons: ["line is not valid JSON"]
+      });
+      continue;
+    }
+
+    const record = parseLegacyImportRecord(parsed, { locale: defaultLocale });
+
+    if (!record.ok) {
+      refusals.push({
+        line: lineNumber,
+        legacyId:
+          typeof (parsed as { legacyId?: unknown })?.legacyId === "string"
+            ? String((parsed as { legacyId: string }).legacyId)
+            : "(missing)",
+        reasons: record.errors
+      });
+      continue;
+    }
+
+    // A duplicate inside ONE file is the export script's bug, and the database
+    // would answer it with a silent `DO NOTHING` — which reads in the report as
+    // "already imported" and hides the real problem.
+    if (seenLegacyIds.has(record.value.legacyId)) {
+      refusals.push({
+        line: lineNumber,
+        legacyId: record.value.legacyId,
+        reasons: ["legacyId appears more than once in this file"]
+      });
+      continue;
+    }
+    seenLegacyIds.add(record.value.legacyId);
+
+    // The same argument as `seenLegacyIds`, against a different constraint.
+    // `findTakenSlugs` asks the DATABASE which slugs are taken, so it cannot
+    // see two rows of THIS file claiming one — and `awcms_blog_posts` has its
+    // own slug uniqueness, so the second one raises 23505 in the middle of a
+    // committing batch, after earlier batches have already landed. The real
+    // SeputarBorneo archive has 84 such collision groups across 171 rows, so
+    // this is not a hypothetical: without this set the first real run dies
+    // part-imported.
+    const collidesWith = seenSlugs.get(record.value.slug);
+    if (collidesWith !== undefined) {
+      refusals.push({
+        line: lineNumber,
+        legacyId: record.value.legacyId,
+        reasons: [
+          `slug "${record.value.slug}" is already claimed by line ${collidesWith} of this file`
+        ]
+      });
+      continue;
+    }
+    seenSlugs.set(record.value.slug, lineNumber);
+
+    // Collected before every refusal BELOW, for the same reason the image set
+    // is: the work list belongs to the whole archive, and an article refused
+    // for an unmapped category or a rejected body still names a category
+    // somebody has to map.
+    //
+    // Deliberately below the two in-file gates above, though: a duplicate is
+    // the SAME article twice, and counting it again would inflate the work
+    // list with demand that does not exist.
+    categoriesPerArticle.push([...record.value.categories]);
+
+    const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
+      resolveImage
+    });
+
+    const featuredMediaId = record.value.featuredImageSrc
+      ? (mediaMap.get(record.value.featuredImageSrc) ?? null)
+      : null;
+
+    // Collected from the converter's own findings plus the record's own lead
+    // photograph, for every article, whether or not it is importable — the
+    // upload set is the whole archive's, and an article refused for an
+    // unmapped category still needs its photographs uploaded.
+    //
+    // This sits ABOVE the category gate, not below it. It used to sit below,
+    // so a first run — which by definition has no `--term-map` yet, because
+    // `--terms` is how you get one — refused every categorised row before
+    // reaching this line and reported ZERO images. The whole point of
+    // `--images` is to be run BEFORE you have everything else. Exactly the
+    // same ordering bug was already fixed for `categoriesPerArticle` above.
+    imageRefsPerArticle.push({
+      body: body.rejections
+        .filter((rejection) => rejection.reason === "unmanaged_image")
+        .map((rejection) => rejection.detail ?? ""),
+      // Only when it still needs uploading — one meaning for this file, the
+      // same one the body half has: a `src` the current map already resolves
+      // is not work.
+      featured: featuredMediaId === null ? record.value.featuredImageSrc : null
+    });
+
+    // A category this run cannot resolve is refused, not dropped. Importing
+    // past it produces an article that landed cleanly, reported nothing, and
+    // is filed under nothing — and `/{locale}/kategori/{slug}` then answers a
+    // crawler with a page that loads and lists nothing, which is read as a
+    // soft 404. That is the failure this whole issue exists to prevent,
+    // arriving through the door built to prevent it.
+    const unmapped = record.value.categories.filter(
+      (name) => !termMap.has(name)
+    );
+
+    if (unmapped.length > 0) {
+      refusals.push({
+        line: lineNumber,
+        legacyId: record.value.legacyId,
+        reasons: unmapped.map((name) =>
+          termMapPath
+            ? `category ${JSON.stringify(name)} is not in ${termMapPath}`
+            : `category ${JSON.stringify(name)} needs a --term-map (run --terms=<path> to get the work list)`
+        )
+      });
+      continue;
+    }
+
+    if (!body.ok) {
+      refusals.push({
+        line: lineNumber,
+        legacyId: record.value.legacyId,
+        reasons: body.rejections.map(
+          (rejection) =>
+            `${rejection.reason} at offset ${rejection.offset}: ${rejection.found}` +
+            (rejection.detail ? ` (${rejection.detail})` : "")
+        )
+      });
+      continue;
+    }
+
+    // The lead photograph gets the same answer as an unmanaged `<img>`, and
+    // for the same reason: `foto_berita` is the picture the legacy page led
+    // with, and an article that imported cleanly without it is a broken
+    // article that looks imported. Every one of the 25,029 SeputarBorneo rows
+    // has one, so silently importing past this would strip the archive.
+    if (record.value.featuredImageSrc && featuredMediaId === null) {
+      refusals.push({
+        line: lineNumber,
+        legacyId: record.value.legacyId,
+        reasons: [
+          mediaMapPath
+            ? `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} is not in ${mediaMapPath}`
+            : `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} needs a --media-map (run --images=<path> to get the upload set)`
+        ]
+      });
+      continue;
+    }
+
+    accepted.push(record.value);
+    acceptedBodies.set(record.value.legacyId, body);
+    acceptedFeaturedMediaIds.set(record.value.legacyId, featuredMediaId);
+  }
+
+  return {
+    accepted,
+    acceptedBodies,
+    acceptedFeaturedMediaIds,
+    refusals,
+    imageRefsPerArticle,
+    categoriesPerArticle
+  };
+}
+
 async function main(): Promise<void> {
   const commit = process.argv.includes("--commit");
   const file = flag("file");
@@ -287,25 +549,6 @@ async function main(): Promise<void> {
   const text = await Bun.file(file).text();
   const lines = text.split("\n");
 
-  const accepted: LegacyImportRecord[] = [];
-  const acceptedBodies = new Map<
-    string,
-    ReturnType<typeof convertLegacyHtmlToPortableText>
-  >();
-  const refusals: Refusal[] = [];
-  const seenLegacyIds = new Set<string>();
-  /**
-   * Line number of the row that first claimed each slug, so the refusal can
-   * name the row it collides with rather than just saying "duplicate".
-   */
-  const seenSlugs = new Map<string, number>();
-  /** One entry per article, so `summariseLegacyImageUsage` can count articles rather than tags. */
-  const imageRefsPerArticle: LegacyArticleImageRefs[] = [];
-  /** Same, for categories — collected from EVERY parsed row, importable or not. */
-  const categoriesPerArticle: string[][] = [];
-  /** Resolved lead photograph per accepted row, keyed by `legacyId` like `acceptedBodies`. */
-  const acceptedFeaturedMediaIds = new Map<string, string | null>();
-
   /**
    * Opened on first USE, not up front.
    *
@@ -316,9 +559,16 @@ async function main(): Promise<void> {
    * somebody who does not yet have the tenant wired up. It also meant the
    * ordering fix below could only be proved against a live Postgres, which is
    * how the ordering bug survived in the first place.
+   *
+   * On an OBJECT rather than in a bare `let`, because the only writer is the
+   * closure below and TypeScript's control-flow analysis cannot see a closure's
+   * assignment: `let sql: Bun.SQL | null = null` reads as exactly `null` in the
+   * `finally`, so `sql.close()` there is an error on type `never`. A property
+   * whose object is reassigned out of view falls back to its declared type,
+   * which is the honest answer here.
    */
-  let sql: Bun.SQL | null = null;
-  const db = (): Bun.SQL => (sql ??= getDatabaseClient());
+  const connection: { client: Bun.SQL | null } = { client: null };
+  const db = (): Bun.SQL => (connection.client ??= getDatabaseClient());
   let imported = 0;
   let alreadyPresent = 0;
 
@@ -388,10 +638,6 @@ async function main(): Promise<void> {
       mediaMap = parsedMap.value;
     }
 
-    const resolveImage = mediaMapPath
-      ? (src: string): string | null => mediaMap.get(src) ?? null
-      : undefined;
-
     let termMap: ReadonlyMap<string, string> = new Map();
 
     if (termMapPath) {
@@ -450,165 +696,21 @@ async function main(): Promise<void> {
       termMap = parsedMap.value;
     }
 
-    for (const [index, raw] of lines.entries()) {
-      const lineNumber = index + 1;
-      const trimmed = raw.trim();
-
-      if (trimmed.length === 0) continue;
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch {
-        refusals.push({
-          line: lineNumber,
-          legacyId: "(unparseable)",
-          reasons: ["line is not valid JSON"]
-        });
-        continue;
-      }
-
-      const record = parseLegacyImportRecord(parsed, { locale: defaultLocale });
-
-      if (!record.ok) {
-        refusals.push({
-          line: lineNumber,
-          legacyId:
-            typeof (parsed as { legacyId?: unknown })?.legacyId === "string"
-              ? String((parsed as { legacyId: string }).legacyId)
-              : "(missing)",
-          reasons: record.errors
-        });
-        continue;
-      }
-
-      // A duplicate inside ONE file is the export script's bug, and the database
-      // would answer it with a silent `DO NOTHING` — which reads in the report as
-      // "already imported" and hides the real problem.
-      if (seenLegacyIds.has(record.value.legacyId)) {
-        refusals.push({
-          line: lineNumber,
-          legacyId: record.value.legacyId,
-          reasons: ["legacyId appears more than once in this file"]
-        });
-        continue;
-      }
-      seenLegacyIds.add(record.value.legacyId);
-
-      // The same argument as `seenLegacyIds`, against a different constraint.
-      // `findTakenSlugs` asks the DATABASE which slugs are taken, so it cannot
-      // see two rows of THIS file claiming one — and `awcms_blog_posts` has its
-      // own slug uniqueness, so the second one raises 23505 in the middle of a
-      // committing batch, after earlier batches have already landed. The real
-      // SeputarBorneo archive has 84 such collision groups across 171 rows, so
-      // this is not a hypothetical: without this set the first real run dies
-      // part-imported.
-      const collidesWith = seenSlugs.get(record.value.slug);
-      if (collidesWith !== undefined) {
-        refusals.push({
-          line: lineNumber,
-          legacyId: record.value.legacyId,
-          reasons: [
-            `slug "${record.value.slug}" is already claimed by line ${collidesWith} of this file`
-          ]
-        });
-        continue;
-      }
-      seenSlugs.set(record.value.slug, lineNumber);
-
-      // Collected before any refusal below, for the same reason the image set
-      // is: the work list belongs to the whole archive, and an article refused
-      // for a bad slug still names a category somebody has to map.
-      categoriesPerArticle.push([...record.value.categories]);
-
-      const body = convertLegacyHtmlToPortableText(record.value.bodyHtml, {
-        resolveImage
-      });
-
-      const featuredMediaId = record.value.featuredImageSrc
-        ? (mediaMap.get(record.value.featuredImageSrc) ?? null)
-        : null;
-
-      // Collected from the converter's own findings plus the record's own lead
-      // photograph, for every article, whether or not it is importable — the
-      // upload set is the whole archive's, and an article refused for a bad
-      // slug still needs its photographs uploaded.
-      //
-      // This sits ABOVE the category gate, not below it. It used to sit below,
-      // so a first run — which by definition has no `--term-map` yet, because
-      // `--terms` is how you get one — refused every categorised row before
-      // reaching this line and reported ZERO images. The whole point of
-      // `--images` is to be run BEFORE you have everything else. Exactly the
-      // same ordering bug was already fixed for `categoriesPerArticle` above.
-      imageRefsPerArticle.push({
-        body: body.rejections
-          .filter((rejection) => rejection.reason === "unmanaged_image")
-          .map((rejection) => rejection.detail ?? ""),
-        // Only when it still needs uploading — one meaning for this file, the
-        // same one the body half has: a `src` the current map already resolves
-        // is not work.
-        featured:
-          featuredMediaId === null ? record.value.featuredImageSrc : null
-      });
-
-      // A category this run cannot resolve is refused, not dropped. Importing
-      // past it produces an article that landed cleanly, reported nothing, and
-      // is filed under nothing — and `/{locale}/kategori/{slug}` then answers a
-      // crawler with a page that loads and lists nothing, which is read as a
-      // soft 404. That is the failure this whole issue exists to prevent,
-      // arriving through the door built to prevent it.
-      const unmapped = record.value.categories.filter(
-        (name) => !termMap.has(name)
-      );
-
-      if (unmapped.length > 0) {
-        refusals.push({
-          line: lineNumber,
-          legacyId: record.value.legacyId,
-          reasons: unmapped.map((name) =>
-            termMapPath
-              ? `category ${JSON.stringify(name)} is not in ${termMapPath}`
-              : `category ${JSON.stringify(name)} needs a --term-map (run --terms=<path> to get the work list)`
-          )
-        });
-        continue;
-      }
-
-      if (!body.ok) {
-        refusals.push({
-          line: lineNumber,
-          legacyId: record.value.legacyId,
-          reasons: body.rejections.map(
-            (rejection) =>
-              `${rejection.reason} at offset ${rejection.offset}: ${rejection.found}` +
-              (rejection.detail ? ` (${rejection.detail})` : "")
-          )
-        });
-        continue;
-      }
-
-      // The lead photograph gets the same answer as an unmanaged `<img>`, and
-      // for the same reason: `foto_berita` is the picture the legacy page led
-      // with, and an article that imported cleanly without it is a broken
-      // article that looks imported. Every one of the 25,029 SeputarBorneo rows
-      // has one, so silently importing past this would strip the archive.
-      if (record.value.featuredImageSrc && featuredMediaId === null) {
-        refusals.push({
-          line: lineNumber,
-          legacyId: record.value.legacyId,
-          reasons: [
-            mediaMapPath
-              ? `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} is not in ${mediaMapPath}`
-              : `featuredImageSrc ${JSON.stringify(record.value.featuredImageSrc)} needs a --media-map (run --images=<path> to get the upload set)`
-          ]
-        });
-        continue;
-      }
-
-      accepted.push(record.value);
-      acceptedBodies.set(record.value.legacyId, body);
-      acceptedFeaturedMediaIds.set(record.value.legacyId, featuredMediaId);
-    }
+    const {
+      accepted,
+      acceptedBodies,
+      acceptedFeaturedMediaIds,
+      refusals,
+      imageRefsPerArticle,
+      categoriesPerArticle
+    } = planLegacyImportRows({
+      lines,
+      defaultLocale,
+      mediaMap,
+      mediaMapPath,
+      termMap,
+      termMapPath
+    });
 
     if (termsPath) {
       // Before `--images`, because the two are independent and an operator who
@@ -754,8 +856,16 @@ async function main(): Promise<void> {
     process.exitCode = 1;
   } finally {
     // Only if something opened it — a `--terms`/`--images` run never does.
-    if (sql) await sql.close({ timeout: 5 });
+    if (connection.client) await connection.client.close({ timeout: 5 });
   }
 }
 
-await main();
+/**
+ * Guarded, because `planLegacyImportRows` above is now imported by
+ * `tests/blog-legacy-import.test.ts`. Unguarded, that import RUNS the CLI: no
+ * `--file`, so `usage()` prints and sets `process.exitCode = 1`, and the whole
+ * DB-free suite exits non-zero for a reason nothing in it mentions.
+ */
+if (import.meta.main) {
+  await main();
+}

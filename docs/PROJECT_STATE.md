@@ -561,6 +561,59 @@ pioneered directly here after the ADR-0047 freeze.)
   derivable from `legacy_source_id` and still growing, against a set that cannot
   be re-derived at all.
 
+  **Two of this round's own new gates did not gate what their comments claimed,
+  and the two paragraphs above are corrected here.** Both mutations that
+  "proved" them were applied at the wrong GRAIN.
+
+  `IMPORT_CHUNK_SIZE` was proved by re-hardcoding the builder's `200` **and**
+  moving the endpoint's cap to 150 — two changes at once. Re-hardcode alone and
+  the test stays **green, 12 pass / 0 fail**, because `200 === 200`. "A test
+  that asserts the two by identity" described the comment the test carried, not
+  the assertion it made: `expect(IMPORT_CHUNK_SIZE).toBe(MAX_REDIRECT_IMPORT_ITEMS)`
+  compares two VALUES. The only thing catching the copy was `typecheck`'s TS6133
+  on the now-unused import — a grip that disappears the moment someone deletes
+  the import along with the literal. The test now also asserts, over the
+  builder's source with comments stripped (`scripts/lib/source-text`, this
+  repo's stripper for exactly this), that
+  `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS` literally appears: red on the
+  re-hardcode alone, and red again when the binding is present only in a
+  comment. The value assertion is kept — each catches what the other cannot.
+
+  The `seenSlugs` mutation was coarse the same way: the whole map deleted.
+  Delete only the `continue;` from the collision branch — leaving the Map, the
+  refusal push and the ordering intact — and the DB-free suite is **green, 43
+  pass / 0 fail**, on a dedupe that does not dedupe, while
+  `tests/integration/legacy-import-cli.integration.test.ts` correctly dies on
+  the real 23505. The behaviour WAS gated, but only by the DB-gated suite:
+  anyone running the documented `DATABASE_URL="" bun run check` before pushing
+  saw full green, and this is data-loss-adjacent — 84 collision groups over 171
+  rows kill a real run mid-batch, after earlier batches have committed. The old
+  test pinned the identifier's presence and its position relative to
+  `categoriesPerArticle.push`, and every part of that survives the mutation.
+
+  The fix is structural rather than a better string match. The per-row
+  decisions moved out of `main` into an exported pure `planLegacyImportRows`,
+  which needs no database because the media and term maps it consults are
+  already verified against the tenant by `main` before the first line is read;
+  `main` keeps the two verification sweeps, the one `findTakenSlugs` query and
+  the batched write. Four DB-free tests now read the returned
+  `accepted`/`refusals`/`categoriesPerArticle` instead of the file's source
+  text, and the `continue`-only mutation turns two of them red. Two incidental
+  corrections came with it: the script's entrypoint is now behind
+  `import.meta.main`, because importing an unguarded CLI RUNS it (`usage()`,
+  `process.exitCode = 1`, the whole suite non-zero for a reason nothing in it
+  mentions); and the lazily-opened client moved from a bare `let` onto an
+  object, because TypeScript's control-flow analysis cannot see a closure's
+  assignment and read `sql` as exactly `null` in the `finally` once `main` was
+  small enough to analyse. Verified against a real Postgres: the CLI
+  integration file 6/6, `tests/integration/` 593 pass / 0 fail.
+
+  **The transferable half, and it is not the one this round already recorded:**
+  a mutation is only as sharp as its GRAIN. Deleting a whole mechanism — the
+  map, the constant's binding — proves the mechanism is REFERENCED, not that it
+  DECIDES anything. The mutation that finds an overclaiming test is the
+  smallest one that leaves every identifier the test names in place.
+
   **What this round now leaves.** The earlier version of this closing said
   _"ADR-0114's generated id→path artefact and the edge wiring, both of which need
   a live tenant — everything else it opened is closed"_. That was wrong in four

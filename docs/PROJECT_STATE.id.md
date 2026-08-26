@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3d29f67a44083a79a9a45eea76484685b88278eadd273e403cd1274136eb14f2 -->
+<!-- i18n-source-hash: sha256:eb43b9dc3bc3aba912f6c8d45e9f31e33684514d9c7552977cac9427115cfe22 -->
 
 # AWCMS — Project State & Continuation
 
@@ -578,6 +578,63 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   Dan peta ARTIKEL tetap TIDAK di-commit atas kebalikan justifikasi peta rubrik —
   25.029 baris yang bisa diturunkan dari `legacy_source_id` dan masih bertambah,
   melawan himpunan yang sama sekali tak bisa diturunkan ulang.
+
+  **Dua gerbang BARU putaran ini sendiri tidak menggerbangi apa yang diklaim
+  komentarnya, dan dua paragraf di atas dikoreksi di sini.** Kedua mutasi yang
+  "membuktikan" keduanya diterapkan pada BUTIRAN yang salah.
+
+  `IMPORT_CHUNK_SIZE` dibuktikan dengan meng-hardcode ulang `200` milik builder
+  **dan** memindahkan cap endpoint ke 150 — dua perubahan sekaligus. Hardcode
+  ulang saja, dan tesnya tetap **hijau, 12 pass / 0 fail**, karena `200 === 200`.
+  "Tes yang menegaskan keduanya secara identitas" menggambarkan KOMENTAR yang
+  dibawa tes itu, bukan asersi yang dibuatnya:
+  `expect(IMPORT_CHUNK_SIZE).toBe(MAX_REDIRECT_IMPORT_ITEMS)` membandingkan dua
+  NILAI. Satu-satunya yang menangkap salinan itu adalah TS6133 dari `typecheck`
+  atas import yang jadi tak terpakai — cengkeraman yang hilang begitu seseorang
+  menghapus import itu bersama literalnya. Tes kini juga menegaskan, atas source
+  builder dengan komentar dibuang lebih dulu (`scripts/lib/source-text`,
+  pembuang komentar repo ini persis untuk ini), bahwa
+  `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS` benar-benar muncul: merah pada
+  hardcode-ulang saja, dan merah lagi bila ikatan itu hanya ada di dalam
+  komentar. Asersi nilai TETAP dipertahankan — masing-masing menangkap yang tak
+  bisa ditangkap yang lain.
+
+  Mutasi `seenSlugs` kasar dengan cara yang sama: seluruh Map dihapus. Hapus
+  HANYA `continue;` dari cabang tabrakan — Map, dorongan penolakan, dan urutannya
+  dibiarkan utuh — dan suite bebas-DB **hijau, 43 pass / 0 fail**, atas dedupe
+  yang tidak men-dedupe, sementara
+  `tests/integration/legacy-import-cli.integration.test.ts` benar-benar mati pada
+  23505 yang nyata. Perilakunya MEMANG digerbangi, tetapi hanya oleh suite
+  ber-DB: siapa pun yang menjalankan perintah lokal terdokumentasi
+  `DATABASE_URL="" bun run check` sebelum push melihat hijau penuh, dan ini
+  berdekatan dengan KEHILANGAN DATA — 84 grup tabrakan atas 171 baris mematikan
+  run nyata di tengah batch, setelah batch-batch sebelumnya ter-commit. Tes lama
+  menyematkan kehadiran identifier dan posisinya relatif terhadap
+  `categoriesPerArticle.push`, dan setiap bagiannya SELAMAT dari mutasi itu.
+
+  Perbaikannya struktural, bukan pencocokan string yang lebih baik. Keputusan
+  per-baris dipindahkan keluar dari `main` ke fungsi murni ter-ekspor
+  `planLegacyImportRows`, yang tidak butuh database karena peta media dan peta
+  term yang dikonsultasinya SUDAH diverifikasi terhadap tenant oleh `main`
+  sebelum baris pertama dibaca; `main` menyimpan dua sapuan verifikasi itu, satu
+  query `findTakenSlugs`, dan tulis berbatch. Empat tes bebas-DB kini membaca
+  `accepted`/`refusals`/`categoriesPerArticle` yang dikembalikan alih-alih teks
+  source berkasnya, dan mutasi hanya-`continue` memerahkan dua di antaranya. Dua
+  koreksi sampingan ikut serta: entrypoint skrip kini di balik `import.meta.main`,
+  karena meng-import CLI tanpa penjaga MENJALANKANnya (`usage()`,
+  `process.exitCode = 1`, seluruh suite non-nol dengan alasan yang tak disebut
+  apa pun di dalamnya); dan klien yang dibuka malas pindah dari `let` telanjang
+  ke sebuah objek, karena analisis alur-kendali TypeScript tak bisa melihat
+  penugasan dari closure dan membaca `sql` sebagai persis `null` di `finally`
+  begitu `main` cukup kecil untuk dianalisis. Diverifikasi terhadap Postgres
+  nyata: berkas integrasi CLI 6/6, `tests/integration/` 593 pass / 0 fail.
+
+  **Bagian yang bisa dipindahkan, dan ini BUKAN yang sudah dicatat putaran ini:**
+  sebuah mutasi hanya setajam BUTIRANnya. Menghapus seluruh mekanisme — Map-nya,
+  ikatan konstantanya — membuktikan mekanisme itu DIRUJUK, bukan bahwa ia
+  MEMUTUSKAN apa pun. Mutasi yang menemukan tes yang mengklaim berlebih adalah
+  mutasi TERKECIL yang membiarkan setiap identifier yang disebut tes itu tetap di
+  tempatnya.
 
   **Yang kini ditinggalkan putaran ini.** Versi lebih awal penutup ini berbunyi
   _"artefak id→path ter-generate milik ADR-0114 dan pengawatan tepinya, keduanya

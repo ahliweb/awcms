@@ -28,6 +28,10 @@ import { describe, expect, test } from "bun:test";
 
 import { stripComments } from "../scripts/access-chokepoint-check";
 import {
+  planLegacyImportRows,
+  type LegacyImportPlanInput
+} from "../scripts/blog-legacy-import";
+import {
   MAX_LEGACY_IMAGE_SRC_LENGTH,
   parseLegacyImportRecord
 } from "../src/modules/blog-content/domain/legacy-import-record";
@@ -50,6 +54,33 @@ function record(overrides: Record<string, unknown> = {}) {
     publishedAt: "2019-03-04T02:11:00Z",
     ...overrides
   };
+}
+
+const TERM_ID = "6d1f2b6e-2c4a-4f39-9a0d-6f1b2c3d4e5f";
+
+/**
+ * The CLI's per-row decisions, with no database.
+ *
+ * `planLegacyImportRows` is the half of `blog:legacy:import` that reads the
+ * NDJSON and decides what is importable; the maps it consults are verified
+ * against the tenant by `main` before it is called, so it needs no connection
+ * and its refusals are ordinary return values. Records go in as objects and
+ * are serialised here, so a test reads as a file of articles rather than a
+ * string of JSON.
+ */
+function plan_(
+  records: readonly Record<string, unknown>[],
+  overrides: Partial<LegacyImportPlanInput> = {}
+) {
+  return planLegacyImportRows({
+    lines: records.map((entry) => JSON.stringify(entry)),
+    defaultLocale: "id",
+    mediaMap: new Map(),
+    mediaMapPath: null,
+    termMap: new Map(),
+    termMapPath: null,
+    ...overrides
+  });
 }
 
 describe("parsing one legacy line", () => {
@@ -339,20 +370,98 @@ describe("the import script refuses rather than repairs", () => {
     );
   });
 
-  test("a duplicate SLUG inside one file is reported too, not left to the constraint", async () => {
-    const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
+  test("a duplicate SLUG inside one file is SKIPPED, not merely reported", () => {
+    // This assertion used to be `source.indexOf("seenSlugs") <
+    // source.indexOf("categoriesPerArticle.push")` — the identifier's presence
+    // and its position. Delete only the `continue;` from the collision branch
+    // and every part of that held: the Map was still there, the refusal was
+    // still pushed, the ordering was still right, and the second colliding row
+    // sailed into `accepted` to raise 23505 mid-batch, after earlier batches
+    // had already committed. `DATABASE_URL="" bun run check` was green on a
+    // dedupe that did not dedupe. `findTakenSlugs` cannot cover this: it asks
+    // the DATABASE, which has not yet seen either row.
+    //
+    // So this reads the DECISION. 84 such collision groups over 171 rows in
+    // the real SeputarBorneo archive is what a missing `continue` costs.
+    const plan = plan_([
+      record({ legacyId: "1", slug: "banjir-kobar" }),
+      record({ legacyId: "2", slug: "banjir-kobar" })
+    ]);
 
-    // `findTakenSlugs` asks the DATABASE, so it cannot see two rows of this
-    // file claiming one slug — and the real archive has 84 such groups across
-    // 171 rows, which raised 23505 mid-batch, after earlier batches committed.
-    // The behaviour is proved by running it in
-    // `tests/integration/legacy-import-cli.integration.test.ts`; this only
-    // pins that the check sits beside `seenLegacyIds` rather than after the
-    // gates that `continue`.
-    expect(source).toContain("seenSlugs");
-    expect(source.indexOf("seenSlugs")).toBeLessThan(
-      source.indexOf("categoriesPerArticle.push")
+    // One accepted, and it is the FIRST — the winner is the earlier line, not
+    // whichever one happened to be written last.
+    expect(plan.accepted.map((entry) => entry.legacyId)).toEqual(["1"]);
+
+    expect(plan.refusals).toHaveLength(1);
+    expect(plan.refusals[0]!.legacyId).toBe("2");
+    expect(plan.refusals[0]!.line).toBe(2);
+    expect(plan.refusals[0]!.reasons[0]).toContain(
+      'slug "banjir-kobar" is already claimed by line 1'
     );
+
+    // The refused row still carries no body into the write path — an entry in
+    // `acceptedBodies` for a row that was refused is how a "reported" row gets
+    // written anyway.
+    expect([...plan.acceptedBodies.keys()]).toEqual(["1"]);
+    expect([...plan.acceptedFeaturedMediaIds.keys()]).toEqual(["1"]);
+  });
+
+  test("distinct slugs are both admitted — the guard is not refusing everything", () => {
+    // The other direction. A `continue` that always fires would pass the test
+    // above and import nothing.
+    const plan = plan_([
+      record({ legacyId: "1", slug: "banjir-kobar" }),
+      record({ legacyId: "2", slug: "banjir-sampit" })
+    ]);
+
+    expect(plan.accepted.map((entry) => entry.legacyId)).toEqual(["1", "2"]);
+    expect(plan.refusals).toEqual([]);
+  });
+
+  test("a duplicate legacyId is skipped by the same rule, on its second occurrence", () => {
+    // Same shape, the other in-file constraint: the database answers this one
+    // with a silent `ON CONFLICT DO NOTHING`, which reads in the report as
+    // "already imported" and hides the export script's bug.
+    const plan = plan_([
+      record({ legacyId: "48213", slug: "banjir-kobar" }),
+      record({ legacyId: "48213", slug: "banjir-sampit" })
+    ]);
+
+    expect(plan.accepted.map((entry) => entry.slug)).toEqual(["banjir-kobar"]);
+    expect(plan.refusals).toHaveLength(1);
+    expect(plan.refusals[0]!.reasons).toEqual([
+      "legacyId appears more than once in this file"
+    ]);
+  });
+
+  test("the in-file gates sit ABOVE the work-list collection, and the category gate below it", () => {
+    // The old test pinned this as `indexOf("seenSlugs") <
+    // indexOf("categoriesPerArticle.push")`. Same claim, read from behaviour.
+    //
+    // Above: a duplicate row is the SAME article twice, so counting its
+    // categories again would inflate the work list with demand that does not
+    // exist. Below: a row refused for an UNMAPPED category still names a
+    // category somebody has to map — `--terms` exists to be run FIRST, when by
+    // definition nothing is mapped yet, and collecting after that gate is the
+    // ordering bug that once made a first run report zero.
+    const duplicate = plan_(
+      [
+        record({ legacyId: "1", slug: "banjir-kobar", categories: ["Daerah"] }),
+        record({ legacyId: "2", slug: "banjir-kobar", categories: ["Hukum"] })
+      ],
+      { termMap: new Map([["Daerah", TERM_ID]]), termMapPath: "terms.json" }
+    );
+
+    expect(duplicate.accepted.map((entry) => entry.legacyId)).toEqual(["1"]);
+    expect(duplicate.categoriesPerArticle).toEqual([["Daerah"]]);
+
+    const unmapped = plan_([
+      record({ legacyId: "1", slug: "banjir-kobar", categories: ["Daerah"] })
+    ]);
+
+    expect(unmapped.accepted).toEqual([]);
+    expect(unmapped.refusals[0]!.reasons[0]).toContain("needs a --term-map");
+    expect(unmapped.categoriesPerArticle).toEqual([["Daerah"]]);
   });
 
   test("an unmapped LEAD photograph refuses the row, like an unmanaged <img>", async () => {
@@ -400,7 +509,7 @@ describe("the import script refuses rather than repairs", () => {
 
     // `--terms`/`--images` issue no query. Opening the pool up front made the
     // one flag an operator runs first die on `DATABASE_URL … is required`.
-    expect(source).toContain("sql ??= getDatabaseClient()");
+    expect(source).toContain("connection.client ??= getDatabaseClient()");
     expect([...source.matchAll(/getDatabaseClient\(\)/g)]).toHaveLength(1);
   });
 });

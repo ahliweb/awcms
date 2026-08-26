@@ -34,9 +34,11 @@ import {
   IMPORT_CHUNK_SIZE,
   type LegacyRubrikMap
 } from "../scripts/blog-legacy-rubrik-redirects";
+import { stripComments } from "../scripts/lib/source-text";
 import { MAX_REDIRECT_IMPORT_ITEMS } from "../src/modules/seo-distribution/domain/redirect-rule";
 
 const MAP_PATH = "data/seputarborneo-legacy/rubrik-redirects.json";
+const BUILDER_PATH = "scripts/blog-legacy-rubrik-redirects.ts";
 
 const map = JSON.parse(readFileSync(MAP_PATH, "utf8")) as LegacyRubrikMap;
 
@@ -233,12 +235,34 @@ describe("SeputarBorneo legacy rubrik redirect map", () => {
 
     expect(items).toHaveLength(63);
 
-    // Identity, not equality of two literals: the builder's chunk size IS
-    // `MAX_REDIRECT_IMPORT_ITEMS`, imported from the domain module the import
-    // endpoint validates against. It was a local `200` under a comment saying
-    // it mirrored the endpoint — which is the one thing a comment cannot do.
-    // Lower the endpoint's cap with the old code in place and this stays
-    // green while the builder emits chunks the endpoint rejects.
+    // Two assertions, because each catches what the other cannot.
+    //
+    // The VALUE check below catches a copy that has already drifted: someone
+    // lowers the endpoint's cap to 50 and leaves a local `200` behind. It does
+    // NOT catch the copy itself — restore the pre-fix shape (a hard-coded
+    // `= 200` under a comment claiming it mirrors the endpoint) and it stays
+    // green, because 200 does equal 200 today. That is exactly the state this
+    // test was written to forbid, and the comment above it used to claim it
+    // was testing "identity, not equality of two literals" while testing
+    // equality of two literals.
+    //
+    // So the SOURCE check comes first: the builder must bind the two names
+    // together, so the drift is impossible rather than merely detected on the
+    // day someone edits the cap. Comments are stripped before matching — a
+    // comment saying `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS` is the
+    // very defect being excluded, and `scripts/lib/source-text` is this repo's
+    // stripper for exactly that reason.
+    const builder = stripComments(readFileSync(BUILDER_PATH, "utf8"));
+
+    expect(builder).toMatch(
+      /export const IMPORT_CHUNK_SIZE\s*=\s*MAX_REDIRECT_IMPORT_ITEMS\s*;/
+    );
+    expect(builder).toMatch(
+      /import \{ MAX_REDIRECT_IMPORT_ITEMS \} from "[^"]*seo-distribution\/domain\/redirect-rule";/
+    );
+
+    // And the value check stays: the binding above is only worth anything if
+    // the symbol it binds to is the one the endpoint actually enforces.
     expect(IMPORT_CHUNK_SIZE).toBe(MAX_REDIRECT_IMPORT_ITEMS);
 
     for (const batch of chunk(items, IMPORT_CHUNK_SIZE)) {
