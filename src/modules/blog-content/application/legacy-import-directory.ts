@@ -5,6 +5,11 @@
  *
  * Three reasons, and the first is the one the whole issue is about.
  *
+ * NOTE ON "23,906" (every occurrence in this file): the measured snapshot is
+ * 25,029 — see ADR-0114 §Consequences, which is the single correction the
+ * figure points at. Left standing because these are arguments about scale, and
+ * scale does not move.
+ *
  * 1. **`published_at`.** `transitionBlogPostStatus` sets it to `now()`, which is
  *    correct for an editor pressing Publish and destroys the thing being
  *    migrated here. 23,906 articles have been indexed for years under their own

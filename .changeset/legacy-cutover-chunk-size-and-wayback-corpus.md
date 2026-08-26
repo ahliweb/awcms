@@ -4,9 +4,10 @@
 
 fix(seo): the import chunk size was tied to the endpoint's cap by a comment, and the rubrik map was missing the one nav link that forgot its own suffix
 
-Hygiene and evidence-capture closing Issue #599 / Issue #711, alongside
-ADR-0114. No behaviour changes for a reader; three things that could have gone
-wrong later cannot now.
+Hygiene and evidence-capture **toward closing** Issue #599 / Issue #711,
+alongside ADR-0114 — which records that this repo cannot close either one: the
+last step is edge configuration outside both repositories. No behaviour changes
+for a reader; three things that could have gone wrong later cannot now.
 
 **A comment is not a call.** `scripts/blog-legacy-rubrik-redirects.ts` carried
 its own `IMPORT_CHUNK_SIZE = 200` under the comment "Mirrors `MAX_IMPORT_ITEMS`

@@ -908,7 +908,12 @@ export type LegacyRedirectMapping = {
   targetPath: string;
 };
 
-/** Bounded per call — a cutover map is built in pages, never as one 23,906-row result set. */
+/**
+ * Bounded per call — a cutover map is built in pages, never as one 23,906-row
+ * result set. NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing because this is an argument about scale, and it does not move.
+ */
 export const LEGACY_REDIRECT_MAP_LIMIT = 500;
 
 /**

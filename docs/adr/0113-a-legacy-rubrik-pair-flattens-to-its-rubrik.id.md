@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md)
 
-<!-- i18n-source-hash: sha256:61b0eb86c37b783a16dec902bc0644620c20014d53f3398b35cecc1905f377b6 -->
+<!-- i18n-source-hash: sha256:e8585cbdb589e3cfc886c66e8f7b15075771f3ed4c9696d6f9b3bca8161976c5 -->
 
 # ADR-0113 — Satu pasangan rubrik legacy diratakan ke rubriknya, dan URL pencarian legacy mempertahankan kueri-nya
 
@@ -10,7 +10,7 @@
 - **Diamandemen:** 26 Agustus 2026 — bagian normalisasinya salah secara faktual (`seo_title()` tak pernah dipanggil); keputusannya TIDAK berubah. Lihat di bawah.
 - **Diamandemen lagi:** 26 Agustus 2026 — **keputusan bentuk-4 DICABUT** (keluarga URL itu tak pernah ada, lihat di bawah), dan klaim bahwa `awcms-astro` tidak butuh perubahan itu **SALAH** dan digantikan [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.id.md). Keputusan perataan untuk bentuk 2 dan 3 TIDAK berubah.
 - **Diamandemen oleh:** [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.id.md) — 301-nya dieksekusi di **TEPI**, bukan di aplikasi mana pun, dan URL artikel legacy dikunci pada digit terdepannya alih-alih pada path eksak. Tujuan yang dipilih ADR ini TIDAK berubah; pemikulnya berubah.
-- **Terkait:** Issue #711 (paruh cutover SeputarBorneo yang dibuka oleh ADR ini); Issue #599 (paruh yang sudah siap cutover); ADR-0045 / ADR-0070 (kosakata URL publik dibelah, dan arsip berita dirender oleh `ahliweb/awcms-astro`); ADR-0039 (tata kelola redirect); ADR-0111 (aturan yang tak bisa menyala lebih buruk daripada tanpa aturan); `sql/060` §2 (aturan path-eksak saja, secara sengaja); PRD §9.2 (tidak ada rantai lebih dari satu hop)
+- **Terkait:** Issue #711 (paruh cutover SeputarBorneo yang dibuka oleh ADR ini); Issue #599 (paruh ARTIKEL — ADR ini semula menyebutnya "sudah siap cutover" dan itu **SALAH**: template artikel yang sudah dikirim mencocoki **0 dari 25.029** URL dan `/news/**` yang tak tercocokkan justru 301 ke dalam 404, lihat [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.id.md)); ADR-0045 / ADR-0070 (kosakata URL publik dibelah, dan arsip berita dirender oleh `ahliweb/awcms-astro`); ADR-0039 (tata kelola redirect); ADR-0111 (aturan yang tak bisa menyala lebih buruk daripada tanpa aturan); `sql/060` §2 (aturan path-eksak saja, secara sengaja); PRD §9.2 (tidak ada rantai lebih dari satu hop)
 
 ## Konteks
 
@@ -86,8 +86,13 @@ tapi tak pernah DIPANGGIL terbaca persis seperti fungsi yang berjalan.
 Tidak ada apa pun di pohon legacy yang MENGHASILKAN tautan rubrik dari nilai
 kolom. Semuanya literal ketik-tangan, dan justru itulah yang membuatnya
 **terenumerasi dan LENGKAP**, bukan sampel — crawler hanya bisa menjangkau apa
-yang ditautkan. Jumlahnya **67**, dan seluruhnya di-commit bersama provenance-nya
-di `data/seputarborneo-legacy/rubrik-redirects.json`.
+yang ditautkan. Jumlahnya **68**, dan seluruhnya di-commit bersama provenance-nya
+di `data/seputarborneo-legacy/rubrik-redirects.json` — HITUNG berkas itu, ia
+otoritasnya. (ADR ini ditulis terhadap **67**; sapuan berikutnya atas pohon
+legacy menemukan `Mitra-Borneo/Pemkab Lamandau`, yang ditautkan nav **TANPA**
+`.html` yang justru menjadi kunci ekstraksi awal, dan itulah yang ke-68. Angka
+di bagian ini dianotasi ulang mengikuti peta ter-commit; tidak ada `targetPath`
+yang ditulis ulang dan himpunan tujuannya tetap sepuluh.)
 
 Dua sifat himpunan itu menentukan pekerjaannya:
 
@@ -98,7 +103,7 @@ Dua sifat himpunan itu menentukan pekerjaannya:
   **KESAMAAN**, dan `normalizeRedirectPath` MEMPERTAHANKAN kapitalisasi —
   sehingga **kedua ejaan butuh aturannya sendiri**. Lima rubrik ditautkan dalam
   dua kapitalisasi.
-- **32 dari 67 resolve ke NOL artikel** — tautan nav dan footer yang mati,
+- **33 dari 68 resolve ke NOL artikel** — tautan nav dan footer yang mati,
   bertahun-tahun, menyajikan HTTP 200 dengan listing KOSONG alih-alih 404,
   sehingga mesin pencari kemungkinan besar mengindeksnya sebagai halaman tipis.
   Delapan di antaranya sisa dari template asal situs ini dan menyebut tempat di
@@ -107,14 +112,14 @@ Dua sifat himpunan itu menentukan pekerjaannya:
   `OLAHRAGA`, tanpa spasi, dan kolasi case-insensitive tidak menutup perbedaan
   SPASI.
 
-**URL mati 301 ke arsip segmen PERTAMA-nya bila segmen itu resolve** — 27 dari
-32, sebuah perbaikan atas 200-kosong bagi pembaca dan konsolidasi bagi crawler.
+**URL mati 301 ke arsip segmen PERTAMA-nya bila segmen itu resolve** — 28 dari
+33, sebuah perbaikan atas 200-kosong bagi pembaca dan konsolidasi bagi crawler.
 Sisa **5 yatim** (`rubrik/kuliner`, `rubrik/Olah Raga`, `rubrik/pariwisata`,
 `rubrik/travel`, `rubrik/Viral`) tidak punya tujuan dan **tidak diberi aturan**;
 410 tidak bisa diekspresikan karena `RedirectStatusCode` hanya 301/302/307/308,
 jadi alternatif dari sebuah aturan adalah 404.
 
-Hasilnya **62 aturan atas 10 kategori tujuan** — dan karena keputusannya
+Hasilnya **63 aturan atas 10 kategori tujuan** — dan karena keputusannya
 membuang `kt`, setiap URL dari kedua bentuk mendarat di arsip rubrik INDUK-nya,
 sehingga seluruh petanya adalah fungsi dari segmen pertama saja.
 
@@ -147,8 +152,13 @@ Diverifikasi tiga cara alih-alih diperdebatkan:
 - **Hidup.** `/cari_berita/sampit.html` dan
   `/rubriks/?news=cari_berita&kt=sampit` berbeda pada tepat SATU baris keluaran
   (`og:url`). Yang pertama disajikan sebagai URL **bentuk-3**.
-- **Korpus.** **NOL** dari 5.174 URL terarsip berbentuk `/cari_berita/*.html`, dan
-  tidak ada template di pohon legacy yang memancarkan tautan semacam itu.
+- **Korpus.** **NOL** dari **5.170** URL terarsip berbentuk
+  `/cari_berita/*.html`, dan tidak ada template di pohon legacy yang memancarkan
+  tautan semacam itu. (Butir ini semula menyebut 5.174, diukur sebelum tarikannya
+  di-commit. Korpusnya kini di-commit apa adanya sebagai
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` dan berisi 5.170 baris —
+  hitung saja. **Kesimpulannya TIDAK berubah**: nol `/cari_berita/*.html`,
+  sehingga pencabutan di bawah berdiri di atas bukti yang sama.)
 
 **Dua hal yang ini larutkan.** Butir terbuka #711 _"aturan `cari_berita` — butuh
 sitemap hidup"_ larut DUA KALI: aturannya tak pernah menyala, dan tidak ada
@@ -187,6 +197,6 @@ ber-query.
 
 Paragraf ini semula berbunyi "47-atau-kurang", dan angka itu TIDAK PERNAH menjadi daftar periksa go-live. **47 adalah batas ATAS `jenis_rubrik`, bukan jumlah tujuan**, dan angka itu sendiri hasil `utf8mb4_unicode_ci` MariaDB: `DISTINCT` case-insensitive melaporkan 47/46, sementara map JS yang berkunci nama EKSAK atas baris yang sama melihat **48/45**. Peta yang dibangun punya **10** tujuan berbeda, dinamai di `data/seputarborneo-legacy/README.md`: `bisnis`, `budaya`, `daerah`, `hukum`, `mitra-borneo`, `nasional`, `olahraga`, `politik`, `provinsi`, `wisata`.
 
-**~~`awcms-astro` tidak butuh perubahan untuk ini.~~ SALAH — lihat [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.id.md).** Paragraf ini menegaskan "redirect-nya diselesaikan di repo ini sebelum rute-rutenya tercapai". Tidak, dan memang tidak bisa: `/kategori/**` disajikan `ahliweb/awcms-astro`, jadi permintaan untuknya TIDAK PERNAH mencapai middleware repo ini — satu-satunya tempat `awcms_seo_redirects` pernah diterapkan. Seluruh 67 entri yang di-commit diputar ulang terhadap server hasil build repo itu dan mengembalikan 404 dengan NOL header `Location`. ADR-0114 memindahkan 301-nya ke TEPI dan mempertahankan setiap tujuan yang dipilih ADR ini.
+**~~`awcms-astro` tidak butuh perubahan untuk ini.~~ SALAH — lihat [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.id.md).** Paragraf ini menegaskan "redirect-nya diselesaikan di repo ini sebelum rute-rutenya tercapai". Tidak, dan memang tidak bisa: `/kategori/**` disajikan `ahliweb/awcms-astro`, jadi permintaan untuknya TIDAK PERNAH mencapai middleware repo ini — satu-satunya tempat `awcms_seo_redirects` pernah diterapkan. Seluruh 67 entri yang di-commit PADA SAAT ITU diputar ulang terhadap server hasil build repo itu dan mengembalikan 404 dengan NOL header `Location` (petanya kini 68; yang ke-68 ditambahkan belakangan dan belum diputar ulang — lihat ADR-0114). ADR-0114 memindahkan 301-nya ke TEPI dan mempertahankan setiap tujuan yang dipilih ADR ini.
 
 **Yang tersisa di #711 BUKAN pemuatan tabel.** Petanya sudah dibangun dan di-commit (`data/seputarborneo-legacy/`), dan setiap source path serta target di dalamnya diperiksa terhadap `normalizeRedirectPath` / `validateRedirectTarget` / `isValidSlug` pada setiap kali test — yang tetap pemeriksaan BENTUK yang berguna meskipun, di bawah ADR-0114, fungsi-fungsi itu bukan lagi yang akan mengeksekusi redirect-nya. Yang tersisa: membuat kesepuluh kategori tujuan, meng-generate artefak tepi, dan mengawatkannya. Tidak ada aturan `cari_berita` yang perlu ditulis, dan tidak ada sitemap legacy untuk menuliskannya.

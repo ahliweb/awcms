@@ -30,7 +30,9 @@
  *
  * ADR-0114 decision 2 exists because the shipped article template matches 0 of
  * 25,029 legacy URLs: every legacy title contains a space, so every legacy URL
- * segment carries `_`, which `SLUG_PATTERN` forbids — and matching is by
+ * segment carries `_`, which the importer's inline slug regex in
+ * `legacy-import-record.ts` forbids (NOT the shared `SLUG_PATTERN` in
+ * `slug-policy.ts`, which the importer never calls) — and matching is by
  * equality, so no slug that can pass the validator can ever equal the indexed
  * segment. The last test seeds a post the way the importer would and asks for
  * the `/blog/{code}/{id}_{Raw_Slug}.html` path the retired-`/news` fallback
@@ -216,8 +218,9 @@ suite("cutover target liveness", () => {
 
   test("the retired-/news fallback target is reported MISSING, not ok", async () => {
     // ADR-0114 decision 2, stated as a test. `buildLegacyBlogPath` produces
-    // this shape, and no slug that can pass `SLUG_PATTERN` (lowercase, hyphens,
-    // no `_`) can ever equal it — so the fallback 301s into a 404 for all
+    // this shape, and no slug that can pass the importer's inline slug regex
+    // (lowercase, hyphens, no `_`) can ever equal it — so the fallback 301s
+    // into a 404 for all
     // 25,029 articles. That is `CUTOVER_VERDICT_REASON.target_missing` in its
     // own words, and this is the assertion that says so out loud.
     expect(

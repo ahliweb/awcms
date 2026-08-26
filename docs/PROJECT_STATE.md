@@ -387,11 +387,18 @@ pioneered directly here after the ADR-0047 freeze.)
 
   **The shipped article template matches 0 of 25,029 URLs, and fails worse than
   a 404.** Every legacy title contains a space, so every legacy URL segment
-  carries `_` — which `SLUG_PATTERN` at `legacy-import-record.ts:117` forbids,
-  while `normalizeRedirectPath` preserves case, decodes nothing, and matches by
-  equality. **No slug that can pass the validator can ever equal the indexed
-  segment**; the two slugs are disjoint by construction. Confirmed externally:
-  2,297 of 2,297 archived `/news/*.html` URLs use the underscore form. And an
+  carries `_` — which the legacy importer's **inline** slug regex in
+  `legacy-import-record.ts` forbids (`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))`
+  inside `validateLegacyPostImportRecord`; there is **no** symbol called
+  `SLUG_PATTERN` in that file — the only one is a private const in
+  `slug-policy.ts`, exposed as `isValidSlug`, which the importer never calls and
+  whose eight call sites are every OTHER tenant's posts, pages, terms and menu
+  keys), while `normalizeRedirectPath` preserves case, decodes nothing, and
+  matches by equality. **No slug that can pass the validator can ever equal the
+  indexed segment**; the two slugs are disjoint by construction. Confirmed
+  externally against the committed corpus: of its 2,301 archived `/news/*` URLs,
+  2,224 use the underscore form and **zero** use a hyphen form (this first read
+  "2,297 of 2,297"; the conclusion is unchanged). And an
   unmatched `/news/**` does not 404 — it falls through to
   `resolveRetiredNewsRedirect` and 301s into `/blog/{code}/{id}_{Raw_Slug}.html`,
   which is `CUTOVER_VERDICT_REASON.target_missing` in its own words: _"a 301 into
@@ -408,7 +415,9 @@ pioneered directly here after the ADR-0047 freeze.)
   matches, with a self-test that DID find a counterexample when shape 4 was
   artificially widened), confirmed live (`/cari_berita/sampit.html` and
   `/rubriks/?news=cari_berita&kt=sampit` differ on one line, `og:url`), and
-  confirmed against 5,174 archived URLs of which zero are `/cari_berita/*.html`.
+  confirmed against the committed corpus's 5,170 archived URLs — the round said
+  5,174 before the pull was committed, and zero are `/cari_berita/*.html` either
+  way.
   So ADR-0113's shape-4 decision decided an empty set, and #711's open item
   _"`cari_berita` rules — needs the live sitemap"_ is dissolved twice over. The
   residual matters: `/cari_berita/X.html` still serves 200 **as a shape-3 URL**
@@ -521,6 +530,10 @@ pioneered directly here after the ADR-0047 freeze.)
   broken for years. The entry is the 68th and gets its 23 siblings' treatment
   exactly (`/kategori/mitra-borneo`; destinations still ten), flagged
   `hrefLacksHtmlSuffix: true` with a test that checks the flag AGAINST the href.
+  **The committed map is therefore 68 entries and 63 rules, and every count
+  earlier in this round (67 entries, 62 rules, 32 dead, 27 reparented) is
+  superseded by that** — count
+  `data/seputarborneo-legacy/rubrik-redirects.json`, which a test now asserts at 68.
   The class was swept, not the instance: exactly one listing link literal in the
   tree lacks `.html`, the only other extensionless relative link being
   `./video/?video=5`, already out of scope.
@@ -548,9 +561,45 @@ pioneered directly here after the ADR-0047 freeze.)
   derivable from `legacy_source_id` and still growing, against a set that cannot
   be re-derived at all.
 
-  **What this round now leaves:** ADR-0114's generated id→path artefact and the
-  edge wiring, both of which need a live tenant. Everything else it opened is
-  closed.
+  **What this round now leaves.** The earlier version of this closing said
+  _"ADR-0114's generated id→path artefact and the edge wiring, both of which need
+  a live tenant — everything else it opened is closed"_. That was wrong in four
+  ways at once, and this is the shortest, most recent leave-list, so it is the
+  one that gets acted on. Split it by **what is code** and **what is
+  operational**, and reuse ADR-0114's own sentence: **this repo cannot close the
+  cutover. Any issue that claims the cutover is "done" when the artefact is
+  committed is claiming the wrong thing.**
+
+  **CODE, not yet written, and it lives here:**
+
+  1. **The id→path generator does not exist.** ADR-0114's article artefact is an
+     id → post path table generated from the tenant;
+     `data/seputarborneo-legacy/README.md` §"The ARTICLE map is deliberately NOT
+     committed" says it plainly — _"the generator is not built yet"_. A live
+     tenant is what it generates AGAINST, not what it is waiting for.
+  2. **An HTTP-level edge verifier does not exist either, and nothing here can
+     assert #599's DoD without it.** ADR-0114 records that
+     `blog:legacy:cutover:verify` _"is verifying the wrong layer"_ for these
+     URLs, and the script's own docstring now says it makes **zero HTTP
+     requests** and that reading the `Location` headers a reader would get _"is
+     a different tool, and this is not it"_. So for a `/kategori/**` target —
+     which is all 63 rubrik rules — the honest verdict this branch shipped is
+     `target_unverifiable`, and there is no tool in this repo that can turn that
+     into a pass.
+
+  **OPERATIONAL, and it does need a live tenant / the infrastructure:**
+
+  3. **The ten destination categories must exist in the tenant before cutover**,
+     or every rule 301s into a 404 — ADR-0113 §Consequences still says so on this
+     branch, and it is ADR-0111's failure one step over.
+  4. **~25,031 uploads / 4.1 GB of media**, which this round made a **hard
+     blocker** rather than a follow-up: the importer now refuses any row whose
+     `featuredImageSrc` the `--media-map` does not cover
+     (`scripts/blog-legacy-import.ts`, the `featuredMediaId === null` refusal),
+     and **25,029 of 25,029 rows have one**. Until that media is uploaded and
+     mapped, #599's import does not run at all — it reports 25,029 refusals.
+  5. **Wiring the artefact into Varnish/Coolify**, which is an infrastructure
+     change outside both repositories.
 
   The transferable shape, and it is a genuinely new one: **every previous round
   here asked "is this symbol called?" — this one found a decision whose target

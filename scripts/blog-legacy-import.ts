@@ -15,6 +15,10 @@
  * report is therefore what you get unless you say otherwise, and the run that
  * writes has to be typed on purpose.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * ## Input
  *
  * NDJSON on a path given by `--file=<path>`, one article per line. See

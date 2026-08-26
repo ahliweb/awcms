@@ -369,6 +369,10 @@ export async function syncPostInstitutionAssignments(
   // because the reader who fixed one has already read the other and remembers
   // agreeing with it.
   //
+  // NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+  // §Consequences, which is the single correction the figure points at. Left
+  // standing because this is an argument about scale, and it does not move.
+  //
   // Deliberately NOT deduplicated, for the reason its twin records: the unique
   // constraint refuses a repeated (post, institution) pair and refused one
   // before this change too. Swallowing it here would turn a loud constraint

@@ -322,8 +322,10 @@ describe("classifyPublicBlogTarget", () => {
   test("the retired-/news fallback target is classified, and it is a post slug", () => {
     // `buildLegacyBlogPath` produces `/blog/{code}/{id}_{Raw_Slug}.html`, and
     // the classifier calls it a post — which is the point: the lookup then
-    // MISSES (no slug containing `_` or an uppercase letter can pass
-    // `SLUG_PATTERN`), and the URL is reported `target_missing` rather than
+    // MISSES (no slug containing `_` or an uppercase letter can pass the
+    // importer's inline slug regex in `legacy-import-record.ts` — the rule that
+    // decides what is IN the column, not the shared `SLUG_PATTERN` in
+    // `slug-policy.ts`), and the URL is reported `target_missing` rather than
     // waved through. ADR-0114 decision 2 is the fix for the miss itself.
     expect(classify(`/blog/${TENANT_CODE}/48213_Banjir_Kobar.html`)).toEqual({
       kind: "post",

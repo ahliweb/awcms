@@ -307,6 +307,10 @@ async function resolveHostBasedRedirect(
  * outcome #599's Definition of Done forbids, produced by the code written to
  * satisfy it.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * Outside `/news/**` this order is unobservable: `resolveRetiredNewsRedirect`
  * returns `null` for every other path, so nothing else changes.
  *

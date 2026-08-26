@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:9f5218c10801eb40ff05f9520c28e199422b14c71a88a323633468f0eb280bb4 -->
+<!-- i18n-source-hash: sha256:3d29f67a44083a79a9a45eea76484685b88278eadd273e403cd1274136eb14f2 -->
 
 # AWCMS — Project State & Continuation
 
@@ -390,12 +390,19 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
   **Template artikel yang sudah dikirim mencocoki 0 dari 25.029 URL, dan gagal
   lebih buruk daripada 404.** Setiap judul legacy memuat spasi, jadi setiap segmen
-  URL legacy membawa `_` — yang dilarang `SLUG_PATTERN` di
-  `legacy-import-record.ts:117`, sementara `normalizeRedirectPath` mempertahankan
+  URL legacy membawa `_` — yang dilarang regex slug **INLINE** importer legacy di
+  `legacy-import-record.ts` (`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` di
+  dalam `validateLegacyPostImportRecord`; **TIDAK ADA** simbol bernama
+  `SLUG_PATTERN` di berkas itu — satu-satunya yang ada adalah const PRIVAT di
+  `slug-policy.ts`, yang diekspos sebagai `isValidSlug`, yang tak pernah dipanggil
+  importer itu dan kedelapan call site-nya adalah post, page, term serta kunci
+  menu SETIAP tenant LAIN), sementara `normalizeRedirectPath` mempertahankan
   kapitalisasi, tidak men-decode apa pun, dan mencocokkan dengan KESAMAAN.
   **Tidak ada slug lolos-validator yang bisa sama dengan segmen terindeks itu**;
-  kedua slug itu terpisah secara KONSTRUKSI. Dikonfirmasi dari luar: 2.297 dari
-  2.297 URL `/news/*.html` terarsip memakai bentuk underscore. Dan `/news/**` yang
+  kedua slug itu terpisah secara KONSTRUKSI. Dikonfirmasi dari luar terhadap
+  korpus ter-commit: dari 2.301 URL `/news/*` terarsip di dalamnya, 2.224 memakai
+  bentuk underscore dan **NOL** memakai bentuk hyphen (semula tertulis "2.297 dari
+  2.297"; kesimpulannya TIDAK berubah). Dan `/news/**` yang
   tak cocok tidak menjadi 404 — ia jatuh ke `resolveRetiredNewsRedirect` lalu 301
   ke `/blog/{code}/{id}_{Raw_Slug}.html`, yang persis
   `CUTOVER_VERDICT_REASON.target_missing` dengan kata-katanya sendiri: _"301 ke
@@ -413,8 +420,10 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   kandidat (0 kecocokan, dengan self-test yang MEMANG menemukan counterexample
   saat bentuk 4 sengaja dilebarkan), dikonfirmasi hidup
   (`/cari_berita/sampit.html` dan `/rubriks/?news=cari_berita&kt=sampit` berbeda
-  pada satu baris, `og:url`), dan dikonfirmasi terhadap 5.174 URL terarsip yang
-  NOL di antaranya `/cari_berita/*.html`. Jadi keputusan bentuk-4 ADR-0113
+  pada satu baris, `og:url`), dan dikonfirmasi terhadap 5.170 URL terarsip dalam
+  korpus ter-commit — putarannya menyebut 5.174 sebelum tarikannya di-commit, dan
+  NOL di antaranya `/cari_berita/*.html` dengan angka mana pun. Jadi keputusan
+  bentuk-4 ADR-0113
   memutuskan himpunan KOSONG, dan butir terbuka #711 _"aturan `cari_berita` —
   butuh sitemap hidup"_ larut DUA KALI. Sisanya penting: `/cari_berita/X.html`
   tetap menyajikan 200 **sebagai URL bentuk-3** dan TIDAK BOLEH menjadi redirect
@@ -540,6 +549,11 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   href-nya. KELASNYA yang disapu, bukan instansnya: tepat satu literal tautan
   listing di pohon itu tak ber-`.html`, dan satu-satunya tautan relatif
   tanpa-ekstensi lainnya adalah `./video/?video=5`, yang memang di luar cakupan.
+  **Karena itu peta ter-commit-nya 68 entri dan 63 aturan, dan setiap hitungan
+  yang lebih awal di putaran ini (67 entri, 62 aturan, 32 mati, 27 dipindah ke
+  induk) DIGANTIKAN olehnya** — hitung
+  `data/seputarborneo-legacy/rubrik-redirects.json`, yang kini di-assert sebuah
+  test pada 68.
 
   **Tarikan CDX-nya 5.170, bukan 5.174** — di-commit apa adanya sebagai
   `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`. `showNumPages=true`
@@ -565,9 +579,48 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   25.029 baris yang bisa diturunkan dari `legacy_source_id` dan masih bertambah,
   melawan himpunan yang sama sekali tak bisa diturunkan ulang.
 
-  **Yang kini ditinggalkan putaran ini:** artefak id→path ter-generate milik
-  ADR-0114 dan pengawatan tepinya, keduanya butuh tenant hidup. Selebihnya, semua
-  yang ia buka sudah ditutup.
+  **Yang kini ditinggalkan putaran ini.** Versi lebih awal penutup ini berbunyi
+  _"artefak id→path ter-generate milik ADR-0114 dan pengawatan tepinya, keduanya
+  butuh tenant hidup — selebihnya semua yang ia buka sudah ditutup"_. Itu SALAH
+  dalam empat hal sekaligus, dan inilah daftar-sisa terpendek dan terbaru,
+  sehingga inilah yang akan dieksekusi orang. Belah menurut **mana yang KODE**
+  dan **mana yang OPERASIONAL**, dan pakai ulang kalimat ADR-0114 sendiri:
+  **repo ini TIDAK BISA menutup cutover-nya. Issue mana pun yang menyatakan
+  cutover "selesai" begitu artefaknya di-commit sedang menyatakan hal yang
+  keliru.**
+
+  **KODE, belum ditulis, dan tempatnya DI SINI:**
+
+  1. **Generator id→path itu TIDAK ADA.** Artefak artikel ADR-0114 adalah tabel
+     id → path post yang di-generate dari tenant;
+     `data/seputarborneo-legacy/README.md` §"The ARTICLE map is deliberately NOT
+     committed" menyatakannya terus terang — _"the generator is not built yet"_.
+     Tenant hidup adalah apa yang ia generate TERHADAPnya, bukan apa yang sedang
+     ia tunggu.
+  2. **Verifier tingkat-HTTP untuk tepi juga TIDAK ADA, dan tanpanya tak ada apa
+     pun di sini yang bisa menegaskan DoD #599.** ADR-0114 mencatat bahwa
+     `blog:legacy:cutover:verify` _"memverifikasi lapis yang SALAH"_ untuk URL-URL
+     ini, dan docstring skripnya sendiri kini menyatakan ia melakukan **NOL
+     permintaan HTTP** dan bahwa membaca header `Location` yang akan diterima
+     pembaca _"adalah tool yang BERBEDA, dan ini bukan tool itu"_. Jadi untuk
+     tujuan `/kategori/**` — yaitu seluruh 63 aturan rubrik — vonis jujur yang
+     dikirim branch ini adalah `target_unverifiable`, dan tidak ada alat di repo
+     ini yang bisa mengubahnya menjadi lulus.
+
+  **OPERASIONAL, dan ini memang butuh tenant hidup / infrastrukturnya:**
+
+  3. **Kesepuluh kategori tujuan WAJIB sudah ada di tenant sebelum cutover**, atau
+     setiap aturan 301 ke dalam 404 — ADR-0113 §Konsekuensi masih menyatakannya di
+     branch ini, dan itu kegagalan ADR-0111 satu langkah di sebelahnya.
+  4. **~25.031 unggahan / 4,1 GB media**, yang oleh putaran ini dijadikan
+     **PEMBLOKIR KERAS**, bukan tindak lanjut: importer kini MENOLAK setiap baris
+     yang `featuredImageSrc`-nya tidak tercakup `--media-map`
+     (`scripts/blog-legacy-import.ts`, penolakan `featuredMediaId === null`), dan
+     **25.029 dari 25.029 baris memilikinya**. Sampai media itu diunggah dan
+     dipetakan, impor #599 sama sekali tidak berjalan — ia melaporkan 25.029
+     penolakan.
+  5. **Mengawatkan artefaknya ke Varnish/Coolify**, sebuah perubahan
+     infrastruktur di luar kedua repositori.
 
   Bentuk yang bisa dipakai ulang, dan ini benar-benar baru: **setiap putaran
   sebelumnya di sini bertanya "apakah simbol ini DIPANGGIL?" — putaran ini

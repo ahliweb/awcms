@@ -24,6 +24,10 @@
  * which no post answers. A redirect into a 404, which is what #599's Definition
  * of Done exists to forbid.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * ## Why the fallback must return the host-based result, not a fresh value
  *
  * Strategy 2's `passthrough` carries the 404-capture context that feeds

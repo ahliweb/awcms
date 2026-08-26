@@ -25,17 +25,23 @@ that has a redirect table.
 middleware runs in **this** application. Everything it can redirect is a request
 this application received.
 
-ADR-0113 chose `/kategori/{slug}` as the destination for all 62 rubrik rules.
+ADR-0113 chose `/kategori/{slug}` as the destination for every rubrik rule —
+**63** of them today, over 68 committed entries (62 over 67 when this ADR was
+first written; the 68th entry landed later on the same branch, see §Consequences).
 `/kategori/**` is served by `ahliweb/awcms-astro`, which is `output: "static"`,
 has **no middleware file at all**, declares no `redirects:` key, and whose
 production entrypoint `server/penyaji.mjs` contains **zero** occurrences of
 `301` or `Location`. `grep -rn seputarborneo` over the whole of that repo's
 `src/` and `docs/` returns **nothing**.
 
-This was not reasoned about — it was executed. All 67 committed rubrik entries
-were replayed against the real built server: **404 on every one, with zero
-`Location` headers**. A rule written into this repo's table is never consulted
-for a request that never arrives here.
+This was not reasoned about — it was executed. All **67** rubrik entries that
+were committed at the time were replayed against the real built server: **404 on
+every one, with zero `Location` headers**. A rule written into this repo's table
+is never consulted for a request that never arrives here. (The map is **68**
+entries now — `/Mitra-Borneo/Pemkab%20Lamandau.html` was added afterwards and has
+**not** been replayed. It is a `/kategori/mitra-borneo` target like its 23
+siblings, all of which were, so the finding stands; the replay count is 67 and is
+left at 67 rather than quietly restated as 68.)
 
 So the sentence in ADR-0113 §Consequences was exactly backwards. `awcms-astro`
 does not "need no change because the redirect is resolved here" — under that
@@ -46,16 +52,40 @@ nothing.
 
 The legacy article URL is `rawurlencode(str_replace(' ', '_', judul))`, so every
 segment carries `_`. All **25,029** legacy titles contain at least one space, so
-all 25,029 segments carry at least one `_`. `SLUG_PATTERN` at
-`src/modules/blog-content/domain/legacy-import-record.ts:117` is
-`/^[a-z0-9]+(?:-[a-z0-9]+)*$/` — it **forbids** `_` and forbids capitals.
-`normalizeRedirectPath` preserves case and decodes nothing, and matching is by
-equality (`application/redirect-directory.ts:133`).
+all 25,029 segments carry at least one `_`. The rule that refuses them is an
+**inline regex literal** inside `validateLegacyPostImportRecord` —
+`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` in
+`src/modules/blog-content/domain/legacy-import-record.ts` — and it **forbids**
+`_` and forbids capitals. `normalizeRedirectPath` preserves case and decodes
+nothing, and matching is by equality (`application/redirect-directory.ts:133`).
+
+**Name that symbol precisely, because the wrong name sends an agent to the wrong
+file.** There is **no** `SLUG_PATTERN` in `legacy-import-record.ts`. The only
+`SLUG_PATTERN` in this repo is a **private** const in
+`src/modules/blog-content/domain/slug-policy.ts`, exported only behind
+`isValidSlug` and imported by eight call sites — posts, pages, terms, menu keys,
+templates, the content-quality checklist and the rubrik-map builder — **none of
+which is the legacy importer**. The importer carries its own copy of the same
+expression instead of calling it. The two are identical today and nothing holds
+them together, which is a latent divergence worth collapsing; collapsing it is
+code, and it is deliberately not done in the change that records this decision.
 
 **No slug that can pass the validator can ever equal the indexed segment.** The
-two slugs are disjoint by construction, not by accident. Externally confirmed:
-of 2,297 archived `/news/*.html` URLs, 2,297 use the underscore form and 0 use a
-hyphen form.
+two slugs are disjoint by construction, not by accident. Externally confirmed
+against the corpus this branch commits,
+`data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` (**5,170** distinct URLs):
+of its **2,301** `/news/*` URLs, **2,224** are the underscore article form and
+**zero** are a hyphen form.
+
+> **Back-annotated.** This paragraph first read "2,297 of 2,297", measured before
+> the corpus was pulled in full and committed. The committed artefact is the
+> authority now — 5,170 lines, not 5,174 — and the numbers above are counted
+> from it, so a future auditor can reconcile them by counting the same file. The
+> **conclusion is unchanged**: zero hyphen-form URLs, so nothing about the
+> disjointness argument moves. The other 77 `/news/*` URLs are 75
+> `/news/news/{id}_…` doubled-segment artefacts plus the bare `/news/` and one
+> `/news/{id}` with no title segment at all — none of them a hyphen form, and
+> all decided in `data/seputarborneo-legacy/README.md`.
 
 And the miss is worse than a miss. An unmatched `/news/**` falls through to
 `resolveRetiredNewsRedirect`
@@ -132,7 +162,7 @@ not a commit.
   artefact; the last step happens in infrastructure configuration that lives
   outside both repositories. Any issue that claims the cutover is "done" when
   the artefact is committed is claiming the wrong thing.
-- **The 62 rubrik rules keep their targets and change their carrier.** No
+- **The 63 rubrik rules keep their targets and change their carrier.** No
   destination changes, so the ten destination categories are still a
   precondition — but they are now a precondition for the **edge** map, not for
   a table load here.
@@ -152,8 +182,22 @@ not a commit.
   **25,029**, and the live legacy site is at id ≥ 25,474. Documents that make a
   live claim are corrected; changesets and merged ADRs are **not** rewritten,
   because they record what was believed when they were written and rewriting
-  them would destroy the only evidence of when the belief changed. This
-  paragraph is the correction they point at.
+  them would destroy the only evidence of when the belief changed.
+  **"They point at this paragraph" is now a fact rather than a hope.** Every
+  editable source comment carrying the figure — in `legacy-import-directory.ts`,
+  `legacy-import-record.ts`, `legacy-term-map.ts`, `legacy-html-conversion.ts`,
+  `blog-term-list-query.ts`, `blog-post-directory.ts`,
+  `blog-taxonomy-directory.ts`, `institution-directory.ts`,
+  `src/pages/api/v1/blog/terms/index.ts`, `redirect-precedence.ts`,
+  `cutover-verification.ts`, `redirect-resolution-service.ts` and
+  `scripts/blog-legacy-import.ts` — carries a one-line pointer here. The figure
+  itself is left standing in them: the comments are arguments about scale, and
+  25,029 does not change any of them. The two migration headers
+  (`sql/138_awcms_blog_legacy_provenance.sql`,
+  `sql/143_awcms_blog_list_ordering_indexes.sql`) keep the old figure with **no**
+  pointer, and that is a reason rather than an omission: **an applied migration
+  is immutable in this repo** — editing `sql/NNN` after it has run, even a
+  comment, blocks `db:migrate` on a live deployment.
 
 ## Alternatives considered
 
@@ -172,7 +216,7 @@ exists to preserve.
 
 **This repo carries the redirects, as ADR-0113 assumed.** It works exactly as
 built — the table, the importer and the middleware are all correct — but only
-for paths this application serves. Buying that means moving all 62 rubrik
+for paths this application serves. Buying that means moving all 63 rubrik
 targets from `/kategori/{slug}` to `/blog/{tenantCode}/category/{slug}`, which
 sends every legacy rubrik URL to the **wrong half of the split vocabulary** and
 would require restating ADR-0071's `/blog/**` here, `/news/**` there boundary
@@ -180,7 +224,17 @@ for this domain. Rejected: a redirect layer chosen because it is the layer we
 already own is how a URL vocabulary decision gets made by accident.
 
 **Write the 25,029 exact article rules anyway, with the slugs fixed.** Rejected
-by arithmetic before it is rejected by taste: the fix would be to relax
-`SLUG_PATTERN` to admit `_` and capitals, which changes what a slug **is** for
-every tenant in the product in order to serve one migration. And it would still
-be 25,029 rows that go stale the first time an editor renames an article.
+by arithmetic before it is rejected by taste: the fix would be to relax the slug
+rule to admit `_` and capitals, which changes what a slug **is** in order to
+serve one migration. And it would still be 25,029 rows that go stale the first
+time an editor renames an article.
+
+Which rule matters, and this is the trap: the expression that refuses these rows
+is the **inline literal in `legacy-import-record.ts`**, not `SLUG_PATTERN` in
+`slug-policy.ts`. They are two copies of one expression. Grepping `SLUG_PATTERN`
+lands in `slug-policy.ts` and widening it there changes what a slug is for every
+tenant's posts, pages, terms and menu keys — through all eight `isValidSlug` call
+sites — while the importer goes on refusing all 25,029 rows exactly as before.
+That is the wrong half of the pair loosened and the right half untouched: this
+repo's recurring class, **grep the CALL, not the definition**, and here the name
+in the record was not even the definition.

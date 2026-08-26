@@ -19,6 +19,11 @@ import {
  * replaced, or 23,906 rows land in the lossy shape and the marks are gone
  * before anyone reads them.
  *
+ * NOTE ON "23,906" (every occurrence in this file): the measured snapshot is
+ * 25,029 — see ADR-0114 §Consequences, which is the single correction the
+ * figure points at. Left standing because these are arguments about scale, and
+ * scale does not move.
+ *
  * ## Rejection, not sanitization — the whole point
  *
  * A sanitizer is a guess about what an attacker meant. A rejection is a

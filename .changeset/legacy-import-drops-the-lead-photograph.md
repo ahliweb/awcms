@@ -4,9 +4,10 @@
 
 fix(blog): the legacy importer dropped the lead photograph of all 25,029 articles, and its image work list was collected after the gate that skips it
 
-Four defects in `bun run blog:legacy:import`, found while closing Issue #599 /
-Issue #711. Each was proved by applying the mutation and running it, not by
-reading the code.
+Four defects in `bun run blog:legacy:import`, found while working on Issue #599
+/ Issue #711 (neither of which this change closes — per ADR-0114 this repo
+cannot). Each was proved by applying the mutation and running it, not by reading
+the code.
 
 **The lead photograph was never carried.** `featured_media_id` has existed since
 `sql/035:46` and `public-content-port-adapter.ts` has been serving it to

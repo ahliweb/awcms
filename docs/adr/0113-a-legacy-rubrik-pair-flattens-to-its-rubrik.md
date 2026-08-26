@@ -8,7 +8,7 @@
 - **Amended:** 26 August 2026 — the normalisation section was factually wrong (`seo_title()` is never called); the decision is unchanged. See below.
 - **Amended again:** 26 August 2026 — **the shape-4 decision is RETRACTED** (that URL family has never existed, see below), and the claim that `awcms-astro` needs no change is **false** and is replaced by [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md). The flattening decision for shapes 2 and 3 is unchanged.
 - **Amended by:** [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md) — the 301s are executed at the **edge**, not in either application, and a legacy article URL is keyed on its leading digits rather than on an exact path. The destinations this ADR chose are unchanged; their carrier is not.
-- **Related:** Issue #711 (the half of the SeputarBorneo cutover this unblocks); Issue #599 (the half that was already cutover-ready); ADR-0045 / ADR-0070 (the public URL vocabulary is split, and the news archive is rendered by `ahliweb/awcms-astro`); ADR-0039 (redirect governance); ADR-0111 (a rule that cannot fire is worse than no rule); `sql/060` §2 (exact-path rules only, by design); PRD §9.2 (no chain longer than one hop)
+- **Related:** Issue #711 (the half of the SeputarBorneo cutover this unblocks); Issue #599 (the ARTICLE half — this ADR originally called it "already cutover-ready" and that was **false**: the shipped article template matches **0 of 25,029** URLs and an unmatched `/news/**` 301s into a 404, see [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)); ADR-0045 / ADR-0070 (the public URL vocabulary is split, and the news archive is rendered by `ahliweb/awcms-astro`); ADR-0039 (redirect governance); ADR-0111 (a rule that cannot fire is worse than no rule); `sql/060` §2 (exact-path rules only, by design); PRD §9.2 (no chain longer than one hop)
 
 ## Context
 
@@ -81,8 +81,13 @@ like a function that runs. **Grep for the CALL, not the definition.**
 Nothing in the legacy tree generates a rubrik link from a column value. Every
 one is a hand-typed literal, which is what makes them **enumerable and
 complete** rather than a sample — a crawler could only ever reach what was
-linked. There are **67**, and they are committed with their provenance at
-`data/seputarborneo-legacy/rubrik-redirects.json`.
+linked. There are **68**, and they are committed with their provenance at
+`data/seputarborneo-legacy/rubrik-redirects.json` — count that file, it is the
+authority. (This ADR was written against **67**; a later sweep of the legacy
+tree found `Mitra-Borneo/Pemkab Lamandau`, linked by the nav **without** the
+`.html` the original extraction keyed on, and it is the 68th. The counts in this
+section are back-annotated to the committed map; no `targetPath` was rewritten
+and the destination set is still ten.)
 
 Two properties of that set decide the work:
 
@@ -92,7 +97,7 @@ Two properties of that set decide the work:
   `normalized_source_path` by **equality** and `normalizeRedirectPath` preserves
   case, so **both spellings need their own rule**. Five rubriks were linked in
   both casings.
-- **32 of the 67 resolved to ZERO articles** — dead nav and footer links, for
+- **33 of the 68 resolved to ZERO articles** — dead nav and footer links, for
   years, serving HTTP 200 with an empty listing rather than a 404, so search
   engines will have indexed them as thin pages. Eight are leftovers from the
   template this site was built from and name places in **South Sumatra**
@@ -102,13 +107,13 @@ Two properties of that set decide the work:
   whitespace difference.
 
 **A dead URL 301s to its first segment's archive when that segment resolves** —
-27 of the 32, an improvement on an empty 200 for a reader and a consolidation
+28 of the 33, an improvement on an empty 200 for a reader and a consolidation
 for a crawler. The remaining **5 orphans** (`rubrik/kuliner`,
 `rubrik/Olah Raga`, `rubrik/pariwisata`, `rubrik/travel`, `rubrik/Viral`) have
 nothing to point at and get **no rule**; 410 is not expressible, since
 `RedirectStatusCode` is 301/302/307/308 only, so the alternative to a rule is a 404.
 
-That leaves **62 rules over 10 destination categories** — and because the
+That leaves **63 rules over 10 destination categories** — and because the
 decision drops `kt`, every URL of either shape lands on its parent rubrik's
 archive, so the whole map is a function of the first segment alone.
 
@@ -140,8 +145,12 @@ Verified three ways rather than argued:
 - **Live.** `/cari_berita/sampit.html` and `/rubriks/?news=cari_berita&kt=sampit`
   differ on exactly one line of output (`og:url`). The first is being served as a
   **shape-3** URL.
-- **Corpus.** **Zero** of the 5,174 archived URLs are `/cari_berita/*.html`, and
-  no template in the legacy tree emits such a link.
+- **Corpus.** **Zero** of the **5,170** archived URLs are `/cari_berita/*.html`,
+  and no template in the legacy tree emits such a link. (This bullet first said
+  5,174, measured before the pull was committed. The corpus is now committed
+  verbatim as `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` and is
+  5,170 lines — count it. The **conclusion is unchanged**: zero
+  `/cari_berita/*.html`, so the retraction below stands on the same evidence.)
 
 **Two things this dissolves.** #711's open item _"`cari_berita` rules — needs the
 live sitemap"_ is dissolved twice over: the rule never fired, and there is no
@@ -178,6 +187,6 @@ defence; nothing in this cutover writes a target with a query any more.
 
 This paragraph originally said "47-or-fewer", and that number was never the go-live checklist. **47 was an upper bound on `jenis_rubrik`, not a count of destinations**, and it was itself a MariaDB `utf8mb4_unicode_ci` figure: a case-insensitive `DISTINCT` reports 47/46, while a JS map keyed by exact name over the same rows sees **48/45**. The built map has **10** distinct destinations, named in `data/seputarborneo-legacy/README.md`: `bisnis`, `budaya`, `daerah`, `hukum`, `mitra-borneo`, `nasional`, `olahraga`, `politik`, `provinsi`, `wisata`.
 
-**~~`awcms-astro` needs no change for this.~~ FALSE — see [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md).** This paragraph asserted that "the redirect is resolved in this repo before its routes are reached". It is not, and it cannot be: `/kategori/**` is served by `ahliweb/awcms-astro`, so a request for it never reaches this repo's middleware — the only place `awcms_seo_redirects` is ever applied. All 67 committed entries were replayed against that repo's real built server and returned 404 with zero `Location` headers. ADR-0114 moves the 301s to the edge and keeps every destination this ADR chose.
+**~~`awcms-astro` needs no change for this.~~ FALSE — see [ADR-0114](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md).** This paragraph asserted that "the redirect is resolved in this repo before its routes are reached". It is not, and it cannot be: `/kategori/**` is served by `ahliweb/awcms-astro`, so a request for it never reaches this repo's middleware — the only place `awcms_seo_redirects` is ever applied. All 67 entries committed at that moment were replayed against that repo's real built server and returned 404 with zero `Location` headers (the map is 68 now; the 68th was added afterwards and has not been replayed — see ADR-0114). ADR-0114 moves the 301s to the edge and keeps every destination this ADR chose.
 
 **What remains on #711 is not a table load.** The map is built and committed (`data/seputarborneo-legacy/`), and every source path and target in it is checked against `normalizeRedirectPath` / `validateRedirectTarget` / `isValidSlug` on every test run — which remains a useful shape check even though, under ADR-0114, those are no longer the functions that will execute the redirect. What is left is creating the ten destination categories, generating the edge artefact, and wiring it in. There are no `cari_berita` rules to write, and no legacy sitemap to write them from.

@@ -15,6 +15,10 @@
  * One line per article also means the reader never holds 23,906 articles in
  * memory, and a malformed line costs one row rather than the run.
  *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
+ *
  * ## Rejection is per-row and reported, never silent
  *
  * FR-DSC of this issue is explicit: the converter must REJECT rather than

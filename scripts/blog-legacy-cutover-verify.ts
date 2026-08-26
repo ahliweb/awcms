@@ -56,13 +56,16 @@
  *
  * Two ways that gap has already bitten, both recorded in ADR-0114:
  *
- *  - **A different repo serves the target.** ADR-0113's 62 rubrik rules point
- *    at `/kategori/**`, which is served by `ahliweb/awcms-astro` — a separate
- *    `output: "static"` deployment with no middleware file at all. No lookup
- *    this job can make would ever notice. All 67 committed entries were later
- *    replayed against that repo's real built server and returned 404 with zero
- *    `Location` headers, while this job had nothing to say about it. That is
- *    why an unlookupable destination is now `target_unverifiable` and not `ok`.
+ *  - **A different repo serves the target.** ADR-0113's 63 rubrik rules — over
+ *    the 68 entries in `data/seputarborneo-legacy/rubrik-redirects.json`; count
+ *    that file rather than trusting this comment — point at `/kategori/**`,
+ *    which is served by `ahliweb/awcms-astro`, a separate `output: "static"`
+ *    deployment with no middleware file at all. No lookup this job can make
+ *    would ever notice. The 67 entries committed at the time were replayed
+ *    against that repo's real built server and returned 404 with zero
+ *    `Location` headers (the 68th was added afterwards and has not been
+ *    replayed), while this job had nothing to say about it. That is why an
+ *    unlookupable destination is now `target_unverifiable` and not `ok`.
  *
  *  - **A different LAYER serves the redirect.** ADR-0114 puts the SeputarBorneo
  *    legacy 301s at the EDGE (Coolify/Varnish), the only layer that can collapse

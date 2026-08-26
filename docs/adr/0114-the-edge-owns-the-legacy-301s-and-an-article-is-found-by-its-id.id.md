@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0114-the-edge-owns-the-legacy-301s-and-an-article-is-found-by-its-id.md)
 
-<!-- i18n-source-hash: sha256:8804aac81359afb174fe1ac7f1ea14da8d518f14ce889304df0e4418a85e0386 -->
+<!-- i18n-source-hash: sha256:a97eac2aee23b7398457e2e92848f9a1421fb6b39da15c89eb1fc3aedbdf52cb -->
 
 # ADR-0114 — Tepi (edge) yang memikul 301 legacy, dan artikel legacy dicari lewat ID-nya
 
@@ -27,17 +27,24 @@ karena repo inilah yang punya tabel redirect.
 Middleware itu berjalan di aplikasi **INI**. Semua yang bisa di-redirect olehnya
 adalah permintaan yang diterima aplikasi ini.
 
-ADR-0113 memilih `/kategori/{slug}` sebagai tujuan seluruh 62 aturan rubrik.
+ADR-0113 memilih `/kategori/{slug}` sebagai tujuan SETIAP aturan rubrik — **63**
+aturan hari ini, atas 68 entri ter-commit (62 atas 67 saat ADR ini pertama
+ditulis; entri ke-68 mendarat belakangan di branch yang sama, lihat §Konsekuensi).
 `/kategori/**` disajikan oleh `ahliweb/awcms-astro`, yang ber-`output: "static"`,
 **tidak punya berkas middleware sama sekali**, tidak mendeklarasikan kunci
 `redirects:`, dan entrypoint produksinya `server/penyaji.mjs` memuat **NOL**
 kemunculan `301` maupun `Location`. `grep -rn seputarborneo` atas seluruh `src/`
 dan `docs/` repo itu mengembalikan **nihil**.
 
-Ini bukan hasil penalaran — ini dijalankan. Seluruh 67 entri rubrik yang
-di-commit diputar ulang terhadap server hasil build yang sesungguhnya: **404 pada
-setiap satunya, dengan NOL header `Location`**. Aturan yang ditulis ke tabel repo
-ini tidak pernah dikonsultasikan untuk permintaan yang tidak pernah tiba di sini.
+Ini bukan hasil penalaran — ini dijalankan. Seluruh **67** entri rubrik yang saat
+itu sudah di-commit diputar ulang terhadap server hasil build yang sesungguhnya:
+**404 pada setiap satunya, dengan NOL header `Location`**. Aturan yang ditulis ke
+tabel repo ini tidak pernah dikonsultasikan untuk permintaan yang tidak pernah
+tiba di sini. (Petanya kini **68** entri — `/Mitra-Borneo/Pemkab%20Lamandau.html`
+ditambahkan SETELAH itu dan **belum** diputar ulang. Ia bertujuan
+`/kategori/mitra-borneo` seperti 23 saudaranya, yang semuanya sudah diputar
+ulang, jadi temuannya tetap berdiri; angka pemutaran ulang adalah 67 dan
+dibiarkan 67, bukan diam-diam dinyatakan ulang sebagai 68.)
 
 Jadi kalimat di ADR-0113 §Konsekuensi itu persis terbalik. `awcms-astro` bukan
 "tidak butuh perubahan karena redirect-nya diselesaikan di sini" — di bawah
@@ -48,17 +55,43 @@ ia tidak menyelesaikan apa pun.
 
 URL artikel legacy adalah `rawurlencode(str_replace(' ', '_', judul))`, jadi
 setiap segmennya membawa `_`. Seluruh **25.029** judul legacy memuat sedikitnya
-satu spasi, jadi seluruh 25.029 segmen membawa sedikitnya satu `_`.
-`SLUG_PATTERN` di
-`src/modules/blog-content/domain/legacy-import-record.ts:117` adalah
-`/^[a-z0-9]+(?:-[a-z0-9]+)*$/` — ia **MELARANG** `_` dan melarang kapital.
-`normalizeRedirectPath` mempertahankan kapitalisasi dan tidak men-decode apa pun,
-dan pencocokannya dengan KESAMAAN (`application/redirect-directory.ts:133`).
+satu spasi, jadi seluruh 25.029 segmen membawa sedikitnya satu `_`. Aturan yang
+menolaknya adalah **literal regex INLINE** di dalam
+`validateLegacyPostImportRecord` —
+`if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))` pada
+`src/modules/blog-content/domain/legacy-import-record.ts` — dan ia **MELARANG**
+`_` serta melarang kapital. `normalizeRedirectPath` mempertahankan kapitalisasi
+dan tidak men-decode apa pun, dan pencocokannya dengan KESAMAAN
+(`application/redirect-directory.ts:133`).
+
+**Sebut simbol itu dengan TEPAT, karena nama yang salah mengirim agen ke berkas
+yang salah.** **TIDAK ADA** `SLUG_PATTERN` di `legacy-import-record.ts`.
+Satu-satunya `SLUG_PATTERN` di repo ini adalah const **privat** di
+`src/modules/blog-content/domain/slug-policy.ts`, yang hanya diekspor di balik
+`isValidSlug` dan diimpor oleh delapan call site — post, page, term, kunci menu,
+template, checklist mutu konten, dan pembangun peta rubrik — dan **tak satu pun
+di antaranya importer legacy**. Importer itu membawa SALINANNYA SENDIRI atas
+ekspresi yang sama alih-alih memanggilnya. Keduanya identik hari ini dan tidak
+ada yang mengikatnya, sebuah divergensi laten yang layak diruntuhkan; meruntuhkannya
+adalah KODE, dan sengaja tidak dikerjakan dalam perubahan yang mencatat keputusan ini.
 
 **Tidak ada slug yang bisa lolos validator yang bisa sama dengan segmen
 terindeks itu.** Kedua slug itu terpisah SECARA KONSTRUKSI, bukan kebetulan.
-Dikonfirmasi dari luar: dari 2.297 URL `/news/*.html` yang terarsip, 2.297
-memakai bentuk underscore dan 0 memakai bentuk hyphen.
+Dikonfirmasi dari luar terhadap korpus yang di-commit branch ini,
+`data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` (**5.170** URL berbeda):
+dari **2.301** URL `/news/*`-nya, **2.224** berbentuk artikel underscore dan
+**NOL** berbentuk hyphen.
+
+> **Dianotasi ulang.** Paragraf ini semula berbunyi "2.297 dari 2.297", diukur
+> sebelum korpusnya ditarik utuh dan di-commit. Artefak ter-commit itulah
+> otoritasnya sekarang — 5.170 baris, bukan 5.174 — dan angka di atas dihitung
+> DARINYA, sehingga auditor berikutnya bisa merekonsiliasinya dengan menghitung
+> berkas yang sama. **Kesimpulannya TIDAK berubah**: nol URL bentuk hyphen, jadi
+> tidak ada bagian dari argumen keterpisahan itu yang bergeser. Ke-77 URL
+> `/news/*` sisanya adalah 75 artefak segmen-ganda `/news/news/{id}_…` plus
+> `/news/` telanjang dan satu `/news/{id}` tanpa segmen judul sama sekali —
+> tak satu pun bentuk hyphen, dan semuanya diputuskan di
+> `data/seputarborneo-legacy/README.md`.
 
 Dan meleset di sini lebih buruk daripada sekadar meleset. `/news/**` yang tak
 tercocokkan jatuh ke `resolveRetiredNewsRedirect`
@@ -138,7 +171,7 @@ OPERASIONAL, bukan sebuah commit.
   memverifikasi artefaknya; langkah terakhir terjadi di konfigurasi infrastruktur
   yang hidup di luar kedua repositori. Issue mana pun yang menyatakan cutover
   "selesai" begitu artefaknya di-commit sedang menyatakan hal yang keliru.
-- **Ke-62 aturan rubrik mempertahankan tujuannya dan berganti PEMIKUL.** Tidak
+- **Ke-63 aturan rubrik mempertahankan tujuannya dan berganti PEMIKUL.** Tidak
   ada tujuan yang berubah, jadi kesepuluh kategori tujuan tetap prasyarat — hanya
   saja kini prasyarat bagi peta **TEPI**, bukan bagi pemuatan tabel di sini.
 - **`blog:legacy:cutover:verify` memverifikasi lapis yang SALAH** untuk URL-URL
@@ -158,7 +191,21 @@ OPERASIONAL, bukan sebuah commit.
   membuat klaim HIDUP dikoreksi; changeset dan ADR ter-merge **TIDAK** ditulis
   ulang, karena keduanya merekam apa yang diyakini saat ditulis dan menulis
   ulangnya akan memusnahkan satu-satunya bukti kapan keyakinan itu berubah.
-  Paragraf inilah koreksi yang mereka tunjuk.
+  **"Mereka menunjuk paragraf ini" kini FAKTA, bukan harapan.** Setiap komentar
+  sumber yang bisa disunting dan membawa angka itu — di `legacy-import-directory.ts`,
+  `legacy-import-record.ts`, `legacy-term-map.ts`, `legacy-html-conversion.ts`,
+  `blog-term-list-query.ts`, `blog-post-directory.ts`,
+  `blog-taxonomy-directory.ts`, `institution-directory.ts`,
+  `src/pages/api/v1/blog/terms/index.ts`, `redirect-precedence.ts`,
+  `cutover-verification.ts`, `redirect-resolution-service.ts` dan
+  `scripts/blog-legacy-import.ts` — membawa penunjuk satu baris ke sini.
+  Angkanya sendiri DIBIARKAN berdiri di sana: komentar-komentar itu argumen
+  tentang SKALA, dan 25.029 tidak mengubah satu pun di antaranya. Kedua header
+  migration (`sql/138_awcms_blog_legacy_provenance.sql`,
+  `sql/143_awcms_blog_list_ordering_indexes.sql`) mempertahankan angka lama
+  **TANPA** penunjuk, dan itu ALASAN, bukan kelalaian: **migration terapan itu
+  IMMUTABLE di repo ini** — menyunting `sql/NNN` setelah ia berjalan, bahkan
+  komentarnya, memblokir `db:migrate` pada deployment yang hidup.
 
 ## Alternatif yang dipertimbangkan
 
@@ -179,7 +226,7 @@ menjadi alasan keberadaan seluruh cutover ini.
 **Repo ini memikul redirect-nya, sebagaimana diasumsikan ADR-0113.** Ia bekerja
 persis sebagaimana dibangun — tabelnya, importer-nya dan middleware-nya semuanya
 benar — tetapi hanya untuk path yang disajikan aplikasi ini. Membelinya berarti
-memindahkan seluruh 62 tujuan rubrik dari `/kategori/{slug}` ke
+memindahkan seluruh 63 tujuan rubrik dari `/kategori/{slug}` ke
 `/blog/{tenantCode}/category/{slug}`, yang mengirim setiap URL rubrik legacy ke
 **paruh yang SALAH dari kosakata yang dibelah**, dan akan menuntut penyataan
 ulang batas ADR-0071 (`/blog/**` di sini, `/news/**` di sana) untuk domain ini.
@@ -188,6 +235,17 @@ miliki adalah cara sebuah keputusan kosakata URL diambil secara TIDAK SENGAJA.
 
 **Tulis saja 25.029 aturan artikel eksak, dengan slug-nya dibetulkan.** Ditolak
 oleh aritmetika sebelum ditolak oleh selera: perbaikannya berarti melonggarkan
-`SLUG_PATTERN` agar menerima `_` dan kapital, yang mengubah APA ITU slug bagi
-setiap tenant di produk ini demi melayani satu migrasi. Dan ia tetap 25.029 baris
-yang basi begitu seorang editor mengganti nama satu artikel.
+aturan slug agar menerima `_` dan kapital, yang mengubah APA ITU slug demi
+melayani satu migrasi. Dan ia tetap 25.029 baris yang basi begitu seorang editor
+mengganti nama satu artikel.
+
+Aturan yang MANA — dan inilah jebakannya: ekspresi yang menolak baris-baris ini
+adalah **literal INLINE di `legacy-import-record.ts`**, bukan `SLUG_PATTERN` di
+`slug-policy.ts`. Keduanya dua salinan dari satu ekspresi. Meng-grep
+`SLUG_PATTERN` mendarat di `slug-policy.ts`, dan melonggarkannya DI SANA mengubah
+apa itu slug bagi post, page, term dan kunci menu SETIAP tenant — lewat kedelapan
+call site `isValidSlug` — sementara importer-nya tetap menolak seluruh 25.029
+baris persis seperti sebelumnya. Itu paruh yang SALAH dari pasangan itu yang
+dilonggarkan dan paruh yang benar tidak disentuh: kelas berulang repo ini,
+**grep CALL-nya, bukan DEFINISI-nya** — dan di sini nama dalam catatannya bahkan
+bukan definisinya.

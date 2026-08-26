@@ -53,6 +53,10 @@ function decodeXmlEntities(text: string): string {
  * would check that a handful of `.xml` files redirect correctly and report
  * a confident green having looked at none of the 23,906 pages. Refusing is the
  * only honest answer, and the caller is told to pass the children instead.
+ *
+ * NOTE ON "23,906": the measured snapshot is 25,029 — see ADR-0114
+ * §Consequences, which is the single correction the figure points at. Left
+ * standing here because this is an argument about scale, and it does not move.
  */
 export function parseSitemapLocations(
   xml: string,
@@ -172,7 +176,9 @@ export type CutoverFacts = {
  *
  * That was the defect `target_unverifiable` exists to close. `targetLive` came
  * back `null` for every destination the caller could not resolve, `null` fell
- * through to `return "ok"`, and the 62 `/kategori/**` rules of ADR-0113 were
+ * through to `return "ok"`, and the `/kategori/**` rules of ADR-0113 — 63 of
+ * them, over the 68 entries in `data/seputarborneo-legacy/rubrik-redirects.json`
+ * (62 over 67 when the defect was found) — were
  * therefore reported clean by a job that had not — could not — check a single
  * one of them, because they are served by a different deployment entirely
  * (ADR-0114). A verdict that says "I did not check this" is worth having; a

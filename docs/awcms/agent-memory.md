@@ -7115,7 +7115,7 @@ description: "Artefak legacy SeputarBorneo ADA di /home/data/dev_php/seputarborn
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-26T05:58:27.806Z
+  modified: 2026-08-26T08:43:41.880Z
 ---
 
 **#599 dan `docs/PROJECT_STATE.md` sama-sama menyatakan artefak legacy "tidak ada
@@ -7134,15 +7134,21 @@ Isi yang berguna:
   ketat catch-all → baris 7 mati sejak commit pertama yang menyentuh berkas itu.
   Ini **URUTAN**, bukan `[L]`: pada baris 7 URL-nya sudah
   `/rubriks/?news=cari_berita&kt=…`. Brute-force 3.375 path = 0 kecocokan (dengan
-  self-test yang menemukan counterexample saat bentuk 4 dilebarkan); 0 dari 5.174
-  URL Wayback berbentuk itu. `/cari_berita/X.html` tetap 200 — sebagai **bentuk
+  self-test yang menemukan counterexample saat bentuk 4 dilebarkan); 0 dari 5.170
+  URL Wayback berbentuk itu (korpus ter-commit
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt`; semula dicatat 5.174,
+  kesimpulannya TIDAK berubah). `/cari_berita/X.html` tetap 200 — sebagai **bentuk
   3** — dan TIDAK BOLEH dijadikan `/cari?q=`. Keputusan bentuk-4 ADR-0113
   DICABUT.
 - `berita/index.php:9` = `(int) $_GET['news']` → id artikel adalah DIGIT
   TERDEPAN, slug dekoratif. **Itu benar tentang router LEGACY dan TIDAK
   mengonfirmasi `--path-template`** — kunci aturan awcms adalah string EKSAK, dan
   template `/news/{legacyId}_{slug}.html` mencocoki **0 dari 25.029** URL: setiap
-  judul berspasi → setiap segmen ber-`_`, yang dilarang `SLUG_PATTERN`. ADR-0114:
+  judul berspasi → setiap segmen ber-`_`, yang dilarang regex slug **INLINE**
+  importer legacy di `legacy-import-record.ts` — **BUKAN** `SLUG_PATTERN`, yang
+  const PRIVAT di `slug-policy.ts` di balik `isValidSlug` dan TIDAK dipanggil
+  importer itu (melonggarkannya melebarkan slug setiap tenant tanpa membuka satu
+  baris pun impor). ADR-0114:
   resolusi artikel BERKUNCI-ID, dan 301-nya dieksekusi di **TEPI**, bukan lewat
   `awcms_seo_redirects` (satu-satunya call site-nya `src/middleware.ts:341`, yang
   TIDAK berada di jalur permintaan `/kategori/**`).
@@ -7214,7 +7220,11 @@ Tugas nyatanya ~25.031 unggahan / 4,1 GB.
 
 **Tidak ADA sitemap legacy** dan tak pernah ada — tapi `--sitemap` menerima
 BERKAS LOKAL, jadi korpus sintetis membukanya tanpa perubahan kode. Wayback CDX =
-5.174 URL (~8,86% korpus), bukti eksternal yang MELURUH.
+**5.170** URL (semula dicatat 5.174), di-commit sebagai
+`data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` — bukti eksternal yang
+MELURUH. Cakupannya artikel: 2.219 id artikel berbeda = 8,87% dari 25.029; dari
+2.301 URL `/news/*` di dalamnya, 2.224 berbentuk underscore dan **NOL** berbentuk
+hyphen.
 
 Ditulis ke PROJECT_STATE §4 sebagai PUTARAN BENTUK (PR #704) + komentar #599;
 dikoreksi oleh PUTARAN ORIGIN (26 Agu 2026).

@@ -28,8 +28,10 @@ host, so any rule it writes is at best hop two.
 **Article resolution is id-keyed, not exact-path.** `/news/{id}_{Title}.html`
 matches on its leading digits against `legacy_source_id`. The shipped exact-path
 template matches **0 of 25,029** URLs — every legacy title contains a space, so
-every segment carries `_`, which `SLUG_PATTERN` forbids, and matching is by
-equality, so no slug that passes the validator can ever equal the indexed segment.
+every segment carries `_`, which the legacy importer's **inline** slug regex in
+`legacy-import-record.ts` forbids (not the shared `SLUG_PATTERN` in
+`slug-policy.ts`, which the importer never calls), and matching is by equality,
+so no slug that passes the validator can ever equal the indexed segment.
 Worse than a miss: an unmatched `/news/**` falls through to
 `resolveRetiredNewsRedirect` and 301s into a path no post has — which is
 `CUTOVER_VERDICT_REASON.target_missing` in its own words.
@@ -46,7 +48,8 @@ shape 4's language is a strict subset of the catch-all's, so line 7 has never be
 reached in any commit that ever touched the file. It is rule ORDER, not the `[L]`
 flag. Brute-forced over 3,375 candidate paths (0 matches, with a self-test that
 did find a counterexample when shape 4 was artificially widened), confirmed live,
-and confirmed against 5,174 archived URLs of which zero are `/cari_berita/*.html`.
+and confirmed against the committed Wayback corpus's 5,170 archived URLs of which
+zero are `/cari_berita/*.html`.
 `/cari_berita/X.html` still serves 200 — as a shape-3 URL — and must never become
 a `/cari?q=` redirect.
 
