@@ -65,7 +65,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Aturan dalam URUTAN pernyataan = aturan TANPA tes](awcms-rule-in-statement-order-has-no-test.md) — ADR-0111: presedensi 2 `await` menelan 23.906 redirect
 - [Kesiapan CMS berita /news/](awcms-news-site-readiness.md) — backend matang, AUTHORING & PRESENTASI putus; 9 pemblokir
 - [Putaran gap portal berita 19 Agu 2026](awcms-news-portal-gap-round-2026-08-19.md) — 132 fitur legacy → #588–#599; TipTap menabrak postur 2-dependency
-- [Situs legacy SeputarBorneo ADA di mesin ini](seputarborneo-legacy-site-is-on-this-machine.md) — EMPAT bentuk URL hidup (`cari_berita` dibayangi catch-all); dump 0-byte UMPAN PALSU, data di volume `seputarborneocom_db_data`
+- [Situs legacy SeputarBorneo = RUJUKAN FITUR, bukan sumber migrasi](seputarborneo-legacy-site-is-on-this-machine.md) — ADR-0116 mencabut cutover 301; #599/#711 DITUTUP. Faktanya tetap: EMPAT bentuk URL hidup, dump 0-byte UMPAN PALSU, data di volume `seputarborneocom_db_data`
 - [Tanya: pemanggilnya ADA di jalur permintaan?](awcms-is-the-caller-even-in-the-request-path.md) — ADR-0114: `awcms_seo_redirects` 1 call site di `src/middleware.ts`, targetnya disajikan `awcms-astro`; TEPI yang memikul 301
 - [PRD LenteraKalteng menggerakkan kerja awcms](lenterakalteng-prd-drives-awcms-work.md) — PRD di ~/Downloads BUKAN di repo; awcms-astro TIDAK boleh jadi situs Lentera
 - [Rekomendasi WAJIB ditulis ke PROJECT_STATE §4](awcms-recommendation-rounds-live-in-project-state.md) — termasuk penolakan DAN pelaksanaannya; menurunkan ulang = satu audit penuh
@@ -7181,12 +7181,23 @@ atau `UPDATE … WHERE`, ia butuh SELECT.
 `````markdown
 ---
 name: seputarborneo-legacy-site-is-on-this-machine
-description: "Artefak legacy SeputarBorneo ADA di /home/data/dev_php/seputarborneo.com; dump 0-byte UMPAN PALSU — 25.029 artikel + 102 pasangan rubrik ada di volume Docker seputarborneocom_db_data"
+description: "ADR-0116: situs legacy kini RUJUKAN FITUR bukan sumber migrasi — cutover 301 DICABUT, #599/#711 DITUTUP; faktanya tetap benar (dump 0-byte UMPAN PALSU; 25.029 artikel + 102 pasangan rubrik di volume Docker seputarborneocom_db_data)"
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-26T08:43:41.880Z
+  modified: 2026-08-26T21:01:58.752Z
 ---
+
+> **LINGKUP BERUBAH 26 Agustus 2026 (ADR-0116) — baca ini dulu.** Situs legacy
+> kini **RUJUKAN FITUR, bukan sumber migrasi**: tidak semua artikel perlu
+> diimpor, dan **kewajiban cutover 301 DICABUT** bersamanya. #599 dan #711
+> DITUTUP (PR #734). Seluruh FAKTA di bawah tetap benar dan tetap berguna —
+> situsnya masih dipakai sebagai rujukan — tetapi **jangan baca satu pun sebagai
+> pekerjaan tertunda**. Yang di bawah menyebut "pemblokir", "tugas nyatanya
+> ~25.031 unggahan / 4,1 GB", atau "konsekuensi yang mengubah rencana" kini
+> bersyarat pada **impor SELEKTIF** yang belum tentu terjadi. Aturannya:
+> **URL tak bisa dibawa tanpa membawa kontennya** — untuk artikel yang sengaja
+> tak diimpor, jawabannya 410, bukan 301.
 
 **#599 dan `docs/PROJECT_STATE.md` sama-sama menyatakan artefak legacy "tidak ada
 di kedua repo". Itu SALAH sejak awal** — salinan kerja situs legacy ada di
