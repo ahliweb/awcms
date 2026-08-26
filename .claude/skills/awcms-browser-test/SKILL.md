@@ -20,9 +20,11 @@ which is **not** run through `bun test` — different test runner, different pur
   render, event handlers, fetch to the API, state after reload.
 - Before a PR for a non-trivial UI change, as a complement to
   `tests/integration/*.integration.test.ts` which (by this repo's convention,
-  see `tests/integration/blog-content-admin-ui.integration.test.ts`)
+  see `tests/integration/menu-widget-response-shape.integration.test.ts`)
   does **not** render markup — integration tests exercise the data-layer functions
-  called by SSR, not the resulting HTML or the client `<script>`.
+  called by SSR, not the resulting HTML or the client `<script>`. The markup
+  side is covered instead by the flat `tests/admin-*-page-contract.test.ts`
+  files, which assert against page source without a browser.
 - Situations without an interactive browser tool (e.g. a headless CLI session) that need
   "try it in a real browser" to verify a feature — run a
   Playwright spec instead of hand-running `curl` one by one.
@@ -34,7 +36,7 @@ which is **not** run through `bun test` — different test runner, different pur
   an integration test that calls the `APIRoute` handler directly, far
   faster and needing no browser at all.
 - The SSR data layer of an admin page (functions called from the frontmatter) →
-  an integration test like `tests/integration/tenant-domain-admin.integration.test.ts`,
+  an integration test like `tests/integration/tenant-domain.integration.test.ts`,
   not a Playwright spec — do not duplicate coverage that already exists there
   with slower E2E.
 

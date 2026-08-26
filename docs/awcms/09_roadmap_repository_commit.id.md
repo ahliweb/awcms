@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](09_roadmap_repository_commit.md)
 
-<!-- i18n-source-hash: sha256:3c252edb69895b37636ca21d5e92782de128b76b01e7d6fd4d73ac25cafe18df -->
+<!-- i18n-source-hash: sha256:de14b8f360aff496bdae57f54b7be0ef8d2be56a70b209944ab49f54f01bf95c -->
 
 # Bagian 9 — Roadmap Teknis Repository dan Urutan Commit
 
@@ -122,9 +122,15 @@ gitGraph
 
 ## GitHub issue snapshot
 
-Issue atomic dibuat atau dibuat ulang dari `docs/awcms/06_github_issues_detail.md`, sedangkan state GitHub aktual dicatat di `docs/awcms/github/`. Snapshot live terbaru bisa saja kosong apabila issue GitHub sudah dibersihkan; dalam kondisi itu, dokumen 06 tetap menjadi backlog rencana, bukan bukti issue aktif.
+Issue atomic dibuat atau dibuat ulang dari `docs/awcms/06_github_issues_detail.md`, yang tetap menjadi backlog rencana, bukan bukti issue aktif.
 
-Aturan:
+> **Tidak diadopsi di sini.** Snapshot terkomit yang digambarkan bagian ini —
+> `docs/awcms/github/` — tidak ada di repo ini dan tidak pernah ada. Baca
+> aturan di bawah sebagai bentuk yang akan diambil snapshot bila kelak
+> diadopsi; untuk state tracker sesungguhnya, query `gh` (lihat skill
+> `awcms-github-snapshot`).
+
+Aturan (bentuk target):
 
 1. Snapshot issue dipisahkan berdasarkan state: `issues-open-NNN.md` dan `issues-closed-NNN.md`.
 2. Setiap file snapshot berisi maksimal 100 issue.

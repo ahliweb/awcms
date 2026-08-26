@@ -2,27 +2,27 @@
 
 # Production Preflight — Rehearsal, Apply, and Rollback Runbook
 
-> **Document status (AWCMS, foundation-rebuild phase).** `bun run
-production:preflight` and every procedure below (`scripts/
-production-preflight.ts`, `authorizeApply`, `deploy/backup/{backup,
-restore,offsite-copy}-postgres.sh` with encryption/HMAC/manifest) are
-> mechanisms that on the `awcms-mini` base are already fully implemented
-> and verified (Issue #684 in the origin repo, epic `platform-hardening`).
-> In AWCMS, **there is no code implementation for this tool yet**:
-> `scripts/production-preflight.ts` does not exist, there is no
-> `production:preflight` key in `package.json`, and `deploy/` only
-> contains `deploy/pgbouncer/pgbouncer.ini.example` (there is no
-> `deploy/backup/` at all yet). Three of the nine stages described below
-> ARE real as standalone scripts — `config:validate`,
+> **Document status (AWCMS, foundation-rebuild phase).** The orchestrator
+> this runbook is written around **does not exist here**: there is no
+> `scripts/production-preflight.ts`, no `authorizeApply`, and no
+> `production:preflight` key in `package.json`. Read every
+> "available"/"already running" claim below as a **specification**, not as
+> current status.
+>
+> What IS real, as standalone commands: `config:validate`,
 > `security:readiness`, `db:pool:health` (see
-> [`production-readiness.md`](production-readiness.md)) — but the
-> orchestrator that runs them as one gated go/no-go sequence, plus the
-> `database:capacity`, `db:connectivity`, `migration:plan` stages, does
-> not exist yet. This document describes the **target architecture and
-> contract** that will be ported from the base as part of building
-> AWCMS's technical foundation; read the "available"/"already running"
-> claims below as a specification that has to be met again during the
-> port, not as the current running status.
+> [`production-readiness.md`](production-readiness.md)) and `db:migrate`.
+> The gated go/no-go sequence that chains them, plus the
+> `database:capacity`, `db:connectivity` and `migration:plan` stages, is
+> not built.
+>
+> `deploy/` is no longer as bare as this banner used to claim. It now holds
+> `deploy/backup/backup-postgres.sh` and `deploy/backup/restore-postgres.sh`
+> (real, and used by §Stage 2), `deploy/pgbouncer/pgbouncer.ini.example`,
+> `deploy/redis/docker-compose.yml` and `deploy/cron/awcms.crontab`. There
+> is no `deploy/backup/README.md` and no `offsite-copy.sh`, and the two
+> backup scripts implement **neither encryption nor HMAC manifests** —
+> §Stage 2 carries the details.
 
 Companion to `docs/awcms/07_sprint_testing_production_readiness.md` — this
 doc covers the operational procedure around `bun run production:preflight`,
@@ -121,47 +121,47 @@ a recent copy of production.
 
 ## Stage 2 — Backup evidence (required before any `--apply-migrations`)
 
-`--backup-verified` is a flag, not an automated check — the operator is
-attesting to a specific evidence trail, not just remembering a backup
-exists somewhere. The backup is encrypted and manifest-signed and the
-restore verifies checksums before any mutation — see
-`deploy/backup/README.md` for the full model. Before passing
-`--backup-verified`:
+Backup evidence is an operator attestation, not an automated check — you
+are attesting to a specific evidence trail, not just remembering a backup
+exists somewhere.
+
+> **Correction (27 August 2026).** Until now this section described an
+> encrypted, HMAC-manifest-signed backup and a `.dump.enc` filename. **None
+> of that is implemented.** `backup-postgres.sh` writes a plain
+> `--format=custom` dump plus a `.sha256` sidecar, and it **refuses to run**
+> if `BACKUP_ENCRYPTION_KEY_FILE` or `BACKUP_HMAC_KEY_FILE` is set — the
+> script's own error message names this document as the thing overstating it.
+> `restore-postgres.sh` decrypts nothing, verifies no manifest, and refuses a
+> `.enc` file rather than guessing. `deploy/backup/README.md` and
+> `deploy/backup/offsite-copy.sh` do not exist either. What IS real is the
+> sha256 sidecar, verified before any mutation, and the scratch-database
+> default below.
 
 ```bash
 DATABASE_URL=<production-url> \
 BACKUP_DIR=/var/backups/awcms \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
 ./deploy/backup/backup-postgres.sh
 ```
 
-Then **prove the dump restores** (a dump that was never test-restored is
-not verified evidence — this is the same principle
-`deploy/backup/README.md` and doc 07's restore SOP already establish).
-`restore-postgres.sh` itself verifies the manifest's HMAC and the dump's
-checksum, and validates the decrypted archive's structure with
-`pg_restore --list`, before touching any target database:
+Then **prove the dump restores** — a dump that was never test-restored is
+not verified evidence. `restore-postgres.sh` verifies the `.sha256` sidecar
+before touching any target database:
 
 ```bash
 DATABASE_URL=<production-url> \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<timestamp>.dump.enc
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
 ```
 
 (Defaults to restoring into the disposable `awcms_restore_test`
-database — never the live one.) Record the dump filename, its manifest's
-`sha256`/`hmac_sha256`, and the restore-test timestamp somewhere durable
-(deploy ticket/runbook log) — this is the "evidence retention" this
-runbook asks for.
+database — never the live one; `RESTORE_SCRATCH_DB` overrides that name.)
+Record the dump filename, its `sha256` digest, and the restore-test
+timestamp somewhere durable (deploy ticket/runbook log) — this is the
+"evidence retention" this runbook asks for.
 
-Off-site copy (`deploy/backup/offsite-copy.sh`) is optional and, if
-configured, runs as a separate step after `backup-postgres.sh` — see
-`deploy/backup/README.md`'s "3-2-1" section. It is not part of the
-`--backup-verified` evidence trail itself (the restore-test is what
-proves the backup is usable; off-site copy is about surviving loss of the
-backup host).
+Off-site copy is a real obligation with no script behind it: copy the dump
+and its sidecar to a second host yourself. The restore-test is what proves
+the backup is usable; the off-site copy is about surviving loss of the
+backup host, and nothing in this repo automates it.
 
 ## Stage 3 — Production preflight (read-only)
 

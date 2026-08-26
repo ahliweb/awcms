@@ -17,17 +17,21 @@ import {
   checkCitedAdminPaths,
   checkCitedAdrs,
   checkCitedPaths,
+  checkCitedRepoPaths,
   checkCitedRunTargets,
   extractCitedAdrNumbers,
+  extractCitedRepoPaths,
   extractCitedRunTargets,
   extractCitedAdminPaths,
   extractCitedSourcePaths,
+  isAbsenceClaim,
   isKnownRunTarget,
   moduleReadmePaths,
   skillSourcePaths,
   stripAspirationalBlocks,
   stripHistoricalBlocks,
-  subjectModuleKey
+  subjectModuleKey,
+  GOVERNED_REPO_PREFIXES
 } from "../scripts/skills-check";
 
 const exists = (known: readonly string[]) => (candidate: string) =>
@@ -483,5 +487,149 @@ describe("mirrors are checked too (#729)", () => {
         "awcms-testing (SKILL.id.md)"
       )
     ).toEqual([]);
+  });
+});
+
+/**
+ * Rule 6 — repo paths outside `src/`.
+ *
+ * Driven with the ACTUAL sentences that shipped, because a rule written from
+ * an imagined defect tends to catch only imagined defects. Every RED case below
+ * is quoted from a file as it stood on 27 August 2026; every green case is a
+ * sentence the corpus needs to keep being able to say.
+ */
+describe("skills:check rule 6 — cited repo paths", () => {
+  const nothingExists = () => false;
+  const everythingExists = () => true;
+
+  const red = (source: string) =>
+    checkCitedRepoPaths(
+      "fixture",
+      source,
+      extractCitedRepoPaths(source),
+      nothingExists
+    );
+
+  test("`sql/NNN` is NOT governed — it is a migration NUMBER, not a path", () => {
+    // `sql/005` names the migration whose file is `005_awcms_….sql`. Treating
+    // it as a filename would fail every correct citation in the corpus at once
+    // — which is precisely what the first draft of this rule did.
+    // `check:docs` validates these by number instead.
+    expect(GOVERNED_REPO_PREFIXES).not.toContain("sql/");
+    expect(extractCitedRepoPaths("seeded by `sql/005` here")).toEqual([]);
+  });
+
+  test("the preflight script that never existed goes red", () => {
+    const problems = red(
+      "**Ten** read-only stages in total (`scripts/production-preflight.ts`'s\n" +
+        "`REMAINING_CHILD_PROCESS_STAGES` + the separately handled stages)."
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("scripts/production-preflight.ts");
+  });
+
+  test("mini's `tests/unit/` layout goes red — this repo puts tests flat", () => {
+    expect(
+      red("see (`tests/unit/module-presets.test.ts`'s case)")
+    ).toHaveLength(1);
+  });
+
+  test("a doc tree that was never committed goes red", () => {
+    expect(red("Follow `docs/awcms/github/README.md`.")).toHaveLength(1);
+  });
+
+  test("a trailing slash does not buy an exemption", () => {
+    // `docs/awcms/github/` was cited nine times WITH the slash. Rule 1 skips
+    // bare directories; if rule 6 copied that, the single most-repeated false
+    // citation in the corpus would have stayed invisible.
+    expect(red("tracked separately in `docs/awcms/github/`")).toHaveLength(1);
+  });
+
+  test("an absence claim stays sayable, in either language", () => {
+    // A gate that demanded these files exist would delete the sentences that
+    // correct the record — the opposite of the point.
+    expect(
+      red("There is no `deploy/backup/README.md`, and never has been.")
+    ).toEqual([]);
+    expect(
+      red(
+        "Berkas `tests/integration/form-drafts.integration.test.ts` tidak ada di repo ini."
+      )
+    ).toEqual([]);
+    expect(
+      red("the now-deleted `openapi/modules/news-portal.openapi.yaml`")
+    ).toEqual([]);
+  });
+
+  test("ONE honest paragraph does not license a second live-sounding one", () => {
+    // The `awcms-production-preflight` failure exactly: a banner saying the
+    // command DOES NOT EXIST, and forty lines later a passage describing its
+    // flags as shipped. Absence has to hold at EVERY occurrence, or the
+    // exemption becomes a way to smuggle the claim back in.
+    const mixed =
+      "`scripts/production-preflight.ts` does not exist. " +
+      "x".repeat(900) +
+      " All three flags are MANDATORY (`scripts/production-preflight.ts`'s `authorizeApply`).";
+
+    expect(isAbsenceClaim(mixed, "scripts/production-preflight.ts")).toBe(
+      false
+    );
+    expect(red(mixed)).toHaveLength(1);
+  });
+
+  test("a sibling-repo citation is scoped, not checked", () => {
+    // This repo cannot resolve another repo's tree and must not pretend to.
+    expect(
+      extractCitedRepoPaths(
+        "in mini: `awcms-mini:tests/integration/profile-identity.integration.test.ts`"
+      )
+    ).toEqual([]);
+    expect(
+      extractCitedRepoPaths("repo `personal-coding:docs/sop-agent-cred.md`")
+    ).toEqual([]);
+  });
+
+  test("a location suffix is trimmed rather than read as a filename", () => {
+    expect(extractCitedRepoPaths("see `scripts/db-migrate.ts:167`")).toEqual([
+      "scripts/db-migrate.ts"
+    ]);
+    expect(extractCitedRepoPaths("see `ops/run-job.sh:88,92`")).toEqual([
+      "ops/run-job.sh"
+    ]);
+  });
+
+  test("patterns and globs are not addresses", () => {
+    expect(
+      extractCitedRepoPaths(
+        "`tests/integration/*.integration.test.ts` and `docs/adr/0036-...md`"
+      )
+    ).toEqual([]);
+  });
+
+  test("a path that resolves produces nothing", () => {
+    const source = "guarded by `tests/module-boundary.test.ts`";
+
+    expect(extractCitedRepoPaths(source)).toEqual([
+      "tests/module-boundary.test.ts"
+    ]);
+    expect(
+      checkCitedRepoPaths(
+        "fixture",
+        source,
+        extractCitedRepoPaths(source),
+        everythingExists
+      )
+    ).toEqual([]);
+  });
+
+  test("a path broken across lines by prettier is still seen", () => {
+    // Rule 1 shipped with this hole: a claim was invisible purely because of
+    // where the line happened to wrap, and the one it hid had never existed.
+    expect(
+      extractCitedRepoPaths(
+        "driven by `scripts/\nproduction-preflight.ts` here"
+      )
+    ).toEqual(["scripts/production-preflight.ts"]);
   });
 });

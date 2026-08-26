@@ -5,7 +5,7 @@ description: Regenerate docs/awcms/repo-inventory.md (module/migration/table-RLS
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:a28be534b64eb13a0206fcbc4d5cc19b22327469594d5aee8b166bc1b55880e7 -->
+<!-- i18n-source-hash: sha256:c30e2484a857da2a15d755e4b14a34e784295dd0f71ca792949377c7ef27b83b -->
 
 # AWCMS — Repo Inventory Regenerate
 
@@ -19,17 +19,24 @@ modul basi di `AGENTS.md`):
 - **Modules** — dari `listModules()` (`src/modules/index.ts`).
 - **Migrations** — seluruh `sql/*.sql`, terurut nomor.
 - **Tables & Row-Level Security** — tabel hasil parsing `CREATE TABLE` +
-  status `ENABLE ROW LEVEL SECURITY`, dicocokkan dengan allow-list
-  RLS-exempt yang di-review (`RLS_EXEMPT_TABLES` di
-  `scripts/repo-inventory-generate.ts`).
-- **Tests** — jumlah file test per subdirektori `tests/`.
+  status `ENABLE ROW LEVEL SECURITY`/`FORCE` (`scripts/lib/table-rls-states.ts`),
+  diparse dari migration, bukan dibaca dari database hidup. Allow-list
+  ter-review untuk tabel global yang memang bebas-RLS adalah
+  `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` di `scripts/security-readiness.ts`,
+  yang sekaligus menyatakan privilege mana yang DILARANG dipegang
+  `awcms_app` atas masing-masing.
+- **Tests** — jumlah file test per direktori tingkat-atas di bawah `tests/`.
 - **Routes/Operations** — ringkasan jumlah path/operation dari kontrak
   OpenAPI ter-bundle (parity sendiri sudah ditegakkan terpisah oleh
   `bun run api:spec:check`, dokumen ini hanya menampilkan angkanya).
 
-GitHub issue/label/milestone snapshot **tidak** diregenerasi script ini —
-itu tetap tanggung jawab skill `awcms-github-snapshot` (live network
-call ke `gh`, sengaja di luar `bun run check`).
+Generatornya `scripts/repo-inventory.ts` (`bun run repo:inventory:generate`,
+`--check` untuk gate-nya) — tidak ada `scripts/repo-inventory-generate.ts`.
+
+Tidak ada snapshot issue/label/milestone GitHub yang diregenerasi script
+ini, maupun oleh apa pun yang lain: `docs/awcms/github/` tidak ada di repo
+ini. Lihat skill `awcms-github-snapshot`, yang berupa spesifikasi target,
+bukan tugas.
 
 ## Kapan menjalankan
 
@@ -64,10 +71,13 @@ least-privilege, atau `bun run security:readiness`). Dua kemungkinan:
 ENABLE ROW LEVEL SECURITY` di migration manapun. Tambahkan migration
    RLS (skill `awcms-new-migration`), lalu regenerasi.
 2. **Tabel memang global** (registry/catalog, bukan data tenant) — tambah
-   entry baru di `RLS_EXEMPT_TABLES` (`scripts/repo-inventory-generate.ts`)
-   dengan sitasi dokumen yang menjelaskan kenapa (pola yang sama seperti
+   entry baru di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`
+   (`scripts/security-readiness.ts`) dengan sitasi dokumen yang menjelaskan
+   kenapa (pola yang sama seperti
    `ROUTE_PARITY_EXEMPTIONS`/`CONFIG_EXEMPTIONS`) — jangan menambah entry
-   tanpa alasan tertulis.
+   tanpa alasan tertulis. Perhatikan konsekuensinya: entry itu bukan hanya
+   "tabel ini bebas RLS", ia juga menamai privilege yang TIDAK boleh
+   dipegang `awcms_app` atasnya.
 
 ## Alur
 
@@ -78,7 +88,7 @@ flowchart LR
   C --> D[bun run check:docs]
   D --> E{POSSIBLE GAP muncul?}
   E -- Ya, gap nyata --> F[Tambah migration RLS]
-  E -- Ya, memang global --> G[Tambah entry RLS_EXEMPT_TABLES + sitasi]
+  E -- Ya, memang global --> G["Tambah entry GLOBAL_TABLE_FORBIDDEN_PRIVILEGES + sitasi"]
   E -- Tidak --> H[bun run repo:inventory:check]
   F --> B
   G --> B

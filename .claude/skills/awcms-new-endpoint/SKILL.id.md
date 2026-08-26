@@ -5,7 +5,7 @@ description: Tambah atau ubah endpoint REST AWCMS di /api/v1 dengan benar. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c82fac5d3a75c7b8cf4a6ed924f9c9166f28c5dc2e30075386f9db7ea6a2cade -->
+<!-- i18n-source-hash: sha256:7e79bf1b4b5d3b00f33b633a92a162beb375e7e35d60150091d914d97bff810f -->
 
 # AWCMS — New / Changed API Endpoint
 
@@ -79,8 +79,12 @@ export const GET = defineTenantRoute({
    Tier `default` (128 KiB) untuk mayoritas endpoint; `large` (5 MiB)
    hanya untuk endpoint konten-berat (HTML/rich content, batch sync).
    Jangan menambah tier baru tanpa memperbarui plafon keras
-   `BODY_SIZE_HARD_CEILING_BYTES` DAN invariant test-nya
-   (`tests/unit/request-body-limit.test.ts`).
+   `BODY_SIZE_HARD_CEILING_BYTES`, lalu jalankan ulang
+   `tests/request-body-limit-coverage.test.ts` — sapuan yang membuktikan
+   tidak ada route membaca body tanpa plafon. Perhatikan yang TIDAK
+   diasersikannya: tidak ada test yang memaku nilai
+   `BODY_SIZE_HARD_CEILING_BYTES` itu sendiri, jadi mengubahnya tidak
+   menggagalkan apa pun.
 6. Mutation high-risk → `awcms-idempotency` (`Idempotency-Key`).
 7. Data sensitif keluar lewat mapper (`awcms-sensitive-data`); jangan return row mentah.
 8. DELETE resource deletable berarti soft delete; restore/purge butuh ABAC, audit, OpenAPI, dan idempotency bila high-risk.

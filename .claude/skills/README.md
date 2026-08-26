@@ -133,10 +133,10 @@ The skills below are **improvement** skills — they assess & raise the quality 
 The skills below are neither feature building nor audit — they purely keep
 mechanical artifacts (docs snapshots, etc.) in sync with external state.
 
-| Skill                   | When to use                                                                                  | Docs source             |
-| ----------------------- | -------------------------------------------------------------------------------------------- | ----------------------- |
-| `awcms-github-snapshot` | Refresh `docs/awcms/github/` after issues/labels/milestones/security alerts change on GitHub | github/README.md        |
-| `awcms-repo-inventory`  | Regenerate `docs/awcms/repo-inventory.md` after adding a module/migration/table/test/route   | repo-inventory/SKILL.md |
+| Skill                   | When to use                                                                                            | Docs source                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `awcms-github-snapshot` | **Target spec only** — `docs/awcms/github/` does not exist here; query `gh` directly for tracker state | awcms-github-snapshot/SKILL.md |
+| `awcms-repo-inventory`  | Regenerate `docs/awcms/repo-inventory.md` after adding a module/migration/table/test/route             | repo-inventory/SKILL.md        |
 
 ## Usage map
 

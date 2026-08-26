@@ -1,15 +1,30 @@
 ---
 name: awcms-github-snapshot
-description: Refresh the GitHub documentation snapshot (docs/awcms/github/) after issues/labels/milestones/security alerts change on GitHub. Use before an audit/release, or when asked to sync the docs with the latest GitHub state. Per docs/awcms/github/README.md.
+description: READ-ONLY / TARGET SPECIFICATION — the GitHub documentation snapshot (docs/awcms/github/) DOES NOT EXIST in this repo and has never been committed here, and neither has the refresh script it describes. There is nothing to refresh and no `bun run` target for it. Use it as the design for a snapshot if one is ever adopted here; to learn the CURRENT tracker state, query `gh` directly. The planned backlog stays docs/awcms/06_github_issues_detail.md.
 ---
 
 🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — GitHub Snapshot Refresh
 
-Follow `docs/awcms/github/README.md`. This snapshot is a factual copy of
-GitHub state (issues, labels, milestones, security alerts) — not the
-planned backlog (that stays `docs/awcms/06_github_issues_detail.md`).
+> **This skill describes something that is not here.** `docs/awcms/github/`
+> has never been committed in this repo (`git log -- docs/awcms/github`
+> returns nothing) and `scripts/github-snapshot-refresh.ts` does not exist.
+> `docs/awcms/README.md` says the same thing in one line: the snapshot "has
+> not been adapted yet". Everything below is the awcms-mini design, kept as
+> the specification a snapshot here would have to meet — **do not report its
+> file names, counts or refresh steps as this repo's state.**
+>
+> To answer a question about the tracker RIGHT NOW, call `gh` and read the
+> answer; do not look for a file. The §"Before refreshing" check below is
+> still worth doing on its own merits — it catches issues left open by a PR
+> body with no `Closes` keyword, which has happened twice here.
+
+<!-- aspirational:mulai -->
+
+The snapshot is a factual copy of GitHub state (issues, labels, milestones,
+security alerts) — not the planned backlog (that stays
+`docs/awcms/06_github_issues_detail.md`).
 
 ## Before refreshing: check for issues whose PR merged but which never closed
 
@@ -91,3 +106,22 @@ flowchart LR
 A summary: which files were updated, the new open/closed/label/milestone
 numbers, and the list of manual sections that need review (if there are
 new issues/labels since the last snapshot).
+
+<!-- aspirational:selesai -->
+
+## What to do here instead
+
+Query the tracker directly and report the answer — there is no file to
+regenerate, so nothing to commit:
+
+```bash
+gh auth status
+gh issue list --state open --limit 50 --json number,title,labels,milestone
+gh pr list --state merged --limit 30 --json number,title,mergedAt
+gh api repos/ahliweb/awcms/code-scanning/alerts --paginate | head
+```
+
+Adopting a committed snapshot here would be a real change with a real cost
+(a generator, a freshness gate, and a bilingual mirror per file under
+[ADR-0097](../../../docs/adr/0097-english-is-the-source-language.md)),
+so it needs a decision, not an assumption that it already happened.

@@ -120,9 +120,14 @@ gitGraph
 
 ## GitHub issue snapshot
 
-Atomic issues are created or recreated from `docs/awcms/06_github_issues_detail.md`, while the actual GitHub state is recorded in `docs/awcms/github/`. The latest live snapshot may well be empty if the GitHub issues have been cleaned up; in that condition, document 06 remains the planned backlog, not evidence of active issues.
+Atomic issues are created or recreated from `docs/awcms/06_github_issues_detail.md`, which remains the planned backlog rather than evidence of active issues.
 
-Rules:
+> **Not adopted here.** The committed snapshot this section describes —
+> `docs/awcms/github/` — does not exist in this repo and never has. Read the
+> rules below as the shape a snapshot would take if one were adopted; for the
+> actual tracker state, query `gh` (see the `awcms-github-snapshot` skill).
+
+Rules (target shape):
 
 1. Issue snapshots are split by state: `issues-open-NNN.md` and `issues-closed-NNN.md`.
 2. Each snapshot file contains at most 100 issues.

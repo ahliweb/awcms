@@ -182,7 +182,7 @@ has millisecond resolution, silently truncating the true value DOWN. An earlier
 version of this code compared un-padded truncated values directly, which
 permanently excluded the boundary row (one row short every archive cycle) and
 looped the archive resume on the same last row. If you touch the boundary logic,
-re-run `tests/unit/data-lifecycle-cursor-boundary.test.ts` and the DB-gated
+re-run `tests/data-lifecycle-cursor-boundary.test.ts` and the DB-gated
 integration test.
 
 ## Provider-neutral archive port

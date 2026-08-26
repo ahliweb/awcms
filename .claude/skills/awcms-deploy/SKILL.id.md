@@ -5,7 +5,7 @@ description: Pilih dan jalankan profil deployment AWCMS (development/production/
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:395c49cbfd86e953611b94656698ac819c237f3972d9989cf92b3e288835de22 -->
+<!-- i18n-source-hash: sha256:bab2d2f8266eb555b7187cbd7f4637993f8670626cf0c20335675361b6629ff4 -->
 
 # AWCMS — Deployment Profile & Execution
 
@@ -232,7 +232,7 @@ bukan job cron), ambil lewat `agent-cred get <service> <field>` (isi dulu
 dengan `agent-cred set <service>` bila belum ada) — jangan `read -s` ad-hoc
 atau credential inline baru, termasuk untuk `ALTER ROLE ... PASSWORD` di
 atas: generate & simpan dulu via `agent-cred set postgres`. TTL cache 3 jam.
-Detail: repo `personal-coding` `docs/sop-agent-cred-credential-cache.md`.
+Detail: repo `personal-coding:docs/sop-agent-cred-credential-cache.md`.
 Job cron/systemd tetap pakai env var/secret file seperti biasa.
 
 ## Rollback

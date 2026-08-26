@@ -84,13 +84,15 @@ DFS). Called from:
 
 - `bun run modules:dag:check` (`scripts/validate-module-graph.ts`) —
   inserted into `bun run check` right after `api:spec:check`.
-- `bun run modules:sync` (`scripts/modules-sync.ts`) — refuses to sync to the DB
-  when the graph is broken, BEFORE any row is touched. Since Issue #697 (epic
-  #679), this script is built on top of the shared worker runner
-  `src/lib/jobs/job-runner.ts` (advisory lock, `--dry-run` via
-  `planModuleSync`, JSON telemetry) — see
-  `docs/awcms/deployment-profiles.md` §Shared worker runner; the behaviour of
-  `syncModuleDescriptors` itself did NOT change.
+- `POST /api/v1/modules/sync` (`src/pages/api/v1/modules/sync.ts`, calling
+  `syncModuleDescriptors` in `application/descriptor-sync.ts`) — refuses to
+  sync to the DB when the graph is broken, BEFORE any row is touched.
+  **There is no `bun run modules:sync` and no `scripts/modules-sync.ts`
+  in this repo** — the endpoint is the whole mechanism.
+  `scripts/README.md` §Deferred lists the CLI target as unported, and six
+  code comments that told readers to run it were corrected for this reason.
+  `planModuleSync` (`domain/descriptor-diff.ts`) is exported so a dry-run can
+  compute the same plan the sync would apply.
 
 **The actual fix for the historical cycle** (Issue #680): `tenant_admin.dependencies`
 was changed from `["profile_identity", "identity_access"]` to `[]` —
@@ -116,7 +118,7 @@ profile_identity}` — did NOT change even after the tenant_admin edge was remov
 because the closure is computed via `identity_access -> profile_identity ->
 tenant_admin` (still transitively the same), not via the removed tenant_admin
 edge. Verify this through the existing test
-(`tests/unit/module-presets.test.ts`'s "real registry's protected set is
+(`tests/module-presets.test.ts`'s "real registry's protected set is
 exactly module_management's own dependency closure").
 
 ### `capabilities` — a source-level relationship, DIFFERENT from `dependencies` (Issue #681, epic #679)

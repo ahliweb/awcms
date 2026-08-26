@@ -228,7 +228,7 @@ job), fetch it via `agent-cred get <service> <field>` (populate it first with
 `agent-cred set <service>` if absent) — not an ad-hoc `read -s` or a new inline
 credential, including for the `ALTER ROLE ... PASSWORD` above: generate and store
 it first via `agent-cred set postgres`. Cache TTL is 3 hours.
-Details: repo `personal-coding` `docs/sop-agent-cred-credential-cache.md`.
+Details: repo `personal-coding:docs/sop-agent-cred-credential-cache.md`.
 Cron/systemd jobs keep using env vars/secret files as usual.
 
 ## Rollback

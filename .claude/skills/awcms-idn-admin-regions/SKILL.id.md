@@ -5,7 +5,7 @@ description: Modul idn_admin_regions SUDAH ADA di repo ini (ADR-0046, migrasi `s
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:5a41d9dced517abe9e8367bcd0c794c6d99a01eb6edb8402304f0ebf1368c3d9 -->
+<!-- i18n-source-hash: sha256:78a8f48a8f495ac18b41d215e95a1df6531001214fd3f06fa38db218c34c2389 -->
 
 # AWCMS — Indonesia Administrative Regions (`idn_admin_regions`)
 
@@ -200,10 +200,10 @@ DO NOTHING`, tidak ada mekanisme baru yang ditemukan. Migration ini HANYA
 - `src/modules/idn-admin-regions/module.ts`,
   `domain/source-provenance.ts`, `application/.gitkeep`, `README.md`.
 - `src/modules/index.ts` (import + registry array).
-- Test: `tests/modules/idn-admin-regions-module.test.ts`,
-  `tests/unit/idn-admin-regions-source-provenance.test.ts`; diperbarui:
-  `tests/foundation.test.ts` (module count 14→15, tambah blok
-  `idn_admin_regions`).
+- Test (tata letak mini — **repo ini menaruhnya datar**: lihat
+  `tests/idn-admin-regions-domain.test.ts`,
+  `tests/idn-admin-regions-vendor-manifest.test.ts`, dan
+  `tests/integration/idn-admin-regions.integration.test.ts`).
 - Docs: `AGENTS.md` §Peta modul + tabel skill + diagram mermaid,
   `.claude/skills/README.md`, `docs/awcms/repo-inventory.md`
   (regenerated).
@@ -389,13 +389,17 @@ WHERE status = 'active'`. Karena setiap baris yang ter-index oleh
    — pola yang SAMA dipakai di seluruh repo ini untuk kolom actor-id
    (`awcms_offices.created_by`, `awcms_email_messages.created_by`,
    dst.), bukan pengecualian baru.
-8. **Migration test**: `tests/integration/idn-admin-regions-schema.integration.test.ts`
-   — karena tabel ini TIDAK tenant-scoped, test ini TIDAK menguji isolasi
-   RLS (beda dari kebanyakan `*-schema.integration.test.ts` lain di repo
-   ini) — sebaliknya membuktikan KETIADAAN `tenant_id`/RLS secara
-   eksplisit, plus constraint nyata: unique `(dataset_id, code)`, index
-   parent lookup, index search `normalized_name`, single-active-dataset,
-   CHECK `status`/`region_type`/`level`, dan nol grant `awcms_app`.
+8. **Migration test**: di REPO INI berkasnya
+   `tests/integration/idn-admin-regions.integration.test.ts` (satu berkas,
+   bukan `-schema` terpisah — mini yang memecahnya). Karena tabel ini TIDAK
+   tenant-scoped, test itu TIDAK menguji isolasi RLS; sebaliknya ia
+   membuktikan KETIADAAN `tenant_id`/RLS-terpaksa secara eksplisit, bahwa
+   single-active-dataset ditegakkan DATABASE (partial unique index) bukan
+   kode aplikasi yang bisa dibalap koneksi kedua, dan bahwa
+   import → activate → rollback bekerja ujung-ke-ujung dengan rollback
+   memulihkan versi SEBELUMNYA. Paruh parsing/normalisasi murni ada di
+   `tests/idn-admin-regions-domain.test.ts`, dan provenance dataset
+   ter-vendor di `tests/idn-admin-regions-vendor-manifest.test.ts`.
    Semua query test lewat `getAdminSql()` (koneksi migration owner) —
    BUKAN `getTestSql()` (role `awcms_app`) — karena `awcms_app`
    memang sengaja nol akses pada tabel ini di issue ini (lihat poin 2 di
@@ -414,7 +418,8 @@ WHERE status = 'active'`. Karena setiap baris yang ter-index oleh
 - `sql/054_awcms_idn_admin_regions_schema.sql`.
 - `scripts/security-readiness.ts` (`RLS_FREE_TABLES` +
   `ALLOWED_GLOBAL_TABLE_GRANTS` — dua entry baru, nol grant).
-- Test: `tests/integration/idn-admin-regions-schema.integration.test.ts`.
+- Test (mini): `awcms-mini:tests/integration/idn-admin-regions-schema.integration.test.ts`.
+  Di sini cakupan setaranya ada di `tests/integration/idn-admin-regions.integration.test.ts`.
 - Docs: `.claude/skills/awcms-idn-admin-regions/SKILL.md` (file ini),
   `src/modules/idn-admin-regions/README.md` (status tabel),
   `docs/awcms/04_erd_data_dictionary.md` (entri baru + table
