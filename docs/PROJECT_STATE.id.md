@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:4ae9307b3775ecc9452e9d80c68340e9adc88ebefa06e8e037e682affdd53e06 -->
+<!-- i18n-source-hash: sha256:f2a201e8b989b8affe414b83cbd6ab9e4ca1801c673a8b8b990ce2495e23b78e -->
 
 # AWCMS — Project State & Continuation
 
@@ -437,6 +437,27 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   ke-67-nya. **Gerbang yang HIJAU sementara jawabannya SALAH adalah
   mode kegagalannya**, dan ini instansi paling jelas yang pernah dihasilkan repo
   ini.
+
+  **Keduanya KINI sudah diperbaiki** (branch yang sama, tepat sesudah putaran
+  ini). `usage()` menyetel `process.exitCode = 1`; verdict
+  `target_unverifiable` menggantikan `ok` yang senyap itu dan ia TIDAK bersih;
+  dan pencarian liveness diperlebar dari satu rute menjadi kedelapan rute di
+  bawah `src/pages/blog/[tenantCode]/`, sehingga verdict baru itu hanya menyala
+  untuk tujuan yang memang BUKAN permukaan deployment ini — `/kategori/*`
+  termasuk di dalamnya. Dua hal muncul dari meng-grep PANGGILANNYA alih-alih
+  membacanya: rute-rutenya mengonsultasi `legacyTenantRouteEnabled` SEBELUM
+  pencarian apa pun (jadi job-nya kini membacanya sekali per run dan
+  memperingatkan bila permukaan publiknya mati), dan skripnya tidak pernah
+  menutup klien SQL-nya. `--urls=<path>` ditambahkan di samping `--sitemap`,
+  yang melarutkan _"butuh sitemap hidup"_ di mana pun ia muncul — flag itu
+  selalu membaca berkas LOKAL. Setiap perbaikan membawa tes yang DIBUKTIKAN
+  gagal pada cacat aslinya: empat mutasi diterapkan dan dijalankan, dan bukti
+  ujung-ke-ujungnya adalah satu aturan nyata berbentuk persis seperti ADR-0113
+  yang terhitung `ok` sebelum perubahan dan `target_unverifiable` sesudahnya.
+  **Yang MASIH tidak bisa dilihat gerbang itu kini ada di docstring-nya
+  sendiri:** ia membuat NOL permintaan HTTP, sehingga di bawah ADR-0114 sebuah
+  run hijau tidak berkata apa pun tentang tepi yang benar-benar memancarkan
+  301-nya.
 
   **Importer-nya membuang SETIAP foto utama secara senyap.** `featured_media_id`
   ADA (`sql/035:46`) dan disajikan ke `awcms-astro`, tetapi

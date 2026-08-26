@@ -34,8 +34,11 @@
  *
  * The chain walk is `resolveRedirectChain` with `findActiveRedirectByPath` as
  * its lookup — the same function pair the middleware uses on a live request —
- * and target liveness is `fetchPublicBlogPostBySlug`, the same call the public
- * post route makes. A verifier that reimplements resolution proves that the
+ * and target liveness goes through whichever loader the destination's own route
+ * calls: `fetchPublicBlogPostBySlug`, `fetchPublicBlogPageBySlug` or
+ * `fetchPublicTermBySlug`, plus the `legacyTenantRouteEnabled` /
+ * `rssEnabled` / `sitemapEnabled` settings each of those routes consults BEFORE
+ * it looks anything up. A verifier that reimplements resolution proves that the
  * reimplementation agrees with the sitemap, which is not the question.
  *
  * The retired-`/news` family is applied in the SAME precedence the resolver

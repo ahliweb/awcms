@@ -430,6 +430,23 @@ pioneered directly here after the ADR-0047 freeze.)
   404'd all 67. **A gate that is green while its answer is wrong is the failure
   mode**, and this is the clearest instance the repo has produced.
 
+  **Both are now fixed** (same branch, immediately after this round). `usage()`
+  sets `process.exitCode = 1`; a `target_unverifiable` verdict replaces the
+  silent `ok` and is not clean; and the liveness lookup was widened from one
+  route to all eight under `src/pages/blog/[tenantCode]/`, so the new verdict
+  fires only for destinations that are genuinely not this deployment's surface —
+  `/kategori/*` among them. Two things came out of grepping the calls rather
+  than reading them: the routes consult `legacyTenantRouteEnabled` BEFORE any
+  lookup (so the job now reads it once per run and warns when the public surface
+  is off), and the script never closed its SQL client. `--urls=<path>` was added
+  beside `--sitemap`, which dissolves _"needs the live sitemap"_ everywhere it
+  appears — the flag always read a LOCAL file. Every fix carries a test proven
+  to fail on the real defect: four mutations were applied and run, and the
+  end-to-end proof is a real rule of ADR-0113's exact shape counted `ok` before
+  the change and `target_unverifiable` after. **What the gate still cannot see
+  is now in its own docstring:** it makes ZERO HTTP requests, so under ADR-0114
+  a green run says nothing about the edge that actually emits the 301s.
+
   **The importer silently drops every lead photograph.** `featured_media_id`
   exists (`sql/035:46`) and is served to `awcms-astro`, but
   `LegacyPostImportInput` has 12 fields and none is media, and the INSERT names
