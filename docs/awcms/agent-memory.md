@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 118.**
+**Jumlah memory saat snapshot terakhir: 119.**
 
 ## Sengaja TIDAK disertakan
 
@@ -87,6 +87,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [SQLSTATE ada di `errno`, bukan `code`](bun-sql-sqlstate-on-errno.md) — `error.code === "23505"` tak pernah benar
 - [Jebakan array Bun.SQL + assertRejected](bun-sql-array-binding-trap.md) — `${array}` tiba sebagai teks gabung-koma (22P02); `expect().rejects` MENG-HANG
 - [Bun.SQL: array TAK BISA membawa NULL](bun-sql-array-cannot-carry-null.md) — menulis STRING `'null'` tanpa melempar; sentinel + `NULLIF`, atau `jsonb_to_recordset` bila kolom nullable-nya banyak
+- [Jebakan test HTTP di Bun](bun-test-server-spawn-and-fetch-timeout.md) — `Bun.serve` di `bun test` + `spawnSync` = DEADLOCK; `fetch` punya idle timeout ~10s yang MENUTUPI `AbortSignal` hilang
 - [Bun buang method HTTP non-standar](bun-drops-nonstandard-http-methods.md) — `BAN`/`PURGE` terkirim sebagai **GET**; uji dengan `Bun.serve` nyata
 - [`ON CONFLICT` menuntut SELECT](postgres-on-conflict-needs-select.md) — GRANT INSERT saja = `permission denied`
 - [`hidden` kalah dari aturan `display`](html-hidden-loses-to-display-rule.md) — obatnya `[hidden]{display:none!important}`
@@ -6667,6 +6668,75 @@ adalah ternary yang dipatahkan Prettier).
 Perbaikan data: `(kolom #>> '{}')::jsonb` — hanya ejaan itu yang membuka bungkus;
 `::text` mengembalikan bentuk berkutip. UPDATE tenant-wide di migration WAJIB
 `NO FORCE ROW LEVEL SECURITY` lalu dikembalikan (lihat [[awcms-workflow-concurrency-notes]]).
+`````
+
+<!-- memory-file: bun-test-server-spawn-and-fetch-timeout.md -->
+
+`````markdown
+---
+name: bun-test-server-spawn-and-fetch-timeout
+description: "`Bun.serve` di dalam `bun test` + `Bun.spawnSync` = DEADLOCK; dan `fetch` Bun punya idle timeout ~10 detik SENDIRI yang MENUTUPI `AbortSignal` yang hilang"
+metadata: 
+  node_type: memory
+  type: reference
+  modified: 2026-08-26T13:16:35.027Z
+---
+
+Dua fakta runtime Bun yang memakan waktu saat menulis test CLI ber-HTTP
+(26 Agustus 2026, `blog:legacy:edge:verify`, awcms #599/#711). Keduanya BUKAN
+tentang kode yang diuji, dan keduanya membuat test tampak salah padahal
+harness-nya yang salah.
+
+## 1. `Bun.serve` di proses `bun test` + `Bun.spawnSync` = DEADLOCK
+
+`Bun.spawnSync` MEMBLOKIR event loop pemanggilnya. Kalau server stub-nya
+`Bun.serve` di proses `bun test` yang SAMA, server itu tak pernah bisa
+melayani permintaan si child — dan child-nya menggantung. Terukur: child masih
+jalan setelah DUA MENIT, sementara skrip yang sama terhadap server yang sama di
+PROSES SENDIRI selesai dalam **1,54 detik**.
+
+Anehnya, `Bun.serve` + `spawnSync` di skrip `bun` biasa (bukan `bun test`)
+BEKERJA — diuji, 1,5 detik. Jadi ini spesifik interaksi dengan runner test.
+
+**Resepnya:** tulis server stub ke berkas lalu `Bun.spawn` (async, bukan sync).
+
+```ts
+const server = Bun.spawn(["bun", serverFile], { stdout: "pipe" });
+// SATU chunk — `new Response(server.stdout).text()` menunggu EOF, dan server
+// yang tetap hidup TIDAK PERNAH menutup stdout-nya, jadi pembacaannya sendiri
+// menggantung.
+const reader = server.stdout.getReader();
+const port = new TextDecoder().decode((await reader.read()).value).trim();
+await reader.cancel();
+```
+
+Untuk stub yang cuma melayani respons dan tidak di-`spawnSync`, `Bun.serve`
+di dalam test TETAP baik-baik saja — 20+ test di repo ini memakainya
+(lihat [[awcms-integration-harness-notes]]). Yang mematikan hanya kombinasi
+dengan `spawnSync`.
+
+## 2. `fetch` Bun punya idle timeout ~10 detik, dan itu MENUTUPI mutasi
+
+Menghapus `signal: AbortSignal.timeout(ms)` dari sebuah `fetch` TIDAK membuat
+runnya menggantung selamanya — Bun tetap menyerah sendiri sekitar 10 detik.
+Terukur terhadap server yang tak pernah menjawab:
+
+| | |
+| --- | --- |
+| dengan `AbortSignal.timeout(1500)` | **1,54 s** |
+| `signal:` dihapus | **12,04 s** |
+
+Akibatnya untuk MUTATION TESTING: asersi `expect(elapsed).toBeLessThan(20_000)`
+LULUS pada kedua kasus, jadi ia membuktikan NOL. Jendelanya harus berada DI
+ANTARA kedua angka itu (dipakai: `> 1_000` dan `< 6_000`).
+
+Ini instans lain dari [[awcms-gate-design-lessons]]: gerbang yang hijau
+sementara jawabannya salah. Dan pelajaran GRAIN yang sama seperti
+[[awcms-run-it-dont-read-it]] — angka ambangnya harus diturunkan dari DUA
+pengukuran, bukan dipilih supaya "cukup longgar".
+
+Terkait: [[bun-drops-nonstandard-http-methods]] (alasan repo ini memakai
+`Bun.serve` sungguhan alih-alih `fetch` tiruan sejak awal).
 `````
 
 <!-- memory-file: codemod-heuristics-read-comments-and-strings.md -->
