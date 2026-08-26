@@ -12,7 +12,7 @@
 
 ## Context
 
-The legacy `.htaccess` at `/home/data/dev_php/seputarborneo.com/.htaccess` has **five** rewrite shapes, not the two every version of the plan named:
+The legacy `.htaccess` at `/home/data/dev_php/seputarborneo.com/.htaccess` has **five** rewrite rules, not the two every version of the plan named — and, as the second amendment below establishes, only **four** of them can ever fire:
 
 ```
 ^news/([^/]*)\.html$          -> /berita/?news=$1          # article  — #599

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0113-a-legacy-rubrik-pair-flattens-to-its-rubrik.md)
 
-<!-- i18n-source-hash: sha256:0d22623ff04e554ab0e2562303067137677825330162116a48d69f26c522e2b0 -->
+<!-- i18n-source-hash: sha256:61b0eb86c37b783a16dec902bc0644620c20014d53f3398b35cecc1905f377b6 -->
 
 # ADR-0113 — Satu pasangan rubrik legacy diratakan ke rubriknya, dan URL pencarian legacy mempertahankan kueri-nya
 
@@ -14,7 +14,7 @@
 
 ## Konteks
 
-Berkas `.htaccess` legacy di `/home/data/dev_php/seputarborneo.com/.htaccess` memuat **lima** bentuk rewrite, bukan dua seperti yang disebut setiap versi rencana:
+Berkas `.htaccess` legacy di `/home/data/dev_php/seputarborneo.com/.htaccess` memuat **lima** aturan rewrite, bukan dua seperti yang disebut setiap versi rencana — dan, sebagaimana ditetapkan amandemen kedua di bawah, hanya **empat** di antaranya yang bisa menyala:
 
 ```
 ^news/([^/]*)\.html$          -> /berita/?news=$1          # artikel   — #599
