@@ -1,5 +1,6795 @@
 # awcms
 
+## 10.0.0
+
+### Major Changes
+
+- 06d094e: feat(blog-content)!: Portable Text is the canonical body format, and its vocabulary stays closed
+  
+  A paragraph in `blog_content` was `{ type: "paragraph", text: string }`. One
+  string. There was no way to make a word bold, italicise a phrase, or put a link
+  inside a sentence — not "no editor for it", **no place for it in the data**.
+  Every article this CMS has stored is unstyled prose, and no editor could have
+  changed that.
+  
+  ADR-0100 lands the format, `sql/134` lands the columns, and
+  `bun run blog:portable-text:backfill` converts the corpus.
+  
+  ### The vocabulary is CLOSED, and that is the security decision
+  
+  Portable Text as the wider ecosystem uses it is open by design: any `_type` is
+  valid and consumers ignore what they do not recognise. That openness is exactly
+  what would dissolve the property this module rests on — `content-validation.ts`
+  **rejects** `<script>`/`<iframe>`/`<embed>`/`<object>`, inline handlers and
+  `javascript:` rather than sanitizing, and the closed `ContentBlock` union is
+  what made "there is no field where arbitrary markup could live" true.
+  
+  So every node type, block style, list kind, decorator and annotation is
+  enumerated, welded to its TypeScript union by a mutual-assignability assertion,
+  and anything else is refused at **write** time rather than merely failing to
+  render. A link `href` is scheme-checked by `URL` parsing at write time — not a
+  regex, which is how `java\nscript:` gets through — and escaped again at render
+  time, because write-time validation governs what is stored while the renderer
+  governs what a body already in the database can do.
+  
+  ### Breaking: `content_text` is no longer accepted from the request
+  
+  It was a required field validated **independently** of `contentJson`, with no
+  check that the two agree — so a caller could send a body about one subject and
+  search text about another, and the search index believed the search text. It is
+  now derived from the body, which closes that by construction rather than by a
+  consistency check every writer would have to remember.
+  
+  ### `content_json.blocks` keeps being written, and that is not indecision
+  
+  `ahliweb/awcms-astro` reads the body from `contentJson.blocks`, its renderer
+  returns `""` for a non-array rather than failing, and it stores an unrelated
+  structured sidecar at `contentJson.awcmsAstro`. So dropping `blocks` would make
+  that site render **every article as a blank page with a green build**, and
+  replacing the envelope would delete the sidecar. Neither failure announces
+  itself.
+  
+  `blocks` therefore continues as a **derived projection** — lossy by
+  construction, since the old vocabulary has no marks — until that repo reads
+  `bodyPortableText` directly. Nothing here reads it; an edit to it is discarded
+  on the next save.
+  
+  ### The backfill is a script, not migration DML
+  
+  `awcms_blog_posts` is `FORCE ROW LEVEL SECURITY`, and DML inside a migration
+  against a FORCE RLS table is green on an empty CI database and breaks in
+  production. So `sql/134` adds columns and stops. The script is **dry-run by
+  default**, bounded per run, and idempotent: its predicate is
+  `body_portable_text = '[]'::jsonb` and the converter is deterministic, so a
+  re-run after a partial failure converts only the remainder instead of rewriting
+  every row with fresh keys.
+  
+  Declared with `schedule.mode: "manual"` rather than a cron entry — a nightly
+  run of a one-shot migration would find nothing and burn a connection forever.
+- 0988bc5: feat(blog-content)!: the write path stores Portable Text, and derives everything else from it
+  
+  The second half of ADR-0100. #604 landed the format, its validator, its renderer
+  and the converter; this wires them to the endpoints, so an article's body is now
+  Portable Text end to end.
+  
+  ### Breaking
+  
+  `contentText` is **refused** on create and update, with a message naming its
+  replacement. Refused rather than ignored: a field silently dropped is one a
+  caller keeps sending for months while believing it does something, and the
+  belief only surfaces when their search results disagree with their articles.
+  
+  `bodyPortableText` is **required** on create. An article with no body is not a
+  draft — it is a row nothing can render, and accepting it moves the failure to
+  whoever opens the page.
+  
+  `contentJson` becomes **optional** and is now the non-body envelope. It still
+  carries `awcmsAstro`, the structured sidecar the sibling repo stores there; its
+  `blocks` key is overwritten with the derived projection on every write.
+  
+  ### The three body columns move together, or not at all
+  
+  A partial update that changed the envelope without the body, or the body
+  without the derived search text, would leave a row internally inconsistent in a
+  way nothing downstream could detect. So `content_json`, `content_text` and
+  `body_portable_text` are written in one `CASE` keyed on whether a body arrived.
+  
+  ### Restoring an old revision no longer blanks the post
+  
+  A revision written before the cutover carries an empty `bodyPortableText` and
+  its real body in `contentJson.blocks`. Restoring it verbatim would blank the
+  post — and **nothing would fail**: the row would be valid and the page would
+  just be empty. The restore path converts from the revision's own envelope when
+  the body is empty rather than trusting it.
+  
+  This is the "restore revision bypasses the new write path" defect class this
+  epic has already hit once, closed at the one call site that can reintroduce a
+  legacy body into a live post.
+  
+  ### The frozen consumer contract was regenerated, deliberately
+  
+  `api:consumer-contract:check` correctly refused `BlogPostWriteInput` as a
+  non-additive change (ADR-0065). Regenerating it is the sanctioned act, and it
+  was taken only after verifying the premise: **`awcms-astro` never writes.** Its
+  only call to this API is `awcmsGet("/api/v1/blog/posts")`, and it declares
+  `contentText?: string` without reading it anywhere.
+  
+  `contentText` therefore stays in every RESPONSE schema, marked `readOnly` — the
+  column still exists and is still what the full-text index is built from. Only
+  the write inputs changed.
+
+### Minor Changes
+
+- b3fcdf1: test(e2e): two different intermittent failures, and the CI one was shared tenant state
+  
+  `admin-users.e2e.ts` went flaky in CI. This change fixes it — and the diagnosis took three attempts, two of which were wrong. Both wrong turns are recorded because each was confidently argued and each would have shipped a false explanation.
+  
+  ### What the CI flake actually was
+  
+  The test asserts that re-assigning the role the owner already holds is rejected with `409`. It intermittently got **`200`** — the assignment succeeded.
+  
+  The assign dropdown lists *every role in the tenant*, and `admin-roles.e2e.ts` creates one, concurrently. When it had, the dropdown's default was a role the owner did **not** hold, so the assign legitimately succeeded. Nothing about the page was wrong; the test depended on tenant state another spec mutates.
+  
+  It now selects the `owner` role explicitly. Shared-state dependence, not a race.
+  
+  ### Wrong turn 1: a hydration race
+  
+  Delegated admin listeners bind on `document` inside a deferred module, so a click before that is silently swallowed. That window is **real** and is now observable via `ADMIN_DELEGATION_READY_ATTRIBUTE` — but it was not the cause of anything here.
+  
+  ### Wrong turn 2: argon2 contention — real, but a different failure
+  
+  Locally the suite was bimodal: usually ~15s green, occasionally **four minutes with six or seven failures**, every one a 30s `waitForURL` timeout **at the login step**. Every authenticated spec drove the real `/login` form, so five parallel workers meant five simultaneous `Bun.password.verify` calls — argon2id, memory- and CPU-hard by design — while the same server rendered admin pages. `--workers=1` made it vanish.
+  
+  That is a genuine finding and the fix below is worth keeping. **But CI runs 2 workers, not 5, and never showed those login timeouts.** It was a local phenomenon, and treating it as the CI flake's cause was wrong.
+  
+  ### A setup project logs in once
+  
+  `tests/e2e/auth.setup.ts` authenticates the owner and saves `storageState`; the `chromium` project depends on it and reuses the session. Three specs opt out with a fresh state: `login.e2e.ts`, because the login flow is its subject, and the two that authenticate as somebody other than the owner. **Thirteen logins became four.**
+  
+  Six consecutive runs at ~18s with zero variance, against the previous 15s-or-four-minutes.
+  
+  ### A read-only sweep is NOT in this change, and why
+  
+  A spec for the user between "owner sees everything" and "nobody sees anything" was written and works — but it proved flaky for a reason that is not its own, and shipping a known-flaky test right after diagnosing one would be incoherent.
+  
+  `admin-modules-toggle.e2e.ts` deliberately DISABLES the `reporting` module, and `/admin` authorizes on `reporting.dashboard.read`. A read-only sweep overlapping that toggle sees the dashboard deny — correctly. Alone it passed 4/4; in the suite it failed roughly one run in three, always on `/admin`.
+  
+  That is a harness problem worth solving properly: read sweeps must not run concurrently with specs that mutate tenant-wide state. The `read` grant stays in `e2e-restricted-user.ts` for that work, with the reason recorded beside it.
+  
+  Worth noting the two sweeps already on `main` are accidentally immune rather than correct: the render sweep asserts only `200`, and a denied screen still returns `200`; the deny sweep expects denial, which a disabled module also produces.
+  
+  ### The hydration window, documented not closed
+  
+  `ADMIN_DELEGATION_READY_ATTRIBUTE` marks the document once a delegated listener is attached, and `admin-users.e2e.ts` waits for it and then for the response itself. Closing the window properly would mean gating 76 controls that share no selector convention, which risks disabling things that work without JavaScript. Making it observable is the honest half.
+- 19f2e32: feat(newsletter): a reader can join a list, and leave it without logging in (#598, ADR-0103)
+  
+  There was no newsletter capability of any kind, and it is easy to mistake for
+  something that already existed. The `email` module is complete and mature —
+  templates with a per-category variable allow-list, an outbox with lease claiming,
+  retry and backoff, a circuit breaker, per-address suppression. **It can send
+  mail.** What was missing is a different thing: a subscriber list a reader can
+  join from a public page. No subscriber table, no endpoint anyone could POST to,
+  no double opt-in, no unsubscribe, no admin screen.
+  
+  The legacy portal has all of it and is live, so migrating a second tenant without
+  this would be a functional **regression**, not a gap.
+  
+  ### Why not part of `email`
+  
+  The reuse gate rejected the obvious home on the interesting ground. `email`
+  answers "may this address be written to, and did the message arrive" — an
+  operational question about deliverability. A subscription answers "did a person
+  ask for this, when, from where, and can they prove they stopped asking" — a legal
+  question about consent, whose record must survive independently of whether any
+  message was ever sent.
+  
+  Folding them together would make `awcms_email_suppressions` mean both "this
+  address bounced" and "this person withdrew consent" — the first an operational
+  fact an operator may clear, the second a decision they must not.
+  
+  ### Four states, and the fourth is not the third
+  
+  `pending` → `active`, with `unsubscribed` and `suppressed` as terminal branches.
+  Re-subscribing is allowed from one and not the other: somebody who unsubscribed
+  in March may sign up again in June, and letting them is correct, while an address
+  suppressed for abuse must not be re-addable by whoever is abusing it. A single
+  `inactive` state would make that a matter of remembering rather than of the type
+  — so the refusal lives in the `ON CONFLICT` statement itself, where no future
+  caller can forget it.
+  
+  ### The public endpoints tell nobody anything
+  
+  All three are anonymous, per-IP rate-limited, and answer the **same neutral
+  body** for every outcome: a new address, one already active, one suppressed, and
+  a host that resolves to no tenant. A distinguishing response turns a public
+  endpoint into a way to ask "is this person subscribed to this newsroom's list",
+  and for a news site in Central Kalimantan that has consequences for the person
+  being asked about.
+  
+  The tenant is resolved from the request **host**, never a header, so a caller
+  cannot choose whose list they are writing to (FR-NWL-002). Idempotency
+  (FR-NWL-005) rests on the unique index over `(tenant_id, email_normalized)` and
+  one statement — not a read-then-write two concurrent submissions could interleave
+  with.
+  
+  ### Consent is recorded when it is given
+  
+  `consent_at` is written when the confirmation link is **followed**, never at
+  submission, so the record says what happened rather than what was asked for.
+  There is no consent field on the request at all, which is stronger than
+  defaulting one to false (PRD §30). A CHECK refuses an `active` row with no
+  consent, and another refuses a suppression with no reason.
+  
+  Both tokens are stored hashed — they are bearer credentials — and the unsubscribe
+  token is stable for the row's lifetime because it is printed in the footer of
+  every message the subscriber will ever receive.
+  
+  ### Unsubscribing never requires a login
+  
+  The endpoint takes the token and nothing else: no session, no tenant header, no
+  address (PRD §30). The row is **kept** — "this person asked to stop, on this
+  date" is what answers a later complaint, and deleting it leaves nothing to answer
+  with.
+  
+  ### The admin screen cannot add a subscriber
+  
+  There is no form, deliberately: a subscription is a person's decision, and an
+  admin-side "add" would be a way to put an address on a list without consent. It
+  cannot display either token either. Suppression is the one write, and it requires
+  a reason, because it is the one state a subscriber cannot leave.
+  
+  The pending count in the summary is load-bearing rather than decorative: a tenant
+  with no active `derived.newsletter_confirmation` template collects `pending` rows
+  that never advance, and this is where that becomes visible instead of silent.
+  
+  Retention purges only unconfirmed `pending` rows — an unfinished request, and
+  keeping it forever means keeping an address nobody consented to. `active`,
+  `unsubscribed` and `suppressed` rows are never touched by it.
+- 9db33e1: feat(site-search): a reader's browser may search, and the `Origin` names the tenant (ADR-0107)
+  
+  `site_search` has been complete for months — weighted `tsvector` indexing,
+  `ts_rank` ordering, escaped snippets, keyset pagination, content-type facets,
+  term facets, a bounded trigram typeahead — and no reader could reach any of it.
+  The reader surface is a static `awcms-astro` build on its own origin, so Issue
+  #597 item 3 stayed blocked on "CORS, `connect-src`, and an ADR".
+  
+  **The CORS half was the smaller problem.** `withSiteSearchTenant` resolves the
+  tenant from the request HOST. A reader on `https://news.example` calling
+  `https://cms.example` is resolved through the documented fallback chain
+  (`PUBLIC_DEFAULT_TENANT_ID` -> `PUBLIC_DEFAULT_TENANT_CODE` ->
+  `awcms_setup_state`) and lands on the deployment's **default tenant** — correct
+  on a single-tenant LAN box, and on a shared deployment one tenant's site
+  displaying ANOTHER tenant's articles as its own results, with a 200, a populated
+  list, and nothing reporting a problem.
+  
+  So the change is not "add headers". A cross-origin search request now resolves
+  its tenant from the `Origin`, against `awcms_tenant_domains`, and from nothing
+  else — no env default, no setup-state default. That closes it by construction
+  rather than by a header, which matters because a header-only design leaves the
+  default tenant's content in the response body for anything that is not a browser
+  (`curl`, a crawler, a proxy).
+  
+  - `Access-Control-Allow-Origin` is echoed verbatim, never `*`, and only for an
+    `active` domain of an `active` tenant — registering and verifying the domain
+    IS the opt-in, so no second switch can disagree with the first.
+  - `Access-Control-Allow-Credentials` is **absent**: search needs no cookie, and
+    a response without it cannot be read by a credentialed request at all.
+  - There is deliberately **no `OPTIONS` handler**. A `GET` with only
+    CORS-safelisted headers is a simple request; answering preflights would
+    quietly turn this into a general-purpose cross-origin API.
+  - A refused origin gets the neutral empty payload, byte-identical to "no
+    results", and pays the same latency pad. Only a server-side counter
+    (`origin_refused` vs `disabled`) can tell them apart.
+  - `Vary: Origin` goes on every answer, including the rate-limit 429 the limiter
+    returns before the origin is ever classified.
+  
+  `parseRequestOrigin`/`isCrossOriginRequest` move out of
+  `visitor-analytics/domain/beacon-cors.ts` into `lib/security/request-origin.ts`
+  — shared, not copied. Two hardened copies of a security parser is the
+  arrangement where the un-hardened one is what an attacker finds.
+  
+  `/api/v1/site-search/query` and `/suggest` enter `COMMITTED_PATHS` in the
+  `awcms-astro` consumer contract and move to `CONSUMED_PATHS` when that repo
+  calls them.
+- c8b6629: test(admin): 41 of 48 admin screens were never loaded by anything — plus a correction, the symptom is a 404
+  
+  `/admin/seo` had never rendered, and the reason nobody noticed is that **nothing requested it**. Seven admin screens were exercised by the CRUD e2e specs; the other 41 were never loaded in CI, by any gate, in any form. `admin:screen-coverage:check` looks adjacent but answers whether a screen CLAIMS a permission — it never loads a page.
+  
+  `check:astro-frontmatter:check` now catches the static half of that class. This is the other half: a screen can type-check perfectly and still throw at render time on a `null` row, a missing permission seed, or data this tenant does not have.
+  
+  ### The route list is discovered, not written down
+  
+  `tests/e2e/admin-screens-render.e2e.ts` enumerates `src/pages/admin/**.astro` at run time and loads every screen as the seeded owner. A hardcoded list is the failure mode this repo keeps finding — a gate checking its own matrix rather than what exists, staying green while the thing it names drifts away. Adding a screen without covering it is now impossible: the screen IS the test case.
+  
+  The one dynamic route (`/admin/modules/[moduleKey]`) derives a real id from the listing page that links to it, and **fails rather than skips** when none can be found. A silent skip is how a dead screen stays dead.
+  
+  One session, soft assertions: 48 logins would be wasteful, and a hard assertion would stop at the first broken screen, so a run would surface one defect at a time.
+  
+  ### Correction: the symptom is a 404, not a 500
+  
+  Verifying this test meant reintroducing the `/admin/seo` fault and watching a real server answer. **It does not answer 500.** The `ReferenceError` goes to the server log; the browser is handed a **404**.
+  
+  ADR-0112 and everything repeating it said 500. All of it is corrected here, and ADR-0112 carries an amendment recording the discovery.
+  
+  This is not a detail. It changes how the class is hunted: asking "which admin screens return 5xx?" finds nothing and concludes the fleet is healthy, because a screen that throws on every render is indistinguishable, by status alone, from a route that was never built.
+  
+  So the test asserts **`200` exactly** — the seeded owner holds every permission, so every admin screen owes it a rendered page — rather than "not 5xx", which would have passed straight over the defect it exists for. Verified in both directions against a real server: green on all 48 screens, and red naming `/admin/seo` when the fault is restored.
+- e513754: feat(blog-content): advertisement slots finally appear on the public pages
+  
+  `selectAndRenderActiveAdsForPlacement` has existed since ADR-0044 §4 with test
+  callers only — its own docblock says "not wired to any public page route in this
+  issue ... a later issue's homepage/article template work calls it directly".
+  This is that issue.
+  
+  Nine of the twelve slots are now drawn: four on the index, four on an article
+  (with THIS article as the target, so a scoped placement and every global one for
+  the same slot both appear), one above each archive, one above search results.
+  `article_middle` lands between two blocks rather than after the last one,
+  because a slot named middle that renders at the end is a lie an advertiser paid
+  for.
+  
+  **The three that are not drawn are named.** `AD_PLACEMENT_RENDER_SURFACES` maps
+  every slot to the routes that render it, `/admin/blog-ads` reads the same
+  constant to mark the three sidebar slots as unrendered here, and a test checks
+  the map against the real route files in both directions. A slot that is bookable
+  but unrendered is "declared, validated, never read" — the booking succeeds, the
+  audit row is written, the invoice goes out, and nothing appears.
+  
+  **The availability notice (FR-ADS-007) is shown only to a tenant that sells
+  advertising** — one `EXISTS` decides it. Applied unconditionally it would paint
+  "ad space available" across four slots of every newsroom in the family,
+  including the ones that have never sold a banner, which would deface the site to
+  advertise a service the tenant does not offer. For such a tenant that `EXISTS`
+  is also the only query this path runs, and every slot renders the empty string,
+  so the page is byte-identical to what it was before.
+  
+  Part of #594.
+- f197721: fix(media-library,blog-content,docs): two surfaces that answered nobody, and a gate that answered wrongly
+  
+  PROJECT_STATE §4 **D16**, **D17**, and the `docs:i18n:stamp` item found while
+  working. The two media findings are opposites: one was a whole branch nothing
+  could reach, the other a surface that answered with something unusable.
+  
+  **D16 — the orphan lifecycle is deleted, the schema is kept.**
+  `markNewsMediaObjectOrphaned` was this repo's only writer of
+  `status = 'orphaned'` and had zero callers, so the reconciliation job's
+  stale-orphan sweep, its partial index and the grace-period comparison all gated
+  a permanently empty set — and every run printed
+  `staleOrphaned(total=0,deleted=0,deferred=0)`, which reads exactly like a clean
+  bucket. It is a leftover of the pre-ADR-0036 model: `sql/087` removed the
+  attach/detach relation, so no reference count exists to derive "orphaned" FROM.
+  
+  Gone: the writer, `markStaleOrphanedNewsMediaObjectDeleted`, the
+  `cleanupStaleOrphaned` path (whose docblock reasoned carefully about a race that
+  could not occur), the `staleOrphaned` category and the job's three counters.
+  
+  **`NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` is NOT deleted with them.** It looked dead
+  and is not — `orphanInR2`, an R2 object with no DB row at all, genuinely uses it
+  to decide when physical deletion is safe. Removing it would have taken out a
+  live control.
+  
+  Kept, per the decision to delete the code and not the schema: the `'orphaned'`
+  value in `sql/041`'s CHECK, `orphaned_at`, its partial index, and both status
+  filters (the admin screen's and the API's — they are reads over a column that
+  can still hold the value, and dropping one would leave two surfaces disagreeing).
+  `isNewsMediaObjectSafeForPublicReference` still refuses the status, so a row that
+  reached it by hand stays out of public references.
+  
+  **D17 — an ad row a renderer can actually use.** `GET /api/v1/news-portal/ad-placements`
+  returned `mediaObjectId` and nothing else, so an external renderer could neither
+  build an `<img src>` nor reproduce the media-safety filter. Three fields are
+  added to `AdPlacementItem`, all required: `mediaPublicUrl`, `mediaAltText`, and
+  `mediaPubliclyReferenceable`.
+  
+  The last is the point. It is the SERVER's verdict, not a status to interpret:
+  `isNewsMediaObjectSafeForPublicReference` turns on which lifecycle states count
+  as verified, and a consumer reimplementing it gets that wrong in the permissive
+  direction — which publishes an unverified image. `false` also covers a
+  soft-deleted object, so a consumer checking only this field cannot render one.
+  
+  Resolved in the same query on every path — a `LEFT JOIN` with the media
+  predicate in the `ON` clause, so a placement whose object was soft-deleted still
+  appears in the admin list rather than vanishing from the one screen that could
+  repair it, and a data-modifying CTE on create/update so a freshly created ad is
+  not reported as unreferenceable. No N+1, no second endpoint. `/admin/blog-ads`
+  now says whether the attached image will actually be shown.
+  
+  **The client asset budget could be measured against a `dist/` the build had not
+  cleaned, and it was.** `bun run build` now runs `rm -rf dist` first.
+  `client-asset-budget.ts`'s own docblock already recorded being misled this way
+  twice; it happened a third time on 22 August 2026, producing a phantom 425 B
+  "saving" for D12 that sent a whole PR down the wrong road. The claim is
+  corrected in the D12 changeset and in PROJECT_STATE §4. A gate that documents
+  its own hazard will mislead somebody again, so the hazard is removed instead.
+  
+  **`docs:i18n:stamp` no longer declares a mirror current that nobody
+  re-translated.** Re-writing the marker is a claim about the translation, and the
+  tool made it unconditionally — so "edit the English, run the stamp" turned
+  `check:docs:translation` green over a mirror that still said the old thing. That
+  happened for real (a §2 count went 141 → 142 while the mirror still read 141) and
+  was caught only by a test that checks `sql/NNN` ranges for a different reason.
+  
+  When a mirror's recorded hash is stale, re-stamping is now allowed only when the
+  mirror itself is modified in the working tree, or the source changed only in
+  whitespace since `HEAD` — the reflow case the tool exists for. Otherwise it
+  refuses, names the file, and exits 1. `--force-restamp` is the deliberate
+  override. Verified against all three cases.
+  
+  It immediately surfaced pre-existing drift it had been papering over: §2 of the
+  Indonesian `PROJECT_STATE` said ADR `0000–0103` while the English source said
+  `0000–0106`. §2 is generated into the English file ONLY, so its mirror is
+  hand-maintained and had silently fallen three ADRs behind. Corrected here.
+- 36ac0d1: feat(blog-content): a static page can finally be read by a reader
+  
+  `awcms_blog_pages` has had full CRUD, lifecycle, revisions, a quality checklist
+  and an admin screen for months, and no route ever served one. Redaksi, the
+  Pedoman Media Siber, the disclaimer and the privacy policy — the pages a news
+  site is required to keep reachable, and the ones Dewan Pers expects to find —
+  were writable and unservable.
+  
+  `GET /blog/{tenantCode}/pages/{slug}` serves them, under a reserved segment
+  because posts and pages have separate slug uniqueness and one segment could not
+  break the tie. They are listed in `sitemap-blog.xml`, declared as the cacheable
+  `blog-page` surface, and locale-prefixed like every other page a human reads.
+  
+  Every handler that changes a page now enqueues an edge-cache purge in its own
+  transaction — the two CRUD routes and all four lifecycle routes. `publish` and
+  `archive` matter most: they are how a page becomes reachable and how it stops
+  being, and neither goes through the PATCH path.
+  
+  An unpublished page cannot be reached through this route by construction, and
+  the predicate is pinned by a test that reads the SQL rather than the rows.
+  
+  Part of #594.
+- 0c48039: test(security): 121 endpoints refuse a tenant user without recording that they did
+  
+  The previous change closed the caller who is *nobody*. This one measures the caller who is *somebody with no grant* — a shape every tenant has, and the one no static gate can reason about.
+  
+  Driving a session holding **zero permissions** at every gated body endpoint:
+  
+  | Answer | Count |
+  |---|---|
+  | `403 ACCESS_DENIED` — authorization first, correct | 84 |
+  | `400 VALIDATION_ERROR` — the endpoint's schema | 61 |
+  | `400 IDEMPOTENCY_REQUIRED` | 54 |
+  | `404` — an existence lookup ran first | 3 |
+  | `422` / `401` | 3 |
+  
+  ### The finding is the missing rows, not the status codes
+  
+  ADR-0063 made `authorizeInTransaction` the one place a decision is taken — and the one place it is **recorded**. A route that refuses before reaching it refuses invisibly: no `awcms_access_decision_log` row, nothing an audit can read. So *"which endpoints answer something other than 403"* is the same question as *"which refusals leave no trace"*, and the answer was **121**.
+  
+  ### A ledger that may only shrink, enforced in both directions
+  
+  `tests/e2e/api-authorization-first.e2e.ts` drives the sweep. `support/authorization-first-ledger.ts` lists what answers early today.
+  
+  - An endpoint **not** listed that answers anything but `403` → red. The debt cannot grow.
+  - An endpoint **listed** that answers `403` → red, because it was fixed and its row must be deleted. Without this second direction a ledger fills with stale rows and becomes wallpaper.
+  
+  Both are mutation-proven: the 121 entries were *generated* by the first direction failing, and adding one stale row turned the second red.
+  
+  This is the shape `api:tenant-route:check` already uses in this repo. It is not an approval — it makes an invisible property visible and bounded.
+  
+  ### One route fixed, as the worked example
+  
+  `POST /api/v1/media/news-images/upload-sessions` used to tell a caller with no `media_library.media.create` grant whether this deployment has R2 configured (`502`), and if so its exact accepted MIME types and size ceiling (`400` + field errors) — recording nothing. It now holds both refusals until authorization has answered.
+  
+  The body is still read and validated *outside* the transaction, because `await request.json()` waits on the client and doing it inside `withTenant` holds a reserved connection for as long as a caller chooses to take. Holding the refusal keeps both properties. The held value is a discriminated union rather than two correlated nullables, so the code reads `held.value` where it would otherwise have asserted `input!`.
+  
+  ### Three entries are structural, and are listed rather than exempted
+  
+  `PATCH /api/v1/blog/posts/:id` and `/blog/pages/:id` read the row before authorizing because the ownership **grant basis** (ADR-0063) is computed from `authorTenantUserId` and `status` — the read is an input to the decision, not a decision taken instead of it. `PATCH /api/v1/partners/:id/status` and `POST /api/v1/access/machine-credentials` compute a stricter permission *from* the body.
+  
+  They are on the ledger anyway. "There is a reason for it" and "it is fine" are different claims, and only the first is true.
+  
+  ### What is genuinely exempt
+  
+  Self-service routes (`defineSelfServiceTenantRoute`): the subject **is** the caller, so there is no permission to check and nothing to record. `POST /api/v1/auth/preferences` answering `200` to a zero-permission user is the product working. They are excluded by the helper their source calls, so the exemption cannot outlive its reason.
+  
+  ### Two traps the spec had to be built around, both recorded
+  
+  **It logged itself out.** Sweeping every route with a live session hit `POST /api/v1/auth/logout`, and every request after that answered `401` — a self-inflicted false negative that reads exactly like a passing gate. Session-destroying endpoints are skipped by name, and the spec now asserts its session is live *before* drawing conclusions from any refusal.
+  
+  **Several "findings" dissolved on inspection.** Status codes alone suggested five existence oracles and an outbound provider call. Reading the sources: `push/subscriptions` is self-service with a *documented* anti-oracle `404`, and the `502` is a local env-config check, not a network call. They are reported here as what they are rather than as fixes.
+  
+  Full e2e suite: 30 passed. `bun run check` green.
+- c0b4620: feat(security,blog-content): a video-embed origin an operator can opt into (ADR-0110, #597 item 8)
+  
+  `video-news-block-renderer.ts` has built a correct, privacy-enhanced
+  `youtube-nocookie.com` iframe since Issue #639 — and **every one of those
+  iframes has been blocked by the browser**, because this repo's CSP allow-lists
+  no third-party origin. The renderer's own header records the degradation ("no
+  video shown, no console error users would see, no XSS") and names the fix it
+  was waiting for: "a future opt-in flag mirroring Turnstile's pattern".
+  
+  What an editor experienced was a blank area where a video should be, with
+  nothing anywhere explaining it.
+  
+  `BLOG_VIDEO_EMBED_ENABLED=true` now adds exactly one origin to `frame-src` and
+  nothing else. Unset — the default — the policy is byte-for-byte what it was, and
+  the two opt-in switches are independent: either, both, or neither.
+  
+  The decision's security content is what it refuses:
+  
+  - **Not derived from tenant data.** "Allow it when a tenant enables the
+    `video_news` block" would make a per-response, deployment-wide header a
+    function of one tenant's data — one tenant enabling video would open the
+    origin for every tenant sharing the deployment. A guarantee that can be
+    flipped by a row in somebody else's tenant is not a guarantee.
+  - **Not gated on the online security profile** the way Turnstile is: Turnstile
+    makes an outbound call to Cloudflare and is meaningless without one, while a
+    video embed makes no server-side call at all.
+  - **`frame-src` only, never `script-src`.** The embed is an iframe; widening the
+    strictly more dangerous directive would buy nothing.
+  - `frame-ancestors 'none'` and `X-Frame-Options: DENY` are untouched — opening
+    `frame-src` says what this page may embed, not who may embed this page.
+  
+  The origin has one definition (`lib/security/video-embed.ts`) which the renderer
+  imports its embed base from: two copies is how a policy and its markup drift.
+  
+  Also corrected here: `security-headers.ts`'s CORP bullet said the JSON API has
+  "ONE deliberate exception" to being unreachable cross-origin and asked its
+  successor to re-read it when a second appeared. ADR-0107 added two. Re-read, and
+  it still holds — CORP does not apply to CORS — now with the count right.
+- 5f91b20: feat(i18n): the locale moves into the PATH — ADR-0098 implemented, and the public URL shape changes
+  
+  ADR-0095 gave every request a `locals.locale` and then localised **no** public
+  surface, because `vcl_hash` hashes `(host, url)` and nothing else: one public URL
+  whose body varied by cookie would serve the Indonesian page to an English reader,
+  minutes later, from a cache neither could re-render. ADR-0098 decided the fix and
+  this builds it.
+  
+  ## What changed for a reader
+  
+  `/blog/{tenant}` and everything under it now answers **`307`** to `/en/…` or
+  `/id/…`, chosen from ADR-0095's chain (cookie → tenant default → `Accept-Language`
+  → `en`). The prefixed URL is the canonical one; the bare path is a permanent
+  alias that renders nothing.
+  
+  The redirect is `private, no-store` — it reads a cookie and must never be cached.
+  Only its destination is cacheable, which is the property `Vary` cannot have.
+  
+  ## The inversion that is the whole safety property
+  
+  On a prefixed URL the **PATH sets `locals.locale`, outranking the cookie.** If the
+  cookie won there, two readers of `/en/blog/acme` would get different bodies under
+  one cache key and whichever missed first would decide what the other saw — the
+  exact misdelivery this ADR exists to make impossible. The URL is the key, so the
+  URL chooses the body.
+  
+  `src/lib/i18n/public-locale-path.ts` is the decision made executable, and it is
+  deliberately unable to read a header: a path goes in, a routing decision comes
+  out.
+  
+  ## The prefix is scoped to CACHEABLE HTML, and that is not a shortcut
+  
+  `CACHEABLE ⇒ prefixed`, and the converse is ADR-0098 decision 6's own reasoning:
+  a `private, no-store` response never reaches a shared cache, so it can localise
+  from a cookie with no possibility of misdelivery. `/admin` is the ADR's stated
+  example; `/login`, `/register` and `/blog/{t}/search` are the same case for the
+  same reason. Among cacheable surfaces only the HTML ones are prefixed —
+  `robots.txt` sits at a protocol-fixed location a crawler will not follow a
+  redirect to reach, and the feeds already carry `?locale=`, which is the same
+  cache key in a different spelling.
+  
+  ## Three things that would have been silent
+  
+  - **`matchPublicCacheSurface` needed a second matching attempt.** Without it
+    every `/en/…` and `/id/…` request would have missed the registry and been
+    stamped `private, no-store` — the ADR would have moved the locale into the key
+    while turning the entire public surface uncacheable, a regression that reads as
+    a caching bug rather than a routing one.
+  - **The sitemap had to move with the canonical.** A `<loc>` naming the bare path
+    while the page's own `<link rel="canonical">` names the prefixed one is a
+    disagreement search engines resolve by trusting neither. `<loc>` now names the
+    tenant default's spelling, with `xhtml:link` alternates per locale.
+  - **Every in-page link is built from the prefixed base path.** Building them bare
+    would drop each reader back onto the alias on their very next click.
+  
+  ## Decision 2 is enforced twice, and both were proven by planting the defect
+  
+  `decideCacheability` REFUSES a response that varies on `Cookie` or
+  `Accept-Language`. Refusing rather than stripping is the point: stripping would
+  cache a body that its own author said varies, which is the misdelivery in its
+  purest form. `edge-cache:surfaces:check` then fails the build on the same two
+  names anywhere under `src/`, so the mistake is loud rather than merely safe.
+  
+  Mutation-proven, not assumed green: three spellings of a forbidden `Vary`
+  (`{ Vary: "Cookie" }`, `headers.set("Vary", "Accept-Language")`, and
+  `"Accept-Encoding, Cookie"` hidden in a list), a machine surface handed a
+  prefixed alias, and a `localePrefixed` flag flipped out of agreement with the
+  path patterns — each caught, each with the failure naming the consequence.
+  
+  ## What is still open behind it
+  
+  Multi-language content fields for `blog_content`. The reader's interface language
+  and the POST's own language are different axes, and `<html lang>` still comes
+  from `post.locale`; the public chrome is not translated yet, so `/en/…` and
+  `/id/…` differ today only in their `hreflang` and canonical. The mechanism is
+  what had to land first — translating the chrome into a cache that could not tell
+  the two apart was the failure ADR-0095 refused to ship.
+- 0d286ad: feat(blog-content): an imported article remembers where it came from, and its body can be converted without being sanitized (#599)
+  
+  PRD §41 brings SeputarBorneo in as a second tenant: **23,906 articles** that
+  search engines have indexed for years, at URLs shaped
+  `/news/{id_ber}_{slug}.html`. Two things made that migration lose its ranking,
+  and both are cheap now and impossible later.
+  
+  ### 1. Nothing remembered `id_ber`
+  
+  After an import, no column on `awcms_blog_posts` held the identifier the legacy
+  URL was built from, so the 301 map could not be derived — only **guessed** from
+  the slug. A slug moves when an editor fixes a headline, and it moves precisely
+  for the articles interesting enough to have inbound links.
+  
+  `sql/138` adds `legacy_source_system` + `legacy_source_id` to posts and pages,
+  both-or-neither by CHECK, unique per tenant by a PARTIAL index (without the
+  `WHERE`, every natively-authored post satisfies it trivially and it protects
+  nothing). Text rather than integer: `id_ber` is numeric, the next archive's
+  identifier will be a uuid or a path, and nothing does arithmetic on it. The pair
+  rather than one column, so a tenant that migrates twice does not collapse two id
+  namespaces into one.
+  
+  `listLegacyRedirectMappings` derives the map, paged and bounded, from published
+  undeleted rows only — a redirect pointing at a draft sends a crawler to a 404,
+  which is worse than the 404 it already had. The legacy URL shape is a
+  `pathTemplate` parameter, so the second migration is configuration rather than a
+  code change.
+  
+  `recordLegacyProvenance` is a dedicated writer, deliberately **not** a field on
+  the editorial create input: provenance is an import-time fact, and putting it in
+  the admin API body would let any caller with `posts.create` claim an origin the
+  301 map is then derived from.
+  
+  ### 2. CKEditor bodies could not be stored
+  
+  Legacy bodies are raw CKEditor HTML. `content_json` cannot hold it and write-time
+  validation correctly refuses `<script>`/`<iframe>`/`<embed>`/`<object>`.
+  
+  `convertLegacyHtmlToPortableText` targets the **canonical** body (ADR-0100), not
+  the projection being replaced — otherwise 23,906 rows land in the lossy shape and
+  the marks #624 just finished delivering are gone before anyone reads them.
+  
+  It **rejects with a report** rather than sanitizing. A sanitizer is a guess about
+  what an attacker meant; a rejection is a statement about what this system stores.
+  That distinction matters most exactly here, because nobody reads 23,906 articles,
+  so whatever a silent sanitizer swallows is what goes live. Executable markup is
+  both rejected *and* discarded, so `steal()` never appears in the preview as
+  though it were a paragraph a journalist wrote.
+  
+  `<img>` is rejected too — not because an image is dangerous, but because keeping
+  a raw `src` smuggles unmanaged media past the enforcement `media_library`
+  applies. The report names each one with its `src`, so an importer can resolve it
+  to an uploaded object first.
+  
+  Formatting survives: headings, lists, blockquotes, links, and `<b>`/`<i>` mapped
+  to the same decorators `<strong>`/`<em>` produce. Styling wrappers (`<span>`,
+  `<font>`) are unwrapped rather than rejected — CKEditor emits them by the
+  thousand and failing every article over them buys no safety. Keys are
+  position-derived with no clock and no randomness, so an import that crashes at
+  article 14,002 is resumed rather than restarted.
+  
+  The converter never throws: an importer walking 23,906 rows needs a report per
+  article, not a stack trace on one of them.
+  
+  **Still open on #599:** the import job itself and the pre-cutover crawl
+  validation. The bulk redirect import the issue asks for already exists —
+  `POST /api/v1/seo/redirects/import` with `dryRun`, capped at 200 items per call,
+  which a paged importer feeds from `listLegacyRedirectMappings`.
+- 5c54d2d: feat(admin-ui): an article can be given a featured image from the CMS
+  
+  `featuredMediaId` has been accepted by `POST`/`PATCH /api/v1/blog/posts` all
+  along, and #610 gave `/admin/media` a way to get files in. Between the two there
+  was still no way to say **which** image belongs to a story without calling the
+  API by hand.
+  
+  Both article forms now carry a picker.
+  
+  ### One picker, not two
+  
+  `src/lib/ui/media-picker-client.ts` is deliberately generic and wired off
+  `data-target`/`data-label`, so the article editor and the ad inventory (#594)
+  share one implementation. The issue asks for exactly that — *"satu pemilih,
+  bukan dua"* — because two would drift, and the one that drifted would be the one
+  nobody was looking at.
+  
+  ### It adds no new permission to `/admin/blog`
+  
+  The catalogue is read **from the browser** against
+  `GET /api/v1/media/objects/list`, which enforces `media_library.media.read`
+  itself. So this screen still gates on `blog_content.posts.*` and nothing else,
+  and the eleven-key contract stays intact — the page header names that constraint
+  explicitly, and a test now asserts no `media_library` gate appears here.
+  
+  A caller who lacks `media.read` is **told so**, rather than shown an empty grid
+  that looks like an empty library and sends them hunting for an upload problem
+  that does not exist.
+  
+  ### Only verified, undeleted objects are offered
+  
+  `/admin/media` deliberately renders no `<img>` — a row there can be
+  `pending_upload` or `failed`, and the screen exists partly so somebody can delete
+  a policy-violating image. That argument does not transfer to a picker, and the
+  difference is the status filter: this asks for `status=verified&deletion=live`,
+  the same set `isPubliclyReferenceable` admits.
+  
+  Both halves matter. A soft-deleted object can still *be* verified while every
+  reference to it has already stopped resolving, so offering one would hand the
+  author an image that is gone.
+  
+  ### Clearing works
+  
+  `featuredMediaId` is sent as `null` rather than omitted on both forms, for the
+  same reason the SEO fields are: on `PATCH`, absent means "leave unchanged", so an
+  omitted empty value would make the wrong photo impossible to detach.
+  
+  ### The asset gate fired, and its question was answered before the raise
+  
+  `APP_BUDGET_BYTES` goes 172,000 → 178,000. The gate asks whether growth is
+  per-screen duplication (Issue #552's shape, where a shared module recovered
+  22,700 B). It is not — three features bought it:
+  
+  ```
+  after ADR-0101                      165,274 B
+  + media upload UI       (#610)      169,128 B   (+3,854)
+  + article SEO fields    (#611)      169,417 B   (+  289)
+  + featured-image picker (this)      173,050 B   (+3,633)
+  ```
+  
+  The picker is a shared module imported by one screen today and by ad inventory
+  next, so its bytes are paid once rather than per screen. The reader budget is
+  untouched at 21,415 B — none of this reaches a public page.
+- 07d1328: feat(visitor-analytics): a static build on its own domain can finally reach the beacon (#637)
+  
+  `POST /api/v1/analytics/collect` is anonymous, rate-limited and always answers
+  `202`. It was built to be called from a public page. When that public page is a
+  static `awcms-astro` build on a **different** origin — the PRD §27.1 scenario —
+  all three ways of calling it were blocked, and not one of the failures appeared
+  in this repo's logs. The dashboards were right; nothing ever arrived.
+  
+  ### The three paths, and what blocked each
+  
+  Astro's `security.checkOrigin` defaults to `true` and `astro.config.mjs` does
+  not turn it off:
+  
+  1. `navigator.sendBeacon(url, blob)` sends `text/plain`, which IS in Astro's
+     `FORM_CONTENT_TYPES` — cross-origin, that is `403 Cross-site POST form
+     submissions are forbidden`.
+  2. `fetch` with no `content-type` falls into the final `return !isSameOrigin`.
+     Also 403.
+  3. `fetch` with `application/json` passes `checkOrigin` — and then the browser
+     sends a preflight `OPTIONS` that nothing answered.
+  
+  This opens **path 3 only**. Paths 1 and 2 stay closed on purpose:
+  `checkOrigin` protects every other write in the repo, Astro installs it ahead of
+  `src/middleware.ts` so it cannot be exempted per-route from inside the app, and
+  disabling it globally would trade a repo-wide guarantee for one endpoint's
+  convenience. The cost is a real constraint on the caller, written into the
+  endpoint's docblock: the beacon must be sent as JSON, which means `fetch`, not
+  `sendBeacon`.
+  
+  ### CORS is not authorization
+  
+  A preflight carries **no body**, so the `OPTIONS` handler cannot know which
+  `tenantCode` the POST will name. It answers the narrower question it can — is
+  this `Origin` an active domain in `awcms_tenant_domains` — and the POST goes on
+  validating `tenantCode` exactly as before. Neither replaces the other: one
+  decides whether a browser may read our answer, the other decides whose analytics
+  a row belongs to. An integration test pins them apart by posting tenant B's code
+  from tenant A's domain and asserting the row lands under B.
+  
+  The allowed origin is always echoed verbatim from a value that resolved against
+  the verified set. Never `*` — which would let any page on the internet write
+  with a public tenant code, and is not even legal alongside the
+  `Access-Control-Allow-Credentials` this endpoint needs. A domain that is merely
+  `pending_verification` is refused: the allow-list is the proven set, not the
+  claimed one.
+  
+  `Vary: Origin` goes out on **every** response, including refusals. A cached
+  denial served to an allowed origin is the same defect as the reverse.
+  
+  ### Two things that are easy to assume and are not true
+  
+  The anonymous visitor-key cookie is `SameSite=Lax`, and a Lax cookie is neither
+  sent nor stored cross-site — so without a change every cross-origin page view
+  would have looked like a first-ever visitor. It is now `SameSite=None` when the
+  request is cross-origin **and** the cookie is `Secure`, falling back to `Lax`
+  otherwise rather than emitting a cookie the browser will drop. A browser that
+  blocks third-party cookies drops it regardless: cross-origin visitor keys are
+  best-effort, page-view counts are not. Letting the client send its own
+  identifier in the body would fix it and is refused — every identifier this
+  endpoint stores is derived server-side.
+  
+  And CORS is enforced by the **browser, on the response**. A caller that is not a
+  browser was never blocked by any of this and still is not; what bounds it is the
+  per-IP rate limit, which now also fronts the new allow-list lookup — same key, so
+  a preflight and the POST it precedes share one budget instead of doubling it.
+  
+  `security-headers.ts` rested its `Cross-Origin-Resource-Policy: same-origin` on
+  the claim that `src/` contains **zero** occurrences of
+  `Access-Control-Allow-Origin`. That claim stops being true with this change, so
+  the comment is corrected in the same commit: CORP is unaffected either way,
+  because it governs `no-cors` subresource embedding and a CORS-mode `fetch` is
+  not one — but the reason is now "CORP does not apply to CORS" rather than "there
+  is no CORS here".
+- 6dfebb2: fix(data-lifecycle,identity-access,profile-identity,comments,email,visitor-analytics): an executed erasure left the person's name, legal name and login address in the database (ADR-0108)
+  
+  `SubjectDataDescriptor` had ONE column list — `redactedColumns`, documented as
+  what a portability export must never carry — and the erasure executor used that
+  same list as the set of columns to overwrite.
+  
+  For the nine tables where both answers coincide (`password_hash`, `token_hash`)
+  it worked perfectly, which is why nothing looked wrong. For the tables holding
+  the person's own identity the two answers are OPPOSITE, and one list forced
+  their authors to choose the wrong one:
+  
+  - `awcms_profiles.display_name`/`legal_name` must be EXPORTED — a
+    subject-access request is largely about them — and DESTROYED. Declaring them
+    would have withheld the subject's own name from their own export, so the
+    descriptor declared nothing, while its comment said these are "COPIES of
+    personal detail living here" that severance "leaves standing". The erasure
+    left them standing too.
+  - `awcms_identities.login_identifier` — same trap, only `password_hash` was
+    ever written.
+  - `awcms_registration_requests` named nothing and wrote NOTHING.
+  - `awcms_invitations`' own comment argues for two columns the code never
+    reached; `awcms_comments_comments` kept the author's name under their
+    published words; `awcms_visitor_sessions.login_identifier_snapshot` survived
+    a rationale that says "erasure has to reach in and clear it".
+  
+  **Verified against real Postgres: after a completed erasure,
+  `SELECT login_identifier FROM awcms_identities` still returned
+  `subject@example.test`.**
+  
+  Three consequences made this worse than a list of missing columns:
+  
+  1. ~90 descriptors answer `severed_with_subject_row` on the premise that
+     anonymising `awcms_identities` makes their stamps resolve to nobody. A stamp
+     pointing at a row that still carries the login address resolves to somebody.
+  2. A column no sentinel fits was silently skipped into a `skippedColumns` list
+     nothing asserts on — `awcms_visitor_sessions.ip_address` (`inet`) and
+     `awcms_visit_events.geo` (`jsonb`) survived every erasure that way.
+  3. An erasure could ABORT. A subject with two rows under a unique index (two
+     pending invitations, two identifiers, two suppressed addresses) had both
+     rewritten to the same `[erased]` sentinel — a 23505 mid-transaction, with the
+     request already claimed.
+  
+  **The fix:** two questions, two declarations. `redactedColumns` (may the subject
+  be handed this?) and the new `anonymizedColumns` (must the erasure destroy
+  this?). Every `anonymize` descriptor was updated, so no table loses behaviour.
+  
+  **The gate is the point, not the twelve edits.** `subject-data:registry:check`
+  now refuses an `anonymize` that names no column and has no `jsonb_array_contains`
+  subject column, refuses a column name the table does not have, and refuses
+  `severed_with_subject_row` when the severance anchor itself anonymises nothing.
+  
+  Uniqueness is DERIVED from `pg_index` rather than declared; `jsonb` columns are
+  emptied; a nullable column of any other type is NULLed; and the integration test
+  asserts `skippedColumns` comes back EMPTY, so the next unwritable column fails a
+  test instead of being reported to nobody.
+  
+  `awcms_tenant_users` changes to `severed_with_subject_row` — what its own
+  rationale always described.
+  
+  `MODULE_CONTRACT_VERSION` 4.0.0 -> 4.1.0.
+  
+  **Operational note:** already-completed erasures are not fixed retroactively. A
+  deployment that has executed any erasure request holds rows this change would
+  have cleared; re-running is an operator decision with its own audit trail.
+- 55e14ae: feat(blog-content): the newsroom can compose its own homepage
+  
+  `awcms_news_portal_homepage_sections` has existed since `sql/044` with a full
+  write API, six strictly-typed section shapes and a reference validator that
+  refuses a stale post id. Nobody could reach any of it: there was no screen, so
+  `homepage_sections.read` and `.configure` sat on the unscreened-permission
+  ledger and the homepage could only ever be whatever the frontend hard-coded.
+  
+  `/admin/blog-homepage` composes it — order, schedule, enable/disable, and the
+  type-specific configuration of all six section types behind one polymorphic
+  form. `headline`, `latest_posts` and `category_grid` reference nothing ordered,
+  so they get real selects; the two curated types and `gallery_block` carry an
+  ordered id list and are typed one per line, with the eligible articles rendered
+  beside the field so typing an id is a lookup rather than a memory test.
+  
+  Only articles a curated slot would really render are offered — published,
+  publicly visible, not future-dated. A picker that offered drafts would let an
+  editor curate a slot that silently renders nothing.
+  
+  The screen adds no permission and no migration: both keys were seeded by
+  `sql/044` and repointed to `blog_content` by `sql/076`. What it removes is two
+  lines from `NOT_YET_SCREENED`, which may only shrink.
+  
+  Part of #594.
+- 71409dc: fix(tenant-domain): verification that verifies (ADR-0106)
+  
+  `POST /api/v1/tenant/domains/{id}/verify` did not verify anything. It read the
+  row, checked `verification_method IS NOT NULL`, and set `status = 'active'` —
+  no DNS lookup, no file fetch, no token comparison anywhere on the route path.
+  
+  An `active` domain feeds `resolvePublicTenantByHost`, the redirect allow-list
+  and the canonical host, so the sequence available to a tenant administrator
+  holding `domains.create` + `.update` + `.verify` was: add a hostname, PATCH
+  `verificationMethod: "manual"`, call verify — and this deployment now answers
+  for that hostname as that tenant. Found while closing finding D7, recorded in
+  PROJECT_STATE §4 rather than fixed there because it needed a decision.
+  
+  **Making the comparison real would only have been half a fix.** The API also
+  accepted the record NAME and VALUE from the caller, and a check against a
+  caller-chosen name and a caller-chosen value proves nothing — both can be
+  pointed at a record that already exists in a zone the caller does not control.
+  So both halves are now server-minted (`_awcms-verify.<host>`, 32 random bytes
+  per row) and supplying either is REFUSED with a 400 naming the field, not
+  silently ignored.
+  
+  **One method survives, and it is the implemented one.** `manual` was the old
+  check. `file` means this server fetching a caller-chosen URL, which is SSRF
+  wearing a verification badge. `dns_cname` needs a platform target that does not
+  exist here. `manual` is removed rather than demoted to an operator attestation:
+  a platform-scoped permission may only be exercised by the platform tenant, and
+  RLS means it cannot see another tenant's row, so preserving the bypass would
+  mean building a cross-tenant surface — the most dangerous kind this codebase
+  has, and not worth building to keep a bypass alive. `sql/046`'s CHECK
+  constraint is untouched.
+  
+  The lookup runs OUTSIDE every transaction (ADR-0006), between two tenant
+  transactions. The second re-authorises (ADR-0063) and carries the proven value
+  into its `WHERE` clause, so a challenge re-issued mid-flight cannot be cashed
+  in. **Absent is not unavailable:** NXDOMAIN is a fact about the claimed domain,
+  SERVFAIL is a fact about our resolver — only the second feeds the circuit
+  breaker or leaves the status untouched, which is finding D6's rule applied
+  where getting it wrong fails in both directions at once. A miss records
+  `failed`, keeping that state reachable and keeping "nobody checked" separable
+  from "we checked and it was not there".
+  
+  Rows created before this change are minted a challenge lazily on their first
+  verify attempt — no DML migration against a `FORCE ROW LEVEL SECURITY` table.
+  
+  **Breaking:** `verificationMethod`, `verificationRecordName` and
+  `verificationRecordValue` are no longer accepted by `POST /api/v1/tenant/domains`
+  or `PATCH .../{id}`. The admin screen no longer offers a verification-method
+  picker and shows the record to publish instead.
+- aef98c4: feat(blog-content): channel, institution, region and topic stop being one string
+  
+  An article filed under "Legislatif" also belongs to DPRD Kotawaringin Barat, to
+  Kabupaten Kotawaringin Barat, and to the topic APBD. Until now `blog_content`
+  could express one of those four things at a time: `awcms_blog_terms` knew only
+  `category` and `tag`, so all four collapsed into one flat vocabulary and stopped
+  being distinguishable afterwards. The archive could not answer "every article
+  about this legislature" without a `LIKE`.
+  
+  **`channel` and `topic` join the term vocabulary** (`sql/131`). They are exactly
+  what a term already is — a tenant-scoped, named, sluggable label — so they reuse
+  the whole existing surface: the dedup index, the RLS policy, the soft delete,
+  `awcms_blog_post_terms`, the admin screen, the endpoints. `topic` joins `tag` as
+  a FLAT vocabulary, because nesting cross-channel issue labels raises "is Korupsi
+  under Hukum or under Politik", a question with no editorial answer. `channel`
+  stays nestable: it is primary navigation and Olahraga → Sepak Bola is real.
+  
+  **Institution becomes its own table**, not a fifth term. It carries a `branch`
+  (legislative/executive, which is what builds each mega menu in one query), a
+  region, and the SEO title and description of a public landing page. Modelling
+  that as a term would mean four columns that are NULL for every category and tag,
+  or storing them as convention inside `description` — the same untyped-string
+  collapse this change exists to end. `awcms_blog_post_institutions` lets one
+  article name several bodies, because a single event routinely involves more than
+  one.
+  
+  **Region is a code, not a term and not a foreign key.** `region_code` holds a
+  dotted `idn_admin_regions` code (`62`, `62.71`, `62.71.01`). It is deliberately
+  not an FK: that master is dataset-versioned, the same Palangka Raya carries a
+  different `id` in every import, and an FK would pin each article to one
+  generation of the Kepmendagri list and break the next time a dataset is
+  activated. An unresolvable code degrades to "no region label" on render rather
+  than failing the read.
+  
+  ### What this also fixed on the way
+  
+  - **`validateTermParent` compared against the literal `"tag"`.** Under that
+    version a nested `topic` passed validation and failed only at the database,
+    surfacing as a raw constraint violation instead of a field error. The flat set
+    is now read from `FLAT_TAXONOMY_TYPES`, and `/admin/blog-taxonomy`'s parent
+    control reads the same constant instead of its own copy of the literal.
+  - **Three validator messages hard-coded "one of category, tag"**, so the moment
+    the enum widened they told callers that `channel` was invalid while the
+    validator accepted it. They are derived from the vocabulary now.
+  - **`purgeBlogPost` would have failed with a foreign-key violation** on any post
+    carrying institutions — the new join table holds a real FK to
+    `awcms_blog_posts`, so the missing DELETE does not leak rows, it breaks the
+    purge. Both join DELETEs are now named as load-bearing rather than tidy.
+  
+  ### `institutions.purge` exists because retention needed a mechanism
+  
+  `data-lifecycle:table-coverage:check` asks every new table how its rows ever
+  leave. The easy answer was the `BOUNDED_BY_DESIGN` ledger — "there are only
+  thirty legislatures, it will not grow". That ledger is capped at sixteen and its
+  bar is a net shrink, not another argument, and the bar is right: an expectation
+  about growth is not a retention policy. So the mechanism was built instead.
+  `POST /api/v1/blog/institutions/{id}/purge` removes a soft-deleted institution
+  and its article links, refuses a live one (the two-step `posts` and `pages`
+  already require), requires an `Idempotency-Key` — unlike restore, which is
+  idempotent by construction — and audits at critical severity. Both new tables
+  carry `delegated` lifecycle descriptors adopting it.
+  
+  ### Client asset budget: raised to 184,000 B, after two wrong measurements
+  
+  `bun run build` did fail on `main` when this work started — 181,336 B against a
+  180,000 B ceiling. But `astro` 7.2.0 -> 7.2.3 then shed 2,411 B of its own
+  output, putting `main` back under at 178,925 B, so the ceiling was NOT left at
+  the 190,000 it was briefly raised to. A budget raised past a breach that has
+  since healed has stopped measuring anything.
+  
+  This change genuinely costs **2,493 B** — not the 82 B first reported, which was
+  measured against a stale `dist/`. A whole admin screen for that price only
+  because it reuses `admin-form-client` and `admin-screens.css`. The ceiling
+  therefore moves to 184,000 B, leaving ~2.6 kB: about one more screen, which is
+  the point of the gate.
+  
+  Recorded for issue #590: the theory that `_astro/error-log.*.css` (24,909 B) is
+  bloated by duplicating `admin-screens.css` is **disproved**. It is `admin.css`,
+  the AdminLayout stylesheet, merely named after `error-log` because Vite names a
+  shared CSS chunk after one of its JS importers.
+- 8c0d9e9: feat(blog): the legacy importer files its articles, instead of landing 23,906 of them under nothing
+  
+  `LegacyPostImportInput` carried no taxonomy and `importLegacyBlogPost` wrote no
+  join row, so a real import landed EVERY article with zero categories. The defect
+  is not visible where you would look for it: each article renders correctly and
+  reads correctly. The symptom appears somewhere else — `/{locale}/kategori/{slug}`,
+  the page each legacy rubrik URL is redirected to, loads and lists nothing.
+  
+  A crawler reads that as a **soft 404**, which is worse than the hard 404 this
+  issue exists to prevent: nothing reports it, and no test that looks at an
+  article would ever see it.
+  
+  **The same handoff as the images, deliberately** — it is the same operator doing
+  the same kind of work twice:
+  
+  - `--terms=<path>` writes the category work list (every legacy category the
+    archive files under, most-used first) and stops.
+  - `--term-map=<path>` takes it back as `{ "<legacy name>": "<term uuid>" }`.
+  
+  Every id is checked against this tenant's **live** taxonomy before a single
+  article is written, and one that is not aborts the whole run — a map is one
+  artefact, so a wrong id in it is a wrong artefact, not a per-row problem.
+  Soft-deleted terms count as unknown: filing an archive under a category an
+  editor removed would resurrect it in every listing without anybody choosing to.
+  
+  **Names are never turned into terms.** An importer that creates a term because a
+  row mentioned one converts a single typo in a 23,906-row export into a published
+  category nobody chose, with no review step where anyone would notice. A
+  newsroom's taxonomy is an editorial decision, not a side effect of an import. A
+  row naming a category the map does not cover is refused, exactly as a row with
+  an unmanaged `<img>` is, and for the same reason: an article that imported
+  cleanly and lost its filing looks like a success.
+  
+  Two smaller decisions that are easy to get wrong and hard to see afterwards:
+  
+  - A `categories` value that is a bare string is REFUSED rather than read as one
+    name — an export that later grows a second category would otherwise file a
+    day's articles under one called `Politik,Daerah`.
+  - Filing happens in the SAME transaction as the insert, and only for a row this
+    run actually inserted. `ON CONFLICT DO NOTHING` leaves no post id for an
+    article that was already present, and re-filing it would DELETE whatever an
+    editor has since corrected by hand.
+  
+  Also adds `findUnknownTermIds`, which names the missing ids rather than counting
+  them: "3 of 40 are unknown" sends an operator to diff two lists by eye.
+- 801d2ea: feat(media-library): a newsroom can record who took a photograph, and whether anyone checked the licence (#615)
+  
+  `awcms_news_media_objects` has carried `alt_text` and `caption` since `sql/041`,
+  and **nothing could edit either**. Of the nine media permissions — create, read,
+  verify, delete, restore, purge, cancel and the two `enforcement.*` — not one
+  permitted changing metadata, and the only method on
+  `/api/v1/media/objects/{id}` was `DELETE`. So a newsroom could upload a wire
+  photo and had nowhere to put the credit the licence obliges it to print.
+  
+  ### Five columns, and why not the two that exist
+  
+  Alt text is an ACCESSIBILITY obligation — what a screen reader says. A caption
+  is EDITORIAL — what the reader is told about the scene. A credit line is
+  neither, and folding all three into one "required" makes the word meaningless.
+  `sql/137` adds `credit_line`, `source_name`, `copyright_status`, `rights_notes`,
+  `rights_verification_status` and the `rights_verified_by`/`_at` pair.
+  
+  `source_name` is separate from `credit_line` because they are often different: a
+  photo credited to a stringer may have arrived through an agency, and a takedown
+  request names the agency. `copyright_status` defaults to `unknown`, which is a
+  real answer rather than a missing one — most of a legacy archive is exactly that.
+  
+  ### Rights verification is not `media.verify`
+  
+  `media.verify` and a `verified` object status mean the BYTES were checked: MIME
+  sniffed from magic bytes, checksum matched. That is a machine answering a
+  question about a file. Whether a licence permits publication is a person
+  answering a question about a contract. One word for both would make one of them
+  wrong, and it would be the legal one — a file that passes a MIME sniff would read
+  as rights-cleared to anyone glancing at a column called `verified`.
+  
+  So: separate column, separate vocabulary, separate permission. The eighth media
+  key, `media_library.media.update`, ships **with** its endpoint —
+  `media-permissions.ts` records why, after two keys survived three reviews by
+  being declared ahead of any code that checked them.
+  
+  ### The adjudication is stamped, never submitted
+  
+  `rights_verified_by` is the authenticated actor and `rights_verified_at` the
+  transaction clock. A client-supplied verifier is a client-supplied signature on
+  the record a takedown dispute is argued from. Returning to `unverified` clears
+  both, enforced by application validation and by a CHECK — one governs what a
+  request may ask for, the other what the table may hold, including rows written by
+  a path that predates the validation.
+  
+  Changing the decision writes an audit event at `warning`; fixing a typo in a
+  credit writes one at `info`.
+  
+  ### The editor
+  
+  `/admin/media` gains a Rights column (credit plus a status badge) and an
+  `?rights=<id>` editor, server-rendered and pre-filled the same way
+  `/admin/blog-ads` opens its form — so the page ships no client code for
+  populating fields, and an editor can send somebody the URL of the exact photo
+  whose credit is wrong. A `PATCH` distinguishes "leave alone" (omitted) from
+  "clear" (`null`); collapsing the two would let a form submitting one field erase
+  a credit somebody else typed.
+  
+  **Existing tenants:** `media.update` is a new catalog permission, so only tenants
+  created after this migration hold it. Run
+  `bun run identity-access:permissions:backfill --tenant <code>` for the rest —
+  dry-run by default.
+  
+  `APP_BUDGET_BYTES` raised 185,000 → 186,000. The growth is 649 B, all in
+  `media.astro`'s own island, checked for the per-screen-duplication shape the
+  gate asks about and not found: the editor reuses the shared form client, and the
+  cheaper server-rendered design was already taken.
+- 9cbcf21: fix(blog): the legacy importer produced 25,029 articles that the repo which SERVES them builds no page for (#599, #711)
+  
+  `importLegacyBlogPost` wrote `content_json` as a hard-coded `{ blocks: [] }`,
+  under a docblock claiming it was "the same lossy projection every other write
+  path produces". It was not: `blog-post-directory.ts` and `blog-page-directory.ts`
+  both call `withProjectedBlocks`, and this file called nothing. **A comment is not
+  a call.**
+  
+  That single literal decides two things in `ahliweb/awcms-astro`, the repo that
+  renders this archive. `renderContentBlocks` reads `contentJson.blocks` and
+  returns `""` for an empty array — every imported article a blank page. And
+  `getArticles` keeps a post only when `readBlock(post).kategori === tab`, reading
+  `contentJson.awcmsAstro` — with no such key, **no article page is built at all**,
+  and no category archive either, because those are assembled from the same
+  tab-filtered set.
+  
+  Measured against that repo's real adapter: a post carrying the sidecar builds 1
+  article; a post written as this importer wrote it builds **0**, in every
+  configured tab. So ADR-0113's 63 rubrik rules and ADR-0114's id-keyed article map
+  would each have redirected onto a page that was never generated — the one outcome
+  both issues' Definition of Done forbids. No gate here could see it, because
+  `/blog/{code}/{slug}` renders from `body_portable_text` and looks perfect.
+  
+  **What changed**
+  
+  - `content_json.blocks` is now the derived projection, and
+    `content_json.awcmsAstro.kategori` carries the section, supplied by a new
+    `blog:legacy:import --section-map=<path>`. A missing map WARNS (a tenant this
+    repo serves needs no sidecar); a row that map cannot place is REFUSED.
+  - **ADR-0115** — the migrated archive lands on ONE origin. ADR-0114 left the
+    id→path table's destination unstated while the repo's only article derivation
+    hard-coded `/blog/{tenantCode}/{slug}`, so the two committed halves of one
+    cutover pointed at two different origins. Both now land on `awcms-astro` at
+    `/{section}/{slug}/`.
+  - `bun run blog:legacy:article-paths` — ADR-0114's missing id→path artefact,
+    derived from the tenant with provenance, preview by default, refusing to emit
+    while any row lacks a section. `--default-locale` is required rather than
+    defaulted: the consuming site serves its default locale unprefixed and this
+    repo's `withPublicLocalePrefix` prefixes every locale, and all 25,029 articles
+    are in the default locale.
+  - `bun run blog:legacy:edge:verify` — the HTTP-level verifier
+    `blog:legacy:cutover:verify`'s own docstring says is "a different tool, and this
+    is not it". It requests each legacy URL with `redirect: "manual"`, counts the
+    hops a reader actually takes, and reuses `classifyCutoverOutcome`. It is the
+    replay that falsified ADR-0113, made repeatable — an operator command, not a
+    CI gate: it only means anything once the edge is wired.
+  - `listLegacyRedirectMappings` now applies the serving route's full predicate. It
+    promised "only PUBLISHED, non-deleted posts: a redirect pointing at a draft
+    sends a search engine to a 404" over exactly those two conditions, while the
+    route requires four — so a `private` post and a future-dated one each got a rule
+    whose destination 404s.
+  - New `unreachable` verdict. A DNS failure, a refused connection, a timeout and a
+    502 all arrive with zero hops, and `hops === 0` was the only thing `no_rule`
+    read — whose reason text was the confident "this URL will answer 404 after
+    cutover, and its ranking is lost". That reason text is rewritten too: run
+    against a real built server, a legacy URL answering **200** with no redirect
+    got the same sentence.
+  
+  **An adversarial review found three real defects in the above, all now fixed and
+  gated.**
+  
+  - **The edge verifier followed a hostile `Location` anywhere.** `probeUrlFor`
+    screened the CORPUS to `http:`/`https:` and the walker then dropped that
+    decision for every hop it actually issued: `file:///etc/hostname` and
+    `data:text/plain,hi` were both resolved and recorded as a 200, a redirect to a
+    loopback port reached the server listening on it, and all of them classified
+    **`ok`**. `hopRefusalFor` now runs before every request — the first one
+    included, because a corpus file can carry a `file://` line as easily as a
+    hostile origin can — refusing non-HTTP schemes and credentialed URLs outright
+    and private/loopback/link-local literals unless `--allow-private` is passed.
+    New verdict `unsafe_redirect`, which OUTRANKS `loop` and `chain_too_long`
+    because a hostile origin can produce either. It reuses `isBlockedAddress` from
+    `ssrf-guard.ts` rather than restating the rule; `validateOutboundUrl` could not
+    be used as-is because it refuses `http:`, which is the shape a crawler holds,
+    and `ssrfSafeFetch` follows redirects internally, which destroys the hop-by-hop
+    visibility this job exists to produce. Not resolving hostnames is a stated
+    boundary, not an omission.
+  - **`buildArticlePaths` validated two of the three segments it builds.** The
+    locale was interpolated raw under a comment reading "Both halves become URL
+    segments, and both are checked" — a comment asserting a binding no call makes,
+    in a file added to fix an instance of exactly that. `awcms_blog_posts.locale`
+    has no CHECK constraint, so that line was the only thing between it and a path.
+  - **The symbol correction broke itself.** The `validateLegacyPostImportRecord` →
+    `parseLegacyImportRecord` fix was applied as a blanket rename across all four
+    files, including the one occurrence that had to stay wrong for the sentence to
+    mean anything — leaving both PROJECT_STATE copies asserting that the CORRECT
+    name does not exist. A search-and-replace over prose does not know which
+    occurrences are the quotation and which are the claim.
+  
+  **A second review pass found four more, three of them in the fixes above.**
+  
+  - **The SSRF guard let every IPv6 literal through.** `new URL("http://[::1]/").hostname`
+    keeps the BRACKETS, and `node:net`'s `isIP("[::1]")` answers 0 — so the
+    reachability test in front of `isBlockedAddress` short-circuited to "allowed"
+    and the rule the module says it reuses was never consulted. `[::1]`,
+    `[fd00::1]` and `[::ffff:127.0.0.1]` were all fetched with the guard ON, the
+    last being a one-token bypass of the `127.0.0.1` case the tests did cover.
+    Brackets are stripped before both calls now — and not passed through, because
+    `isBlockedAddress` fails closed on a non-literal and would have refused every
+    PUBLIC IPv6 host too.
+  - **Three CLI properties were gated by nothing**, each with the DB-free suite
+    green: `process.exitCode = 1` deletable from `usage()` in both new scripts;
+    `signal: AbortSignal.timeout(...)` deletable from the probe's fetch, making
+    `--timeout` a flag that parses and does nothing; and the artefact generator's
+    refusal-to-emit — ADR-0115's headline consequence — deletable, because nothing
+    invoked `main()`. `tests/blog-legacy-cutover-cli-contracts.test.ts` spawns the
+    real processes for the first two, and the third is proven against a real
+    Postgres.
+  - **The timeout assertion's first form proved nothing.** Deleting the signal
+    still finished the run — in 12.04s rather than 1.54s, on Bun's own ~10s idle
+    timeout — so a 20s ceiling passed the mutation. The window now sits between
+    the two measurements.
+  
+  Also from the review: the two hand-written verdict arrays in
+  `tests/cutover-verification.test.ts` listed seven members where the union had
+  eight, so they claimed a completeness they no longer had. They are now DERIVED
+  from `CUTOVER_VERDICT_REASON`'s keys — which `Record<CutoverVerdict, string>`
+  makes exhaustive by construction — and that change immediately earned itself by
+  going red when `unsafe_redirect` was added.
+  
+  Nine mutations were applied and run rather than reasoned about. The one worth
+  recording: leave the envelope builder correct and exported and change only the
+  INSERT so it stops calling it — the DB-free suite is 13 pass / 0 fail, green over
+  a builder nothing calls, which is exactly the state that shipped, while the
+  integration test goes red on the column it reads back out of Postgres.
+  
+  ADR-0114 and both PROJECT_STATE copies named the slug validator
+  `validateLegacyPostImportRecord`, which does not exist (it is
+  `parseLegacyImportRecord`) — in the paragraph that says "name that symbol
+  precisely, because the wrong name sends an agent to the wrong file". Corrected in
+  all four.
+  
+  This repo still cannot close the cutover: the ten destination categories,
+  ~25,031 media uploads, the edge wiring and an `awcms-astro` rebuild remain
+  operational steps outside both repositories.
+- 363cdf2: feat(blog-content): an editor can see the article instead of guessing (#592)
+  
+  An editor wrote a body in a `<textarea>` and then guessed how it would appear.
+  Not a poor preview — none at all. Since #624 the reader gets the canonical
+  Portable Text rendered, so bold is bold and a link is a link, which makes the
+  editing box and the published page differ more than they used to. Guessing got
+  harder, not easier.
+  
+  `GET /admin/blog/{id}/preview` renders the article through
+  `renderBlogBodyHtml` + `renderPublicPageShell` — **the same two functions**
+  `/blog/{tenantCode}/{slug}` calls. Not a copy: a preview that re-implements the
+  template drifts, and a preview that lies is worse than none, because an editor
+  trusts it and ships the difference. A test asserts there is no second renderer
+  here rather than trusting the comment.
+  
+  ### Why in this repo rather than `awcms-astro`
+  
+  That repo is a static build declaring zero authenticated surfaces, and its own
+  suite goes red when a route leaves `output: 'static'` without saying so. Using
+  its admin-surface door would make the public template carry sessions, SSR and CSP
+  work — and PRD §45.10 still lists that decision as OPEN. This repo already has
+  the session, the chokepoint, the audit trail and the public templates.
+  
+  ### A draft cannot escape through this URL
+  
+  The post is read through the ADMIN directory, because seeing a draft is the whole
+  point — the public predicate would find nothing. That makes three things
+  load-bearing rather than decorative:
+  
+  - `X-Robots-Tag: noindex, nofollow`, fixed rather than derived from the article's
+    own visibility: previewing a `public` article must still not index *this* URL.
+  - `Cache-Control: private, no-store`, on the success path and on the 403.
+  - The path is pinned in `MUST_NEVER_MATCH`, so a shared cache cannot hold one and
+    serve a draft to whoever asks next.
+  
+  No canonical URL and no JSON-LD are emitted — fabricating either would tell a
+  crawler something untrue about a URL that must never be crawled. The route writes
+  nothing: no INSERT, UPDATE or DELETE, asserted.
+  
+  No ad slots and no share buttons. Rendering an advertiser's creative into an
+  editor's preview would count an impression nobody saw. Internal tag linking is
+  likewise absent — it is a render-time transform over published terms, and showing
+  it would suggest a draft already carries links it only gets on publication.
+  
+  Gated by `blog_content.posts.update` through `loadAdminScreen`: no new
+  authorization path, and the person who may change the article is the person who
+  may see it unpublished. A denied caller gets 403, not 404 — they have already
+  proved who they are, so hiding the article's existence would only send them
+  looking for a bug instead of asking for the permission they lack.
+  
+  **Still open on #592:** the in-place editing overlay. This delivers the preview it
+  sits on top of.
+- 8ac2e9e: feat(admin-ui): articles stop publishing with no meta description and no canonical
+  
+  `POST`/`PATCH /api/v1/blog/posts` have accepted `seoTitle`, `metaDescription`
+  and `canonicalUrl` all along. The form offered none of them, so **every article
+  published without any**, and `seo_distribution` then faithfully rendered that
+  absence into `<head>` and into every share card.
+  
+  Both forms now carry the three fields.
+  
+  ### The asymmetry between the two forms is the point
+  
+  They are not wired the same way, because the two endpoints read absence
+  differently:
+  
+  - **Create** omits an empty field. Absent means "none", and `seoTitle` rejects
+    `""` outright — sending a blank would 400 a form the author simply left empty.
+  - **Edit** sends `null`. On `PATCH`, absent means "leave unchanged", so omitting
+    a cleared field would make these **write-once**: an editor who deletes a wrong
+    meta description would watch it come back.
+  
+  A contract test pins both spellings, because the two look interchangeable and
+  are not.
+  
+  ### Bounds come from the validator, not from the template
+  
+  `MAX_SEO_TITLE_LENGTH` and `MAX_META_DESCRIPTION_LENGTH` are now exported and
+  used for `maxlength`. A hand-typed `70` would be the two-copies-of-one-value
+  shape this repo keeps getting bitten by: they agree until one is edited, and the
+  failure surfaces as a browser accepting what the server refuses.
+  
+  Field labels are mapped too — without that, a rejected `metaDescription`
+  surfaces under its raw API name, which matches no label on the page.
+  
+  ### Also fixes a stale header
+  
+  `/admin/blog`'s module header still described the plain-paragraph `<textarea>`
+  and `lib/ui/blog-body-editor` that #606 replaced with the Portable Text block
+  editor. Corrected, along with what is still deliberately absent (terms,
+  featured media).
+- 2f4d1c4: feat(site-search): a reader can narrow a search by channel, topic, institution and region (#633)
+  
+  PRD FR-DSC-002 asks for six facets. #632 landed **content type** alone, and not
+  for want of time: the other dimensions had nowhere to come from.
+  
+  `awcms_site_search_documents` carries `tags text[]`, filled from the search-source
+  descriptor's `tagsColumn` — and `tagsColumn` names **one column on the source
+  table**. Since `sql/131`, channel and topic are `awcms_blog_terms` rows reached
+  through `awcms_blog_post_terms`, and institution is `awcms_blog_institutions`
+  reached through `awcms_blog_post_institutions`. A column name cannot express a
+  join, so there was no value `tagsColumn` could have been given that was correct.
+  Both descriptors read `tagsColumn: null`, and that was the honest answer.
+  
+  ### The descriptor learned to say "join"
+  
+  `SearchSourceTermFacet` has two shapes, because the data has two. A `join` facet
+  names a link table, a value table, and the columns tying them together; a
+  `column` facet names a column on the source row. `region` is the second kind —
+  PRD §8.5 gives an article exactly one region, and declaring it through a join it
+  does not have would be a fiction the query builder would then have to honour.
+  
+  One shared vocabulary table becomes two facets through `valueEquals`
+  (`taxonomy_type = 'channel'` vs `'topic'`), and `valueNullColumns` is the
+  soft-delete gate. Values are **slugs**, labels are names: renaming a channel must
+  not break every saved filter, and it does not, because the name travels
+  separately.
+  
+  ### The gate grew in the same change, because it had to
+  
+  Every name in a term facet is interpolated into SQL. `site-search:sources:check`
+  now validates the join shape field by field — and, more importantly, walks
+  **every table a descriptor names**, including the ones it only reaches through a
+  facet join. That last part is #625 one layer deeper: a descriptor whose join
+  touches a table `awcms_worker` cannot `SELECT` passes every check here and fails
+  at 03:00 with `permission denied`. `sql/140` adds the four grants; removing any
+  one of them turns the gate red, which is how it was verified rather than assumed.
+  
+  ### Where the facets live, and why not in `tags`
+  
+  A `term_facets jsonb` column on the document, written by the **same upsert** as
+  the document itself. A separate table would mean a delete/insert cycle that can
+  succeed halfway, and the failure mode is a facet count that disagrees with the
+  documents it claims to describe — the same drift the issue warns about for the
+  trigger-maintained variant. As one column they cannot drift, and they are covered
+  by the same checksum.
+  
+  They are deliberately **not** folded into `tags`, which feeds `tags_text` and
+  therefore the weighted `search_vector`. Putting facet values there would change
+  relevance ranking as a side effect of adding a facet, and would let a reader
+  match a filter value as free text.
+  
+  The checksum change matters more than it looks: moving a post between channels
+  touches no column of the post itself, so without the facets in the checksum the
+  reconcile sweep would report `unchanged` and the facet would keep counting it
+  under the old channel forever. A document with **no** facets hashes exactly as it
+  did before, so deploying this does not rewrite every document in every tenant.
+  
+  ### The "don't narrow a facet by its own filter" rule, generalized
+  
+  #632 encoded it in the type — `Omit<…, "resourceType">` made the filter
+  unrepresentable. That was right with one facet and wrong the moment there were
+  five, because a facet must apply every filter **except its own**. So the type
+  counts now do apply the term filters, each term facet applies the type filter and
+  the other term filters, and a facet the reader has actively filtered on gets its
+  own pass with only that filter removed. That is one extra query per active term
+  filter, and there is no way to fold them into the first.
+  
+  Filtering is by `?channel=politik&topic=pemilu`, ANDed, matched with a single
+  GIN-backed `@>` containment. Parameter names come from the registry, so an
+  undeclared one is **ignored** rather than passed through — otherwise an anonymous
+  caller could probe the index's shape by watching the count. Ignoring beats
+  rejecting: `utm_source` and `fbclid` ride along on every shared link, and a search
+  that 400s because somebody arrived from Facebook is a search that looks broken.
+  
+  The cross-tenant negative is tested against real Postgres for term facets
+  specifically, rather than inherited from the type facet's assumption — both
+  tenants in the fixture use the slug `politik`, so a leak reads as a wrong number
+  rather than passing quietly.
+- 34d0f80: feat(blog-content): a legacy archive can keep its photographs (#599)
+  
+  `bun run blog:legacy:import` landed in #640 and, on a real CKEditor archive,
+  would have refused very nearly every row.
+  
+  `convertLegacyHtmlToPortableText` rejects `<img>` — correctly, because a
+  managed-media deployment stores images as registry references and an import that
+  kept the raw `src` would smuggle unmanaged media past the enforcement
+  `media_library` exists to apply. The rejection names the `src` "so the importer
+  can resolve it to an uploaded object first". Nothing implemented *first*. For
+  23,906 articles that meant a refusal log with ~24,000 entries and zero imported
+  posts.
+  
+  ### What was NOT built, and why that is the same answer as last time
+  
+  Not a fetcher. Turning a legacy URL into a managed object means pulling
+  third-party bytes from the server at an address somebody else chose — a
+  server-side request forgery primitive — and then minting a `verified` registry
+  row for bytes no upload pipeline ever inspected. `legacy-ad-ingest.ts` faced
+  exactly this question for `awcms_blog_ads.image_url` and wrote the answer down
+  at length: bytes are vouched for by the upload pipeline or not at all. That
+  reasoning is unchanged by the volume.
+  
+  ### What was built: the other half of the handoff
+  
+  - **`--images=<path>`** writes the upload set — every distinct `<img src>` the
+    archive references, counted by ARTICLE and ordered by demand — and stops
+    there. It is built from the converter's own findings rather than a second scan
+    of the HTML, so there is one definition of "what counts as an image
+    reference".
+  - **`--media-map=<path>`** takes the result back as `{ "<src>": "<uuid>" }`
+    after the operator has uploaded the files through `/admin/media`. A mapped
+    image becomes a one-item `gallery` node **in the position it occupied in the
+    article**; consecutive images join one gallery, which is the common CKEditor
+    photo-row shape.
+  
+  Without `--media-map` nothing changes: `<img>` is residue exactly as before, and
+  an image the map does not cover still refuses its article rather than importing
+  it with a hole.
+  
+  ### The check that has to happen before anything is written
+  
+  Every id in the map is put to the registry — `isMediaReferenceSafe`, so
+  "exists, belongs to this tenant, and is verified/attached" — and one that fails
+  aborts the whole run.
+  
+  That is deliberate rather than defensive. `renderGalleryBlockHtml` silently
+  drops a gallery item whose media object does not resolve, because a public page
+  must degrade rather than 500. So a wrong id produces an article that imported
+  cleanly, reported no error, and has lost its photographs — visible only to a
+  reader, on a page nobody re-checks. It cannot be a per-row refusal either: a map
+  is one artefact, and a wrong id in it is a wrong artefact. The cross-tenant and
+  not-yet-verified cases are tested against real Postgres, because "is this a
+  uuid" and "is this our verified media" are different questions and only the
+  second one is the right one.
+  
+  ### One thing deliberately not carried across
+  
+  No `caption`. The renderer prints `caption` as a visible `<figcaption>` (and
+  reuses it as the `alt`), while a legacy `alt` is very often the file name.
+  Carrying it would print a filename under 23,906 photographs — a silent edit to
+  every article in the archive, made by an import script.
+- 86a9add: feat(identity-access,blog-content): an author's opt-in public byline (ADR-0109, #597 item 4)
+  
+  `awcms_blog_posts.author_tenant_user_id` has recorded who wrote every article
+  since `sql/035` and nothing public has ever resolved it —
+  `structured-data-rendering.ts` says why in its own comment: emitting an
+  individual editor's identity would be "a new PII surface", so the JSON-LD
+  `author` is the ORGANISATION. The result is a news platform whose articles are
+  attributed to a masthead and never to a journalist.
+  
+  The obvious fix — publish `awcms_profiles.display_name` — is one line and no
+  migration, and it is refused. It turns every internal account name into public
+  data the moment an article publishes, for every author, with nobody having
+  chosen it; and in a newsroom the byline is frequently NOT the account name.
+  
+  So `sql/146` adds a separate, nullable, opt-in
+  `awcms_tenant_users.public_byline_name`. **`NULL` — every existing row — means
+  the organisation-level attribution ADR-0102 already ships**, so no existing
+  article's attribution changes.
+  
+  - On the membership row, not the profile: `awcms_profiles` holds every party a
+    tenant knows, and it makes the byline per-TENANT — right for a principal who
+    writes for two newsrooms under two names.
+  - Written only through `PATCH /api/v1/auth/profile` (ADR-0096: accepts no id).
+    There is deliberately **no administrative sibling** — an editor who could set
+    somebody else's byline could publish an article under a colleague's name.
+  - Optional in the body, with three distinct states: absent leaves it unchanged,
+    `null`/`""` clears it, a string sets it.
+  - The JSON-LD `author` becomes a `Person` carrying the name and nothing else —
+    no `url`, no `sameAs`, no identifier.
+  - The `?view=full` build feed gains `authorByline`, resolved for a whole page in
+    ONE batched query. The integration test asserts a query ceiling over 32 posts
+    that fails when the lookup is made per-post.
+  - `awcms_tenant_users` gains its first personal column, so its subject-data
+    descriptor returns to `anonymize` naming exactly it (ADR-0108): a byline that
+    survived an erasure would leave the person's name under every article they
+    wrote.
+  
+  The account screen gains the field, in both locales.
+- ad86d67: The `vX.Y.Z` model is now checked at every commit, not only after the tag is public
+  
+  The model was real and already enforced — by one regex, on the release path, in
+  a step that runs *because* a tag was pushed. That ordering was the defect. Every
+  way of getting the version wrong (`package.json` bumped by hand to `9.2`, a
+  prerelease suffix, a CHANGELOG section nobody wrote) stayed green through all 51
+  gates on `main` and surfaced only after `git push origin vX.Y.Z` — at which
+  point the tag is public, and `release-process.md` §Yanking is explicit that this
+  repo does not force-push a corrected tag over a published one. The cheapest
+  failure was reachable only at the most expensive moment.
+  
+  The tag namespace shows the cost. Six tags do not match the model — `2.9.9`,
+  `2.12.0`, `3.0.0`, `3.1.0`, `4.3.1`, `4.5.0` — and `3.0.0` sits on commit
+  `b23d3308` beside `v3.0.0`: one release under two names. Nothing reported any of
+  it, because nothing was looking.
+  
+  **`bun run version:check` (gate 52)** applies the model continuously: eight
+  rules covering `package.json`, CHANGELOG heading validity/ordering/agreement,
+  the tag namespace, and the pending changesets. Two of them are about a version
+  number that has already been published — `version-behind-tags` catches a revert
+  that drops `package.json` below the newest tag, from where the next bump
+  re-issues a number that is taken.
+  
+  **`scripts/lib/semver.ts`** is now the single definition of the model, shared by
+  the new gate and by `release:verify`. Extracting it closed a real hole: the
+  pattern it replaced, `/^v(\d+\.\d+\.\d+)$/`, accepted `v01.2.3` — and SemVer §2
+  forbids leading zeros for precisely the reason this repo can already demonstrate
+  on `b23d3308`, that one release under two spellings is one release nobody can
+  name unambiguously.
+  
+  Three narrower fixes went with it:
+  
+  - **`release:verify` resolves its tag deterministically.** The local fallback
+    used `git describe --tags --exact-match`, which on the double-tagged commit
+    picks by git's internal ordering rather than by the model, then fails with
+    "does not match vX.Y.Z" naming a tag nobody chose — with nothing in the
+    message identifying the second tag as the cause. It now filters
+    `git tag --points-at HEAD` to release tags, and says so when the choice is
+    genuinely ambiguous.
+  
+  - **The `v*.*.*` trigger is bound to its backstop.** The glob matches
+    `v1.2.3-rc.1`, and a glob cannot express "no prerelease", so `release:verify`
+    is the only thing standing between a prerelease tag and a signed, attested,
+    published release. Deleting that step is now a gate failure rather than a
+    silent fail-open.
+  
+  - **`ci.yml` fetches tags.** A default checkout is shallow and fetches none, so
+    the tag rule would have reported `UNENFORCED` forever — green, and blind, the
+    same shape as a coverage gate that passes because it sees nothing. The rule
+    now has data in CI, and a test asserts the `fetch-tags: true` line is still
+    there so it cannot be removed quietly.
+  
+  The six legacy tags are a closed exact-name exemption list citing ADR-0024, not
+  a pattern hole: a seventh cannot appear without someone editing the list. Every
+  tag cut since `v5.1.0` (2026-07-16) already conformed — 15 of 15. This makes
+  that a checked invariant instead of a streak.
+  
+  Two rules were deliberately left out because they would have been red on
+  arrival for reasons that are history rather than drift: "every CHANGELOG version
+  has a tag" (`5.0.0` and `0.2.0` correctly have none — ADR-0024 §4) and "every
+  tag has a CHANGELOG section" (`v3.0.0`–`v4.6.0` are pre-rebuild). A gate whose
+  first act is to demand a `--force` flag teaches everyone to pass one.
+- a6e583e: feat(blog-content): a build client can read the homepage, the ad inventory and the static pages
+  
+  Four read endpoints close the last half of #594: `awcms-astro` renders its own
+  templates, and until now it had no way to ask this repo what belongs on them.
+  
+  - `GET /api/v1/news-portal/homepage-sections/composed` — the RESOLVED homepage,
+    not its configuration. A consumer resolving the configuration itself would
+    re-implement the publication predicate in a second repository on a second
+    deploy cadence, and the first disagreement is a draft article on somebody's
+    front page.
+  - `GET /api/v1/news-portal/ad-placements/active` — every slot's runnable
+    creatives, already rotated and capped. All twelve slots, including the three
+    this repo's own templates do not draw: the sidebar exists in the consuming
+    front end, and an endpoint shaped around what this repo renders would withhold
+    the inventory a consumer exists to show. An invalid or unpaired `targetType`
+    is refused rather than falling back to `global`, because silently widening an
+    ad query is how a placement booked against one article appears on all of them.
+  - `GET /api/v1/blog/pages/public` and `/{slug}` — the pages a reader can
+    actually reach, sharing their predicates with `sitemap-blog.xml` and with
+    `/blog/{tenantCode}/pages/{slug}` respectively. Deliberately not
+    `/api/v1/blog/pages?status=published`: the admin list is an editor's view and
+    returns private and unlisted pages too, so a consumer reaching for it would
+    publish every private page the newsroom has with nothing reporting an error.
+    The detail ships the body as both `contentJson` and the canonical
+    `bodyPortableText`, which is what lets a consumer move to the canonical shape
+    on its own schedule.
+  
+  All four are **guarded, not anonymous** — the same decision ADR-0102 made for
+  `GET /api/v1/site-profile/composed`: "public read" means the public site's
+  builder can read it. A curated homepage names the articles an editor considers
+  most important before they are on any page, and there is no reason to hand that
+  to callers who are not building the site. A test pins that none of the four ever
+  appears in `ALLOWED_PUBLIC_OPERATIONS`.
+  
+  No permission and no migration.
+  
+  Closes the awcms half of #594.
+- e6fe436: feat(blog-content): 23,906 legacy articles can be imported, and their URLs land in one hop (#599)
+  
+  #634 added `legacy_source_system`/`legacy_source_id` (`sql/138`), the HTML→Portable
+  Text converter, and `listLegacyRedirectMappings`. What it did not add — and what
+  the issue's own design review caught — is **anything that writes those columns**.
+  The redirect map had a reader and no writer.
+  
+  ### `bun run blog:legacy:import`
+  
+  NDJSON in, one article per line, preview by default. `--commit` is a second
+  deliberate act, the same inversion `blog:ads:ingest` uses and for a stronger
+  reason: this runs once, by hand, against a newsroom's entire archive, and the
+  expensive mistake is not "forgot to preview" but "previewed, then never read the
+  rejections".
+  
+  The format is a file rather than a connection to the legacy MySQL, because a job
+  here that dialled out to it would add a second driver, a second set of secrets
+  and a second network dependency to a runtime with exactly two dependencies.
+  
+  **Three independent refusal gates, all reported per row, none of which repairs
+  anything:**
+  
+  - **The record.** No `legacyId` → refused, because without it the redirect map
+    cannot be derived after the fact, which is the permanent loss this issue exists
+    to prevent. `status: "published"` with no `publishedAt` → refused, rather than
+    re-dated to the cutover afternoon. MySQL's `0000-00-00` zero date is caught
+    here instead of by Postgres mid-batch.
+  - **The body.** A body with any rejection is **skipped entirely**, not stored
+    sanitized. An article whose images silently vanished looks imported and is
+    broken.
+  - **The slug.** Checked against the tenant in one query before anything is
+    written, so a collision is a line in the report rather than a constraint error
+    12,000 rows into a run.
+  
+  A duplicate `legacyId` **inside one file** is reported too — the database would
+  answer it with a silent `DO NOTHING`, which reads as "already imported" and hides
+  the export script's bug.
+  
+  `importLegacyBlogPost` is one INSERT rather than create-then-publish, for three
+  reasons and the first is the whole issue: `transitionBlogPostStatus` sets
+  `published_at` to `now()`. It is idempotent on `sql/138`'s partial unique index,
+  so preview → commit → fix rejects → commit again does not duplicate the archive.
+  It writes no revision or audit event: an import is the arrival of something that
+  existed elsewhere, and 23,906 "created by import" revisions bury the real history.
+  
+  ### `bun run blog:legacy:redirects:import`
+  
+  The map is **derived, not supplied** — `legacy_source_id` IS the map, which is
+  why the column exists. So the rules cannot disagree with the content: an article
+  that was never imported has no rule, and one that gets unpublished stops
+  producing one. `--path-template` carries the legacy URL shape because that shape
+  belongs to the system being migrated *from*.
+  
+  Two checks run in preview as well as commit, because the point is to find out
+  before cutover: the target must not itself be the source of an existing rule, and
+  it must already carry its locale prefix. An existing rule for a source path is
+  **reported, never overwritten** — a hand-authored exception must survive a bulk
+  run. One `now` for the whole run, so a rule expiring mid-run cannot be seen by
+  one check and not the next.
+  
+  ### The two-hop bug that was already merged
+  
+  ADR-0098 made `/blog/{code}/{slug}` a locale-prefixed surface.
+  `listLegacyRedirectMappings` was emitting the bare path, so every legacy URL
+  would have been redirected to a path that immediately redirected again — the
+  chain longer than one hop that PRD §9.2 forbids and that this issue lists as its
+  own acceptance criterion. The target now carries the prefix, taken from the
+  **post's own** locale; a post in a locale this deployment does not support keeps
+  the bare path rather than being sent confidently into a language with no routes,
+  and the importer reports that case instead of writing it.
+  
+  ### Still open on this issue
+  
+  Two things need artefacts that are not in this repo and are noted rather than
+  guessed at:
+  
+  - **Enumerating every legacy URL shape from `.htaccess`.** Only
+    `/news/{id}_{slug}.html` is covered here. The static-page and rubrik rewrites
+    need the actual file; `--path-template` means covering them is a second run,
+    not a code change.
+  - **The pre-cutover crawl against the live legacy sitemap.** The local half —
+    every rule this repo would write resolves in one hop to a published post — is
+    enforced by the importer above. Fetching the legacy site to confirm coverage
+    needs the legacy site.
+- 60c14ec: feat(blog-content): advertising inventory can finally be booked from a browser
+  
+  `awcms_news_portal_ad_placements` was the most complete subsystem in this repo
+  that nobody could operate: twelve slots, four rotation modes, `global`/`widget`/
+  `post`/`page` targeting with the pairing rule enforced as a database CHECK,
+  scheduling, and every creative holding a real foreign key to a verified media
+  object — reachable only through `curl`.
+  
+  `/admin/blog-ads` books it. The table is built from the SLOTS, not from the
+  rows, so an unsold slot renders its availability notice (FR-ADS-007) instead of
+  being indistinguishable from a slot that does not exist, and each one states its
+  recommended size and its render-time item cap — an operator who cannot see that
+  number will load six banners into a one-banner slot and conclude the rotation is
+  broken.
+  
+  The creative goes through the one shared media picker, the same one the article
+  editor uses. A `global` placement sends `targetId: null` rather than `""`,
+  because the pairing rule is a database CHECK and an empty string violates a
+  constraint the operator never chose.
+  
+  Three client helpers move into `admin-form-client.ts` in the same change —
+  `localDateTimeToInstant`, `checkboxChecked`, `integerValue` — because this is
+  the second screen to need all three, and `/admin/blog-homepage` now imports them
+  instead of carrying its own copies. The first of the three is not a convenience:
+  `datetime-local` carries no zone, so a schedule parsed on the server is read in
+  the server's timezone and a campaign booked from Palangka Raya starts at the
+  wrong hour with nothing reporting an error.
+  
+  No permission and no migration: both keys were seeded by `sql/045` and repointed
+  by `sql/076`. `NOT_YET_SCREENED` loses its last two `blog_content` entries other
+  than the internal-link policy.
+  
+  Part of #594.
+- 03b6610: fix(visitor-analytics,data-lifecycle): two reads with no ceiling
+  
+  Findings **C2** and **C5** of the 17 August 2026 audit round. `sql/145`. One PR
+  because they are one habit: a statement whose real cost is O(everything this
+  tenant has ever accumulated), written where the author was thinking about one
+  subject or one cutoff.
+  
+  **C2 — the only unbounded retention purge in the repo.** Four statements with no
+  batch limit, each using `RETURNING id` purely to take a JS-side `.length`. A
+  tenant with a year of unpurged analytics deleted every row in one transaction:
+  one lock set held for the duration, one WAL burst, and a `statement_timeout` that
+  turns the whole pass into a rollback rather than partial progress. Every sibling
+  already caps at 5000 and loops.
+  
+  All four statements are now `WHERE <pk> IN (SELECT … ORDER BY … LIMIT n)` — the
+  shape `audit-purge.ts` established — and the function returns `hasMore`. The
+  scheduled job loops with a **fresh transaction per pass** (looping inside one
+  would hold every lock and dead tuple for the duration, which is the thing the
+  batching exists to avoid) and reports any tenant that hits the pass cap. The
+  on-demand endpoint does **one** bounded pass and returns `hasMore`, because the
+  size of the work is unknown when the caller presses the button.
+  
+  *What the ORDER BY buys is stated precisely rather than assumed.* Termination
+  does not depend on it — a DELETE removes what it took. It buys oldest-first,
+  which matches the index the predicate already uses and means an interrupted purge
+  has removed the data furthest past retention rather than an arbitrary slice. On a
+  retention control, "which half got deleted" is not a detail. This correction came
+  from a mutation: removing the ORDER BY left every test green, and the code comment
+  claiming it gave monotonic progress was wrong.
+  
+  **C5 — a subject-access export with 49 unbounded reads, two over unindexed
+  columns.** `awcms_audit_events.actor_tenant_user_id` and the `awcms_domain_events`
+  twin have no index and are **not foreign keys**, deliberately (an audit row must
+  survive the deletion of the actor it names), so `db:fk-index:check` structurally
+  cannot see them. The near-miss makes it worse:
+  `awcms_audit_events_actor_tenant_idx` covers `actor_tenant_id` — the delegated
+  actor's *tenant*, a different column one character apart in reading.
+  
+  `sql/145` adds three partial indexes. **Measured** on 60,000 rows: the actor read
+  went from a Seq Scan touching 858 buffers (2.5 ms) to an Index Scan touching 33
+  (0.039 ms).
+  
+  The reads are also row-capped, with the cap reported. A cap on a subject-access
+  export is only acceptable because it is **flagged**: an export that quietly
+  returned the first N rows would answer a legal obligation with a number dressed
+  as an answer — strictly worse than the unbounded read it replaced, which was at
+  least honest. `truncated` is per table, `truncatedTables` rides in the response
+  beside the existing `unanswered` coverage statement, and the `critical` audit
+  event says INCOMPLETE in its message. The cap is a safety valve against a
+  pathological subject (an automation account named as actor on a million rows),
+  not a page size; there is deliberately no cursor, because a "complete answer"
+  assembled across pages has a boundary at every request where a partial answer can
+  be mistaken for the whole one.
+- 10dd495: feat(blog-content): an editor can fix a sentence on the page that shows it (#592)
+  
+  #635 closed the first half of Issue #592 — a preview that renders through the
+  **public template itself**, so an editor stops guessing. This is the second half
+  of its scope: click a block in that preview and fix it there.
+  
+  ### The decision this waited on, and how it went
+  
+  `preview.ts` is an `APIRoute` returning an HTML string, and Astro bundles
+  `<script>` only for `.astro` components. The CSP is `default-src 'self'` with no
+  `'unsafe-inline'`, so an inline script on that page is refused by the browser.
+  The client code therefore has to come from `public/`, and there were three ways
+  to put it there.
+  
+  Hand-writing the JavaScript beside `public/js/news-share.js` was the cheap one,
+  and it costs exactly what this issue cares most about: a **second, untyped copy**
+  of the block ↔ Portable Text conversion that `lib/ui/portable-text-editor.ts`
+  owns. A preview whose editor drifts from the real editor is the same defect as a
+  preview whose renderer drifts — one layer in.
+  
+  So the overlay is TypeScript, it imports the one conversion, and
+  `bun run build:preview-overlay` bundles it to `public/js/blog-preview-overlay.js`
+  — committed and freshness-gated by `build:preview-overlay:check`, the shape this
+  repo already uses for the OpenAPI bundle, the compiled catalogs and the
+  inventories. **5,609 B**, measured on clean builds, and the app budget rose by
+  exactly that and nothing else.
+  
+  A fourth option needed no new asset at all and is worth recording as closed:
+  `/admin/blog` **is** an `.astro` page, so an `<iframe>` of the preview beside the
+  editor would have been bundled for free. It is impossible here, and for a good
+  reason — every response carries `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`. Relaxing either would trade an application-wide
+  clickjacking guarantee for one screen's convenience.
+  
+  ### After a save, the page reloads — and that is the feature
+  
+  There is no renderer in the browser. The overlay PATCHes the body through
+  `PATCH /api/v1/blog/posts/{id}` — the endpoint the editor screen already uses,
+  with its own guard, validation, revision and cache-purge behaviour — and then
+  reloads. So the route still writes nothing, there is still no second
+  authorization path, and what appears after an edit is by construction what a
+  reader gets rather than a browser's approximation of it.
+  
+  ### Two things that would have been silently wrong
+  
+  `renderPortableTextToHtml` learned to stamp `data-pt-index`, off by default and
+  passed by one caller. The index is the position in the document **array**, not a
+  count of rendered elements: a body containing a gallery would otherwise have
+  saved an edit onto the wrong block — only for articles with media in them, which
+  is the worst kind of "works on my draft". Both halves are tested.
+  
+  The overlay is offered **only** when the canonical body is what got rendered. On
+  a row that has not been through `blog:portable-text:backfill`,
+  `renderBlogBodyHtml` falls back to the lossy projection, and the projection is
+  not the array an edited block is spliced into. Stamping it would have offered a
+  click that could not be saved.
+  
+  Also folded in: the `</script`-breakout escaping for JSON in a `<script>` data
+  block now lives in `lib/html/escape.ts` with its reasoning, because Issue #592
+  gave it a second caller. Two hand-copies of one escaping rule is how the second
+  one ends up weaker. And the `public/` enumeration in `security-headers.ts` was
+  extended in the same change — ADR-0101 gates the audience registry precisely
+  because that sentence had already gone stale once.
+- 8a0f41a: fix(sync-storage): a node's `localPath` was a server path and its `objectKey` had no tenant
+  
+  Finding **A7** of the 17 August 2026 audit round.
+  
+  `POST /api/v1/sync/objects` accepts `localPath` and `objectKey` from an
+  HMAC-authenticated node. The cron dispatcher then runs `Bun.file(localPath)` on
+  the **server** and `Bun.S3Client.write(objectKey, …)` as the destination. Neither
+  string had a shape.
+  
+  **The path.** No root confinement, and the distinguishing error text travelled
+  back to the node through `last_error` on `GET /api/v1/sync/objects/status` —
+  `Local file not found: /etc/shadow` versus a read error is an existence oracle
+  for any path on the host, answerable one string at a time by a client entitled to
+  poll. `localPath` is now confined to `OBJECT_SYNC_LOCAL_ROOT_PATH` (default
+  `./var/object-sync`, the same convention `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH`
+  uses), checked at the enqueue boundary **and** again next to the syscall — the
+  first so a refusal never becomes a durable queue row, the second because rows
+  queued before this change are still in the table and the check that matters is
+  the one beside `Bun.file`.
+  
+  Every refusal reports one sentence. Which rule was broken goes to the server log:
+  naming the rule is most of what an oracle needs, and the operator debugging a
+  genuinely misconfigured node reads the log, not the node's console. The
+  missing-file message no longer contains the path at all.
+  
+  **The key.** No tenant prefix, so one node could name another tenant's key — and
+  an S3/R2 PUT to an existing key is an overwrite. The destination is now
+  `<tenantId>/<objectKey>`, applied at PUT time rather than stored: no migration,
+  no re-keying of queued rows, and the key a node reads back from
+  `/sync/objects/status` is still the one it sent. `objectKey` is also validated as
+  a plain relative key. S3 has no server-side path semantics, so `../` is not
+  traversal *at the provider* — but `/` is a delimiter for listing, lifecycle rules
+  and every console that presents a bucket as a tree, and a key that reads as an
+  escape in the one place a human looks at it will eventually be treated as one.
+  
+  **On the confinement rule itself.** `resolveConfinedPath` refuses a `..` segment
+  *textually*, before resolving, and then also checks the resolved path against the
+  root. The second check alone accepts a path that escapes and comes back
+  (`../object-sync/x`): it collapses to somewhere inside the root, having named
+  directories outside it on the way. Nothing reads those, so it is not itself an
+  exploit — but a rule that accepts it is one refactor from a rule that follows it,
+  and "a relative path of ordinary segments, under the root" is a rule that fits in
+  a sentence. It deliberately does **not** resolve symlinks: `realpath` needs the
+  file to exist, and treating symlinks here would imply this is a sandbox. It is a
+  confinement check for a supplied string.
+  
+  The finding needs a compromised legitimate node (`AWCMS_SYNC_ENABLED` +
+  `R2_ENABLED` + the deployment HMAC secret) to reach, which is why it was rated
+  below the others in its group.
+- 01c06f3: docs(i18n): the whole corpus is English with Indonesian mirrors — the ledger reaches zero
+  
+  The rest of the ADR-0097 migration: 97 ADRs, 75 `docs/awcms` documents, 21 module
+  READMEs, `ARCHITECTURE.md`, `PROJECT_STATE.md`, `scripts/README.md` and
+  `src/lib/README.md`. Every document is now English at its bare path with an
+  Indonesian mirror at `<name>.id.md`, banner-linked both ways and held together by
+  the `i18n-source-hash` marker. **`DOCS_AWAITING_MIRROR` is empty.**
+  
+  **The seeding assumption was wrong for 21 documents, and nothing could see it.**
+  
+  Mirrors are seeded by copying the source, on the assumption the source is
+  Indonesian awaiting translation. Twenty-one documents were *already written in
+  English* — four ADRs and seventeen module READMEs and runbooks, which makes sense
+  because those are developer-facing and were written in English from the start. So
+  seeding produced an English file named `.id.md`.
+  
+  The rails structurally cannot detect this. The recorded hash matches (it is a
+  copy of the source), the banner is correct, and `check:docs:translation` is green
+  — while an Indonesian reader following the link gets English. It surfaced only
+  because a translator volunteered "already English — left unchanged" in its report,
+  which prompted checking the other direction.
+  
+  That is the same shape as the two gates this migration already exposed as
+  half-blind: **a check inherits the assumptions of whoever wrote it.** The
+  verification built for this migration asked whether the English side still
+  contained Indonesian; it never asked whether the Indonesian side was Indonesian,
+  because the migration was only ever imagined as running one way. All 21 are now
+  real Indonesian, verified by stopword density on both sides.
+  
+  **The inventory generators had to be translated too, and that was not cosmetic.**
+  `repo-inventory.ts`, `project-state-inventory.ts` and `scripts-inventory.ts`
+  write markdown *into* three of the documents being translated. Left in
+  Indonesian, the next `:generate` would have silently reverted those translations
+  — and no gate would have objected, because the gates check that the artefact
+  matches the generator, and it would have. 66 strings across four generators,
+  table headers and cell values included.
+  
+  The OpenAPI `description` fields and the generated `api-reference.md` were
+  checked and are **already entirely English** — that half of the scope did not
+  exist.
+- 2853d28: feat(blog-content): the composed homepage is finally rendered to a reader
+  
+  `listActiveHomepageSectionsForRendering` has existed since `sql/044` with zero
+  callers. A tenant could compose a homepage and no reader would ever see it.
+  
+  `/blog/{tenantCode}` now renders that composition above its chronological
+  listing, on page 1 only — pages 2..n are the archive, and repeating a curated
+  front page above each of them would put the same articles on every page.
+  
+  **The deterministic fallback (PRD §10).** A curated slot whose articles have all
+  been unpublished would render a heading over nothing, which reads as a broken
+  site rather than an editorial gap. Such a slot is filled from the most recent
+  eligible articles instead — from one shared pool, consumed in order, excluding
+  every article already placed above it, so a fallback can never duplicate an
+  article the editor curated three sections up. `latest_posts` and `category_grid`
+  are deliberately NOT rescued: they already query live content, and substituting
+  unrelated articles would answer a different question than the editor asked.
+  
+  **A section that resolves to nothing is dropped, heading included** — and if
+  every section drops out, the page is exactly what a tenant who never opened the
+  composer sees. A front page cannot come out blank.
+  
+  **The query count is a constant.** This is an anonymous page, so an unbounded
+  query count is an expense a stranger chooses. Curated post ids, category slugs
+  and images are each resolved in ONE bulk query for the whole page; only
+  per-section list queries remain, capped by `MAX_RENDERED_SECTIONS` and
+  `MAX_CATEGORY_GROUPS`, both of which log what they dropped rather than
+  truncating silently.
+  
+  Part of #594.
+- d926d18: feat(admin-ui): an article can finally be given a category, channel and topic
+  
+  `POST`/`PATCH /api/v1/blog/posts` have accepted `termIds` since Issue #539, and
+  no screen had ever sent one. So every article published with no category, no
+  channel and no topic — and `sql/131` had just split those into four real
+  vocabularies that nothing could assign.
+  
+  Both article forms now carry a term picker.
+  
+  ### The recorded blocker had an answer that cost nothing
+  
+  `/admin/blog`'s header stated the obstacle plainly:
+  
+  > a picker needs the taxonomy catalogue, and reading it under this screen's
+  > `posts.*` gates would be a read with no permission of its own
+  
+  That is true of a **server-side** read, which is why the screen was pinned to
+  eleven permission keys. It is not true of a browser fetch against
+  `GET /api/v1/blog/terms`, which enforces `blog_content.taxonomies.read` itself —
+  the same resolution the media picker reached in #612.
+  
+  So the eleven-key contract stands, unborrowed. A test asserts no `taxonomies`
+  gate appears on the page.
+  
+  ### Two load-bearing details
+  
+  **`termIds` is sent only when the vocabulary actually loaded.** Absent means
+  "leave the assignments alone"; `[]` means "remove them all". A failed fetch that
+  sent `[]` would **silently strip every category the post already had** on the
+  next save, with no error anywhere. The picker marks its host `data-failed` and
+  the payload omits the field entirely in that case.
+  
+  **All four vocabularies render, including empty ones.** An absent group reads as
+  "this build has no channel picker" — a different and wrong conclusion from "no
+  channels defined yet".
+  
+  ### Prefill costs one query, not N
+  
+  `fetchPostTermIds` already existed. It runs once, for the single post being
+  edited, awaited sequentially inside the screen's existing transaction — not in
+  the list, where per-post terms are the N+1 `listBlogPostsForAdmin` avoids on
+  purpose.
+  
+  ### A term whose vocabulary this build does not know is dropped
+  
+  Rather than rendered under an unlabelled heading. `TAXONOMY_TYPES` is the shared
+  runtime constant, so a fifth type added server-side surfaces as an omission
+  somebody notices, not as a mystery group — the same failure mode
+  `CONTENT_BLOCK_TYPES` exists to prevent.
+- 188f282: fix(security): 77 API endpoints handed their validation schema to any bearer token, and recorded nothing
+  
+  Found by running the API rather than reading it:
+  
+  ```
+  POST /api/v1/blog/institutions   Authorization: Bearer nonsense
+  → 400 VALIDATION_ERROR
+    branch must be one of legislative, executive.
+    name is required and must be at most 150 characters.
+    slug is required.
+  ```
+  
+  No account, no session — any string at all in the `Authorization` header. Measured against a running server: **77 session-gated endpoints answered that way.**
+  
+  ### The disclosure is the smallest part of it
+  
+  `authorizeInTransaction` is what writes the decision log. A request that short-circuits before reaching it is never recorded — so **enumerating the API left no trace at all**. Schema disclosure is the visible symptom; the missing audit trail is the finding.
+  
+  The cause is ordering. `defineTenantRoute` checked that a token was *present*, then ran the route's `prepare` hook, which parses and validates the body. Hand-written handlers did the same thing by validating before `withTenant`.
+  
+  ### Why no gate saw it
+  
+  Every static check in this repo was green on the day it was measured. Ordering between a `prepare` hook and a chokepoint call is not a text property: a textual "validation appears before authorization" scan reported **297 of 305** route blocks — a number wrong enough to be useless, and one I nearly reported before checking it against a server.
+  
+  ### One boundary, not 77 edits
+  
+  `src/middleware.ts` now refuses a body-carrying API request whose credential does not resolve, before anything parses it. The per-route fix would have been 77 edits with no mechanism behind them — nothing stops the 78th route, and 63 of the 77 are hand-written handlers sharing no shape.
+  
+  It also turns "which endpoints are reachable without a session" — until now implicit, and knowable only by reading 246 handlers — into `SESSION_FREE_BODY_ENDPOINTS`, where each of the 26 entries carries a stated reason.
+  
+  **Authentication only.** Authorization stays at the ADR-0063 chokepoint and is not duplicated; a second place deciding what a caller may *do* is the drift this repo keeps paying for. The session is therefore looked up twice on a write — once at the boundary, once inside the route's own transaction — and that is deliberate: handing the route a principal resolved in a different transaction would split the decision from the read it guards, the exact hazard `loadAdminScreen` documents. Reads carry no body and never reach the boundary.
+  
+  ### The authorization half, in the factory
+  
+  `defineTenantRoute` now **holds** a `prepare` refusal until authorization has answered. A caller lacking the permission gets `403` and a decision-log row instead of `400` and a schema; an allowed caller still gets their validation errors.
+  
+  Authorizing before parsing would have been wrong for a documented reason: `await request.json()` waits on the *client*, so parsing inside `withTenant` holds a reserved connection and its work-class slot for as long as a caller chooses to take. Holding the refusal keeps both properties.
+  
+  Two routes cannot defer — `POST /api/v1/partners/:id/status` and `POST /api/v1/access/machine-credentials` compute their guard *from* the body, so with no valid `prepared` there is no guard to evaluate. They return early, and what that leaves is bounded to callers who already hold a live session.
+  
+  ### Both halves proven by breaking them
+  
+  | Mutation | Result |
+  |---|---|
+  | Boundary disabled, rebuilt, re-run | **185 assertion failures** across 92 endpoints |
+  | Blank reason on an exemption | pure gate red |
+  | Exemption naming a route that no longer exists | pure gate red |
+  | Trailing-slash variant of a protected path | pure gate red |
+  
+  `tests/e2e/api-body-auth-boundary.e2e.ts` probes **every** body-accepting route against a running server and requires `401` unless declared exempt. It imports the exemption list from the module the middleware uses, so it cannot drift from the boundary it checks. A new public endpoint fails it until declared, with a reason.
+  
+  Verified end to end: the leak returns `401`; a read-only session posting an invalid body to a factory route returns `403 ACCESS_DENIED` where it used to return the schema; the full e2e suite passes 27, so no legitimate authenticated write regressed.
+  
+  Recorded as **C18** in `docs/awcms/standar-performa-dan-keamanan.md`, closed with its checker named, per that document's own rule.
+- 2383703: fix(seo-distribution): 23,906 legacy redirects were written, and not one of them could ever fire (#599)
+  
+  Issue #599's pipeline was complete and correct in every part, and produced a redirect map that could not work. `blog:legacy:redirects:import` derives one exact rule per imported article, checks that none chains, and carries ADR-0098's locale prefix so the hop is the last one. `isRedirectEligiblePath` accepts `/news/**`, so all 23,906 rules were written and sat in the table looking right.
+  
+  `resolvePublicRedirect` consulted the retired-`/news` family rewrite **first** and returned on its hit. That rewrite claims every `/news/**` path, so no tenant rule was ever read — and its answer was a 301 to `/blog/{tenantCode}/{legacyId}_{slug}.html`, a path no post has, because the legacy id and the `.html` suffix belong to the shape being migrated *from*.
+  
+  Every one of those URLs would have redirected into a 404: the precise outcome #599's Definition of Done forbids, produced by the code written to satisfy it.
+  
+  ### Why no test failed
+  
+  The precedence existed only as the order of two `await`s inside a `try` block — unreachable without a database, so nobody wrote the cheap test. The two strategies belong to different concerns, so neither module's suite had reason to look at the other, and both stayed green while being individually correct.
+  
+  ### [ADR-0111](docs/adr/0111-a-tenants-exact-redirect-beats-a-retired-family-rewrite.md): most specific wins
+  
+  A tenant-authored exact rule now resolves before the family rewrite, which becomes the fallback. Outside `/news/**` the change is unobservable — the retired handler returns `null` for every other path. For the URLs the rewrite was built for, nothing changes.
+  
+  The decision moved into `domain/redirect-precedence.ts` as a pure function, which is the load-bearing half rather than tidying: a rule shaped as statement order is a rule nobody can test cheaply, and that is exactly how this survived. `tests/redirect-precedence.test.ts` covers both directions and asserts against the service source that the function is called and that no early `return retired` has crept back above it — all three of those wiring assertions fail when the old order is restored.
+  
+  Requests answered by a tenant rule now do one *fewer* transaction, since the retired handler no longer opens one first to discover it has nothing to say.
+  
+  ### `blog:legacy:cutover:verify` — Issue #599 scope item 4
+  
+  The other two jobs reason only about articles that were imported, so neither can see a legacy URL that was **not** — a deleted article, a paginated index, a tag page. Those produce no rule, and nobody finds out until a crawler does.
+  
+  This one starts from the legacy site's own sitemap and reports, per URL: resolves in one hop to a live page; no rule (a 404 after cutover); a chain longer than one hop (PRD §9.2); a loop; or a 301 into a path this deployment does not serve. It drives the real resolution path — `resolveRedirectChain` with `findActiveRedirectByPath`, and `fetchPublicBlogPostBySlug` for liveness — rather than reimplementing it, and applies ADR-0111's precedence so its prediction matches what a crawler will actually get.
+  
+  It writes nothing; there is no `--commit` because there is nothing to commit.
+  
+  **A sitemap INDEX is refused rather than flattened.** Its `<loc>` entries are child sitemaps, so checking them as pages would verify that a handful of `.xml` files redirect and then report success having read no page URL at all. The same refusal covers an empty document, an oversized one, and any `<loc>` that is not an http(s) URL — an unusable entry is counted and named, never silently skipped.
+- 838e792: test(e2e): the sweeps were accidentally immune, and the fix had to come first
+  
+  Every e2e spec shares one seeded tenant. Some of them change it tenant-wide, and under `fullyParallel: true` a reader could observe that change mid-flight. The previous round fixed one symptom of this; this one fixes the cause, and then fixes what the cause had been hiding.
+  
+  ### Two waves, ordered
+  
+  `playwright.config.ts` now runs `setup` → `read` → `write`. Read-wave specs see the tenant as the bootstrap left it; writers run afterwards. Within each wave everything is still parallel, so the cost is one barrier, not serialization — the suite still finishes in ~19s.
+  
+  Reads run first rather than last on purpose. Running them last would depend on every mutator reverting cleanly, which is true today but is an invariant nobody could enforce: a mutator that fails halfway leaves residue by definition, and the reader would then be asserting against the wreckage of a different failure.
+  
+  ### The classification is checked, not trusted
+  
+  A list of filenames is normally the wrong answer in this repo — a gate that checks its own matrix rather than what exists is the recurring failure here. So it is held from both ends:
+  
+  - `tests/e2e-wave-classification.test.ts` requires every `*.e2e.ts` on disk to appear in exactly one wave. A new spec fails CI until its author decides which it is, and an unclassified spec would not run at all.
+  - Membership of the read wave is enforced **at run time**: read-wave specs import `test` from `tests/e2e/support/e2e-read-wave.ts`, which fails any test that issues a mutating `/api/` request. Verified by mutation — adding one `fetch(…, {method: "POST"})` to a read-wave spec turns that spec red, naming the request.
+  
+  Session endpoints are the only allowed exception, because three specs must authenticate as somebody other than the shared owner.
+  
+  ### What the ordering unlocked: the sweeps were not actually checking anything
+  
+  This is the part worth reading. `admin-screens-render.e2e.ts` asserted `200`, and **a denied screen also returns `200`** — denial renders here, it never redirects. So the sweep would have stayed green if a screen started refusing the owner: a module switched off, a grant dropped from the bootstrap, a tenant-wide `deny` authored. It was accidentally immune rather than correct, and it could not be tightened while a mutator might be running concurrently.
+  
+  It now asserts the screen rendered its **contents** — no denial hook anywhere in the page. Verified by mutation: disabling the `reporting` module makes it fail on `/admin` **and** `/admin/reporting` together, which is exactly the interference that used to be indistinguishable from a defect. Under the old assertion that scenario was green.
+  
+  ### A read-only operator is now covered, and it is where ADR-0053 gets its runtime check
+  
+  `tests/e2e/admin-read-only-access.e2e.ts` — written a round ago, held back because it failed roughly one run in three through no fault of its own — lands unchanged. It drives a user granted every tenant-scoped `read` and nothing else: the grant comes from the permission catalogue, the expectation from each page's own `authorize` block, so the two halves come from different sources.
+  
+  `/admin/tenants` and `/admin/partner-registry` must refuse that user. This is the only runtime check on ADR-0053 anywhere in the repo, and verified by mutation: granting the read-only role the two platform reads makes both screens serve their contents and the spec reports cross-tenant disclosure.
+  
+  **It belongs here rather than in the owner sweep, and finding that out cost a failed run.** The first attempt asserted the owner is refused by those two screens. It failed — against an environment where the seeded tenant *is* the platform tenant, whose owner legitimately holds those permissions. What the owner is owed there depends on which tenant was seeded, which the sweep has no independent way to know, so those two screens are now exempt from the contents-vs-refusal question there and held to `200` + shell. For the read-only user it is unconditional: a `scope = 'tenant'` grant can never include a platform permission, whichever tenant they belong to.
+  
+  ### Corrected: the browser-test skill described a different repo
+  
+  `.claude/skills/awcms-browser-test/SKILL.md` claimed specs for `/admin/analytics` and `/admin/security`, an `admin-responsive-nav.e2e.ts`, an `admin-a11y-smoke.e2e.ts`, and a `@axe-core/playwright` devDependency. **None exists here** — all of it was inherited from `awcms-mini` when the skill was ported.
+  
+  It also described the CI job as running in **two phases** with `--grep-invert "@full-online-gate"`, restarting the server under `AUTH_ONLINE_SECURITY_ENABLED=true` for `admin-security-enabled.e2e.ts`. `ci.yml` has no second phase and neither spec exists. Both corrections are stated in place rather than silently overwritten, because the failure mode of a stale skill is that an agent follows it instead of looking — and a confident false description of CI is worse than none.
+  
+  The Status section now lists the 16 specs that are actually present, and a new mandatory convention covers wave classification, so the next author is told about it by the skill rather than by a failing gate.
+- 313c9c4: fix(identity-access): a password reset changed the credential everywhere and revoked sessions in one tenant
+  
+  Finding **A5** of the 17 August 2026 audit round. `sql/144`.
+  
+  `setPrincipalCredentialForIdentity` is global by design (ADR-0086: one human, one
+  credential). `revokeAllSessionsForIdentity` carries `WHERE tenant_id = …`, and it
+  has to — `awcms_sessions` is `FORCE ROW LEVEL SECURITY` and the transaction is
+  scoped to one tenant. So a person whose tenant-B cookie was stolen, recovering
+  from tenant A, changed the password everywhere and revoked nothing in B. **The
+  stolen session kept working with a password its holder no longer knows** — the
+  exact opposite of what a reset is for. "Sign me out everywhere" had the same
+  boundary, and two doc comments asserted the guarantee the code no longer
+  provided.
+  
+  **Why an epoch rather than a wider revoke.** The revocation cannot be widened
+  from inside the request: the tenant GUC is set for one tenant per transaction, so
+  the UPDATE would silently match zero rows everywhere else — the same bug with
+  more code. Escaping RLS would mean a `SECURITY DEFINER` function that may revoke
+  any session in any tenant, reachable from a request path, which is a far larger
+  blast radius than the problem.
+  
+  An epoch inverts it. The credential change writes **one row it already owns**
+  (`awcms_principals` is global and RLS-free), and every session carries the epoch
+  it was minted under. A session behind its principal is refused by every reader in
+  every tenant at once, and no writer ever crosses a tenant boundary. The
+  integration suite asserts that directly: after a reset in A, tenant B's row still
+  has `revoked_at IS NULL` and is refused anyway.
+  
+  **The bump lives inside `setPrincipalCredential`**, in the same statement as the
+  hash, for the reason ADR-0079 already paid for once: a caller that replaces the
+  credential and forgets the bump leaves no trace — the password changes, the mail
+  arrives, the tests pass, and the stolen session keeps working. Two writers that
+  must always run together are one writer. `promotePrincipalCredential`
+  deliberately does **not** bump: promotion writes a hash the identity already had,
+  nothing about the credential changed, and bumping there would sign a person out
+  of their other tenants on an ordinary login.
+  
+  **One fragment, eight readers, one gate.** `sessionCredentialCurrent` is the only
+  definition of "still backed by the current credential", and
+  `bun run identity:session-readers:check` (new, gate 57) fails the build for a
+  recorded live-session reader that does not embed it, for a session `INSERT` that
+  does not stamp the epoch, and for any new file naming `awcms_sessions` that is on
+  neither list. The alternative — a per-file `AND …` — is exactly the arrangement
+  ADR-0079 records: a session row gives no hint that a global credential exists to
+  be behind, so the next author writes the three predicates they can see and the
+  fourth is invisible.
+  
+  Both nullabilities are load-bearing and in opposite directions.
+  `awcms_principals.credential_epoch` is `NOT NULL DEFAULT 0` so the comparison
+  always has a right-hand side; `awcms_sessions.credential_epoch` is **nullable**
+  and read as 0, so sessions minted before this migration are behind the moment any
+  epoch is bumped and the first reset after deployment kills them. An identity with
+  no `principal_id` (nullable by design, sql/112) is unaffected — it has no global
+  credential to be behind, and its tenant-scoped revocation remains its whole
+  guarantee.
+- 01c06f3: docs(i18n): all 56 skills are English, with Indonesian mirrors — the ledger falls 253 → 197
+  
+  The first batch of the ADR-0097 migration, and deliberately the first: skills are
+  read by coding agents, and a skill that is misread produces wrong work rather
+  than confusion. This repo has already recorded skills whose stale claims sent an
+  agent the wrong way. 13,000 lines of operational instruction now say what they
+  mean in the language every reader and every agent actually gets.
+  
+  Each skill is English at `SKILL.md` with a verbatim Indonesian mirror at
+  `SKILL.id.md`, banner-linked both ways and held together by the
+  `i18n-source-hash` marker.
+  
+  **Three defects had to be fixed before a single file could be translated, and two
+  of them were introduced by the language inversion itself.**
+  
+  1. **The stamping tool would have silently broken every skill.** It writes the
+     bilingual banner as line 1 — correct for the 198 plain documents, wrong for
+     the 55 files that open with YAML frontmatter. A banner above `---` does not
+     fail loudly; the frontmatter simply stops being frontmatter, and every skill
+     loses the `name`/`description` that decide when it is selected. A repo full of
+     skills nobody selects looks exactly like a repo whose skills were never
+     needed. `tests/skill-frontmatter.test.ts` now asserts the invariant on the
+     artefact and fails when the banner is put back on top.
+  
+  2. **`module-absence-claims` fired on a correction note.** Its exoneration
+     markers (`SUDAH`, `kini`, `Versi sebelumnya`, …) were Indonesian-only, so
+     translating a document REMOVED its exoneration while leaving the absence
+     phrasing intact — and the gate then failed on a paragraph whose whole purpose
+     is to say the claim is obsolete.
+  
+  3. **`doc-inventory-counts` stopped covering translated files entirely, without
+     failing.** Its module-total pattern expects the Indonesian word order
+     (`**22 modul terdaftar**`); English puts the qualifier first
+     (`**22 registered modules**`), so it matched nothing. Not a failure — a
+     silent loss of coverage, which as the corpus becomes English would have grown
+     to the whole corpus one document at a time. Same shape as the `dot: true`
+     blind spot this gate's own header records.
+  
+  Both 2 and 3 are the same class: **a gate that matches on prose is a gate with a
+  language.** They were found by translating, and they are the reason to translate
+  in batches with the full chain green at each step rather than in one sweep.
+  
+  The ADR index gate also now reads the ENGLISH `docs/adr/README.md` as
+  authoritative rather than the Indonesian mirror — under ADR-0097 asking the mirror
+  to lead is asking the copy to lead. The mirror stays covered by its hash.
+  
+  `docs:i18n:stamp` no longer advises running `format` afterwards. That is
+  backwards and it cost a debugging round: formatting an English source after
+  stamping changes its bytes, so every mirror hash goes stale and the gate reports
+  17 files as mistranslated when nothing was. Format first, then stamp.
+  
+  197 documents remain on the shrink-only ledger.
+- 68a243e: feat(identity-access): per-user time zone — `/admin/account` stops apologising for UTC
+  
+  PROJECT_STATE §4's i18n next step 4. `awcms_principal_preferences` gains
+  `time_zone` (sql/130), joining `locale` and `theme` as the third per-human
+  display preference, and `/admin/account` renders every timestamp in it.
+  
+  The screen previously hard-coded `DISPLAY_TIME_ZONE = "UTC"` with a comment
+  explaining why: *"this base has no per-user time zone, and guessing the server's
+  would make a session's 'last seen' wrong in a way nobody could detect — the
+  reader would simply believe it."* That reasoning still holds, and is exactly why
+  the fallback stays UTC rather than the host's zone. What changed is that there
+  is now a stated preference to read instead of a guess to make.
+  
+  ## The CHECK is a shape check, and says so
+  
+  `locale` and `theme` enumerate their values, and sql/128 argues the CHECK is
+  what makes "this column can only hold something the build can render" true for
+  writers that never pass through TypeScript.
+  
+  **That argument does not transfer, and pretending it did would be worse than not
+  trying.** There are 445 IANA zones in this runtime; the list is tzdata's, it
+  changes several times a year, and an enumerating CHECK would be wrong within
+  months — wrong in the direction that REFUSES a legitimate value, which is the
+  failure an operator cannot work around. Postgres knows the real list
+  (`pg_timezone_names`) but a CHECK may not read a table.
+  
+  So sql/130 asserts only what is stable — non-empty, plausibly shaped, ≤64 chars
+  — and the migration states plainly that it stops nonsense, not every wrong
+  value. The authority on renderability is `Intl.DateTimeFormat`, which throws
+  `RangeError` on an unknown zone and therefore answers exactly the right
+  question.
+  
+  ## The degradation is the part worth testing
+  
+  `formatDateTime` throws on an unresolvable zone. A zone stored under an older
+  tzdata and dropped by a newer one would take down the account screen — the page
+  somebody opens when they think their password leaked, which is when a stack
+  trace is most expensive.
+  
+  `readPreferences` therefore coerces on the way OUT, the same shape `coerceLocale`
+  already uses for a locale list that shrank under a stored value. The tests pin
+  that rather than the happy path, and include the assertion that an uncoerced
+  zone really does throw — so if that ever stops being true, the comment
+  justifying the coercion is caught being wrong.
+  
+  ## The picker is server-rendered, from `Intl`
+  
+  The `<select>` is built from `Intl.supportedValuesOf("timeZone")` on the SERVER,
+  so the values offered are exactly the values `coerceTimeZone` will accept back.
+  A list from anywhere else could offer a zone this deployment cannot resolve, and
+  the save would fail with the reader looking at a value the page itself
+  suggested. It is ~445 options of SSR HTML on one admin page — no client asset,
+  so the budget `bun run build` enforces is untouched.
+  
+  "Use this device's time zone" SELECTS but does not save: the browser's zone is a
+  guess from the operating system, and a guess that silently persists is the class
+  of defect the hard-coded UTC existed to avoid. If the detected zone is not among
+  the options — a browser whose tzdata is ahead of the server's — the control says
+  so rather than leaving itself silently unchanged.
+  
+  `POST /api/v1/auth/preferences` accepts `timeZone` (absent = leave alone, null =
+  reset, unrenderable = `UNSUPPORTED_TIME_ZONE`), carried forward in the same
+  read-then-write transaction as the other two axes so a request mentioning one
+  cannot wipe another.
+- 9bdb900: feat(site-search): a search result set can say what else is in it (#607)
+  
+  `GET /api/v1/site-search/query` returned a ranked list and nothing about the
+  shape of the set it came from. A reader could not narrow by content type, and a
+  build client had nothing to render a filter from. `search-query.ts` emitted no
+  aggregation at all, which the issue named as the one item of its scope that
+  might need backend work — it did.
+  
+  `countSearchFacets` counts per `resource_type` over the same result set, and the
+  endpoint returns them on every page.
+  
+  ### The filter is deliberately not applied to its own counts
+  
+  A facet answers *"what else is there"*, so it is computed BEFORE the facet's own
+  filter narrows the set. Applying `resourceType` would zero every other value the
+  moment a reader picks one — and a reader looking at a list of zeroes has no way
+  back to results that still exist, because the interface has stopped saying they
+  do.
+  
+  Every OTHER predicate is shared with the result query character for character:
+  same tenant, same locale, same `websearch_to_tsquery`, same admitted-type
+  allow-list. A count derived from a wider predicate advertises documents the
+  reader cannot reach. The signature is an `Omit<…, "resourceType">`, so passing
+  the filter is unrepresentable rather than merely unused.
+  
+  ### It cannot become a cross-tenant oracle
+  
+  A COUNT leaks the existence of content without displaying it, so a facet that
+  escaped its tenant would be a disclosure with nothing on screen to notice it by.
+  The explicit `tenant_id` predicate and RLS FORCE both bind it, and the
+  integration suite asserts it negatively against a real database with both tenants
+  holding rows that match the same query — non-vacuously, since tenant B holds
+  more than tenant A.
+  
+  Counts are computed on every page, including cursor pages: they describe the
+  whole result set rather than the page, so omitting them after the first would
+  make them look like they had changed. The value list is bounded.
+  
+  ### The neutral payload stays one shape
+  
+  `facets` is present and `required` in every response — an unresolved host, a
+  disabled tenant, a rejected query and a real answer. A key present in one shape
+  and absent in another re-opens exactly the distinction that neutral payload
+  exists to close.
+  
+  Two of the issue's three scope items are unchanged by this and belong elsewhere:
+  the reader search box and autocomplete consumer are `awcms-astro`'s under
+  PRD §27.1, and the endpoints they need already exist. Term facets — channel,
+  institution, region, topic — need the index to carry them first; see the
+  follow-up issue for why `tagsColumn` cannot express a join table.
+- 12f32f1: feat(docs): English becomes the source language, Indonesian the mirror (ADR-0097)
+  
+  ADR-0023 already decided that `<name>.md` is what readers get by default and
+  `<name>.id.md` holds the other language. It adopted that for **three** front-door
+  documents and wrote the rest off as "a separate backlog, not scheduled by this
+  ADR". The backlog was never scheduled.
+  
+  The state that left behind: of **260** documents in scope, **four** follow the
+  convention. The other **253 are Indonesian prose sitting at a bare path the
+  convention promises is English** — every ADR, `PROJECT_STATE.md`, all 55 skills,
+  every module README. A reader who follows the repo's own rule gets the wrong
+  language 97% of the time.
+  
+  **What this change actually does is invert the direction**, which is the half
+  that was costing something. ADR-0023 kept Indonesian authoritative so the authors
+  would not have to switch language — but the staleness marker therefore lived on
+  the generated English side, so every edit to an authoritative Indonesian file
+  made the English stale, and the English is what most readers and **all coding
+  agents** see. Keeping the source in the language fewer readers use means the copy
+  people actually read is the copy allowed to drift. That is not hypothetical here:
+  this repo has already recorded skills whose stale claims sent an agent the wrong
+  way, most recently one asserting a database role did not exist when it did.
+  
+  Mechanically:
+  
+  - the `<!-- i18n-source-hash -->` marker moves to the `.id.md` mirror and records
+    the hash of the English source;
+  - the language banner is rewritten on both sides, because ADR-0023's banner names
+    Indonesian as "(sumber)" and a banner that lies about which file is
+    authoritative sends the next editor to change the wrong one;
+  - `DOCS_AWAITING_MIRROR` names all **253** outstanding documents as a
+    **shrink-only ledger** — entries come off as documents are translated, the gate
+    rejects an entry whose mirror already exists, and nothing may be added;
+  - coverage and currency are **separate** checks, because a document with no
+    mirror has no pair to be stale, so fusing them would produce a gate that reads
+    green while most of the corpus is untranslated.
+  
+  Generated artefacts (`api-reference.md` from the OpenAPI `description` fields,
+  `repo-inventory.md`, `agent-memory.md`) are exempt from hand-mirroring. Making
+  those English is a change to the generator or the spec — translating the artefact
+  would be overwritten on the next run.
+  
+  All three failure modes were proven before this shipped, by reintroducing them:
+  an edited English source reports a stale mirror; a deleted mirror for an
+  off-ledger document reports missing coverage; a ledger entry whose mirror exists
+  reports an overstated ledger.
+  
+  This is the first of several changes — the 253 translations follow, and each one
+  shrinks the ledger.
+- 01c06f3: feat(jobs): the schedule becomes data, and the jobs image ships from the release
+  
+  `crontab -l` on the production host carried **one** of the 32 declared jobs.
+  Scheduled posts never published, the domain-event outbox was never drained, push
+  delivery was inert, reporting projections went stale, DNS never reconciled,
+  business-scope and subscription expiry never ran — so access outlived its
+  validity — and the **entire retention family** never ran, which means the
+  retention guarantees ADR-0094 states were enforced by nothing at all.
+  
+  Nothing reported any of it, because a job that is never scheduled does not
+  produce an error. It produces silence.
+  
+  `modules:jobs:check` already required every worker script to HAVE a descriptor
+  carrying a `recommendedSchedule`. That closed the half that could be closed
+  without deciding anything: the descriptor existed and the schedule was **prose**.
+  "Every 1-2 minutes via cron/systemd timer." is readable and unexecutable, so the
+  schedule lived in a document, the crontab lived on a host, and nothing compared
+  them.
+  
+  **The schedule is now data.** `ModuleJobSchedule` is either
+  `{ mode: "cron", expression, backlog }` or `{ mode: "manual", because }`, and
+  `jobs:crontab:generate` renders `ops/awcms-jobs.crontab` from the registry.
+  `jobs:crontab:check` fails when the artefact drifts and when any job declares no
+  schedule — a new job can no longer be born dormant. Of the 32: **23 belong on a
+  timer, 9 are structurally operator-run** (one-shot migrations, deploy gates, a
+  rollback), and each of those 9 states a structural reason rather than an
+  omission.
+  
+  **The risky ones ship commented out, and that is the point.** Enabling these on a
+  deployment that has been up for months is not "resuming a schedule". For 18 of
+  them the first tick is one unbounded action against a backlog that accumulated
+  the whole time: every overdue post published at once, every queued push delivered
+  to real devices, every expired grant revoked mid-session, every row past
+  retention deleted in one pass. Each is the *correct* behaviour, and each deserves
+  to be seen once before it happens. So each renders as a commented line carrying
+  its own first-run note — installing the file cannot fire a mass delete, and
+  enabling one is a deliberate edit after a `--dry-run`.
+  
+  **The other half: the jobs image now comes from CI.** The runtime image carries
+  only `dist/`, so no job target can execute in it — verified on the running
+  production container:
+  `bun run logs:audit:purge` → `Module not found "scripts/audit-log-purge.ts"`.
+  A `jobs` stage carries the same commit's sources, and `release.yml` publishes it
+  as `ghcr.io/ahliweb/awcms-jobs`. It replaces a hand-copied source snapshot on the
+  host that did not follow releases — so after every deploy the cron ran the
+  *previous* release's code against the *new* schema until someone remembered to
+  refresh it.
+  
+  The new stage is placed **before** `runtime`, not after, and both build steps now
+  name their `target:` explicitly. `docker build` with no target builds the last
+  stage, and several things build this file that way; a jobs image published as the
+  application image is a deploy that succeeds and serves nothing.
+- 4b7c84f: feat(site-profile): a tenant can state who it is, without editing frontend source
+  
+  A tenant had no logo, favicon, editorial address, contact email, phone, WhatsApp
+  number, copyright line, tagline or social profile link — anywhere. A footer, a
+  masthead, a contact page and the `Organization` JSON-LD node all had to
+  hard-code the publisher's identity in frontend source, which violates PRD §25
+  ("tanpa edit source code") and FR-TEN-004, and makes a second tenant impossible
+  without a fork.
+  
+  `site_profile` is a new module (ADR-0102, `sql/135`) owning that identity.
+  
+  ### The reuse gate ran before anything was built
+  
+  `theming` was rejected outright: its value **is** the strictness of its charter —
+  token values are validated against a strict CSS grammar — and an editorial
+  address is not a design token. `blog_content.settings` was rejected because
+  identity is not content.
+  
+  `awcms_seo_tenant_settings` was the real candidate, and the one the issue itself
+  preferred. It was rejected on **charter**: every identity-looking field there is
+  an SEO *output* (`og:site_name`, the JSON-LD `Organization` node, the fallback
+  `og:image`), consumed by a meta-tag renderer and set by whoever owns index
+  impact. PRD §25 asks for site *chrome*, set by whoever runs the newsroom — and
+  ADR-0053 already established that separating those authorities matters.
+  
+  ### The cost of a second module is paid on the read side
+  
+  The real objection to a new module was never storage; it was *"consumers must
+  know which to ask"*. So `GET /api/v1/site-profile/composed` returns both halves
+  in one answer, with the four SEO-owned fields named exactly as
+  `seo_distribution` names them. A build client asks one endpoint and never learns
+  the split exists. Nothing is duplicated between the two tables, so no value can
+  drift out of step with a copy.
+  
+  ### Security surface
+  
+  Social link URLs are **refused, not sanitized**, unless absolute `http(s)`. They
+  render as `<a href>` on every public page, so a `javascript:`/`data:` value is
+  stored XSS with a very long reach — the posture `content-validation.ts` takes
+  toward markup. Protocol-relative and scheme-less values are refused for the same
+  reason: both parse as *something* and neither states an origin.
+  
+  Logo and favicon are media object **ids**, never URLs, so managed-media
+  enforcement keeps governing the bytes.
+  
+  `read` and `update` are separately grantable (`sql/058`'s reasoning: changing
+  what every page's contact block says is a different power from reading it), and
+  the `PUT` is idempotency-keyed and audited — the audit row records **which
+  fields are set, never their values**, because contact data should not be copied
+  into a second store that more people read.
+  
+  ### Also
+  
+  `submitWithFieldErrors` gained an `idempotent` option. Before it, an endpoint
+  could require an idempotency key **or** return per-field errors and a caller had
+  to choose — which is why `/admin/seo` reports "invalid" without saying which
+  field.
+  
+  **Existing tenants will 403 until granted the new permissions**: a seed reaches
+  only tenants created after it, the limitation every permission-seed migration in
+  this repo carries.
+- 3463929: feat(blog-content): an article can name the institution it is about
+  
+  `sql/131` made institution the fourth classification dimension — a table rather
+  than a taxonomy type, because it carries a branch, a region code and its own
+  landing SEO. `sql/132` seeded its permissions.
+  `syncPostInstitutionAssignments` and `fetchPostInstitutionIds` were written, and
+  the first documents an "embedded `institutionIds?: string[]` on the post
+  payload, exactly like `syncPostTermAssignments`".
+  
+  **That payload field never existed.** `institutionIds` appeared nowhere outside
+  its own directory file: the validator did not accept it, neither route passed
+  it, and both functions had **zero callers**. The dimension was schema, docs and
+  dead code — the writer landed and its readers never did.
+  
+  ### The write path
+  
+  `institutionIds` joins `termIds` on create and update, deliberately sharing the
+  same shape validator (now `validateUuidIdList`) for the reason
+  `syncPostInstitutionAssignments` already gave: giving the two relations
+  different shapes would make the post endpoint's contract arbitrary.
+  
+  Existence is checked with `countExistingInstitutions` before the write, so an
+  unknown id is a named 400 rather than a raw 500 from a bare FK violation — the
+  same treatment `termIds` gets. `GET` now returns `institutionIds` beside
+  `termIds`, read sequentially because two queries in parallel on one transaction
+  connection leak it.
+  
+  ### The picker
+  
+  A separate fetch and a separate failure state from the term picker, because it
+  is a separate permission: `blog_content.institutions.read`, not
+  `taxonomies.read`. An editor can hold one and not the other, so folding them
+  into one request would blank both halves of the form on a single refusal.
+  
+  Both pickers follow the rule established in #613: `institutionIds` is sent
+  **only** when the roster actually loaded. Absent means "leave the assignments
+  alone" and `[]` means "remove them all", so a failed fetch that sent `[]` would
+  silently unassign every institution on the next save.
+  
+  ### Note for the next change
+  
+  The app asset surface is now **177,717 B against a 178,000 B budget** — 283 B of
+  headroom. That is deliberate rather than pre-emptively raised: the budget is
+  doing its job, and the next change should make its own case with its own
+  measurement, as ADR-0101 requires.
+- 76f0080: fix(admin-seo): `/admin/seo` answered 404 on every request and had never rendered — plus the gate that found it (C4)
+  
+  `/admin/seo` computed `showRedirectActions` as the **third statement** of its frontmatter, from three `const`s declared 130 lines further down in the same scope. That is a temporal dead zone: the compiled component threw `ReferenceError: Cannot access 'canUpdateRedirect' before initialization` before rendering anything.
+  
+  The screen had never worked once. It passed review, `bun run check`, the build, and CI, and the compiled production chunk shows the ordering preserved — statement 3 reading what statement 120 declares. An always-404 operator screen is the failure this repo is least able to notice: nothing polls it, and its module descriptor lists it in the sidebar, so it looks shipped.
+  
+  ### Why nothing saw it, and why the fix is a gate
+  
+  `tsc` cannot parse `.astro`, and `astro check` **cannot run here** — `@astrojs/check@0.9.10` refuses on TypeScript 7 ("does not expose the programmatic API that `astro check` relies on"), verified by installing and running it rather than by reading a peer range. No version fixes it, and downgrading to 6.x would regress the compiler under ~156,000 lines and 33 gates to buy one checker.
+  
+  So 61 files and ~34,760 lines were checked by nothing. ADR-0068 §C recorded that as an intentional divergence whose mitigation was that reviewers read `.astro` diffs by eye. This is what that mitigation missed.
+  
+  ### [ADR-0112](docs/adr/0112-astro-frontmatter-is-type-checked-by-extraction.md) — `check:astro-frontmatter:check`
+  
+  Every `.astro` frontmatter is extracted to a sibling `*.astro-frontmatter-check.ts`, type-checked with this repo's own `tsc`, and deleted in a `finally` — the technique `check:astro-scripts:check` already used for `<script>` blocks (#552, which found two defects the same way). Same directory is the whole trick: frontmatter imports are relative, so a mirrored tree would need every specifier rewritten, a transformation that can itself be wrong.
+  
+  Four shims make an extracted block compile, and each gives something up — `*.astro` imports (component `Props` unchecked at call sites), the `Astro` global (`Astro.props` becomes the generic record; `App.Locals` still applies, so `locals.ssrContext` and `locals.locale` ARE checked), `export {}` for module scope (without it an import-free frontmatter is a SCRIPT whose top-level `const`s go global, and two components here both declare `ariaLabel`), and `noUnusedLocals` off for this project only (the template consumes nearly every binding, so 658 phantom diagnostics buried the signal).
+  
+  Together they took the raw output from **920 diagnostics to the 6 that were real.**
+  
+  The gate reported exactly those 6 before the fix and `OK — 61 frontmatter block(s) typechecked` after, which is the regression test: it covers every other `.astro` too, not just this page.
+  
+  ### The divergence is narrowed, not deleted
+  
+  `astro-files-not-type-checked` now covers exactly one thing — component `Props` at their call sites — and the eye-reading instruction in `awcms-testing`/`awcms-pr-review` stays for that class. Standards finding **C4 is closed**, which was the last open row in the document.
+  
+  One mistake worth recording: the shim first carried a top-level `import type`, which made the `.d.ts` a module — and `declare module "*.astro"` inside a module is read as augmentation rather than a wildcard, so every `.astro` import still failed and the gate reported 53 phantom `TS2307`s. A test now asserts the shim has no column-0 `import`/`export`.
+- 798b21c: feat(admin-ui): a journalist can upload a photo without hand-calling the API
+  
+  `media_library` has had the whole server half for a long time — presigned
+  session, magic-byte MIME sniff over the real bytes, server-side SHA-256
+  verification, authoritative post-TOCTOU size check, orphan lifecycle, reconcile
+  job. What it never had was the only part a journalist can use: **a file picker**.
+  
+  `/admin/media` could browse, delete, restore and purge. It could not accept a
+  file, so attaching a photo to an article meant calling the API by hand with a
+  token — which is not a workflow, it is a workaround.
+  
+  ### The absence was deliberate, and this answers its objection
+  
+  ADR-0056 kept `media.create` off this screen for a stated reason: uploading is a
+  three-step dance, and *"a button that starts a session this page cannot finish
+  would leave `pending_upload` rows behind on every misclick"*.
+  
+  That objection was about an **unfinished flow**, not about the screen. So the
+  uploader finishes it, and every failure path cancels the session it created:
+  
+  - a failed transfer cancels;
+  - a failed finalize cancels — the bytes landed but nothing references them;
+  - a cancel that itself fails does **not** replace the error the operator can act
+    on, because the reconcile job is the backstop and "cleanup also failed" is not
+    something the person uploading can do anything about.
+  
+  Each of those is a test, because "it cancelled" is the property the objection
+  was about. The decision was recorded in three places (the page header, the
+  contract test, the screen-coverage registry) and all three are updated to say
+  why it was reversed rather than quietly dropped.
+  
+  ### Two details that decide whether it works at all
+  
+  **`XMLHttpRequest`, not `fetch`** — only XHR reports upload progress. A newsroom
+  photo on a regional connection is otherwise tens of seconds of silence, and
+  silence is indistinguishable from a hang: people retry, and every retry is
+  another orphan object.
+  
+  **The checksum is optional on purpose.** `crypto.subtle` does not exist outside
+  a secure context, and the LAN/offline profile may be plain HTTP. The finalize
+  contract already treats `checksumSha256` as optional, so the client sends one
+  when it can and omits it when it cannot, rather than failing an upload on a
+  deployment shape the project supports. A digest that *throws* is treated the
+  same way.
+  
+  ### It renders only where it can work
+  
+  `POST .../upload-sessions` answers `502 PROVIDER_ERROR` with R2 unconfigured, so
+  the same config the endpoint checks decides whether the panel exists — no file
+  picker that fails every time for a reason the journalist cannot fix. The
+  `accept` attribute comes from the same allow-list the server validates against,
+  and the `create` guard is resolved through `loadAdminScreen` so the form is not
+  rendered to someone the endpoint would refuse.
+  
+  Client cost: **3,854 B**, all of it on the app surface. The reader budget is
+  untouched at 21,415 B — the first change to demonstrate the ADR-0101 split doing
+  its job.
+- 05b55b3: feat(admin-ui): the article editor can open a post with a gallery in it
+  
+  `/admin/blog` was a plain-paragraph `<textarea>`, and it **refused to open** any
+  post whose body held a gallery or a video embed. That refusal was correct — it
+  could only write paragraphs, so saving would have destroyed those blocks — and
+  it meant that once an article had a gallery, its title and slug stayed editable
+  while **its body could never be touched from the CMS again**.
+  
+  There is now a block editor, on top of the Portable Text ADR-0100 landed.
+  
+  ### Written here rather than pulled in, and the number is the argument
+  
+  The editor costs **5,271 B** of client budget — 3,942 B of script, 1,329 B of
+  CSS. Measured on clean builds, `main` 181,418 B -> 186,689 B.
+  
+  The alternative was TipTap + ProseMirror: roughly 150-250 kB across ~20
+  transitive packages, which would have broken the 27,000 B per-file cap about
+  tenfold and roughly doubled the client total, in a repo that ships exactly TWO
+  runtime dependencies and writes all 44 of its admin screens in vanilla
+  TypeScript.
+  
+  It is that small because the vocabulary is CLOSED: three decorators, one
+  annotation, eight block styles, two list kinds. A general editing framework is
+  large because it must handle a vocabulary nobody has enumerated. This one does
+  not, so it does not need one.
+  
+  ### Three decisions that make it small
+  
+  **One editable element per block, not one per document.** Portable Text is an
+  array of blocks and Sanity's own editor is block-based for the same reason: a
+  document-wide `contenteditable` has to solve cross-block selection, block
+  splitting and undo across the whole array. One element per block maps 1:1 onto
+  the data and keeps every hard case local.
+  
+  **Paste is inserted as plain text.** This removes the editor's hardest security
+  question entirely — the editable region only ever contains tags this page
+  created, so the parser never has to reason about what a browser produced from
+  somebody's Word document. It is also the better editorial outcome.
+  
+  **A gallery or video is an opaque card**, parsed from `data-opaque` and pushed
+  back byte-identical. That is what lets such a post be edited at all.
+  
+  ### Also
+  
+  An `href` never reaches the editable DOM — it stays in `markDefs` and the span
+  carries only `data-mark`, so a stray click inside the editor cannot navigate and
+  the editor never trusts an href read back out of its own markup. Orphaned
+  annotations are pruned with their marks, because the validator refuses a mark
+  naming no declared annotation and the two must move together or a save fails on
+  content the editor itself produced.
+- 58a3393: feat(blog-content): an article can now be scheduled to stop, not only to start
+  
+  `scheduled_at` and `blog:publish:scheduled` have handled the appearing half
+  since Issue #541. The withdrawing half did not exist: the transition table
+  offers `published -> archived | draft`, both manual, and `unpublish` appeared
+  nowhere in `src/` or `sql/`.
+  
+  For a newsroom that is not an edge case. An embargo that lifts, a campaign page
+  whose contract ends, partner content with a paid window — every one of them was
+  held open by somebody remembering to archive the post, at an hour nobody is
+  monitoring. What failed silently was not the system; it was the person.
+  
+  `awcms_blog_posts.unpublish_at` (sql/133) closes the window, and the existing
+  job archives the post when it arrives.
+  
+  ### Four decisions worth stating
+  
+  **One job, two sweeps — not a second cron entry.** Two descriptors mean two
+  schedules, and two schedules drift: an operator disables one, or a container
+  ships a crontab with a single line, and posts publish forever while nothing ever
+  withdraws them. That failure is invisible, because the site looks like it is
+  working. Publish runs first, so a window that opens and closes inside one tick
+  resolves in the right order rather than being skipped.
+  
+  **No content quality checklist on the withdrawal.** The publish sweep gates on
+  it because publishing exposes content to readers. Withdrawing exposes nobody,
+  and a checklist that could BLOCK a withdrawal would hold an expired embargo open
+  on the strength of a missing alt text — the exact inversion of what the gate is
+  for.
+  
+  **`unpublish_at` is NOT cleared on transition, unlike `scheduled_at`.** The two
+  are not symmetric: `scheduled_at` is an intent already carried out that would
+  re-fire if kept, while `unpublish_at` is the record of a window that is still
+  open. Clearing it when the post publishes would silently cancel the withdrawal
+  the editor set in the same action.
+  
+  **Pages deliberately do not get the column.** `awcms_blog_pages` carries
+  Redaksi, Pedoman Media Siber and Disclaimer — the legal surface a news site is
+  required to keep reachable. A scheduled unpublish there would let a tenant
+  remove, on a timer and with no editor in the loop, the page a press council
+  expects to find.
+  
+  ### A defect class caught on the way
+  
+  `BlogPostRow` is populated by a CAST (`as BlogPostRow[]`), and a cast is an
+  assertion, not a verification — so adding a field to the type, to `toView()`,
+  and to ONE of the eight column lists typechecks perfectly while the other seven
+  silently return `undefined`. `undefined` is not `null`: it serialises to a
+  missing key, so the field vanishes from the API response for exactly the reads
+  that forgot it. The first patch here hit precisely that, and nothing failed.
+  `tests/blog-post-column-list-parity.test.ts` now fails when any column list
+  drops a declared field, and it was verified to fail before it was trusted.
+- 4769a7d: test(admin): nothing had ever watched an admin screen refuse a user who holds no permissions
+  
+  The per-screen contract tests are source greps — they prove a page *mentions* a permission key, not that a control is hidden from someone lacking it. `admin-screens-render.e2e.ts` loads every screen as the seeded **owner**, who holds every permission. So the deny path — the half of authorization that actually matters — had never been executed by anything.
+  
+  A screen can name the right key, gate the right control, pass every static test, and still render its contents: because the gate was written on a variable that is `true` for the wrong reason, or because the deny branch was simply never exercised.
+  
+  ### Four screens could not be checked at all
+  
+  `loadAdminScreen` never redirects, so a denied screen RENDERS, and the convention is an element carrying `id="<screen>-denied"`. Forty-three followed it. **`site-profile`, `blog-settings`, `sidebar-menu` and `comments` rendered a correct denial message with no id on it.**
+  
+  Nothing was broken for a user — they saw the right words. What was broken was verifiability: no mechanical check could tell those four apart from a screen that shows its contents to someone with no permission, because there was nothing to look for. A denial nobody can assert on is a denial nobody will notice losing.
+  
+  All four now carry the hook, and `tests/admin-deny-path-contract.test.ts` keeps every gated screen carrying one — including the assertion that each still routes through `loadAdminScreen`, since a page reading its data without that has no deny path at all.
+  
+  ### `tests/e2e/admin-deny-path.e2e.ts`
+  
+  Logs in as a tenant user whose role holds **zero** permissions, and requires of all 46 static gated screens: status `200` (a denial is a rendered page — a 404 would mean the screen *threw*, the `/admin/seo` class, and a throw must never read as a refusal) and the screen's own `#…-denied` element present.
+  
+  The denial id is read **from each page's source**, not derived from its URL: several screens use a name that is not their route (`/admin/blog-ads` → `#ads-denied`, `/admin` → `#dashboard-denied`), and deriving would have produced confident failures against ids that never existed.
+  
+  The restricted user is seeded through the same primitives the owner bootstrap uses — `hashPassword`, `linkIdentityToPrincipal`, the same tables in the same order — because a user assembled by hand with a different hash, or with no principal link (ADR-0086), would be testing a shape the login path never produces.
+  
+  ### Verified in both directions
+  
+  Green across all 46 screens. With `canRead` forced true on `/admin/site-profile` — a simulated authorization leak — the suite goes **red naming that screen**.
+  
+  One correction worth recording: the first run reported those same four screens as leaking, and they were not. The server was serving a build made before the hooks were added. The finding was a stale artefact, and re-running against a fresh build is the only reason it was not reported as a defect.
+  
+  **Not covered, deliberately:** a *partially*-permissioned user seeing the right subset of controls. Expected results differ per screen there, so it is per-screen knowledge rather than one mechanical rule, and it is a larger piece of work.
+- d84be39: fix(build): the asset budget could not see the thing its premise was about
+  
+  `build:asset-budget:check` gated one number — the byte total of `dist/client` —
+  against a ceiling whose stated premise is written into its own failure message:
+  the symptom it exists to prevent arrives as "the public pages feel slow".
+  
+  Attribution from Astro's SSR route manifest (Issue #590) shows that number could
+  not see reader weight at all.
+  
+  ### The measurement
+  
+  A public content page loads **zero** `_astro` assets. Those pages are not Astro
+  components — `src/pages/blog/`, `[...path].ts`, the feeds and the sitemaps are
+  `.ts` routes emitting their own shell through `public-page-rendering.ts`, which
+  links two absolute paths out of `public/`.
+  
+  ```
+  reader (public content pages)   21,415 B   css/public-content.css + js/news-share.js
+  app    (admin, auth, landing)  165,274 B   every _astro/* chunk + push-sw.js
+  ```
+  
+  Reader weight was 11% of an admin-dominated total, which made it effectively
+  unmeasured — verified by planting the regression:
+  
+  ```
+  reader regression of +5,000 B  ->  total 191,689 B  <=  ceiling 192,000 B  ->  PASSED
+  ```
+  
+  5,000 B is a **23% increase in what a visitor to an article downloads**, and the
+  gate waved it through.
+  
+  ### The change
+  
+  `TOTAL_BUDGET_BYTES` is replaced by two budgets (ADR-0101):
+  `READER_BUDGET_BYTES` = 24,000 and `APP_BUDGET_BYTES` = 172,000. Neither surface
+  can spend the other's allowance.
+  
+  Classification is derived where structure allows — everything under `_astro/` is
+  `app`, no list to maintain. `public/` files are declared in
+  `PUBLIC_ASSET_AUDIENCE`, enforced **both ways**: an undeclared file in the build
+  fails, and a declaration naming a file the build did not emit fails too.
+  
+  That second rule exists because of a defect found on the way:
+  `security-headers.ts` asserted "`public/` holds exactly two files" while it held
+  three — `push-sw.js` had landed ten days earlier and nothing re-read the claim.
+  The CORP reasoning survives the correction; the enumeration is now gated so it
+  cannot decay again.
+
+### Patch Changes
+
+- 01c06f3: fix(admin-ui): the theme toggle was inert in production, and now a gate reads the build instead of the comment
+  
+  `ThemeToggle.astro` carried a doc comment asserting that its `<script>`, having
+  no `is:inline`, would be bundled to an external module and therefore need no CSP
+  hash bookkeeping. The built manifest disagreed. `dist/server/entry.mjs` listed
+  `src/components/ThemeToggle.astro` in `inlinedScripts`, Astro's `renderScript`
+  emitted it as `<script type="module">…</script>`, and the production CSP —
+  verified live as `script-src 'self' 'sha256-lOc2GAiS/8scFxSOam/Qp0WAZJ9iWtVPpAe0h4d3eDE='`
+  — refused it. The button rendered and did nothing.
+  
+  The mechanism is the same one that cost v9.1.2, and this is its **third**
+  instance:
+  
+  1. `LanguageSwitcher` — shipped, found in production.
+  2. The first attempted fix for it — a bare side-effect import into a module
+     nothing else used, which folded into the script and inlined identically.
+  3. `ThemeToggle` — this one, sitting in the build for weeks.
+  
+  Astro emits an external file only when something survives bundling that needs a
+  CROSS-CHUNK import. This script's one import was `THEME_STORAGE_KEY`, a string
+  constant; the minifier folds it to a literal, the import disappears, nothing is
+  left that needs a chunk. "Has an import" was true in the source and false in the
+  artefact — which is exactly why a comment cannot be the control.
+  
+  So the control is now the artefact. `build:inline-scripts:check` reads the built
+  SSR manifest and fails if ANY component script is inlined. The bound is **zero**,
+  not "at most one": the hash-authorised theme-init body is `is:inline` and never
+  passes through that map, so zero is both correct and the only bound with no
+  allow-list to quietly widen. It runs as part of `bun run build`, so it also
+  covers `release.yml`, which builds without running the full `check` chain.
+  
+  Proven against the real defect rather than a synthetic one: run on the build that
+  shipped, it names `ThemeToggle.astro`; run after the fix, it passes.
+  
+  The fix itself follows the pattern `AdminLayout.astro` already documents — the
+  behaviour moves to `src/lib/ui/theme-toggle-client.ts` and is imported from the
+  layout's script alongside the imports already proven external. That also means
+  this code is now type-checked, which a `.astro` `<script>` never is.
+- 9ddc624: fix(access): three permissions existed in the catalogue and in no descriptor, which is how an entire authorization surface came to have no screen
+  
+  `awcms_permissions` is what `authorizeInTransaction` reads: a row there is what a
+  role can be granted. The module descriptors are a SECOND register of the same
+  facts, and they are the one every static gate trusts —
+  `access:permissions:enforcement:check` asks "does each DECLARED permission have
+  an enforcer?", `admin:screen-coverage:check` asks "does each DECLARED permission
+  have a screen?". Both iterate what modules declare.
+  
+  Nothing compared the two registers, in either direction.
+  
+  `identity_access.abac_policies.{read,configure,analyze}` were seeded straight
+  into `sql/032` and declared nowhere, on the reasoning written into that
+  migration — _"rather than via a module descriptor `permissions` array which this
+  module does not use"_ — which was true when written and stopped being true
+  afterwards. The endpoints worked, so nothing looked broken. What broke was that
+  the three became **invisible to every gate that would have interrogated them**.
+  
+  **What the blindness concealed.** The DSL policy surface those three guard —
+  `/api/v1/access/policies/*`, the ONLY surface producing policies the evaluator
+  consumes — has had **no admin screen at all**, for its whole life. ADR-0033
+  anticipated one. `admin:screen-coverage:check` exists to say exactly that, and
+  could not: it iterates declared permissions and these were not among them. The
+  gate was not wrong; it was never given the question.
+  
+  **And six description drifts, which were not cosmetic.** Every permission-seed
+  migration ends `ON CONFLICT DO NOTHING`, so a description is written exactly
+  once and a later descriptor edit never reaches the catalogue.
+  `comparePermissions` reports that as `mismatched_description` and the module
+  health signal counts it as a failure — so `blog_content`, `identity_access`,
+  `tenant_admin` and `idn_admin_regions` had all been reporting
+  `permission_catalog_synced = fail` on every migrated deployment. Measured
+  against a real database, not inferred. `sql/148` corrects five of them; the
+  sixth is fixed in the DESCRIPTOR instead, because there the catalogue had the
+  better sentence. The rule applied was "make both registers say the better
+  sentence", not "make the catalogue obey the code".
+  
+  **The gate is a test, not a `scripts/*-check.ts`, deliberately.** The obvious
+  pure gate parses `sql/*.sql` — two INSERT column shapes, plus five migrations
+  that DELETE catalogue rows in at least two predicate shapes, applied
+  cumulatively. A regex that silently mis-parses one produces a gate that is
+  confidently wrong. The migrated database has already applied all of it exactly,
+  so `tests/integration/permission-catalogue-parity.integration.test.ts` reads the
+  answer instead of re-deriving it, and reuses `comparePermissions` so CI and the
+  health endpoint cannot drift into disagreeing about the same two registers.
+  Mutation-proven: dropping one declaration reports
+  `orphaned: identity_access.abac_policies.read`.
+  
+  **`/admin/access-policies`** gives the surface its screen: the policy list, with
+  an **In force** column, and a decision simulator (pick role codes, name a
+  module/activity/action, get allow|deny plus the matched policy). `isDslManaged`
+  is now on the record and in the API response because neither a client nor a
+  screen could otherwise tell a stored policy from one in force — this list
+  returns flat and DSL rows alike.
+  
+  `abac_policies.configure` is recorded in `DELIBERATELY_UNSCREENED` rather than
+  built, on the precedent this repo already accepted for `workflow.definition.*`:
+  authoring a condition DSL needs a real editor, and a JSON textarea that accepts
+  a malformed policy until the API rejects it is a worse affordance than none. The
+  objection is sharper here — a malformed workflow graph is a bad diagram, a
+  malformed access policy is an authorization rule.
+  
+  **Two smaller honesty fixes.** The health signal COMPUTED `orphaned` and then
+  filtered it out of its verdict; it now reports orphans in the detail while still
+  only failing on `missing`/`mismatched_description`, because an orphan is a
+  governance gap rather than a runtime fault and should not block a release.
+  And `/admin/abac-policies` now says out loud that policies created there are
+  stored but never evaluated — true since ADR-0033 and deliberate, but the screen
+  had only ever said the table is empty by default, which reads as "nothing here
+  yet" rather than "nothing here takes effect".
+- 4f93333: test(http): a smoke test that speaks HTTPS — the topology that hid two production defects
+  
+  PROJECT_STATE §4 recommendation 8, the last open engineering item from the
+  15 August round.
+  
+  Two defects shipped in one week and neither was visible from this repo:
+  
+  - **v9.1.1** — every native `<form method="post">` answered `403 Cross-site POST
+    form submissions are forbidden`. Astro's `checkOrigin` compares the browser's
+    `Origin` against `url.origin`; behind TLS termination those are
+    `https://host` and `http://host` and can never match.
+  - **v9.1.2 / #573** — feeds emitted `<link>http://…</link>` on an `https://`
+    site, the same root cause reaching output instead of a comparison.
+  
+  Both need a TLS-terminating proxy to appear. Dev, `bun run build`, the unit
+  suite and the Playwright smoke test all speak plain HTTP to the app, where the
+  two origins DO match — so 47 gates and 4,600 tests stayed green while the site
+  was broken. The round wrote the remedy down as "one scenario behind a
+  TLS-terminating reverse proxy would find both in seconds". This is that
+  scenario.
+  
+  ## A real two-hop topology, not a simulation of one
+  
+      fetch("https://localhost:P") ──TLS──▶ proxy ──plain HTTP──▶ origin
+  
+  The origin server sees exactly what production sees: a plain `http://` request
+  URL, an `Origin` header naming `https://`, and `X-Forwarded-Proto: https`. That
+  asymmetry IS the bug, and it cannot be reproduced by constructing a `Request` by
+  hand — which is why the existing unit test passed throughout the outage. The
+  first assertion in the file checks the topology itself (the origin really does
+  see `http`), because without it every later scenario would pass for the wrong
+  reason.
+  
+  Seven scenarios: the `APP_URL` branch that actually fixed production (proxy
+  trust is NOT enabled there), the trusted-proxy branch, an untrusted
+  `X-Forwarded-Proto` being correctly ignored, the host staying the visitor's
+  rather than `APP_URL`'s, the v9.1.1 form-POST refusal REPRODUCED against
+  `url.origin`, the same POST accepted against the resolved origin, and the
+  JSON-exemption that makes the shipped workaround sound rather than lucky.
+  
+  Proven by mutation: reverting `resolveRequestOrigin` to bare `url.protocol`
+  fails three of them.
+  
+  ## Deliberately not the whole application
+  
+  Booting `dist/` would need a database, a tenant and a session — which is what
+  makes an end-to-end HTTPS test the sort of thing a repo keeps not writing. This
+  mounts the two DECISIONS instead and exercises the real resolver over a real
+  socket. `site-origin:check` already proves the app routes through that resolver;
+  neither gate covers the other.
+  
+  ## The certificate is generated, never committed
+  
+  A private key in the repository would be a GitGuardian finding on every commit
+  that touched it. `openssl` mints a throwaway pair per run.
+  
+  Where `openssl` is missing the bar differs by where it runs, deliberately: a
+  contributor gets a warning and a working checkout, **CI gets a failure** — a
+  smoke test that stops smoking in CI is indistinguishable from one that passes.
+  
+  One trap is recorded in the file because it cost a debugging round:
+  `Bun.spawnSync` THROWS `Executable not found in $PATH` rather than returning
+  `{ success: false }`, so the obvious guard never runs and `beforeAll` dies with
+  a bare `(unnamed)` failure naming nothing.
+- 2c3a875: docs(site-search): the reader's search box exists, so its two paths stop being a promise (#607, #597 item 3)
+  
+  `GET /api/v1/site-search/query` and `/suggest` were frozen as **COMMITTED** in
+  #681 (ADR-0107) — a shape this repo had agreed to keep for a consumer that did
+  not exist yet. `ahliweb/awcms-astro` now publishes the box (its ADR-0043), so
+  both move to **CONSUMED**, which is the direction the cross-repo Definition of
+  Done requires: freeze here first, call there second.
+  
+  ### "Consumed" stopped meaning "the build calls it"
+  
+  The seven entries that were already there are called by `astro build` over
+  there, from a machine holding a read-only credential. These two are called by
+  the **reader's browser**, anonymously and cross-origin, and that difference is
+  invisible from this side: both are `GET`s against this API, and the gate over
+  there extracts string literals from `src/` without knowing who executes them.
+  
+  It is written into `CONSUMED_PATHS`' own docblock because it changes what
+  breaking one costs. A shape change on a build-called path reddens a build
+  somebody is watching. A shape change on these two fails **silently in a
+  stranger's browser**, on a site that was published weeks ago and will not be
+  rebuilt on account of it.
+  
+  ### What the consumer actually relies on, beyond the result shape
+  
+  Recorded here so it is not discovered by breaking it:
+  
+  - **No `OPTIONS` handler is the contract, not an omission.** The box calls both
+    paths with `fetch` and no custom headers, which keeps them *simple requests*.
+    A header added on either side turns them into preflighted ones, and the
+    preflight has nothing to answer it.
+  - **The facet payload is load-bearing.** The chips render from
+    `facets.resourceTypes` and `facets.terms`, and they rely on each facet being
+    counted WITHOUT its own filter — that is what keeps a reader who narrowed to
+    one channel able to click back out.
+  - **`suggest`'s own limits still apply.** The consumer debounces and enforces a
+    minimum length client-side; both are courtesies, not controls, and this repo's
+    `min_query_length` and per-IP limit remain the only enforcement.
+- 9cbcf21: test(blog): two gates added by this branch stayed green when their own defect was restored, because both mutations were applied at the wrong grain
+  
+  Found while working on Issue #599 / Issue #711 (neither of which this change
+  closes — per ADR-0114 this repo cannot). Both directions were proved by
+  execution: red under the mutation, green without it.
+  
+  **`IMPORT_CHUNK_SIZE` was never asserted by identity.** The test's own comment
+  said _"Identity, not equality of two literals"_, and the assertion under it was
+  `expect(IMPORT_CHUNK_SIZE).toBe(MAX_REDIRECT_IMPORT_ITEMS)` — two VALUES.
+  Restore the pre-fix shape, a hard-coded `= 200` under a comment claiming it
+  mirrors the endpoint, and it stays green at 12 pass / 0 fail, because `200`
+  does equal `200` today. The mutation that "proved" it had changed two things at
+  once: the literal AND the endpoint's cap. What actually caught the copy was
+  `typecheck`'s TS6133 on the now-unused import — a grip that disappears the
+  moment someone deletes the import along with the literal. The test now also
+  asserts, over the builder's source with comments stripped first
+  (`scripts/lib/source-text`), that `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS`
+  literally appears. It goes red on the re-hardcode alone, and red again when the
+  binding is present only in a comment. The value assertion is kept: each catches
+  what the other cannot.
+  
+  **The in-file slug dedupe was gated only by the DB-gated suite.** The DB-free
+  test pinned the identifier `seenSlugs` and its position relative to
+  `categoriesPerArticle.push`. Delete only the `continue;` from the collision
+  branch — leaving the Map, the refusal push and the ordering intact — and the
+  DB-free files are green at 43 pass / 0 fail on a dedupe that does not dedupe,
+  while the integration test correctly dies on the real 23505. Anyone running the
+  documented `DATABASE_URL="" bun run check` before pushing saw full green, and
+  this is data-loss-adjacent: 84 collision groups over 171 rows kill a real run
+  mid-batch, after earlier batches have committed.
+  
+  The fix is structural rather than a sharper string match. The per-row decisions
+  of `bun run blog:legacy:import` move out of `main` into an exported pure
+  `planLegacyImportRows`, which needs no database because the media map and term
+  map it consults are already verified against the tenant by `main` before the
+  first line is read; `main` keeps those two verification sweeps, the one
+  `findTakenSlugs` query and the batched write. Four DB-free tests now read the
+  returned `accepted` / `refusals` / `categoriesPerArticle` instead of the file's
+  source text, and the `continue`-only mutation turns two of them red.
+  
+  No change to what the CLI does: verified against a real Postgres at 6/6 on
+  `tests/integration/legacy-import-cli.integration.test.ts` and 593 pass / 0 fail
+  across `tests/integration/`. Two incidental corrections came with the
+  extraction — the script's entrypoint now sits behind `import.meta.main`,
+  because importing an unguarded CLI runs it (`usage()`, `process.exitCode = 1`,
+  and the whole suite exits non-zero for a reason nothing in it mentions), and
+  the lazily-opened database client moved from a bare `let` onto an object,
+  because TypeScript's control-flow analysis cannot see a closure's assignment
+  and read `sql` as exactly `null` in the `finally` once `main` was small enough
+  to analyse.
+- 49a2732: chore(actions): codeql-action init and analyze move to 4.37.8 together
+  
+  The same split Dependabot produces every time: `github/codeql-action/init` and
+  `github/codeql-action/analyze` arrive as two separate pull requests, and each
+  one fails on its own because CodeQL requires every `codeql-action` step in a
+  workflow to run the SAME version — a lone bump reddens the Analyze job with
+  `Not all workflow steps that use github/codeql-action use the same version`.
+  
+  Both steps therefore move to the same commit SHA
+  (`db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28`) in this one change, and the sibling
+  pull request carrying the other half is closed rather than merged.
+- 6d9e867: test(version-check): the non-vacuity guard made a release commit a red suite
+  
+  `every pending changeset has valid frontmatter` asserted `pending.length > 0`
+  on the live repo. That holds on every commit except the one it exists to
+  protect: a release consumes every changeset, so `.changeset/` is legitimately
+  empty and the assertion fails precisely when the repo is in the state the whole
+  version model is built around.
+  
+  It had never fired because the test landed **after** v9.1.2, and v10.0.0 is the
+  first release since — the first time it was ever asked the question. Combined
+  with `changesets:policy:check`, whose release-consumption carve-out requires the
+  release commit to touch `package.json` and nothing else, a release PR could not
+  be green: fixing the test inside the release commit breaks the policy gate, and
+  leaving it breaks the suite. This fix has to land BEFORE a release, not with it.
+  
+  Non-vacuity moves onto the READER, against a planted directory: one real
+  changeset plus the `README.md` it must skip, and an empty `.changeset/` proving
+  that zero pending is a release rather than a failure. The live-repo assertion
+  keeps checking frontmatter validity, which is what it was for.
+- 9cbcf21: docs(adr): the cutover record named a symbol that does not exist in the file it cited, and its leave-list called unwritten code an operational step
+  
+  Seven corrections to the SeputarBorneo cutover's own record. No behaviour
+  changes — every source edit is a comment.
+  
+  **The `SLUG_PATTERN` citation was wrong in both languages, in six places, and it
+  is this repo's named recurring defect reproduced inside the ADR that names it.**
+  There is no symbol called `SLUG_PATTERN` in
+  `src/modules/blog-content/domain/legacy-import-record.ts`. The check there is an
+  inline regex literal, `if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))`. The only
+  `SLUG_PATTERN` in the repo is a **private** const in
+  `src/modules/blog-content/domain/slug-policy.ts`, exposed as `isValidSlug` and
+  imported by eight call sites, **none of them the legacy importer** — it carries
+  its own copy of the same expression. ADR-0114's §Alternatives told a reader that
+  the rejected option was to "relax `SLUG_PATTERN`", so an agent acting on it would
+  have greped that name, landed in `slug-policy.ts`, widened what a slug **is** for
+  every tenant's posts, pages, terms and menu keys, and left the importer refusing
+  all 25,029 rows exactly as before: the wrong half of a pair loosened, the right
+  half untouched. The ADR now names the inline literal, names the duplication as a
+  latent divergence (without refactoring it here), and states the trap explicitly.
+  
+  **The ADRs' counts contradicted the corpus this branch commits.**
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` is **5,170** lines and
+  holds **2,301** `/news/*` paths of which **2,224** are the underscore article
+  form and **zero** are a hyphen form. The ADRs and both index rows still asserted
+  5,174 and "2,297 of 2,297". Corrected against the committed artefact, with the
+  old figures named so a future auditor can reconcile them, and with the
+  substantive conclusions stated as unchanged — zero `/cari_berita/*.html`, zero
+  hyphen-form.
+  
+  **The rubrik map is 68 entries and 63 rules, not 67 and 62.** Counted from the
+  committed JSON: 68 entries, 63 carrying a `targetPath`, 33 at
+  `articlesAtCapture: 0`, ten distinct destinations. Corrected in ADR-0113 (68/33/
+  28), ADR-0114, both index rows, `blog-legacy-cutover-verify.ts` and
+  `cutover-verification.ts`. The **67** in "all 67 committed entries were replayed"
+  is kept and explained rather than restated: the 68th was added afterwards and has
+  not been replayed.
+  
+  **ADR-0113's header still called Issue #599 "the half that was already
+  cutover-ready"** — the exact belief ADR-0114 exists to destroy, in the block an
+  agent reads first. Corrected in both languages.
+  
+  **PROJECT_STATE §4's closing understated what is left**, and §4 is the entry
+  point this repo's own memory says to read first. It now lists **what is code**
+  (the id→path generator, which is unwritten — not a thing awaiting a tenant; and
+  an HTTP-level edge verifier, without which nothing here can assert #599's DoD for
+  a `/kategori/**` target) separately from **what is operational** (the ten
+  destination categories, the ~25,031 uploads / 4.1 GB the importer's new hard
+  refusal made load-bearing, and the Varnish/Coolify wiring), reusing ADR-0114's
+  own sentence: this repo cannot close the cutover.
+  
+  **Two changesets claimed to close the issues.** Reworded to "toward closing" and
+  "found while working on": neither change closes either issue and, per ADR-0114,
+  this repo cannot.
+  
+  **ADR-0114 asserted a pointer that did not exist.** Its §Consequences said the
+  "23,906 articles" figure appears in twenty-odd source comments and that "this
+  paragraph is the correction they point at" — nothing pointed at it. Every
+  editable source comment carrying the figure now does, in thirteen files; the two
+  `sql/NNN` migration headers keep the old figure with no pointer, and the ADR now
+  states why that is a reason rather than an omission: **an applied migration is
+  immutable in this repo**, so editing one — even a comment — blocks `db:migrate`
+  on a live deployment.
+- 0891187: perf(identity-access): the expiry job costs the same for twelve elapsed items as for one, and its SoD audit rows were never asserted
+  
+  Both passes of `business-scope-expiry-job` issued one `INSERT` per expired item.
+  Both are capped at 500, so the worst case was **500 sequential statements inside
+  one transaction**, per tenant, per pass, across every tenant
+  `iterateTenantsInBatches` visits.
+  
+  A bound of 500 is not a defence against a per-item query; it is the size at
+  which one starts to matter. It is more than twice the batch bound of the
+  scheduled blog sweeps that were flattened for exactly this reason.
+  
+  - The assignment pass writes its `awcms_business_scope_assignment_events` rows
+    with one `unnest` — an append-only log with no conflict target, and every
+    column except the id is constant for the pass.
+  - The exception pass now uses `recordAuditEvents`, the batch form of the very
+    writer its per-row loop was calling. **The rows are unchanged**: each expired
+    exception still gets its own `critical` entry naming the rule that lapsed,
+    because that is what an auditor reads one at a time. Only the number of round
+    trips moved.
+  
+  The asymmetry between the two passes is deliberate and stays: an assignment
+  expiring on schedule is routine and gets one summary event, an SoD exception
+  lapsing is a control coming off and gets one entry each.
+  
+  **A gap this uncovered.** The SoD expiry test asserted the status flip and
+  nothing else — no assertion touched the audit rows at all. Moving that write to
+  a batch writer would have left every existing assertion in the file green even
+  if the batch had dropped its rows entirely. The test now checks the entry
+  exists, is `critical`, carries the resource id, and that `attributes.ruleKey`
+  reads back as a jsonb **object** rather than a jsonb string. Mutation-proven:
+  passing an empty batch fails it.
+  
+  The budget is asserted as a **relation**, not an absolute: a run with twelve
+  elapsed assignments must cost exactly what a run with one costs. An absolute
+  number here would have to encode the fixed per-tenant overhead of every pass in
+  this job and would move for reasons unrelated to the defect. Measured through
+  `countPoolQueries`, because a job reaches its transaction itself via
+  `withTenantOrThrow` → `sql.begin` and counting only the pool's own tagged
+  templates would see none of the statements that matter.
+  
+  Mutation-proven: restoring the per-item `INSERT` takes the twelve-item run from
+  17 queries to 28 — exactly eleven more, for eleven more items.
+- 5e8bf98: perf(blog): filing a post costs two queries instead of one per term, and a write path finally has a budget
+  
+  `syncPostTermAssignments` issued one `INSERT` PER TERM. Per save that is a small
+  constant — an article carries a handful of terms — which is why it stood for as
+  long as it did. It stopped being a small constant when a bulk importer became
+  the caller: `blog:legacy:import` now files every article it inserts, so a
+  23,906-row archive turned this into roughly 24,000 `DELETE`s and 48,000
+  `INSERT`s inside batched transactions, where two statements per article will do.
+  
+  Now one `DELETE` and one `INSERT ... unnest`, the shape `comment-retention.ts`
+  and `announcement-directory.ts` already use.
+  
+  **Deliberately NOT deduplicated on the way in.** `awcms_blog_post_terms_unique`
+  refused a repeated `(post, term)` pair before this change and still does. A
+  caller passing the same term twice has a bug, and swallowing it here would turn
+  a loud constraint error into a silent difference between what was asked for and
+  what was stored.
+  
+  **The finding behind it is worth more than the fix.** This repo has four query
+  budget suites — public reads, admin reads, the sitemap builder, the middleware —
+  and all four measure READS. Every N+1 a full scan of `src/` turns up is on a
+  write path or in a job. That is not an oversight so much as where attention
+  goes: a read path is hit constantly so its cost is felt, and a write path is hit
+  once per save so a per-item query inside it looks like nothing.
+  
+  So this adds `tests/integration/post-term-assignment-budget.integration.test.ts`
+  — the first query budget on a write path. The budget is EXACT (2), not a
+  ceiling, because the property being pinned is that the number does not move with
+  the number of terms; a `toBeLessThanOrEqual` would pass a per-term regression as
+  long as the fixture stayed small. The fixture assigns twelve, so the old shape
+  cannot pass by accident, and every case asserts the rows that actually landed
+  beside the count — a budget on its own is satisfied by a function that writes
+  nothing.
+  
+  The remaining findings from the same scan (nine lower-amplification write paths,
+  a per-post fetch inside the scheduled-publish sweep, and a low-cardinality index
+  on `awcms_blog_post_terms`) are recorded in `PROJECT_STATE.md` §4 rather than
+  changed here, so they do not have to be re-derived.
+- ff1efee: chore(api): the site-identity endpoint is now CONSUMED, not merely promised (#596)
+  
+  `ahliweb/awcms-astro#61` landed, so `GET /api/v1/site-profile/composed` is no
+  longer a shape this repo promised to keep for a caller that did not exist — it
+  is the shape a live build renders its masthead, favicon, footer, contact block,
+  social links and `Organization` node from.
+  
+  The entry moves from `COMMITTED_PATHS` to `CONSUMED_PATHS` and the pinned count
+  goes to four, matching the literal the neighbour's own gate asserts against its
+  source. The frozen fixture does not change, because it freezes the union.
+  
+  That the move happens at all is the point. `api-consumer-contract.ts` keeps the
+  two lists apart because a promise and a dependency deserve the same stability
+  and fail differently — breaking a consumed path breaks a build that exists
+  today. A distinction nothing ever acts on decays into a label, which is how
+  three non-calls once sat in `CONSUMED_PATHS` describing calls that never
+  happened.
+- ccb4703: fix(ops): edge-cache:purge had no working scheduled runner, and the 18 reviewed jobs are now live
+  
+  Two separate bugs, found while diagnosing why edited content stayed stale past its TTL on a real
+  deployment.
+  
+  **`edge-cache:purge` was never actually running.** It's the documented exception in
+  `DOCUMENTED_EXCEPTIONS` (no module to hang a descriptor on, ADR-0043) — by design it never appears
+  in the generated `ops/awcms-jobs.crontab`, so nothing in `jobs:crontab:check` could ever catch its
+  absence. The only thing invoking it on the affected host was a hand-rolled, pre-existing cron entry
+  that had drifted (stale container/database names from an earlier rename) and had been failing on
+  every run. Its correct spec — every 10-30 seconds, per its own script header and
+  `docs/awcms/deployment-profiles.md` — needs a small stack of staggered cron lines (cron's native
+  grain is 60s); it uses per-row claim-lease (`FOR UPDATE SKIP LOCKED`), so those staggered runs are
+  safe to overlap, unlike the `runJob`-model jobs elsewhere in this file.
+  
+  **`ops/run-job.sh`'s env whitelist was separately missing `EDGE_CACHE_*`.** Even a correctly
+  scheduled `edge-cache:purge` line would have silently run with `mode=off` regardless of the
+  deployment's real `EDGE_CACHE_MODE`/`EDGE_CACHE_PURGE_ENDPOINT` — confirmed by running it manually
+  and getting `endpointConfigured=false` against a container where both were set. One line added to
+  the `grep -E` allowlist.
+  
+  **Separately: the 18 jobs `job-schedules-are-data` shipped commented out are now reviewed.** Found
+  all 18 enabled directly on a live host's crontab in one shot, bypassing the "uncomment ONE at a
+  time, after running it with `--dry-run`" process that same changeset put in place. 13 had already
+  been running for hours with zero real effect (empty queues on that deployment); the other 5
+  (`analytics:purge`, `comments:retention`, `data-lifecycle:archive-purge`, `push:queue:purge`,
+  `sync:objects:purge`) had never had a first run — one was minutes from firing blind. Paused those
+  5, ran each with `--dry-run`, confirmed zero pending items across the board, then reclassified all
+  18 descriptors from `backlog: "review-before-first-run"` to `"bounded"` and regenerated the
+  crontab. `jobs:crontab:check` now reports 23 active, 0 awaiting review, 9 operator-run.
+- 2a08301: chore(db): drop the half of `sql/138` that nothing ever wrote or read
+  
+  `sql/138` gave BOTH `awcms_blog_posts` and `awcms_blog_pages` a
+  `legacy_source_system`/`legacy_source_id` pair, reasoning that "a legacy archive
+  has static pages too, and giving only posts provenance would make half the 301
+  map underivable". The posts half was then built — `blog:legacy:import` writes it
+  and `listLegacyRedirectMappings` derives the redirect map from it. The pages half
+  never was: no importer writes those two columns and no query reads them,
+  anywhere in `src/`, `scripts/` or `tests/`.
+  
+  Reading the legacy site's actual `.htaccess` settled the question they were
+  speculating about. The static-page rewrite is
+  `^([^/]*)\.html$ -> /data/?halaman=$1`, and `data/index.php` switches on a
+  CLOSED SET OF THREE — `tentang_kami`, `pedoman_media_cyber`, `disclimer`. Three
+  URLs is three exact-path rules in `awcms_seo_redirects`, supported since
+  `sql/060`: admin data entry, not an importer and not a backfill.
+  
+  **Leaving them was not the cheap option, which is the part worth keeping.**
+  `tests/legacy-redirect-map.test.ts` asserted that the MIGRATION FILE'S TEXT
+  contained `ALTER TABLE awcms_blog_pages`, under the title "pages get the same
+  treatment as posts". That reads as coverage and is not: a test over a
+  migration's source proves a column exists, and cannot notice the column is dead.
+  So the pair was not inert — it was answering "is the static-page half handled?"
+  with "yes". That test is replaced by one that searches for a READER, which is
+  the assertion the old one could not make.
+  
+  Safe by construction: nothing has ever written these columns, so every row's
+  value is NULL in every deployment. There is no data to lose and no backfill to
+  plan. The posts columns, their index and their CHECK are untouched — they are
+  the live half, and the 301 map is derived from them.
+- e77e726: perf(identity-access): an admin screen resolved the same session eleven times to render one page
+  
+  `/admin/blog` calls `can()` ten times on top of its entry decision. Each one is a
+  full `authorizeInTransaction`, and each re-resolved the same session, the same
+  permission set, the same delegated-grant state and the same platform tenant id —
+  on **one** reserved `interactive` connection out of eight process-wide.
+  
+  Measured against a real database:
+  
+  | | queries | wall time |
+  | --- | --- | --- |
+  | before | **89** | 47 ms |
+  | after | **29** | 23 ms |
+  
+  (The finding estimated ~66 queries. The real number was 89.)
+  
+  **The cache is an opt-in the caller supplies, not something inside the guard**,
+  and that is the whole safety argument. A memo keyed on `tx` inside
+  `authorizeInTransaction` would speed up every caller and would also change what a
+  caller sees after **it** has written: a route that grants a role and then
+  re-authorizes in the same transaction would read the grant set from before its
+  own write — silently, and only sometimes.
+  
+  So `loadAdminScreen` creates one per render and passes it to the entry decision
+  and to every `can()` probe, because a screen render is a read path by
+  construction: the eleven decisions describe one moment and nothing writes between
+  them. Every other caller is untouched and keeps reading fresh.
+  
+  **Inputs are memoised, never a decision.** Only the reads whose answer cannot
+  differ between two decisions about the same principal in the same transaction:
+  the resolved principal, the machine credential, the granted permission keys, the
+  delegated grant state, the platform tenant id. Module availability and
+  entitlement, the delegated-write rule, the machine-credential write ceiling,
+  business-scope facts, SoD, the policy evaluation and the decision log all still
+  run per request — the eleven decision-log rows are still eleven.
+  
+  The test proves the decisions first and the speed second, because a cache that is
+  faster and answers differently is not an optimisation. It compares cached against
+  uncached decision by decision for an **allowed** render and a **denied** one; it
+  asserts two principals sharing one cache do not see each other's answers; and it
+  executes the safety argument directly — grant a permission mid-transaction,
+  re-authorize **without** a cache, and watch the answer change, which is exactly
+  what would not happen if the memo lived inside the guard.
+  
+  Mutation-proven: dropping the token hash from the cache key turns the
+  cross-principal case red; making `cachedRead` ignore the cache turns the query
+  count red.
+- b246341: chore(api): the menu and widget endpoints are now CONSUMED, not merely promised (#597)
+  
+  `ahliweb/awcms-astro#67` renders the tenant's navigation menu and its widgets, so
+  `/api/v1/blog/menus` and `/api/v1/blog/widgets` move from `COMMITTED_PATHS` to
+  `CONSUMED_PATHS` and the pinned count goes five to seven — the same number that
+  repo's own gate asserts.
+  
+  Their sequence had one step the others did not. `/api/v1/blog/terms` could be
+  frozen the moment it was decided; these two could not be frozen **at all** until
+  Issue #652 gave their responses an actual schema. Freezing an array of bare
+  `object` would have added two paths to this list that no change could ever
+  break — a contract entry with no contract in it, which is a more expensive kind
+  of nothing than an empty list, because it reads as coverage.
+  
+  This closes Issue #597 item 6, and with it the last item on that issue that was
+  not waiting on a written decision.
+- 239b835: fix(jobs): three scheduled jobs that reported success while doing nothing
+  
+  Findings **D4**, **D5** and **D6** of the 17 August 2026 audit round. One PR
+  because they are one failure mode, and it is the one that survives every other
+  kind of check: the job runs, the exit code is 0, the summary prints a number,
+  and the number is wrong in the direction that looks fine.
+  
+  **D4 — a dead branch, and a run that gave up on every remaining tenant.**
+  `visitor-analytics-rollup.ts` tested `if (result instanceof Response)` to detect
+  database backpressure. That shape only ever comes out of `withTenant`; this loop
+  calls `withTenantOrThrow`, which **throws** `DatabaseBusyError` instead. So
+  `tenantsSkipped` was permanently 0, the `partial` warning built on it could never
+  fire, and — the part that actually cost something — a busy database abandoned
+  every tenant after the first instead of skipping one. The rollup targets a single
+  day, so an abandoned run is a permanent hole: tomorrow's pass rolls up tomorrow.
+  Skipped tenants are now caught, **named** (`--date=` is the remedy and it needs
+  the ids) and the loop continues. The catch is deliberately narrow — anything that
+  is not `DatabaseBusyError` still reaches the job runner, or the fix would
+  reintroduce the bug it is fixing.
+  
+  `visitor-analytics-purge.ts` carries the identical dead branch and is fixed the
+  same way. It is the more serious of the two: it is what **enforces** retention,
+  so an abandoned run means every tenant after the first keeps holding visitor data
+  past its window — and the summary's own `(WARNING: … database busy)` clause,
+  gated on the permanently-zero counter, could never print.
+  
+  **D5 — `failures=0` while a whole source had stopped indexing.**
+  `failureCount` sums per-**document** failures across the sources that finished. A
+  source whose reconcile threw never reached `results.push`, so it contributed
+  nothing to that sum, and the `break` meant every source after it went
+  unattempted. The engine returned `status: "failed"`;
+  `scripts/site-search-reconcile.ts` summed the number and never looked at the
+  status. `site-search:reconcile complete … failures=0`, exit 0, public search
+  silently frozen.
+  
+  The engine now reports `failedSources` and `unattemptedSources` — named, and
+  separate from `failureCount`, because collapsing a dead source into a document
+  counter is how "0" came to mean "one whole source stopped". The script checks
+  `status`, prints both lists, and exits **1**. The `break` stays: a source failing
+  on a database error leaves the transaction aborted, so continuing would only
+  produce a cascade of `25P02`s. That case now gets caught **per tenant** instead
+  of rejecting out of the whole loop — the same lesson as D4.
+  
+  **D6 — a ledger that recorded contact that never happened, and a breaker one bad
+  address could open.**
+  
+  `EmailDeliveryResult` gains `skipped`. When the Mailketing breaker opens
+  *mid-pass*, `send` refuses without calling out; the dispatcher was writing a
+  `failure` row into `awcms_email_delivery_attempts` and burning a `retry_count`
+  for it, so a breaker that opened part-way through a batch could push the rest to
+  terminal `failed` without one of them having been sent. Such a message now
+  returns to `queued` untouched — no attempt row, no retry spent — counted as
+  `deferred` and printed in the summary.
+  
+  Separately, the adapter was feeding the breaker for two **per-message business
+  rejections**: a message with no recipient, and a `2xx` body carrying
+  `status: "failed"`. Six invalid addresses in one batch was enough to open it and
+  stop email for the whole deployment, including the password-reset messages that
+  are the reason the module exists. Both now leave the breaker alone, and the
+  HTTP-status branch adopts the split the sibling port already documents
+  (`push-delivery/domain/fcm-error-mapping.ts`): 429 and 5xx are statements about
+  the service, every other 4xx is about the message. A bad API token — the one
+  shape that hides among those rejections — is `email:provider:health`'s job, and
+  unlike the breaker it can tell an operator *which* problem it is.
+- 41400ed: fix(access): a guard may now only demand a permission some module declares, and the scanner stopped inventing one out of a ternary
+  
+  `access:permissions:enforcement:check` has asked one question since ADR-0057 §F:
+  does every permission a module descriptor **declares** have an
+  `authorizeInTransaction` guard? It never asked it backwards — does every guard
+  name a permission some descriptor declares? — and the reverse is the direction
+  with the worse failure behind it.
+  
+  `authorizeInTransaction` answers from `grantedPermissionKeys`, built by joining
+  the actor's active role grants to `awcms_permissions`. A key no descriptor
+  declares has no catalogue row to join to, so **no role can hold it**, so
+  `evaluateAccess` returns `default_deny` — for the tenant owner, for the platform
+  tenant, for every actor in every deployment, permanently. The endpoint is not
+  weakly guarded; it is dead, and it answers 403 in a shape indistinguishable from
+  a legitimate refusal.
+  
+  This repo has shipped that exact defect twice.
+  `POST /api/v1/identity/business-scope/assignments` refused every input in every
+  deployment (#180 F2), and `blog_content.pages.publish` meant no page could be
+  published by any code path while public search filtered on
+  `status = 'published'` and therefore always returned nothing (ADR-0057). Both
+  were found by hand, months later, by someone who set out to build a screen.
+  Neither is visible to the forward question: a key nobody declared is not in the
+  set the forward loop walks.
+  
+  **The gap was not theoretical, and the proof came from the gate's own scanner.**
+  Asked backwards, the repo produced exactly one violation:
+  `seo_distribution.redirect.purge`, from
+  `src/pages/api/v1/seo/redirects/[id]/lifecycle.ts`. That route guards on
+  
+  ```ts
+  action: (lifecycleAction === "purge" ? "delete" : "update") as "delete" | "update"
+  ```
+  
+  and `readActionValues` collected **every** string literal in the expression,
+  including the one the ternary tests **against**. So the scanner invented a third
+  permission the route never demands. Harmless for exactly as long as nothing read
+  the enforced set back — which is what the reverse direction does.
+  
+  Both halves are fixed. Comparison operands are dropped before literals are
+  collected, and only the operand rather than the whole condition, because the two
+  comments routes write `decision === "approve" ? "approve" : "reject"` where
+  `approve` is both tested for and yielded. The operand is removed **whole, quotes
+  included**: blanking it to `""` re-pairs the surrounding quotes so the gaps
+  between the real literals start matching as literals themselves — this fix's own
+  first draft did that and invented four permissions per route, which is why it is
+  pinned by a test.
+  
+  The staleness rule had to change with it. It was "an exception is stale if the
+  permission is not declared", and that makes an exception excusing an
+  **undeclared guard** impossible to write — recording one would immediately
+  report it stale. An exception is now stale only when it excuses nothing: neither
+  a declared permission that lacks an enforcer, nor a guard that lacks a
+  declaration.
+  
+  The gate ships with the exception list still **empty**, both directions:
+  244/244 declared permissions have a guard, and every guard names a declared
+  permission.
+- 9aaf785: chore(deps-dev): @types/bun 1.3.14 -> 1.4.0
+  
+  Types only — no runtime code changes. `bun run typecheck` (`tsc --noEmit` over
+  the whole tree, including the extracted `.astro` frontmatter and client scripts)
+  is clean on the new definitions, which is the only thing a types bump can
+  actually break.
+  
+  Stated rather than left for a reader to notice: the type definitions now run
+  AHEAD of the runtime this repo pins. `packageManager` is `bun@1.3.14`, every CI
+  job pins `1.3.14` (with the minimum-supported job on the `1.3.0` floor), and
+  `@types/bun` is now 1.4.0 — so a 1.4-only API would type-check here and be
+  absent at run time. Nothing in this change reaches for one; the guard against it
+  is that the tests and the build run on the pinned runtime, not on the types.
+- 9cbcf21: docs(adr): the cutover map was right about its destinations and wrong about who would serve them (#599, #711)
+  
+  ADR-0113 §Consequences said, in both languages, _"`awcms-astro` needs no change
+  for this… the redirect is resolved in this repo before its routes are reached."_
+  That sentence is false, and until now it was the most consequential error in the
+  SeputarBorneo cutover's record — an agent following it would have built the wrong
+  thing.
+  
+  `awcms_seo_redirects` is applied at **exactly one call site**:
+  `resolvePublicRedirectForRequest`, from `src/middleware.ts:341`, which runs in
+  **this** application. ADR-0113's 62 rubrik rules target `/kategori/**`, served by
+  `ahliweb/awcms-astro` — `output: "static"`, no middleware file at all, no
+  `redirects:` key, and a production entrypoint `server/penyaji.mjs` containing zero
+  occurrences of `301` or `Location`. All 67 committed entries were replayed against
+  that repo's real built server: **404 on every one, zero `Location` headers.**
+  
+  ### ADR-0114 records the two decisions this forced
+  
+  **The edge (Coolify/Varnish) owns the legacy 301s.** It is the only layer that can
+  collapse `http→https` + `www→apex` + `legacy→new` into the ONE hop PRD §9.2
+  demands; an application only sees a request after the edge has acted on scheme and
+  host, so any rule it writes is at best hop two.
+  
+  **Article resolution is id-keyed, not exact-path.** `/news/{id}_{Title}.html`
+  matches on its leading digits against `legacy_source_id`. The shipped exact-path
+  template matches **0 of 25,029** URLs — every legacy title contains a space, so
+  every segment carries `_`, which the legacy importer's **inline** slug regex in
+  `legacy-import-record.ts` forbids (not the shared `SLUG_PATTERN` in
+  `slug-policy.ts`, which the importer never calls), and matching is by equality,
+  so no slug that passes the validator can ever equal the indexed segment.
+  Worse than a miss: an unmatched `/news/**` falls through to
+  `resolveRetiredNewsRedirect` and 301s into a path no post has — which is
+  `CUTOVER_VERDICT_REASON.target_missing` in its own words.
+  
+  The ADR also states plainly what this makes inert, so nobody reaches for it:
+  **`awcms_seo_redirects` and `--path-template` are not the mechanism for this
+  cutover.**
+  
+  ### ADR-0113 is amended in place, for the second time
+  
+  Its **shape-4 decision is retracted**: `/cari_berita/{q}.html` has never existed.
+  The two-segment catch-all is `.htaccess` line 6 and `cari_berita` is line 7, and
+  shape 4's language is a strict subset of the catch-all's, so line 7 has never been
+  reached in any commit that ever touched the file. It is rule ORDER, not the `[L]`
+  flag. Brute-forced over 3,375 candidate paths (0 matches, with a self-test that
+  did find a counterexample when shape 4 was artificially widened), confirmed live,
+  and confirmed against the committed Wayback corpus's 5,170 archived URLs of which
+  zero are `/cari_berita/*.html`.
+  `/cari_berita/X.html` still serves 200 — as a shape-3 URL — and must never become
+  a `/cari?q=` redirect.
+  
+  "47-or-fewer target categories" is corrected to the built map's **10**. 47 was an
+  upper bound on `jenis_rubrik` under MariaDB's case-insensitive collation (a JS map
+  keyed by exact name sees 48/45), never the go-live checklist.
+  
+  ### Everywhere else the false claims lived
+  
+  The ADR index rows (both languages), `docs/PROJECT_STATE.md` §4's DECISION /
+  SHAPE / #599-split entries, the `legacy-import-record.ts` comment claiming the
+  slug is "half of the legacy URL and half of the new one" (they are disjoint by
+  construction), the `blog-legacy-import.ts` docstring claiming every CKEditor row
+  was residue (measured: 4 of 25,029), and `data/seputarborneo-legacy/README.md`,
+  which now records the map's one known gap (`/Mitra-Borneo/Pemkab%20Lamandau.html`)
+  and the Wayback CDX corpus with its decay caveat.
+  
+  The **23,906 → 25,029** count correction is made once, in ADR-0114, and applied to
+  documents that make a live claim. Merged changesets and merged ADRs are
+  deliberately not rewritten: they record what was believed when they were written.
+  
+  Documentation only. No behaviour changes; the code defects this round found —
+  `blog:legacy:cutover:verify` exiting 0 on every usage error, `classifyCutoverOutcome`
+  returning `ok` for every target it cannot check, the importer dropping all 25,029
+  lead photographs — are recorded in PROJECT_STATE §4's ORIGIN ROUND and fixed in a
+  later change.
+- d904f5f: fix(i18n): the screens ledger reaches ZERO — and the two gates measuring it were each blind to a class
+  
+  `SCREENS_AWAITING_TRANSLATION` goes **18 → 0**: all 43 admin screens render their
+  template text through `t()`. That closes PROJECT_STATE §4's next step 2.
+  
+  The 23 ledgered literals were the split-sentence class the bulk migration could
+  not mechanise — a sentence broken in the middle by an interpolated value or a
+  `<code>`/`<strong>`. They are merged into whole msgids with placeholders. Two
+  costs are recorded because the next merge pays them again:
+  
+  - `t()` returns a STRING, so the `<code>` around a placeholder is lost. A real
+    `<a>` keeps its own label instead — a link is a control, not a phrase.
+  - Where the value is OPTIONAL, one `{code}` msgid renders "platform tenant ()".
+    That shape needs TWO whole msgids, one per branch.
+  
+  ## The screens gate could not see a third of the work
+  
+  Its scanner reads template text only where it follows a TAG. Text after an
+  EXPRESSION is invisible:
+  
+      <caption>{roles.length} role(s)</caption>
+  
+  Nineteen such strings were found BY HAND, across 15 screens the gate already
+  called finished — table captions, `{n} per page`, `{label} media id`,
+  `No {status} comments.` Every one was rendering English to an Indonesian reader
+  while the ledger said the screen was done.
+  
+  They are fixed. The `{n} thing(s)` captions became real `tn()` plurals rather
+  than a placeholder patch, which is the first time the plural path has been
+  exercised through the `.po` round-trip: verified end to end, `1 role` / `5 roles`
+  in English and `1 peran` / `5 peran` in Indonesian, where `nplurals=1` means one
+  form serves both.
+  
+  The SCANNER still cannot see the class, and that is deliberate for now: making
+  `afterTag` survive a closing `}` would start capturing template literals and
+  chained ternaries as prose — the false-positive failure `CODE_SHAPED` exists to
+  hold back. That widening deserves its own change and its own mutation test
+  rather than riding along with a ledger being emptied. The limitation is written
+  into the gate's header, so an empty ledger is not read as more than it means.
+  
+  `CODE_SHAPED` did gain `===`/`!==`, for a narrower reason: a chained ternary
+  between two elements (`) : token.kind === "number" ? (`) was the single thing
+  standing between `theming.astro` and a finished ledger. The under-count argument
+  that makes the heuristic conservative only holds while a screen is ON the
+  ledger; a screen that cannot be finished is where it stops being conservative.
+  
+  ## The catalogue gate was blind to 86 msgids
+  
+  Its literal harvester excluded any string containing a backslash — stated as
+  conservative, and it was not. **Prettier rewrites an em dash inside a `t()`
+  literal as `—`**, and this admin's prose is full of em dashes, so the
+  longest and most prose-like msgids were never REQUIRED to exist in `locales/`.
+  
+  The consequence is silent and one-directional: an unharvested msgid is never
+  demanded, never added, and `createTranslator` falls back to it — correct
+  English, forever, in every locale, with both ledgers reading 0.
+  
+  It had already happened. `users.astro` calls `t()` on a sentence declared in
+  NEITHER catalogue; it has been rendering English to Indonesian readers, and
+  nothing could report it. The harvester now decodes escapes (`\uXXXX`, `\n`,
+  `\t`, `\r`, quotes, backslash) and still skips a literal carrying an unknown
+  escape, for the same reason the `.po` parser rejects one.
+  
+  Proven by mutation, not by observation: deleting one escaped msgid from `en.po`
+  is reported by the fixed harvester and passes **silently** under the old
+  pattern. The decoder is NOT the same as `decodeEscapes` in `po.ts` and must not
+  be — the two formats escape differently (a `.po` stores a real em dash and
+  rejects `\u` outright); what has to agree is the decoded text, not the syntax.
+  
+  23 msgids orphaned by the merges are removed from both catalogues.
+- 0e0c5a2: docs(visitor-analytics): the beacon has a caller now, and it is the third reader-browser path (#597 item 9)
+  
+  `POST /api/v1/analytics/collect` had its cross-origin path opened in #637/#638
+  so a statically built site on its own domain could reach it. Nothing called it.
+  `ahliweb/awcms-astro` now does — its ADR-0044 decided **whether**, and the answer
+  came with a constraint this repo should know about — so the path joins
+  `CONSUMER_PATHS` and its shape is frozen with the rest.
+  
+  ### Three reader-browser paths, and they do NOT share one rule
+  
+  Ten paths are consumed. Seven are called by `astro build` from a machine holding
+  a read-only credential. Three run in a reader's browser: the two `site-search`
+  paths and this one. That much was already recorded when search landed.
+  
+  What is new is that the three disagree, and the disagreement is load-bearing:
+  
+  - **the search paths must carry NO custom header** — nothing answers a preflight
+    for them, deliberately;
+  - **the beacon MUST carry `content-type: application/json`** — `checkOrigin`
+    refuses the alternatives, and the `OPTIONS` handler exists for the preflight
+    that follows. `navigator.sendBeacon` is unusable there for the same reason.
+  
+  Making them consistent, in either direction, kills one of them in a reader's
+  browser and in no log here.
+  
+  ### The consumer calls it WITHOUT credentials, by decision
+  
+  Its ADR-0044 chose that deliberately: a cross-origin `fetch` that does not ask
+  for credentials neither sends nor stores cookies, so the `awcms_visitor_key`
+  cookie this endpoint sets is **discarded by the browser**. Every page view
+  arrives as a first visit.
+  
+  Recorded here because it is an assumption this repo could otherwise make and be
+  wrong about: for that consumer, page-view counts are real and unique-visitor
+  counts are not. Nothing on this side should be changed on the premise that a
+  repeat visitor is recognisable — and the `SameSite=None` work in #637 is not
+  wasted, it simply serves consumers that make the other choice.
+- 6a59437: fix(blog-content): automatic tag linking only ever saw the alphabetically-first 100 tags
+  
+  `resolveInternalTagLinkingContext` built its candidate list like this:
+  
+  ```ts
+  const allTags = await listBlogTerms(tx, tenantId, { taxonomyType: "tag" });
+  ```
+  
+  The local name says `allTags`. It was not all tags. `listBlogTerms` is the admin
+  screen's list: `ORDER BY name ASC`, bounded at a hundred. So on any tenant with
+  more than a hundred tags, automatic internal tag linking considered the
+  alphabetically-first hundred and silently ignored the rest.
+  
+  **Nothing failed.** The feature rendered, the preview endpoint showed the
+  matches it did make, and an editor asking *"why was `Sepak Bola` not linked?"*
+  got no answer anywhere — the tag exists, it is enabled, it is spelled correctly,
+  and it happens to start with S. On the 23,906-article archive Issue #599 is
+  preparing for, the feature would have been operating on well under 5% of the
+  vocabulary while looking entirely healthy.
+  
+  **The fix is not to remove the bound.** `createInternalTagLinkEngine` compiles
+  ONE alternation regex from every candidate, so an unbounded vocabulary means a
+  very large regex compiled on a public post render. The defect was not that a
+  bound existed — it was that the bound was inherited by accident from a function
+  written for an admin table, that it degraded **alphabetically**, which is the
+  least meaningful order available, and that nothing recorded when it was hit.
+  
+  All three are addressed:
+  
+  - `MAX_INTERNAL_TAG_LINK_CANDIDATES` is named and lives with the feature.
+  - `listTagLinkCandidates` orders by how many non-deleted posts carry the tag —
+    the topics most likely to occur in prose. Assignments to soft-deleted posts do
+    not count, so a tag left on five hundred deleted articles does not outrank one
+    in daily use. Unused tags are still candidates; they only lose the tiebreak.
+  - The resolved context carries `vocabulary: { total, limit, truncated }`, and
+    `GET /api/v1/blog/posts/{id}/internal-links/preview` returns it. Until now,
+    "the tag is disabled", "the tag is shorter than `minTermLength`", "the tag is
+    not in the body" and "the tag is past the cap" were the same empty `matches`
+    list — and only the last of those is something an editor cannot fix by
+    editing.
+  
+  `total` counts the tenant's whole vocabulary including tags it has switched off,
+  because it answers "how big is this vocabulary", not "how many reached the
+  engine". Conflating them would report a truncated vocabulary for a tenant that
+  had merely disabled some tags.
+- 34c89c3: docs(adr): the two decisions PROJECT_STATE was waiting on — locale in the cache key, and changing the login address
+  
+  ADR-0098 and ADR-0099, both `Accepted (not yet implemented)` and both bound to
+  their promised artifacts by `tests/adr-implementation-status.test.ts`, so the
+  status flips to plain `Accepted` in the same PR that lands the code and cannot
+  float free of it.
+  
+  ## ADR-0098 — the cache key carries the locale, in the PATH
+  
+  ADR-0095 localised **no** public surface, because `vcl_hash` hashes only
+  `(host, url)`: one public URL whose body varies by cookie serves the Indonesian
+  page to an English reader, minutes later, on a page neither can re-render. The
+  prerequisite was recorded rather than implemented. This decides it on the stated
+  brief — best performance and most secure — and both candidate mechanisms lose:
+  
+  - **`Vary: Cookie`** multiplies cache objects by the number of *distinct cookie
+    strings* (session ids, analytics ids, CSRF tokens), so nearly every reader
+    gets a private copy of a public page and the origin ends up paying for the
+    cache's misses too. It also puts a credential-bearing header in the key.
+  - **`Vary: Accept-Language`**, normalised in VCL, bounds the fan-out at two but
+    cannot see an explicit click — a reader who chose Indonesian on an English
+    browser gets English forever, making the language switcher decorative on the
+    surface most readers see. This repo has already shipped, broken and fixed that
+    switcher twice.
+  
+  So the locale goes in the path. `vcl_hash` is not touched, no `Vary` is added to
+  any cacheable public response, and hit rate is *unchanged* rather than merely
+  acceptable — object count grows with the number of locales (2), not with readers
+  or header permutations. **No request header enters the cache key at all**, which
+  is what removes the cache-poisoning class: those attacks work by making the key
+  disagree with the body, and there is no disagreement available when the path is
+  both.
+  
+  Selection happens by a `private, no-store` **307**, so the cookie is honoured
+  without ever reaching the cache — the property `Vary` cannot have. The
+  prohibition on `Vary: Cookie`/`Accept-Language` is to be *enforced* by
+  `edge-cache:surfaces:check`, not documented, or decision 1 is a convention the
+  next person reaches past.
+  
+  ## ADR-0099 — changing the login address is account recovery
+  
+  ADR-0096 excluded it on purpose, and the reason decides the design: **the login
+  address IS the account**. It is where a password reset is sent, so whoever
+  controls it can take the account without knowing the password. That makes it the
+  highest-risk self-service action in the product — changing a password with a
+  stolen session locks the owner out *visibly*, while changing the address locks
+  them out *silently* and hands over the recovery channel.
+  
+  Both addresses are proven, differently. The **new** one by a single-use,
+  short-lived, hashed, **bound** token (an unbound token is a bearer credential
+  for "repoint this account"). The **old** one is not asked to prove anything — it
+  is notified immediately, with a cancel link valid **longer** than the
+  confirmation window, so the owner does not have to notice in time, only to
+  notice at all. That notice is the only part of the design that helps somebody
+  who has *already* been compromised.
+  
+  Plus: fresh re-authentication (password, and `aal2` where a factor exists),
+  because a session alone is not authority to move the recovery channel;
+  confirmation revokes every other session **and every outstanding reset token**;
+  uniqueness checked at confirmation rather than at request, so the form is not an
+  account-existence oracle; and deliberately **no administrative sibling**,
+  because changing somebody else's sign-in address is account takeover with a
+  permission attached.
+  
+  The Indonesian mirrors carry the translated status qualifier
+  (`Accepted (belum diimplementasikan)`), matching ADR-0067's precedent — which is
+  also why the status gate scans them without a second map keyed by mirror name.
+- 3e03ef9: chore(api): navigation menus and widgets join the frozen consumer contract (ADR-0105)
+  
+  Issue #597 item 6: menus and widgets have been configurable since Issue #542,
+  with an admin screen for both, and nothing has ever rendered either of them.
+  Issue #652 cleared the first obstacle by giving both list responses an actual
+  schema. What was left was a decision, and the interesting part is not "read the
+  menus".
+  
+  **The obvious move is refused.** Replacing `siteConfig.tabs` with a CMS menu
+  looks like exactly what the issue asks for, and it only fails in the second
+  language: the tab bar renders its labels through the PO catalogue, and that
+  repo's own comment records that an earlier hard-coded version made the site's
+  main navigation "the one piece of interface that never translated — in a
+  template whose whole point is being multilingual". An `awcms` menu item carries
+  **one** label; there is no per-locale label anywhere in the schema. So a
+  CMS-driven primary navigation would reintroduce that exact defect through a
+  feature — and tabs also decide the route structure, the section ordering and an
+  article's section, none of which a list of links carries.
+  
+  So the tab bar stays and the CMS menu renders as a secondary region, with
+  widgets in their declared positions. Both additive: a tenant that configures
+  neither gets the site it has today.
+  
+  The rest of ADR-0105 is about what a menu item resolves to. `url` is used as
+  given; `post` resolves through the feed the build already holds; **`page` is
+  dropped with a warning naming the item**, because this consumer has no page
+  concept — a published dead link is a reader's problem, while a warning reaches
+  the editor who can fix it. `bodyText` is escaped, because the write path refuses
+  markup and granting it at render time would make that refusal decorative.
+  
+  Written down rather than worked around: **menu labels are not localisable**. A
+  per-locale label is a migration, an admin-screen change and a write-path change,
+  and it should not be smuggled into the change that first renders a menu.
+  
+  Both paths enter `COMMITTED_PATHS`, not `CONSUMED_PATHS` — nothing calls them
+  yet.
+- f190940: fix(db): a blank `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` shadowed the `DATABASE_URL` fallback it claims to have
+  
+  `getNamedDatabaseClient` resolved its connection string as
+  
+  ```ts
+  process.env[envVarName] ?? process.env.DATABASE_URL
+  ```
+  
+  and `??` falls back only on `null`/`undefined`. A **blank** value is therefore
+  "configured": the fallback never runs, and the operator gets
+  
+  ```
+  WORKER_DATABASE_URL (or DATABASE_URL as a fallback) is required to connect to the database.
+  ```
+  
+  with `DATABASE_URL` set and correct. An error that names the fallback it has
+  just refused to use, which is close to the worst possible message — it sends the
+  reader to check the variable that is already right.
+  
+  The per-kind URLs are documented as **opt-in**: unset means fall back to
+  `DATABASE_URL` so a deployment managing one connection string keeps working.
+  Blank is what an operator produces when trying to express exactly that, and it
+  did the opposite.
+  
+  A blank value is not an exotic input:
+  
+  - a compose file with `WORKER_DATABASE_URL:` and nothing after it;
+  - a PaaS environment row saved empty (Coolify, and this deployment uses one);
+  - `export A=1 B=$A` — `$A` is expanded before `A` is assigned, so `B` is blank.
+  
+  None of those look like "unset" to whoever wrote them, which is why the failure
+  reads as a contradiction rather than as a hint.
+  
+  `readConfiguredUrl` now treats blank and whitespace-only as unset, so the
+  fallback behaves the way the error message and the module header both already
+  claimed. Trimming matters for the same reason: a variable holding only spaces
+  otherwise reaches `new Bun.SQL(" ")` and fails somewhere far from its cause.
+  
+  Found while running the integration suite locally — seven of the "nine
+  pre-existing failures" reported earlier in this work were this, triggered by the
+  `export A=1 B=$A` form. They were never repo failures. With the environment set
+  correctly the suite is **565 pass, 0 fail**.
+- cb3481a: fix(seo): the public 404 telemetry write had no rate limit, and two documents called its cardinality bounded when the caller supplies the key
+  
+  `recordPublicNotFound` runs after ANY public request that resolves to a tenant
+  and 404s. It is unauthenticated, it opens its own transaction, and it performs
+  one `INSERT … ON CONFLICT` per request.
+  
+  Its aggregation key is
+  `(tenant_id, normalized_path, referrer_domain, locale, domain_host)` — and the
+  caller controls two of those five freely. The path is whatever they request (up
+  to the 2048 `normalizeRedirectPath` allows), and `referrer_domain` is
+  `new URL(request.headers.get("referer")).hostname`, with no allow-list. So
+  `/a1 … /aN` is N rows, and each is multipliable again by varying `Referer`.
+  
+  ## The claim that made it look handled
+  
+  Two documents said this was bounded, and the stronger one is load-bearing:
+  
+  - `not-found-directory.ts`: *"bounded cardinality + bounded retention"*.
+  - `seo-distribution/module.ts`: *"cardinality is bounded by distinct 404 paths,
+    not by traffic — the volume that would justify range-partitioning is already
+    collapsed by the upsert"* — the stated justification for
+    `partition.eligible: false`.
+  
+  The upsert collapses **repeats of one key**. It does nothing about distinct
+  keys. And there is no fixed set of "404 paths": the set is whatever anyone
+  requests, so distinct keys are produced *by* traffic, which is what the
+  rationale denies.
+  
+  The `sql/060` DDL comment, notably, is correct as written — it says *"a bot
+  probing the **same** 404 a million times is one row"*. The claim only became
+  false where it was paraphrased.
+  
+  ## The sibling already had the answer
+  
+  `POST /api/v1/analytics/collect` is the same kind of endpoint — public,
+  anonymous, one row per request — and it has had a per-IP rate limit since it
+  shipped, for a threat its own comment states in terms that transfer word for
+  word: *"anyone holding a public tenantCode could flood the endpoint with
+  unbounded session/event writes and poison a tenant's aggregates."*
+  
+  This path had no equivalent. It now uses the same `checkSharedRateLimit`
+  backstop at the same 120 req / 60 s default, env-tunable via
+  `SEO_NOT_FOUND_RATE_LIMIT_MAX` / `SEO_NOT_FOUND_RATE_LIMIT_WINDOW_SEC`.
+  
+  Keyed on **IP only, never the tenant** — the beacon's no-oracle contract kept
+  here, so a refusal is driven purely by volume from one source and reveals
+  nothing about whether a tenant exists. Nothing is refused to the visitor: the
+  404 response has already been produced and is returned unchanged; only the
+  telemetry write is skipped, and skipped **silently**, because logging per
+  refused write would hand the same flood a second amplifier.
+  
+  ## What was NOT done
+  
+  No per-tenant cap on distinct rows. A cap bounds storage harder, but introduces
+  a failure mode that does not exist today — an attacker who fills it makes real
+  404s invisible — and the rate limit plus the already-declared age-based purge
+  (30d default, 7d floor) bounds the steady state without that. The partition
+  rationale now says outright that raising the rate limit substantially means
+  re-examining `partition.eligible` rather than assuming it still holds.
+  
+  The resolve path itself was audited in the same pass and is sound: `MAX_REDIRECT_HOPS = 5`
+  bounds the chain walker, and `awcms_seo_redirects_resolve_idx` is a partial
+  index on exactly `(tenant_id, normalized_source_path) WHERE deleted_at IS NULL
+  AND state = 'active'`. Issue #599 taking that table from near-empty to ~23,906
+  rules per tenant is a B-tree lookup, not a scan.
+  
+  Proven without a database, on a differential the function's own fail-open
+  contract would otherwise hide: with `DATABASE_URL` unset the DB step logs
+  `seo_distribution.not_found.capture_failed`, so "within budget" logs it once and
+  "over budget" logs nothing at all. A test asserting only "it does not throw"
+  would pass either way. Removing the backstop and moving the tenant into the
+  limiter key each redden three cases.
+- fef533a: fix(security): an unauthenticated caller could make the server buffer a request body without bound
+  
+  `request.json()`, `request.text()` and `request.formData()` all read the WHOLE
+  body before returning anything, with no ceiling. **Twenty-five route files**
+  called one of them directly.
+  
+  Twenty-four were behind a resolved session, so the exposure was a caller
+  spending its own authenticated quota. **One was not.**
+  `data-lifecycle/dry-run.ts` calls `resolveAuthInputs`, which checks that a tenant
+  header and a token are *present* — it resolves neither — and then read the body.
+  Two arbitrary strings were enough to reach it.
+  
+  **The middleware's pre-check could not help**, and the reason is the finding:
+  `checkContentLengthCeiling` returns `true` when the header is **absent**. A
+  chunked request declares no `Content-Length`, so the one case that needs a
+  ceiling is precisely the case that pre-check waves through. It is
+  defence-in-depth against an honestly-declared oversized body, which is not the
+  threat.
+  
+  All twenty-five now read through `readJsonBody` / `readTextBody` / the new
+  `readFormBody`, and `bun run api:body-limit:check` fails any route under
+  `src/pages/api/` that calls a raw reader — with an exemption list that starts
+  **empty** and may only shrink. `readJsonBody` had existed since Issue #466 and
+  was used by some routes and not others, which is what a convention becomes when
+  nothing enforces it: correct wherever somebody remembered.
+  
+  **`readJsonBody` now distinguishes empty from malformed.** It used to answer
+  `null` for both, so converting a route that returned "Request body must be valid
+  JSON" would have silently changed that 400 into a field-validation 400 with a
+  different sentence — or into a silent accept where an empty body is legitimate.
+  Every converted route keeps the exact response it had.
+  
+  `readFormBody` reads capped text and parses it as `URLSearchParams`, giving the
+  same `.get(name)` surface with a ceiling in front of it. It is **not** a
+  multipart parser and says so: no route here sends multipart (uploads go direct to
+  R2 through a presigned session), and a route that starts to needs a real parser
+  rather than this.
+  
+  The test drives real streaming `Request` objects that declare no length — the
+  exact shape the middleware cannot see — and asserts the read **stops early**,
+  counting the bytes the producer actually emitted. A ceiling applied after
+  buffering is not a ceiling, and only an executed test can tell the two apart:
+  mutation-proven, moving the check below the loop turns three cases red.
+- a65f05b: fix(tenant-domain,media-library,workflow-approval): three declarations nothing read
+  
+  PROJECT_STATE §4 **D7**, **D8**, **D15**. One habit: a value is declared, it
+  passes every shape check, and no runtime code reads it — so a gate that verifies
+  STRUCTURE reports "present" for something that decides nothing, and the next
+  reader takes the declaration as evidence of behaviour. The three resolved
+  differently on purpose.
+  
+  **D7 — deleted, not wired.** `tenant_domain` declared
+  `defaults: { defaultVerificationMethod: "manual" }` that nothing read, so every
+  domain is created with `verification_method = NULL` and `verify` answers
+  `missing_verification_method`. The repair that suggests itself — apply the
+  default at creation — is the one that must not be made: `verifyTenantDomain`
+  performs no verification of any kind. It checks the column is non-NULL and sets
+  `status = 'active'`; there is no DNS lookup anywhere on the route path. A NULL
+  `verification_method` is currently the only step between "a tenant created a
+  hostname row" and "that hostname is active" in host→tenant resolution, the
+  redirect allow-list and the canonical host. The settings block is gone with the
+  reasoning in its place, and the test that asserted the default now asserts its
+  absence plus the behaviour that must not change.
+  
+  **D8 — moved from judgement to ledger.** `media_library.enforcement.read`/
+  `.enable` were filed as deliberate screening decisions reading "belongs with
+  /admin/security, not an object console" — and `/admin/security` carries the MFA
+  enforcement level and nothing about media. A relocation nobody performed is not
+  a judgement, and filing it as one kept both surfaces off the shrink-only ledger,
+  the one list that is supposed to say how much is unbuilt. Now 13 deliberate and
+  36 awaiting a screen, where it was 15 and 34.
+  
+  **D15 — the comments, which is what the finding said the live defect was.** Two
+  composition roots explained the missing notification port with "the `email`
+  module has not been ported yet"; `email` is live and owns the adapter, whose own
+  header says "only a composition root may import this file" while having zero
+  importers. The two were each other's alibi. Both are corrected, and the port is
+  deliberately still not injected: nothing can reach the path (`startWorkflowInstance`
+  has no caller and no route creates an instance), so wiring it would add a second
+  declared-and-never-run thing and put an announcement enqueue inside the decision
+  transaction with no way to exercise its failure. A test pins the absence so the
+  change that gives instance creation a caller has to remove the pin deliberately.
+  
+  Found while closing D7 and recorded as a new §4 item rather than fixed here:
+  **`POST /api/v1/tenant/domains/{id}/verify` verifies nothing.** Closing it needs
+  a real verification step plus a decision about what `manual` is allowed to mean,
+  which is a security change with an ADR in it — not a settings cleanup.
+- 1f87745: chore(api): the site-identity endpoint joins the frozen consumer contract (#596)
+  
+  `GET /api/v1/site-profile/composed` shipped in #616 so a build client could ask
+  who a site is without editing frontend source. Nothing froze its shape, so a
+  field renamed here would have been green in this repo's CI and broken
+  `ahliweb/awcms-astro`'s build — a failure surfacing where the person who caused
+  it is not looking, which is the whole reason
+  `tests/fixtures/awcms-astro-consumer-contract.openapi.yaml` exists.
+  
+  **The order is the point.** That repo's Definition of Done says a new call
+  "reddens [its contract gate] until `awcms` freezes its response shape", so the
+  entry lands here **first** and the neighbour starts calling it second. Reversing
+  the two would put a live build on a shape this repo has not agreed to keep.
+  
+  Which is why it enters as `COMMITTED_PATHS`, not `CONSUMED_PATHS`. Today nothing
+  calls it, and that file is explicit that blurring the two is what once let three
+  non-calls sit in this list labelled as calls. It moves to CONSUMED — with the
+  count in `tests/api-consumer-contract.test.ts` going to four, matching the
+  literal the neighbour's own gate pins — in the change that makes the call real.
+  The frozen fixture is identical either way, because it freezes the union.
+  
+  The freeze walks the transitive `$ref` closure, so `SiteProfile` and
+  `ComposedSiteIdentity` are frozen with the path — which is where the interesting
+  breakages live (a field renamed, a nullable dropped), not in the four-line path
+  object.
+  
+  Regenerating also folded in `institutionIds` on `BlogPost`/`BlogPostSummary`.
+  That field landed in #595 and the fixture predates it; the check is
+  additive-superset, so a stale fixture stayed green while silently protecting
+  less than it appeared to. It is now frozen too, which is the correct state and
+  not a second change — the fixture is the shape at its last deliberate
+  regeneration, and this is one.
+- 9b4b927: fix(blog-content): booking an ad, rearranging the front page and renaming a category now reach the reader (#628)
+  
+  Issue #623 derived the real population of the ADR-0042 §Rule 21 obligation —
+  every mutating API route owned by a module that owns a cacheable surface — and
+  found twenty-eight handlers whose answer nobody had decided. It fixed five and
+  left the rest on a shrink-only ledger rather than burying a bug fix under
+  twenty-eight more.
+  
+  That ledger is now **empty**. Eleven handlers were real staleness and purge;
+  twenty carry a reason a reader can check.
+  
+  ### The eleven
+  
+  - **Ad placements** (create/update/delete). Since #621 ad slots render on five
+    public routes. A booked placement that does not appear until TTL is impressions
+    an advertiser paid for and did not get; a withdrawn one still being served is a
+    campaign running past its end date.
+  - **Homepage sections** (create/update/delete). Since #619 `/blog/{code}` renders
+    `composeHomepage`. An editor rearranging the front page while the edge serves
+    the old arrangement is the arrangement not having happened.
+  - **Terms** (create/update/delete). The category and tag archives resolve through
+    `fetchPublicTermBySlug`, and a deleted category kept answering 200 from cache.
+  - **Blog settings.** `rssEnabled`/`sitemapEnabled` decide whether `feed.xml` and
+    `sitemap-blog.xml` answer **at all**, and both are the `blog-discovery` surface.
+  - **Internal tag-link settings.** Applied at render time to every published
+    article's body, so changing the policy rewrites pages already cached.
+  
+  ### The twenty, and why an exemption is now checkable
+  
+  Thirteen are exempt because nothing public renders what they write — menus,
+  widgets, templates, the blog theme row, institutions (#614 stores them and no
+  reader shows them), and the legacy ad tables that `composeAdSlots` does not read.
+  
+  That reason used to be the kind that goes stale in silence. It no longer can: the
+  suite walks the **transitive import closure** of every file under
+  `src/pages/blog/` and fails if any of those directories becomes reachable. The
+  day a public surface starts rendering a menu, the exemption that says nothing
+  does turns red.
+  
+  Seven are `seo_distribution` handlers. `buildRobotsPayload`,
+  `buildSitemapPagePayload` and `buildFeedPayload` are the only producers of the
+  three `seo-*` surfaces and none of them reads a redirect or a not-found record.
+  
+  **One residual risk is stated rather than hidden:** a redirect whose *source*
+  path is itself a cacheable surface stays inert until that object's TTL, because
+  Varnish answers a cached hit without reaching the middleware. A purge here cannot
+  fix it — `enqueueModuleContentPurge` bans a MODULE scope, the stale object is
+  tagged `m:blog_content`, and an `m:seo_distribution` ban matches nothing.
+  Expressing it needs a path-scoped ban, a different mechanism. The common case is
+  already covered from the other side: a slug change purges through the post's own
+  PATCH before `capture-url-change` records the redirect.
+  
+  Proven by removing one purge and watching both the enumerated count and the
+  derived population go red.
+- 9cbcf21: fix(seo): the pre-cutover gate exited 0 on every usage error and called an unchecked target `ok` (#599, #711)
+  
+  `blog:legacy:cutover:verify` is the only tool that can fail the SeputarBorneo
+  Definition of Done. It could not fail. Two defects, either one sufficient on its
+  own, and together they let it print _"All N legacy URL(s) resolve in one hop to a
+  page this deployment serves"_ for a map whose origin 404s every entry.
+  
+  **`usage()` never set `process.exitCode`.** Reproduced by execution, exit 0 for
+  all of: no arguments, a missing `--tenant`, a missing `--tenant-code`, a missing
+  `--sitemap`, a misspelled flag name, an empty `--sitemap=` value (the `$F` a
+  shell expands to nothing), and `--limit=abc`. So
+  `bun run blog:legacy:cutover:verify --sitemap=$F && deploy` deployed on a typo,
+  having verified nothing — while the last line of that same banner promised
+  _"exits non-zero when any URL would lose its ranking"_. One missing line, inside
+  the function whose own text made the promise.
+  
+  **`classifyCutoverOutcome` returned `ok` for every target it could not check.**
+  It handled `targetLive === false`; `targetLive === null` fell through to
+  `return "ok"`. And `null` was the answer for everything that was not
+  `/blog/{tenantCode}/{slug}` — which is every one of ADR-0113's 62 `/kategori/*`
+  targets. There is now a `target_unverifiable` verdict, it is not clean, and the
+  run exits non-zero on it. `--json` rows carry `reason` and `targetLive` too, so
+  the distinction between _checked and missing_ and _never checked_ survives into
+  the report a human reads later.
+  
+  **The lookup was widened so `target_unverifiable` means something.** A verdict
+  that fires for families this repo really does serve would be noise, so
+  `classifyPublicBlogTarget` now enumerates all eight routes under
+  `src/pages/blog/[tenantCode]/` — post, page, category, tag, index, search,
+  `feed.xml`, `sitemap-blog.xml` — and resolves each through the same function the
+  route itself calls (`fetchPublicTermBySlug`, `fetchPublicBlogPageBySlug`,
+  `fetchPublicBlogPostBySlug`). A path under the tenant that no route matches is
+  `unrouted`, which is a knowable 404 rather than an unknown. `target_unverifiable`
+  is now reserved for what it should always have meant: **not this deployment's
+  surface**.
+  
+  Two smaller things that came out of grepping the calls rather than reading them:
+  the routes check `legacyTenantRouteEnabled` (and `rssEnabled`/`sitemapEnabled`)
+  **before** they look anything up, so this job now reads those settings once per
+  run and warns when the public surface is off — without that, it reported live
+  destinations for a tenant serving no public content at all. And it never closed
+  its SQL client; it does now, the shape every other `blog:legacy:*` script uses.
+  
+  **`--urls=<path>` dissolves the "needs the live sitemap" blocker.** There is no
+  SeputarBorneo sitemap — not in the legacy tree, not in git history, and the live
+  site 404s `/robots.txt` and every conventional sitemap path while serving 200
+  itself. But `--sitemap` always read a **local file**, so the blocker was only
+  ever the XML wrapper. `--urls` takes one URL per line, skips blank lines and
+  whole-line `#` comments (a `#` inside a URL is a fragment, and is kept), refuses
+  a file that is nothing but comments, and combines with `--sitemap`.
+  
+  **What a green run still does not prove**, now written into the script's own
+  docstring: this job makes **zero HTTP requests**. It asks the database "is there
+  a rule, and is there a row at the end of it", not "does the origin a reader hits
+  emit a 301". Under ADR-0114 the legacy 301s execute at the **edge**, which this
+  cannot see. Verifying that means requesting the URLs and reading the `Location`
+  headers, and that is a different tool.
+  
+  Every fix is covered by a test proven to fail on the real defect — the four
+  mutations were applied and run, not reasoned about. `tests/blog-legacy-cutover-verify-cli.test.ts`
+  drives the real process with `Bun.spawnSync` for the exit codes (with a control
+  that a legitimate invocation is still accepted), and
+  `tests/integration/cutover-target-liveness.integration.test.ts` asserts against a
+  real PostgreSQL that a `/kategori/*` target is **not** reported `ok` — the exact
+  assertion whose absence let 62 rules look verified.
+- 957b78e: docs(family): the stack table said Astro `^7.0.7` while the repo ran `^7.2.2`, and nothing was looking
+  
+  `docs/awcms/family-compatibility.md` is where a human goes to find out which
+  Astro this repo is pinned to. It said `^7.0.7` and `@astrojs/node` `^11.0.2`.
+  `package.json` and the manifest both said `^7.2.2` and `^11.1.2`, and
+  `family:conformance:check` was green the whole time — it proves the manifest's
+  `declared` values against their real `source`, and never reads the prose.
+  
+  ### The drift has a direction, which is why it needed a gate and not a fix
+  
+  The Bun, TypeScript and PostgreSQL rows were correct. The two stale rows were
+  exactly the two that **dependabot moves**: a bump edits `package.json`, the
+  conformance gate forces the manifest to follow, and there the chain stops.
+  
+  So this table does not rot randomly. It ages in the direction dependency bumps
+  push it, at the rate they land, and silently — which makes it worse than no
+  table at all. An absent table sends the reader to `package.json`; a confident
+  wrong one does not.
+  
+  Correcting the two rows without closing that would have bought a few weeks.
+  
+  ### `tests/family-compatibility-doc-parity.test.ts`
+  
+  Every row of the stack table in **both** the English source and the `.id.md`
+  mirror is now compared against the manifest, cell by cell. Em-dash cells are
+  asserted as absent values, so a real number cannot be quietly added where the
+  matrix says the repo declares none.
+  
+  Both files are read rather than just the source. The translation gates compare
+  the mirror's `i18n-source-hash` against the English file, which catches "the
+  source moved and the mirror did not" — it cannot catch "both were written
+  wrong on the same day", which is what had happened here.
+  
+  Proved by mutation in five directions, each naming the offending file and row:
+  the original defect restored; the mirror drifting alone; a row deleted; an
+  em-dash cell gaining a value; and the real future case — the manifest bumped
+  to `^7.2.4` with the docs untouched, which reddens both files by name.
+- 12e3a76: fix(security): a typo in a rate-limit env var switched the limiter off entirely
+  
+  Three PUBLIC, unauthenticated endpoints read their rate-limit thresholds as
+  `Number(process.env.X ?? 60)`. That expression is wrong in two directions, and
+  both failures are silent:
+  
+  - `??` falls back only on `undefined`/`null`. A **non-numeric** value —
+    `SITE_SEARCH_RATE_LIMIT_MAX=6O` with a letter O — yields `NaN`. Every
+    comparison against `NaN` is `false`, so `count > NaN` never trips and **the
+    limiter is off**. Worse than merely off: the `rate_limited` metric stays at
+    zero, which an operator reads as evidence of no abuse.
+  - An **empty** value is not `undefined`, so `??` does not fire either;
+    `Number("")` is `0`, and a ceiling of zero 429s every visitor on their first
+    request.
+  
+  The three: `/api/v1/site-search/query` (anonymous full-text search),
+  `/api/v1/site-search/suggest` (runs on every keystroke), and
+  `/api/v1/setup/initialize` — the last being the highest-value of them, because
+  it bootstraps a tenant, office and owner for an unauthenticated caller and that
+  limit is the only bound on how many Cloudflare siteverify round-trips and
+  multi-row bootstrap attempts one caller can drive.
+  
+  `resolveLoginPolicyConfig` learned this in Issue #147 and grew its own parser.
+  The lesson never travelled; this moves it to
+  `src/lib/security/env-thresholds.ts` where the next public endpoint will find
+  it.
+  
+  ### Why the helper takes the VALUE and not the variable name
+  
+  The obvious shape — `parsePositiveIntEnv("SITE_SEARCH_RATE_LIMIT_MAX", 60)` —
+  would have been a quiet regression. `config:env:coverage:check` resolves literal
+  `process.env.NAME` spellings and says in its own header that computed reads
+  "need a human". A variable read only through a name-taking helper therefore
+  stops being checked against `.env.example`, and an operator loses the one
+  artefact telling them the knob exists. So the call site keeps the literal read
+  and passes the value; the name is used for the warning and nothing else. A test
+  asserts that literal spelling survives, so a future "tidy-up" cannot undo it
+  silently.
+  
+  Bad values now fall back to the documented default and warn once — deduplicated
+  per `name=value`, because a per-request warning on a public endpoint is a free
+  log-volume amplifier.
+- 7d768bc: chore(deps-dev): @changesets/cli 3.0.0 -> 3.0.1
+  
+  A patch on the tool this repository's whole versioning policy runs on, so it was
+  exercised rather than assumed: `changeset --version` reports 3.0.1 and
+  `changeset status` parses `.changeset/config.json` and every pending changeset
+  file in the directory without complaint. The repo's own
+  `changesets:policy:check` — which is our script, not the CLI's — behaves exactly
+  as before.
+  
+  The same caveat as the 3.0.0 bump still holds and is worth restating rather than
+  implying: `changeset version`, the command that consumes these files and
+  rewrites `package.json` + `CHANGELOG.md`, is only fully exercised at release
+  time, not in CI. The release flow is a separate, isolated pull request by
+  design, so a surprise there cannot be entangled with feature work.
+- 01c06f3: fix(seo): one source for the site origin — the feed stopped emitting `http://` links on an `https://` site
+  
+  Verified in production before and after, not inferred:
+  
+      curl https://awcms.ahlikoding.com/blog/ahliweb/feed.xml
+      → <link>http://awcms.ahlikoding.com/…</link>   for every entry
+  
+  The Node adapter derives `url.origin` from its own listener. Traefik terminates
+  TLS and the app listens on plain HTTP, so `url.origin` was `http://…` on a site
+  every visitor reaches over `https://…`, and **nothing in this repo read
+  `X-Forwarded-Proto`** — confirmed by grep across the whole tree; the only matches
+  were prose describing the problem.
+  
+  **Why it went unnoticed for so long is the interesting part.** The one place a
+  person is likely to check — the canonical `<link href>` — read correctly, because
+  Cloudflare's Automatic HTTPS Rewrites patches `href`/`src` attributes in flight.
+  The `og:url` beside it, built from the *same variable*, arrived wrong, because it
+  uses a `content` attribute. That asymmetry was previously recorded here as
+  evidence of "two independent URL builders"; it is not. It is one builder, wrong
+  everywhere, concealed on exactly the tag you would inspect.
+  
+  A full inventory found **three** origin sources, not two:
+  
+  - **A** `url.origin` — the six `src/pages/blog/[tenantCode]/**` routes (canonical,
+    `og:url`, JSON-LD `@id`, share links, feed, sitemap). Wrong scheme, and the
+    *request* host rather than the tenant's.
+  - **B** literal `` `https://${primaryHost}` `` — all of `seo_distribution`. Right
+    for this deployment, wrong for the offline-LAN profile, which would publish
+    sitemaps and feeds pointing at a scheme it does not answer on.
+  - **C** `APP_URL` — OIDC `redirect_uri`, password-reset, invitation and
+    registration-approval links: the surfaces where being wrong is most expensive,
+    because they are emailed and clicked later.
+  
+  All three now go through `src/lib/http/site-origin.ts`. The scheme comes from
+  `X-Forwarded-Proto` when `PUBLIC_TRUST_PROXY=true`, otherwise from `APP_URL`,
+  otherwise from the request. **The `APP_URL` branch is the load-bearing one**:
+  production sets `APP_URL=https://awcms.ahlikoding.com` and does NOT set
+  `PUBLIC_TRUST_PROXY` (read off the running container), so a fix that only worked
+  with proxy trust enabled would have shipped and changed nothing. The host is
+  deliberately NOT taken from `APP_URL` — multi-host deployments must keep naming
+  the host the visitor actually used.
+  
+  No fourth proxy-trust flag: this reuses `PUBLIC_TRUST_PROXY` and the same
+  multi-value refusal `extractHostHeader` already applies, because picking one
+  value out of a comma-separated chain is choosing which hop to believe.
+  
+  `site-origin:check` keeps it single. It flags two shapes — `${url.origin}`
+  interpolated into output, and a hardcoded scheme whose host is *entirely*
+  interpolated — and deliberately does not flag `new URL(x).origin` used for
+  comparison, nor vendor endpoints like
+  `` `https://${accountId}.r2.cloudflarestorage.com` `` where the interpolation is a
+  subdomain label inside a fixed domain and `https` is correct forever. Proven by
+  reintroducing the real defect: the gate names the file and line, and passes again
+  when reverted.
+- cb5ae6d: fix(admin-ui): 125 classes the admin uses had no CSS at all — `/admin/account` was shipping raw browser controls
+  
+  Found by looking at the running admin rather than at the code. `/admin/account`
+  renders as an unstyled document in production: labels butted against inputs,
+  default `<select>` chrome, default buttons, no cards, no spacing. It is not a
+  design shortfall — the stylesheet never contained the classes the templates use.
+  
+  ## The measurement
+  
+  234 distinct classes appear in `src/pages/admin/**` and `src/layouts/**`.
+  **150 had no rule anywhere in `src/styles/`**, and 125 of those are visual
+  rather than behaviour hooks:
+  
+  | Vocabulary | Screens | Rules before |
+  | --- | --- | --- |
+  | `.admin-form` | 13 | 0 |
+  | `.btn-primary` / `.btn-secondary` / `.btn-danger` / `.btn-small` | 6 | 0 |
+  | `.admin-table` / `.table-scroll` | 4 | 0 |
+  | whole dashboard (`.kpi*`, `.dashboard-*`, `.card-header`, `.row`, `.num`) | 1 | 0 |
+  | `.admin-card` / `.admin-field` / `.admin-actions` / `.admin-note` / `.admin-empty` / `.admin-error` | `/admin/account` + settings screens | 0 |
+  
+  The admin grew **two** class vocabularies. `.admin-create-form` (18 rules) and
+  `.data-table` (33 rules) are the styled one; a later wave — ADR-0096's
+  `/admin/account`, then thirteen settings forms and the dashboard — reached for
+  `.admin-card` / `.admin-form` / `.kpi` / `.btn-primary` instead, and nothing
+  ever defined them. The dashboard is the landing page of the whole admin.
+  
+  **`.visually-hidden` was undefined while `.sr-only` exists**, so `users.astro`
+  rendered its screen-reader-only text *visibly*. That one is an accessibility
+  defect, not a cosmetic one — an undefined a11y utility fails loudly in the
+  wrong direction. It is now an alias of the same rule rather than a second
+  implementation, because two that drift is how one of them stops clipping.
+  
+  ## Where the rules live, and why it is not `admin-screens.css`
+  
+  `AdminLayout` always loads `admin.css`; `admin-screens.css` is a per-screen
+  import — and `/admin/account` never added it. That is exactly how a vocabulary
+  goes missing for a whole wave of screens, so the new rules go where the layout
+  guarantees them and the next page cannot forget them.
+  
+  Every value is a token, and the control metrics match `.admin-create-form`
+  (44px touch target, `--radius-sm`, `focus-visible` border) so the two
+  vocabularies read as one product rather than two eras of it. Solid fills use the
+  `-strong` tokens, which `tokens.css` documents at length as the ones that hold
+  4.5:1 with white text — the plain tokens are tuned for text and border use.
+  
+  `display:` on the message boxes is safe only because `tokens.css` carries a
+  global `[hidden] { display: none !important }`. Without it this block would pin
+  twelve error boxes permanently open, which is the defect this repo already
+  recorded when `.auth-form { display: flex }` made `form.hidden` inert on four
+  auth pages. The comment says so at the rule.
+  
+  ## The budget
+  
+  `PER_FILE_BUDGET_BYTES` goes 21,000 → 27,000, and the reasoning is rewritten
+  rather than the number nudged. That rule's stated premise — quoted in its own
+  failure message — is that "a single file this size usually means an island
+  bundled a dependency". `admin.css` is the admin's shared stylesheet, parsed once
+  and cached across every screen; splitting it to satisfy the old number would
+  cost a request on every admin page and save nothing, improving the metric while
+  making the thing it protects slightly worse.
+  
+  **`TOTAL_BUDGET_BYTES` is deliberately NOT raised.** The ceiling that bounds
+  what a reader actually downloads still binds at 180,000 B — and the build now
+  sits at **178,925 B, 99.4% of it**. The next addition to `dist/client` will
+  fail this gate, which is the correct outcome: that conversation should happen,
+  not be pre-empted here.
+- c6c8e9f: feat(blog-content): the tag vocabulary can finally be read past its hundredth entry
+  
+  `GET /api/v1/blog/terms` ended in a bounded `LIMIT`, ordered by name, and
+  returned a bare array. Nothing in that answer distinguishes "this tenant has
+  ninety tags" from "this tenant has three thousand tags and you are holding the
+  alphabetically-first hundred". There was no cursor, no total, no flag — the
+  only honest reading of a full page was "there may or may not be more, ask
+  somebody".
+  
+  For `category` and `channel` the bound was right and stays right: a newsroom
+  has a dozen of each, and the endpoint's own comment called terms
+  "low-cardinality config". For `tag` it was never right. A tag vocabulary grown
+  over the 23,906-article archive of Issue #599 runs to thousands of entries, and
+  a static build generating one archive page per tag would build a hundred pages,
+  green, with every article filed under a later tag linking into a page nobody
+  generated. The failure is invisible from both ends: the server answered every
+  question it was asked, and the client got well-formed data.
+  
+  `?order=created_at` now selects a stable keyset traversal and the response
+  carries `nextCursor`; follow it until it is null. `?limit=` is accepted (default
+  100, max 200). `?cursor=` without `?order=created_at` is refused with `400`
+  rather than quietly honoured, because `name` is editable: renaming a term moves
+  it across a page boundary, so a cursor over the alphabetical ordering skips or
+  repeats terms and neither side can tell. That is the same refusal, for the same
+  reason, that `GET /api/v1/blog/posts` already makes about `updated_at`.
+  
+  The default list is deliberately unchanged — the admin taxonomy screen wants
+  names in alphabetical order, and a screen showing a page is not lying about
+  anything. What changed is that a caller which needs the whole vocabulary now has
+  a way to say so, and a way to know when it has it.
+  
+  `tests/integration/blog-term-cursor.integration.test.ts` asserts the traversal
+  against a real PostgreSQL over rows inserted by a single statement — sharing a
+  `created_at` to the microsecond, the shape that reduced page two to zero rows
+  before Issue #158 — and also asserts the default list's truncation head-on,
+  because that behaviour is still there and is the reason any of this was needed.
+- 01c06f3: fix(reporting): `reporting:exports:dispatch` threw on every tick — an untyped parameter inferred as `interval`
+  
+  Found by scheduling the job and reading the log fifteen minutes later:
+  
+      PostgresError: operator does not exist: timestamp with time zone > interval
+  
+  `listDueScheduledExports` binds `now` as a parameter and subtracts an interval
+  from it. The parameter arrives untyped, and the only clue Postgres has for
+  inferring it is the `- make_interval(...)` beside it — which resolves to
+  `interval - interval`. The whole expression is then an `interval`, and comparing
+  a `timestamptz` to one has no operator, so the statement **throws** rather than
+  returning a wrong answer. Proven both ways directly against the production
+  planner: `PREPARE` fails without the cast and succeeds with `::timestamptz`.
+  
+  **Three things had to be true at once for this to survive, and they were:**
+  
+  1. The job had never been scheduled — the production crontab carried one of 32 —
+     so the statement had never executed anywhere.
+  2. `--dry-run` reported `status: success`, because it never reaches this path.
+     *A dry run is not a run.*
+  3. No test called this function. Every other reporting test uses the projection
+     tables, not the scheduled-export ones.
+  
+  The regression test is an INTEGRATION test, deliberately. A unit test asserting
+  the query string contains `::timestamptz` would pass on any string containing
+  those characters and keep passing if the cast moved somewhere useless — it checks
+  the shape, and the shape was never the problem. Only a real planner can answer
+  whether the statement is executable, so the test executes it, and also pins the
+  interval boundary in both directions so a cast that makes it *runnable* but
+  compares the wrong things still fails.
+- 4b7c84f: chore(data-lifecycle): the retention exemption list shrinks for the first time, because `sql/` already answered
+  
+  `data-lifecycle:table-coverage:check` asks every `awcms_*` table to have answered
+  the retention question. Until now a table could answer three ways: a
+  `dataLifecycle` descriptor, a reasoned `BOUNDED_BY_DESIGN` refusal, or a place on
+  the closed ledger of tables that predate the rule.
+  
+  `awcms_site_profile` (Issue #596) arrived as a **seventeenth** exemption whose
+  argument was the second entry's almost word for word — one row per key, upserted,
+  ceiling is another table. That is exactly the pattern-match the list's own bar was
+  hardened to catch: **"a net shrink is required, not an argument."**
+  
+  ### The shrink, and the objection it had to answer first
+  
+  A fourth pass now answers for a table without anybody writing anything down: if
+  **no role holds `INSERT`** on it anywhere in `sql/`, its row count cannot grow at
+  runtime. A bound the database enforces, checkable by running one query rather
+  than by trusting a sentence.
+  
+  The repo had already considered this and rejected it, in a comment kept precisely
+  because "the idea is attractive enough that somebody will propose it again". That
+  rejection was right about the version it was aimed at:
+  
+  - it derived from `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`, which constrains
+    `awcms_app` alone — so `awcms_idn_admin_regions`, 91,000 rows written by a job
+    running as `awcms_worker`, would have been exempted as unwritable. The new
+    derivation reads **every** role, and that table is now pinned by a test as
+    **unsealed**: the counter-example proves the rule instead of refuting it;
+  - and it judged the parse too expensive for "a question five sentences answer
+    better". The parser landed anyway for `data-lifecycle:worker-grants:check`, and
+    five sentences had become seventeen entries. Both gates now share one scanner,
+    so the comment-swallowing bug that scanner records has one place to be fixed.
+  
+  ### What it paid for
+  
+  - **`BOUNDED_BY_DESIGN` 17 → 14.** `awcms_entitlements`, `awcms_plans` and
+    `awcms_plan_entitlements` leave: their prose argued migration-only authorship,
+    which is what `sql/109`'s `REVOKE ALL` already enforces.
+  - **The debt ledger 108 → 103.** Two catalogues (`awcms_permissions`,
+    `awcms_schema_migrations`) and three tables whose writer MOVED and whose INSERT
+    was revoked behind it — `awcms_access_assignments` after ADR-0079, both
+    `awcms_identity_mfa_*` tables after ADR-0087.
+  - **Both duplications are now errors**, not tolerated: a sealed table may not also
+    be argued in prose or recorded as debt. A hand-written answer the database
+    already enforces is not a second opinion, it is a copy — and it goes stale the
+    day the grant changes and the sentence does not.
+  
+  ### Fail-closed
+  
+  If the baseline `GRANT … ON ALL TABLES` / `ALTER DEFAULT PRIVILEGES` can no
+  longer be found, every table would read as sealed and the whole schema would be
+  exempted in one silent step. The derivation refuses instead: nothing sealed, and
+  a printed reason. The gate then reports those tables as unanswered — loud, wrong
+  in the safe direction, and self-correcting. That direction is planted as a test,
+  along with statement ordering (privileges are a running total, not a set) and
+  column-scoped `GRANT INSERT (col)`, which read as "no grant" would have sealed a
+  table a role can write.
+  
+  No runtime behaviour changes: no migration, no new grant, no descriptor.
+- ad86d67: chore(graph): the committed knowledge graph gets a checker — and it immediately caught the prose lying about it
+  
+  `graphify-out/` has been tracked here since PR #400, arranged by four `.gitignore`
+  rules that each carry a paragraph of reasoning. Not one of them had a checker, and
+  **nothing in the repo read `graphify-out/` at all** — 51 gates, none of which could
+  see the artifact.
+  
+  The sibling repo `awcms-astro` already learned what that costs. It shipped a graph
+  where **60 of 101 community labels were attached to the wrong communities**:
+  community 6 named `content-blocks.ts` while its members came entirely from a
+  performance document, and three separate communities all named `BaseLayout.astro`.
+  The JSON was valid, the report was tidy, every gate was green. Community names are
+  not decoration — they are what `graphify query`, any GraphRAG consumer, and any
+  human navigating the graph actually read. A graph that names its own communities
+  wrongly is worse than no graph, because it answers confidently.
+  
+  **The same silence had already produced two false claims here**, both found by
+  running the new gate for the first time rather than by reading the file:
+  
+      docs/awcms/knowledge-graph.md: states 8159 nodes, graph.json holds 9574
+      docs/awcms/knowledge-graph.md: states 21470 edges, graph.json holds 26456
+      docs/awcms/knowledge-graph.md: states 485 communities, graph.json holds 570
+      docs/awcms/knowledge-graph.md: lists `.graphify_labels.json` as tracked,
+                                     but git does not track it
+  
+  Both were written true and went false when the artifact moved underneath them —
+  the failure mode the whole `.generated` discipline in this repo exists to prevent,
+  in a document that had no pair.
+  
+  `bun run graph:artifacts:check` (gate 51) checks five things: only the four shared
+  artifacts are tracked; the report's Summary line agrees with `graph.json`; every
+  community has a name somebody chose (not a filename, not the `Community N`
+  placeholder, no duplicates, and matching between report and graph); nothing under
+  a `.graphifyignore` entry appears in the graph; and the documentation matches the
+  artifact. It reads only files already in the repo — no build, no network, no
+  graphify installation — so it runs in CI. It costs ~80ms on a 15 MB graph.
+  
+  **Staleness is reported, never fatal.** The distance from `built_at_commit` to
+  `HEAD` prints as a note. Making it red would force every PR touching an indexed
+  file to carry a multi-megabyte rebuild, and a gate that expensive gets relaxed
+  within a month. What is guarded is the artifact's internal honesty; when to
+  rebuild stays a deliberate decision, and the note keeps that decision visible.
+  
+  **`.graphifyignore` arrives with its measurement, not its opinion.** It excludes
+  the `*.id.md` translation mirrors: ADR-0097 makes them hash-tracked, word-for-word
+  restatements of an English source that is already indexed. The number is what
+  makes the case — the corpus holds 260 of them and the last graph had scanned only
+  4, because 256 (`.claude/skills/**/SKILL.id.md`) landed on 2026-08-15 in commit
+  `01c06f39`, *after* that graph was built. So the exclusion reads as near-free
+  against today's artifact (8 nodes, 0.08%) while actually keeping 256
+  restatements out of the next rebuild. Verified against `graphify.detect` rather
+  than assumed: 0 mirrors in the corpus afterwards.
+  
+  It also records what is deliberately **not** excluded. `awcms-astro` excludes
+  `.changeset/`; that decision does not transfer. There it was 171 of 971 nodes
+  (18%) with 139 of 178 edges pointing at other changesets — an isolated blob. Here
+  it measures 15 nodes from 5 files (0.16%), with 8 of 17 edges crossing out into
+  the rest of the corpus. Same directory name, opposite shape.
+  
+  **One walker replaces nine.** `scripts/lib/repo-files.ts` now holds the recursive
+  descent that nine scripts had each written for themselves — `repo-inventory.ts`
+  and `project-state-inventory.ts` carried the same function *byte for byte*. The
+  others differed in ways nobody chose: `site-origin-check.ts` skipped every
+  dot-entry while `logging-lint-check.ts` descended into them;
+  `logging-lint-check.ts` returned `[]` for a missing directory while
+  `astro-script-typecheck.ts` threw; `i18n-catalog-check.ts` skipped `node_modules`
+  and `catalogs` while `repo-inventory.ts` skipped nothing. A gate that walks a
+  smaller tree than its author believed is green *because it never looked*, which is
+  the one failure mode that never asks to be investigated.
+  
+  Every option therefore defaults to the most literal behaviour — descend
+  everything, keep every regular file, absolute paths, throw on a missing directory
+  — so no call site was quietly narrowed. Six were migrated and the equivalence was
+  **proven, not asserted**: each replaced implementation was run beside the new one
+  over the real tree and compared as a set (414, 361, 1033, 43, 984, 984, 100, 982,
+  361 files — identical every time, none empty), and the six gates' output diffed
+  byte-identical before and after.
+  
+  The gate's own test feeds it the defects that actually happened — the `awcms-astro`
+  filename and duplicate labels, and this repo's stale figures and wrong tracking
+  column — and requires each rule to go **red**. A test that only proves a gate green
+  on today's tree proves nothing about the gate.
+- a28729b: perf(blog): syncing a menu costs two queries instead of one per item, and two claims about why it couldn't be were wrong
+  
+  `syncMenuItems` issued one `INSERT` per menu item — the third instance of the
+  shape `syncPostTermAssignments` and `syncPostInstitutionAssignments` already
+  had fixed, and the one deferred as needing "a decision rather than a drive-by".
+  
+  **Both halves of that stated reason were wrong, and they were mine.**
+  
+  The note called the function `replaceMenuItems`. No such function exists. The
+  name was written from memory instead of read from the signature, and it reached
+  a GitHub issue, a merged PR body, a merged changeset and both copies of
+  `PROJECT_STATE` before anything caught it — nothing checks a function name that
+  appears only in prose.
+  
+  The note also said its callers depend on the order of its `RETURNING`. They do
+  not. `blog/menus/[id].ts` fills the same response field from `syncMenuItems`
+  (roots-then-children) or from `fetchMenuItems` (`ORDER BY sort_order`) depending
+  only on whether the request supplied `items` — the endpoint already answers in
+  two different orders, so no client can be depending on either. That claim was
+  inferred from the presence of a `RETURNING` clause, never verified.
+  
+  With both checked, nothing needed deciding:
+  
+  - The self-FK is `NOT DEFERRABLE`, and a `NOT DEFERRABLE` foreign key is checked
+    by an AFTER ROW trigger that fires at the end of the **statement**, not after
+    each row. Verified against a real Postgres with the child listed **first** —
+    the arrangement that must fail if checking were per-row. One multi-row
+    `INSERT` is therefore safe whatever the order within it.
+  - `RETURNING` was not needed at all. `MenuItemInput` carries all seven columns,
+    `tenantId`/`menuId` are parameters, the table has no user triggers, and no
+    `DEFAULT` applies to a column that is always given a value — so the clause read
+    back exactly what had just been sent.
+  
+  Now one `DELETE` and one `INSERT ... jsonb_to_recordset`
+  (`jsonb_to_recordset` rather than `unnest`: four nullable columns, and a Bun.SQL
+  array cannot carry NULL — it writes the literal string `'null'` without
+  throwing).
+  
+  Behaviour is unchanged, including the returned roots-then-children order. It is
+  kept because it is what this function returns and changing it would be a silent
+  API change riding along with a performance fix — but its docstring no longer
+  claims the ordering is load-bearing for the FK, because it is not.
+  
+  **One test in the first draft asserted something false and passed.** A case
+  named "a child listed BEFORE its parent still lands" claimed the old code could
+  not have done it. It could: `syncMenuItems` filters roots and children itself,
+  so the caller's order never reaches the `INSERT`, and the case passed under the
+  per-item loop too. It now asserts what it actually covers — input order changes
+  neither what lands nor what returns — and the file header states outright that
+  the FK property is **not** reproducible through this function, so the case is
+  not mistaken for evidence of it later.
+  
+  Mutation-proven on both real properties: dropping a field from the batch so the
+  stored row diverges from the input reddens "what it RETURNS is what the table
+  holds" — the check that makes building the answer from input safe at all — and
+  restoring the per-item loop reddens the budget.
+- 7065cd0: feat(blog-content): the build feed finally says which category an article is in
+  
+  `GET /api/v1/blog/posts?view=full` is the traversal a static site is generated
+  from — every column of a post, walked to the end with a cursor. It carried
+  everything except the one thing an archive is built out of: `termIds`. The
+  comment explaining why was honest and its conclusion did not follow —
+  `fetchPostTermIds` takes one post, so attaching it per row would have been one
+  extra query each, and the answer taken was to leave the field out entirely
+  rather than to fetch a page's worth at once.
+  
+  What that cost was not performance. Every write path has accepted `termIds`
+  since Issue #539, the detail endpoint has returned them the whole time, and the
+  OpenAPI `BlogPost` schema declared them — so a newsroom files an article under
+  a category, the CMS stores it, the contract says the field is there, and the
+  feed is silent. `awcms-astro` therefore has no category or tag archive at all,
+  which is the first item Issue #597 lists.
+  
+  The page now fetches both classifications for the whole page in one query each
+  (`fetchPostTermIdsForPosts`, `fetchPostInstitutionIdsForPosts`): three round
+  trips per page, not one per post. `institutionIds` (Issue #595) rides along for
+  the same reason — it is the same shape, filled in by the same editors, and
+  leaving it out would have repeated the defect one dimension over.
+  
+  A post with no assignments gets `[]`, never `undefined`. Those read identically
+  to a consumer writing `post.termIds?.length`, and the difference decides whether
+  an unfiled article is reported or silently dropped from every archive. That is
+  also why the feed's row is its own type (`BlogPostFeedView`) rather than two
+  optional fields on `BlogPostView`: optional would let a caller read `undefined`
+  from one of the several functions that do not fetch them and conclude the
+  article has no categories.
+  
+  **Also fixed, found in the same file:** `PATCH /api/v1/blog/posts/{id}` accepted
+  `institutionIds`, synced them, and then returned a body without them. A client
+  that re-renders from what it got back — which is what the admin screen does —
+  watched the institutions it had just saved disappear, and a second PATCH built
+  from that render would have unassigned them for real.
+- db09c7b: chore(api): the tenant's vocabulary joins the frozen consumer contract (ADR-0104)
+  
+  `ahliweb/awcms-astro` has no category archive and no tag archive — Issue #597
+  item 1. Two changes this month made one buildable: the feed now carries
+  `termIds` (#649) and the term list can now be walked to the end (#647). What was
+  left was the decision about what the consumer reads and who owns what.
+  
+  ADR-0104 records it, and the parts worth arguing about are:
+  
+  - **The surface is the existing admin `GET /api/v1/blog/terms`, not a new
+    anonymous one.** ADR-0102's posture: "public read" means the BUILDER of the
+    public site can read it. The consequence is stated in the ADR rather than
+    discovered in a build log — the build credential's role needs
+    `blog_content.taxonomies.read`, the same permission-seed gap
+    `site_profile.profile.read` hit.
+  - **The contract freezes the `?order=created_at` traversal, never the default
+    alphabetical list.** Freezing the list would make "returns some of the terms"
+    the guaranteed behaviour.
+  - **The archive URL shape belongs to the consumer.** `awcms` serves its own at
+    `/blog/{tenantCode}/category/{slug}` and gains no per-tenant archive-URL
+    template: that would put the decision in the repo that does not serve the
+    page, and the first disagreement would break links from the side that cannot
+    see them.
+  
+  `/api/v1/blog/terms` is added to `COMMITTED_PATHS`, not `CONSUMED_PATHS` — the
+  call is not real yet. It moves when `awcms-astro` makes it, which is the order
+  that repo's Definition of Done requires and the only thing that keeps the
+  promised/consumed distinction from decaying into a label.
+- 66a1038: fix(gates): five gates were scanning less than they claimed, because a comment stripper ate real code
+  
+  Eight files carried their own `stripComments`, and the version most of them
+  carried began by running a block-comment regex over the whole file:
+  
+  ```ts
+  source.replace(/\/\*[\s\S]*?\*\//g, "")
+  ```
+  
+  Nothing there knows about strings. A `/*` inside a **string literal** opens a
+  comment that is closed by the next `*/` anywhere in the file, and everything
+  between them is deleted. A route glob is enough to trigger it, and route globs
+  are ordinary:
+  
+  ```ts
+  const PARTNER_GLOB = "/api/v1/partner/**";
+  
+  await tx`INSERT INTO awcms_tenant_users (tenant_id) VALUES (${t})`;
+  
+  /** A docblock whose closing marker ends the accidental comment. */
+  ```
+  
+  Run through the naive stripper, that `INSERT INTO` **is gone**.
+  
+  **What it cost on a real file.** `src/modules/blog-content/module.ts` loses 7,260
+  characters and 57 lines to it — including its entire `jobs:` and `capabilities:`
+  declarations. Any gate reading that descriptor through the naive stripper was
+  looking at a module with no jobs, and reporting OK. Across `src/`, 29 files lose
+  more than 200 characters.
+  
+  Five gates were built on it: `modules:table-writes:check`,
+  `access:chokepoint:check`, `config:env:coverage:check`,
+  `identity:principal-access:check` and `access:grant-readers:check`.
+  
+  **No gate signal differs today**, which is exactly why this is worth fixing now:
+  it is a fail-open that grows with every new docblock and every new glob constant,
+  and reports nothing as it grows. All eight gates were run before and after — same
+  answers, and `docs/awcms/work-class-registry.generated.json` regenerates
+  byte-identical.
+  
+  The implementation now lives once, in `scripts/lib/source-text.ts`: the
+  string-aware scanner that was local to `i18n-catalog-check.ts`. It blanks
+  characters rather than removing them, so offsets and line numbers survive and a
+  removed comment cannot splice two tokens into a third that matches.
+  
+  `work-class-registry-generate.ts`'s `codeOnly` is folded in too. It was not the
+  swallowing variety — no whole-file regex — but it was blind the other way: a
+  block comment whose middle lines do not begin with `*`, or a trailing
+  `/* … */` after code, survived it and could be read as a call.
+  
+  `stripComments` stays re-exported from the three scripts that 21 test files
+  already import it from, rather than editing 21 import lines in a change about
+  something else.
+  
+  The test keeps the naive version as an **oracle** — a test that only exercised
+  the good stripper would assert that it works, which is easy and uninformative.
+  Comparing both on the same input is what shows the difference is real, and what
+  notices if somebody reintroduces the shortcut.
+- 01c06f3: fix(admin-ui): /admin/account stopped offering MFA and SSO that the deployment has turned off
+  
+  The account screen branched only on the caller's own state — do they have a
+  factor, do they have a linked provider — and never on the DEPLOYMENT switch.
+  With `AUTH_MFA_ENABLED` unset, which is how production runs today, it rendered a
+  **"Set up two-factor authentication"** button whose endpoint answers 400. The
+  same for SSO's **"Connect"** under `AUTH_SSO_ENABLED`.
+  
+  A control that exists, invites a click and cannot work is worse than an absent
+  one: the person tries it, gets an error with no explanation, and tries again.
+  It is exactly the fake affordance the `LanguageSwitcher` comment condemns, one
+  screen over.
+  
+  The gating is deliberately narrow, and the narrowness is the design:
+  `isMfaFeatureEnabled` governs **enrolment only**. Disable, recovery codes and
+  step-up are driven by database state precisely so an operator can turn the flag
+  off without stranding people who already enrolled. Gating the whole section would
+  take away the exit. Same for SSO — `Connect` is gated, `Disconnect` is not.
+  
+  Both branches now say what is true ("not available on this deployment, ask an
+  administrator") rather than showing nothing, because an empty space reads as a
+  missing feature and a stated one reads as a decision.
+- ce82c1d: refactor(ui,\_shared,scripts): three duplications that had already cost something
+  
+  PROJECT_STATE §4 **D12**, **D13**, **D14**. Each reads like tidying and is not:
+  every one of the three had already produced a difference nobody chose.
+  
+  **D12 — one JSON mutation, three projections.** `src/lib/ui/` held three
+  near-identical copies of the same `fetch`, and they had drifted: `sendJson` and
+  `sendJsonForData` supported `extraHeaders`, bodyless requests and `DELETE`;
+  `sendJsonWithFieldErrors` supported none of it until Issue #596 added the first
+  by hand — which is why `/admin/seo` reported "invalid" without saying which
+  field. The three are now projections of one `sendJsonRequest`. They stay three
+  public functions on purpose: `sendJson`'s narrow `{ ok, errorCode }` is what
+  stops thirty-odd screens painting internal detail onto the page (Issue #540),
+  and widening it for everyone to serve two callers would remove that property
+  from all of them. `postJson` is deleted — zero callers, and a docblock claiming
+  to serve "the existing create-form call sites" that made it look load-bearing.
+  
+  The two copies also disagreed about header precedence: the field-errors one
+  merged `extraHeaders` OVER `Content-Type`, so a caller could have replaced it.
+  Nothing did. The kept order is the one both docblocks claimed.
+  
+  Four other files in `src/lib/ui` fetch with same-origin credentials and are
+  deliberately not folded in — two are GET reads, and
+  `push-subscription-client.ts` surfaces the server's own `error.message` and
+  `data.subscription.endpointMasked`, which is exactly what the narrow shape
+  exists to withhold.
+  
+  **It recovers no client bytes, and the claim that it would was wrong.** Both
+  files were already shared chunks shipped once each, so "three copies of the
+  bytes" was never true — three copies of the SOURCE shipped once. The 425 B
+  "saving" measured during the work came from a `dist/` the build had not cleaned;
+  clean builds either side of this change are byte-identical. `bun run build` now
+  runs `rm -rf dist` first so the number cannot come from a tree the build did not
+  produce — the budget script's own docblock had already recorded being misled
+  this way twice.
+  
+  What the change is worth stands on the drift, the dead wrapper and the silent
+  header disagreement, which is what the finding was actually about.
+  
+  **D13 — one timestamp expression, not twenty-one.** `KEYSET_CURSOR_CREATED_AT_SQL`
+  hardcoded a bare `created_at` while its own docblock told callers to "wrap it in
+  a table alias at the call site", which is not something a string can do — so
+  every joined query wrote its own. It is now `keysetCursorCreatedAtSql(alias?)`
+  over a shared `utcMicrosecondTextSql(column, offsetSuffix)`, and all the copies
+  are gone. The audit counted twenty; there were twenty-one, because three more
+  render the same expression for `occurred_at` and `last_seen_at`, and the
+  `idn_admin_regions` DTO renders it with a `Z` suffix.
+  
+  All were byte-correct, which is not the same as safe: `AT TIME ZONE 'UTC'` and
+  `US` are both silent when wrong, and getting `US` wrong resurrects #158 — a
+  cursor denoting an instant earlier than its own row, skipping every row in that
+  millisecond, past page one only. A test refuses any `to_char(… AT TIME ZONE
+  'UTC'` outside the owning module; it matches the RENDERING rather than the
+  correct format string, because an edit that gets a character wrong is the case
+  it exists to catch. The column reference is asserted to be an identifier, since
+  callers hand the result to `tx.unsafe`.
+  
+  **D14 — finishing the `scripts/lib/` extraction.** Three shared modules:
+  
+  - `markdown-table.ts` — `extractBlock`/`replaceBlock` were byte-identical
+    copies; `parseInventoryRows` was not. One copy had learned about `\|` escapes
+    because its own table holds a shell pipeline; the other split on a bare `|`
+    and would have torn that cell. The escape-aware version is a strict superset,
+    so it costs the other caller nothing.
+  - `migrations.ts` — **six** copies of the loader, and the non-empty assertion
+    existed in exactly one. Every caller asks "which tables exist, and which have
+    RLS forced", and an empty list answers all of them with a confident, wrong
+    "none" — a gate reporting full coverage of nothing. It now resolves `sql/`
+    from the repository root, which only `sql-grants.ts`'s copy did, so no gate
+    depends on where it was run from.
+  - `table-rls-states.ts` — `deriveTableRlsStates` was exported from a
+    documentation GENERATOR and imported by two gates. A gate that fails because a
+    generator was refactored teaches a reader that the gate is fragile.
+  
+  Both `catch { return; }` walkers in `edge-cache-surfaces-check.ts` now use the
+  shared walk, which throws on an unreadable root. A gate that silently skips a
+  directory reports "no violations" for a tree it never opened — and for that one,
+  a missed purge call site is a stale cross-tenant page.
+  
+  Both new gates were verified to FAIL on a real defect, not merely to pass.
+- 4b4016e: fix(seo-distribution): the middleware cost the performance gate could not see
+  
+  PROJECT_STATE §4 **B5**. The performance standard lists "queries per hot read
+  request ≤ 3" as **measured**, citing two budget suites. Both hand a counting
+  `tx` to a directory function — so everything a public request pays BEFORE the
+  route (resolving the tenant from the host, opening the tenant transaction,
+  asking `seo_distribution` whether the path redirects) was not merely unmeasured,
+  it was outside what the tool could measure at all. `countQueries` can only be
+  given a `tx`, which means it can only see code the test has already put inside a
+  transaction.
+  
+  **Measured first.** `countPoolQueries` wraps the POOL and the transaction opened
+  on it, and `tests/integration/middleware-query-budget.integration.test.ts` pins
+  the real numbers against a real PostgreSQL: **5** statements for a passthrough,
+  **7** when the request redirects, **0** for a path the redirect vocabulary does
+  not cover. Exact rather than ceilings — a ceiling with slack cannot tell an
+  improvement from a regression into the slack — and explicitly a floor, because
+  `BEGIN` and `COMMIT` are two more round trips `sql.begin` issues itself that no
+  Proxy can see. A budget that quietly under-counts is how "measured" came to mean
+  something other than measured.
+  
+  **Then reduced, by one read rather than a short-circuit.**
+  `resolveTenantAllowedHosts` and `resolveTenantPrimaryHost` read the same table
+  under the same active/not-deleted filter, differing only by `is_primary`, and
+  the redirect path called them one after the other on every eligible public
+  request. `resolveTenantDomainSet` answers both from one round trip: 6 → 5, and
+  8 → 7, proven by running the new budget against the pre-fix code and watching it
+  report the old numbers. The "does this tenant have any live rule?" short-circuit
+  the file's own perf note considered is still NOT applied, for the reason that
+  note gives: the passthrough branch needs the server-derived host to attribute a
+  404, and the legacy-blog auto-redirect fires from settings rather than a rule
+  row.
+  
+  **The standard now states its scope.** The ≤ 3 ceiling was always a ROUTE budget
+  and the table did not say so; the middleware budget is a separate row rather
+  than folded into the same number, because the two are paid by different code and
+  one sum would hide which half moved.
+  
+  **Also corrected: two comments that asserted a live code path was dead.** Both
+  `redirect-resolution-service.ts` and `redirect-middleware.ts` said the middleware
+  passes `locale = null` "all the way through", so locale-scoped redirect rules
+  could never match. That was true under ADR-0039 and false since ADR-0098's
+  locale routing landed and the middleware began passing the served locale for a
+  prefixed URL.
+- a3b9007: fix(blog-content): publishing an article from /admin/blog now purges the edge cache (#623)
+  
+  ADR-0042 §Rule 21 requires every handler that changes content to enqueue a purge
+  inside the same transaction. For `blog_content`, five post lifecycle routes never
+  called `enqueueModuleContentPurge` at all — including `publish.ts`, which is the
+  endpoint the Publish button on `/admin/blog` calls.
+  
+  With `EDGE_CACHE_MODE` active — and it has been on in staging since 26 July 2026
+  — publishing an article emitted no purge. `/blog/{code}` has a 120-second TTL and
+  `blog-post` 300, so it healed itself and the symptom was "the new article takes a
+  while to show up" rather than a hard failure. `archive` is the direction that
+  matters: a withdrawn article kept being served from the edge until its TTL
+  expired, which is the withdrawal not having happened.
+  
+  Purges added to `publish`, `archive`, `restore`, `purge`, and
+  `revisions/{revisionId}/restore` — the last one was not in the issue's list (it
+  lives a directory deeper) but rewrites the body of a post that may be published
+  right now.
+  
+  `schedule.ts` deliberately did NOT get one, against the issue's enumeration:
+  `ALLOWED_STATUS_TRANSITIONS` lets only `draft` and `review` become `scheduled`,
+  so nothing it commits is ever visible publicly, and the sweep that does publish
+  it already purges. Adding one would append a ban matching no cached object while
+  the queue reported success — the "ceremony that reads as coverage" this repo
+  already refuses for surfaceless module keys.
+  
+  ### Why no gate caught it
+  
+  `edge-cache:surfaces:check` asks whether the MODULE purges somewhere, and
+  `blog_content` did. `tests/edge-cache-content-purge.test.ts` pinned a per-file
+  count for an enumerated list, and a list cannot report the file it does not
+  contain — its own comment said so.
+  
+  The obligation is now derived: every mutating API route owned by a module that
+  owns a cacheable surface must either purge or carry a checkable reason it cannot
+  change what a reader sees. Six routes are exempt with reasons. Twenty-eight more
+  are recorded on a shrink-only ledger — several of them, ads and homepage sections
+  in particular, look like the same defect and are tracked for a follow-up rather
+  than buried inside a five-route fix. A new mutating handler is on neither list,
+  so it fails on arrival; proven by planting one, not merely observed green.
+- 8a2bab5: docs(sample-content): nine finished articles so a fresh deployment has something to render
+  
+  A CMS with no content answers none of the questions you set it up to answer:
+  every list is empty, every pagination boundary is untested, and every layout
+  looks correct because nothing is in it. `data/sample-content/` now carries nine
+  finished articles in Bahasa Indonesia — choosing a CMS, perceived page speed, URL
+  structure that never has to change, the three services, Core Web Vitals for
+  non-technical owners, static versus dynamic, and a pre-launch checklist.
+  
+  No new code and no new importer: the archive is NDJSON in the shape
+  `bun run blog:legacy:import` already reads, so preview stays the default and a
+  re-run is a no-op on the existing unique key.
+  
+  `--system=sample-ahliweb` is load-bearing rather than cosmetic. The redirect
+  importer decides which rows to derive a 301 map from by system name, so a
+  distinct one is what stops a real migration run building redirects for URLs that
+  never existed on anybody's site.
+  
+  Verified by importing into a migrated database rather than by reading: 9 of 9
+  importable, 0 refused, 9 inserted, each with a real Portable Text body of 8-16
+  blocks and a derived `content_text`.
+- 41400ed: perf(push): a notification fan-out costs two queries instead of one per device
+  
+  `enqueuePushToRecipients` cost `R + (R x S)` queries — one subscription lookup
+  per recipient, then one `INSERT` per device — all inside a single transaction
+  holding one connection. A notification to 500 users with two devices each was
+  1,500 round trips.
+  
+  Nothing in production ever paid it, and that is the reason to fix it rather than
+  to leave it. The only caller today, `POST /api/v1/push/test`, passes exactly one
+  recipient. But the helper's whole contract is "every ACTIVE subscription of
+  every recipient", so the cost is not a property of the function as used — it is
+  a property waiting for the first caller that broadcasts, at which point it
+  arrives as a production incident rather than a review comment. This is the same
+  write-side blind spot the performance round found in the scheduled sweeps and in
+  `syncPostTermAssignments`: a per-item query inside a path hit once per save
+  looks like nothing until a bulk caller appears.
+  
+  Now two statements regardless of fan-out: `fetchActiveSubscriptionIdsForUsers`
+  resolves every recipient in one round trip, and one
+  `INSERT ... jsonb_to_recordset` writes the whole batch.
+  `fetchActiveSubscriptionIds` is now a batch of one so the two cannot drift — a
+  predicate fixed in one and not the other is how a batch path quietly stops
+  matching the path everything was tested against.
+  
+  `jsonb_to_recordset` rather than `unnest` for the reason `recordAuditEvents`
+  uses it: this table has four nullable columns and a `jsonb` one, and a Bun.SQL
+  array cannot carry NULL — it writes the literal string `'null'` without
+  throwing.
+  
+  The cheap cases did not get more expensive to make the expensive case cheap:
+  zero recipients still costs zero queries, and every-recipient-skipped — the
+  COMMON case, since most users never enable push — costs one, not two.
+  
+  Behaviour is unchanged, deliberately including the odd part: recipients are
+  still fanned out in the order given, and a caller passing the same id twice
+  still gets two notifications. That is arguably a caller bug, but changing it
+  here would be a silent behaviour change riding along with a performance fix.
+  
+  Pinned by `tests/integration/push-enqueue-budget.integration.test.ts` — exact
+  budgets against a fixture of 4 recipients and 9 devices, which is 13 queries
+  under the old shape, so it cannot pass by accident. The tests read the rows back
+  out of the table as well as counting, because a `jsonb_to_recordset` rewrite is
+  exactly the kind of change that satisfies a counter while corrupting what lands:
+  `data` arriving as a jsonb STRING, or a NULL arriving as the literal text
+  `'null'`, are both silent. Mutation-proven: restoring the per-row `INSERT` fails
+  the two budget tests and passes every correctness one.
+- 28de56b: perf(blog-content): three round trips the request path paid for and threw away
+  
+  Findings **B2**, **B3** and **B4** of the 17 August 2026 audit round. One PR
+  because they are one habit: a caller re-derives something the caller above it
+  already had.
+  
+  **B2 — a read taken and discarded on every anonymous page view, and it was worse
+  than the finding said.** `isLegacyTenantRouteEnabled` went through the merged
+  settings reader, which also reads `awcms_blog_settings` and then throws that row
+  away. One wasted round trip on all seven `/blog/{tenantCode}/*` routes — 100% of
+  page views on a default deployment, where the edge cache is off.
+  
+  **Two of the seven were paying for it twice.** `feed.xml.ts` and
+  `sitemap-blog.xml.ts` call `isLegacyTenantRouteEnabled` and then call
+  `fetchBlogSettings` themselves for `rssEnabled`/`sitemapEnabled` — so
+  `awcms_blog_settings` was read, discarded, and read again. The gate is now one
+  query; the merged reader still reads both, because it uses both, and a test pins
+  each so the saving cannot come from quietly dropping a field.
+  
+  **B3 — the tenant id the route resolved and dropped.** All eight `/blog/*` routes
+  now publish `locals.edgeCacheTenantId`, so middleware stops repeating the
+  `awcms_tenants` lookup on every cache MISS. `discovery-route.ts:145` was the
+  working precedent.
+  
+  Placement is the whole of it, and the test asserts placement rather than
+  behaviour: `publish-tenant.ts`'s standing rule is *resolve, gate, produce,
+  publish last*. A 404 is a cacheable status, so publishing before the
+  missing-resource branch would annotate a "no such post" 404 differently from an
+  "unknown tenant" 404 and answer, from one request, the question the routes'
+  generic-404 shape exists to withhold. Every `return notFound…` stays above the
+  publish; the one response that serves the resource is below it.
+  
+  **B4 — a third transaction whose first read was a column nobody fetched.**
+  `AdminLayout` ran `SELECT tenant_name FROM awcms_tenants` on every `/admin/*`
+  render, against the row `readTenantDisplayDefaults` already had open one
+  transaction earlier for `default_locale`/`default_theme`. The name now rides
+  along on that primary-key read.
+  
+  The layout's circuit-open shape check moved with it: it keyed on `tenantName`,
+  which is no longer in that block's return, so leaving it would have tested for a
+  field that is never there and silently skipped **every** assignment below it —
+  the sync indicator, the disabled-module set and the sidebar arrangement. It keys
+  on `syncActive` now, and a test pins that.
+  
+  *Both B4 assertions failed on their first run by matching the corrective comment
+  explaining the removal rather than any code — finding D2 in miniature, caught by
+  the shared comment stripper D2 landed one PR earlier. They strip first now.*
+- 38c65d8: fix(blog-content): one control character in one title made the whole feed unreadable; and `LOG_LEVEL` had no value that both validated and worked
+  
+  Two findings from the 17 August 2026 audit round that share a shape — a control
+  applied to the wrong copy, and a contract no value could satisfy.
+  
+  **A6 — `/blog/{tenantCode}/feed.xml` and `sitemap-blog.xml` escaped as HTML.**
+  `escapeHtml` neutralises the five markup entities and passes C0 control
+  characters through. XML 1.0 forbids most of them **anywhere** in a document,
+  including as a numeric reference; HTML merely discourages them.
+  `validateTitleField` checks a post title's length and nothing else, and there is
+  no write-side stripping — so one stray control character in one title made the
+  whole channel non-well-formed and every reader rejected it. Not that item: the
+  feed.
+  
+  ADR-0038 named `escapeXmlText` for exactly this. It was applied to the
+  `seo_distribution` serializers, which answer **404** in production, and not to
+  these two routes, which answer **200**.
+  
+  The route's own docblock is why the wrong function looked right: *"escaped
+  through the same `escapeHtml` used for HTML (XML and HTML share the same five
+  entity escapes)"*. True, and not the whole difference. It has been corrected
+  rather than deleted — a false comment beside correct code is the next author's
+  instruction.
+  
+  **D3 — `LOG_LEVEL` had no working value.** `config:validate` accepted `warn`;
+  the logger implements `warning`. `LOG_LEVEL=warn` therefore passed the validated
+  contract, matched no level, fell back to `info`, and the firehose kept shipping
+  while the operator believed they had quieted it — and `LOG_LEVEL=warning`, the
+  value that would have worked, was rejected.
+  
+  Fixed on **both** sides and additively: the validator now accepts `warning`
+  (and keeps `warn`), and the logger canonicalises `warn` → `warning` with a
+  one-time notice naming the canonical spelling. Rejecting `warn` outright would
+  have been tidier and would have turned a silent no-op into a failed
+  `config:validate` on a deployment that is running right now, to punish a
+  spelling. An unrecognised value still falls back to `info` — the safe direction,
+  because the alternative is a deployment that logs nothing because somebody typed
+  `infoo`.
+  
+  Also corrects `docs/PROJECT_STATE.md` §4: **A8 was already fixed** before this
+  round wrote it up. Both site-search rate-limit settings already go through
+  `parsePositiveIntSetting`, which handles the NaN half and the empty-string half.
+  The entry is marked rather than deleted, because an audit item describing a
+  defect that is not there sends the next reader looking for it.
+- 548e961: fix(api): the menu and widget lists were documented as returning "object"
+  
+  `GET /api/v1/blog/menus` and `GET /api/v1/blog/widgets` each declared their
+  payload as an array of bare `object`. That is not a wrong shape — it is **no
+  shape**, and it is worse than a wrong one in a specific way: nothing can ever
+  fail against it. Any field could be renamed or dropped and the frozen consumer
+  contract would still pass, because everything is a subset of "object".
+  
+  Issue #597 item 6 says menus and widgets are configurable and nothing renders
+  them. The reason no consumer could is that there was nothing to build against:
+  `awcms-astro`'s contract gate freezes response shapes, and freezing this one
+  would have frozen a promise with no content.
+  
+  So `BlogMenu` and `BlogWidget` are written out, and three things the code
+  already does are now stated rather than left to be discovered:
+  
+  - **A menu carries its `items`**, already sorted by `sortOrder`. That is what
+    the schema exists for — a menu without items is a name, and navigation cannot
+    be rendered from a name.
+  - **`key` is the identifier, `name` is the label.** A consumer that selects a
+    menu by `name` breaks the first time somebody fixes a typo.
+  - **Inactive widgets ARE returned.** There is no `?activeOnly=`; `isActive` is
+    on every row and the consumer filters. An endpoint that hid them would make
+    "switched off" and "deleted" the same answer.
+  - **`bodyText` is plain text, not markup.** The write path refuses unsafe HTML
+    rather than sanitizing it, so a consumer must escape before rendering.
+  
+  `BlogMenuItem` gains `tenantId` and `menuId` as `readOnly` — the read returns
+  them and the write does not accept them, and the schema is shared by both.
+  
+  Writing a schema creates a new way to be wrong: naming a field the endpoint does
+  not return. This repo shipped that once already — the post list documented as
+  `BlogPost` while it returned a summary, which built an entire site of empty
+  articles with nothing failing. So
+  `tests/integration/menu-widget-response-shape.integration.test.ts` reads the
+  `required` list out of the BUNDLED spec, seeds real rows, calls the same
+  functions the routes call, and requires every one of those properties to be
+  present on what comes back. The document cannot claim a field the code does not
+  produce.
+- b199e69: fix(sync): a push batch had no count bound, and the write side of one protocol was capped while the read side was not
+  
+  `POST /api/v1/sync/push` validated every event in the `events` array and never
+  the array's length. The only limit was the body tier:
+  `readTextBody(request, "large")` allows 5 MB, and a minimal event serialises to
+  a couple of hundred bytes, so one authenticated request could carry on the order
+  of **30,000 events**.
+  
+  That is not merely slow. Each accepted event costs a compare-and-set on the
+  aggregate version plus an inbox `INSERT`, each conflicted one a conflict
+  `INSERT` — all sequential, all inside a single transaction that holds a
+  connection and keeps every aggregate row it has advanced locked until commit.
+  The cost is not the round trips; it is how long everything else waits behind
+  them.
+  
+  Meanwhile `/sync/pull` has clamped reads to 500 since it shipped. The two halves
+  of one protocol had asymmetric bounds, and the unbounded half was the one that
+  writes.
+  
+  `MAX_SYNC_PUSH_EVENTS` is now defined **as** `MAX_SYNC_PULL_EVENTS` rather than
+  as a second `500`, because the reason for the number is the relationship — a
+  node must not be able to push more in one batch than it can pull in one page.
+  `pull.ts` imports the same constant. Two independent literals that happen to
+  agree today are how the asymmetry comes back the next time one of them is tuned,
+  so the test asserts the relationship and not the value.
+  
+  **Refused, never truncated.** Truncation on a write path silently drops events a
+  node believes it delivered: a node treats an accepted batch as accepted in full
+  and would advance its own cursor past events that never landed. This is the
+  bound posture #180 settled for the business-scope resolver — every bound refuses
+  rather than truncating. The read side clamps instead, correctly, because a
+  clamped page still says `hasMore`.
+  
+  The refusal is reported as ONE error, not one per event. An error body carrying
+  a field error for each of 30,000 events is its own denial of service, and the
+  verdict does not depend on their contents. `maxItems: 500` and `minItems: 1` are
+  in the OpenAPI schema so the contract says it too.
+  
+  **Found by a sweep, and it turned up a second thing.** Scanning `src/` for SQL
+  issued inside a loop found 34 sites. Most are bounded — by a code registry
+  (`append-domain-event`), by a declared cap (`MAX_NODE_ACTIVATIONS = 128`,
+  `MAX_SIDEBAR_ROWS`), or by a job's batch size — and several were already batched
+  (`/sync/objects` under #435). One was not bounded at all, above.
+  
+  And one was a **twin of an already-fixed defect**.
+  `syncPostInstitutionAssignments` issued one `INSERT` per institution. Its own
+  docstring says it is "exactly like `syncPostTermAssignments`" — and it was, in
+  contract and not in cost: the term path was flattened to two statements when
+  `blog:legacy:import` made a 23,906-article archive its caller, and this path,
+  which the same importer drives through the same post payload, kept the loop. It
+  now uses the same `DELETE` + `INSERT ... unnest`, with its own budget file
+  because two budgets in one file go green the moment either regresses and the
+  other absorbs it.
+  
+  A sibling that advertises itself as a sibling is the easiest kind of defect to
+  miss: whoever fixed the first one had already read the second and remembered
+  agreeing with it.
+  
+  `syncMenuItems` has the same shape and is not changed here — it carries a
+  self-referencing FK and returns its rows, so it was deferred rather than done as
+  a drive-by. Recorded with the rest of the sweep. (Two corrections to an earlier
+  draft of this note, which named it `replaceMenuItems` — a function that does not
+  exist — and said its callers depend on the order of its `RETURNING`. The
+  endpoint already returns two different orderings depending on whether `items`
+  was supplied, so no caller can depend on either.)
+- d8d4c44: fix(sync-storage,reporting): two writers that could not see each other
+  
+  Findings **C3** and **C4** of the 17 August 2026 audit round. One PR because
+  they are one mistake at two levels: a decision made from a read, and an action
+  taken on that decision, with nothing in between that holds them together. Being
+  inside a transaction is not that thing — READ COMMITTED re-snapshots per
+  **statement**.
+  
+  **C3 — a lost update in the conflict foundation itself.** `POST /sync/push`
+  read `current_version`, checked it against the event's `baseVersion`, and then
+  wrote `current_version + 1` unconditionally. Two concurrent batches both read 5,
+  both passed the check, both wrote the literal 6: two conflicting events accepted,
+  **zero conflict rows**, one increment lost. Harmless downstream today only
+  because `awcms_sync_inbox` has no consumer — the defect is in the optimistic
+  concurrency itself.
+  
+  The write is now a compare-and-set (`… DO UPDATE … WHERE current_version =
+  ${expected}`), extracted to `advanceAggregateVersion` so it has one name and one
+  test. A CAS that matches nothing means another writer moved it in between, which
+  is exactly `version_mismatch` — the verdict the pure evaluator would have reached
+  on a fresh read, so a node sees an outcome it already understands. The inbox row
+  is now written **after** the version advances, not before; it used to be first,
+  so a losing batch left an accepted event behind for an increment it never made.
+  
+  `SELECT … FOR UPDATE` on the prefetch was the alternative and is weaker: it locks
+  rows that exist, so two batches *creating* the same aggregate would both proceed,
+  and it would hold every aggregate in the batch for the whole transaction rather
+  than one row for one statement.
+  
+  **C4 — a cursor that could step over a row that had not committed yet.** The
+  incremental projection worker selected `cursorColumn >= cursor` with **no upper
+  bound**. Postgres `now()` is transaction start, so a row written by a long
+  transaction carries a timestamp from before it committed and can land behind a
+  cursor that has already moved past it — never selected again. ADR-0077 rejected
+  exactly this shape for sync-pull; this engine kept it, and ADR-0072 declares the
+  incremental value authoritative, so nothing reconciles it.
+  
+  The scan now stops at `now() - REPORTING_PROJECTION_LAG_SECONDS` (default 60).
+  The guarantee that buys is stated rather than implied: *a row is counted if the
+  transaction that wrote it committed within the lag of starting*. A writer holding
+  a transaction open longer than the lag is still missed — bounded and named, not
+  eliminated. `0` restores the old behaviour for a deployment that has measured its
+  own writers.
+  
+  `pg_stat_activity`'s `min(xact_start)` would be exactly right and is unusable
+  here: a non-superuser without `pg_read_all_stats` reads NULL for other users, so
+  the bound would silently become `now()` — no bound at all, wearing the shape of
+  one. A wrong answer that looks like the right mechanism is worse than a plainly
+  approximate one.
+- b4998ef: fix(docs): three gates read only the English half, and one gate had no caller at all
+  
+  Closes #729. The follow-up to #728, which fixed the two generated blocks; this
+  is the rest of the class the audit found, and the class was never "generated
+  blocks" — it was **every gate that reads the English file and stops**.
+  
+  ## 76 mirror files that make claims about code
+  
+  `skills:check` exists because a wrong skill is worse than a stale doc: an agent
+  **follows** a skill. It globbed `SKILL.md` and `src/modules/*/README.md`, so all
+  55 `SKILL.id.md` and 21 module `README.id.md` could name a `bun run` target that
+  does not exist, or a path that was renamed, with every gate green.
+  
+  Both corpora are widened. Mutation-proven with three real corruptions, each
+  naming the exact mirror:
+  
+  ```
+  awcms-testing (SKILL.id.md) tells the reader to run `bun run this:target:does:not:exist`, which is not in package.json…
+  awcms-testing (SKILL.id.md) cites 1 path(s) that do not exist (e.g. `src/modules/this-module-does-not-exist/README.md`)…
+  src/modules/blog-content/README.id.md names admin screens that do not exist: /admin/this-screen-does-not-exist
+  ```
+  
+  **The first draft of this broke the English files**, and the reason is worth
+  keeping. `checkCitedPaths` used its first argument as both the report label
+  **and** the key for `ASPIRATIONAL_SKILLS` / `subjectModuleKey`. Passing a
+  decorated label defeated both exemptions and turned a green gate into 19 false
+  failures on files that were fine. Identity and label are now separate
+  parameters, and a test asserts the exemption still holds when a label is
+  supplied.
+  
+  ## The ADR index mirror was missing an ADR
+  
+  `checkAdrIndexCoverage` read `docs/adr/README.md` only. `check-docs.mjs` even
+  explained why — *"Its Indonesian mirror is held to it by `i18n-source-hash`, not
+  by a second copy of this gate"* — but that hash answers *"has the English
+  changed since translation?"*, not *"does the mirror list every ADR?"*.
+  
+  `docs/adr/README.id.md` was missing **ADR-0100** entirely: 113 rows in English,
+  112 in the mirror. Added, and the gate now reads both.
+  
+  **Coverage is asserted; linking is not.** The mirror links the English file for
+  98 of its rows and the `.id.md` copy for the rest, even though a mirror exists
+  for all of them. Demanding one form would turn a real coverage gate into a
+  98-row reformatting demand, and that noise is how a gate gets switched off. So
+  the mirror may link either copy and may not omit an ADR — while the English
+  index must still link English, or a row could quietly point at the translation
+  and pass.
+  
+  ## A gate with no caller
+  
+  `memory:docs:check` is not a gate with a blind spot. It had **no caller at
+  all**: the target existed, and it was in neither `scripts.check` nor any
+  workflow, so it had never run once. It was failing —
+  `docs/awcms/agent-memory.md` had drifted from the 116 active memory files.
+  
+  Its own header documents that `--check` exits 0 when the memory directory is
+  absent, *"so this gate catches drift on a device that has memory rather than
+  forcing CI to have one"* — a design note that only makes sense for something
+  meant to be wired in. Now it is, and both halves are verified: corrupting the
+  snapshot exits 1, and running with an empty `HOME` prints
+  *"Tidak ada direktori memory — check dilewati"* and exits 0.
+  
+  The chain is 58 gates → **59**.
+  
+  ## Deliberately not done
+  
+  `docs/awcms/knowledge-graph.id.md` is still uncovered
+  (`graph:artifacts:check` hardcodes the English path). It is hand-written prose
+  about a generated artefact — the least dangerous of the set, and covering it
+  needs its own design rather than a fourth path added here.
+- f0c98ce: fix(identity-access): a delegated access grant that had run out kept conferring its role
+  
+  `sql/117` gave every partner grant an `expires_at`, ADR-0090 wrote that
+  revocation **and expiry** deactivate the membership in the same transaction, and
+  `expireDelegatedAccessGrants` exists to do it. Nothing has ever called it — no
+  job descriptor, no script, no `package.json` target — and both request-time
+  resolvers filtered on `revoked_at IS NULL` alone. A partner engagement approved
+  "until 30 September" therefore conferred its role for as long as nobody revoked
+  it by hand, and the 31-day `CHECK` that caps the date was enforcing a ceiling on
+  a value nothing read. `sql/117` even ships a `(tenant_id, expires_at)` index
+  built for the sweep that was never wired.
+  
+  **Expiry is now a gate, not a sweep.** `resolveDelegatedGrantState` carries
+  `expires_at > now()` in the same statement that reads the partner's registry
+  status, and the chokepoint refuses `403 DELEGATED_GRANT_EXPIRED` above
+  `fetchGrantedPermissionKeys`, so no grant row can influence it. That is the shape
+  this module already uses twice — `isBusinessScopeAssignmentCurrentlyActive` and
+  `isSoDConflictExceptionCurrentlyValid` both refuse an elapsed row at decision
+  time and leave `status` to a job. A sweep alone would leave a window between the
+  second on the row and the second the timer next fires, which is precisely when
+  the access was supposed to have stopped.
+  
+  `now()` rather than a parameter, because it is the transaction-start instant from
+  the same clock that wrote the column; comparing against a JavaScript `Date` would
+  make the gate depend on two clocks agreeing.
+  
+  **The refusal is named accurately, and that is not cosmetic.** An expired grant
+  also reads as "no live row" to the partner-registry resolver, so it would have
+  fallen through the existing `partner_suspended` branch and written a decision-log
+  row asserting a suspension that never happened — sending a customer to ask a
+  vendor about it. The new branch runs first and files under
+  `delegated_grant_expired`. The attribution resolver is deliberately left
+  unfiltered: a refusal that cannot name the engagement is where an investigation
+  stops, and the id reaches audit rows only, never a decision.
+  
+  Redemption now also stamps the grant's own `expires_at` onto the role it writes
+  (`effective_to`), so `activeRoleGrants` — whose `effective_to IS NULL` branch
+  means "in force forever" — stops answering yes on its own. Both timestamps are
+  written together: `sql/102` constrains `effective_to > effective_from`, and
+  `effective_from` DEFAULTs to `now()`, so supplying only the end date would
+  compare this process's clock against PostgreSQL's and could refuse a legitimate
+  redemption whenever the two disagree.
+  
+  Still outstanding, and deliberately a separate change: the sweep that ends the
+  membership row and its sessions. Until it lands an expired actor is refused every
+  authorization but keeps an `active` row in the customer's user list — bookkeeping,
+  not access. It is separate because giving `awcms_worker` blanket `UPDATE` on
+  `awcms_tenant_users` and `awcms_sessions` would hand a scheduled job the ability
+  to re-activate a deactivated member and un-revoke a session, which is a wider
+  privilege than the sweep needs and warrants its own decision.
+- 687262c: fix(security): the CSP blocked every direct-to-R2 upload before a byte left the browser
+  
+  `media_library` has had the whole presigned upload flow for months — create a
+  session, `PUT` the bytes straight to R2, finalize. The browser half could never
+  have worked: the policy had **no `connect-src` directive at all**, so it fell
+  through to `default-src 'self'` and the browser refused the cross-origin `PUT`.
+  
+  This is the **third** instance of one defect in this file. `img-src` was missed
+  and every R2 image rendered as an empty box; `media-src` was missed the same way
+  and every gallery video stayed blocked while the images beside it loaded. A
+  directive that is never named does not announce its fall-through — the failure
+  appears in a browser console, not in a response the server can see.
+  
+  ### The origin is not the one already in the policy
+  
+  Reads come from `NEWS_MEDIA_R2_PUBLIC_BASE_URL`, usually a custom domain. Writes
+  go to R2's S3 API endpoint, `https://{accountId}.r2.cloudflarestorage.com`.
+  Reusing the public base for `connect-src` would emit a policy that reads as
+  correctly configured and still blocks every upload, so
+  `deriveMediaUploadOrigin` derives the write origin separately and a test pins
+  that they differ.
+  
+  `connect-src` is emitted unconditionally — naming it is the entire point — and
+  names the R2 origin only when uploads are configured. On a LAN/offline
+  deployment the directive is exactly `connect-src 'self'` and no third-party
+  origin appears anywhere in the policy, unchanged.
+  
+  Prerequisite for the upload UI in #595: without it there is nothing to build on.
+- a5c1cfa: fix(docs): the two generated inventory blocks are now generated in BOTH languages, and the mirror that said "do not hand-edit" had nothing generating it
+  
+  Closes #727.
+  
+  `scripts/README.md` and `docs/PROJECT_STATE.md` §2 each carry a generated block
+  with a gate. Their Indonesian mirrors carried **the same block, banner
+  included** — telling the reader not to hand-edit a block that nothing generated
+  — and both had drifted:
+  
+  | Mirror | Claimed | Real |
+  | --- | --- | --- |
+  | `scripts/README.id.md` | 107 targets, 48 gated | 121, 54 |
+  | `docs/PROJECT_STATE.id.md` | ADR range ends `0111` | `0113` |
+  | | 48 admin screens, 61 `.astro`, 57 gates | 49, 62, 58 |
+  | | `MODULE_CONTRACT_VERSION` **4.0.0** | **4.1.0** |
+  
+  That last row is the one worth pausing on: a *contract version*, stated wrong,
+  in a document whose whole job is to be the accurate continuation point.
+  
+  ## Why no gate could see it
+  
+  Not oversight — a category error. `check:docs:translation` compares a **sha256
+  of the English source** against a marker stored in the mirror, which answers
+  *"has the English changed since this was translated?"*. That is exactly the
+  right question for prose: prose only goes stale when its source changes.
+  
+  Derived content goes stale when the **repo** changes, with both files untouched.
+  No hash of either file can see that. And re-stamping after any unrelated English
+  edit silently re-blesses it — which is how this survived, and how I nearly
+  shipped it again: syncing the mirror by hand in #726 and re-stamping marked it
+  current while `PROJECT_STATE.id.md` was still wrong.
+  
+  ## The fix
+  
+  Both generators now render **every locale from one collection pass**, so the two
+  documents can differ in wording and cannot differ in fact. A label table rather
+  than a second renderer, deliberately: two renderers can disagree, and the whole
+  defect being fixed is two copies disagreeing.
+  
+  The translated surface is small — for `PROJECT_STATE` it is ten row labels,
+  three column headers, two prose strings and the one source-of-truth cell that is
+  prose rather than a bare command; everything else, including every value, is
+  shared.
+  
+  `project-state:inventory:check` and `scripts:inventory:check` now verify every
+  locale and name the failing file:
+  
+  ```
+  docs/PROJECT_STATE.id.md: row "ADR" is stale — document: "**0000**–**0099** …", repo: "**0000**–**0113** …"
+  scripts/README.id.md: the rows match but the generated block does NOT — what is stale sits outside the table
+  ```
+  
+  Mutation-proven in both directions: corrupting a value in either mirror reddens
+  the corresponding gate, and making a renderer ignore its locale — emitting
+  English into the Indonesian file, the *new* way to be wrong that this design
+  introduces — reddens the test written for exactly that.
+  
+  ## What the audit found, which is bigger than this issue
+  
+  #727's Definition of Done asked whether other mirrors have the same gap. They
+  do, and it is not limited to generated blocks. Verified by reading each gate:
+  
+  - `checkAdrIndexCoverage` reads `docs/adr/README.md` only — the Indonesian ADR
+    index can omit an ADR silently.
+  - `skills:check` globs `SKILL.md` and `src/modules/*/README.md` — **55
+    `SKILL.id.md` and 21 module `README.id.md`** are checked by nothing, so a
+    mirror can name a `bun run` target that does not exist.
+  - `graph:artifacts:check` hardcodes `docs/awcms/knowledge-graph.md`.
+  - `memory:docs:check` exists, is CI-safe by construction (exit 0 with no memory
+    directory), and is **in neither `scripts.check` nor any workflow** — a gate
+    that has never run. It fails today.
+  
+  Filed separately rather than swept in here; this change closes the generated-block
+  half it was reported for.
+- d54a1c1: chore(api): the taxonomy endpoint is now CONSUMED, not merely promised (#597)
+  
+  `ahliweb/awcms-astro#66` landed the category and tag archives, so
+  `/api/v1/blog/terms` moves from `COMMITTED_PATHS` to `CONSUMED_PATHS` and the
+  pinned count goes four to five — the same number that repo's own gate asserts,
+  derived from its source with comments stripped.
+  
+  This is the third step of the sequence ADR-0104 records, and it is not
+  bookkeeping. Breaking a consumed path breaks a build that exists today;
+  breaking a committed one breaks a design that has been agreed and not yet
+  built. The two deserve different care, and the distinction only survives if
+  entries actually move — the state that once let three non-calls sit in
+  `CONSUMED_PATHS` describing calls that never happened.
+  
+  The frozen fixture is unchanged in shape: the same seven paths were already
+  frozen, only their justification moved.
+- ed6b67b: docs(skill): `awcms-workflow-approval` menyatakan role `awcms_worker` TIDAK ADA — ia ada, dan salah arahnya berbahaya
+  
+  Empat klaim di `.claude/skills/awcms-workflow-approval/SKILL.md` keliru, dan
+  semuanya ke arah yang sama: menyuruh pembacanya MEMBATALKAN pemisahan privilege
+  yang sudah terpasang.
+  
+  - "Repo ini tidak punya role `awcms_worker`" — ia DIBUAT di
+    `sql/022_awcms_db_worker_setup_roles.sql`.
+  - "`WORKER_DATABASE_URL` fallback ke `DATABASE_URL` … pemisahan privilege BELUM
+    ada di sini" — produksi terverifikasi memakai `awcms_worker` untuk worker dan
+    `awcms_app` untuk aplikasi.
+  - "Jangan tulis `GRANT … TO awcms_worker` — akan gagal jalan" — migrasi repo ini
+    memuat **78** GRANT semacam itu yang sudah lama berjalan.
+  - "Temuan over-grant PR #778 vacuous di repo ini" — justru sebaliknya:
+    `sql/022:145` sudah memberi `awcms_workflow_instances` `SELECT` SAJA, yakni
+    persis bentuk perbaikannya, dan `WORKER_ROLE_GRANTS` di
+    `scripts/security-readiness.ts` menjaganya.
+  
+  **Kenapa arah salahnya yang penting.** Dokumen basi biasanya membuat orang
+  melakukan pekerjaan yang sudah tak perlu. Yang ini sebaliknya: agen yang
+  mempercayainya akan MENOLAK menulis GRANT worker untuk job baru dan
+  menjalankannya sebagai role pemilik — menghapus pemisahan privilege yang nyata.
+  Itu regresi keamanan yang lahir dari dokumentasi. Skill `awcms-deploy` sudah
+  dikoreksi untuk klaim kembar ini; berkas ini terlewat, dan `skills:check`
+  tidak bisa melihatnya karena ia memverifikasi bahwa path yang DIKUTIP ada,
+  bukan bahwa kalimat di sekitarnya benar.
+  
+  Ditemukan saat menjadwalkan job yang selama ini tidak pernah berjalan:
+  `workflow:escalations:dispatch` termasuk 31 dari 32 job yang tak ter-cron, dan
+  pertanyaan "role apa yang dipakainya" langsung menabrak klaim ini.
+- 4a19be6: fix(ops,database): three operational signals that told an operator something untrue
+  
+  PROJECT_STATE §4 **D9**, **D10**, **D11**. Three unrelated mechanisms, one shape:
+  each produced a signal an operator relies on, and each signal was wrong in a way
+  nothing reported.
+  
+  **D9 — the log file named at attach time.** `ops/ship-logs.sh` redirected the
+  tailer with `>> "${DEST}/app-$(date -u +%Y-%m-%d).log"`. A redirect names its
+  file once, when the shell spawns the process, and the descriptor then lives
+  until the container changes — weeks on a stable deployment. So today's lines
+  landed in a file dated by the last DEPLOY, and the 30-day `-mtime` sweep could
+  never reclaim it: the file it should have been bounding was the only one still
+  growing. The redirect is now a `while read` loop that re-derives the date and
+  reopens with `>>` per line (`printf -v day "%(...)T"`, a builtin — no `date`
+  fork per line). The distinguishing property is testable without waiting for
+  midnight: delete the file underneath a running writer and see whether the next
+  line brings it back. The test executes exactly that, against the payload
+  extracted from the script, and carries a control case driving the old shape
+  through the same procedure.
+  
+  **D10 — nothing read the readiness endpoint.** `/api/v1/database/pool/health`
+  reports `databaseReachable` and `circuitBreakerState`, is unauthenticated, and
+  was consulted by nothing; Coolify, the container `HEALTHCHECK` and the Varnish
+  probe all read the dependency-free liveness endpoint, so a release with an
+  unreachable database is marked successful and cut over.
+  
+  The obvious fix is wrong and was not taken: those three RESTART or REROUTE, and
+  restarting an app does not repair a database — pointing them at readiness turns a
+  database outage into a container restart loop. Liveness is the right question
+  for them, and that reasoning is now written at each site so it is not "fixed"
+  later. What readiness needed was a reader on the path that pages a person:
+  `ops/synthetic-check.sh` now probes it every 10 minutes from outside, asserting
+  both fields, because the endpoint answers 200 while reporting the database is
+  gone. Coolify's own Health Check Path is configuration outside this repo — the
+  runbook states the split and says not to point it at readiness, and does not
+  pretend that is enforced.
+  
+  **D11 — jobs ran as `interactive`, and it was seven scripts, not six.** The job
+  work-class registry names a class for every worker script and feeds the capacity
+  model, and seven scripts never passed it: their transactions took `withTenant`'s
+  `"interactive"` default, so nightly purges queued in the bucket sized for live
+  users. `site-search-reconcile.ts` had the drift running the other way, passing
+  `maintenance` where the registry says `background_sync` — resolved toward the
+  registry, whose entry carries an argued rationale where the script's literal
+  carried none.
+  
+  The fix that matters is the gate: `db:work-class:generate` now refuses to run
+  when a script does not open its transactions as its declared class, in both
+  directions. It COUNTS rather than checking presence — a script with three calls
+  and one literal reads as declared to any presence check while two of its
+  transactions still run as `interactive`, and two of these scripts have exactly
+  that shape. It reads one file, the script, and says so: a job whose transactions
+  live in a module under `src/` is not covered by it.
+  
+  Both documents that asserted jobs "do not call `acquireWorkClassSlot`" are
+  corrected. They were true when written and stayed after they stopped being
+  true — jobs go through `withTenantOrThrow`, which is that call.
+- 6d9c4f3: feat(blog-content): a reader can finally search for the Pedoman Media Siber (#625)
+  
+  Static pages got a public route in #617 and a place in `sitemap-blog.xml`, and
+  stayed invisible to site search. The reason had quietly changed underneath: the
+  old one — "no public route, so an indexed page would produce a hit that 404s" —
+  stopped being true, and the real blocker became a GRANT.
+  
+  `bun run site-search:reconcile` runs as `awcms_worker` and issues one `SELECT`
+  per registered descriptor. `sql/035` gave that role `SELECT, UPDATE` on
+  `awcms_blog_posts` and deliberately nothing on `awcms_blog_pages`, because at the
+  time nothing read them. Registering a descriptor without the grant would have
+  passed every gate in the repository — the registry check is pure and never opens
+  a database — and then failed at 03:00 with `permission denied for table
+  awcms_blog_pages`, in a job nobody is watching.
+  
+  `sql/136` grants SELECT only. The index engine reads sources and writes solely to
+  its own `awcms_site_search_*` tables, and an unused UPDATE on the table holding
+  the Pedoman Media Siber is not a harmless extra. RLS still does the isolating —
+  the grant is the table privilege the FORCE-RLS policy then narrows, the same
+  two-layer posture the worker's existing post reads have.
+  
+  ### The predicate is the LISTING one
+  
+  `visibility = 'public'`, matching `listPublicBlogPagesForSitemap` rather than the
+  detail route, which also serves `unlisted`. That tier means reachable by direct
+  link and absent from every listing — and a search result is a listing. Indexing
+  on the detail predicate would surface exactly the pages an editor marked as
+  not-to-be-listed.
+  
+  `weight: 0.6`: someone searching a news site is usually looking for coverage, so
+  the disclaimer should not rank beside it. The weight scales the score rather than
+  capping it, so a page still wins when the query is genuinely about it.
+  
+  ### Pages are searchable, deliberately not commentable
+  
+  A comment thread under a published editorial standard reads as qualifying it.
+  Recorded in `module.ts` so a future symmetry pass finds a decision rather than an
+  oversight; adding one later is a single descriptor.
+  
+  ### The gate
+  
+  `site-search:sources:check` now derives the read privilege from the descriptors
+  themselves and checks it against `sql/`, reusing the scanner
+  `data-lifecycle:worker-grants:check` already uses for the retention engine
+  (`grantsPrivilegeToRole` moved into `sql-grants.ts` so there is one
+  implementation). Proven by removing the migration and watching it fail with the
+  exact message. It reads migration text, so it proves the grant was WRITTEN, not
+  applied.
+  
+  **After deploying:** existing tenants have no page documents until
+  `bun run site-search:reconcile` runs. It is idempotent and picks them up on its
+  next pass; run it by hand for them sooner. No DML in the migration — the table is
+  FORCE RLS, and a migration that writes to one is green on an empty CI database
+  and breaks in production.
+- dbc763c: fix(security): a suspended tenant could still rewrite its profile, change its password and mint new sessions
+  
+  ADR-0073 made suspension a SERVICE status rather than a login status, and put the
+  refusal in the two places that decide access: `authorizeInTransaction` and
+  `ssr-session.ts`. Neither of those is on the path of
+  `defineSelfServiceTenantRoute` or `defineClientCredentialTenantRoute` — the two
+  factories that deliberately have no `AccessRequest` to consult — so twelve routes
+  kept serving a suspended tenant's live session.
+  
+  Verified against a real database before the fix: `PATCH /api/v1/auth/profile`
+  answered **200** for a suspended tenant.
+  
+  The one that matters most is the pair `POST /api/v1/auth/session-handoff/issue`
+  and `.../redeem`: they MINT a session. A session that would have expired renews
+  itself, so the foothold outlives the TTL suspension exists to drain — the
+  suspension never finishes.
+  
+  `push/subscriptions/index.ts` did carry the check, by hand, on `POST` only. Its
+  `DELETE` sibling did not, and that asymmetry is what shows the omission was
+  accidental rather than a decision: a per-route copy is enforced by whoever
+  remembers, and eleven other routes in the class did not.
+  
+  **The refusal now belongs to both factories**, one `awcms_tenants` primary-key
+  read on an RLS-free table, with the platform-tenant resolution behind the `&&` so
+  it runs only for a tenant that is already refused. A missing row reads as
+  stopped.
+  
+  **Omitting the declaration REFUSES.** A route that must stay reachable states
+  `allowedWhileTenantSuspended: "<reason>"` — a reason rather than a boolean, for
+  the same discipline `SUSPENDED_TENANT_ALLOWED_PERMISSION_KEYS` carries: `true`
+  can be added in a diff without anybody saying what it buys. Four routes declare
+  one, and they follow one rule: **a suspended tenant may still SEE its own
+  security state and may still do things that only ever REMOVE its own access.**
+  Listing your sessions, ending one, ending all of them, and unregistering a push
+  device. A suspension that stops a customer from ending a stolen session is
+  protecting the attacker.
+  
+  `api:tenant-route:check` now also fails any file under `src/pages/api` or
+  `src/pages/admin` that calls `isTenantServiceStopped` itself, so the copy cannot
+  come back. Comment lines are skipped, so a docblock explaining that the factory
+  owns the refusal is not read as a route deciding it.
+- 9ba574e: fix(security): the other 59 endpoints that refused before authorization could record it
+  
+  Gap C19's second and final bulk shrink. The ledger goes **70 -> 11**, and from
+  its opening measurement **121 -> 11**. Every one of the eleven survivors is a
+  named class with a reason rather than a leftover.
+  
+  Same property as the first pass, and the same one-sentence rule: **move the
+  ANSWER, not the work.** These 59 validated the request body before `withTenant`
+  opened and RETURNED from there, so a tenant user holding no grant learned the
+  endpoint's field names, enum values and length limits — repeatedly, and without
+  producing an `awcms_access_decision_log` row, because ADR-0063 makes
+  `authorizeInTransaction` the one place a decision is recorded and nothing ever
+  reached it.
+  
+  The body is still read and validated outside the transaction, because it must
+  be: `await request.json()` waits on the CLIENT, and doing that inside
+  `withTenant` holds a reserved connection and its work-class slot for as long as
+  a caller chooses to take. Only the refusal was held. The caller who is allowed
+  gets exactly the validation errors they got before.
+  
+  **Two things deliberately did not move, and they are the same rule.** The
+  body-size ceiling is a PROTOCOL limit — refusing it tells the caller nothing
+  they did not already send. And request-SHAPE guards (a missing tenant header, a
+  missing token, a missing path parameter) are about whether this is a well-formed
+  request for this route at all, not about the resource behind it; a caller who
+  omitted their own path segment learns nothing from being told so.
+  
+  **What stayed, by class:**
+  
+  - Ownership-grant-basis reads (`PATCH` posts/pages, `submit-review`): the row is
+    an INPUT to the decision, not a decision taken instead of it.
+  - Guards whose ACTION is read off the body: authorizing first would authorize
+    against a guessed action.
+  - `submit-review`'s `MODULE_DISABLED`: a smaller disclosure of a different kind,
+    and deferring it is a product decision about which of two true things to say.
+  - Three authentication-flow routes that never call `authorizeInTransaction` at
+    all, so there is no chokepoint to move a refusal behind. Whether they should
+    record anything is a question about the decision log's scope, not about
+    statement order.
+  
+  Enforced both ways by `tests/e2e/api-authorization-first.e2e.ts`, which drives a
+  live zero-permission session at every gated endpoint: an unlisted endpoint
+  answering anything but `403` is RED, and so is a listed one that answers `403`.
+- 4830b9d: fix(security): 51 endpoints refused a tenant user before authorization could record that they did
+  
+  Gap C19's largest uniform class, retired. The ledger goes **121 -> 70**, and the
+  `400 IDEMPOTENCY_REQUIRED` half of it goes **54 -> 3**.
+  
+  ADR-0063 made `authorizeInTransaction` the one place an access decision is taken
+  AND the one place it is recorded. A route that refuses before reaching it
+  refuses invisibly: no `awcms_access_decision_log` row, nothing for an audit to
+  read, nothing to alert on. These 51 refused a missing `Idempotency-Key` header —
+  and in most cases the body's field names, enum values and length limits right
+  after it — from outside the transaction, so a tenant user holding no grant could
+  map an endpoint's contract repeatedly and leave no trace of having been there.
+  
+  **What moved is the ANSWER, not the work.** The body is still read and validated
+  before `withTenant` opens, because `await request.json()` waits on the CLIENT and
+  doing that inside a transaction holds a reserved connection and its work-class
+  slot for as long as a caller chooses to take. The refusal is held and returned
+  after authorization has spoken. The caller who is allowed still gets their
+  validation errors; the caller who is not gets `403` and leaves a row.
+  
+  The body-size ceiling deliberately did NOT move: a PROTOCOL limit tells the
+  caller nothing they did not already send, and it must stay ahead of everything.
+  
+  **Three of the 54 stayed, and they are a class, not a remainder.**
+  `comments/admin/:id/moderate`, `comments/admin/bulk-moderate` and
+  `seo/redirects/:id/lifecycle` read their guard's ACTION off the body
+  (`decision === "approve" ? "approve" : "reject"`). Authorizing first there means
+  authorizing against a GUESSED action — whatever the ternary falls back to when
+  the body is invalid — so a moderator holding only `approve` who sent a typo
+  would be told `403` for a permission their request never needed. That is a worse
+  answer than the one being fixed, not a smaller one, so they are recorded in the
+  ledger's structural section alongside the three already there, with the two ways
+  out named (split the route per action, or check the union of both permissions
+  first). Both are product decisions.
+  
+  Two follow-on corrections fell out of doing it: `tenant/domains/:id/verify`
+  carries the proven key forward from phase 1 rather than re-reading it across
+  three phases, and `media-finalize-upload-session` takes a discriminated union
+  instead of nullable fields — a shape that let both be absent would have needed a
+  non-null assertion further down, which is how an invariant stops being checked.
+  
+  Enforced, both directions, by the sweep that measured it:
+  `tests/e2e/api-authorization-first.e2e.ts` fails when an unlisted endpoint
+  answers anything but `403` (the debt growing) AND when a listed one answers
+  `403` (an entry that was fixed and must be deleted).
+- 0b5343b: chore(deps-dev): @changesets/cli 2.31.1 -> 3.0.0
+  
+  A major bump of the tool this repo's whole versioning policy runs on, so it was
+  exercised rather than assumed: `changeset --version` reports 3.0.0,
+  `changeset status` parses `.changeset/config.json` and every pending changeset
+  file without complaint, and the repo's own `changesets:policy:check` behaves
+  exactly as before (it fails this branch for the one correct reason — a
+  dependency bump with no changeset — and passes once this file exists).
+  
+  Stated plainly rather than implied: `changeset version` — the command that
+  consumes changesets and rewrites `package.json` + `CHANGELOG.md` — is only
+  fully exercised at release time, not in CI. The next release is where a v3
+  behaviour change would surface, and the release flow is already a separate,
+  isolated PR (`chore(release): vX.Y.Z`) precisely so that a surprise there
+  cannot be entangled with feature work.
+- 5e01a3c: chore(actions): codeql-action init and analyze move to 4.37.7 together
+  
+  Dependabot always splits `github/codeql-action/init` and `/analyze` into two
+  pull requests, and each one fails on its own: CodeQL requires every
+  `codeql-action` step in a workflow to run the SAME version, so a lone bump
+  produces `Not all workflow steps that use github/codeql-action use the same
+  version` and `Loaded a configuration file for version 'X', but running 'Y'`.
+  
+  Both steps therefore move to the same commit SHA
+  (`ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd`) in one change, and the sibling PR
+  is closed rather than merged after it.
+- 9cbcf21: fix(blog): the legacy importer dropped the lead photograph of all 25,029 articles, and its image work list was collected after the gate that skips it
+  
+  Four defects in `bun run blog:legacy:import`, found while working on Issue #599
+  / Issue #711 (neither of which this change closes — per ADR-0114 this repo
+  cannot). Each was proved by applying the mutation and running it, not by reading
+  the code.
+  
+  **The lead photograph was never carried.** `featured_media_id` has existed since
+  `sql/035:46` and `public-content-port-adapter.ts` has been serving it to
+  `awcms-astro` all along, but `LegacyPostImportInput` had twelve fields and none
+  of them was media, and the INSERT named sixteen columns without it. Every one of
+  the 25,029 SeputarBorneo rows has a `foto_berita`, so a real run would have
+  landed the whole archive without the picture each page led with — reporting
+  success, because `--images` scanned body HTML only and would never have
+  mentioned them. The record now carries `featuredImageSrc`, it resolves through
+  the SAME `--media-map` handoff a body `<img>` uses and the SAME
+  `isMediaReferenceSafe` sweep (one map, one chokepoint, no second and weaker
+  check), a mapped one is written to `featured_media_id`, and an unmapped one is
+  refused with a report line rather than imported without the photograph.
+  
+  **`--images` was wrong by the whole archive in the other direction too.** Body
+  scanning found 2 images in that archive; the honest upload set is ~25,031 files
+  / 4.1 GB. The summary now prints the two parts separately — lead photographs and
+  body images — because a single total is what let "2" read as "almost nothing to
+  do".
+  
+  **The image collection sat below the category gate.** A row naming a category
+  the run cannot map is refused with `continue`, and the scan was after that
+  `continue`, so a FIRST run — which by definition has no `--term-map`, because
+  `--terms` is how you get one — reported zero images. The identical ordering bug
+  had already been found and fixed one gate earlier for `categoriesPerArticle`.
+  It is now collected above both gates, and `--terms`/`--images` open no database
+  client at all, so the flag an operator runs first no longer dies on
+  `DATABASE_URL … is required`.
+  
+  **Two rows of one file could claim one slug.** There was a `seenLegacyIds` set
+  and no `seenSlugs`; `findTakenSlugs` asks the database, which cannot see a
+  collision inside the file it has not written yet. The real archive has 84
+  collision groups across 171 rows, so the first real run raised 23505 in the
+  middle of a committing batch, after earlier batches had landed. The second
+  occurrence is now refused as a report line naming the line it collides with, and
+  the run finishes.
+  
+  Also corrected: `legacy-media-map.ts` still claimed that essentially every row
+  of a real CKEditor archive was residue. Measured, it is 4 of 25,029 (0.02%), and
+  only 2 bodies contain an `<img>` at all.
+- 125199f: perf(blog): listing menus cost one query per menu, the item batch had no count bound at all, and the sweep that should have caught the first was looking for backticks
+  
+  Three findings on the same pair of endpoints, and they compound: the write had
+  no cap, and the read that embedded what the write stored had neither a batch nor
+  a bound.
+  
+  ## The batch was the only uncapped one in the API
+  
+  `validateMenuItemsInput` never checked `items.length`. Every other batch surface
+  in this repo declares a count bound — `MAX_IMPORT_ITEMS = 200` on the redirect
+  import, `MAX_IDS` on bulk comment moderation, `MAX_NODE_ACTIVATIONS = 128` on
+  sync activation, and `/sync/push` gained one last round — so this was checked
+  against all 18 routes that accept a body array, and it is the only one without.
+  
+  The only limit was the 128 KB `default` body tier. A minimal item
+  (`{"id":…uuid…,"label":"a","linkType":"url","url":"http://a.co","sortOrder":0}`)
+  is about 105 bytes, so one request could carry roughly **1,250 items**.
+  
+  `MAX_MENU_ITEMS = 200` now lives in `domain/menu-policy.ts`, enforced in the one
+  validator both `POST /api/v1/blog/menus` and `PATCH /api/v1/blog/menus/{id}`
+  already reach the database through — not in the two routes, which would be two
+  places to drift apart.
+  
+  It is counted **before** the per-item pass. After it, an oversized array of
+  invalid entries would still be walked in full and could emit several field
+  errors per entry, so a request about to be refused would still choose how much
+  work the server does and how large the refusal is. Asserting the error *count*,
+  not just `valid: false`, is what separates the two orderings in the test.
+  
+  ## The list endpoint was an N+1, and it is up to 100 SERIAL round trips
+  
+  `GET /api/v1/blog/menus` called `fetchMenuItems` once per menu, inside the
+  request transaction, for up to the 100 menus `listMenus` returns. The loop was
+  deliberately sequential — one Postgres connection serves one query at a time, so
+  `Promise.all` over a shared `tx` hangs rather than parallelises — which made the
+  cost 100 serial round trips holding the pooled connection and its work-class
+  slot for the whole duration. Concurrency was never the fix; asking once is.
+  
+  `fetchMenuItemsForMenus` reads every menu's items in one `menu_id = ANY(…)` and
+  groups them in memory. Two queries for the page, whatever the menu count.
+  
+  **Why the last N+1 sweep did not find it.** That sweep scanned for a tagged
+  template `await` inside a loop body. This call site is
+  `await fetchMenuItems(tx, …)` — a plain function call. Matching the SQL *syntax*
+  rather than the query made every N+1 routed through a helper invisible to it;
+  re-run against the helper set instead, the same 34-loop scan surfaces 45 sites.
+  Nothing about this loop was subtle. The scanner was looking for backticks.
+  
+  ## A bare `LIMIT` here would have been silent data loss
+  
+  `syncMenuItems` has full-replace semantics. A client that reads a menu, edits it
+  and saves it back sends exactly what it was shown — so a read that quietly
+  stopped at the cap would make that round trip **delete** every item past it.
+  
+  So the read returns `{ items, truncated }` and both endpoints surface
+  `itemsTruncated`. It reads `MAX_MENU_ITEMS + 1` rows and keeps 200: with exactly
+  the cap there is no way to tell "full" from "overflowing". Only a menu stored
+  before the cap existed can report `true`; a write response is always `false`,
+  because the request that produced it was itself capped.
+  
+  The bound is applied with `row_number() OVER (PARTITION BY menu_id …)` rather
+  than a `LIMIT`, because a single `LIMIT` across the batch would spend the whole
+  allowance on whichever menu sorted first and return nothing for the rest, with
+  the truncation attributable to no menu in particular.
+  
+  ## `sort_order` is not unique, so the old order was not defined
+  
+  Nothing stops two siblings sharing a `sort_order`, and the read ordered by it
+  alone — leaving equal-ordered items in whatever order the scan produced. That
+  was survivable while the read was unbounded and is not once a bound can cut the
+  list, because an arbitrary order makes an arbitrary 200 of 250. Ties now break
+  on `id`.
+  
+  ## Contract
+  
+  `itemsTruncated` is added to `BlogMenu` (required) and `maxItems: 200` to the
+  item arrays. `GET /api/v1/blog/menus` is consumed by `ahliweb/awcms-astro`, and
+  the frozen consumer contract still passes **without regeneration** — the change
+  is additive for a reader, and that repo reads menus at build time and never
+  writes them. Its `Menu` type does not carry `itemsTruncated`, so a tenant whose
+  menu exceeds 200 items would render 200 there without a warning; that is a
+  cross-repo question, not a regression introduced here.
+  
+  Mutation-proven, each against the assertion that claims it: an unpartitioned
+  window, a bare `LIMIT` at the cap, a dropped `id` tiebreaker, the per-menu loop
+  restored, and the count check moved after the per-item pass each redden the
+  corresponding case and only it.
+- 2b3f58a: chore(actions): docker/setup-buildx-action 4.2.0 -> 4.3.0
+  
+  Release-workflow only — the step that prepares the Buildx builder before the
+  production image is built and pushed to ghcr.io. Pinned by commit SHA, as every
+  action in this repository is, with the human-readable version kept in the
+  trailing comment.
+  
+  The bump carries no repository change of its own; it needs this changeset only
+  because `.github/workflows/*.yml` is deliberately NOT exempt from the changeset
+  policy, so that a supply-chain move in the release path is never invisible in
+  the CHANGELOG.
+- 42d2512: fix(ops): scheduled jobs wrote archives into a container deleted seconds later, with 81 of 171 environment variables missing
+  
+  `ops/run-job.sh` ran every scheduled job with `docker run --rm` and **no
+  volume**. `data-lifecycle:archive-purge` and `reporting:exports:dispatch` wrote
+  their artefacts into a filesystem that was destroyed seconds later, while
+  `awcms_data_lifecycle_archive_manifests` and `awcms_report_export_runs` recorded
+  them as PRESENT. The README's restore procedure could not be executed and a
+  scheduled export 404'd on download.
+  
+  Nothing failed, and that is the whole difficulty: writing the file really did
+  succeed. The job exits 0, the row says the archive exists, and the first person
+  to find out is whoever needs the restore.
+  
+  A host directory is now mounted over the container's `var/`. One mount covers
+  both, because both roots default to `./var/...` relative to the working
+  directory — and a test pins that container path to the image's actual `WORKDIR`,
+  so a Dockerfile change that moves one without the other cannot land quietly.
+  
+  **The environment was worse than the finding said.** The hand-maintained prefix
+  pattern dropped **81 of the 171** variables this codebase reads, not ten. Among
+  them:
+  
+  - `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` and `REPORTING_EXPORT_ROOT_PATH` — the two
+    paths that decide where the artefacts above are written at all;
+  - every `TENANT_DOMAIN_CLOUDFLARE_*` variable, because `^CLOUDFLARE_` is anchored
+    and those do not start with it, so `tenant-domain:dns:sync` ran with no API
+    token and no zone;
+  - every `VISITOR_ANALYTICS_*` variable, including the retention windows
+    `analytics:purge` exists to enforce;
+  - `SYNC_HMAC_ALLOW_LEGACY`, `SITE_SEARCH_*`, `TURNSTILE_*`, `TRUSTED_PROXY_*`.
+  
+  A job that does not receive a variable takes the code's default, does the inert
+  thing, and reports success.
+  
+  Selection is now by exact NAME from `ops/awcms-jobs.env-allowlist`, **generated**
+  by `bun run jobs:env-allowlist:generate` from the same source
+  `config:env:coverage:check` reads, and held by a new gate in `bun run check`. A
+  hand-kept pattern goes stale the day somebody adds a variable; a generated one
+  cannot fall behind the code without a gate going red. Exact-name matching also
+  means a lookalike (`DATABASE_URL_LOOKALIKE`) is not copied, which no prefix
+  pattern can promise.
+  
+  Two refusals, because both silent alternatives produce a job that runs and
+  reports success: an unreadable allow-list, and copying zero variables, each stop
+  the run. A `*_ROOT_PATH` pointed outside the mount is named in the log rather than
+  tolerated — that is the same defect wearing a configuration, and its symptom is
+  identical to success.
+  
+  The env selection is not merely asserted as source: the runner's own `awk`
+  expression is executed over a fixture environment against the real generated
+  allow-list, which is the only way to tell exact-name matching from a prefix
+  match.
+- 113c5da: fix(i18n): the Indonesian catalogue reaches ZERO — and one screen was shipping Indonesian as its English source
+  
+  `MAX_UNTRANSLATED_ID_ENTRIES` goes **718 → 0**. All 1,258 msgids now carry an
+  Indonesian translation, which is PROJECT_STATE §4's next step 1 closed rather
+  than deferred again.
+  
+  ## The defect the count was hiding
+  
+  Translating the backlog meant reading every untranslated msgid, and eighteen of
+  them were **already Indonesian** — the msgid ITSELF, in `en.po`, the file this
+  repo calls its English source since ADR-0097.
+  
+  `/admin/blog-settings` was the whole of it. Its bulk `t()` migration wrapped the
+  screen's existing Indonesian literals instead of translating them first, so:
+  
+  - `en.po` uses the gettext identity fallback (`msgstr ""` → the msgid IS the
+    output), which means an **English reader got an Indonesian screen** —
+    `Simpan`, `Judul blog`, `RSS aktif`, `Anda tidak punya permission`;
+  - `id.po` left those eighteen untranslated, so an Indonesian reader got the same
+    page by ACCIDENT — falling back to a msgid that happened to be their language.
+  
+  Both locales rendered something plausible, which is exactly why no gate and no
+  screenshot review would ever have caught it. The one artefact that disagreed was
+  the untranslated counter, and only once somebody read the strings it was
+  counting.
+  
+  Two more Indonesian strings were outside the catalogue entirely — the client
+  script's `Gagal menyimpan pengaturan…` and `Tersimpan.` were hard-coded, so they
+  were Indonesian in *every* locale with nothing declaring them. They now travel
+  through the `#blog-settings-i18n` data-attribute seam `/admin/account` already
+  uses.
+  
+  The screen is fully English-sourced and comes **off** the
+  `i18n:screens:check` ledger (18 → 17). Its five-fragment trailing note is merged
+  into one msgid with `{setting}`/`{table}` placeholders — the merge PROJECT_STATE
+  §4 step 2 prescribes, because a translator handed `BUKAN di sini — ia setting
+  modul, disimpan di` cannot reorder a sentence they only see in pieces.
+  
+  `t("Identity")` was deliberately NOT reused for the blog's identity fieldset:
+  that msgid already exists carrying the `menu-section` context, where it names the
+  identity_access module group. Two unrelated senses on one key is the ambiguity
+  `msgctxt` exists to prevent, so the legend is `Blog identity`.
+  
+  ## A fifth check, because the ledger at 0 is not the same as correct
+  
+  `i18n:catalog:check` now asserts **placeholder parity**: every `{name}` in a
+  msgid survives into its translation, and none is invented.
+  
+  This is the one translation defect a machine can see, and it is silent in both
+  directions. A dropped `{days}` renders a sentence that reads perfectly and has
+  lost its number. An invented `{dyas}` is left VERBATIM by `interpolate()` (a
+  deliberate choice there — an unmatched placeholder is printed rather than
+  blanked), so the reader gets a literal brace mid-sentence. Neither is visible in
+  a review of the English.
+  
+  Proven against both shapes rather than merely green: dropping `{days}` from
+  `Allow ({days} days)` and renaming `{linked}` to `{tautan}` in `Connected
+  {linked}` are each reported, with the line number and both placeholder sets.
+  Plural entries compare against the UNION of `msgid` and `msgid_plural`, since
+  Indonesian's single form has to serve both; comparing sets rather than sequences
+  keeps reordering legal, which it must be, because Indonesian does not put a
+  two-placeholder sentence in the English order.
+  
+  The ledger stays at 0 rather than being deleted. At 0 it rejects the next msgid
+  that lands without Indonesian on the day it lands — the alternative is counting
+  again in a year.
+- c497810: chore(deps): astro 7.2.2 and @astrojs/node 11.1.2, with the family manifest moved in step
+  
+  Both halves of the Astro stack are bumped in ONE change rather than the two
+  Dependabot opened, because they fail for the same reason and fixing one leaves
+  the other red: `awcms-family-compatibility.yaml` pins `stack.astro.declared` and
+  `stack.astroNode.declared` as source constants that must match
+  `package.json` exactly, so any bump reddens `family:conformance:check` until the
+  manifest moves with it.
+  
+  `bun install` resolves astro to 7.2.3 inside the declared `^7.2.2` range. Full
+  `bun run check` verified green on the bumped stack before merge — all 52 gates,
+  the test suite, and the build.
+- a94d5e9: perf(blog-content): the blog lists sorted the whole tenant to return fifty rows
+  
+  `sql/035` gives `awcms_blog_posts` seven indexes, and not one of them leads with
+  `updated_at` or `created_at` — the two columns every list in the module orders
+  by. `/admin/blog`, `/admin/pages`, the term-filtered post list, and the keyset
+  traversal `GET /api/v1/blog/posts` that a static build walks were each a
+  tenant-wide sequential scan followed by a top-N sort.
+  
+  **Measured rather than derived.** The audit could only reason from btree prefix
+  rules; this was run against 24,000 seeded posts on PostgreSQL 18:
+  
+  | query | before | after |
+  | --- | --- | --- |
+  | `/admin/blog`, `LIMIT 50` | Seq Scan 24,000 rows + top-N heapsort, 7.4 ms | Index Scan, 50 rows, 0.057 ms |
+  | same with the status filter | Seq Scan 20,572 rows + sort, 4.8 ms | Index Scan, 50 rows, 0.050 ms |
+  | keyset first page | Seq Scan 24,000 rows + sort, 5.1 ms | Index Scan, 50 rows, 0.110 ms |
+  | keyset page resumed at row 10,000 | — | Index Scan, 50 rows, 0.060 ms |
+  
+  The number that matters is not the milliseconds. It is **24,000 becoming 50**:
+  the cost was O(tenant posts) and is now O(page size), so a page that is fast on a
+  demo tenant stays fast on the 23,906-article archive Issue #599 exists to import.
+  The resumed deep page is the case a first-page measurement cannot see, and the
+  one a static build spends nearly all its time in.
+  
+  **One correction to the finding.** C1 also says "plus a second full scan for
+  `count(*)`". That is not what happens: the count beside the list already plans as
+  an Index Only Scan on `awcms_blog_posts_tenant_deleted_idx` (1.8 ms, unchanged by
+  this migration). It reads every index entry, which is why it does not get faster
+  — but it is not a heap scan, and no index added here would help it. A cheap count
+  needs a different answer entirely, with its own trade-off.
+  
+  The posts indexes are **partial** on `deleted_at IS NULL`, which those queries
+  write as a literal. The pages index is **not**: `listBlogPages` decides deleted
+  versus live with a `CASE` over a bound parameter, so a partial index is provable
+  under a custom plan and not under a generic one — and an index the planner can
+  only sometimes prove applicable is an index that sometimes is not there.
+  
+  Held by `tests/integration/blog-list-ordering-plan.integration.test.ts`, which
+  asserts the PLAN rather than a duration: the named index is the access path,
+  there is no `Seq Scan`, there is no sort node, and no more than 50 rows are read.
+  A timing threshold on shared CI hardware is a coin flip; `EXPLAIN` states the
+  structural property directly. Its last case drops the index inside a rolled-back
+  transaction and asserts the scan comes back — without that, every other
+  assertion would also pass on a table too small to distinguish the plans.
+- b75dd13: fix(security,identity-access,blog-content): three costs that grew with something nobody was watching
+  
+  Three PROJECT_STATE §4 items whose common shape is a cost that is invisible at
+  the size everything was tested at, and that grows with something the code never
+  looks at: how many clients have ever connected, how many roles a tenant has
+  defined, how many tags an article could match.
+  
+  **B6 — the in-process rate-limit map had no eviction.** One entry per distinct
+  client IP, created on first contact and never removed. Redis is off by default,
+  so this map is the live path for the topology this base documents as its
+  default, and the end state is an OOM of the process that also holds every other
+  cache. Two mechanisms now, because a sweep alone is not a bound: an amortised
+  sweep drops entries whose window has elapsed (`checkRateLimit` already treats
+  that as a fresh start, so they hold no information), and a hard cap of 50,000
+  evicts — in one batch, down to 45,000 — the entries CLOSEST TO EXPIRING, which
+  is the least harmful choice available when nothing has expired to reclaim. The
+  bucket now stores its own `windowMs`: eviction happens outside any call for that
+  key, and the map is shared by callers with windows in seconds and in minutes, so
+  sweeping by the triggering caller's window would expire the other family's
+  counters early. Forgetting a LIVE counter hands its owner a fresh allowance,
+  which is the one failure a memory fix must not introduce, and it is asserted
+  alongside the size.
+  
+  **C6 — `/admin/roles` was an N+1 plus a payload that grew as roles × catalogue.**
+  `listRolePermissions` was awaited once per role, sequentially (concurrent
+  queries on one transaction connection leak it), so a 40-role tenant paid 40
+  summed round trips to render one screen; `listRolePermissionsForRoles` answers
+  the set in one, with an entry for every requested id so no caller has to tell
+  "no grants" from "not in the result". The single-role reader is deleted rather
+  than left unused — a zero-caller export is how the next screen quietly
+  reintroduces the N+1. The ~230-row permission catalogue was also rendered as
+  `<option>`s once per role — ~23,000 options in one document, of which at most
+  one is ever chosen. It is now emitted once in a `<template>` and cloned into a
+  role's picker on first open, minus what that panel already lists as granted. The
+  server still decides whether a picker exists at all, and the endpoint's
+  `configure` guard remains the only authority on the grant itself.
+  
+  **C7 — `prepareCandidates` re-escaped every tag name inside the sort
+  comparator.** A comparator runs O(n log n) times: 1090 `escapeHtml` calls per
+  sort at the 100-candidate cap instead of 100, on by default on every public
+  article render. Decorate-sort-undecorate, with the escaped name carried on the
+  row the dedupe loop and the caller both already need.
+  
+  One thing worth knowing before the next screen: C6's client-side picker costs
+  ~540 B and leaves **161 B** of headroom under `build:asset-budget:check`'s
+  192,000 B app ceiling. The trade is good in itself, but the next client script
+  to land will fail that gate for reasons unrelated to whatever it did.
+- 9cbcf21: fix(seo): the import chunk size was tied to the endpoint's cap by a comment, and the rubrik map was missing the one nav link that forgot its own suffix
+  
+  Hygiene and evidence-capture **toward closing** Issue #599 / Issue #711,
+  alongside ADR-0114 — which records that this repo cannot close either one: the
+  last step is edge configuration outside both repositories. No behaviour changes
+  for a reader; three things that could have gone wrong later cannot now.
+  
+  **A comment is not a call.** `scripts/blog-legacy-rubrik-redirects.ts` carried
+  its own `IMPORT_CHUNK_SIZE = 200` under the comment "Mirrors `MAX_IMPORT_ITEMS`
+  in `src/pages/api/v1/seo/redirects/import.ts`" — the third instance in this repo
+  of a coupling asserted in prose and enforced nowhere. Lowering the endpoint's cap
+  would have left the builder emitting chunks the endpoint rejects, with nothing
+  failing until an operator posted one mid-cutover. The constant now lives once, as
+  `MAX_REDIRECT_IMPORT_ITEMS` in
+  `src/modules/seo-distribution/domain/redirect-rule.ts`, and both sides import it;
+  the test asserts the two by identity rather than by value. The mutation that
+  proves the test — re-hardcode the builder's `200` and move the endpoint's cap to
+  150 — was applied and run red.
+  
+  `--emit` also writes its payload chunks beside the map instead of into the
+  working directory, and the map path is anchored to the script, so the script now
+  runs from anywhere instead of failing on a relative read. The emitted chunks are
+  gitignored: they are derived, and they land inside a committed data directory
+  where `git add -A` would otherwise sweep them up.
+  
+  **The rubrik map was missing a URL, and the sweep that found it closed the
+  class.** The nav links `Mitra-Borneo/Pemkab Lamandau` in five templates **without
+  `.html`**, and the original extraction keyed on that suffix. Every relative link
+  literal in the legacy tree that lacks `.html` was then enumerated: this URL, plus
+  `./video/?video=5`, which the derivation already excludes. The map is 68 entries
+  and 63 rules; no `targetPath` was rewritten and the destination set is still ten.
+  
+  The entry is not what the gap was reported to be, and the difference is written
+  down. `/Mitra-Borneo/Pemkab%20Lamandau.html` returns 200 with an **empty**
+  listing — byte-identical to a known-zero sibling apart from the category name,
+  and a re-probe of the same snapshot answers 0 rows against 133 for the parent —
+  while the form the nav actually links, without `.html`, returns **404**, because
+  the legacy `.htaccess` rewrites only `…\.html$`. `sourcePath` is therefore the
+  form that serves, `legacyHref` is the literal that was written, and the one entry
+  where they differ carries `hrefLacksHtmlSuffix: true`, checked against the href
+  by a test rather than trusted.
+  
+  **The Wayback CDX corpus is committed** as
+  `data/seputarborneo-legacy/wayback-cdx-2026-08-26.txt` — 5,170 distinct URLs,
+  verbatim, with the query, the pagination proof (`showNumPages=true` answers 2,
+  and only on the bare query) and its limits recorded beside it. It is committed
+  for the same reason the rubrik map is: it cannot be reconstructed later. It is
+  stated as what it is — Internet Archive crawls, not indexing, reaching 8.87% of
+  the 25,029 articles, with many captures returning 200 over a bot-challenge
+  interstitial, and with 22 of the map's own 68 URLs missing from it entirely.
+  
+  Three URL families are decided rather than left open, each with its reason in
+  `data/seputarborneo-legacy/README.md`: the two Wayback-only typos and the 75
+  `/news/news/{id}_…` doubled-segment URLs get no rule, and the article map stays
+  uncommitted — 25,029 rows re-derivable from `legacy_source_id` and still growing
+  is the exact inverse of the rubrik map's justification.
+- 88e0f95: fix(blog-content): a phrase an editor bolded now reaches the reader bold (#624)
+  
+  ADR-0100 made Portable Text the canonical body, and #605/#606 gave editors an
+  editor that produces **bold**, _italic_, code and inline links.
+  `domain/portable-text-rendering.ts` renders every one of them correctly, and had
+  **zero production callers** — `grep` found only its own definition.
+  
+  What the public routes rendered was `content_json.blocks`, the projection that
+  `portable-text-conversion.ts` itself calls lossy by construction: "ContentBlock
+  has no marks. So bold, italic, code and links flatten to their plain text on the
+  way back." A journalist bolded a phrase, saved, opened the article, and read it
+  plain. No error, no log, no red gate — the failure was silent on both sides.
+  
+  ### Why this is a fallback and not a swap
+  
+  `sql/134` gives `body_portable_text` a `'[]'::jsonb` DEFAULT and leaves the
+  conversion to `bun run blog:portable-text:backfill`, a deployment job that
+  deliberately does not run from the migration. On a deployment that has not run
+  it, the canonical column is empty for every pre-existing row, so switching the
+  renderer unconditionally would render **every article blank** — and blank is
+  indistinguishable from "the editor wrote nothing".
+  
+  `renderBlogBodyHtml` renders the canonical body when it holds content and the
+  projection when it does not. That is byte-identical to the previous output on a
+  deployment that has not backfilled, needs no release coordination, and heals per
+  row as the backfill progresses. Every write since #605 populates both columns in
+  one statement, so the two shapes are consistent by construction and an empty
+  canonical body means either "predates the backfill" or "the editor cleared it" —
+  both served correctly by falling back.
+  
+  Applied to the public post route, the public static-page route (which had
+  documented that the two must move together or not at all) and the internal-link
+  preview, so an editor previews what a reader will actually get.
+  
+  ### Media follows the body that renders
+  
+  Gallery and video-thumbnail ids are now collected from **both** stored shapes and
+  ordered by the one that renders, because the social-preview fallback takes the
+  first image in the content and "first" must mean first as the reader sees it.
+  `fetchPublicBlogPostBySlug` and `listPublicBlogPostsForFeed` select the canonical
+  column, without which the fallback would be permanent and look correct.
+  
+  ### The gate
+  
+  A renderer with no callers is invisible to every gate that checks shape rather
+  than reach, and this repo has recorded that defect class before. A test now fails
+  when any production file outside `blog-body-rendering.ts` names either low-level
+  renderer, and when the reader-facing routes stop calling the deciding one.
+  
+  RSS, the sitemap, `seo_facts` and the `site_search` index were checked and are
+  unaffected: all four read `content_text`, the derived plain-text column, which
+  carries no marks either way.
+- 98b22aa: docs(adr): the legacy site is a feature reference, and the 301 obligation is withdrawn with the migration (#599, #711)
+  
+  The product owner withdrew PRD §41's migration requirement on 26 August 2026:
+  not all articles from `seputarborneo.com` need to be migrated or imported, and
+  the site is to be used as a reference for its **features and functionality**.
+  
+  Both open cutover issues stood on that one premise — #599 opens with it — so
+  withdrawing it decides both. Recorded as **ADR-0116**, which AMENDS ADR-0113,
+  ADR-0114 and ADR-0115 rather than superseding them: their mechanics were right
+  and are still right, and the only thing withdrawn is the clause each inherits
+  from PRD §41 / FR-DSC-007 — that _every_ legacy URL must resolve in one hop.
+  
+  **The import is the small half; the 301 obligation is the load-bearing one.** A
+  301 is a promise that the content moved, so it cannot be issued for content that
+  did not. This repo already refused exactly that trade once, in ADR-0113, for
+  legacy search URLs: _"mengarahkannya ke artikel mana pun adalah 301 yang
+  berbohong."_ Applied consistently it gives the rule — **you cannot carry the
+  URLs without carrying the content** — and for an article deliberately left
+  behind the honest status is 410, never a 301 to a category index. 25,029 of
+  those is a soft-404 farm built with tooling written to make lying redirects hard.
+  
+  **Zero behaviour change, and no job is deleted.** A selective import is the same
+  pipeline with a smaller input, and it needs no new code because
+  `listLegacyRedirectMappings` selects `WHERE legacy_source_id IS NOT NULL` — it
+  derives the map from rows that exist, so a partial import cannot produce a
+  dangling rule by construction. None of the six legacy jobs is in the `check`
+  chain, and the suites covering them test behaviour that has not changed.
+  
+  One docblock is scoped in place rather than deleted:
+  `blog:legacy:cutover:verify` exists because an un-imported legacy URL "answers
+  404 on cutover day, and the ranking does not come back". That 404 is now the
+  INTENDED state, so a full-corpus run reports the desired outcome as failing —
+  a property of the corpus it is handed, not a defect in the job. No
+  `CutoverVerdict` member for "deliberately gone" was added, because no obligation
+  now requires the run that would need one.
+  
+  Also recorded: the requirement was carried for weeks on two different counts of
+  its own subject — 23,906 in #599/#597 and several documents, against the legacy
+  database's 25,029 — which nobody reconciled.
+- 01c06f3: fix(data-lifecycle): the retention engine could not touch two of the tables it is responsible for
+  
+  Found by RUNNING the job against production, not by reading a grant list:
+  
+      bun run data-lifecycle:archive-purge --dry-run
+      → PostgresError: permission denied for table awcms_delegated_access_grants
+  
+  `data-lifecycle:archive-purge` runs as `awcms_worker`. Its generic executor
+  issues a `SELECT` to find candidates and, for `hard_delete` descriptors, a
+  `DELETE` to remove them. Two lifecycle tables had never been granted either:
+  `awcms_delegated_access_grants` (`sql/117`) and `awcms_subject_requests`
+  (`sql/125`).
+  
+  **Every existing gate passed, and every one of them was right.**
+  `data-lifecycle:registry:check` verifies the descriptors are well-formed;
+  `data-lifecycle:table-coverage:check` verifies every lifecycle-bearing table has
+  one. What nothing compared was the descriptor against the privilege needed to
+  honour it. The registry said "this table is purged on a 365-day retention", the
+  database said "no", and each statement was checked in isolation. A descriptor
+  declaring a retention the engine cannot enforce is not retention — it is a claim,
+  and ADR-0094's guarantees rested on it.
+  
+  Two defects with the same silence, and they are not the same defect: the job was
+  also never scheduled. *Unscheduled* means "it would work if run". This meant "it
+  would not".
+  
+  `data-lifecycle:worker-grants:check` closes the class rather than these two rows.
+  It derives the required privileges from the descriptor registry and checks them
+  against `sql/`, so a new lifecycle descriptor without its grant fails in CI.
+  
+  Two things about that gate are worth stating, because both were mistakes it made
+  first:
+  
+  - It covers only `executionMode: "generic"` descriptors. The 11 `delegated` ones
+    are purged by their owning module's own job, with its own statements and its
+    own already-correct grants. The first draft required generic-engine privileges
+    for them too and reported **14 findings of which 9 were noise** — which is how
+    a gate teaches people to ignore it.
+  - Its scanner strips SQL comments before matching. Without that, a `--` line
+    merely *mentioning* GRANT has no semicolon, so `GRANT[\s\S]*?;` starts there
+    and swallows the real statement after it. That produced **four false positives
+    on grants sitting in plain sight** in `sql/060`, `sql/074` and `sql/091` — the
+    `js/bad-tag-filter` mistake in a different costume, in the very file whose doc
+    comment warns about it.
+  
+  A third grant is in the same migration and is NOT of the same kind:
+  `awcms_domain_event_replays` has no lifecycle descriptor and is never purged — it
+  is READ by `domain-events:deliveries:purge` as an `EXISTS` guard so a delivery a
+  replay still points at is not deleted. It surfaced the same way
+  (`permission denied`) and the new gate does **not** cover it, because deriving
+  which tables a `delegated` job reads on the way would mean statically analysing
+  every job's SQL. That gap is recorded rather than papered over: what found it was
+  running all 23 schedulable jobs with `--dry-run` against production.
+  
+  All three grants are applied and verified on production — `archive-purge` and
+  `deliveries:purge` both now complete with `status: success`.
+- 38a4f64: fix(blog-content): the canonical article body was stored as a jsonb string, so the public page never rendered it (#641)
+  
+  Found while diagnosing a CI-only failure on #633, then verified against a real
+  PostgreSQL 18 rather than inferred.
+  
+  Bun.SQL **JSON-encodes** a string parameter bound to a jsonb slot. So
+  `${JSON.stringify(x)}::jsonb` stores the jsonb **scalar string**, not the value:
+  
+  ```
+  JSON.stringify + ::jsonb  ->  jsonb_typeof = 'string'
+  the JS value   + ::jsonb  ->  jsonb_typeof = 'array'
+  ```
+  
+  Confirmed through the real write path, not a synthetic query:
+  `createBlogPost` stored `content_json` as `object` (it binds an object) and
+  `body_portable_text` as `string` (it bound `JSON.stringify(...)`).
+  
+  ### Why this was not cosmetic
+  
+  ADR-0100 makes `body_portable_text` **canonical** and `content_json.blocks` a
+  lossy projection. #624 put the decision in one place, and it asks
+  `Array.isArray(body.bodyPortableText)`.
+  
+  `Array.isArray` of a string is **false**. So for every post ever written through
+  the normal path, the public renderer took the `content_json` branch and rendered
+  the lossy projection — exactly the defect #624 was written to prevent, present
+  the whole time. Nothing errored, nothing logged, and the page looked plausible
+  because the projection renders *something*.
+  
+  The same shape breaks anything that treats the column as jsonb rather than text:
+  `->`, `@>`, `jsonb_array_length`, a GIN index, a generated column.
+  
+  ### Eight sites, one of them the backfill itself
+  
+  `blog-post-directory` (create + update), `blog-page-directory` (create +
+  update), `blog-revision-directory`, `direct-address-notification`
+  (`awcms_email_messages.variables`), `legacy-import-directory` (added hours
+  earlier in #599, caught by the new gate), and — the sharp one —
+  `portable-text-backfill`, the job whose entire purpose is to populate the
+  canonical column ADR-0100 introduced.
+  
+  ### The repo already knew, in four other files
+  
+  `reconciliation-run-store.ts`, `machine-credential-directory.ts`,
+  `site-profile-directory.ts` and `collector.ts` each carry a comment warning about
+  this exact trap. Somebody hit it, wrote it down where they hit it, and eight
+  other call sites kept the broken spelling. **A comment in four files told four
+  files**, which is why this adds `bun run db:jsonb-binding:check` — it caught the
+  eighth site on its first run.
+  
+  ### `sql/141` repairs existing rows
+  
+  `(body_portable_text #>> '{}')::jsonb` — `#>> '{}'` extracts a jsonb scalar's
+  *unquoted* text, and it is the only spelling that unwraps; `::text` gives the
+  quoted JSON representation and re-casting it returns the same string.
+  
+  FORCE RLS is dropped for the duration and restored in the same transaction
+  (`sql/018`/`sql/103`/`sql/112`'s pattern): FORCE applies to the table owner too,
+  so a tenant-wide `UPDATE` inside a migration matches **zero rows** — green on an
+  empty CI database, inert on a populated one.
+  
+  A shape guard restricts the cast to values that start with `[` (or `{` for email
+  variables), because casting an unparseable string aborts the whole migration,
+  which on a populated production database means the deployment stops. Anything
+  the guard skipped is counted and named by a `RAISE WARNING` rather than passing
+  silently — the same failure mode this whole issue is about.
+  
+  ### After deploying
+  
+  `sql/141` repairs the stored **shape**. Content that has no canonical body at all
+  still needs `bun run blog:portable-text:backfill`, which now writes arrays.
+  
+  The integration tests here fail on the pre-fix code — including the load-bearing
+  one, which asserts the renderer takes the canonical branch for a post that went
+  through the real write path rather than asserting a type.
+- 962b446: feat(identity-access): a partner's access now really ends when its grant runs out, not merely stops working
+  
+  The gate landed first: an expired delegated grant has been refused at the
+  chokepoint since the previous change, from the instant on its row. What was
+  still missing is what ADR-0090 actually promised — that expiry "deactivates the
+  membership in the same transaction". Until now it did not deactivate anything.
+  The grant stayed `revoked_at IS NULL`, the partner's person stayed an **active
+  member** in the customer's user list, and their session row stayed live. Access
+  had stopped; the record said otherwise, and a customer reads that record as
+  fact.
+  
+  `bun run identity-access:delegated-access:expiry` closes it: the grant is
+  revoked with reason `expired` and **no actor** (`sql/117`'s CHECK anticipates
+  this — "what is forbidden is an actor without a time"), the delegated tenant user
+  goes `inactive`, and its live sessions are revoked. Hourly, bounded per pass,
+  `maintenance` work class, offset from the business-scope sweep. `--dry-run`
+  counts the backlog and mutates nothing.
+  
+  **The interesting part is where the privilege lives.** The job runs as
+  `awcms_worker`, which holds neither `UPDATE` on `awcms_tenant_users` nor anything
+  on `awcms_sessions` — and must not. The column that deactivates a member also
+  writes `'active'`; the column that revokes a session also writes `NULL`. Both are
+  escalations, in the role whose whole purpose is that it cannot escalate, and
+  column-scoped grants do not help because the dangerous value lives in the same
+  column as the wanted one.
+  
+  So `sql/142` puts the privilege in a narrow `SECURITY DEFINER` function instead —
+  the `sql/048` / `sql/119` / `sql/124` precedent — with a dedicated memberless
+  NOLOGIN owner, policies scoped to that role alone, and a boundary that is not a
+  column list but the statements themselves: **it takes a tenant id and a batch
+  size and nothing else**, so no caller-supplied value is ever written. Every
+  literal is in the migration. Each of its three statements is guarded so it can
+  only ever REMOVE access. The worst a compromised worker can do by calling it in a
+  loop is end support episodes early.
+  
+  `awcms_app` deliberately gets no `EXECUTE`: the request path has its own
+  revocation, which names the human who performed it, and a privilege granted for a
+  caller that does not exist is a privilege granted for nothing.
+  
+  Proven against a real database: the worker can run the sweep and is refused
+  `42501` on a direct `UPDATE` of either table; the sweep and the human revocation
+  path reach the same end state (the anchor against two implementations drifting);
+  an ordinary member of the same tenant is untouched; a grant still in date is left
+  alone; a second pass sweeps nothing; and a batch size a caller invents is clamped
+  inside the function rather than obeyed.
+- ec160ee: feat(blog): the SeputarBorneo rubrik 301 map is built and committed — and ADR-0113's stated normalisation was wrong because it named a function nothing calls
+  
+  ADR-0113 settled #711's decision three days into its own life and got the
+  mechanics wrong. The decision is unchanged; how the map is derived is not.
+  
+  ## `seo_title()` is dead code
+  
+  The ADR said the map keys on `seo_title(jenis_rubrik)`. That function is
+  **defined nine times** across the legacy PHP tree and **called zero times** —
+  and the nine copies do not agree: `index.php` replaces spaces with `_` while the
+  other eight use `-`. `rubriks/index.php` binds the URL segments **raw**, after a
+  `trim()`, straight into `WHERE jenis_rubrik = ? AND kategori = ?`.
+  
+  A legacy rubrik URL segment is the column value, not a slug of it. So the
+  `MITRA BORNEO` / `MITRA-BORNEO` collapse warning was wrong too — as raw
+  segments they are different paths that never collapse, and neither is linked
+  from anywhere, so neither needs a rule.
+  
+  The claim entered as prose in an issue comment, was carried into a merged ADR,
+  and was never checked against a call site. Same shape as the `replaceMenuItems`
+  function that did not exist and the `awcms_blog_pages.legacy_source_*` columns
+  that had no reader: **a function that is quoted but never called reads exactly
+  like one that runs.** Grep for the call, not the definition.
+  
+  ## What the URLs actually are, and why the set is complete
+  
+  Nothing in the legacy tree generates a rubrik link from a column value — every
+  one is a hand-typed literal. That is what makes the set **enumerable and
+  complete rather than a sample**: a crawler could only reach what was linked.
+  There are **67**, now committed with their provenance at
+  `data/seputarborneo-legacy/rubrik-redirects.json`.
+  
+  Each was resolved against the legacy database with exactly the query
+  `rubriks/index.php` runs. The volume was copied out read-only, probed, and the
+  copy deleted; the original was never mounted writable.
+  
+  **Casing is load-bearing here and was not on the legacy site.** MariaDB's
+  `utf8mb4_unicode_ci` made `rubrik/Hukum.html` and `rubrik/hukum.html` the same
+  page (5,183 articles each). This repo matches `normalized_source_path` by
+  equality and `normalizeRedirectPath` preserves case, so **both spellings need
+  their own rule**. Five rubriks were linked in both.
+  
+  **32 of the 67 resolved to zero articles** — dead nav and footer links for
+  years, serving HTTP 200 with an empty listing rather than a 404, so search
+  engines will have indexed them as thin pages. Eight are leftovers from the
+  template this site was built from and name places in South Sumatra
+  (`daerah/Kikim%20Area.html`). `rubrik/Olah Raga.html` is dead because the column
+  value is `OLAHRAGA` with no space, and a case-insensitive collation does not
+  close a whitespace difference.
+  
+  Per ADR-0113 the 27 with a resolvable first segment 301 to that parent's
+  archive. The **5 orphans** carry `targetPath: null` and get no rule — 410 is not
+  expressible (`RedirectStatusCode` is 301/302/307/308), so the alternative to a
+  rule is a 404.
+  
+  **62 rules over 10 destination categories.** Because the decision drops `kt`,
+  every URL of either shape lands on its parent rubrik's archive, so the map is a
+  function of the first segment alone.
+  
+  ## What ships
+  
+  - `data/seputarborneo-legacy/` — the map plus a README recording how it was
+    derived and why it cannot be re-derived (it needed a PHP working copy and a
+    MariaDB volume that exist on one workstation and ship nowhere).
+  - `bun run blog:legacy:rubrik-redirects` — builds the
+    `POST /api/v1/seo/redirects/import` payload, preview by default, `--emit` to
+    write chunks. It does not write to the database: the import endpoint already
+    owns conflict/loop/chain safety and the audit row, and a bulk redirect load
+    should carry an operator's credential rather than a script's role.
+  - Tests that push every entry through the write path's own
+    `normalizeRedirectPath`, `validateRedirectTarget` and `isValidSlug`.
+  
+  That last part is deliberate. This file's cautionary sibling,
+  `tests/legacy-redirect-map.test.ts`, asserted that a migration's *source text*
+  contained `ALTER TABLE awcms_blog_pages` — which proved a column existed and
+  could not notice that nothing read it, and those columns were dropped months
+  later in `sql/147`. A map that cannot be re-derived deserves assertions about
+  whether it would actually work, not about whether it parses. `findMapProblems`
+  is itself tested against three deliberately corrupted entries, because a
+  validator nobody has seen fail is a validator nobody has tested.
+  
+  Loading still requires the ten destination categories to exist in the tenant
+  first, or every rule 301s into a 404 — ADR-0111's failure one step over.
+- f0da9c2: fix(security): a tenant SSO admin could name ANY environment variable as the OIDC client secret
+  
+  `client_secret_env_var` was validated as "a non-empty string". A tenant SSO
+  administrator could therefore write `DATABASE_URL` — or
+  `AUTH_MFA_SECRET_ENCRYPTION_KEY`, or `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`, the
+  key that decrypts every other provider's stored secret — point `issuer_url` at a
+  host they control, and receive that value in the `client_secret` field of the
+  token-exchange POST. Before any ID token is validated, and with the SSRF guard
+  satisfied, because the host really is reachable.
+  
+  Nothing was broken. Every component did exactly what it was written to do; the
+  COMPOSITION was a tenant-admin → deployment-compromise primitive. It is not live
+  (`AUTH_SSO_ENABLED` is off in production), which is exactly why it is cheap to
+  close now and expensive to close the day SSO is switched on.
+  
+  The name a provider may give is now bounded to
+  `^AUTH_SSO_CLIENT_SECRET_[A-Z0-9_]{1,48}$`. A **namespace** rather than a
+  deny-list, because a deny-list is a list somebody has to keep in step with every
+  secret this deployment or a future one happens to hold, and it fails open for the
+  one added last week. A namespace fails the other way: a variable an operator has
+  not deliberately created under this prefix cannot be named at all. Note what the
+  prefix does not match — `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY` is one
+  underscore-separated word away, and is excluded.
+  
+  **Checked in three places, and only the third is load-bearing.** Both admin
+  validators refuse a bad name at write time — create AND update, because a
+  create-only check is one an admin walks around by patching afterwards. Then
+  `resolveProviderClientSecret` re-asserts it immediately before it touches `env`.
+  That last one is what matters: validators only see values arriving now, and the
+  reader reads rows written in the past by writers that predate the rule. A gate on
+  the front door does nothing about what is already inside.
+  
+  The refusal is `null`, which the caller already treats as a misconfigured
+  provider. Deliberately no distinct error code — the only person who can act on it
+  is an operator reading the provider row, and a distinct code would tell a caller
+  which environment variables this deployment does and does not hold.
+  
+  No variable of this shape exists by default; `.env.example` and the env reference
+  say how to create one per provider.
+- 9a8b993: chore(deps): astro 7.2.4 and @astrojs/node 11.1.4, with the family manifest and its doc table moved in step
+  
+  Both halves of the Astro stack move in ONE change rather than the two Dependabot
+  opened. They are not merely convenient to batch: `@astrojs/node@11.1.4` raises
+  its peer requirement to `astro@^7.2.1`, and both packages pull the same
+  `@astrojs/internal-helpers@0.10.4`, so the lockfiles of the two pull requests
+  overlap and landing one leaves the other conflicted.
+  
+  The bump also cannot travel alone. `awcms-family-compatibility.yaml` pins
+  `stack.astro.declared` and `stack.astroNode.declared` as SOURCE CONSTANTS that
+  must equal `package.json` exactly, so `family:conformance:check` goes red on any
+  bump until the manifest moves with it — which is what it caught here
+  (`[FAIL] stack: Astro (declared ^7.2.2 vs actual ^7.2.4)`). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the
+  manifest by `tests/family-compatibility-doc-parity.test.ts`, so they move too;
+  that parity test exists precisely because the table once said `^7.0.7` while the
+  repo ran `^7.2.2` and nothing was looking.
+  
+  The sibling pull request carrying the `@astrojs/node` half is closed rather than
+  merged.
+- 8c15da1: perf(blog): the scheduled publish/unpublish sweeps cost a constant, not a constant per post
+  
+  The previous round left this named rather than fixed: "`blog-scheduled-publish`
+  calls the per-post `fetchPostTermIds` inside its sweep loop. Bounded by how many
+  posts are due in one sweep — which at a cutover is not small."
+  
+  It was worse than a term fetch. Per due post the sweep issued a term fetch, a
+  managed-media enforcement read PER checklist evaluation (and it evaluates
+  twice), a media resolve per evaluation, an `UPDATE`, an edge-cache purge enqueue
+  and an audit `INSERT`. Measured against the previous implementation with twelve
+  due posts:
+  
+  | Sweep (12 due posts)     | Before | After |
+  | ------------------------ | ------ | ----- |
+  | publish, enforcement off |     40 |     6 |
+  | publish, enforcement on  |     52 |     7 |
+  | unpublish                |     27 |     4 |
+  
+  The slope is what matters: `4 + 3N`, `4 + 4N` and `3 + 2N` against a flat 6, 7
+  and 4. At the batch bound of 200 due posts that is 604, 804 and 403 round trips
+  — per tenant, on the ONE reserved `maintenance` connection the job holds, in a
+  job that visits every active tenant in sequence.
+  
+  **Nothing in the sweep was per-post except the verdict.** Two of the three reads
+  are not per-post facts at all: managed-media enforcement is a property of the
+  tenant, and media resolution is keyed by media object id, which is tenant-wide.
+  Resolving the union of a batch's references in one `id = ANY(...)` returns
+  byte-identical rows to resolving each post's separately.
+  
+  **The TOCTOU re-check got smaller, not weaker.** The sweep re-evaluates the
+  checklist immediately before it writes, because the referenced media objects are
+  not locked by the batch's `FOR UPDATE`. Batching keeps that window at one query
+  round trip and stops it growing with how far into the batch a post sits.
+  Reusing the first pass's verdicts would have removed the mitigation entirely
+  while looking like a tidy-up, so the second pass is still a second pass — it
+  just costs two queries for the whole batch instead of two per post.
+  
+  **And it is now the first thing holding that mitigation.** It was a comment with
+  nothing behind it: a budget would be HAPPIER if the second pass were deleted,
+  and a correctness test over a stable fixture cannot tell the two passes apart.
+  `tests/integration/scheduled-publish-toctou.integration.test.ts` drives a
+  `MediaLibraryPort` stub that resolves the featured media on the FIRST call and
+  stops on the second — the detachment, made deterministic — and requires the post
+  to stay `scheduled`. The control case (media that never goes away) must publish,
+  so a test that passed because the checklist never passed at all cannot hide.
+  Mutation-proven: reusing the first verdict turns two of its three cases red.
+  
+  **`recordAuditEvents`** is the reusable half: N audit rows in one statement,
+  built from a single `jsonb` parameter rather than one array per column. Bun's
+  array binding cannot carry a NULL — it writes the literal string `null` without
+  throwing — so an `unnest` over this table's eight nullable columns would have
+  been eight chances to be silently wrong. `recordAuditEvent` is now a batch of
+  one, so the two forms cannot drift.
+  
+  `evaluateContentQualityChecklistForContent` is likewise a batch of one over the
+  new `evaluateContentQualityChecklistForBatch`, so the interactive
+  publish/schedule endpoints and the sweep cannot come to disagree about what the
+  checklist says.
+  
+  **And the audit writer's two ADR-0091 columns are now asserted where they are
+  decided.** `tests/two-sided-attribution.test.ts` guards them by reading the
+  source as text, which proves a spelling rather than a row — it failed on this
+  change while the behaviour was intact. It stays (it is cheap and needs no
+  database) but is no longer the only witness:
+  `tests/integration/audit-log-writer.integration.test.ts` reads both columns back
+  out of the table, along with NULL handling, `jsonb_typeof(attributes)`,
+  per-row redaction, the one-statement budget, and the RLS refusal of a batch
+  carrying a foreign tenant's row.
+  
+  **The third open item from that round is now measured, and the answer is no
+  change.** The hypothesis was that `awcms_blog_post_terms_tenant_idx` is a
+  redundant single low-cardinality column and a `(tenant_id, term_id)` composite
+  would serve both it and the category archive. Against 24,000 posts: the archive
+  uses neither index for a wide category (it drives from
+  `awcms_blog_posts_tenant_status_published_idx` and probes the
+  `(post_id, term_id)` unique index), and for a narrow one the planner flips to a
+  term-driven plan using `(term_id)` — 27 buffers instead of 48,832. A composite
+  serves that plan identically and is slightly wider per entry; dropping
+  `(term_id)` in its favour would leave `awcms_blog_terms` parent deletes scanning
+  the join table, exactly the residual `db:fk-index:check` documents. Recorded in
+  `PROJECT_STATE.md` §4 so it is not re-derived.
+
 ## 9.1.2
 
 ### Patch Changes
