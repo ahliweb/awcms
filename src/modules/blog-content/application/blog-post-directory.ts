@@ -16,6 +16,7 @@ import {
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
 import {
+  portableTextToContentBlocks,
   portableTextToPlainText,
   withProjectedBlocks
 } from "../domain/portable-text-conversion";
@@ -545,7 +546,39 @@ export async function listBlogPostsByStatus(
   return listBlogPosts(tx, tenantId, { status, limit });
 }
 
-/** Partial update; `version` is bumped on every successful write (monotonic change counter — no optimistic-concurrency check is enforced yet, see module README). */
+/**
+ * Partial update; `version` is bumped on every successful write (monotonic
+ * change counter — no optimistic-concurrency check is enforced yet, see module
+ * README).
+ *
+ * ## Why `content_json` has THREE branches and not two
+ *
+ * ADR-0100 §4 keeps `content_json` alive as the non-body ENVELOPE precisely
+ * because `ahliweb/awcms-astro` stores a sidecar in it — `awcmsAstro.kategori`,
+ * which ADR-0115 §2 then turned into a written contract that
+ * `blog:legacy:import` populates from `--section-map`.
+ *
+ * This function used to have two branches, and a **body-only** PATCH took the
+ * projection branch with `input.contentJson === undefined`. `withProjectedBlocks`
+ * spreads a non-object envelope to `{}`, so the row came back holding `blocks`
+ * and nothing else: **the sidecar was destroyed on every save.** The admin edit
+ * screen is exactly that caller — `admin/blog.astro` sends `bodyPortableText`
+ * and has never sent `contentJson`.
+ *
+ * Nothing failed, and that is the whole shape of it. The article still renders
+ * perfectly HERE, because `/blog/{code}/{slug}` reads `body_portable_text`. What
+ * breaks is in the other repo, where `getArticles` keeps a post only when the
+ * sidecar names a configured tab — so the article silently stops being BUILT.
+ * Green build, no page, no warning on either side.
+ *
+ * The projection is therefore merged onto the STORED envelope, and merged **in
+ * SQL** rather than by reading the row first: a read-modify-write would race
+ * with a concurrent update of the same envelope, and `jsonb_set` cannot.
+ *
+ * `blog-page-directory.ts` carries the identical three branches. No consumer
+ * stores a sidecar on a page today, so that half repairs nothing currently
+ * broken — but a twin that keeps its sibling's defect is how the defect returns.
+ */
 export async function updateBlogPost(
   tx: Bun.SQL,
   tenantId: string,
@@ -561,10 +594,24 @@ export async function updateBlogPost(
         -- partial update that changed the envelope without the body, or the
         -- body without the derived search text, would leave the row internally
         -- inconsistent in a way nothing downstream could detect.
+        --
+        -- THREE branches, not two. See this function's docblock for why the
+        -- third one has to exist; in short, a body-only PATCH must not be
+        -- allowed to rebuild the envelope from nothing.
         content_json = CASE
-          WHEN ${input.bodyPortableText !== undefined}
+          -- Body untouched: the envelope moves only if the caller sent one.
+          WHEN ${input.bodyPortableText === undefined}
+            THEN COALESCE(${input.contentJson ?? null}, content_json)
+          -- Body AND envelope supplied: the caller owns both, unchanged.
+          WHEN ${input.contentJson !== undefined}
             THEN ${input.bodyPortableText === undefined ? null : withProjectedBlocks(input.contentJson, input.bodyPortableText)}
-          ELSE COALESCE(${input.contentJson ?? null}, content_json)
+          -- Body only: re-project onto the STORED envelope, so every key the
+          -- caller never mentioned survives the write.
+          ELSE jsonb_set(
+            CASE WHEN jsonb_typeof(content_json) = 'object' THEN content_json ELSE '{}'::jsonb END,
+            '{blocks}',
+            ${input.bodyPortableText === undefined ? null : portableTextToContentBlocks(input.bodyPortableText)}::jsonb
+          )
         END,
         content_text = CASE
           WHEN ${input.bodyPortableText !== undefined}
