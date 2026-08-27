@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:52b3e82f03cf1055930f4ab20146262362b3d5b50e3566ceaa2695f029553154 -->
+<!-- i18n-source-hash: sha256:a376696ab9a0a581dc43c11bf2052f985782ca5fc78459f2dd065b94ba781525 -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -22,9 +22,12 @@ yang **tidak** dijalankan lewat `bun test` — beda test runner, beda tujuan.
   awal, event handler, fetch ke API, state setelah reload.
 - Sebelum PR untuk perubahan UI non-trivial, sebagai pelengkap
   `tests/integration/*.integration.test.ts` yang (per konvensi repo ini,
-  lihat `tests/integration/blog-content-admin-ui.integration.test.ts`)
+  lihat `tests/integration/menu-widget-response-shape.integration.test.ts`)
   **tidak** merender markup — integration test menguji fungsi data-layer
   yang dipanggil SSR, bukan HTML yang dihasilkan atau `<script>` client.
+  Sisi markup-nya justru ditutup berkas datar
+  `tests/admin-*-page-contract.test.ts`, yang berasersi terhadap sumber
+  halaman tanpa browser.
 - Situasi tanpa tool browser interaktif (mis. sesi CLI headless) yang perlu
   "coba di browser beneran" untuk memverifikasi sebuah fitur — jalankan
   spec Playwright alih-alih `curl` manual satu per satu.
@@ -36,7 +39,7 @@ yang **tidak** dijalankan lewat `bun test` — beda test runner, beda tujuan.
   integration test yang memanggil `APIRoute` handler langsung, jauh lebih
   cepat dan tidak butuh browser sama sekali.
 - Data-layer SSR admin page (fungsi yang dipanggil frontmatter) →
-  integration test seperti `tests/integration/tenant-domain-admin.integration.test.ts`,
+  integration test seperti `tests/integration/tenant-domain.integration.test.ts`,
   bukan spec Playwright — jangan duplikasi coverage yang sudah ada di sana
   dengan E2E yang lebih lambat.
 

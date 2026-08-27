@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4da7816b20e41caf9b9718d010fe9769292304388289567f921d85c77058bf86 -->
+<!-- i18n-source-hash: sha256:b81432901f8d3bd70d081b837dcdc071e6fdc6246fae7d343f9b352ab1a79726 -->
 
 # Data Lifecycle
 
@@ -201,7 +201,7 @@ sebenarnya KE BAWAH. Versi kode ini yang lebih awal membandingkan nilai terpangk
 tanpa bantalan secara langsung, yang secara permanen mengecualikan baris batas
 (kurang satu baris tiap siklus archive) dan membuat resume archive berputar pada
 baris terakhir yang sama. Bila Anda menyentuh logika batas ini, jalankan ulang
-`tests/unit/data-lifecycle-cursor-boundary.test.ts` dan test integrasi yang
+`tests/data-lifecycle-cursor-boundary.test.ts` dan test integrasi yang
 digerbangi DB.
 
 ## Port archive netral-provider

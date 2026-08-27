@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:477817326d4e56290b1b4ffe73b058eed5fc84ede99b8d93762507c73f21ff4a -->
+<!-- i18n-source-hash: sha256:e1b58d695a8551c028b24a3c3d9734949c63e4d73b12631c04ce14b385191bef -->
 
 # AWCMS Project Skills
 
@@ -135,10 +135,10 @@ Skill di bawah bersifat **peningkatan** — menilai & menaikkan mutu artefak yan
 Skill di bawah bukan build fitur maupun audit — murni menjaga artefak
 mekanis (docs snapshot, dsb.) tetap sinkron dengan state eksternal.
 
-| Skill                   | Kapan dipakai                                                                               | Sumber docs             |
-| ----------------------- | ------------------------------------------------------------------------------------------- | ----------------------- |
-| `awcms-github-snapshot` | Refresh `docs/awcms/github/` setelah issue/label/milestone/security alert berubah di GitHub | github/README.md        |
-| `awcms-repo-inventory`  | Regenerate `docs/awcms/repo-inventory.md` setelah menambah modul/migration/tabel/test/route | repo-inventory/SKILL.md |
+| Skill                   | Kapan dipakai                                                                                                  | Sumber docs                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `awcms-github-snapshot` | **Hanya spesifikasi target** — `docs/awcms/github/` tidak ada di sini; query `gh` langsung untuk state tracker | awcms-github-snapshot/SKILL.md |
+| `awcms-repo-inventory`  | Regenerate `docs/awcms/repo-inventory.md` setelah menambah modul/migration/tabel/test/route                    | repo-inventory/SKILL.md        |
 
 ## Peta pemakaian
 

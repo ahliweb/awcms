@@ -387,8 +387,10 @@
   (`scripts/security-readiness.ts`), yang juga menyatakan privilege mana yang
   DILARANG dipegang `awcms_app` atas masing-masing. Tak ada tabel bisnis yang
   boleh masuk ke sana.
-- **Snapshot GitHub** (issue/label/milestone) dilacak terpisah di
-  `docs/awcms/github/`, di-refresh on-demand — sengaja di luar `bun run check`.
+- **Snapshot GitHub** (issue/label/milestone) **tidak ada** di repo ini —
+  `docs/awcms/github/` belum pernah dikomit. Untuk state tracker, query `gh`
+  langsung; lihat skill `awcms-github-snapshot`, yang berupa spesifikasi
+  target, bukan tugas yang bisa dijalankan.
 
 ## Lihat juga
 

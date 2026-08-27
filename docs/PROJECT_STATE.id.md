@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:03dc4641dd31f2b42d0ee804398906c6cef923ad3c881ca2288eec8a1c1d9180 -->
+<!-- i18n-source-hash: sha256:74556c807306efa4eee22e6050b20b4055239d008782fee46c025895b61d2046 -->
 
 # AWCMS — Project State & Continuation
 
@@ -888,7 +888,7 @@ NOT NULL`, jadi ia menurunkan petanya **dari baris yang ADA**. Impor sepuluh
   NILAI. Satu-satunya yang menangkap salinan itu adalah TS6133 dari `typecheck`
   atas import yang jadi tak terpakai — cengkeraman yang hilang begitu seseorang
   menghapus import itu bersama literalnya. Tes kini juga menegaskan, atas source
-  builder dengan komentar dibuang lebih dulu (`scripts/lib/source-text`,
+  builder dengan komentar dibuang lebih dulu (`scripts/lib/source-text.ts`,
   pembuang komentar repo ini persis untuk ini), bahwa
   `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS` benar-benar muncul: merah pada
   hardcode-ulang saja, dan merah lagi bila ikatan itu hanya ada di dalam

@@ -1,30 +1,29 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](production-preflight-runbook.md)
 
-<!-- i18n-source-hash: sha256:66787b578f4687c6fe88136dfdcf9f6f693436182d265bebd088d887ab473757 -->
+<!-- i18n-source-hash: sha256:42532a107274932dc7c15f320e5bc8763fe39289bfa6642eb03256903c9300f8 -->
 
 # Preflight Produksi — Runbook Gladi, Apply, dan Rollback
 
-> **Status dokumen (AWCMS, tahap foundation-rebuild).** `bun run
-production:preflight` dan seluruh prosedur di bawah (`scripts/
-production-preflight.ts`, `authorizeApply`, `deploy/backup/{backup,
-restore,offsite-copy}-postgres.sh` dengan enkripsi/HMAC/manifest) adalah
-> mekanisme yang pada base `awcms-mini` sudah diimplementasikan penuh dan
-> diverifikasi (Issue #684 di repo asal, epic `platform-hardening`). Di
-> AWCMS, **belum ada implementasi kode untuk tool ini**: `scripts/
-production-preflight.ts` tidak ada, tidak ada key `production:preflight`
-> di `package.json`, dan `deploy/` hanya berisi
-> `deploy/pgbouncer/pgbouncer.ini.example` (belum ada `deploy/backup/`
-> sama sekali). Tiga dari sembilan tahap yang dijelaskan di bawah SUDAH
-> nyata sebagai skrip berdiri sendiri — `config:validate`,
+> **Status dokumen (AWCMS, tahap foundation-rebuild).** Orkestrator yang
+> menjadi pusat runbook ini **tidak ada di sini**: tidak ada
+> `scripts/production-preflight.ts`, tidak ada `authorizeApply`, dan tidak
+> ada key `production:preflight` di `package.json`. Baca setiap klaim
+> "tersedia"/"sudah berjalan" di bawah sebagai **spesifikasi**, bukan
+> status saat ini.
+>
+> Yang NYATA, sebagai perintah berdiri sendiri: `config:validate`,
 > `security:readiness`, `db:pool:health` (lihat
-> [`production-readiness.md`](production-readiness.md)) — tetapi
-> orkestrator yang menjalankannya sebagai satu urutan go/no-go yang
-> digerbangi, plus tahap `database:capacity`, `db:connectivity`,
-> `migration:plan`, belum ada. Dokumen ini menjelaskan **target
-> arsitektur dan kontrak** yang akan diport dari base sebagai bagian
-> pembangunan fondasi teknis AWCMS; baca klaim "tersedia"/"sudah
-> berjalan" di bawah sebagai spesifikasi yang harus dipenuhi ulang saat
-> porting, bukan status berjalan saat ini.
+> [`production-readiness.md`](production-readiness.md)) dan `db:migrate`.
+> Urutan go/no-go yang merangkainya, plus tahap `database:capacity`,
+> `db:connectivity` dan `migration:plan`, belum dibangun.
+>
+> `deploy/` tidak lagi sekosong yang dulu diklaim banner ini. Kini berisi
+> `deploy/backup/backup-postgres.sh` dan `deploy/backup/restore-postgres.sh`
+> (nyata, dipakai §Stage 2), `deploy/pgbouncer/pgbouncer.ini.example`,
+> `deploy/redis/docker-compose.yml`, dan `deploy/cron/awcms.crontab`. Tidak
+> ada `deploy/backup/README.md` dan tidak ada `offsite-copy.sh`, dan kedua
+> skrip backup itu **tidak** mengimplementasikan enkripsi maupun manifest
+> HMAC — detailnya di §Stage 2.
 
 Pendamping `docs/awcms/07_sprint_testing_production_readiness.md` —
 dokumen ini membahas prosedur operasional di sekitar `bun run
@@ -130,48 +129,49 @@ yang persis sama di sana, terhadap salinan produksi yang mutakhir.
 
 ## Tahap 2 — Bukti backup (wajib sebelum `--apply-migrations` apa pun)
 
-`--backup-verified` adalah sebuah flag, bukan pemeriksaan otomatis —
-operator sedang menyatakan adanya jejak bukti yang spesifik, bukan sekadar
-ingat bahwa ada backup di suatu tempat. Backup-nya terenkripsi dan
-manifesnya ditandatangani, dan proses restore memverifikasi checksum
-sebelum mutasi apa pun — lihat `deploy/backup/README.md` untuk model
-lengkapnya. Sebelum mengoper `--backup-verified`:
+Bukti backup adalah atestasi operator, bukan pemeriksaan otomatis — kamu
+menyatakan adanya jejak bukti yang spesifik, bukan sekadar ingat bahwa ada
+backup di suatu tempat.
+
+> **Koreksi (27 Agustus 2026).** Sampai sekarang bagian ini menggambarkan
+> backup terenkripsi dengan manifest bertanda-tangan HMAC dan nama berkas
+> `.dump.enc`. **Tidak satu pun dari itu diimplementasikan.**
+> `backup-postgres.sh` menulis dump `--format=custom` polos plus sidecar
+> `.sha256`, dan ia **menolak jalan** bila `BACKUP_ENCRYPTION_KEY_FILE`
+> atau `BACKUP_HMAC_KEY_FILE` di-set — pesan error skrip itu sendiri
+> menyebut dokumen ini sebagai yang melebih-lebihkannya.
+> `restore-postgres.sh` tidak mendekripsi apa pun, tidak memverifikasi
+> manifest apa pun, dan menolak berkas `.enc` alih-alih menebak.
+> `deploy/backup/README.md` dan `deploy/backup/offsite-copy.sh` juga tidak
+> ada. Yang NYATA adalah sidecar sha256, diverifikasi sebelum mutasi apa
+> pun, dan default database scratch di bawah.
 
 ```bash
 DATABASE_URL=<production-url> \
 BACKUP_DIR=/var/backups/awcms \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
 ./deploy/backup/backup-postgres.sh
 ```
 
-Lalu **buktikan dump-nya bisa direstore** (dump yang tidak pernah
-diuji-restore bukanlah bukti terverifikasi — ini prinsip yang sama dengan
-yang sudah ditegakkan `deploy/backup/README.md` dan SOP restore doc 07).
-`restore-postgres.sh` sendiri memverifikasi HMAC manifes dan checksum
-dump, serta memvalidasi struktur arsip terdekripsi dengan
-`pg_restore --list`, sebelum menyentuh database target mana pun:
+Lalu **buktikan dump-nya bisa direstore** — dump yang tidak pernah
+diuji-restore bukanlah bukti terverifikasi. `restore-postgres.sh`
+memverifikasi sidecar `.sha256` sebelum menyentuh database target mana pun:
 
 ```bash
 DATABASE_URL=<production-url> \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<timestamp>.dump.enc
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
 ```
 
 (Secara default merestore ke database sekali-buang `awcms_restore_test` —
-tidak pernah ke yang hidup.) Catat nama berkas dump,
-`sha256`/`hmac_sha256` dari manifesnya, dan stempel waktu uji-restore di
+tidak pernah ke yang hidup; `RESTORE_SCRATCH_DB` mengganti nama itu.) Catat
+nama berkas dump, digest `sha256`-nya, dan stempel waktu uji-restore di
 tempat yang awet (tiket deploy/log runbook) — inilah "retensi bukti" yang
 diminta runbook ini.
 
-Salinan luar-lokasi (`deploy/backup/offsite-copy.sh`) bersifat opsional
-dan, bila dikonfigurasi, berjalan sebagai langkah terpisah setelah
-`backup-postgres.sh` — lihat bagian "3-2-1" di
-`deploy/backup/README.md`. Ia bukan bagian dari jejak bukti
-`--backup-verified` itu sendiri (uji-restore-lah yang membuktikan backup
-itu bisa dipakai; salinan luar-lokasi soal bertahan dari hilangnya host
-backup).
+Salinan luar-lokasi tetap kewajiban nyata yang tidak punya skrip: salin
+sendiri dump beserta sidecar-nya ke host kedua. Uji-restore-lah yang
+membuktikan backup itu bisa dipakai; salinan luar-lokasi soal bertahan dari
+hilangnya host backup, dan tidak ada apa pun di repo ini yang
+mengotomasinya.
 
 ## Tahap 3 — Preflight produksi (read-only)
 

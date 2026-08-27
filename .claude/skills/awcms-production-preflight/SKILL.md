@@ -62,57 +62,48 @@ Response compression and cache tiers ABOVE the application (Cloudflare in front 
 Traefik/Varnish) are not checked by any preflight — see the `awcms-deploy` skill
 (findings C3/C14 in the performance & security standards document).
 
-Since Issue #684 (epic #679), `bun run production:preflight` (Issue 12.2)
-is ONE **read-only** command that runs the full sequence itself
-— `config:validate` → `security:readiness` → `database:capacity` (Issue
-#743, epic #738 platform-evolution — a cross-instance connection capacity
-calculator, pure config arithmetic, with no database connection at
-all; see `database-capacity-runbook.md`) → `db:connectivity` (one
-`SELECT` verifying the connection + the migration ledger table) → `api:spec:check`
-→ `modules:compose:check` (Issue #740, epic #738 — the build-time composition
-registry of base modules is valid; there is no derived-application/
-`extension:check` path any more, removed by ADR-0034) → `test` → `build` →
-`db:pool:health` (skipped if the server is not
-running yet, except under `APP_ENV=production` — there the skip BLOCKS go-live) →
-`migration:plan` (dry-run: lists pending migrations WITHOUT running them).
-**Ten** read-only stages in total (`scripts/production-preflight.ts`'s
-`REMAINING_CHILD_PROCESS_STAGES` + the separately handled `db:connectivity`/`db:pool:health`/
-`migration:plan` — `extension:check` removed, ADR-0034). No stage writes to the
-database. Running the commands one by one manually (like the old list
-above) is NO longer recommended — `bun run db:migrate` on its
-own is NOT part of this preflight at all; see §Applying
-migrations below.
+<!-- aspirational:mulai -->
 
-### Applying migrations (a separate step, must be explicit)
+### The staged orchestrator — a TARGET, not something you can run
 
-`bun run production:preflight` itself **never** writes to the
-database — an old bug (Issue #684): `db:migrate` used to run as an
-unconditional early stage, so a later stage (spec check/test/build)
-failing still left the database migrated even though the final verdict was
-"GO-LIVE BLOCKED". Applying migrations now requires explicit flags, and
-runs ONLY when the verdict is `GO-LIVE ALLOWED` (all ten read-only stages
-above passed):
+Everything in this sub-section describes the orchestrator doc 07 §Preflight
+specifies. **None of it exists in this repo.** It is kept because it is the
+shape a build would take, and because the flag semantics below are the reason
+`--backup-verified` matters at all.
 
-```bash
-APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
-  --apply-migrations --backup-verified --acknowledge-target=production
-```
+The design: ONE **read-only** command running the whole sequence —
+`config:validate` → `security:readiness` → `database:capacity` (a
+cross-instance connection capacity calculator, pure config arithmetic, no
+database connection at all; see `database-capacity-runbook.md`) →
+`db:connectivity` → `api:spec:check` → `modules:compose:check` → `test` →
+`build` → `db:pool:health` → `migration:plan` (dry-run: lists pending
+migrations WITHOUT running them). No stage writes to the database; applying
+migrations is a separate, explicitly flagged step
+(`--apply-migrations --backup-verified --acknowledge-target=<value>`, all
+three mandatory together, with `--acknowledge-target` required to equal
+`APP_ENV` as a typo catcher), running only after every read-only stage passes.
 
-All three flags are MANDATORY together (`scripts/production-preflight.ts`'s
-`authorizeApply`, covered by unit tests): `--apply-migrations` (operator intent),
-`--backup-verified` (an attestation of a fresh backup that has been proven
-restorable), `--acknowledge-target=<value>` which must be EXACTLY the same as
-`APP_ENV` (a typo catcher — running in the wrong shell/`.env` with the wrong
-`--acknowledge-target` produces a hard refusal, not a silent mutation
-of the wrong database). The full procedure (rehearsal, backup evidence,
-apply, rollback): `docs/awcms/production-preflight-runbook.md`. Its
-rehearsal stage only applies to installations that do stand up a second
-environment — this repo does not, and there is no profile for it: `staging` was removed from the
-deployment profile vocabulary
+<!-- aspirational:selesai -->
+
+### Applying migrations in THIS repo (a separate step, must be explicit)
+
+There is no orchestrator to gate this, so the sequencing is yours to hold:
+run the five commands under §Preflight commands, confirm
+`bun run security:readiness` exits zero, take and **restore-test** a backup
+(§Backup & restore below), and only then run `bun run db:migrate` against the
+production URL. `db:migrate` is the real mechanism and it applies migrations
+immediately — nothing checks first that the preceding steps passed.
+
+The full procedure (rehearsal, backup evidence, apply, rollback):
+`docs/awcms/production-preflight-runbook.md`. Its rehearsal stage only applies
+to installations that do stand up a second environment — this repo does not,
+and there is no profile for it: `staging` was removed from the deployment
+profile vocabulary
 ([ADR-0083](../../../docs/adr/0083-this-template-deploys-to-one-environment.md)
 as amended; `development`/`production`/`offline-lan` remain).
-Without a preceding environment, `--backup-verified` stops being a
-ceremonial attestation: it is the only thing standing in front of a production migration.
+Without a preceding environment, restore-tested backup evidence stops being a
+ceremonial attestation: it is the only thing standing in front of a production
+migration.
 
 ## Go-live checklist
 
@@ -139,43 +130,47 @@ flowchart LR
 
 ## Backup & restore (must be tested)
 
-Since Issue 12.2 this flow has been implemented as ready-to-use
-scripts — since Issue #691 (epic #679) these scripts require an **encrypted
-backup + a signed manifest (HMAC)**, and restore verifies the
-checksum BEFORE any mutation (see `deploy/backup/README.md` for the
-full security model: keys must come from a FILE — `BACKUP_ENCRYPTION_KEY_FILE`/
-`BACKUP_HMAC_KEY_FILE` — not from the CLI/env content; `DATABASE_URL` never
-appears in the argv of `pg_dump`/`pg_restore`/`psql`; a mutual-exclusion lock; an optional off-site
-copy via `deploy/backup/offsite-copy.sh`; scheduled restore drills
-via `deploy/backup/restore-drill.sh`):
+Two scripts exist and they are the whole of it: `deploy/backup/backup-postgres.sh`
+and `deploy/backup/restore-postgres.sh`.
+
+> **Do NOT set `BACKUP_ENCRYPTION_KEY_FILE` or `BACKUP_HMAC_KEY_FILE`.** At-rest
+> encryption and manifest signing are **not implemented**. `backup-postgres.sh`
+> writes a plain `--format=custom` dump plus a sha256 sidecar, and it **refuses
+> to run** — by design — if either variable is set, rather than letting you
+> believe the dump is encrypted. Protect the dump with filesystem permissions
+> and off-host copies instead. There is no `deploy/backup/README.md`, no
+> `offsite-copy.sh` and no `restore-drill.sh`; earlier versions of this skill
+> and of `docs/awcms/production-preflight-runbook.md` §Stage 2 named all four
+> as if they shipped.
 
 ```bash
 DATABASE_URL="$DATABASE_URL" \
 BACKUP_DIR=/var/backups/awcms \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
 ./deploy/backup/backup-postgres.sh
 
 DATABASE_URL="$DATABASE_URL" \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump.enc
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump
 ```
 
-(Restores into the disposable `awcms_restore_test` database by
-default — never the live one. `--target=<dbname>` + matching
-`--acknowledge-target=<dbname>` is required for a real recovery target.)
+(Restores into the disposable `awcms_restore_test` database by default —
+never the live one; `RESTORE_SCRATCH_DB` overrides the scratch name. A real
+recovery target has to be named and acknowledged explicitly.)
 
-Restore validation: tenant/user/product/stock/transaction readable · login test · POS smoke test · report smoke test. `deploy/backup/restore-drill.sh` automates part of this validation (schema migration, RLS tenant isolation, sample records) plus an RTO/RPO report — run it on a schedule, separately from the daily backup.
+Restore validation is manual: tenant/user/transaction rows readable · login
+test · report smoke test. Nothing automates the drill or produces an RTO/RPO
+report, so put it on a schedule yourself, separately from the daily backup.
 
-Since Issue #684, `--backup-verified` above MUST be based on real
-restore-test evidence from these scripts, not merely a backup that "exists" —
-see `docs/awcms/production-preflight-runbook.md`'s §Backup evidence
-for the full sequence (dump → restore-test → record evidence).
+Backup evidence for a production migration MUST be a real restore test from
+these two scripts, not merely a backup that "exists" — see
+`docs/awcms/production-preflight-runbook.md`'s §Backup evidence for the
+sequence (dump → restore-test → record evidence).
 
 ## Output
 
 A production readiness report: the status of each gate, findings (severity), rollback plan, go/no-go decision. A critical control failure **blocks** go-live.
-`--json-output=<path>` (optional, Issue #684) writes the structured result
-(`{ go, failedStages, blockingSkips, results, plan, applied }`) to a file — for deploy evidence archives,
-it does not change the default stdout output.
+
+You assemble that report yourself from the output of the commands under
+§Preflight commands — there is no aggregated verdict and no structured
+`--json-output` artefact to archive, because there is no orchestrator to
+produce one. `bun run security:readiness` is the only step whose exit code
+carries a go/no-go decision.

@@ -198,10 +198,10 @@ DO NOTHING`; no new mechanism was invented. This migration ONLY
 - `src/modules/idn-admin-regions/module.ts`,
   `domain/source-provenance.ts`, `application/.gitkeep`, `README.md`.
 - `src/modules/index.ts` (import + registry array).
-- Tests: `tests/modules/idn-admin-regions-module.test.ts`,
-  `tests/unit/idn-admin-regions-source-provenance.test.ts`; updated:
-  `tests/foundation.test.ts` (module count 14→15, added the
-  `idn_admin_regions` block).
+- Tests (mini's layout — **this repo puts them flat**: see
+  `tests/idn-admin-regions-domain.test.ts`,
+  `tests/idn-admin-regions-vendor-manifest.test.ts` and
+  `tests/integration/idn-admin-regions.integration.test.ts`).
 - Docs: `AGENTS.md` §Module map + skill table + mermaid diagram,
   `.claude/skills/README.md`, `docs/awcms/repo-inventory.md`
   (regenerated).
@@ -386,13 +386,17 @@ WHERE status = 'active'`. Because every row indexed by this
    — the SAME pattern is used throughout this repo for actor-id columns
    (`awcms_offices.created_by`, `awcms_email_messages.created_by`,
    etc.), not a new exception.
-8. **Migration test**: `tests/integration/idn-admin-regions-schema.integration.test.ts`
-   — because these tables are NOT tenant-scoped, this test does NOT exercise
-   RLS isolation (unlike most other `*-schema.integration.test.ts` in this
-   repo) — instead it proves the ABSENCE of `tenant_id`/RLS
-   explicitly, plus the real constraints: unique `(dataset_id, code)`, the
-   parent-lookup index, the `normalized_name` search index, single-active-dataset,
-   the `status`/`region_type`/`level` CHECKs, and zero `awcms_app` grants.
+8. **Migration test**: in THIS repo it is
+   `tests/integration/idn-admin-regions.integration.test.ts` (one file, not a
+   separate `-schema` one — mini split them). Because these tables are NOT
+   tenant-scoped it does NOT exercise RLS isolation; instead it proves the
+   ABSENCE of `tenant_id`/forced RLS explicitly, that single-active-dataset is
+   enforced by the DATABASE (the partial unique index) rather than by
+   application code a second connection could race, and that
+   import → activate → rollback works end to end with rollback restoring the
+   PREVIOUS version. The pure parsing/normalisation half lives in
+   `tests/idn-admin-regions-domain.test.ts`, and the vendored-dataset
+   provenance in `tests/idn-admin-regions-vendor-manifest.test.ts`.
    Every test query goes through `getAdminSql()` (the migration owner
    connection) — NOT `getTestSql()` (role `awcms_app`) — because `awcms_app`
    is deliberately at zero access on these tables in this issue (see point 2
@@ -411,7 +415,8 @@ WHERE status = 'active'`. Because every row indexed by this
 - `sql/054_awcms_idn_admin_regions_schema.sql`.
 - `scripts/security-readiness.ts` (`RLS_FREE_TABLES` +
   `ALLOWED_GLOBAL_TABLE_GRANTS` — two new entries, zero grants).
-- Test: `tests/integration/idn-admin-regions-schema.integration.test.ts`.
+- Test (mini): `awcms-mini:tests/integration/idn-admin-regions-schema.integration.test.ts`.
+  Here the equivalent coverage lives in `tests/integration/idn-admin-regions.integration.test.ts`.
 - Docs: `.claude/skills/awcms-idn-admin-regions/SKILL.md` (this file),
   `src/modules/idn-admin-regions/README.md` (status table),
   `docs/awcms/04_erd_data_dictionary.md` (new entries + table

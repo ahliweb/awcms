@@ -5,7 +5,7 @@ description: "SEBAGIAN BACAAN SAJA — hanya fondasi (Issue 2.2: profile CRUD, i
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c9ef81a31770935ea110b3800518b30d321419d0bfeef3c25fd1a2eaa1de80ad -->
+<!-- i18n-source-hash: sha256:5ad9121de659ec70cde8e4e7997e8562bb6b94345f679bd7fdf55a1c74ff694c -->
 
 # AWCMS — Profile Identity Module
 
@@ -156,10 +156,12 @@ di sini**, bukan kode yang sudah berjalan di repo ini:
    memfilter `tenant_id` di `WHERE`-nya (mengandalkan RLS untuk jalur
    normal) justru supaya lapis kedua ini GENUINELY teruji lewat test
    terhadap koneksi privileged (bypass RLS) — di mini:
-   `tests/integration/profile-identity.integration.test.ts`'s test
+   `awcms-mini:tests/integration/profile-identity.integration.test.ts`'s test
    "application-layer guard: assertSameTenant/CrossTenantMergeError fires
-   even when RLS is bypassed". **Repo ini belum punya `tests/integration/`
-   sama sekali (Issue #154)** — port lapis #748 tanpa mem-port test itu
+   even when RLS is bypassed". **Repo ini SUDAH punya tier integration**
+   (Issue #154 sudah mendarat: `tests/integration/harness.ts` plus ~74 spec) —
+   yang belum ada hanyalah spec profile-identity di dalamnya, jadi mem-port
+   lapis #748 tanpa mem-port test itu
    berarti guard kedua tidak terverifikasi. **Endpoint merge/match baru wajib
    memanggil `assertSameTenant` di titik eksekusi, jangan andalkan RLS
    saja** — RLS adalah lapis pertama, bukan satu-satunya.
@@ -226,9 +228,11 @@ port dulu kalau memang dibutuhkan.
 
 ## Verifikasi
 
-Repo ini **belum punya `tests/integration/` sama sekali** (Issue #154) —
-termasuk `profile-identity.integration.test.ts` yang disebut di atas; itu
-milik mini. Yang ada di sini: unit test `tests/*.test.ts` (jalankan
+Repo ini **sudah punya tier integration** — Issue #154 mendaratkannya:
+`tests/integration/harness.ts` dan ~74 spec `*.integration.test.ts`, yang
+hanya berjalan bila `DATABASE_URL` di-set dan di-skip diam-diam bila tidak.
+Yang BELUM ada di dalamnya adalah `profile-identity.integration.test.ts`;
+itu milik mini. Unit test tinggal datar di `tests/*.test.ts` (jalankan
 `bun test`). Saat mem-port lapis #748, test cross-tenant guard yang sengaja
 bypass RLS (koneksi privileged) adalah bagian WAJIB dari port — bukan
 opsional — karena itulah satu-satunya yang membuktikan lapis kedua

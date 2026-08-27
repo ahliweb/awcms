@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d8b6be94cad358824a79ffb75d09e175a09ce3b63ef651a61e620bda6a234035 -->
+<!-- i18n-source-hash: sha256:ae6ed57acf5731dd9c51c7f55ab8d00a97a124647afbce9414e1e108634069ae -->
 
 # Blog Content
 
@@ -360,13 +360,18 @@ independently-writable copy of the same concept into
 truth: an admin could flip "RSS enabled" off in the generic module
 settings store while the feed route keeps
 reading the OLD `awcms_blog_settings` value and stays enabled — a
-real correctness bug, not a stylistic preference. `fetchEffectivePublicRouteSettings`
-proves this is enforced, not just documented:
-`tests/integration/blog-content-settings.integration.test.ts`'s "writing
-those exact key names into the new module-settings store has NO effect on
-/news/feed.xml or /news/sitemap-news.xml" test PATCHes `rssEnabled: false`
-into the wrong store and confirms the feed stays enabled, then flips it
-through the correct store and confirms it actually disables.
+real correctness bug, not a stylistic preference. Aturannya ditegakkan oleh
+`fetchEffectivePublicRouteSettings` yang hanya membaca `awcms_blog_settings`.
+
+> **Celah cakupan (diverifikasi 27 Agustus 2026).** Paragraf ini dulu
+> menyitir `tests/integration/blog-content-settings.integration.test.ts`
+> untuk test "menulis nama kunci itu ke store module-settings TIDAK
+> berpengaruh". **Berkas itu tidak ada di repo ini, dan tidak ada test yang
+> berasersi demikian.** Yang ada menyentuh `rssEnabled` dari sudut lain:
+> `tests/integration/public-path-wasted-reads.integration.test.ts` dan
+> `tests/integration/cutover-target-liveness.integration.test.ts`. Jadi
+> perlakukan aturan sumber-kebenaran-tunggal ini sebagai terdokumentasi
+> tapi belum terbukti sampai ada yang menulis test negatifnya.
 
 ### `publicBasePath` — NOT adopted, and that is the point
 
@@ -390,10 +395,12 @@ paths that both exist.
 the same `validateModuleSettingsPatch` (`module-management/domain/module-settings.ts`)
 every other module's settings PATCH does — neither the key name
 (`legacyTenantRouteEnabled`) nor its value matches any entry in `redaction.ts`'s
-`REDACTION_KEYS` list, confirmed by
-`tests/integration/blog-content-settings.integration.test.ts`'s existing
-secret-shaped-key test (unchanged assertion, now targeting `blog_content`
-instead of `form_drafts`).
+`REDACTION_KEYS` list. Perilaku kunci-berbentuk-rahasia pada validator
+bersama itu dicakup `tests/module-management-settings.test.ts` dan
+`tests/form-draft-validation.test.ts`; **tidak ada** kasus khusus
+`blog_content`, dan berkas yang dulu disitir paragraf ini
+(`tests/integration/blog-content-settings.integration.test.ts`) tidak ada di
+sini.
 
 ## Revisions (Issue #541)
 
@@ -653,7 +660,7 @@ Seluruh string UI (~300 key baru, namespace `admin.blog.*`) ditambahkan ke `i18n
 - Tidak ada secret hardcoded ditambahkan — layar admin ini murni UI + panggilan ke endpoint yang sudah ada; tidak ada koneksi database langsung dari klien, tidak ada token/API key baru.
 - Tidak ada eksposur PostgreSQL publik — semua akses data tetap lewat `withTenant`/aplikasi backend yang sudah ada, SSR read di frontmatter Astro berjalan server-side (sama seperti `admin/index.astro`/`admin/sync.astro` yang sudah ada sebelum issue ini).
 - Least-privilege runtime DB access — tidak berubah; halaman admin tetap terikat koneksi role `awcms_app` yang sama yang dipakai seluruh app (lihat `docs/awcms/18_configuration_env_reference.md`).
-- RLS isolation — diuji ulang eksplisit di `tests/integration/blog-content-admin-ui.integration.test.ts` untuk dua fungsi baru (`listBlogPostsForAdmin` tenant-isolation test); fungsi lain yang dipanggil layar admin (`listBlogPages`, `listBlogTerms`, dst.) sudah punya cakupan RLS dari test suite Issue #538-#542.
+- RLS isolation — jalur baca admin bersandar pada chokepoint `withTenant` + RLS yang sama dengan setiap baca lain. Berkas yang dulu disitir baris ini, `tests/integration/blog-content-admin-ui.integration.test.ts`, **tidak ada** di repo ini; `listBlogPostsForAdmin` diuji `tests/integration/query-budget-admin.integration.test.ts` (anggaran jumlah query, bukan asersi isolasi tenant), jadi test isolasi khusus listing admin masih berutang.
 - Aksi admin high-risk wajib confirm + audit — lifecycle action posts sudah audit sejak Issue #538/#541 (`recordAuditEvent`, action `blog.post.<verb>`); layar admin menambah lapisan `window.confirm` di atasnya, tidak menggantikannya.
 - Rendering publik tetap aman dari XSS — tidak diubah oleh issue ini; `content_json`/`content_text`/widget `bodyText`/ad `imageUrl`/`linkUrl` tetap lewat whitelist renderer yang sama (`content-block-rendering.ts`, `ads-directory.ts`'s `renderAdHtml`). Editor admin (`contentJson` textarea) mengizinkan penulis mengetik apa pun, tapi validasi server (`validateContentJsonField`'s `containsUnsafeHtml`) tetap menolak `<script>`/`<iframe>`/`<embed>`/`<object>`/inline handler/`javascript:` sebelum tersimpan — editor tidak melonggarkan aturan itu.
 - Pesan error tidak membocorkan stack trace — action banner admin selalu menampilkan `error.message` dari respons API (yang sendiri sudah aman, doc 10) atau string generik `common.network_error`, tidak pernah `error.stack`/exception mentah dari `console.error` (yang hanya dicatat server-side).
@@ -717,7 +724,7 @@ bun run db:migrate                     # skema tidak berubah di issue ini (0 app
 bun run api:spec:check                 # OpenAPI/AsyncAPI baseline (26 channel blog-content, semua terpakai)
 bun run typecheck                      # tsc --noEmit, termasuk seluruh .astro admin/blog/*
 bun test                               # unit + integration; DATABASE_URL wajib untuk suite integration
-bun test tests/integration/blog-content-admin-ui.integration.test.ts  # test baru khusus Issue #543
+bun test tests/integration/query-budget-admin.integration.test.ts  # anggaran query layar admin
 bun run build                          # Astro build, termasuk seluruh layar admin/blog/*
 bun run check                          # lint + check:docs + api:spec:check + typecheck + test + build
 bun run config:validate                # kontrak env (satu dari tiga tahap go-live yang sudah nyata)

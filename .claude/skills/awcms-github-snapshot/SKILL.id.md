@@ -1,17 +1,35 @@
 ---
 name: awcms-github-snapshot
-description: Refresh snapshot dokumentasi GitHub (docs/awcms/github/) setelah issue/label/milestone/security alert berubah di GitHub. Gunakan sebelum audit/release, atau saat diminta menyinkronkan docs dengan state GitHub terbaru. Sesuai docs/awcms/github/README.md.
+description: READ-ONLY / SPESIFIKASI TARGET — snapshot dokumentasi GitHub (docs/awcms/github/) TIDAK ADA di repo ini dan tidak pernah dikomit ke sini, begitu pula skrip refresh yang dijelaskannya. Tidak ada yang bisa di-refresh dan tidak ada target `bun run` untuknya. Pakai sebagai desain bila snapshot semacam itu kelak diadopsi di sini; untuk mengetahui state tracker SAAT INI, query `gh` langsung. Backlog rencana tetap docs/awcms/06_github_issues_detail.md.
 ---
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:2341265761ce3e3290cdf6a111d9d06ceeb7b80ba9326a7a52ddfb35a0e2088b -->
+<!-- i18n-source-hash: sha256:65ddc544c7c1c116229b5c7ab5575b09100928d3fe002e0e1cb9752fdf5fde82 -->
 
 # AWCMS — GitHub Snapshot Refresh
 
-Ikuti `docs/awcms/github/README.md`. Snapshot ini adalah salinan
-faktual state GitHub (issue, label, milestone, security alert) — bukan
-backlog rencana (itu tetap `docs/awcms/06_github_issues_detail.md`).
+> **Skill ini menggambarkan sesuatu yang tidak ada di sini.**
+> `docs/awcms/github/` tidak pernah dikomit di repo ini
+> (`git log -- docs/awcms/github` tidak mengembalikan apa pun) dan
+> `scripts/github-snapshot-refresh.ts` tidak ada. `docs/awcms/README.md`
+> menyatakan hal yang sama dalam satu baris: snapshot itu "belum
+> diadaptasi". Seluruh isi di bawah adalah desain awcms-mini, disimpan
+> sebagai spesifikasi yang harus dipenuhi bila snapshot dibuat di sini —
+> **jangan laporkan nama berkas, angka, atau langkah refresh-nya sebagai
+> state repo ini.**
+>
+> Untuk menjawab pertanyaan tentang tracker SEKARANG, panggil `gh` dan baca
+> jawabannya; jangan cari berkas. Bagian §"Sebelum refresh" di bawah tetap
+> layak dikerjakan atas alasannya sendiri — ia menangkap issue yang
+> tertinggal terbuka karena body PR tanpa kata kunci `Closes`, yang sudah
+> terjadi dua kali di sini.
+
+<!-- aspirational:mulai -->
+
+Snapshot ini adalah salinan faktual state GitHub (issue, label, milestone,
+security alert) — bukan backlog rencana (itu tetap
+`docs/awcms/06_github_issues_detail.md`).
 
 ## Sebelum refresh: cek issue yang PR-nya sudah merge tapi belum ke-close
 
@@ -90,3 +108,23 @@ flowchart LR
 Ringkasan: file yang diperbarui, angka open/closed/label/milestone baru,
 dan daftar bagian manual yang perlu ditinjau (bila ada issue/label baru
 sejak snapshot terakhir).
+
+<!-- aspirational:selesai -->
+
+## Yang dilakukan di sini sebagai gantinya
+
+Query tracker langsung dan laporkan jawabannya — tidak ada berkas yang
+perlu diregenerasi, jadi tidak ada yang perlu dikomit:
+
+```bash
+gh auth status
+gh issue list --state open --limit 50 --json number,title,labels,milestone
+gh pr list --state merged --limit 30 --json number,title,mergedAt
+gh api repos/ahliweb/awcms/code-scanning/alerts --paginate | head
+```
+
+Mengadopsi snapshot terkomit di sini adalah perubahan nyata dengan biaya
+nyata (satu generator, satu gate kesegaran, dan cermin dwibahasa per berkas
+menurut
+[ADR-0097](../../../docs/adr/0097-english-is-the-source-language.md)),
+jadi ia butuh keputusan, bukan asumsi bahwa itu sudah terjadi.

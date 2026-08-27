@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:773ab8377b97d4e4d73f394ce9751fd6d0f428fcd7e4a7a6e5313b84ba03d0e6 -->
+<!-- i18n-source-hash: sha256:810f8d7a3df364c9692465245ab83dd648436a5b6c6bad7ba14fbb8c4d7a7de2 -->
 
 # Management Reporting
 
@@ -79,7 +79,7 @@ reporting:projections:registry:check`.
 infrastructure/consumer-registry.ts` (`reporting.event_activity_
 projector`) — the one deliberate cross-module edge, one-directional
   (`domain_event_runtime -> reporting/application`), verified cycle-free
-  by `tests/unit/module-boundary-cycles.test.ts`.
+  by `tests/module-boundary.test.ts`.
 
 Every projection — REGARDLESS of its steady-state strategy — is
 REBUILT via the exact same bounded `cursor_table` re-scan mechanism
@@ -201,7 +201,7 @@ into generation (reviewer + security-auditor finding, PR #781).
 `GET/POST /api/v1/reports/exports`, `POST .../exports/{id}/disable`,
 `POST .../exports/trigger`, `GET .../exports/runs`,
 `GET .../exports/runs/{id}/download` — see
-`openapi/modules/reporting-projections.openapi.yaml`. Every mutation
+`openapi/modules/reporting.openapi.yaml`. Every mutation
 (`rebuild`, `rebuild/cancel`, `exports` create/disable/trigger) requires
 `Idempotency-Key`; `reconcile` and every `GET` do not (no business-state
 mutation).

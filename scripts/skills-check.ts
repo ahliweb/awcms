@@ -48,6 +48,43 @@
  * Rule 3's list is deliberately per-SKILL rather than per-PATH. A path list would
  * grow with every edit to a target spec and stop being read; a skill list changes
  * only when a skill changes character, which is exactly when someone should look.
+ *
+ * ## Rule 6 — the OTHER repo directories, because rule 1 only ever read `src/`
+ *
+ * Rules 1 and 3 govern `src/…` and nothing else. Every other directory a skill
+ * cites — `tests/`, `scripts/`, `openapi/`, `deploy/`, `ops/`, `docs/` — was
+ * invisible, and that is where a skill does its most operational talking: which
+ * test proves a claim, which script to run, which runbook to follow. A sweep on
+ * 27 August 2026 found sixty-odd such citations that resolve to nothing, and the
+ * failure directions were not cosmetic:
+ *
+ * - `awcms-production-preflight` described `scripts/production-preflight.ts` with
+ *   its stages, its flags and its `authorizeApply` "covered by unit tests" —
+ *   forty lines below its own banner saying the command DOES NOT EXIST. It also
+ *   told an operator to set `BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE`
+ *   before a go-live backup, which makes `deploy/backup/backup-postgres.sh`
+ *   REFUSE TO RUN — that script's own `die()` message names the runbook as
+ *   overstating it. The gate could not see either side.
+ * - `awcms-profile-identity` said twice that this repo "has no `tests/integration/`
+ *   at all yet". It has 74 specs and a harness. An agent following it skips the
+ *   entire tier.
+ * - `awcms-github-snapshot` was a whole live-sounding skill for `docs/awcms/github/`,
+ *   a tree never committed here, driven by a script that does not exist.
+ * - A dozen `tests/unit/<x>.test.ts` citations carried over from mini's layout,
+ *   where this repo puts tests flat in `tests/`.
+ *
+ * Same shape as rule 1, three differences that keep it honest rather than noisy:
+ *
+ * - **Sibling-repo citations are scoped, not banned.** `awcms-mini:tests/…` (and
+ *   `awcms-micro:`, `personal-coding:`) name a file in another repo; this repo
+ *   cannot check it and should not pretend to. The prefix is this repo's existing
+ *   convention, so the rule enforces it: an unprefixed `tests/…` is a claim ABOUT
+ *   THIS REPO.
+ * - **An absence claim is exempt.** "there is no `deploy/backup/README.md`" must
+ *   stay sayable — a gate that demanded the file exist would delete the very
+ *   sentences that correct the record. Detected by phrase, near the citation.
+ * - **Line/anchor suffixes are trimmed**, so `ops/run-job.sh:88,92` is checked as
+ *   `ops/run-job.sh`.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -276,6 +313,143 @@ export function extractCitedSourcePaths(source: string): string[] {
         .filter((cited) => !cited.includes("*") && !cited.endsWith("/"))
     )
   ];
+}
+
+/**
+ * Repo directories rule 6 governs.
+ *
+ * Two deliberate absences:
+ *
+ * - `src/` — rule 1 owns it, and reports it with a message that names the
+ *   module registry as the reason.
+ * - `sql/` — `sql/005` is this repo's shorthand for "the migration numbered
+ *   005", not a path (the file is `005_awcms_….sql`). Checking it as a
+ *   filename would fail every correct citation in the corpus.
+ *   `check:docs`'s `checkSqlMigrationReferences` already validates those BY
+ *   NUMBER, which is the form they are written in.
+ */
+export const GOVERNED_REPO_PREFIXES: readonly string[] = [
+  "tests/",
+  "scripts/",
+  "openapi/",
+  "asyncapi/",
+  "deploy/",
+  "ops/",
+  "infra/",
+  "config/",
+  "locales/",
+  "data/",
+  "docs/",
+  "public/",
+  "fixtures/"
+];
+
+/**
+ * A citation scoped to a sibling repo, e.g. `awcms-mini:tests/…`. Nothing here
+ * can check those, and pretending otherwise would either fail honest text or
+ * silently bless it. The prefix is the repo's existing convention (it was
+ * already used for `awcms-mini:src/pages/…`), so rule 6 makes it load-bearing:
+ * an UNPREFIXED path is a claim about THIS repo.
+ */
+const SIBLING_REPO_PREFIX = /^[a-z][a-z0-9-]*:/;
+
+/**
+ * Phrasings that mark a citation as a deliberate statement of ABSENCE.
+ *
+ * Without this the gate would forbid the sentences that do the most good — the
+ * ones that say a file readers keep looking for is not there. Every phrase is
+ * one this repo actually uses, in either language, and matching happens on a
+ * window around the citation with markdown emphasis stripped, so
+ * `does **not** exist` reads the same as `does not exist`.
+ */
+const ABSENCE_PHRASES =
+  /(does|do|did) not exist|not exist in this repo|never existed|never been committed|no longer exists?|now-deleted|there (is|are) no |there was no |used to cite|tidak ada|belum ada|tidak pernah|belum pernah|dihapus|yang dulu disitir/i;
+
+/** Characters after which a citation is a location, not part of the filename. */
+const LOCATION_SUFFIX = /:[0-9].*$/;
+
+/**
+ * Extract the backtick-quoted repo paths a skill cites, outside `src/`.
+ *
+ * Whitespace inside the backticks is normalised first for the same reason rule 1
+ * does it: prettier wraps prose and will break inside a code span, and a rule
+ * that only sees paths which happen to fit on one line is a rule with a hole in
+ * it that nobody can see.
+ */
+export function extractCitedRepoPaths(source: string): string[] {
+  const joined = source.replace(
+    /`([A-Za-z0-9_.-]+\/[^`]*?)`/g,
+    (match, cited: string) =>
+      cited.includes("\n") ? `\`${cited.replace(/\s+/g, "")}\`` : match
+  );
+
+  return [
+    ...new Set(
+      // `,` is in the class for line RANGES only (`ops/run-job.sh:88,92`);
+      // without it the whole span fails to match and the citation is skipped
+      // silently, which is a hole rather than an exemption.
+      [...joined.matchAll(/`([A-Za-z0-9_.:,/[\]-]+)`/g)]
+        .map((match) => match[1]!)
+        .filter((cited) => !SIBLING_REPO_PREFIX.test(cited))
+        .filter((cited) =>
+          GOVERNED_REPO_PREFIXES.some((prefix) => cited.startsWith(prefix))
+        )
+        .map((cited) => cited.split("#")[0]!.replace(LOCATION_SUFFIX, ""))
+        .map((cited) => cited.replace(/\/+$/, ""))
+        .filter(
+          (cited) =>
+            cited.length > 0 &&
+            cited.includes("/") &&
+            !cited.includes("*") &&
+            !cited.includes("...") &&
+            !/[{}<>]/.test(cited)
+        )
+    )
+  ];
+}
+
+/** Is this citation sitting inside a sentence that says it does NOT exist? */
+export function isAbsenceClaim(source: string, cited: string): boolean {
+  const flattened = source.replace(/[*_]/g, "");
+  const needle = cited.replace(/[*_]/g, "");
+
+  for (
+    let at = flattened.indexOf(needle);
+    at !== -1;
+    at = flattened.indexOf(needle, at + 1)
+  ) {
+    const window = flattened
+      .slice(Math.max(0, at - 260), at + needle.length + 200)
+      .replace(/\s+/g, " ");
+
+    // Every occurrence must be an absence claim. One honest "X does not exist"
+    // paragraph must not license a second passage that treats X as real —
+    // that mixture is exactly what `awcms-production-preflight` shipped.
+    if (!ABSENCE_PHRASES.test(window)) return false;
+  }
+
+  return true;
+}
+
+/** Rule 6, given a resolver for "does this path exist". */
+export function checkCitedRepoPaths(
+  skill: string,
+  source: string,
+  citedPaths: readonly string[],
+  pathExists: (candidate: string) => boolean,
+  label: string = skill
+): SkillProblem[] {
+  const missing = citedPaths.filter(
+    (cited) => !pathExists(cited) && !isAbsenceClaim(source, cited)
+  );
+
+  return missing.map((cited) => ({
+    skill: label,
+    message:
+      `cites \`${cited}\`, which does not exist in this repo. Point it at the real path, ` +
+      "say plainly that it does not exist (an absence claim is exempt), or — if it lives in " +
+      "another repo — scope it as `awcms-mini:<path>` so a reader knows not to look here."
+  }));
 }
 
 /**
@@ -593,13 +767,23 @@ async function main(): Promise<void> {
         )
       );
 
-      // Rule 5. Aspirational skills are exempt for the same reason rule 1
-      // exempts them: their subject does not exist, so neither do its screens.
+      // Rules 5 and 6. Aspirational skills are exempt for the same reason rule 1
+      // exempts them: their subject does not exist, so neither do its screens
+      // or the tests and scripts that would have proved it.
       if (!(skill in ASPIRATIONAL_SKILLS)) {
+        const visible = stripHistoricalBlocks(gated);
+
         problems.push(
           ...checkCitedAdminPaths(
             skill,
-            extractCitedAdminPaths(stripHistoricalBlocks(gated)),
+            extractCitedAdminPaths(visible),
+            existsSync,
+            label
+          ),
+          ...checkCitedRepoPaths(
+            skill,
+            visible,
+            extractCitedRepoPaths(visible),
             existsSync,
             label
           )
@@ -637,6 +821,16 @@ async function main(): Promise<void> {
       ...checkCitedAdminPaths(
         moduleReadme,
         extractCitedAdminPaths(source),
+        existsSync
+      ),
+      // Rule 6 over the same corpus, and for the same reason rule 5 covers it:
+      // a module README is what a person reads before touching the module. Its
+      // "verified by <test>" lines are the most trusted claims in the repo, and
+      // three of `blog_content`'s named a test file that has never existed.
+      ...checkCitedRepoPaths(
+        moduleReadme,
+        source,
+        extractCitedRepoPaths(source),
         existsSync
       )
     );
@@ -682,7 +876,8 @@ async function main(): Promise<void> {
     `skills:check OK — ${skillDirs.length} skills, ` +
       `${Object.keys(ASPIRATIONAL_SKILLS).length} declared aspirational/historical, ` +
       `${moduleReadmes.length} module READMEs, ` +
-      `every cited src path, ADR, \`bun run\` target and \`/admin/…\` screen resolves.`
+      "every cited repo path (`src/` and the other governed directories), ADR, " +
+      "`bun run` target and `/admin/…` screen resolves."
   );
 }
 

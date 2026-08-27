@@ -358,13 +358,18 @@ independently-writable copy of the same concept into
 truth: an admin could flip "RSS enabled" off in the generic module
 settings store while the feed route keeps
 reading the OLD `awcms_blog_settings` value and stays enabled — a
-real correctness bug, not a stylistic preference. `fetchEffectivePublicRouteSettings`
-proves this is enforced, not just documented:
-`tests/integration/blog-content-settings.integration.test.ts`'s "writing
-those exact key names into the new module-settings store has NO effect on
-/news/feed.xml or /news/sitemap-news.xml" test PATCHes `rssEnabled: false`
-into the wrong store and confirms the feed stays enabled, then flips it
-through the correct store and confirms it actually disables.
+real correctness bug, not a stylistic preference. The rule is enforced by
+`fetchEffectivePublicRouteSettings` reading only `awcms_blog_settings`.
+
+> **Coverage gap (verified 27 August 2026).** This paragraph used to cite
+> `tests/integration/blog-content-settings.integration.test.ts` for a
+> "writing those key names into the module-settings store has NO effect"
+> test. **That file does not exist in this repo, and no test makes that
+> assertion.** What does exist touches `rssEnabled` from other angles:
+> `tests/integration/public-path-wasted-reads.integration.test.ts` and
+> `tests/integration/cutover-target-liveness.integration.test.ts`. So treat
+> the single-source-of-truth rule as documented-but-unproven until someone
+> writes the negative test.
 
 ### `publicBasePath` — NOT adopted, and that is the point
 
@@ -388,10 +393,12 @@ paths that both exist.
 the same `validateModuleSettingsPatch` (`module-management/domain/module-settings.ts`)
 every other module's settings PATCH does — neither the key name
 (`legacyTenantRouteEnabled`) nor its value matches any entry in `redaction.ts`'s
-`REDACTION_KEYS` list, confirmed by
-`tests/integration/blog-content-settings.integration.test.ts`'s existing
-secret-shaped-key test (unchanged assertion, now targeting `blog_content`
-instead of `form_drafts`).
+`REDACTION_KEYS` list. The shared validator's secret-shaped-key behaviour is
+covered by `tests/module-management-settings.test.ts` and
+`tests/form-draft-validation.test.ts`; there is **no** `blog_content`-specific
+case, and the file this paragraph used to cite
+(`tests/integration/blog-content-settings.integration.test.ts`) does not
+exist here.
 
 ## Revisions (Issue #541)
 
@@ -651,7 +658,7 @@ Every UI string (~300 new keys, namespace `admin.blog.*`) is added to `i18n/en.p
 - No hardcoded secret was added — these admin screens are purely UI + calls to existing endpoints; there is no direct database connection from the client, no new token/API key.
 - No public PostgreSQL exposure — all data access still goes through the existing `withTenant`/backend application, and the SSR read in the Astro frontmatter runs server-side (just like `admin/index.astro`/`admin/sync.astro`, which existed before this issue).
 - Least-privilege runtime DB access — unchanged; admin pages are still bound to the same `awcms_app` role connection the whole app uses (see `docs/awcms/18_configuration_env_reference.md`).
-- RLS isolation — explicitly re-tested in `tests/integration/blog-content-admin-ui.integration.test.ts` for the two new functions (the `listBlogPostsForAdmin` tenant-isolation test); the other functions the admin screens call (`listBlogPages`, `listBlogTerms`, etc.) already have RLS coverage from the Issue #538-#542 test suites.
+- RLS isolation — the admin read path relies on the same `withTenant` + RLS chokepoint as every other read. The file this line used to cite, `tests/integration/blog-content-admin-ui.integration.test.ts`, does **not** exist in this repo; `listBlogPostsForAdmin` is exercised by `tests/integration/query-budget-admin.integration.test.ts` (a query-count budget, not a tenant-isolation assertion), so a dedicated admin-listing isolation test is still owed.
 - High-risk admin actions must confirm + audit — post lifecycle actions have been audited since Issue #538/#541 (`recordAuditEvent`, action `blog.post.<verb>`); the admin screens add a `window.confirm` layer on top of that, they do not replace it.
 - Public rendering stays XSS-safe — unchanged by this issue; `content_json`/`content_text`/widget `bodyText`/ad `imageUrl`/`linkUrl` still go through the same whitelist renderers (`content-block-rendering.ts`, `ads-directory.ts`'s `renderAdHtml`). The admin editor (the `contentJson` textarea) lets an author type anything, but server validation (`validateContentJsonField`'s `containsUnsafeHtml`) still rejects `<script>`/`<iframe>`/`<embed>`/`<object>`/inline handlers/`javascript:` before it is stored — the editor does not loosen that rule.
 - Error messages do not leak a stack trace — the admin action banner always shows `error.message` from the API response (which is itself already safe, doc 10) or the generic `common.network_error` string, never `error.stack`/a raw exception from `console.error` (which is only recorded server-side).
@@ -715,7 +722,7 @@ bun run db:migrate                     # the schema does not change in this issu
 bun run api:spec:check                 # OpenAPI/AsyncAPI baseline (26 blog-content channels, all of them used)
 bun run typecheck                      # tsc --noEmit, including every admin/blog/* .astro
 bun test                               # unit + integration; DATABASE_URL is required for the integration suite
-bun test tests/integration/blog-content-admin-ui.integration.test.ts  # the new test specific to Issue #543
+bun test tests/integration/query-budget-admin.integration.test.ts  # admin screen query budgets
 bun run build                          # Astro build, including every admin/blog/* screen
 bun run check                          # lint + check:docs + api:spec:check + typecheck + test + build
 bun run config:validate                # the env contract (one of the three go-live stages that actually exist)

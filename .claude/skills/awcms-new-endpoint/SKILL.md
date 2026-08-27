@@ -77,8 +77,11 @@ export const GET = defineTenantRoute({
    The `default` tier (128 KiB) for the majority of endpoints; `large` (5 MiB)
    only for content-heavy endpoints (HTML/rich content, batch sync).
    Do not add a new tier without updating the hard ceiling
-   `BODY_SIZE_HARD_CEILING_BYTES` AND its invariant test
-   (`tests/unit/request-body-limit.test.ts`).
+   `BODY_SIZE_HARD_CEILING_BYTES`, and re-run
+   `tests/request-body-limit-coverage.test.ts` — the sweep that proves no
+   route reads a body without a ceiling. Note what it does NOT assert: no
+   test pins the value of `BODY_SIZE_HARD_CEILING_BYTES` itself, so a change
+   to it fails nothing.
 6. High-risk mutation → `awcms-idempotency` (`Idempotency-Key`).
 7. Sensitive data leaves through a mapper (`awcms-sensitive-data`); do not return raw rows.
 8. DELETE on a deletable resource means soft delete; restore/purge need ABAC, audit, OpenAPI, and idempotency when high-risk.

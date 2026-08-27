@@ -853,7 +853,7 @@ NULL`, so it derives the map **from rows that exist**. Import ten articles and
   compares two VALUES. The only thing catching the copy was `typecheck`'s TS6133
   on the now-unused import — a grip that disappears the moment someone deletes
   the import along with the literal. The test now also asserts, over the
-  builder's source with comments stripped (`scripts/lib/source-text`, this
+  builder's source with comments stripped (`scripts/lib/source-text.ts`, this
   repo's stripper for exactly this), that
   `IMPORT_CHUNK_SIZE = MAX_REDIRECT_IMPORT_ITEMS` literally appears: red on the
   re-hardcode alone, and red again when the binding is present only in a

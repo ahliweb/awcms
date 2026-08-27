@@ -5,7 +5,7 @@ description: Jalankan preflight & go-live readiness AWCMS sebelum production. Gu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:b21b256f35d5bd4ea44015d783bd9d1731dd910a5ba0113d13a79b74c4e3c339 -->
+<!-- i18n-source-hash: sha256:071278e83987add19e80ec794bc142d591b2ede2374f909541527fecc021ae6c -->
 
 # AWCMS — Production Preflight & Go-Live
 
@@ -64,57 +64,49 @@ Kompresi respons dan tier cache di ATAS aplikasi (Cloudflare di depan
 Traefik/Varnish) tidak diperiksa preflight mana pun — lihat skill `awcms-deploy`
 (temuan C3/C14 di dokumen standar performa & keamanan).
 
-Sejak Issue #684 (epic #679), `bun run production:preflight` (Issue 12.2)
-adalah SATU perintah **read-only** yang menjalankan urutan lengkap sendiri
-— `config:validate` → `security:readiness` → `database:capacity` (Issue
-#743, epic #738 platform-evolution — kalkulator kapasitas koneksi
-lintas-instance, murni aritmatika config, tanpa koneksi database sama
-sekali; lihat `database-capacity-runbook.md`) → `db:connectivity` (satu
-`SELECT` memverifikasi koneksi + tabel ledger migrasi) → `api:spec:check`
-→ `modules:compose:check` (Issue #740, epic #738 — registry komposisi
-build-time modul base valid; tidak ada lagi jalur aplikasi-turunan/
-`extension:check`, dihapus oleh ADR-0034) → `test` → `build` →
-`db:pool:health` (skip bila server belum
-jalan, kecuali `APP_ENV=production` — di situ skip BLOKIR go-live) →
-`migration:plan` (dry-run: daftar migrasi pending TANPA menjalankannya).
-**Sepuluh** stage read-only total (`scripts/production-preflight.ts`'s
-`REMAINING_CHILD_PROCESS_STAGES` + `db:connectivity`/`db:pool:health`/
-`migration:plan` yang ditangani terpisah — `extension:check` dihapus, ADR-0034). Tidak ada stage yang menulis ke
-database. Menjalankan command satu-satu secara manual (seperti daftar lama
-di atas) TIDAK lagi direkomendasikan — `bun run db:migrate` secara
-terpisah TIDAK termasuk dalam preflight ini sama sekali; lihat §Menerapkan
-migrasi di bawah.
+<!-- aspirational:mulai -->
 
-### Menerapkan migrasi (langkah terpisah, wajib eksplisit)
+### Orkestrator ber-stage — TARGET, bukan sesuatu yang bisa dijalankan
 
-`bun run production:preflight` sendiri **tidak pernah** menulis ke
-database — bug lama (Issue #684): `db:migrate` dulu berjalan sebagai
-stage awal tanpa syarat, jadi stage belakangan (spec check/test/build)
-yang gagal tetap meninggalkan database ter-migrasi walau verdict akhirnya
-"GO-LIVE DIBLOKIR". Sekarang menerapkan migrasi butuh flag eksplisit,
-HANYA berjalan bila verdict `GO-LIVE DIIZINKAN` (sepuluh stage read-only
-di atas semua lulus):
+Seluruh sub-bagian ini menggambarkan orkestrator yang dispesifikasikan doc 07
+§Preflight. **Tidak satu pun dari ini ada di repo ini.** Ia disimpan karena
+itulah bentuk yang akan diambil bila dibangun, dan karena semantik flag di
+bawah adalah alasan bukti backup penting sama sekali.
 
-```bash
-APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
-  --apply-migrations --backup-verified --acknowledge-target=production
-```
+Desainnya: SATU perintah **read-only** yang menjalankan seluruh urutan —
+`config:validate` → `security:readiness` → `database:capacity` (kalkulator
+kapasitas koneksi lintas-instance, murni aritmatika config, tanpa koneksi
+database sama sekali; lihat `database-capacity-runbook.md`) →
+`db:connectivity` → `api:spec:check` → `modules:compose:check` → `test` →
+`build` → `db:pool:health` → `migration:plan` (dry-run: daftar migrasi
+pending TANPA menjalankannya). Tidak ada stage yang menulis ke database;
+menerapkan migrasi adalah langkah terpisah yang di-flag eksplisit
+(`--apply-migrations --backup-verified --acknowledge-target=<nilai>`, ketiganya
+wajib bersamaan, dengan `--acknowledge-target` harus sama dengan `APP_ENV`
+sebagai penangkap typo), berjalan hanya setelah semua stage read-only lulus.
 
-Ketiga flag WAJIB bersamaan (`scripts/production-preflight.ts`'s
-`authorizeApply`, diuji unit test): `--apply-migrations` (niat operator),
-`--backup-verified` (atestasi backup baru yang sudah dibuktikan bisa
-di-restore), `--acknowledge-target=<nilai>` yang harus SAMA PERSIS dengan
-`APP_ENV` (penangkap typo — menjalankan di shell/`.env` yang salah dengan
-`--acknowledge-target` salah menghasilkan penolakan keras, bukan mutasi
-diam-diam ke database yang salah). Prosedur lengkap (rehearsal, bukti backup,
-apply, rollback): `docs/awcms/production-preflight-runbook.md`. Tahap
-rehearsal-nya hanya berlaku bagi instalasi yang memang mendirikan environment
-kedua — repo ini tidak, dan tidak ada profil untuk itu: `staging` dihapus dari
-kosakata profil deployment
+<!-- aspirational:selesai -->
+
+### Menerapkan migrasi di REPO INI (langkah terpisah, wajib eksplisit)
+
+Tidak ada orkestrator yang menggerbangi ini, jadi urutannya Anda sendiri yang
+memegang: jalankan lima perintah di §Perintah preflight, pastikan
+`bun run security:readiness` keluar dengan kode nol, ambil dan **uji-restore**
+backup (§Backup & restore di bawah), baru kemudian jalankan
+`bun run db:migrate` terhadap URL produksi. `db:migrate` adalah mekanisme
+sesungguhnya dan ia menerapkan migrasi seketika — tidak ada yang memeriksa
+lebih dulu bahwa langkah-langkah sebelumnya lulus.
+
+Prosedur lengkap (rehearsal, bukti backup, apply, rollback):
+`docs/awcms/production-preflight-runbook.md`. Tahap rehearsal-nya hanya
+berlaku bagi instalasi yang memang mendirikan environment kedua — repo ini
+tidak, dan tidak ada profil untuk itu: `staging` dihapus dari kosakata profil
+deployment
 ([ADR-0083](../../../docs/adr/0083-this-template-deploys-to-one-environment.md)
 sebagaimana diamandemen; tersisa `development`/`production`/`offline-lan`).
-Tanpa environment pendahulu, `--backup-verified` berhenti menjadi atestasi
-seremonial: ia satu-satunya yang berdiri di depan migrasi produksi.
+Tanpa environment pendahulu, bukti backup yang sudah diuji-restore berhenti
+menjadi atestasi seremonial: ia satu-satunya yang berdiri di depan migrasi
+produksi.
 
 ## Checklist go-live
 
@@ -141,43 +133,49 @@ flowchart LR
 
 ## Backup & restore (wajib teruji)
 
-Sejak Issue 12.2, alur ini sudah diimplementasikan sebagai skrip siap
-pakai — sejak Issue #691 (epic #679) skrip ini mewajibkan **backup
-terenkripsi + manifest bertanda tangan (HMAC)**, dan restore memverifikasi
-checksum SEBELUM mutasi apa pun (lihat `deploy/backup/README.md` untuk
-model keamanan lengkap: kunci wajib dari FILE — `BACKUP_ENCRYPTION_KEY_FILE`/
-`BACKUP_HMAC_KEY_FILE` — bukan CLI/env-content; `DATABASE_URL` tidak pernah
-muncul di argv `pg_dump`/`pg_restore`/`psql`; lock mutual-exclusion; off-site
-copy opsional via `deploy/backup/offsite-copy.sh`; restore drill terjadwal
-via `deploy/backup/restore-drill.sh`):
+Ada dua skrip dan hanya itu: `deploy/backup/backup-postgres.sh` dan
+`deploy/backup/restore-postgres.sh`.
+
+> **JANGAN set `BACKUP_ENCRYPTION_KEY_FILE` atau `BACKUP_HMAC_KEY_FILE`.**
+> Enkripsi at-rest dan penandatanganan manifest **tidak diimplementasikan**.
+> `backup-postgres.sh` menulis dump `--format=custom` polos plus sidecar
+> sha256, dan ia **menolak jalan** — memang disengaja — bila salah satu
+> variabel itu di-set, alih-alih membiarkan Anda mengira dump-nya terenkripsi.
+> Lindungi dump dengan permission filesystem dan salinan off-host. Tidak ada
+> `deploy/backup/README.md`, tidak ada `offsite-copy.sh`, tidak ada
+> `restore-drill.sh`; versi terdahulu skill ini dan
+> `docs/awcms/production-preflight-runbook.md` §Stage 2 menyebut keempatnya
+> seolah-olah sudah ada.
 
 ```bash
 DATABASE_URL="$DATABASE_URL" \
 BACKUP_DIR=/var/backups/awcms \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
 ./deploy/backup/backup-postgres.sh
 
 DATABASE_URL="$DATABASE_URL" \
-BACKUP_ENCRYPTION_KEY_FILE=/etc/awcms/backup-encryption.key \
-BACKUP_HMAC_KEY_FILE=/etc/awcms/backup-hmac.key \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump.enc
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump
 ```
 
-(Restores into the disposable `awcms_restore_test` database by
-default — never the live one. `--target=<dbname>` + matching
-`--acknowledge-target=<dbname>` is required for a real recovery target.)
+(Me-restore ke database sekali-pakai `awcms_restore_test` secara bawaan —
+tidak pernah ke database hidup; `RESTORE_SCRATCH_DB` mengganti nama scratch
+itu. Target pemulihan sungguhan wajib dinamai dan diakui secara eksplisit.)
 
-Validasi restore: tenant/user/produk/stok/transaksi terbaca · login test · POS smoke test · report smoke test. `deploy/backup/restore-drill.sh` mengotomasi sebagian validasi ini (migrasi schema, tenant isolation RLS, sample record) plus laporan RTO/RPO — jalankan terjadwal, terpisah dari backup harian.
+Validasi restore dilakukan manual: baris tenant/user/transaksi terbaca ·
+login test · report smoke test. Tidak ada yang mengotomasi drill atau
+menghasilkan laporan RTO/RPO, jadi jadwalkan sendiri, terpisah dari backup
+harian.
 
-Sejak Issue #684, `--backup-verified` di atas WAJIB berdasarkan bukti
-restore-test nyata dari skrip ini, bukan sekadar backup yang "ada" —
-lihat `docs/awcms/production-preflight-runbook.md`'s §Backup evidence
-untuk urutan lengkap (dump → restore-test → catat evidence).
+Bukti backup untuk migrasi produksi WAJIB berupa uji-restore nyata dari dua
+skrip ini, bukan sekadar backup yang "ada" — lihat
+`docs/awcms/production-preflight-runbook.md`'s §Backup evidence untuk
+urutannya (dump → restore-test → catat evidence).
 
 ## Output
 
 Laporan production readiness: status tiap gate, temuan (severity), rollback plan, keputusan go/no-go. Critical control fail **memblokir** go-live.
-`--json-output=<path>` (opsional, Issue #684) menulis hasil terstruktur
-(`{ go, failedStages, blockingSkips, results, plan, applied }`) ke file — untuk arsip evidence deploy,
-tidak mengubah output stdout default.
+
+Laporan itu Anda susun sendiri dari output perintah-perintah di §Perintah
+preflight — tidak ada verdict teragregasi dan tidak ada artefak terstruktur
+`--json-output` untuk diarsipkan, karena tidak ada orkestrator yang
+menghasilkannya. `bun run security:readiness` satu-satunya langkah yang kode
+keluarnya membawa keputusan go/no-go.

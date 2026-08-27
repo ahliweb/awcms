@@ -154,11 +154,12 @@ here**, not code already running in this repo:
    filter `tenant_id` in its `WHERE` (relying on RLS for the normal
    path) precisely so that this second layer is GENUINELY tested through a test
    against a privileged connection (RLS bypassed) — in mini:
-   `tests/integration/profile-identity.integration.test.ts`'s test
+   `awcms-mini:tests/integration/profile-identity.integration.test.ts`'s test
    "application-layer guard: assertSameTenant/CrossTenantMergeError fires
-   even when RLS is bypassed". **This repo has no `tests/integration/`
-   at all yet (Issue #154)** — porting the #748 layer without porting that test
-   means the second guard is unverified. **A new merge/match endpoint must
+   even when RLS is bypassed". **This repo HAS an integration tier** (Issue
+   #154 landed: `tests/integration/harness.ts` plus ~74 specs) — there is just
+   no profile-identity spec in it yet, so porting the #748 layer without
+   porting that test means the second guard is unverified. **A new merge/match endpoint must
    call `assertSameTenant` at the point of execution, do not rely on RLS
    alone** — RLS is the first layer, not the only one.
 
@@ -224,9 +225,11 @@ port it first if it really is needed.
 
 ## Verification
 
-This repo **has no `tests/integration/` at all yet** (Issue #154) —
-including the `profile-identity.integration.test.ts` mentioned above; that one
-belongs to mini. What exists here: unit tests `tests/*.test.ts` (run
+This repo **does have an integration tier** — Issue #154 landed it:
+`tests/integration/harness.ts` and ~74 `*.integration.test.ts` specs, which
+run only when `DATABASE_URL` is set and are silently skipped when it is not.
+What it does **not** contain is `profile-identity.integration.test.ts`; that
+one belongs to mini. Unit tests live flat in `tests/*.test.ts` (run
 `bun test`). When porting the #748 layer, the cross-tenant guard test that
 deliberately bypasses RLS (privileged connection) is a MANDATORY part of the port — not
 optional — because it is the only thing that proves the second layer is

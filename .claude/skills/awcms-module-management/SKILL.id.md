@@ -5,7 +5,7 @@ description: Kelola/konsumsi sistem Module Management AWCMS (registry base, vali
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:4126a68dee73503e0593ea4442704c80edfc57e5c26032099d03a048658289d6 -->
+<!-- i18n-source-hash: sha256:e9e368bcf6091d5dcb4f60cae17d079914abe7dc04ddfca38524c9a6173f1a40 -->
 
 # AWCMS — Module Management System
 
@@ -88,13 +88,16 @@ satu-titik). Dipanggil dari:
 
 - `bun run modules:dag:check` (`scripts/validate-module-graph.ts`) —
   disisipkan ke `bun run check` tepat setelah `api:spec:check`.
-- `bun run modules:sync` (`scripts/modules-sync.ts`) — menolak sync ke DB
-  bila graph rusak, SEBELUM baris apa pun tersentuh. Sejak Issue #697 (epic
-  #679), script ini dibangun di atas shared worker runner
-  `src/lib/jobs/job-runner.ts` (advisory lock, `--dry-run` via
-  `planModuleSync`, JSON telemetry) — lihat
-  `docs/awcms/deployment-profiles.md` §Shared worker runner; perilaku
-  `syncModuleDescriptors` sendiri TIDAK berubah.
+- `POST /api/v1/modules/sync` (`src/pages/api/v1/modules/sync.ts`, memanggil
+  `syncModuleDescriptors` di `application/descriptor-sync.ts`) — menolak sync
+  ke DB bila graph rusak, SEBELUM baris apa pun tersentuh.
+  **Tidak ada `bun run modules:sync` dan tidak ada `scripts/modules-sync.ts`
+  di repo ini** — endpoint itulah seluruh mekanismenya.
+  `scripts/README.md` §Deferred mendaftar target CLI itu sebagai belum
+  diport, dan enam komentar kode yang menyuruh pembacanya menjalankannya
+  sudah dikoreksi karena alasan ini. `planModuleSync`
+  (`domain/descriptor-diff.ts`) diekspor supaya dry-run bisa menghitung plan
+  yang sama dengan yang akan diterapkan sync.
 
 **Fix nyata untuk cycle historis** (Issue #680): `tenant_admin.dependencies`
 diubah dari `["profile_identity", "identity_access"]` menjadi `[]` —
@@ -120,7 +123,7 @@ profile_identity}` — TIDAK berubah meski edge tenant_admin dihapus,
 karena closure dihitung lewat `identity_access -> profile_identity ->
 tenant_admin` (masih transitif sama), bukan lewat edge tenant_admin yang
 dihapus. Verifikasi ini lewat test yang sudah ada
-(`tests/unit/module-presets.test.ts`'s "real registry's protected set is
+(`tests/module-presets.test.ts`'s "real registry's protected set is
 exactly module_management's own dependency closure").
 
 ### `capabilities` — hubungan source-level, BEDA dari `dependencies` (Issue #681, epic #679)
