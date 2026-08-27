@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0098-the-cache-key-carries-the-locale-in-the-path.md)
 
-<!-- i18n-source-hash: sha256:3249dfe9efc7930a0aab5e42a825609ce8957c003c439d66d6712474cd92243c -->
+<!-- i18n-source-hash: sha256:712c211f16d52b1d7ba059b4a99f1d1ad44d600c1344c12793b5a95e9d1d7bbf -->
 
 # ADR-0098 — Kunci cache membawa locale, dan ia membawanya di PATH
 
@@ -60,3 +60,27 @@ Tiga mekanisme bisa membuat badan ter-cache benar secara locale.
 - **Netral:** `seo_distribution` sudah membangun URL absolut lewat `site-origin.ts` (putaran ADR-0097, #573), jadi prefiksnya masuk lewat satu pembangun origin yang sudah ada, bukan yang kedua.
 
 - **Ditolak: `Vary` pada header yang dinormalisasi.** Ia mekanisme yang dipakai kebanyakan situs dan ia yang salah di sini, karena alasan khas produk ini: pengalih bahasa adalah kendali yang sudah pernah dikirim, dirusak, dan diperbaiki dua kali oleh repo ini (v9.1.1, v9.1.2). Desain yang membuat klik eksplisit tidak bisa mengalahkan header peramban akan menjadikan kendali itu dekoratif tepat pada permukaan yang dilihat paling banyak pembaca.
+
+## Amandemen (2026-08-27, v10.0.1) — URL ber-prefix disajikan RUTE, bukan rewrite
+
+**Yang berubah:** mekanisme penyajian di dalam keputusan 3, dan tidak ada yang lain.
+
+Keputusan 3 menyatakan URL ber-prefix disajikan dengan me-_rewrite_-nya kembali ke rute telanjang (`next("/blog/acme")`), dan bagian Konsekuensi ADR ini membenarkannya dengan alasan "tanpa pohon `[locale]` ganda". **Mekanisme itu tidak berfungsi di build ini.** Rewrite yang sasarannya rute BERPARAMETER meresolusi rutenya dan menghitung params-nya dengan benar, lalu tidak pernah mengeksekusinya — yang menjawab justru catch-all.
+
+Diukur terhadap image produksi, di container terisolasi, pada rute yang sama:
+
+| sasaran rewrite                             | diakses langsung | lewat rewrite |
+| ------------------------------------------- | ---------------- | ------------- |
+| `/login`, `/search`, `/robots.txt` (statis) | 200              | 200           |
+| `/blog/{tenant}/search` (berparameter)      | 200              | **404**       |
+| `/blog/{tenant}`, `/blog/{tenant}/{slug}`   | —                | **404**       |
+
+Karena setiap permukaan `/blog/{tenantCode}` berparameter, v10.0.0 merilis blog publik yang URL telanjangnya `307` ke URL ber-prefix yang menjawab 404 — indeks dan setiap artikel. `context.rewrite()` menjalankan ulang middleware sehingga berputar; memberi `URL` atau `Request` ke `next()` tidak mengubah apa pun. Tidak ada ejaan satu-baris dari mekanisme asli yang berhasil.
+
+**Mekanisme baru:** keempat permukaan yang dibaca manusia punya rute nyata di `src/pages/[locale]/blog/[tenantCode]/…`. Masing-masing **hanya pendaftaran** — ia me-re-export handler rute telanjangnya lewat `localisedPublicRoute()`, yang mem-404-kan segmen yang bukan locale yang didukung. Keberatan ADR ini terhadap pohon `[locale]` adalah duplikasi LOGIKA, dan re-export tidak menduplikasi logika: perubahan pada rute telanjang otomatis menjadi perubahan pada rute ber-prefix.
+
+`src/middleware.ts` tidak lagi me-rewrite. Ia tetap menyetel `locals.locale` dari path, tetap meresolusi aturan `seo_distribution` terhadap path telanjang, dan tetap me-`307` URL telanjang ke ejaan ber-prefix-nya.
+
+**Yang TIDAK berubah:** keputusan 1, 2, 4, 5 dan 6 berlaku tanpa perubahan, begitu pula seluruh keputusan 3 kecuali mekanisme penyajiannya. Kunci cache tetap `(host, url)`, tidak ada `Vary` ditambahkan, pemilihan locale tetap `307` ber-`private, no-store`, path telanjang tetap alias yang tidak me-render, dan `/admin` tetap tak tersentuh. **Bentuk URL yang dilihat pembaca identik** — amandemen ini tak terlihat dari luar server.
+
+**Kenapa ia sampai ke produksi dalam keadaan hijau.** Tak satu pun tes di level mana pun pernah mengambil URL publik ber-prefix locale. ADR ini menjadikan ejaan ber-prefix sebagai kanonik untuk setiap permukaan blog yang dibaca manusia, sementara suite terus menguji hanya ejaan telanjang, yang me-redirect. `tests/localised-public-routes.test.ts` menutupnya: ia menurunkan rute ber-prefix yang diwajibkan dari sistem berkas, sehingga permukaan ber-prefix baru tak bisa ditambahkan tanpa rutenya, dan ia terbukti lewat mutasi terhadap kedua cacat asli — menghapus satu rute ber-prefix dan mengembalikan rewrite masing-masing memerahkannya.

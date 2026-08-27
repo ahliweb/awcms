@@ -58,3 +58,27 @@ Three mechanisms can make a cached body locale-correct.
 - **Neutral:** `seo_distribution` already builds absolute URLs through `site-origin.ts` (ADR-0097 round, #573), so the prefix enters through the existing single origin builder rather than a second one.
 
 - **Rejected: `Vary` on a normalised header.** It is the mechanism most sites use and it is the wrong one here, for a reason specific to this product: the language switcher is a control this repo already shipped, broke, and fixed twice (v9.1.1, v9.1.2). A design in which an explicit click cannot win over a browser header would make that control decorative on exactly the surface most readers see.
+
+## Amendment (2026-08-27, v10.0.1) — the prefixed URL is served by a route, not by a rewrite
+
+**What changed:** the serving mechanism inside decision 3, and nothing else.
+
+Decision 3 said the prefixed URL is served by rewriting it back to the bare route (`next("/blog/acme")`), and this ADR's Consequences justified that with "no duplicated `[locale]` tree". **That mechanism does not work in this build.** A rewrite whose target is a PARAMETERISED route resolves the route and computes its params correctly and then never executes it — the catch-all answers instead.
+
+Measured against the production image, in an isolated container, on the same route:
+
+| rewrite target                              | reached directly | reached by rewrite |
+| ------------------------------------------- | ---------------- | ------------------ |
+| `/login`, `/search`, `/robots.txt` (static) | 200              | 200                |
+| `/blog/{tenant}/search` (parameterised)     | 200              | **404**            |
+| `/blog/{tenant}`, `/blog/{tenant}/{slug}`   | —                | **404**            |
+
+Because every `/blog/{tenantCode}` surface is parameterised, v10.0.0 shipped a public blog in which the bare URL `307`d to a prefixed URL that answered 404 — index and every article. `context.rewrite()` re-runs middleware and loops; passing a `URL` or a `Request` to `next()` changes nothing. There is no one-line spelling of the original mechanism that works.
+
+**The new mechanism:** the four reader-facing surfaces have real routes at `src/pages/[locale]/blog/[tenantCode]/…`. Each is **registration only** — it re-exports the bare route's handler through `localisedPublicRoute()`, which 404s a segment that is not a supported locale. The objection this ADR raised to a `[locale]` tree was duplicated LOGIC, and re-export does not duplicate logic: a change to the bare route is a change to the prefixed one by construction.
+
+`src/middleware.ts` no longer rewrites. It still sets `locals.locale` from the path, still resolves `seo_distribution` rules against the bare path, and still `307`s a bare URL to its prefixed spelling.
+
+**What did NOT change:** decisions 1, 2, 4, 5 and 6 stand unmodified, and so does the whole of decision 3 except its serving mechanism. The cache key is still `(host, url)`, no `Vary` is added, locale selection is still a `private, no-store` `307`, the bare path is still an alias that does not render, and `/admin` is still untouched. **The URL shape a reader sees is identical** — this amendment is invisible from outside the server.
+
+**Why it reached production green.** Not one test at any level fetched a locale-prefixed public URL. The ADR made the prefixed spelling the canonical one for every reader-facing blog surface, and the suite went on exercising only the bare spellings, which redirect. `tests/localised-public-routes.test.ts` closes that: it derives the required prefixed routes from the filesystem, so a new prefixed surface cannot be added without one, and it is mutation-proven against both real defects — deleting a prefixed route and restoring the rewrite each turn it red.
