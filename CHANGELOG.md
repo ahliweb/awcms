@@ -1,5 +1,167 @@
 # awcms
 
+## 10.0.1
+
+### Patch Changes
+
+- ce6c171: fix(docs): the gate that holds skills to the code only ever read `src/`, and the go-live skill contradicted its own banner
+  
+  `skills:check` was built on the premise that a wrong skill is worse than a stale
+  doc, because an agent **follows** a skill. Its rule 1 reads `src/…` citations
+  and nothing else. Every other directory a skill talks about — `tests/`,
+  `scripts/`, `openapi/`, `deploy/`, `ops/`, `docs/` — was ungoverned, and that is
+  where a skill does its most operational talking: which test proves a claim,
+  which script to run, which runbook to follow before a production migration.
+  
+  A sweep of the corpus found ~60 such citations that resolve to nothing. They did
+  not fail cosmetically.
+  
+  ## `awcms-production-preflight` told an operator to break the backup
+  
+  Its banner says, correctly, that `bun run production:preflight` **does not
+  exist**. Forty lines below, a section described `scripts/production-preflight.ts`
+  in detail — ten stages, `REMAINING_CHILD_PROCESS_STAGES`, three mandatory apply
+  flags, an `authorizeApply` "covered by unit tests", a `--json-output` evidence
+  artefact. None of it exists; the file has never been in this repo. This is the
+  `awcms-performance` failure mode the gate's own comments record, in the corpus
+  the gate was written to protect.
+  
+  Worse, §Backup & restore instructed the operator to set
+  `BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE` before taking the go-live
+  backup. `deploy/backup/backup-postgres.sh` **refuses to run** when either is set
+  — its own `die()` message says at-rest encryption and manifest signing are not
+  implemented and names `production-preflight-runbook.md` §Stage 2 as overstating
+  them. Following the skill literally broke the last step before a production
+  migration. The runbook said the same thing and is corrected too; its status
+  banner had additionally aged in the wrong direction, claiming `deploy/` held
+  only a pgbouncer example long after the two backup scripts landed.
+  
+  The target design is kept, fenced as `aspirational`, because the flag semantics
+  are the reason restore-tested backup evidence matters at all. What replaces it
+  is what you can actually run.
+  
+  ## `awcms-profile-identity` denied a whole test tier
+  
+  It stated twice that this repo "has no `tests/integration/` at all yet (Issue
+  #154)". Issue #154 landed: there is a harness and ~74 specs. An agent following
+  that skill skips the tier entirely. What is actually missing is the one
+  profile-identity spec, which is now what it says.
+  
+  ## The rest
+  
+  - `awcms-github-snapshot` was a live-sounding skill for `docs/awcms/github/` — a
+    tree never committed here — driven by a script that does not exist. Reframed
+    as a target spec (its `gh` commands, which are real, moved outside the fence),
+    and the rows in `docs/awcms/README.md`, doc 09, `repo-inventory.md` and the
+    skills index that presented it as a live task now say so.
+  - `awcms-module-management` credited `bun run modules:sync`
+    (`scripts/modules-sync.ts`) with refusing a broken graph. `scripts/README.md`
+    §Deferred already records that this target never existed and that the real
+    mechanism is `POST /api/v1/modules/sync` — six code comments were corrected
+    for this once already; the skill kept the claim.
+  - `awcms-repo-inventory` named `scripts/repo-inventory-generate.ts` and
+    `RLS_EXEMPT_TABLES`; the generator is `scripts/repo-inventory.ts` and the
+    allow-list is `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` in
+    `scripts/security-readiness.ts`, which also pins the forbidden privileges.
+  - `blog_content`'s README cited three test files that have never existed, for
+    its single-source-of-truth rule, its secret-shaped-key rejection and its admin
+    RLS isolation. Two of those assertions exist nowhere, so the README now says
+    the claims are unproven rather than naming a file to trust.
+  - A dozen `tests/unit/<x>.test.ts` citations carried over from mini's layout;
+    this repo puts tests flat under `tests/`.
+  
+  ## Rule 6
+  
+  Same shape as rule 1, over the other governed directories, across both language
+  copies of every skill and every module README. Three deliberate carve-outs:
+  
+  - **`sql/` is not governed.** `sql/005` is a migration NUMBER, not a path (the
+    file is `005_awcms_….sql`). The first draft checked it as a filename and went
+    red on every correct citation in the corpus. `check:docs` already validates
+    those by number, which is the form they are written in.
+  - **An absence claim is exempt.** "there is no `deploy/backup/README.md`" has to
+    stay sayable, or the gate deletes the sentences that correct the record.
+    Detected by phrase, in both languages, near the citation — and required at
+    **every** occurrence, so one honest paragraph cannot license a second
+    live-sounding one. That is the preflight defect, stated as a property.
+  - **Sibling-repo citations are scoped, not banned.** `awcms-mini:tests/…` names
+    a file this repo cannot check. The prefix was already the convention; rule 6
+    makes it load-bearing, so an unprefixed path is a claim about THIS repo.
+  
+  Line/anchor suffixes are trimmed (`ops/run-job.sh:88,92`), and paths broken
+  across lines by prettier are rejoined first — rule 1 shipped with that hole, and
+  the citation it hid had never existed.
+  
+  Mutation-proven against the real sentences, not invented ones: each of the four
+  defects above goes red, and the absence claims, sibling-repo citations, globs
+  and resolving paths stay green.
+- 33e3f3d: fix(i18n,blog-content): v10.0.0 served the entire public blog as 404, and no test at any level had ever fetched the URL it broke
+  
+  ADR-0098 moved the locale into the PATH and served the prefixed URL by rewriting
+  it back to the bare route. Shipped in v10.0.0, that meant `/blog/{tenant}` `307`d
+  to `/id/blog/{tenant}`, and `/id/blog/{tenant}` answered **404** — the index and
+  every article, plus a feed whose `<link>` elements all pointed at those 404s.
+  `/`, `/login` and `/search` were unaffected, which is why the site looked alive.
+  
+  ### The mechanism, measured rather than reasoned about
+  
+  A rewrite whose TARGET is a parameterised route resolves the route and computes
+  its params correctly and then never executes it; the catch-all answers instead.
+  Verified against the production image in an isolated container, on the same
+  route:
+  
+  | rewrite target                              | reached directly | reached by rewrite |
+  | ------------------------------------------- | ---------------- | ------------------ |
+  | `/login`, `/search`, `/robots.txt` (static)  | 200              | 200                |
+  | `/blog/{tenant}/search` (parameterised)      | 200              | **404**            |
+  
+  Every `/blog/{tenantCode}` surface is parameterised, so every one of them fell.
+  `context.rewrite()` re-runs middleware and loops (`307`); passing a `URL` or a
+  `Request` to `next()` changes nothing. There is no one-line spelling of the
+  original mechanism that works, which is why the mechanism changed and ADR-0098
+  was amended rather than re-argued.
+  
+  (Deliberately not a markdown link. A changeset is validated by `check:docs`
+  while it sits in `.changeset/`, and then `changeset version` inlines it into
+  `CHANGELOG.md` at the repo ROOT — so `../docs/…` is broken in the first place
+  and `docs/…` is broken in the second. There is no relative spelling that is
+  correct in both, and the v10.0.0 release found that out the hard way: two
+  changesets carried `../docs/adr/…` and turned the release commit red.)
+  
+  ### What replaces it
+  
+  Real routes at `src/pages/[locale]/blog/[tenantCode]/…` — five files that are
+  **registration only**: each re-exports the bare route's `GET` through
+  `localisedPublicRoute()`. ADR-0098's objection to a `[locale]` tree was
+  duplicated LOGIC, and re-export does not duplicate logic — a change to the bare
+  route is a change to the prefixed one by construction.
+  
+  `localisedPublicRoute()` exists because `[locale]` is a dynamic segment, so
+  `/anything/blog/acme` matches the pattern too. Without the check a bogus prefix
+  would SERVE the tenant's content under an unbounded number of addresses, each
+  its own cache key. It 404s with the same generic response an unknown tenant
+  gets, so "no such locale" and "no such tenant" stay indistinguishable.
+  
+  `src/middleware.ts` no longer rewrites. It still sets `locals.locale` from the
+  path, still resolves `seo_distribution` rules against the bare path, and still
+  `307`s a bare URL to its prefixed spelling. **The URL shape a reader sees is
+  unchanged** — this fix is invisible from outside the server.
+  
+  ### The coverage gap is the finding
+  
+  Not one test, at any level, ever fetched a locale-prefixed public URL. ADR-0098
+  made the prefixed spelling canonical for every reader-facing blog surface and
+  the suite went on exercising only the bare ones, which redirect — so a fully
+  green CI was consistent with a fully 404 blog.
+  
+  `tests/localised-public-routes.test.ts` derives the required prefixed routes
+  from the filesystem rather than a hand-written list, so a new prefixed surface
+  cannot be added without its route. It is mutation-proven against both real
+  defects: deleting a prefixed route and restoring the rewrite each turn it red,
+  and it is green again once restored. It also pins the converse — `feed.xml`,
+  `sitemap-blog.xml` and `search` must have NO prefixed twin, because a second
+  address for one inventory document is its own defect.
+
 ## 10.0.0
 
 ### Major Changes
