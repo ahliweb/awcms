@@ -13,6 +13,7 @@ import {
   boundedPageSize
 } from "../../_shared/offset-pagination";
 import {
+  portableTextToContentBlocks,
   portableTextToPlainText,
   withProjectedBlocks
 } from "../domain/portable-text-conversion";
@@ -366,7 +367,25 @@ export async function listBlogPagesForAdmin(
   };
 }
 
-/** Partial update; `version` bumped on every successful write (same monotonic-counter convention as `updateBlogPost`, no optimistic-concurrency check yet). */
+/**
+ * Partial update; `version` bumped on every successful write (same
+ * monotonic-counter convention as `updateBlogPost`, no optimistic-concurrency
+ * check yet).
+ *
+ * ## `content_json` has the same three branches as `updateBlogPost`, on purpose
+ *
+ * The defect they repair was found on the POSTS side: a body-only PATCH took
+ * the projection branch with `input.contentJson === undefined`, so
+ * `withProjectedBlocks` spread `{}` and every key of the stored envelope was
+ * destroyed on save. There the lost key is `awcmsAstro` and the consequence is
+ * an article `ahliweb/awcms-astro` silently stops building.
+ *
+ * **No consumer stores a sidecar on a PAGE today, so this half repairs nothing
+ * that is currently broken** — and it is changed anyway. The two functions were
+ * identical when the defect was written; leaving one of them holding it is how
+ * it comes back, and a reader finding the difference later would have to guess
+ * whether the divergence was deliberate.
+ */
 export async function updateBlogPage(
   tx: Bun.SQL,
   tenantId: string,
@@ -382,10 +401,23 @@ export async function updateBlogPage(
         -- partial update that changed the envelope without the body, or the
         -- body without the derived search text, would leave the row internally
         -- inconsistent in a way nothing downstream could detect.
+        --
+        -- THREE branches, the same shape as updateBlogPost's, and kept that
+        -- way on purpose. See this function's docblock.
         content_json = CASE
-          WHEN ${input.bodyPortableText !== undefined}
+          -- Body untouched: the envelope moves only if the caller sent one.
+          WHEN ${input.bodyPortableText === undefined}
+            THEN COALESCE(${input.contentJson ?? null}, content_json)
+          -- Body AND envelope supplied: the caller owns both, unchanged.
+          WHEN ${input.contentJson !== undefined}
             THEN ${input.bodyPortableText === undefined ? null : withProjectedBlocks(input.contentJson, input.bodyPortableText)}
-          ELSE COALESCE(${input.contentJson ?? null}, content_json)
+          -- Body only: re-project onto the STORED envelope, so every key the
+          -- caller never mentioned survives the write.
+          ELSE jsonb_set(
+            CASE WHEN jsonb_typeof(content_json) = 'object' THEN content_json ELSE '{}'::jsonb END,
+            '{blocks}',
+            ${input.bodyPortableText === undefined ? null : portableTextToContentBlocks(input.bodyPortableText)}::jsonb
+          )
         END,
         content_text = CASE
           WHEN ${input.bodyPortableText !== undefined}
