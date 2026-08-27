@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](release-process.md)
 
-<!-- i18n-source-hash: sha256:1074501ea4aa97b48d47ae558262940461d2566f54c1ca4bb3c3e4c001420164 -->
+<!-- i18n-source-hash: sha256:f3211aafdb4042100129c7e11c0165ccc3ef1f745dc103753ba6bb93718b4881 -->
 
 # Release Process — Changesets, SBOM, Signing, Provenance
 
@@ -120,7 +120,7 @@ Digerbangi di belakang GitHub Environment bernama `release` (lihat §Environment
 
 Me-retag `:latest` pada `ghcr.io/ahliweb/awcms` dan `ghcr.io/ahliweb/awcms-jobs` ke digest yang baru saja ditandatangani dan di-attest. Ia tidak mendeklarasikan `environment:` sendiri — `needs: [build, sign-attest-publish]` sudah membuatnya tak terjangkau sampai gerbang disetujui, dan prompt approval kedua untuk keputusan yang sama hanyalah friksi tanpa keputusan kedua di belakangnya. Ia dibuat job terpisah alih-alih langkah tambahan di `sign-attest-publish` justru karena alasan job itu sendiri: `id-token`/`attestations` bersifat JOB-scoped, sehingga menjaga `docker/setup-buildx-action` di luar job berprivilese mempertahankan properti pengurungan yang dijelaskan di atas.
 
-Retag memakai `docker buildx imagetools create`, yang menulis ulang manifest terhadap registry alih-alih pull dan push ulang, mengikat image aplikasi dengan `@<digest>` — digest persis yang diserahkan ke `cosign sign` — sehingga `:latest` tak bisa mendarat pada image hasil rebuild yang karenanya berbeda. Satu langkah terakhir membaca ulang `:latest` dari registry dan menggagalkan job kecuali ia menunjuk digest tersebut.
+Retag adalah operasi REGISTRY, bukan Docker: `GET /v2/<name>/manifests/<digest>` lalu `PUT /v2/<name>/manifests/latest` dengan byte dan `Content-Type` yang sama. Isi identik byte-per-byte menghasilkan hash identik, sehingga `:latest` tak bisa mendarat di mana pun selain digest tertandatangani — image aplikasi diikat dengan `@<digest>`, digest persis yang diserahkan ke `cosign sign`. `docker buildx imagetools create` sempat dipakai dan TIDAK BISA melakukannya: ia selalu memancarkan manifest list baru yang membungkus sumbernya, yang berarti digest berbeda, sementara attestation terikat pada digest. Rilis `v10.0.3` gagal persis di sana; lihat ADR-0117 §Amandemen. Satu langkah terakhir membaca `Docker-Content-Digest` milik registry sendiri untuk `:latest` dan menggagalkan job kecuali cocok.
 
 Ia berjalan **setelah** GitHub Release terbit, bukan sebelum. Kedua urutan sama-sama menjaga `:latest` tertandatangani, tetapi langkah release-notes adalah yang benar-benar pernah gagal di pipeline ini (`v7.0.0`, body 186.449 karakter, setelah image sudah ter-push) — mempromosikan terakhir berarti kegagalan semacam itu meninggalkan `:latest` pada rilis sebelumnya, alih-alih menunjuk versi yang tak punya Release yang menjelaskannya. Lihat [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.id.md).
 
