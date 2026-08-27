@@ -19,7 +19,14 @@
  * same "OK" as a rule that passed.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   checkPackageVersion,
@@ -394,8 +401,46 @@ describe("the real repo satisfies every rule", () => {
   });
 
   test("every pending changeset has valid frontmatter", () => {
-    const pending = readPendingChangesets();
+    // No non-vacuity guard on the LIVE count here, and that is the point. The
+    // first draft asserted `pending.length > 0`, which is true on every commit
+    // except the one that matters: a release consumes every changeset, so
+    // `.changeset/` is legitimately empty and the guard turned the release
+    // commit into a red suite. It had never fired because this test was added
+    // AFTER v9.1.2 and the next release was v10.0.0 — the first time it was
+    // ever asked the question.
+    expect(checkPendingChangesets(readPendingChangesets())).toEqual([]);
+  });
+
+  test("the reader finds changesets and skips its own README", () => {
+    // Non-vacuity belongs on the READER, against a planted directory, rather
+    // than on whatever the repo happens to hold today.
+    const root = mkdtempSync(path.join(tmpdir(), "awcms-changesets-"));
+    mkdirSync(path.join(root, ".changeset"));
+    writeFileSync(
+      path.join(root, ".changeset", "README.md"),
+      "# Changesets\n\nnot a changeset\n"
+    );
+    writeFileSync(
+      path.join(root, ".changeset", "a-real-one.md"),
+      '---\n"awcms": patch\n---\n\nfix(x): something\n'
+    );
+
+    const pending = readPendingChangesets(root);
+
+    expect(pending.map((entry) => entry.name)).toEqual(["a-real-one.md"]);
     expect(checkPendingChangesets(pending)).toEqual([]);
-    expect(pending.length).toBeGreaterThan(0);
+
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("an empty `.changeset/` is a release, not a failure", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "awcms-changesets-empty-"));
+    mkdirSync(path.join(root, ".changeset"));
+    writeFileSync(path.join(root, ".changeset", "README.md"), "# Changesets\n");
+
+    expect(readPendingChangesets(root)).toEqual([]);
+    expect(checkPendingChangesets([])).toEqual([]);
+
+    rmSync(root, { recursive: true, force: true });
   });
 });
