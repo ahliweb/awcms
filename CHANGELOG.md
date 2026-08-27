@@ -1,5 +1,93 @@
 # awcms
 
+## 10.0.2
+
+### Patch Changes
+
+- db48916: fix(ops): the synthetic check asserted `200` on a URL that is designed to redirect, and would have sat red forever
+  
+  ADR-0098 made `/blog/{tenant}` an ALIAS: it answers `307` to
+  `/{locale}/blog/{tenant}`. Probe 6 asserted `200` on the bare URL without
+  following, so it went red the day that landed — and its own §ALERT DISCIPLINE
+  describes exactly what happens next: the first failure alerts, repeats stay
+  quiet, and the check becomes one people have learned to ignore.
+  
+  Worse than noisy: red for the wrong reason, with the real defect hiding behind
+  it. v10.0.0 shipped that redirect pointing at a **404** — the hop was healthy
+  and the destination was not, and each half looked fine when probed alone. A
+  probe that stopped at the `307` could not tell those two states apart.
+  
+  So the assertion is now the PAIR. `-L` follows the hop and requires the
+  destination to serve; `%{url_effective}` requires it to be the locale-prefixed
+  spelling. The second half is not decoration — a `200` on a bare URL would mean
+  the prefix silently stopped being canonical, and every cache entry and every
+  `hreflang` this site publishes would then disagree with what it serves.
+  
+  Verified against production after v10.0.1: `blog index 200 at its
+  locale-prefixed URL (https://awcms.ahlikoding.com/id/blog/ahliweb)`, whole
+  check `VERDICT: all probes passed`, exit 0 — through Cloudflare and Varnish,
+  not against the container.
+- 795bad9: fix(blog): editing a post through `/admin/blog` destroyed `content_json.awcmsAstro`, and the repo that SERVES the article then built no page for it
+  
+  `content_json` survived the Portable Text cutover for one reason. ADR-0100 §4
+  keeps it as the non-body ENVELOPE because `ahliweb/awcms-astro` stores a sidecar
+  in it, and ADR-0115 §2 then made that a written contract:
+  `content_json.awcmsAstro.kategori` carries the SECTION, populated by
+  `blog:legacy:import --section-map`.
+  
+  `updateBlogPost` had **two** branches for that column, and a body-only `PATCH`
+  took the projection branch with `input.contentJson === undefined`.
+  `withProjectedBlocks` spreads a non-object envelope to `{}`, so the row came
+  back holding `blocks` and nothing else. **The sidecar was destroyed on every
+  save.**
+  
+  The admin edit screen is exactly that caller: `admin/blog.astro:2092` sets
+  `body.bodyPortableText` and has never set `body.contentJson`. `PATCH
+  /api/v1/blog/posts/{id}` passes `input.contentJson` straight through without
+  hydrating it from the stored row, so the destruction is not specific to the
+  screen — every client that sends a body without an envelope had it.
+  
+  ## Why nothing caught it, and why it is the same rung the CONSUMER ROUND named
+  
+  Nothing fails. The article still renders perfectly **here**, because
+  `/blog/{code}/{slug}` reads `body_portable_text`. What breaks is one repository
+  away: `getArticles` in `ahliweb/awcms-astro` keeps a post only when the sidecar
+  names a configured tab, so the article silently stops being **built** — green
+  build, no page, no warning on either side. An imported article an editor opens
+  once and saves simply disappears from the site.
+  
+  `portable-text-conversion.ts`'s own docblock says `withProjectedBlocks`
+  preserves _"every other key — including `awcmsAstro`"_. That is true **of the
+  function** and false of every call the admin screen makes, because the caller
+  never passes the envelope there is to preserve. A comment is not a call.
+  
+  ## The repair
+  
+  Three branches instead of two. A body-only update now re-projects onto the
+  **stored** envelope with `jsonb_set`, so every key the caller never mentioned
+  survives. Merged in SQL rather than by reading the row first: a
+  read-modify-write would race with a concurrent update of the same envelope, and
+  `jsonb_set` cannot.
+  
+  The other two branches are unchanged on purpose. A caller that sends an envelope
+  still **owns** it — quietly merging for those callers would make it impossible
+  to remove a key.
+  
+  `blog-page-directory.ts` gets the identical three branches. No consumer stores a
+  sidecar on a page today, so that half repairs nothing currently broken; it is
+  changed because the two functions were identical when the defect was written,
+  and a twin that keeps its sibling's defect is how the defect returns.
+  
+  ## Coverage
+  
+  `tests/integration/blog-envelope-sidecar.integration.test.ts` — six cases,
+  DB-gated, named for the consequence rather than the column. It asserts the
+  sidecar survives, that a key **this repo has never heard of** survives too (an
+  allowlist keyed on `awcmsAstro` would pass the first assertion and lose the next
+  consumer's data), that `blocks` is still re-derived (so "stop touching
+  `content_json`" is not a passing answer), that an explicit envelope still
+  replaces, and that pages behave identically.
+
 ## 10.0.1
 
 ### Patch Changes
