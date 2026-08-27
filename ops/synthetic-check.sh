@@ -145,9 +145,32 @@ else
   fi
 fi
 
-# --- 6. a real content route -------------------------------------------------
-CODE=$($CURL -o /dev/null -w '%{http_code}' "${BASE}/blog/${TENANT}" || echo 000)
-[ "$CODE" = "200" ] && ok "blog index 200" || fail "blog index returned ${CODE}"
+# --- 6. a real content route, FOLLOWED to where it actually serves ------------
+#
+# This probe asserted `200` on the bare URL and went red the day ADR-0098 landed,
+# because the bare URL is an ALIAS: it answers `307` to `/{locale}/blog/{tenant}`
+# by design. Left alone it would have alerted once and then sat "failing"
+# forever — the muted-check failure its own §ALERT DISCIPLINE warns about.
+#
+# Worse, it would have been red for the WRONG reason while the real defect hid
+# behind it. v10.0.0 shipped that redirect pointing at a 404: the hop was
+# healthy and the destination was not, and each half looked fine when probed
+# alone. So the assertion is the PAIR — follow the redirect, and require both
+# that the destination serves and that it is the locale-prefixed spelling.
+# `-L` plus `%{url_effective}` is what makes the second half observable.
+CODE=$($CURL -L -o /dev/null -w '%{http_code}' "${BASE}/blog/${TENANT}" || echo 000)
+FINAL=$($CURL -L -o /dev/null -w '%{url_effective}' "${BASE}/blog/${TENANT}" || echo "")
+
+if [ "$CODE" != "200" ]; then
+  fail "blog index returned ${CODE} after following redirects (final: ${FINAL:-none})"
+elif ! printf '%s' "$FINAL" | grep -qE "/(en|id)/blog/${TENANT}([/?#]|$)"; then
+  # A `200` on a bare URL means the locale prefix silently stopped being
+  # canonical — the reader is being served an alias, and every cache entry and
+  # every `hreflang` this site publishes now disagrees with what it serves.
+  fail "blog index served an UNPREFIXED URL (${FINAL}) — ADR-0098 regression"
+else
+  ok "blog index 200 at its locale-prefixed URL (${FINAL})"
+fi
 
 # --- verdict + alert discipline ----------------------------------------------
 PREV=""; [ -f "$STATE" ] && PREV=$(cat "$STATE")
