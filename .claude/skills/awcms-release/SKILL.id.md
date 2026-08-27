@@ -5,7 +5,7 @@ description: Jalankan proses rilis AWCMS dengan Changesets. Gunakan saat diminta
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c77de150f49cae5f1208585a96140743d2aa2e193f1a527b10389197f23b1922 -->
+<!-- i18n-source-hash: sha256:93448a661254d3de5f9c5b88fbf8696984ca4a5b8740ea166e82f85b895ad441 -->
 
 # AWCMS — Release (Changesets)
 
@@ -38,7 +38,7 @@ flowchart LR
    RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify   # gate lokal: tag↔package.json↔CHANGELOG↔0 changeset pending
    git push origin vX.Y.Z                        # push HANYA tag rilis (hindari `--tags` yang mendorong semua tag lokal)
    ```
-   Push tag ini **memicu** `.github/workflows/release.yml`: guard ancestor-of-`main`, `bun run release:verify` (versi/CHANGELOG/changeset tersisa harus konsisten — `release.yml` mengambil tag dari `github.ref_name`, lokal dari `RELEASE_VERIFY_TAG` atau `git describe --exact-match`), full quality gate, lalu — setelah disetujui lewat `release` environment (lihat doc `release-process.md` §Environment approval) — build image, dua SBOM CycloneDX (source + image), checksums, `cosign sign` keyless, `actions/attest-build-provenance`/`attest-sbom`, push `ghcr.io/ahliweb/awcms`, dan `gh release create` dengan asset terlampir.
+   Push tag ini **memicu** `.github/workflows/release.yml`: guard ancestor-of-`main`, `bun run release:verify` (versi/CHANGELOG/changeset tersisa harus konsisten — `release.yml` mengambil tag dari `github.ref_name`, lokal dari `RELEASE_VERIFY_TAG` atau `git describe --exact-match`), full quality gate, lalu — setelah disetujui lewat `release` environment (lihat doc `release-process.md` §Environment approval) — build image, dua SBOM CycloneDX (source + image), checksums, `cosign sign` keyless, `actions/attest-build-provenance`/`actions/attest`, push `ghcr.io/ahliweb/awcms`, dan `gh release create` dengan asset terlampir.
 7. **Jangan** lagi menjalankan `gh release create` manual — itu sekarang bagian dari `release.yml`; menjalankannya manual sebelum workflow selesai akan bentrok dengan asset yang coba di-attach otomatis.
 
 ## Aturan

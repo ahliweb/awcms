@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](release-process.md)
 
-<!-- i18n-source-hash: sha256:59723d41620c971a3545efac40a2fdd893a4020143299d0990dd42765d842660 -->
+<!-- i18n-source-hash: sha256:1074501ea4aa97b48d47ae558262940461d2566f54c1ca4bb3c3e4c001420164 -->
 
 # Release Process — Changesets, SBOM, Signing, Provenance
 
@@ -24,10 +24,11 @@ flowchart TD
   Commit --> Tag[git tag vX.Y.Z + push]
   Tag --> Validate[release.yml: validate job<br/>ancestor-of-main guard,<br/>release:verify, full check]
   Dispatch[workflow_dispatch<br/>rehearsal, any branch] --> Validate
-  Validate --> BuildJob[build job: image + SBOM x2<br/>+ checksums, no signing creds]
+  Validate --> BuildJob[build job: image + SBOM x2<br/>+ checksums, no signing creds<br/>pushes :version and :sha- only]
   BuildJob --> Approve{release environment<br/>approval}
   Approve -- approved --> SignJob[sign-attest-publish job:<br/>cosign sign, attest<br/>provenance + SBOM]
   SignJob --> Publish[Push ghcr.io attestations<br/>+ GitHub Release with assets<br/>real release only]
+  Publish --> Promote[promote-latest job:<br/>retag :latest to the signed digest<br/>real release only]
 ```
 
 Kedua trigger wajib menjalankan `validate` job yang persis sama — jalur rehearsal bukan jalan pintas melewati quality gate, hanya melewati tag-ancestor guard dan `release:verify` (keduanya `if: github.event_name == 'push'`; `bun run check` sendiri selalu berjalan).
@@ -82,10 +83,10 @@ Check ini berjalan sebagai workflow sendiri (`changesets.yml`), bukan step tamba
 
 Dua entry point, keduanya konvergen ke job graph yang sama:
 
-| Trigger                           | Efek                                                                                                                                                  |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `push` tag yang cocok `v*.*.*`    | **Rilis nyata.** Mempublikasikan image, GitHub Release, dan memindahkan `:latest`.                                                                    |
-| `workflow_dispatch` (ref apa pun) | **Rehearsal.** Menjalankan pipeline yang identik terhadap image tag `dryrun-<sha>`. Tidak ada GitHub Release dibuat, `:latest` tidak pernah disentuh. |
+| Trigger                           | Efek                                                                                                                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `push` tag yang cocok `v*.*.*`    | **Rilis nyata.** Mempublikasikan image, lalu — hanya setelah gerbang approval dilewati — GitHub Release, dan baru setelah itu memindahkan `:latest`. Ini TIGA peristiwa terpisah, bukan satu (ADR-0117). |
+| `workflow_dispatch` (ref apa pun) | **Rehearsal.** Menjalankan pipeline yang identik terhadap image tag `dryrun-<sha>`. Tidak ada GitHub Release dibuat, `:latest` tidak pernah disentuh.                                                    |
 
 ### `validate` job (read-only)
 
@@ -102,7 +103,7 @@ Dua entry point, keduanya konvergen ke job graph yang sama:
 
 Berjalan identik untuk rilis nyata dan rehearsal. Sengaja tidak memegang credential signing/attestation (`id-token`/`attestations`) — lihat di bawah.
 
-1. Build `Dockerfile.production` dengan Docker Buildx, push ke `ghcr.io/ahliweb/awcms` bertag `<version>` (atau `dryrun-<sha>` untuk rehearsal) dan `sha-<commit>`; `:latest` ditambahkan hanya untuk rilis nyata.
+1. Build `Dockerfile.production` dengan Docker Buildx, push ke `ghcr.io/ahliweb/awcms` bertag `<version>` (atau `dryrun-<sha>` untuk rehearsal) dan `sha-<commit>`. **`:latest` TIDAK diproduksi di sini** — job ini berjalan sebelum gerbang approval, jadi apa pun yang ia tag menjadi publik dan tanpa tanda tangan; lihat job `promote-latest` di bawah dan [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.id.md).
 2. **SBOM** — dua SBOM CycloneDX JSON terpisah via [`anchore/sbom-action`](https://github.com/anchore/sbom-action) (Syft di baliknya): satu untuk **source tree** (`bun.lock` + workspace, `sbom-source.cdx.json`) dan satu untuk **image container terbangun** (`sbom-image.cdx.json`) — keduanya bisa berbeda (SBOM image juga mencerminkan paket OS base image, bukan hanya `bun.lock`).
 3. **Checksums** — `CHECKSUMS.txt` (SHA-256) mencakup kedua SBOM dan sebuah `git archive` source tarball.
 4. Mengunggah semua di atas sebagai workflow artifact berumur pendek (1 hari) untuk diunduh job berikutnya.
@@ -112,8 +113,16 @@ Berjalan identik untuk rilis nyata dan rehearsal. Sengaja tidak memegang credent
 Digerbangi di belakang GitHub Environment bernama `release` (lihat §Environment approval di bawah). Dipisah dari `build` menjadi job sendiri karena alasan keamanan: `id-token`/`attestations` permission bersifat JOB-scoped di GitHub Actions, jadi setiap step di job yang memegangnya bisa mencetak OIDC token sendiri — menjaga third-party action `anchore/sbom-action` sepenuhnya di luar job ini berarti hipotesis kompromi supply-chain pada action itu tidak pernah punya credential OIDC/attestation untuk disalahgunakan. Berjalan identik untuk rilis nyata dan rehearsal:
 
 1. **Signing** — `cosign sign --yes` terhadap digest image yang dihasilkan `build` job, **keyless OIDC** (tidak ada signing key yang pernah ada; identitasnya adalah workflow run ini sendiri, didukung OIDC token GitHub Actions dan Sigstore's Fulcio/Rekor).
-2. **Attestation/provenance** — `actions/attest-build-provenance` untuk digest image (dipush ke registry juga) dan untuk tiga artefak source (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest-sbom` mengasosiasikan `sbom-image.cdx.json` dengan digest image secara spesifik. Semua adalah attestation store SLSA-compatible milik GitHub sendiri — tidak ada infrastruktur terpisah yang perlu dijalankan/dipelihara.
+2. **Attestation/provenance** — `actions/attest-build-provenance` untuk digest image (dipush ke registry juga) dan untuk tiga artefak source (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest` (dengan `sbom-path`) mengasosiasikan `sbom-image.cdx.json` dengan digest image secara spesifik. Semua adalah attestation store SLSA-compatible milik GitHub sendiri — tidak ada infrastruktur terpisah yang perlu dijalankan/dipelihara.
 3. **Publish** (rilis nyata saja) — mengekstrak section versi ini dari `CHANGELOG.md` sebagai body release dan menjalankan `gh release create`, melampirkan `CHECKSUMS.txt` dan kedua SBOM plus source tarball sebagai release asset.
+
+### `promote-latest` job (rilis nyata saja; `packages: write` saja)
+
+Me-retag `:latest` pada `ghcr.io/ahliweb/awcms` dan `ghcr.io/ahliweb/awcms-jobs` ke digest yang baru saja ditandatangani dan di-attest. Ia tidak mendeklarasikan `environment:` sendiri — `needs: [build, sign-attest-publish]` sudah membuatnya tak terjangkau sampai gerbang disetujui, dan prompt approval kedua untuk keputusan yang sama hanyalah friksi tanpa keputusan kedua di belakangnya. Ia dibuat job terpisah alih-alih langkah tambahan di `sign-attest-publish` justru karena alasan job itu sendiri: `id-token`/`attestations` bersifat JOB-scoped, sehingga menjaga `docker/setup-buildx-action` di luar job berprivilese mempertahankan properti pengurungan yang dijelaskan di atas.
+
+Retag memakai `docker buildx imagetools create`, yang menulis ulang manifest terhadap registry alih-alih pull dan push ulang, mengikat image aplikasi dengan `@<digest>` — digest persis yang diserahkan ke `cosign sign` — sehingga `:latest` tak bisa mendarat pada image hasil rebuild yang karenanya berbeda. Satu langkah terakhir membaca ulang `:latest` dari registry dan menggagalkan job kecuali ia menunjuk digest tersebut.
+
+Ia berjalan **setelah** GitHub Release terbit, bukan sebelum. Kedua urutan sama-sama menjaga `:latest` tertandatangani, tetapi langkah release-notes adalah yang benar-benar pernah gagal di pipeline ini (`v7.0.0`, body 186.449 karakter, setelah image sudah ter-push) — mempromosikan terakhir berarti kegagalan semacam itu meninggalkan `:latest` pada rilis sebelumnya, alih-alih menunjuk versi yang tak punya Release yang menjelaskannya. Lihat [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.id.md).
 
 ## Mengapa `anchore/sbom-action` (Syft) untuk SBOM generation
 
@@ -123,7 +132,11 @@ Digerbangi di belakang GitHub Environment bernama `release` (lihat §Environment
 
 ## Environment approval (langkah manual maintainer)
 
-`sign-attest-publish` mendeklarasikan `environment: release` (`build` tidak — karena tidak memegang credential signing/attestation, menggerbanginya di belakang approval hanya menambah friksi tanpa manfaat keamanan). Mereferensikan nama environment di sebuah workflow **auto-create record environment yang tidak terproteksi** pada run pertama bila belum ada — ini **tidak**, dengan sendirinya, mem-pause job untuk approval. Mengonfigurasi **required reviewers** pada environment tersebut adalah perubahan repo-admin/shared-state yang sengaja dibiarkan untuk diterapkan eksplisit oleh maintainer:
+`sign-attest-publish` mendeklarasikan `environment: release`. `build` tidak, karena ia tidak memegang credential signing/attestation — menggerbanginya tidak mengurung apa pun yang bisa dilakukan job itu dengan credential tersebut, dan di sanalah third-party `anchore/sbom-action` sengaja dijalankan.
+
+> **Apa yang dicakup dan TIDAK dicakup gerbang ini.** Ia menggerbangi _penandatanganan, attestation, GitHub Release, dan (sejak [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.id.md)) tag `:latest`_. Ia **tidak** menggerbangi push image itu sendiri: `build` menerbitkan `:<version>` dan `:sha-<commit>` begitu tag di-push, sebelum approval apa pun. Tag-tag itu imutabel dan inert — tak ada yang menunjuk ke sana kecuali konsumen meminta versi persis itu — sehingga rilis yang tak pernah disetujui meninggalkannya dan tidak memindahkan apa pun. Paragraf ini dahulu menyatakan menggerbangi `build` hanya menambah "friksi tanpa manfaat keamanan"; itu benar untuk kredensial dan SALAH untuk penerbitan, karena `build` juga memancarkan `:latest`. Empat rilis (`v8.0.0`, `v9.0.0`, `v9.1.0`, `v9.1.1`) duduk tanpa persetujuan di gerbang ini masing-masing lebih dari sepekan, sementara `:latest` sudah menunjuk image mereka yang tak bertanda tangan. ADR-0117 memindahkan `:latest` ke belakang gerbang; sisa paragraf ini tetap berlaku.
+
+Mereferensikan nama environment di sebuah workflow **auto-create record environment yang tidak terproteksi** pada run pertama bila belum ada — ini **tidak**, dengan sendirinya, mem-pause job untuk approval. Mengonfigurasi **required reviewers** pada environment tersebut adalah perubahan repo-admin/shared-state yang sengaja dibiarkan untuk diterapkan eksplisit oleh maintainer:
 
 **Via GitHub UI:** Settings → Environments → New environment → beri nama tepat `release` → **Required reviewers** → tambahkan minimal satu maintainer → Save protection rules. Setiap run `release.yml`'s publish job (rilis nyata **dan** rehearsal) akan pause di "Waiting for review" sampai reviewer yang disetujui klik **Approve and deploy**.
 

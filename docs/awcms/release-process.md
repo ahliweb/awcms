@@ -22,10 +22,11 @@ flowchart TD
   Commit --> Tag[git tag vX.Y.Z + push]
   Tag --> Validate[release.yml: validate job<br/>ancestor-of-main guard,<br/>release:verify, full check]
   Dispatch[workflow_dispatch<br/>rehearsal, any branch] --> Validate
-  Validate --> BuildJob[build job: image + SBOM x2<br/>+ checksums, no signing creds]
+  Validate --> BuildJob[build job: image + SBOM x2<br/>+ checksums, no signing creds<br/>pushes :version and :sha- only]
   BuildJob --> Approve{release environment<br/>approval}
   Approve -- approved --> SignJob[sign-attest-publish job:<br/>cosign sign, attest<br/>provenance + SBOM]
   SignJob --> Publish[Push ghcr.io attestations<br/>+ GitHub Release with assets<br/>real release only]
+  Publish --> Promote[promote-latest job:<br/>retag :latest to the signed digest<br/>real release only]
 ```
 
 Both triggers must run exactly the same `validate` job — the rehearsal path is not a shortcut around the quality gate, it only skips the tag-ancestor guard and `release:verify` (both `if: github.event_name == 'push'`; `bun run check` itself always runs).
@@ -80,10 +81,10 @@ This check runs as its own workflow (`changesets.yml`), not as an extra step ins
 
 Two entry points, both converging on the same job graph:
 
-| Trigger                           | Effect                                                                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `push` of a tag matching `v*.*.*` | **Real release.** Publishes the image, the GitHub Release, and moves `:latest`.                                                        |
-| `workflow_dispatch` (any ref)     | **Rehearsal.** Runs the identical pipeline against image tag `dryrun-<sha>`. No GitHub Release is created, `:latest` is never touched. |
+| Trigger                           | Effect                                                                                                                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `push` of a tag matching `v*.*.*` | **Real release.** Publishes the image, then — only once the approval gate is passed — the GitHub Release, and only then moves `:latest`. These are three separate events, not one (ADR-0117). |
+| `workflow_dispatch` (any ref)     | **Rehearsal.** Runs the identical pipeline against image tag `dryrun-<sha>`. No GitHub Release is created, `:latest` is never touched.                                                        |
 
 ### `validate` job (read-only)
 
@@ -100,7 +101,7 @@ Two entry points, both converging on the same job graph:
 
 Runs identically for a real release and a rehearsal. Deliberately holds no signing/attestation credentials (`id-token`/`attestations`) — see below.
 
-1. Build `Dockerfile.production` with Docker Buildx, push to `ghcr.io/ahliweb/awcms` tagged `<version>` (or `dryrun-<sha>` for a rehearsal) and `sha-<commit>`; `:latest` is added only for a real release.
+1. Build `Dockerfile.production` with Docker Buildx, push to `ghcr.io/ahliweb/awcms` tagged `<version>` (or `dryrun-<sha>` for a rehearsal) and `sha-<commit>`. **`:latest` is NOT produced here** — this job runs before the approval gate, so anything it tags is public and unsigned; see the `promote-latest` job below and [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.md).
 2. **SBOM** — two separate CycloneDX JSON SBOMs via [`anchore/sbom-action`](https://github.com/anchore/sbom-action) (Syft behind it): one for the **source tree** (`bun.lock` + workspace, `sbom-source.cdx.json`) and one for the **built container image** (`sbom-image.cdx.json`) — the two can differ (the image SBOM also reflects the base image's OS packages, not just `bun.lock`).
 3. **Checksums** — `CHECKSUMS.txt` (SHA-256) covers both SBOMs and a `git archive` source tarball.
 4. Uploads all of the above as a short-lived (1 day) workflow artifact for the next job to download.
@@ -110,8 +111,16 @@ Runs identically for a real release and a rehearsal. Deliberately holds no signi
 Gated behind a GitHub Environment named `release` (see §Environment approval below). It is split out of `build` into its own job for a security reason: the `id-token`/`attestations` permissions are JOB-scoped in GitHub Actions, so every step in a job holding them can mint its own OIDC token — keeping the third-party `anchore/sbom-action` entirely out of this job means a hypothetical supply-chain compromise of that action never has OIDC/attestation credentials to abuse. Runs identically for a real release and a rehearsal:
 
 1. **Signing** — `cosign sign --yes` against the image digest produced by the `build` job, **keyless OIDC** (no signing key ever exists; the identity is this workflow run itself, backed by the GitHub Actions OIDC token and Sigstore's Fulcio/Rekor).
-2. **Attestation/provenance** — `actions/attest-build-provenance` for the image digest (pushed to the registry too) and for the three source artifacts (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest-sbom` associates `sbom-image.cdx.json` with the image digest specifically. All of these are GitHub's own SLSA-compatible attestation store — no separate infrastructure to run/maintain.
+2. **Attestation/provenance** — `actions/attest-build-provenance` for the image digest (pushed to the registry too) and for the three source artifacts (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest` (with `sbom-path`) associates `sbom-image.cdx.json` with the image digest specifically. All of these are GitHub's own SLSA-compatible attestation store — no separate infrastructure to run/maintain.
 3. **Publish** (real releases only) — extracts this version's section from `CHANGELOG.md` as the release body and runs `gh release create`, attaching `CHECKSUMS.txt` and both SBOMs plus the source tarball as release assets.
+
+### `promote-latest` job (real releases only; `packages: write` only)
+
+Retags `:latest` on both `ghcr.io/ahliweb/awcms` and `ghcr.io/ahliweb/awcms-jobs` to the digest that was just signed and attested. It declares no `environment:` of its own — `needs: [build, sign-attest-publish]` already makes it unreachable until the gate is approved, and a second approval prompt for the same decision would be friction without a second decision behind it. It is a separate job rather than extra steps in `sign-attest-publish` for that job's own reason: `id-token`/`attestations` are job-scoped, so keeping `docker/setup-buildx-action` out of the privileged job preserves the containment property described above.
+
+The retag uses `docker buildx imagetools create`, which rewrites manifests against the registry rather than pulling and re-pushing, binding the application image by `@<digest>` — the exact digest handed to `cosign sign` — so `:latest` cannot land on a rebuilt-and-therefore-different image. A final step re-reads `:latest` from the registry and fails the job unless it resolves to that digest.
+
+It runs **after** the GitHub Release is published, not before. Both orderings keep `:latest` signed, but the release-notes step is the one that has actually failed in this pipeline (`v7.0.0`, a 186,449-character body, after the image was already pushed) — promoting last means such a failure leaves `:latest` on the previous release, rather than pointing at a version with no Release describing it. See [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.md).
 
 ## Why `anchore/sbom-action` (Syft) for SBOM generation
 
@@ -121,7 +130,9 @@ Gated behind a GitHub Environment named `release` (see §Environment approval be
 
 ## Environment approval (manual maintainer step)
 
-`sign-attest-publish` declares `environment: release` (`build` does not — since it holds no signing/attestation credentials, gating it behind approval would only add friction with no security benefit). Referencing an environment name in a workflow **auto-creates an unprotected environment record** on the first run if it does not exist — this does **not**, by itself, pause the job for approval. Configuring **required reviewers** on that environment is a repo-admin/shared-state change deliberately left for a maintainer to apply explicitly:
+`sign-attest-publish` declares `environment: release`. `build` does not, because it holds no signing/attestation credentials — gating it would not contain anything the job can already do with them, and it is where the third-party `anchore/sbom-action` deliberately runs.
+
+> **What the gate does and does not cover.** It gates _signing, attestation, the GitHub Release, and (since [ADR-0117](../adr/0117-latest-moves-only-after-the-approval-that-signs-it.md)) the `:latest` tag_. It does **not** gate the image push itself: `build` publishes `:<version>` and `:sha-<commit>` as soon as the tag is pushed, before any approval. Those tags are immutable and inert — nothing resolves to them unless a consumer asks for that exact version — so a release that is never approved leaves them behind and moves nothing else. This paragraph previously said gating `build` would add "friction with no security benefit"; that was true of credentials and false of publication, because `build` also emitted `:latest`. Four releases (`v8.0.0`, `v9.0.0`, `v9.1.0`, `v9.1.1`) sat unapproved at this gate for over a week each while `:latest` already pointed at their unsigned images. ADR-0117 moved `:latest` behind the gate; the rest of this paragraph stands. Referencing an environment name in a workflow **auto-creates an unprotected environment record** on the first run if it does not exist — this does **not**, by itself, pause the job for approval. Configuring **required reviewers** on that environment is a repo-admin/shared-state change deliberately left for a maintainer to apply explicitly:
 
 **Via the GitHub UI:** Settings → Environments → New environment → name it exactly `release` → **Required reviewers** → add at least one maintainer → Save protection rules. Every run of `release.yml`'s publish job (real release **and** rehearsal) will then pause at "Waiting for review" until an approved reviewer clicks **Approve and deploy**.
 
