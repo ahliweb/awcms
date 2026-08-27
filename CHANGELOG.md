@@ -1,5 +1,49 @@
 # awcms
 
+## 10.0.3
+
+### Patch Changes
+
+- 2bb515b: `:latest` now moves only after the release approval that signs it (ADR-0117).
+  
+  `release.yml`'s `build` job runs BEFORE the `release` environment gate, and its
+  push step's tag list included `${REPO}:latest` — so "unapproved" never meant
+  "unpublished", only "unsigned". The documented rationale for leaving `build`
+  ungated reasoned only about credentials ("holds no signing/attestation
+  credentials"), which is correct about credentials and silent about the fact that
+  the same job also publishes.
+  
+  Four release runs had sat at that gate for 13–17 days (`v8.0.0`, `v9.0.0`,
+  `v9.1.0`, `v9.1.1`), each having already pushed its image and moved `:latest`.
+  Measured with `gh attestation verify` at the time: `9.1.0` and `9.1.1` returned
+  HTTP 404 with no attestation, while `9.1.2` and `10.0.2` verified — so during
+  the windows each was newest, this repo's own documented verification recipe
+  would have failed against the image the pipeline had put in front of consumers.
+  
+  Those four have since been approved and published, so every version from
+  `8.0.0` onward is now signed and attested. That was an operational backfill,
+  not something this change did: a tag-push run executes the workflow file as of
+  its own tag, so re-running them would still have pushed `:latest` from `build`.
+  Note for anyone repeating it — their `gh release create` predates this change
+  and passes no `--latest=false`, so publishing them moved GitHub's "Latest" flag
+  onto `v9.1.1` and it had to be reasserted onto the newest release afterwards.
+  
+  - `build` now emits only the immutable `:<version>` and `:sha-<12>` tags.
+  - A new `promote-latest` job (`needs: [build, sign-attest-publish]`,
+    `packages: write` only, real releases only) retags `:latest` for both the app
+    and jobs images, binding the app image by the exact digest handed to
+    `cosign sign`, and then re-reads `:latest` from the registry and fails unless
+    it resolves there.
+  - It runs after `gh release create`, not before: the release-notes step is the
+    one that has actually failed here (`v7.0.0`), and promoting last leaves
+    `:latest` on the previous release rather than on a version with no Release.
+  - `actions/attest-sbom` is deprecated and emitted a warning on the `v10.0.2`
+    run; swapped for `actions/attest`, which takes the same `sbom-path` input.
+  
+  The rehearsal path is unchanged — `workflow_dispatch` still cannot touch
+  `:latest`, now enforced by an `if:` on a whole job rather than a branch inside a
+  tag-computation script.
+
 ## 10.0.2
 
 ### Patch Changes

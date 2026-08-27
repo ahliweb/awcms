@@ -1,6 +1,6 @@
 {
   "name": "awcms",
-  "version": "10.0.2",
+  "version": "10.0.3",
   "private": true,
   "description": "AWCMS \u2014 basis/fondasi modular monolith untuk pengembangan ERP & solusi bisnis (Bun + Astro + PostgreSQL)",
   "license": "MIT",
