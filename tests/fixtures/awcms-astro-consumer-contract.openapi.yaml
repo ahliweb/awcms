@@ -239,6 +239,8 @@ paths:
                   type: string
                 items:
                   type: array
+                  maxItems: 200
+                  description: At most 200 entries; a longer array is refused with `VALIDATION_ERROR` before any entry is validated.
                   items:
                     $ref: "#/components/schemas/BlogMenuItem"
       responses:
@@ -718,6 +720,104 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/newsletter/confirm:
+    post:
+      operationId: newsletterConfirm
+      tags:
+        - Newsletter
+      summary: Confirm a pending subscription
+      security: []
+      description: |-
+        Anonymous and per-IP rate-limited. The moment consent is recorded: `consent_at` and `consent_ip_hash` are written here, because what happened is that somebody followed a link from an inbox.
+
+        The token is SPENT on use — keeping a used bearer credential is keeping a credential. A token that matches nothing, one already spent, and a row in the wrong state all answer the same body as success; distinguishing them would let somebody holding a guessed token learn whether it was ever valid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterTokenRequest"
+      responses:
+        "200":
+          description: Accepted. Says nothing about the token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterNeutralResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many requests from this source (`RATE_LIMITED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/newsletter/subscribe:
+    post:
+      operationId: newsletterSubscribe
+      tags:
+        - Newsletter
+      summary: Subscribe an address to this tenant's newsletter
+      security: []
+      description: |-
+        Anonymous and per-IP rate-limited. Idempotent (FR-NWL-005): a second POST for the same address does not create a second row — the unique index over `(tenant_id, email_normalized)` and one `ON CONFLICT` statement do that, not a read-then-write two concurrent submissions could interleave with.
+
+        Answers `200` with the SAME message for every outcome: a new address, an address already active, one that is suppressed, and a host that resolves to no tenant. It never says which. A malformed body still answers `400` — that is a statement about the REQUEST, not about any address, so it leaks nothing.
+
+        Writes a `pending` row and sends a confirmation mail. Consent is NOT recorded here: `consent_at` is written when the link is followed, so the record says what happened rather than what was asked for. A tenant with no active `derived.newsletter_confirmation` template sends no mail and the row stays `pending` — the correct failure, since silently activating without confirmation would be the wrong one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterSubscribeRequest"
+      responses:
+        "200":
+          description: Accepted. Says nothing about the address.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterNeutralResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many subscription requests from this source (`RATE_LIMITED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/newsletter/unsubscribe:
+    post:
+      operationId: newsletterUnsubscribe
+      tags:
+        - Newsletter
+      summary: End a subscription
+      security: []
+      description: |-
+        Anonymous, and that is a REQUIREMENT rather than a convenience (PRD §30): unsubscribing must be easy and must not require a login. Takes the token and nothing else — no session, no tenant header, no email address. Requiring any of those would mean a person who wants out has to prove who they are first, and the token already proves they hold the link.
+
+        The row is KEPT. "This person asked to stop, on this date" is what answers a later complaint, and deleting it leaves nothing to answer with. A SUPPRESSED row is not touched: suppression is the operator's decision, and an old link must not move a row out of the one state it cannot leave.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterTokenRequest"
+      responses:
+        "200":
+          description: Accepted. Says nothing about the token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterNeutralResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many requests from this source (`RATE_LIMITED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/site-profile/composed:
     get:
       operationId: siteProfileComposedRead
@@ -1130,6 +1230,7 @@ components:
         - key
         - name
         - items
+        - itemsTruncated
       properties:
         id:
           type: string
@@ -1145,9 +1246,26 @@ components:
           description: Editorial label. NOT an identifier.
         items:
           type: array
+          maxItems: 200
           description: Already sorted by `sortOrder`. One level of nesting at most — an item whose parent itself has a parent is refused at write time.
           items:
             $ref: "#/components/schemas/BlogMenuItem"
+        itemsTruncated:
+          type: boolean
+          description: |
+            `true` when the menu holds more than the 200 items `items` is
+            bounded at, and `items` is only the first 200 of them.
+
+            **Do not save a truncated list back.** `PATCH /api/v1/blog/menus/{id}`
+            REPLACES the whole item set, so writing back what you were shown
+            would delete every item past the bound. Only a menu written before
+            the 200-item cap existed can report `true`; on a write response it
+            is always `false`, because the request that produced it was itself
+            capped.
+
+            Ties are broken by `id`, so items sharing a `sortOrder` keep the
+            same order between identical reads — without that the 200 kept
+            would be an arbitrary 200.
         createdAt:
           type: string
           format: date-time
@@ -1675,6 +1793,44 @@ components:
             - active
             - expired
             - revoked
+    NewsletterNeutralResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+              description: One sentence, true whatever happened. Identical across every outcome by design — see this fragment's header.
+    NewsletterSubscribeRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          description: Shape-checked only — something, an `@`, something with a dot, no spaces. A stricter regex would reject valid addresses and buy nothing, because the actual proof that an address exists and belongs to the person who typed it is the confirmation link nobody else can follow.
+        locale:
+          type: string
+          nullable: true
+          pattern: ^[a-z]{2}(-[A-Z]{2})?$
+          description: Language for the confirmation mail. Falls back to `en`.
+      description: There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, and having no field at all is stronger than defaulting one to false — consent is recorded when the confirmation link is followed, so it cannot be defaulted, pre-ticked, or inferred from a submission.
+    NewsletterTokenRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          pattern: ^[A-Za-z0-9_-]+$
+          description: "The base64url token from the emailed link. Bounded and shape-checked BEFORE it is hashed: an anonymous endpoint that will hash whatever it is handed is an anonymous endpoint that will hash a megabyte."
     PortableTextBody:
       type: array
       maxItems: 2000

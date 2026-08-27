@@ -13,8 +13,10 @@ import {
 } from "../../../../lib/security/request-body-limit";
 import { ok, fail } from "../../../../modules/_shared/api-response";
 import { enqueueDirectAddressEmail } from "../../../../modules/email/application/direct-address-notification";
-import { withNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
+import { newsletterPreflightResponse } from "../../../../modules/newsletter/application/public-newsletter-preflight";
+import { withPublicNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
 import { subscribe } from "../../../../modules/newsletter/application/subscriber-directory";
+import type { NewsletterOriginDecision } from "../../../../modules/newsletter/domain/newsletter-cors";
 import {
   NEWSLETTER_CONFIRMATION_TEMPLATE_KEY,
   buildConfirmationUrl
@@ -71,6 +73,39 @@ const RATE_LIMIT_WINDOW_SEC = parsePositiveIntSetting(
 const NEUTRAL_MESSAGE =
   "If that address can be subscribed, a confirmation email is on its way.";
 
+/**
+ * Which origin the confirmation link points at (ADR-0118).
+ *
+ * For a GRANTED cross-origin request it is the caller's own origin — and it is
+ * safe to echo precisely because it is not taken on trust: the request only
+ * reached this branch because that hostname resolved a tenant through
+ * `awcms_tenant_domains`. An unverified `Origin` here would be a way to have
+ * this deployment email a stranger a valid token pointing at a site the sender
+ * chose.
+ *
+ * For everything else it stays what it was: the origin this request arrived on.
+ *
+ * ## What this does NOT fix, and it is worth naming
+ *
+ * `NEWSLETTER_CONFIRM_PATH` is `/newsletter/confirm`, and this repo serves no
+ * such page — `src/pages/newsletter/` does not exist. A same-origin
+ * subscription therefore still emails a link to a 404 here, exactly as it did
+ * before this change. That is not an oversight of this change: the family's
+ * public surface belongs to `awcms-astro` (ADR-0070), which serves both pages
+ * and posts the token back here. A deployment with no site in front of it has
+ * nowhere for a reader to confirm, and adding public reader pages to this repo
+ * to paper over that would contradict the decision that put them there.
+ */
+function confirmationOrigin(
+  decision: NewsletterOriginDecision,
+  url: URL,
+  request: Request
+): string {
+  return decision.kind === "granted"
+    ? decision.origin
+    : resolveRequestOrigin(url, request);
+}
+
 export const POST: APIRoute = async ({
   request,
   url,
@@ -94,7 +129,14 @@ export const POST: APIRoute = async ({
       "Too many subscription requests from this source. Try again later.",
       {},
       undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+      {
+        "retry-after": String(rateLimit.retryAfterSec),
+        // The limiter answers before the origin is ever classified, so this
+        // response carries no CORS grant — but it is still one of the answers
+        // this URL gives, and a cache must not hand it to another origin as if
+        // it were origin-independent (ADR-0118, following ADR-0107).
+        vary: "Origin"
+      }
     );
   }
 
@@ -109,55 +151,85 @@ export const POST: APIRoute = async ({
   if (!validation.valid) {
     recordCounter("newsletter_subscribe_total", { outcome: "invalid" });
     // About the REQUEST, not about any address — so it leaks nothing.
+    // Same reasoning as the 429 above: classified before the origin is, so no
+    // grant — a cross-origin caller sees a failed request rather than this
+    // body, which is the same information a neutral endpoint gives it anyway.
     return fail(
       400,
       "VALIDATION_ERROR",
       "A valid email address is required.",
       {},
-      validation.errors
+      validation.errors,
+      { vary: "Origin" }
     );
   }
 
   const sql = getDatabaseClient();
-  const origin = resolveRequestOrigin(url, request);
 
-  await withNewsletterTenant(sql, request, async (tx, tenant) => {
-    const outcome = await subscribe(
-      tx,
-      tenant.tenantId,
-      validation.value,
-      "public_form"
-    );
+  const { corsHeaders, decision } = await withPublicNewsletterTenant(
+    sql,
+    request,
+    async (tx, tenant) => {
+      const outcome = await subscribe(
+        tx,
+        tenant.tenantId,
+        validation.value,
+        "public_form"
+      );
 
-    // `null` means no mail should go out: suppressed, or already active. The
-    // caller cannot tell, and neither can the person who submitted the form.
-    if (!outcome.confirmationToken) {
+      // `null` means no mail should go out: suppressed, or already active. The
+      // caller cannot tell, and neither can the person who submitted the form.
+      if (!outcome.confirmationToken) {
+        return null;
+      }
+
+      // A tenant with no ACTIVE confirmation template gets `{ enqueued: false }`
+      // and the row stays `pending`. That is the correct failure — silently
+      // activating without confirmation would be the wrong one — and the admin
+      // screen's pending count is where it becomes visible.
+      await enqueueDirectAddressEmail(
+        tx,
+        tenant.tenantId,
+        NEWSLETTER_CONFIRMATION_TEMPLATE_KEY,
+        validation.value.email,
+        {
+          confirmUrl: buildConfirmationUrl(
+            confirmationOrigin(decision, url, request),
+            outcome.confirmationToken
+          ),
+          siteName: tenant.tenantName
+        },
+        locals.correlationId,
+        validation.value.locale ?? "en"
+      );
+
       return null;
     }
-
-    // A tenant with no ACTIVE confirmation template gets `{ enqueued: false }`
-    // and the row stays `pending`. That is the correct failure — silently
-    // activating without confirmation would be the wrong one — and the admin
-    // screen's pending count is where it becomes visible.
-    await enqueueDirectAddressEmail(
-      tx,
-      tenant.tenantId,
-      NEWSLETTER_CONFIRMATION_TEMPLATE_KEY,
-      validation.value.email,
-      {
-        confirmUrl: buildConfirmationUrl(origin, outcome.confirmationToken),
-        siteName: tenant.tenantName
-      },
-      locals.correlationId,
-      validation.value.locale ?? "en"
-    );
-
-    return null;
-  });
+  );
 
   recordCounter("newsletter_subscribe_total", { outcome: "accepted" });
 
   // Deliberately outside the branch above: an unresolved tenant, a disabled
   // module and a real subscription all end here.
-  return ok({ message: NEUTRAL_MESSAGE });
+  return ok({ message: NEUTRAL_MESSAGE }, {}, corsHeaders);
 };
+
+/**
+ * The preflight (ADR-0118). It exists because the contract is JSON, which makes
+ * every cross-origin POST here preflighted — and until this handler, nothing
+ * answered, so the POST was never sent.
+ *
+ * `OPTIONS` is in Astro's `SAFE_METHODS`, so `security.checkOrigin` lets the
+ * preflight through and the decision is entirely this handler's to make. It
+ * shares the POST's per-IP limiter under the SAME key rather than opening a
+ * second budget: a preflight is part of the request it precedes, not a separate
+ * one, and `Access-Control-Max-Age` keeps a reader from paying for it twice.
+ */
+export const OPTIONS: APIRoute = async ({ request, clientAddress }) =>
+  newsletterPreflightResponse(
+    getDatabaseClient(),
+    request,
+    clientAddress,
+    "newsletter:subscribe",
+    { maxAttempts: RATE_LIMIT_MAX, windowMs: RATE_LIMIT_WINDOW_SEC * 1000 }
+  );

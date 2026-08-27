@@ -12,7 +12,8 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import { ok, fail } from "../../../../modules/_shared/api-response";
-import { withNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
+import { newsletterPreflightResponse } from "../../../../modules/newsletter/application/public-newsletter-preflight";
+import { withPublicNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
 import { confirmSubscription } from "../../../../modules/newsletter/application/subscriber-directory";
 import {
   hashSubscriptionToken,
@@ -72,7 +73,14 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
       "Too many requests from this source. Try again later.",
       {},
       undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+      {
+        "retry-after": String(rateLimit.retryAfterSec),
+        // The limiter answers before the origin is ever classified, so this
+        // response carries no CORS grant — but it is still one of the answers
+        // this URL gives, and a cache must not hand it to another origin as if
+        // it were origin-independent (ADR-0118, following ADR-0107).
+        vary: "Origin"
+      }
     );
   }
 
@@ -85,24 +93,52 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   const token = (bodyRead.value as { token?: unknown } | null)?.token;
 
   if (!isWellFormedSubscriptionToken(token)) {
-    return fail(400, "VALIDATION_ERROR", "A confirmation token is required.");
+    // Classified before the origin is, so no CORS grant — see the 429 above.
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "A confirmation token is required.",
+      {},
+      undefined,
+      { vary: "Origin" }
+    );
   }
 
   const sql = getDatabaseClient();
   const tokenHash = hashSubscriptionToken(token);
 
-  await withNewsletterTenant(sql, request, async (tx, tenant) =>
-    confirmSubscription(
-      tx,
-      tenant.tenantId,
-      tokenHash,
-      // Records WHERE the confirmation came from, which is the consent-bearing
-      // event. Keyed and non-reversible; see `client-fingerprint.ts` for why it
-      // must not be compared across process restarts.
-      hashClientIp(clientIp),
-      locals.correlationId
-    )
+  const { corsHeaders } = await withPublicNewsletterTenant(
+    sql,
+    request,
+    async (tx, tenant) =>
+      confirmSubscription(
+        tx,
+        tenant.tenantId,
+        tokenHash,
+        // Records WHERE the confirmation came from, which is the consent-bearing
+        // event. Keyed and non-reversible; see `client-fingerprint.ts` for why it
+        // must not be compared across process restarts.
+        hashClientIp(clientIp),
+        locals.correlationId
+      )
   );
 
-  return ok({ message: NEUTRAL_MESSAGE });
+  return ok({ message: NEUTRAL_MESSAGE }, {}, corsHeaders);
 };
+
+/**
+ * The preflight (ADR-0118).
+ *
+ * This is the one that made double opt-in reachable at all from a site: the
+ * confirmation link lands on a page the site serves, that page posts the token
+ * back here, and until this handler existed the browser never sent that POST —
+ * so `consent_at` was never written and no subscriber ever became `active`.
+ */
+export const OPTIONS: APIRoute = async ({ request, clientAddress }) =>
+  newsletterPreflightResponse(
+    getDatabaseClient(),
+    request,
+    clientAddress,
+    "newsletter:confirm",
+    { maxAttempts: RATE_LIMIT_MAX, windowMs: RATE_LIMIT_WINDOW_SEC * 1000 }
+  );
