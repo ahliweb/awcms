@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:9a467ef4c0a37e72ec2d935ac93d3620c84682b1c2dc2b8549d1a189e6375a92 -->
+<!-- i18n-source-hash: sha256:f06f9aa879bb3cecad846469cc24cc9bb5b64ff6834f4f628e8d44e95ee61d38 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.0.2..HEAD`                                                    |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0116** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0117** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |

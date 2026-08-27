@@ -169,9 +169,22 @@ jobs:
       image-digest: ${{ steps.push.outputs.digest }}
       image-ref: ${{ steps.tags.outputs.primary }}
       image-repo: ${{ steps.tags.outputs.repo }}
+      jobs-repo: ${{ steps.tags.outputs.jobs-repo }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # `:latest` is deliberately NOT produced here. This job runs BEFORE the
+      # `release` environment approval gate, so anything it tags is public the
+      # moment the tag is pushed — with no signature and no attestation yet.
+      # Moving `:latest` from here meant every unapproved build silently became
+      # what `docker pull ghcr.io/ahliweb/awcms` returns: v8.0.0, v9.0.0,
+      # v9.1.0 and v9.1.1 all pushed images and transited `:latest` through
+      # builds that were never approved and are unsigned to this day, so a
+      # consumer running `gh attestation verify oci://…:latest` during those
+      # windows would have failed against an image the project had never
+      # published. `:latest` now moves in the `promote-latest` job below, which
+      # cannot start until the gate is approved and the digest is signed.
+      # See ADR-0117.
       - name: Compute image tags
         id: tags
         run: |
@@ -180,11 +193,9 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
             TAGS="${REPO}:${VERSION}
-          ${REPO}:sha-${GITHUB_SHA::12}
-          ${REPO}:latest"
+          ${REPO}:sha-${GITHUB_SHA::12}"
             JOBS_TAGS="${JOBS_REPO}:${VERSION}
-          ${JOBS_REPO}:sha-${GITHUB_SHA::12}
-          ${JOBS_REPO}:latest"
+          ${JOBS_REPO}:sha-${GITHUB_SHA::12}"
             PRIMARY="${REPO}:${VERSION}"
           else
             TAGS="${REPO}:dryrun-${GITHUB_SHA::12}"
@@ -200,6 +211,7 @@ jobs:
             echo "EOF"
             echo "primary=$PRIMARY"
             echo "repo=$REPO"
+            echo "jobs-repo=$JOBS_REPO"
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker Buildx
@@ -337,8 +349,13 @@ jobs:
             sbom-source.cdx.json
             source.tar.gz
 
+      # `actions/attest-sbom` is deprecated — it emitted a deprecation warning on
+      # the v10.0.2 run and GitHub's notice names `actions/attest` as the
+      # replacement. The generic action takes the same `sbom-path` input and
+      # produces the same SBOM attestation, so this is an action swap, not a
+      # change of what gets attested.
       - name: Attest SBOM — image
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ needs.build.outputs.image-repo }}
           subject-digest: ${{ needs.build.outputs.image-digest }}
@@ -394,3 +411,80 @@ jobs:
             --title "${{ github.ref_name }}" \
             --notes-file release-notes.md \
             CHECKSUMS.txt sbom-source.cdx.json sbom-image.cdx.json source.tar.gz
+
+  # ADR-0117. `:latest` used to be produced by `build`, which runs before the
+  # approval gate — so it moved whether or not anyone ever approved the release.
+  # It lives in its own job rather than in `sign-attest-publish` for the same
+  # reason that job exists at all (see its comment): `id-token`/`attestations`
+  # are JOB-scoped, so the fewer steps that sit in the job holding them, the
+  # smaller the surface that can mint an OIDC token. This job needs only
+  # `packages: write`, and `needs: sign-attest-publish` already makes it
+  # unreachable until the gate is approved — no second `environment:` needed.
+  #
+  # Ordering is deliberate: this runs AFTER the GitHub Release is published, not
+  # before. Both orderings keep `:latest` signed, but the failure modes are not
+  # equal — the release-notes step is the one that has actually failed in this
+  # pipeline before (v7.0.0 died there on a 186,449-character body, after the
+  # image was already pushed). Promoting last means such a failure leaves
+  # `:latest` on the previous release rather than pointing at a version with no
+  # Release to describe it.
+  promote-latest:
+    name: Point :latest at the published release
+    needs: [build, sign-attest-publish]
+    # Real releases only. A rehearsal must never move `:latest` — that is the
+    # property that lets `workflow_dispatch` be run against any ref safely.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `imagetools create` retags by manifest reference against the registry —
+      # it does not pull, rebuild, or re-push layers, so `:latest` ends up on the
+      # exact digest that was signed and attested above rather than on a
+      # rebuilt-and-therefore-different image.
+      - name: Point :latest at the released digest
+        env:
+          APP_REPO: ${{ needs.build.outputs.image-repo }}
+          JOBS_REPO: ${{ needs.build.outputs.jobs-repo }}
+          APP_DIGEST: ${{ needs.build.outputs.image-digest }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Bind the app image by DIGEST, not by the `:${VERSION}` tag. The
+          # digest is the one `cosign sign` and both attest steps were given, so
+          # this cannot drift from what was actually signed even if something
+          # else moved the version tag in between.
+          docker buildx imagetools create --tag "${APP_REPO}:latest" "${APP_REPO}@${APP_DIGEST}"
+
+          # The jobs image is built by a second build-push step whose digest is
+          # not exported as a job output, so it is bound by its immutable
+          # `:${VERSION}` tag — that tag is written once per release and never
+          # reused, since `release:verify` rejects a tag whose version does not
+          # match `package.json`.
+          docker buildx imagetools create --tag "${JOBS_REPO}:latest" "${JOBS_REPO}:${VERSION}"
+
+      - name: Verify :latest resolves to the signed digest
+        env:
+          APP_REPO: ${{ needs.build.outputs.image-repo }}
+          APP_DIGEST: ${{ needs.build.outputs.image-digest }}
+        run: |
+          set -euo pipefail
+          ACTUAL=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${APP_REPO}:latest")
+          echo "latest -> ${ACTUAL}"
+          echo "signed -> ${APP_DIGEST}"
+          if [ "$ACTUAL" != "$APP_DIGEST" ]; then
+            echo "::error::${APP_REPO}:latest resolves to ${ACTUAL}, not the signed digest ${APP_DIGEST}."
+            exit 1
+          fi
