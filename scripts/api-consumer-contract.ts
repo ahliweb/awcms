@@ -144,6 +144,12 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
+  "/api/v1/newsletter/subscribe":
+    "ADR-0118 — a reader subscribes from the site's own page, in their own browser, cross-origin and anonymously. FOURTH of the reader-browser class, and the first that WRITES: it sends mail on this deployment's behalf, which is why its CORS grant is narrower than the beacon's (no credentials) and why its tenant comes from an `Origin` verified against `awcms_tenant_domains` rather than from the host chain — the host of such a request is this CMS, and the default-tenant fallback would have put a stranger's address in somebody else's list. Frozen: the request body (`email`, optional `locale`), the ALWAYS-neutral 200 body, and the 400 that speaks about the request rather than about any address. `awcms-astro`#79 wrote the caller and held it behind a flag until this entry existed.",
+  "/api/v1/newsletter/confirm":
+    "ADR-0118 — the POST behind the link in the confirmation email, made by the page the SITE serves at `/newsletter/confirm` (ADR-0070: the family's reader pages are not in this repo). This is where `consent_at` is written, so it is the endpoint double opt-in actually depends on. Frozen: the `{ token }` body and the neutral 200.",
+  "/api/v1/newsletter/unsubscribe":
+    "ADR-0118 — the same shape from the same kind of page, and PRD §30 makes it the one that must never require proving who you are. Frozen: the `{ token }` body and the neutral 200.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":

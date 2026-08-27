@@ -65,10 +65,10 @@ describe("the public endpoints are not an enumeration oracle", () => {
   test("subscribe returns the same body whether or not a subscription happened", async () => {
     const source = stripComments(await readFile(SUBSCRIBE, "utf8"));
 
-    // The `ok(...)` sits OUTSIDE `withNewsletterTenant`, so an unresolved host,
-    // a disabled module and a real subscription all reach it.
-    const okIndex = source.indexOf("return ok({ message: NEUTRAL_MESSAGE })");
-    const tenantIndex = source.indexOf("await withNewsletterTenant(");
+    // The `ok(...)` sits OUTSIDE the tenant call, so an unresolved host, a
+    // refused origin, a disabled module and a real subscription all reach it.
+    const okIndex = source.indexOf("return ok({ message: NEUTRAL_MESSAGE }");
+    const tenantIndex = source.indexOf("await withPublicNewsletterTenant(");
 
     expect(tenantIndex).toBeGreaterThan(-1);
     expect(okIndex).toBeGreaterThan(tenantIndex);
@@ -86,16 +86,36 @@ describe("the public endpoints are not an enumeration oracle", () => {
     }
   });
 
-  test("the tenant comes from the HOST, never from a header", async () => {
+  test("the tenant comes from the request, never from a header the caller chooses", async () => {
     for (const route of [SUBSCRIBE, CONFIRM, UNSUBSCRIBE]) {
       const source = stripComments(await readFile(route, "utf8"));
 
       // A tenant header on an anonymous endpoint would let any caller choose
       // whose list they are writing to — FR-NWL-002 defeated by the request it
       // is supposed to bind.
-      expect(source).toContain("withNewsletterTenant");
+      //
+      // Since ADR-0118 the resolver is `withPublicNewsletterTenant`: the HOST
+      // for a same-origin request, and for a cross-origin one the `Origin`
+      // VERIFIED against `awcms_tenant_domains`. That is still not a header the
+      // caller chooses — an unknown origin is refused rather than falling
+      // through to this deployment's default tenant, which is the case
+      // `tests/newsletter-cross-origin.test.ts` asserts directly.
+      expect(source).toContain("withPublicNewsletterTenant");
       expect(source).not.toContain("resolveAuthInputs");
       expect(source).not.toContain("x-tenant-id");
+    }
+  });
+
+  test("every route answers the preflight its own JSON contract forces", async () => {
+    for (const route of [SUBSCRIBE, CONFIRM, UNSUBSCRIBE]) {
+      const source = stripComments(await readFile(route, "utf8"));
+
+      // The blocker that hid three others for a week (ADR-0118): a JSON
+      // contract makes every cross-origin POST preflighted, and a route with no
+      // `OPTIONS` is a route a reader's browser never reaches — while every
+      // test over its POST handler stays green.
+      expect(source).toContain("export const OPTIONS");
+      expect(source).toContain("newsletterPreflightResponse");
     }
   });
 

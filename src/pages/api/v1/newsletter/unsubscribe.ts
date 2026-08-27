@@ -11,7 +11,8 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import { ok, fail } from "../../../../modules/_shared/api-response";
-import { withNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
+import { newsletterPreflightResponse } from "../../../../modules/newsletter/application/public-newsletter-preflight";
+import { withPublicNewsletterTenant } from "../../../../modules/newsletter/application/public-newsletter-tenant";
 import { unsubscribeByToken } from "../../../../modules/newsletter/application/subscriber-directory";
 import {
   hashSubscriptionToken,
@@ -74,7 +75,14 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
       "Too many requests from this source. Try again later.",
       {},
       undefined,
-      { "retry-after": String(rateLimit.retryAfterSec) }
+      {
+        "retry-after": String(rateLimit.retryAfterSec),
+        // The limiter answers before the origin is ever classified, so this
+        // response carries no CORS grant — but it is still one of the answers
+        // this URL gives, and a cache must not hand it to another origin as if
+        // it were origin-independent (ADR-0118, following ADR-0107).
+        vary: "Origin"
+      }
     );
   }
 
@@ -87,15 +95,40 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   const token = (bodyRead.value as { token?: unknown } | null)?.token;
 
   if (!isWellFormedSubscriptionToken(token)) {
-    return fail(400, "VALIDATION_ERROR", "An unsubscribe token is required.");
+    // Classified before the origin is, so no CORS grant — see the 429 above.
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "An unsubscribe token is required.",
+      {},
+      undefined,
+      { vary: "Origin" }
+    );
   }
 
   const sql = getDatabaseClient();
   const tokenHash = hashSubscriptionToken(token);
 
-  await withNewsletterTenant(sql, request, async (tx, tenant) =>
-    unsubscribeByToken(tx, tenant.tenantId, tokenHash, locals.correlationId)
+  const { corsHeaders } = await withPublicNewsletterTenant(
+    sql,
+    request,
+    async (tx, tenant) =>
+      unsubscribeByToken(tx, tenant.tenantId, tokenHash, locals.correlationId)
   );
 
-  return ok({ message: NEUTRAL_MESSAGE });
+  return ok({ message: NEUTRAL_MESSAGE }, {}, corsHeaders);
 };
+
+/**
+ * The preflight (ADR-0118). Same shape as its two siblings, and it matters most
+ * here: PRD §30 says leaving must be easy, and a link that a reader's browser
+ * cannot complete is not easy, it is impossible.
+ */
+export const OPTIONS: APIRoute = async ({ request, clientAddress }) =>
+  newsletterPreflightResponse(
+    getDatabaseClient(),
+    request,
+    clientAddress,
+    "newsletter:unsubscribe",
+    { maxAttempts: RATE_LIMIT_MAX, windowMs: RATE_LIMIT_WINDOW_SEC * 1000 }
+  );
