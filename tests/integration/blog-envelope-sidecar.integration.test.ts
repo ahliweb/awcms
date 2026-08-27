@@ -149,125 +149,128 @@ async function pageDenganSidecar(): Promise<string> {
 
 const suite = integrationEnabled ? describe : describe.skip;
 
-suite("editing an article does not unpublish it from the consuming site", () => {
-  beforeAll(async () => {
-    await setupIntegrationDatabase();
-  });
-
-  afterAll(async () => {
-    await teardownIntegrationDatabase();
-  });
-
-  beforeEach(async () => {
-    await resetDatabase();
-    await seedFixtures();
-  });
-
-  test("a body-only edit keeps the section the consuming site builds the article from", async () => {
-    const id = await postDenganSidecar();
-
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      // Exactly what `admin/blog.astro` sends: a body, and no envelope.
-      const updated = await updateBlogPost(tx, TENANT, id, {
-        bodyPortableText: BADAN_BARU
-      });
-
-      expect(updated).not.toBeNull();
-
-      // The whole point. Before the repair this was `undefined`, and the
-      // article stopped being built one repository away.
-      expect(updated!.contentJson.awcmsAstro).toEqual(
-        ENVELOPE_TERSIMPAN.awcmsAstro
-      );
+suite(
+  "editing an article does not unpublish it from the consuming site",
+  () => {
+    beforeAll(async () => {
+      await setupIntegrationDatabase();
     });
-  });
 
-  test("a key this repo has never heard of survives too", async () => {
-    const id = await postDenganSidecar();
-
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      const updated = await updateBlogPost(tx, TENANT, id, {
-        bodyPortableText: BADAN_BARU
-      });
-
-      // Guards against the repair that would pass the test above and still be
-      // wrong: an allowlist that preserves `awcmsAstro` by name. The envelope
-      // belongs to its consumers, and this repo does not know their keys.
-      expect(updated!.contentJson.catatanKonsumenLain).toEqual(
-        ENVELOPE_TERSIMPAN.catatanKonsumenLain
-      );
+    afterAll(async () => {
+      await teardownIntegrationDatabase();
     });
-  });
 
-  test("the projection is still re-derived — preserving the envelope must not freeze the body", async () => {
-    const id = await postDenganSidecar();
-
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      const updated = await updateBlogPost(tx, TENANT, id, {
-        bodyPortableText: BADAN_BARU
-      });
-
-      // The green direction, and it is not decoration: "stop touching
-      // content_json at all" would satisfy every assertion above while leaving
-      // `blocks` describing an article nobody can read any more.
-      const blocks = updated!.contentJson.blocks as { text?: string }[];
-      expect(blocks).toHaveLength(1);
-      // Marks flatten on the way across (ADR-0100 §4, lossy by construction).
-      expect(blocks[0]!.text).toBe("Badan baru");
+    beforeEach(async () => {
+      await resetDatabase();
+      await seedFixtures();
     });
-  });
 
-  test("a caller that DOES send an envelope still owns it", async () => {
-    const id = await postDenganSidecar();
+    test("a body-only edit keeps the section the consuming site builds the article from", async () => {
+      const id = await postDenganSidecar();
 
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      const updated = await updateBlogPost(tx, TENANT, id, {
-        bodyPortableText: BADAN_BARU,
-        contentJson: { awcmsAstro: { schemaVersion: 1, kategori: "berita" } }
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        // Exactly what `admin/blog.astro` sends: a body, and no envelope.
+        const updated = await updateBlogPost(tx, TENANT, id, {
+          bodyPortableText: BADAN_BARU
+        });
+
+        expect(updated).not.toBeNull();
+
+        // The whole point. Before the repair this was `undefined`, and the
+        // article stopped being built one repository away.
+        expect(updated!.contentJson.awcmsAstro).toEqual(
+          ENVELOPE_TERSIMPAN.awcmsAstro
+        );
       });
-
-      // Unchanged contract: supplying the envelope replaces it. The repair adds
-      // a branch for callers who send NO envelope; it does not quietly merge
-      // for callers who send one, because that would make it impossible to
-      // REMOVE a key.
-      expect(updated!.contentJson.awcmsAstro).toEqual({
-        schemaVersion: 1,
-        kategori: "berita"
-      });
-      expect(updated!.contentJson.catatanKonsumenLain).toBeUndefined();
     });
-  });
 
-  test("an edit that does not touch the body leaves the envelope alone", async () => {
-    const id = await postDenganSidecar();
+    test("a key this repo has never heard of survives too", async () => {
+      const id = await postDenganSidecar();
 
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      const updated = await updateBlogPost(tx, TENANT, id, {
-        title: "Judul baru"
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        const updated = await updateBlogPost(tx, TENANT, id, {
+          bodyPortableText: BADAN_BARU
+        });
+
+        // Guards against the repair that would pass the test above and still be
+        // wrong: an allowlist that preserves `awcmsAstro` by name. The envelope
+        // belongs to its consumers, and this repo does not know their keys.
+        expect(updated!.contentJson.catatanKonsumenLain).toEqual(
+          ENVELOPE_TERSIMPAN.catatanKonsumenLain
+        );
       });
-
-      expect(updated!.title).toBe("Judul baru");
-      expect(updated!.contentJson).toEqual(ENVELOPE_TERSIMPAN);
     });
-  });
 
-  test("a page behaves identically — the twin does not keep its sibling's defect", async () => {
-    const id = await pageDenganSidecar();
+    test("the projection is still re-derived — preserving the envelope must not freeze the body", async () => {
+      const id = await postDenganSidecar();
 
-    await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
-      const updated = await updateBlogPage(tx, TENANT, id, {
-        bodyPortableText: BADAN_BARU
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        const updated = await updateBlogPost(tx, TENANT, id, {
+          bodyPortableText: BADAN_BARU
+        });
+
+        // The green direction, and it is not decoration: "stop touching
+        // content_json at all" would satisfy every assertion above while leaving
+        // `blocks` describing an article nobody can read any more.
+        const blocks = updated!.contentJson.blocks as { text?: string }[];
+        expect(blocks).toHaveLength(1);
+        // Marks flatten on the way across (ADR-0100 §4, lossy by construction).
+        expect(blocks[0]!.text).toBe("Badan baru");
       });
-
-      // No consumer stores a sidecar on a page today, so this proves nothing a
-      // reader currently depends on. It proves the two functions did not
-      // diverge — which is how the defect would come back.
-      expect(updated!.contentJson.awcmsAstro).toEqual(
-        ENVELOPE_TERSIMPAN.awcmsAstro
-      );
-      expect(updated!.contentJson.catatanKonsumenLain).toEqual(
-        ENVELOPE_TERSIMPAN.catatanKonsumenLain
-      );
     });
-  });
-});
+
+    test("a caller that DOES send an envelope still owns it", async () => {
+      const id = await postDenganSidecar();
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        const updated = await updateBlogPost(tx, TENANT, id, {
+          bodyPortableText: BADAN_BARU,
+          contentJson: { awcmsAstro: { schemaVersion: 1, kategori: "berita" } }
+        });
+
+        // Unchanged contract: supplying the envelope replaces it. The repair adds
+        // a branch for callers who send NO envelope; it does not quietly merge
+        // for callers who send one, because that would make it impossible to
+        // REMOVE a key.
+        expect(updated!.contentJson.awcmsAstro).toEqual({
+          schemaVersion: 1,
+          kategori: "berita"
+        });
+        expect(updated!.contentJson.catatanKonsumenLain).toBeUndefined();
+      });
+    });
+
+    test("an edit that does not touch the body leaves the envelope alone", async () => {
+      const id = await postDenganSidecar();
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        const updated = await updateBlogPost(tx, TENANT, id, {
+          title: "Judul baru"
+        });
+
+        expect(updated!.title).toBe("Judul baru");
+        expect(updated!.contentJson).toEqual(ENVELOPE_TERSIMPAN);
+      });
+    });
+
+    test("a page behaves identically — the twin does not keep its sibling's defect", async () => {
+      const id = await pageDenganSidecar();
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT, async (tx) => {
+        const updated = await updateBlogPage(tx, TENANT, id, {
+          bodyPortableText: BADAN_BARU
+        });
+
+        // No consumer stores a sidecar on a page today, so this proves nothing a
+        // reader currently depends on. It proves the two functions did not
+        // diverge — which is how the defect would come back.
+        expect(updated!.contentJson.awcmsAstro).toEqual(
+          ENVELOPE_TERSIMPAN.awcmsAstro
+        );
+        expect(updated!.contentJson.catatanKonsumenLain).toEqual(
+          ENVELOPE_TERSIMPAN.catatanKonsumenLain
+        );
+      });
+    });
+  }
+);
