@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:74556c807306efa4eee22e6050b20b4055239d008782fee46c025895b61d2046 -->
+<!-- i18n-source-hash: sha256:f07576fe453fd7416c0d8d0093dd05510d3625c817eb32a87fb25e7698e70b73 -->
 
 # AWCMS — Project State & Continuation
 
@@ -107,9 +107,9 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek                              | Nilai (ter-generate)                                                                  | Sumber kebenaran                                                                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **10.0.0**                                                                            | `package.json`                                                                          |
+| Versi                              | **10.0.1**                                                                            | `package.json`                                                                          |
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.0.0..HEAD`                                                    |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.0.1..HEAD`                                                    |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0116** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
