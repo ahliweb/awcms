@@ -439,49 +439,99 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # `imagetools create` retags by manifest reference against the registry —
-      # it does not pull, rebuild, or re-push layers, so `:latest` ends up on the
-      # exact digest that was signed and attested above rather than on a
-      # rebuilt-and-therefore-different image.
+      # Retagging is a REGISTRY operation here, not a Docker one — see the step
+      # below for why. No buildx, no daemon, no `docker login`: the only
+      # credential needed is a ghcr bearer token minted from GITHUB_TOKEN.
       - name: Point :latest at the released digest
         env:
           APP_REPO: ${{ needs.build.outputs.image-repo }}
           JOBS_REPO: ${{ needs.build.outputs.jobs-repo }}
           APP_DIGEST: ${{ needs.build.outputs.image-digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_PASS: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
 
-          # Bind the app image by DIGEST, not by the `:${VERSION}` tag. The
-          # digest is the one `cosign sign` and both attest steps were given, so
-          # this cannot drift from what was actually signed even if something
-          # else moved the version tag in between.
-          docker buildx imagetools create --tag "${APP_REPO}:latest" "${APP_REPO}@${APP_DIGEST}"
+          # `docker buildx imagetools create` CANNOT do this job, and the v10.0.3
+          # release is the proof: it always emits a NEW manifest list wrapping
+          # its sources, so `:latest` landed on a freshly-serialised index
+          # (sha256:5dde705e…) instead of the signed manifest
+          # (sha256:d5423378…). Same layers, different digest — and an
+          # attestation is bound to a DIGEST, so `gh attestation verify
+          # oci://…:latest` failed against a release whose `:10.0.3` verified
+          # fine. That is precisely the condition ADR-0117 exists to prevent,
+          # reintroduced by the mechanism chosen to prevent it.
+          #
+          # A tag is just a name the registry maps to manifest bytes, so the
+          # digest-preserving retag is: GET the manifest, PUT the SAME bytes
+          # under the new name. Byte-identical content hashes identically, so
+          # `:latest` cannot land anywhere but the signed digest. Uses only curl
+          # and jq (both present on the runner) — no extra action in a job that
+          # holds `packages: write`.
+          retag() {
+            local repo="$1" src="$2" dst="$3" path token ct
+            path="${repo#ghcr.io/}"
 
-          # The jobs image is built by a second build-push step whose digest is
-          # not exported as a job output, so it is bound by its immutable
-          # `:${VERSION}` tag — that tag is written once per release and never
-          # reused, since `release:verify` rejects a tag whose version does not
-          # match `package.json`.
-          docker buildx imagetools create --tag "${JOBS_REPO}:latest" "${JOBS_REPO}:${VERSION}"
+            token=$(curl -fsSL -u "${GHCR_USER}:${GHCR_PASS}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${path}:pull,push" | jq -r .token)
 
+            # Ask for every manifest media type; echo back whatever came, so an
+            # index and a single manifest are both carried through untouched.
+            ct=$(curl -fsSL -o manifest.json -D - \
+              -H "Authorization: Bearer ${token}" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${path}/manifests/${src}" \
+              | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}' | tail -1)
+
+            test -n "$ct"
+            curl -fsSL -X PUT \
+              -H "Authorization: Bearer ${token}" \
+              -H "Content-Type: ${ct}" \
+              --data-binary @manifest.json \
+              "https://ghcr.io/v2/${path}/manifests/${dst}" >/dev/null
+            rm -f manifest.json
+          }
+
+          # The app image is bound by DIGEST — the one `cosign sign` and both
+          # attest steps were given — so it cannot drift even if something else
+          # moved the version tag in between.
+          retag "${APP_REPO}" "${APP_DIGEST}" latest
+
+          # The jobs image's digest is not exported as a job output, so it is
+          # bound by its immutable `:${VERSION}` tag — written once per release
+          # and never reused, since `release:verify` rejects a tag whose version
+          # does not match `package.json`.
+          retag "${JOBS_REPO}" "${VERSION}" latest
+
+      # This step is why the v10.0.3 defect was caught in the release that
+      # introduced it rather than by a consumer weeks later. It stays.
       - name: Verify :latest resolves to the signed digest
         env:
           APP_REPO: ${{ needs.build.outputs.image-repo }}
           APP_DIGEST: ${{ needs.build.outputs.image-digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_PASS: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          ACTUAL=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${APP_REPO}:latest")
+          path="${APP_REPO#ghcr.io/}"
+          token=$(curl -fsSL -u "${GHCR_USER}:${GHCR_PASS}" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:${path}:pull" | jq -r .token)
+
+          # Read the digest the REGISTRY reports for the tag (Docker-Content-Digest),
+          # rather than anything a local tool re-computes.
+          ACTUAL=$(curl -fsSL -I \
+            -H "Authorization: Bearer ${token}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json' \
+            -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+            -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+            -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/${path}/manifests/latest" \
+            | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:"{print $2}' | tail -1)
+
           echo "latest -> ${ACTUAL}"
           echo "signed -> ${APP_DIGEST}"
           if [ "$ACTUAL" != "$APP_DIGEST" ]; then

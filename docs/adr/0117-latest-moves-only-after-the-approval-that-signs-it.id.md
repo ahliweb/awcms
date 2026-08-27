@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0117-latest-moves-only-after-the-approval-that-signs-it.md)
 
-<!-- i18n-source-hash: sha256:c25726886b81492ad3f4c4ed91bf15e0ed0b692370357b975b9453905b3bb6b7 -->
+<!-- i18n-source-hash: sha256:dc8af3e5b02cc9fe58c292f93ef2fe100be1797a3d5d389e1ae5b9cf039df7fc -->
 
 # ADR-0117 — `:latest` berpindah hanya setelah persetujuan yang menandatanganinya
 
@@ -118,13 +118,14 @@ Konkretnya:
    yang bisa mencetak token OIDC. Menambahkan `docker/setup-buildx-action` ke job
    berprivilese justru akan membelanjakan properti pengurungan yang hendak
    dipertahankan ADR ini.
-4. Retag memakai `docker buildx imagetools create`, yang bekerja atas manifest
-   terhadap registry — ia tidak pull, tidak rebuild, tidak push ulang layer,
-   sehingga `:latest` mendarat pada _digest yang sama_ dengan yang ditandatangani,
-   bukan pada image hasil rebuild yang karenanya berbeda. Image aplikasi diikat
-   dengan `@${APP_DIGEST}` — digest persis yang diserahkan ke `cosign sign` dan
-   kedua langkah attest — sehingga ia tak bisa melenceng sekalipun ada yang
-   memindahkan tag versi di antaranya.
+4. Retag adalah operasi **REGISTRY**: GET manifest-nya, lalu PUT byte yang SAMA
+   di bawah nama `latest`. Isi yang identik byte-per-byte menghasilkan hash yang
+   identik, sehingga `:latest` tak bisa mendarat di mana pun selain digest
+   tertandatangani. Image aplikasi diikat dengan `@${APP_DIGEST}` — digest persis
+   yang diserahkan ke `cosign sign` dan kedua langkah attest — sehingga ia tak
+   bisa melenceng sekalipun ada yang memindahkan tag versi di antaranya. (Butir
+   ini semula menetapkan `docker buildx imagetools create`; itu SALAH dan run
+   nyata pertama membuktikannya. Lihat §Amandemen.)
 5. Satu langkah verifikasi membaca ulang `:latest` dari registry dan menggagalkan
    job kecuali ia menunjuk digest tertandatangani itu. Invarian yang diperkenalkan
    ADR ini cukup murah untuk diasersi langsung, dan ADR yang propertinya hanya
@@ -166,6 +167,57 @@ mem-push `:latest` dari `build` bila dijalankan ulang. Keduanya adalah butir
 operasional — setujui agar mendapat tanda tangan dan Release-nya, atau biarkan
 artefaknya kedaluwarsa pada 30 hari — dan bagaimanapun `:latest` hari ini menunjuk
 `10.0.2`, yang sudah ditandatangani.
+
+## Amandemen 2026-08-28 — `imagetools create` TIDAK BISA melakukannya, dan `v10.0.3` membuktikannya
+
+Rilis pertama yang menjalankan `promote-latest` adalah `v10.0.3`, dan ia **GAGAL
+di langkah verifikasi** — dan justru itulah satu-satunya sebab ini menjadi
+amandemen, bukan cacat yang ditemukan konsumen berminggu-minggu kemudian.
+
+`docker buildx imagetools create` TIDAK menunjuk sebuah tag ke byte yang sudah
+ada. Ia selalu **membangun dan mem-push manifest list BARU** yang membungkus
+sumbernya, sehingga `:latest` mendarat pada index hasil serialisasi baru
+`sha256:5dde705e…` sementara manifest tertandatangani adalah `sha256:d5423378…`
+(sebuah `application/vnd.oci.image.manifest.v1+json` polos, bukan index —
+`imagetools` membungkusnya). Layer sama, config sama, digest BERBEDA.
+
+Perbedaan itulah inti persoalannya, karena **attestation terikat pada DIGEST**.
+Diukur segera sesudahnya:
+
+```
+gh attestation verify oci://ghcr.io/ahliweb/awcms:10.0.3 --owner ahliweb  -> exit 0
+gh attestation verify oci://ghcr.io/ahliweb/awcms:latest --owner ahliweb  -> exit 1
+```
+
+Jadi mekanisme yang dipilih untuk menjamin "`:latest` selalu bisa diverifikasi"
+justru menghasilkan, pada run pertamanya, `:latest` yang TIDAK bisa diverifikasi
+— persis kondisi yang hendak dicegah ADR ini, dilahirkan kembali oleh
+implementasinya sendiri. Keputusan di §Keputusan sudah benar; MEKANISME butir 4
+yang salah.
+
+**Mekanisme yang dikoreksi.** Sebuah tag hanyalah nama yang dipetakan registry ke
+byte manifest, jadi retag yang menjaga digest adalah yang harfiah: `GET
+/v2/<name>/manifests/<digest>`, lalu `PUT /v2/<name>/manifests/latest` dengan
+body dan `Content-Type` yang sama. Isi identik byte-per-byte menghasilkan hash
+identik. Diverifikasi terhadap registry NYATA sebelum dikirim: manifest untuk
+`sha256:d5423378…` berukuran 2.189 byte dan `sha256sum` atas byte itu
+mereproduksi `d5423378…` persis. Hanya memakai `curl` dan `jq`, keduanya sudah
+ada di runner — yang sekaligus mengeluarkan `docker/setup-buildx-action` dan
+`docker/login-action` dari job yang memegang `packages: write`, dividen kecil
+bagi argumen pengurungan di butir 3.
+
+Langkah verifikasi tak berubah tujuannya, tetapi kini membaca header
+`Docker-Content-Digest` milik registry sendiri untuk tag itu, bukan digest yang
+dihitung ulang oleh alat lokal. Penalaran butir 5-lah yang menangkap ini, dan
+layak dinyatakan ulang karena ia nyaris tak lolos tinjauan sebagai "asersi yang
+sudah jelas": **pemeriksaan yang tampak mubazir justru yang menangkap mekanisme
+yang Anda pilih keliru.**
+
+`v10.0.3` terbit tertandatangani dan ter-attest di bawah tag versinya, dengan
+GitHub Release dan asetnya utuh; hanya `:latest` yang salah, dan ia tetap salah
+sampai rilis berikutnya menjalankan job yang sudah dikoreksi — tak ada cara
+memperbaikinya di tempat, karena run yang dipicu push tag mengeksekusi berkas
+workflow sebagaimana adanya pada tag itu sendiri.
 
 ## Konsekuensi
 

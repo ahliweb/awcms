@@ -113,12 +113,13 @@ Concretely:
    steps that sit in the job holding them, the smaller the surface that can mint
    an OIDC token. Adding `docker/setup-buildx-action` to the privileged job would
    have spent the containment property this ADR is trying to preserve.
-4. The retag uses `docker buildx imagetools create`, which operates on manifests
-   against the registry — it does not pull, rebuild, or re-push layers, so
-   `:latest` lands on the _same digest_ that was signed rather than on a
-   rebuilt-and-therefore-different image. The application image is bound by
-   `@${APP_DIGEST}` — the exact digest handed to `cosign sign` and both attest
-   steps — so it cannot drift even if something else moved the version tag.
+4. The retag is a **registry** operation: GET the manifest, PUT the same bytes
+   under the name `latest`. Byte-identical content hashes identically, so
+   `:latest` cannot land anywhere but the signed digest. The application image is
+   bound by `@${APP_DIGEST}` — the exact digest handed to `cosign sign` and both
+   attest steps — so it cannot drift even if something else moved the version
+   tag. (This point originally specified `docker buildx imagetools create`; that
+   was wrong and the first live run proved it. See §Amendment.)
 5. A verification step re-reads `:latest` from the registry and fails the job
    unless it resolves to that signed digest. The invariant this ADR introduces is
    cheap enough to assert directly, and an ADR whose property is only asserted in
@@ -158,6 +159,54 @@ would still push `:latest` from `build` if they were re-run. They are an
 operational item — approve them to get their signatures and Releases, or let
 their artefacts expire at 30 days — and either way `:latest` today points at
 `10.0.2`, which is signed.
+
+## Amendment 2026-08-28 — `imagetools create` cannot do this, and `v10.0.3` proved it
+
+The first release to run `promote-latest` was `v10.0.3`, and it **failed at the
+verification step** — which is the only reason this is an amendment and not a
+defect discovered by a consumer weeks later.
+
+`docker buildx imagetools create` does not point a tag at existing bytes. It
+always **builds and pushes a new manifest list** wrapping its sources, so
+`:latest` landed on a freshly-serialised index `sha256:5dde705e…` while the
+signed manifest was `sha256:d5423378…` (a plain
+`application/vnd.oci.image.manifest.v1+json`, not an index — `imagetools` wrapped
+it). Same layers, same config, different digest.
+
+That distinction is the whole point, because **an attestation is bound to a
+digest**. Measured immediately afterwards:
+
+```
+gh attestation verify oci://ghcr.io/ahliweb/awcms:10.0.3 --owner ahliweb  -> exit 0
+gh attestation verify oci://ghcr.io/ahliweb/awcms:latest --owner ahliweb  -> exit 1
+```
+
+So the mechanism chosen to guarantee "`:latest` is always verifiable" produced,
+on its first run, a `:latest` that was not verifiable — the exact condition this
+ADR exists to prevent, reintroduced by its own implementation. The decision in
+§Decision was right; point 4's mechanism was wrong.
+
+**Corrected mechanism.** A tag is only a name the registry maps to manifest
+bytes, so the digest-preserving retag is the literal one: `GET
+/v2/<name>/manifests/<digest>`, then `PUT /v2/<name>/manifests/latest` with the
+same body and the same `Content-Type`. Byte-identical content hashes identically.
+Verified against the live registry before shipping: the fetched manifest for
+`sha256:d5423378…` is 2,189 bytes and `sha256sum` of those bytes reproduces
+`d5423378…` exactly. Uses only `curl` and `jq`, both already on the runner, which
+also removes `docker/setup-buildx-action` and `docker/login-action` from a job
+holding `packages: write` — a small extra dividend for the containment argument
+in point 3.
+
+The verification step is unchanged in purpose but now reads the registry's own
+`Docker-Content-Digest` header for the tag rather than a digest re-computed by a
+local tool. Point 5's reasoning is what caught this, and it is worth restating
+because it nearly did not survive review as "an obvious assertion": **the check
+that looks redundant is the one that catches the mechanism you chose wrongly.**
+
+`v10.0.3` shipped signed and attested under its version tag, with its GitHub
+Release and assets intact; only `:latest` was wrong, and it stays wrong until the
+next release runs the corrected job — there is no way to repair it in place,
+because a tag-push run executes the workflow file as of its own tag.
 
 ## Consequences
 
