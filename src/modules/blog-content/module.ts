@@ -445,7 +445,13 @@ export const blogContentModule = defineModule({
     // ADR-0059: `/news` is the HOST-RESOLVED public content family (index,
     // detail, category, tag) — this module's surface too, resolved from the
     // request rather than from a `{tenantCode}` path segment.
-    routes: ["/api/v1/blog", "/blog", "/api/v1/news-portal"]
+    // ADR-0098 (as amended): `/[locale]/blog` is the CANONICAL spelling of the
+    // four reader-facing public surfaces — the bare `/blog` family stays as the
+    // unprefixed alias the middleware `307`s away from, and as the module the
+    // prefixed routes re-export. Both belong to this module; the prefixed one
+    // needs its own claim because `[locale]` is a leading dynamic segment and
+    // no `/blog` prefix can cover it.
+    routes: ["/api/v1/blog", "/blog", "/[locale]/blog", "/api/v1/news-portal"]
   },
   // Public search-source contribution to `site_search` (ADR-0040 §3, ported
   // from awcms-micro Issue #270). Pure DATA — no executable extractor, no SQL:

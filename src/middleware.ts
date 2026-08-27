@@ -358,16 +358,22 @@ export const onRequest = defineMiddleware(async (context, next) => {
         ? redirectResult.capture
         : null;
 
-    // `next(path)` is a REWRITE, not a second request: the prefixed URL is what
-    // the reader sees and what the edge keys on, while the route file that
-    // serves it stays at `src/pages/blog/…` with no duplicated `[locale]` tree.
-    // Routes read the reader's language from `locals.locale`, set above, rather
-    // than from `Astro.url` — which a rewrite deliberately moves to the bare
-    // path (`Astro.originPathname` keeps the prefixed one).
-    const response =
-      localeRoute.action === "serve"
-        ? await next(barePathname + context.url.search)
-        : await next();
+    // No rewrite. The prefixed URL is served by a REAL route
+    // (`src/pages/[locale]/blog/…`), which is the ADR-0098 amendment.
+    //
+    // This line used to be `next(barePathname + context.url.search)`, and that
+    // is the defect v10.0.0 shipped: a rewrite whose target is a PARAMETERISED
+    // route resolves the route and computes its params correctly and then never
+    // executes it — the catch-all answers instead, so every locale-prefixed
+    // blog URL 404'd while every bare one redirected into it. Rewrites to
+    // STATIC targets (`/login`, `/search`, `/robots.txt`) work, which is why
+    // nothing else on the site was affected and why the shape of the bug was
+    // not obvious. `src/lib/i18n/localised-route.ts` carries the measurements.
+    //
+    // Routes still read the reader's language from `locals.locale`, set above,
+    // rather than from `Astro.url` — that contract is unchanged, and it is now
+    // simply true rather than true-after-a-rewrite.
+    const response = await next();
 
     if (notFoundCapture && response.status === 404) {
       await recordPublicNotFound(
