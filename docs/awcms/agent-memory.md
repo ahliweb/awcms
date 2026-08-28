@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 119.**
+**Jumlah memory saat snapshot terakhir: 123.**
 
 ## Sengaja TIDAK disertakan
 
@@ -51,6 +51,9 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Standar keamanan/performa = dokumen HIDUP](awcms-standards-anchor-and-second-pass.md) — C19 ledger hanya-mengecil 121→11 (pindahkan JAWABANNYA bukan pekerjaannya); `sql/NNN` baru menyentuh 6 dokumen
 - [Skill DIGERBANGI CI](awcms-skills-now-gated.md) — ADR-0062 `skills:check`; path arsip WAJIB `awcms-mini:src/…`; ekstraktor hanya lihat backtick SATU BARIS
 - [Skill "FIKTIF" bisa salah ARAH](awcms-stale-skill-flips-direction.md) — banner "belum ada" menua sebalik arah dan agen MENGIKUTI skill; wajib §Peta ke artefak nyata
+- [Tautan changeset TAK PUNYA bentuk relatif yang benar](awcms-changeset-links-have-no-correct-relative-form.md) — dua lokasi, dua ejaan, saling meniadakan; sebut nomor ADR saja
+- [Gerbang approval berjalan SESUDAH penerbitan](awcms-approval-gate-ran-after-the-publish.md) — ADR-0117: `:latest` pindah sebelum ada yang mengklik; 4 rilis tak bertanda tangan; backfill MEMBALIK flag "Latest"
+- [Gerbang yang hanya menyala saat RILIS](awcms-gates-that-only-fire-at-release.md) — v10.0.0: `pending.length > 0` + tautan `../docs/…` di changeset; fix WAJIB mendarat di main lebih dulu
 - [Pelajaran desain gate](awcms-gate-design-lessons.md) — gate CAKUPAN hijau sambil jawabannya salah; uji dengan cacat ASLI; `.generated` tanpa generator
 - ["Jalankan, jangan dibaca" — 4 cacat lolos 37 gerbang](awcms-run-it-dont-read-it.md) — migrasi tak-apply, `isBlockedAddress` non-IP, `withTenant` MENGEMBALIKAN Response
 - [Retensi outbox SELESAI — dua registry](awcms-lifecycle-two-registries-and-bounded-list.md) — #468: 5 deskriptor + `BOUNDED_BY_DESIGN`; ADR-0076 registry KEDUA
@@ -108,6 +111,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Artefak ter-generate DRIFT setelah dua squash-merge](awcms-generated-artifact-merge-drift.md) — regenerasi, jangan tangan
 - [Berkas untracked IKUT `git checkout`](awcms-untracked-file-follows-checkout.md) — `check:docs` cuma lihat berkas ter-track → `git add -A` DULU
 - [Full check sebelum PR](awcms-full-check-before-pr.md) — `bun run check` PENUH; paritas CI = `DATABASE_URL="" bun run test` + `build`
+- [Bun lokal > Bun CI = artefak "STALE" PALSU](awcms-local-bun-newer-than-ci-fakes-stale-artifacts.md) — 1.4.0 vs 1.3.14; JANGAN commit bundle regenerasi, itu justru memerahkan CI
 - [Security readiness gate](awcms-security-readiness-notes.md) — cek harus dibuktikan GAGAL pada kondisi seharusnya; role-check sengaja warning
 - [PR stacked = NOL CI](awcms-stacked-pr-no-ci.md) — workflow hanya trigger `branches: [main]`; GitGuardian tetap `pass` sehingga tampak hijau
 - [False-positive scanner keamanan](awcms-security-scanner-falsepos.md) — GitGuardian scan SEMUA commit PR; ia GitHub App, tak bisa ditutup dari env ini
@@ -153,7 +157,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Pilot turunan #187 (historis)](awcms-derived-pilot-notes.md) — jalur repo turunan DIHAPUS ADR-0034; katalog `awcms_permissions` global tanpa RLS
 - [Image produksi TIDAK BISA menjalankan job](awcms-prod-image-cannot-run-jobs.md) — runtime hanya `dist/`; 29 job = `Script not found`
 - [Resep gladi migrasi produksi](awcms-migration-rehearsal-on-prod-copy.md) — restore dump ke throwaway (buat ROLE dulu); DUA backfill pasca-rilis
-- [Runbook deploy Coolify](awcms-deploy-runbook-coolify.md) — SATU environment; varnish compose ber-IP HARDCODED; 200 di domain ≠ produksi hidup
+- [Runbook deploy Coolify](awcms-deploy-runbook-coolify.md) — SATU environment; varnish IP HARDCODED; 200 di domain ≠ produksi hidup. KOREKSI 27 Agu: backup terjadwal ADA, image `awcms-jobs` diterbitkan release.yml, peran migrasi = PEMILIK DB bukan `awcms_setup`
 - [`graphify install` MENGHAPUS patch skill lokal](graphify-install-wipes-local-skill-patches.md) — backup lalu re-apply tiap upgrade
 - [Kebijakan artefak graphify-out SUDAH settled](awcms-graphify-out-artefact-policy.md) — rebuild graf bebas changeset; JANGAN kecualikan `.changeset/`
 - [graphify butuh extra yang install polos hilangkan](graphify-svg-export-needs-matplotlib.md) — tanpa `[sql]` file `.sql` nol node; svg butuh matplotlib DAN scipy
@@ -1006,6 +1010,131 @@ metadata:
 Terkait: [[awcms-workflow-concurrency-notes]] (DML pada tabel FORCE RLS: hijau di CI kosong, jebol di produksi berisi) — pola "hijau di CI, jebol di deployment nyata" yang sama. Lihat juga [[awcms-full-check-before-pr]].
 `````
 
+<!-- memory-file: awcms-approval-gate-ran-after-the-publish.md -->
+
+`````markdown
+---
+name: awcms-approval-gate-ran-after-the-publish
+description: "Gerbang approval `release` menggerbangi TANDA TANGAN, bukan PENERBITAN — `:latest` sudah pindah sebelum siapa pun mengklik; plus jebakan \"Latest\" membalik saat mem-backfill rilis lama"
+metadata: 
+  node_type: memory
+  type: feedback
+  modified: 2026-08-27T23:07:55.053Z
+---
+
+Dari 2026-08-28 (ADR-0117, PR #746). Dua hal yang mahal kalau diturunkan ulang.
+
+**1. Gerbang yang berjalan SESUDAH hal yang seharusnya ia gerbangi.**
+`release.yml` menggerbangi job `sign-attest-publish` di belakang environment
+`release` dengan required reviewer. Tetapi job `build` — yang berjalan SEBELUM
+gerbang — memikul `push: true` dengan daftar tag yang memuat `${REPO}:latest`.
+Jadi "belum disetujui" tak pernah berarti "belum diterbitkan"; ia hanya berarti
+"belum ditandatangani". **EMPAT rilis membuktikannya**: `v8.0.0`, `v9.0.0`,
+`v9.1.0`, `v9.1.1` duduk `status: waiting` 13–17 hari sementara `:latest` sudah
+menunjuk image mereka. Diukur, bukan disimpulkan —
+`gh attestation verify oci://ghcr.io/ahliweb/awcms:9.1.1 --owner ahliweb`
+mengembalikan **exit 1 / HTTP 404**, sementara `9.1.2` exit 0.
+
+Yang membuatnya bertahan lama: **rasional tertulisnya bernalar tentang KREDENSIAL
+saja** — "`build` holds no signing/attestation credentials, [so] gating it would
+only add friction with no security benefit". Benar soal kredensial, BISU soal
+fakta bahwa job yang sama juga MENERBITKAN. Pola yang bisa dibawa:
+**saat sebuah dokumen membenarkan "X tak perlu digerbangi", periksa DAFTAR
+LENGKAP efek samping X, bukan hanya kategori yang disebut alasannya.**
+
+Kenapa nol gerbang menangkapnya: cacatnya adalah **URUTAN DUA JOB yang
+masing-masing benar**. Tak ada artefak yang isinya salah, jadi tak ada gerbang
+berbasis sumber yang bisa membacanya — dan seluruh 50+ gerbang repo ini berbasis
+sumber. Satu-satunya jejak tertulis justru MENGUATKAN cacatnya: komentar header
+workflow mendaftar `image :latest moved, GitHub Release published` sebagai satu
+hasil atomik. Sekerabat dengan [[awcms-gates-that-only-fire-at-release]] dan
+[[awcms-gate-design-lessons]], tapi kelasnya beda: bukan gate yang salah baca,
+melainkan **tak ada gate yang BISA membacanya**.
+
+Perbaikannya (ADR-0117): `build` hanya memancarkan `:${VERSION}`/`:sha-<12>`
+(imutabel, inert); job baru `promote-latest` (`needs: [build,
+sign-attest-publish]`) me-retag `:latest` lewat `docker buildx imagetools create`
+terhadap `@${APP_DIGEST}` — digest PERSIS yang diserahkan ke `cosign sign` —
+lalu MEMBACA ULANG `:latest` dan gagal kecuali menunjuk ke sana. Job terpisah,
+bukan langkah di dalam job berprivilese, karena `id-token`/`attestations`
+per-JOB: menambah `docker/setup-buildx-action` ke sana justru membelanjakan
+properti pengurungan yang sedang dipertahankan. Promosi berjalan SETELAH
+`gh release create` — langkah release-notes adalah yang benar-benar pernah gagal
+(`v7.0.0`, body 186.449 karakter).
+
+**2. Mem-backfill rilis lama MEMBALIK flag "Latest" — dan diam-diam.**
+Menyetujui empat run tertahan itu menjalankan `gh release create` milik workflow
+**sebagaimana adanya pada tag masing-masing**, yang tidak memakai `--latest=false`.
+Default REST `make_latest` adalah true, jadi sesudah backfill **`v9.1.1` menjadi
+"Latest"** sementara `v10.0.2` yang sebenarnya terbaru turun ke daftar. Perbaikan:
+`PATCH /repos/:o/:r/releases/:id` dengan `{"make_latest":"true"}` pada rilis yang
+benar, lalu verifikasi lewat `gh api repos/:o/:r/releases/latest --jq .tag_name`.
+**Selalu periksa flag Latest sesudah menerbitkan rilis apa pun yang BUKAN yang
+paling baru.** Catatan terkait: memperbaiki workflow di `main` TIDAK memperbaiki
+run tertahan — run yang dipicu push tag mengeksekusi workflow versi TAG-nya.
+
+**2b. `docker buildx imagetools create` MENGUBAH digest — ia BUKAN retag.**
+Ini menggagalkan `v10.0.3`, rilis pertama yang menjalankan `promote-latest`.
+`imagetools create` SELALU membangun dan mem-push **manifest list BARU** yang
+membungkus sumbernya, jadi `:latest` mendarat di index hasil serialisasi ulang
+(`sha256:5dde705e…`) sementara manifest tertandatangani adalah `sha256:d5423378…`
+— sebuah `application/vnd.oci.image.manifest.v1+json` POLOS yang ia bungkus.
+Layer sama, config sama, **digest beda**. Karena **attestation terikat pada
+DIGEST**, `gh attestation verify oci://…:latest` exit 1 sementara `:10.0.3`
+exit 0 — mekanisme yang dipilih untuk menjamin properti itu justru mematahkannya
+di run pertamanya.
+
+Retag yang menjaga digest itu harfiah — sebuah tag hanyalah NAMA yang dipetakan
+registry ke byte manifest, jadi ambil byte-nya dan taruh di bawah nama lain:
+
+```bash
+token=$(curl -fsSL -u "$USER:$TOKEN" \
+  "https://ghcr.io/token?service=ghcr.io&scope=repository:${path}:pull,push" | jq -r .token)
+ct=$(curl -fsSL -o m.json -D - -H "Authorization: Bearer $token" \
+  -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+  -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+  "https://ghcr.io/v2/${path}/manifests/${digest}" \
+  | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}' | tail -1)
+curl -fsSL -X PUT -H "Authorization: Bearer $token" -H "Content-Type: $ct" \
+  --data-binary @m.json "https://ghcr.io/v2/${path}/manifests/latest"
+```
+
+Hanya `curl` + `jq`. Bisa diuji SEBELUM dikirim, dan WAJIB: ambil manifest-nya
+lalu `sha256sum` — kalau byte-nya mereproduksi digest yang ditandatangani, PUT
+balik pasti mendarat di sana. Untuk membaca digest sebuah tag, pakai header
+`Docker-Content-Digest` dari `curl -I`, bukan alat lokal yang menghitung ulang.
+
+**Pelajaran yang lebih besar: langkah verifikasi yang tampak MUBAZIR adalah yang
+menangkap mekanisme yang Anda pilih keliru.** Asersi "`:latest` benar-benar
+menunjuk digest tertandatangani" nyaris tak ditulis karena terasa jelas; ia
+satu-satunya sebab cacat ini ketahuan di rilis yang melahirkannya, bukan oleh
+konsumen berminggu kemudian. Dan: **run yang dipicu push tag mengeksekusi
+workflow versi TAG-nya**, jadi memperbaiki `main` tidak memperbaiki rilis yang
+sudah terlanjur — `:latest` yang rusak hanya bisa dibetulkan dengan MEMOTONG
+rilis berikutnya.
+
+**3. Dua kegagalan lokal yang BUKAN milik Anda, di repo ini, hari ini.**
+`bun run check` merah dua kali tanpa hubungan dengan perubahan:
+(a) `memory:docs:check` — membandingkan direktori memory di LUAR repo dengan
+`docs/awcms/agent-memory.md`; CI melewatinya karena direktori itu tak ada di
+path CI. (b) `build:preview-overlay:check` + test yang men-`spawnSync`-nya —
+false STALE dari [[awcms-local-bun-newer-than-ci-fakes-stale-artifacts]].
+**Buktikan pre-existing dengan `git worktree add <tmp> main` lalu jalankan
+gerbangnya di sana**, jangan menyimpulkan. Peringatan: worktree ber-path lain
+membuat gerbang yang PATH-SENSITIF (seperti `memory:docs:check`) "PASS" secara
+hampa — itu bukan bukti.
+
+Menambah ADR baru memerahkan DUA artefak ter-generate yang wajib diregenerasi
+(bukan disunting): `bun run repo:inventory:generate` dan
+`bun run project-state:inventory:generate` (baris "ADR" di §2), keduanya diikuti
+`bun run format` lalu `bun run docs:i18n:stamp`.
+
+Terkait: [[awcms-deploy-runbook-coolify]], [[awcms-full-check-before-pr]],
+[[awcms-generated-artifact-merge-drift]], [[awcms-untracked-file-follows-checkout]].
+`````
+
 <!-- memory-file: awcms-astro-bun-runtime.md -->
 
 `````markdown
@@ -1731,6 +1860,40 @@ Terkait: [[awcms-tenant-admin-office-notes]] (composite FK/RLS), [[awcms-integra
 [[awcms-applied-migration-immutable]] (sql/027 masih bisa direfine — belum di deployment nyata).
 `````
 
+<!-- memory-file: awcms-changeset-links-have-no-correct-relative-form.md -->
+
+`````markdown
+---
+name: awcms-changeset-links-have-no-correct-relative-form
+description: "Tautan relatif di `.changeset/*.md` TAK BISA benar di dua tempat: `docs/…` merahkan check:docs, `../docs/…` merahkan CHANGELOG saat rilis — jangan ditautkan"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-08-27T07:54:25.180Z
+---
+
+Berkas changeset hidup di DUA lokasi, dan tautan relatif hanya bisa benar di
+salah satunya:
+
+1. Saat masih `.changeset/nama.md` → `bun run check:docs` menyelesaikan tautan
+   relatif terhadap **`.changeset/`**. Jadi `docs/adr/x.md` = RUSAK.
+2. Setelah `bun run changeset:version` → isinya di-inline ke `CHANGELOG.md` di
+   **AKAR REPO**. Jadi `../docs/adr/x.md` = RUSAK (menunjuk ke luar repo).
+
+**Tidak ada ejaan relatif yang benar di keduanya.** Terbukti dua arah pada
+rilis v10.0.0 (27 Agu 2026): dua changeset memakai `../docs/adr/…`, lolos
+`check:docs` selama berbulan-bulan, lalu memerahkan commit rilis; memperbaikinya
+ke `docs/adr/…` justru memerahkan `check:docs` pada changeset berikutnya.
+
+**Aturan: JANGAN menautkan dokumen repo dari changeset.** Sebut nomornya saja
+(`ADR-0098`) dalam teks biasa. Nomor ADR sudah cukup untuk menemukannya, dan
+gerbang tak punya yang bisa dirusak.
+
+Ini kelas yang sama dengan [[awcms-gates-that-only-fire-at-release]] — cacatnya
+hanya menyala saat berkasnya BERPINDAH tempat, yaitu hanya saat rilis. Belum ada
+gerbang yang memeriksa tautan changeset terhadap KEDUA lokasi; itu masih utang.
+`````
+
 <!-- memory-file: awcms-check-the-sibling-endpoint.md -->
 
 `````markdown
@@ -2185,7 +2348,7 @@ description: "SATU environment (produksi v8.0.0) sejak 11 Agu — app n3gg3qud�
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-11T04:26:03.917Z
+  modified: 2026-08-27T08:28:42.783Z
 ---
 
 > **STATE 11 Agustus 2026 (setelah standup) — SATU environment, produksi saja.**
@@ -2228,6 +2391,39 @@ metadata:
 > (`${GITHUB_REF_NAME#v}`). Job `sign-attest-publish` butuh approval maintainer
 > di environment `release`; job `build` menerbitkan image SEBELUM gerbang itu,
 > jadi deploy tak perlu menunggu approval.
+
+> **KOREKSI 27 Agustus 2026 (deploy v10.0.0 → v10.0.1). Empat hal di bawah
+> sudah TIDAK BERLAKU atau berubah:**
+>
+> 1. **Backup terjadwal SUDAH ADA.** `/home/admin1/awcms-jobs/backup-awcms.sh`
+>    (cron 17:30 UTC) + `restore-drill-awcms.sh`. Ia memverifikasi tiap dump
+>    dengan `pg_restore -l` DAN membandingkan jumlah objek. Jalankan tangan
+>    sebelum migrasi: exit 0 = sah. Kalimat "nol backup terjadwal" di bawah
+>    sudah kedaluwarsa.
+> 2. **Image job kini DITERBITKAN `release.yml`** — `ghcr.io/ahliweb/awcms-jobs:<versi>`
+>    dari commit yang SAMA dengan image app, publik. `ops/run-job.sh` ada di REPO
+>    dan meresolusi: `$AWCMS_JOBS_IMAGE` → `ghcr.io/…:$AWCMS_JOBS_TAG` (default
+>    `latest`) → build lokal. Utang "snapshot sumber menua" LUNAS — tapi salinan
+>    di HOST bisa tetap basi: verifikasi sha256 tiap berkas `ops/*` vs
+>    `git show origin/main:ops/<f>` SETIAP rilis.
+> 3. **`run-job.sh` baru MENOLAK jalan tanpa `ops/awcms-jobs.env-allowlist`**
+>    (176 nama, ter-generate). Versi lama menyaring env dengan PREFIX dan
+>    menjatuhkan 81 dari 171 variabel — job jalan, mengambil default kode,
+>    melapor sukses. Kirim allow-list DULU baru runner-nya.
+>    Ia juga meng-`mkdir` `/var/lib/awcms-jobs` yang **butuh root**; `admin1`
+>    tak punya sudo tanpa password. Buat sekali:
+>    `docker run --rm -v /var/lib:/hostlib alpine:3 sh -c "mkdir -p /hostlib/awcms-jobs && chown 1000:1000 /hostlib/awcms-jobs"`.
+>    Tanpa ini KE-62 baris cron mati.
+> 4. **Peran migrasi BUKAN `awcms_setup`** (itu peran sempit khusus
+>    `POST /api/v1/setup/initialize`; ia memberi `permission denied for schema
+>    public`). Yang benar PEMILIK database = `POSTGRES_USER` container DB
+>    (`awcms_staging`). Password WAJIB di-URL-encode (`jq -sRr @uri`):
+>    `docker run --rm --network coolify -e DATABASE_URL="postgres://$U:$P@my85c1xd4txesedhic72maeu:5432/awcms" ghcr.io/ahliweb/awcms-jobs:<versi> bun run db:migrate`
+>
+> Verifikasi pasca-deploy yang benar-benar menangkap sesuatu: `synthetic-check.sh`
+> (ia menemukan blog 404 total yang lolos 10 check CI). IP `extra_hosts` Varnish
+> tetap wajib dicek tiap redeploy — 27 Agu kebetulan sama (`10.0.1.61`), bukan
+> jaminan.
 
 Dua fakta yang **tidak tercatat di repo** dan baru terlihat saat deploy nyata 5 Agustus 2026 (v7.0.0 ke staging + produksi):
 
@@ -3272,6 +3468,56 @@ Terkait: [[awcms-check-the-sibling-endpoint]],
 [[awcms-stale-skill-flips-direction]].
 `````
 
+<!-- memory-file: awcms-gates-that-only-fire-at-release.md -->
+
+`````markdown
+---
+name: awcms-gates-that-only-fire-at-release
+description: "v10.0.0: DUA pemblokir yang mustahil terlihat sebelum commit rilis — guard non-vacuity `pending.length > 0` dan tautan `../docs/…` di changeset"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-08-27T02:17:46.306Z
+---
+
+Rilis v10.0.0 (27 Agu 2026) diblokir dua kali oleh gerbang yang **hijau di
+setiap commit kecuali commit rilis itu sendiri**. Keduanya lolos berbulan-bulan
+karena tak ada rilis yang menanyainya.
+
+**1. Guard non-vacuity membunuh commit rilis.**
+`tests/version-check.test.ts` meng-assert `pending.length > 0` pada repo HIDUP.
+Benar selalu — kecuali pada commit yang mengonsumsi seluruh `.changeset/`, yaitu
+keadaan yang justru menjadi pusat seluruh model versi. Test itu mendarat SETELAH
+v9.1.2, jadi v10.0.0 adalah kali pertama ia ditanya.
+
+Yang membuatnya jadi deadlock, bukan sekadar bug: `changesets:policy:check`
+punya carve-out release-consumption yang menuntut commit rilis menyentuh
+`package.json` DAN TIDAK ADA LAIN. Jadi memperbaiki test DI DALAM commit rilis
+merusak gerbang policy; membiarkannya merusak suite. **Perbaikannya wajib
+mendarat di `main` LEBIH DULU** (PR #736), baru branch rilis dibangun ulang di
+atasnya. Non-vacuity dipindah ke PEMBACA dengan direktori tertanam.
+
+**2. Changeset menulis `../docs/adr/…`.**
+Benar relatif terhadap `.changeset/`, RUSAK begitu `changeset version`
+menyatukannya ke `CHANGELOG.md` di AKAR repo — `../docs/` menunjuk ke luar repo.
+`check:docs` menangkap 2 temuan; obatnya buang `../`. **Tulis tautan changeset
+relatif terhadap AKAR repo (`docs/adr/…`), bukan terhadap `.changeset/`.**
+Belum ada gerbang yang memeriksa ini saat changeset DIBUAT — masih utang.
+
+**3. `docs/PROJECT_STATE.md` §2 memuat nomor versi** di kedua salinan bahasa,
+jadi ia PASTI basi setelah bump. `bun run project-state:inventory:generate` lalu
+`bun run format` — jangan tangan ([[awcms-project-state-doc]]).
+
+Urutan yang terbukti benar untuk rilis berikutnya:
+`fix pemblokir → merge ke main → bangun ULANG branch rilis dari origin/main →
+cherry-pick fix config → changeset:version → perbaiki tautan + regenerate §2 →
+amend → release:verify + version:check + changesets:policy:check`.
+
+Terkait: [[awcms-gate-design-lessons]], [[awcms-gate-reads-one-of-a-pair]],
+[[awcms-run-it-dont-read-it]] — kelas yang sama: gerbang yang tak pernah
+ditanyai pada kondisi yang seharusnya ia jaga.
+`````
+
 <!-- memory-file: awcms-gelombang-2-session-surface-complete.md -->
 
 `````markdown
@@ -3822,6 +4068,49 @@ Yang menahan registry kedua jadi tempat parkir bukan aturan tertulis: `data-life
 Deskripsi **operasi** OpenAPI tak bisa diubah (snapshot pra-migrasi beku, byte-identical); deskripsi **TAG** tidak dibekukan dan ter-render ke `awcms/api-reference.md` — itu lever yang tersedia.
 
 Lihat [[awcms-outbox-retention-two-blockers]] (superseded), [[awcms-gate-design-lessons]].
+`````
+
+<!-- memory-file: awcms-local-bun-newer-than-ci-fakes-stale-artifacts.md -->
+
+`````markdown
+---
+name: awcms-local-bun-newer-than-ci-fakes-stale-artifacts
+description: "Bun lokal 1.4.0 vs CI 1.3.14 membuat gerbang artefak ter-bundle MERAH PALSU; JANGAN regenerasi — commit-nya akan memerahkan CI"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-08-27T02:11:28.445Z
+---
+
+`bun run check` lokal bisa GAGAL di gerbang yang membandingkan bundle ter-commit
+dengan hasil bundle segar, padahal repo BENAR:
+
+- `build:preview-overlay:check` → "public/js/blog-preview-overlay.js is STALE"
+- `tests/preview-overlay-bundle.test.ts` → "the committed bundle > matches its
+  TypeScript source"
+
+**Sebabnya versi Bun, bukan kode.** `package.json` `packageManager: bun@1.3.14`
+dan `.github/workflows/ci.yml` memasang `bun-version: "1.3.14"` di SEMUA job.
+Bun lokal di mesin ini 1.4.0. Minifier Bun mengganti skema penamaan variabel
+antar versi, jadi keluarannya beda byte sambil identik secara semantik
+(`var x={strong:…}` vs `var Q={strong:…}` — hanya nama).
+
+**Cara membedakan palsu dari nyata — dua bukti, bukan tebakan:**
+1. `gh run list --branch main --limit 3` hijau pada commit yang memuat bundle
+   yang SAMA (CI menjalankan `bun run check` di ci.yml baris 83).
+2. `diff` bundle ter-commit vs hasil `bun run build:preview-overlay` hanya
+   berisi perbedaan nama identifier satu-huruf.
+
+**JANGAN `git add` bundle hasil regenerasi lokal.** Ia dibangun 1.4.0; CI
+membangun ulang dengan 1.3.14 dan akan melihatnya STALE — memerahkan CI justru
+karena "memperbaiki" merah palsu. Kembalikan dengan
+`git checkout -- public/js/blog-preview-overlay.js`.
+
+Perbaikan benar bila ingin run lokal setia: pasang Bun 1.3.14. Selain itu,
+percayakan gerbang bundle ke CI dan jalankan sisa rantainya lokal.
+
+Terkait: [[awcms-generated-artifact-merge-drift]] (di sana regenerasi MEMANG
+jawabannya — bedanya di sana sumbernya yang bergerak, di sini toolchain-nya).
 `````
 
 <!-- memory-file: awcms-local-dev-bootstrap.md -->
@@ -5768,7 +6057,7 @@ description: "Working tree bersama memindahkan HEAD — `git branch --show-curre
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-08-08T04:47:13.952Z
+  modified: 2026-08-27T08:28:20.779Z
 ---
 
 Subagent (awcms-coder dll.) bekerja di **working tree yang SAMA** dengan orchestrator. Meski di-instruksikan "jangan git ops", agent bisa menjalankan `git checkout main`/`git switch` untuk inspeksi (mis. diff terhadap main) dan **memindahkan HEAD**. Terjadi di PR #189 (#184 MFA): setelah `git switch -c feature/184-...`, HEAD balik ke `main` sebelum commit pertama → 3 commit MFA mendarat di `main` lokal, bukan branch fitur. `gh pr create` gagal "No commits between main and feature".
@@ -5796,6 +6085,35 @@ Yang benar-benar menangkapnya:
   bukan gerbang. Di sesi yang sama, agen verifikasi malah MELAKSANAKAN ADR-0071
   (menghapus rute, men-stage penghapusan) di `main`. Pakai `isolation: "worktree"`,
   atau lakukan penulisan sendiri dan `git status` tiap selesai fase.
+
+**TAMBAHAN 2026-08-27 — bukan cuma subagent: SESI LAIN yang berjalan bersamaan.**
+Saat rilis v10.0.0/v10.0.1 ada sesi kedua bekerja di working tree yang sama
+(`fix/amplop-sidecar-dipertahankan`). Reflog memperlihatkan kami bergantian
+memindahkan HEAD dalam hitungan detik. Dua kerusakan BARU, di luar yang di atas:
+
+1. **`git add -A` menyapu berkas sesi lain** ke commit saya — PR #742 lahir
+   dengan 4 berkas padahal punya saya 2. Sinyalnya persis seperti dicatat di
+   atas: `gh pr view <n> --json files` menunjukkan jumlah yang tak terduga.
+   **Periksa itu SEBELUM merge, tiap PR** — dua PR saya yang lain (#740/#741,
+   salah satunya rilis yang sudah ditag) ternyata bersih, tapi itu keberuntungan.
+2. **`git reset --hard origin/main` di tree bersama MEMBUANG perubahan
+   belum-ter-commit milik sesi lain.** Tak ada peringatan, tak ada cara
+   memulihkan. Ini yang paling berbahaya dan saya melakukannya beberapa kali.
+
+**Perbaikan yang tidak mengganggu mereka** (dipakai untuk membersihkan #742):
+```
+git worktree add --detach /tmp/wt origin/main
+git -C /tmp/wt checkout origin/<branch-saya> -- <path> <path>   # ambil HANYA milik sendiri
+git -C /tmp/wt commit && git -C /tmp/wt push --force-with-lease origin HEAD:<branch-saya>
+git worktree remove --force /tmp/wt
+```
+Pakai `git -C <wt>`, JANGAN `cd` ([[bash-cwd-persists-cross-repo-audit-hazard]]).
+`gh pr merge` murni remote — ia tak pernah menyentuh working tree, jadi aman.
+
+**Aturannya: begitu ada tanda sesi lain hidup di repo ini, pindah ke worktree
+sendiri untuk SELURUH sisa pekerjaan.** Tandanya murah dicek: `git branch
+--show-current` mengembalikan nama yang tak Anda buat, atau `git log -1` memuat
+pekerjaan yang bukan milik Anda.
 
 **How to apply:**
 - SEBELUM setiap `git commit`, jalankan `git branch --show-current` dan pastikan = branch fitur yang diniatkan.
