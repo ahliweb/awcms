@@ -402,6 +402,24 @@ jobs:
             echo "truncated to $(wc -c < release-notes.md) bytes"
           fi
 
+      # ADR-0119. `gh release create` without `--latest` inherits GitHub's
+      # default, and that default assumes releases only ever move FORWARD. This
+      # repo breaks that assumption by design: the `release` environment gate
+      # can hold a run for days, so releases can publish OUT OF VERSION ORDER.
+      # On 28 August 2026 approving the parked `v10.0.0`/`v10.0.1` runs moved
+      # the "Latest" badge off `v10.0.4` and onto a version four releases stale.
+      # The flag is therefore DECIDED, never inherited.
+      - name: Decide the "Latest" badge for this release
+        id: latest_flag
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flag=$(gh release list --limit 200 \
+                   --json tagName,isPrerelease,isDraft \
+                 | bun scripts/release-latest-flag.ts "${GITHUB_REF_NAME}")
+          echo "value=${flag}" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release (real release only)
         if: github.event_name == 'push'
         env:
@@ -409,8 +427,33 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
+            --latest="${{ steps.latest_flag.outputs.value }}" \
             --notes-file release-notes.md \
             CHECKSUMS.txt sbom-source.cdx.json sbom-image.cdx.json source.tar.gz
+
+      # The step that looks redundant. ADR-0117's amendment exists because the
+      # mechanism chosen to guarantee a property broke it on first run, and the
+      # only reason that was caught in the release that introduced it — rather
+      # than by a consumer weeks later — was a re-read nobody thought necessary.
+      # Same reasoning, same shape: assert what the badge ACTUALLY says.
+      - name: Verify the badge landed where it was decided
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          actual=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          want='${{ steps.latest_flag.outputs.value }}'
+          echo "decided latest=${want}; /releases/latest now reports ${actual}"
+
+          if [ "$want" = "true" ] && [ "$actual" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::decided Latest for ${GITHUB_REF_NAME} but the badge is on ${actual}"
+            exit 1
+          fi
+
+          if [ "$want" = "false" ] && [ "$actual" = "${GITHUB_REF_NAME}" ]; then
+            echo "::error::${GITHUB_REF_NAME} took the Latest badge it was denied — a superseded version is now what consumers resolve"
+            exit 1
+          fi
 
   # ADR-0117. `:latest` used to be produced by `build`, which runs before the
   # approval gate — so it moved whether or not anyone ever approved the release.

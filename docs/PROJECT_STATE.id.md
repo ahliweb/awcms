@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b38f5881e8a27b4ec21023e34f0385e5fa0245623eaa17db8998edf8a03050f5 -->
+<!-- i18n-source-hash: sha256:d105206f33e47d2a4b59fd7c3ab064723c3df8e6efe6cbf50dd24a689783d49a -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.0.4..HEAD`                                                    |
 | Modul base                         | **24** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **148** (`sql/001`–`148`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0118** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0119** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **0 dari 24** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **62** (35.126 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **59** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -439,9 +439,24 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   mengoper flag `--latest` apa pun**, jadi setiap penerbitan di luar urutan akan
   mengulanginya: konsumen yang membaca badge itu, atau alat apa pun yang
   mengikuti `/releases/latest`, diarahkan ke versi usang selama tak ada yang
-  memeriksa. Perbaikan sempitnya `--latest=false` pada setiap backfill;
-  perbaikan tahan-lamanya adalah membuat workflow MEMUTUSKAN flag itu, bukan
-  mewarisi default yang mengandaikan rilis selalu bergerak maju.
+  memeriksa.
+
+  **Ditutup hari itu juga oleh [ADR-0119](adr/0119-the-latest-badge-is-decided-not-inherited.id.md)**,
+  mengambil opsi tahan-lama alih-alih yang sempit: workflow-nya MEMUTUSKAN flag
+  itu, bukan mewarisi default. `--latest=true|false` selalu dioper dan selalu
+  dihitung — Latest hanya bila tak ada rilis terbit dengan versi lebih tinggi,
+  draft dan pre-release dikecualikan, tag di luar `vX.Y.Z` diabaikan di kedua
+  sisi. Perbandingannya fungsi MURNI di samping pemeriksaan `release:verify`
+  lainnya, bukan shell di dalam blok `run:`, sebab logika tak-teruji di jalur
+  rilis adalah cara cacat ini tiba; jembatan I/O-nya gagal-TERTUTUP ke `false`
+  (salah `false` terlihat dan satu perintah dari selesai, salah `true`
+  memindahkan badge dan tak ada yang melaporkannya); badge-nya DIBACA ULANG
+  sesudah penerbitan dan job gagal bila berbeda. `release.yml` sendiri diasersi
+  oleh tes yang menyusun ulang setiap pemanggilan `gh release create` nyata dari
+  baris sambungannya lalu mensyaratkan flag itu — mengecualikan baris komentar,
+  sebab workflow tersebut membicarakan perintahnya dalam prosa dua kali dan
+  pencarian substring menjawab pertanyaan tentang dokumentasi sambil tampak
+  menjawab pertanyaan tentang perilaku.
 
   **Gerbang yang sensitif terhadap toolchain-nya sendiri memblokir semua yang di
   belakangnya.** `build:preview-overlay:check` membandingkan bundle ter-commit

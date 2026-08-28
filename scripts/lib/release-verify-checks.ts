@@ -8,7 +8,12 @@
  * belum dikonsumsi tersisa di `.changeset/`.
  */
 
-import { isReleaseTag } from "./semver";
+import {
+  compareReleaseVersions,
+  isReleaseTag,
+  parseReleaseVersion,
+  parseVersionFromTag
+} from "./semver";
 
 export type Problem = { message: string };
 
@@ -112,4 +117,73 @@ export function checkNoPendingChangesets(
     };
   }
   return null;
+}
+
+/**
+ * Satu rilis yang SUDAH terbit, sebagaimana `gh release list --json` menyebutnya.
+ */
+export type PublishedRelease = {
+  tagName: string;
+  isPrerelease?: boolean;
+  isDraft?: boolean;
+};
+
+/**
+ * Apakah rilis untuk `tag` boleh memikul badge **"Latest"** GitHub (ADR-0119).
+ *
+ * ## Kenapa ini perlu diputuskan, bukan diwariskan
+ *
+ * `gh release create` TANPA flag `--latest` memakai default GitHub, dan default
+ * itu mengandaikan rilis selalu bergerak MAJU. Andaian itu salah di repo ini:
+ * gerbang approval `release` bisa menahan sebuah run berhari-hari, jadi rilis
+ * bisa terbit **di luar urutan versi**. Terbukti 28 Agustus 2026 — menyetujui
+ * run `v10.0.0`/`v10.0.1` yang tertahan menerbitkan release-nya dan badge
+ * "Latest" langsung berpindah dari `v10.0.4` ke `v10.0.0`, yaitu ke versi yang
+ * SUDAH digantikan empat rilis sebelumnya.
+ *
+ * Yang membuatnya lolos lama: empat backfill sehari sebelumnya melakukan hal
+ * yang sama, lalu `v10.0.3` dan `v10.0.4` terbit sejam kemudian dan merebut
+ * badge itu kembali — sehingga state akhir terlihat seperti "backfill tidak
+ * memindahkan badge". **State akhir tak bisa menjawab pertanyaan tentang
+ * urutan**; dua peristiwa yang saling menutupi terlihat seperti satu peristiwa
+ * yang tak pernah terjadi.
+ *
+ * ## Aturannya
+ *
+ * Latest hanya bila TIDAK ADA rilis terbit yang versinya lebih tinggi. Draft
+ * dan pre-release diabaikan karena GitHub sendiri tak pernah menaruh badge itu
+ * pada keduanya — memperhitungkannya akan membuat sebuah pre-release lama
+ * menolak badge dari rilis stabil yang sah.
+ *
+ * Tag yang tak berpola `vX.Y.Z` (dan rilis terbit yang tagnya begitu) diabaikan
+ * dengan sengaja: repo ini memikul tag lama tanpa prefix (`3.0.0`, `4.5.0`),
+ * dan membandingkan sesuatu yang bukan versi rilis hanya menghasilkan urutan
+ * yang tak berarti.
+ *
+ * @param tag tag yang sedang diterbitkan, mis. `v10.0.5`
+ * @param published rilis yang sudah ada — `gh release list --json tagName,isPrerelease,isDraft`
+ */
+export function shouldMarkReleaseLatest(
+  tag: string,
+  published: readonly PublishedRelease[]
+): boolean {
+  const thisVersionText = parseVersionFromTag(tag);
+  if (thisVersionText === null) return false;
+
+  const thisVersion = parseReleaseVersion(thisVersionText);
+  if (thisVersion === null) return false;
+
+  for (const release of published) {
+    if (release.isDraft || release.isPrerelease) continue;
+
+    const otherText = parseVersionFromTag(release.tagName);
+    if (otherText === null) continue;
+
+    const other = parseReleaseVersion(otherText);
+    if (other === null) continue;
+
+    if (compareReleaseVersions(other, thisVersion) > 0) return false;
+  }
+
+  return true;
 }

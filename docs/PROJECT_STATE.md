@@ -112,7 +112,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.0.4..HEAD`                                                    |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **148** (`sql/001`–`148`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0118** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0119** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **62** (35.126 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **59** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -433,9 +433,23 @@ pioneered directly here after the ADR-0047 freeze.)
   **The workflow's `gh release create` passes no `--latest` flag**, so any
   future out-of-order publish does this again: a consumer reading the badge, or
   any tool that follows `/releases/latest`, is pointed at a superseded version
-  for as long as nobody looks. The narrow fix is `--latest=false` on any
-  backfill; the durable one is for the workflow to decide the flag rather than
-  inherit a default that assumes releases only ever go forward.
+  for as long as nobody looks.
+
+  **Closed the same day by [ADR-0119](adr/0119-the-latest-badge-is-decided-not-inherited.md)**,
+  taking the durable option rather than the narrow one: the workflow DECIDES the
+  flag instead of inheriting a default. `--latest=true|false` is always passed
+  and always computed — Latest only when no published release has a higher
+  version, drafts and pre-releases excluded, non-`vX.Y.Z` tags ignored on both
+  sides. The comparison is a PURE function beside the other `release:verify`
+  checks, not shell in a `run:` block, because untested logic on the release
+  path is how this arrived; the I/O bridge fails CLOSED to `false` (a wrong
+  `false` is visible and one command from fixed, a wrong `true` moves the badge
+  and nothing reports it); the badge is RE-READ after publishing and the job
+  fails if it disagrees. `release.yml` itself is asserted by a test that
+  reassembles every real `gh release create` invocation from its continuation
+  lines and requires the flag — excluding comment lines, because that workflow
+  discusses the command in prose twice and a substring search answers a question
+  about documentation while appearing to answer one about behaviour.
 
   **A gate that is sensitive to its own toolchain blocked everything behind it.**
   `build:preview-overlay:check` compares a committed bundle byte-for-byte
