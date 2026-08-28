@@ -39,6 +39,7 @@ import {
   renderPortableTextToHtml
 } from "../src/modules/blog-content/domain/portable-text-rendering";
 import { renderBlogBodyHtml } from "../src/modules/blog-content/domain/blog-body-rendering";
+import { pinnedBunVersion } from "../scripts/build-preview-overlay";
 import { PUBLIC_ASSET_AUDIENCE } from "../scripts/client-asset-budget";
 import type {
   PortableTextBlock,
@@ -260,18 +261,54 @@ describe("the overlay's own logic", () => {
 });
 
 describe("the committed bundle", () => {
+  test("the pin is read from `packageManager`, not written down twice", () => {
+    expect(pinnedBunVersion("bun@1.3.14")).toBe("1.3.14");
+    expect(pinnedBunVersion("bun@1.3.14 ")).toBe("1.3.14");
+    // No `@`, wrong type, or absent: an unreadable pin must not silently
+    // become a version that some Bun could equal, because that would turn the
+    // strict branch on by accident on an arbitrary machine.
+    expect(pinnedBunVersion("bun")).toBe("");
+    expect(pinnedBunVersion(undefined)).toBe("");
+    expect(pinnedBunVersion(42)).toBe("");
+  });
+
   test("matches its TypeScript source", async () => {
     // `public/js/blog-preview-overlay.js` is generated. The point of generating
     // it — rather than hand-writing it beside `news-share.js` — is that the
     // block <-> Portable Text conversion has ONE definition, and a stale bundle
     // is that guarantee quietly expiring.
+    //
+    // The assertion carries the gate's own precondition, and is NOT weakened by
+    // it. A minified bundle's bytes belong to the bundler as much as to the
+    // source, so only a run on the PINNED Bun can tell a stale artefact from a
+    // newer minifier. CI installs that Bun in every job, so there the strict
+    // branch below is what runs — the same demand this test always made.
+    //
+    // Off the pin it asserts the other half, which is the half that was broken:
+    // the gate must NOT claim staleness it cannot have established, and must
+    // not exit non-zero for it. Accepting any output here instead would make
+    // the test blind, which is the defect one layer up.
+    const pkg = (await Bun.file("package.json").json()) as {
+      packageManager?: unknown;
+    };
+    const pinned = pinnedBunVersion(pkg.packageManager);
+    expect(pinned).not.toBe("");
+
     const { spawnSync } = await import("node:child_process");
     const result = spawnSync("bun", ["run", "build:preview-overlay:check"], {
       cwd: process.cwd(),
       encoding: "utf8"
     });
+    const output = result.stdout + result.stderr;
 
-    expect(result.stdout + result.stderr).toContain("OK");
     expect(result.status).toBe(0);
+
+    if (Bun.version === pinned) {
+      expect(output).toContain("OK");
+      expect(output).not.toContain("UNVERIFIED");
+    } else {
+      expect(output).toMatch(/OK|UNVERIFIED/);
+      expect(output).not.toContain("STALE");
+    }
   });
 });
