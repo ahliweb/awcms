@@ -361,7 +361,7 @@
 | ------------- | ---------- |
 | `(root)`      | 414        |
 | `e2e`         | 18         |
-| `integration` | 73         |
+| `integration` | 74         |
 | `unit`        | 1          |
 
 ### Routes

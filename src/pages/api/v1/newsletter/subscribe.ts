@@ -69,6 +69,29 @@ const RATE_LIMIT_WINDOW_SEC = parsePositiveIntSetting(
   "NEWSLETTER_RATE_LIMIT_WINDOW_SEC"
 );
 
+/**
+ * How long an address waits before a SECOND confirmation email can be sent to
+ * it. A different axis from the limiter above, not a duplicate of it: that one
+ * bounds how fast one SENDER may submit, and this one bounds how much mail one
+ * RECIPIENT receives.
+ *
+ * The distinction is the whole point. The person being mailed contributes no IP
+ * to the request, so no per-IP ceiling can protect them — and without this,
+ * every repeat submission of the same address re-issued a token and enqueued
+ * another email, so anyone willing to rotate IPs could have this deployment
+ * mail-bomb a stranger in its own name.
+ *
+ * Fifteen minutes: longer than "it did not arrive, let me try again", far
+ * shorter than a confirmation link's own lifetime. Parsed rather than coerced
+ * for the reason above — a non-numeric value would otherwise become `NaN`, and
+ * every comparison against `NaN` is false, which switches the ceiling OFF.
+ */
+const CONFIRMATION_COOLDOWN_SEC = parsePositiveIntSetting(
+  process.env.NEWSLETTER_CONFIRMATION_COOLDOWN_SEC,
+  900,
+  "NEWSLETTER_CONFIRMATION_COOLDOWN_SEC"
+);
+
 /** One sentence, and it is true whatever happened. */
 const NEUTRAL_MESSAGE =
   "If that address can be subscribed, a confirmation email is on its way.";
@@ -174,11 +197,13 @@ export const POST: APIRoute = async ({
         tx,
         tenant.tenantId,
         validation.value,
-        "public_form"
+        "public_form",
+        CONFIRMATION_COOLDOWN_SEC
       );
 
-      // `null` means no mail should go out: suppressed, or already active. The
-      // caller cannot tell, and neither can the person who submitted the form.
+      // `null` means no mail should go out: suppressed, already active, or
+      // inside the per-address cooldown. The caller cannot tell which, and
+      // neither can the person who submitted the form.
       if (!outcome.confirmationToken) {
         return null;
       }
