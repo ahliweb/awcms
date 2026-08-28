@@ -408,13 +408,34 @@ pioneered directly here after the ADR-0047 freeze.)
   8.1.0    exit=1  HTTP 404
   ```
 
-  So the containment ADR-0117 bought is holding — `:latest` verifies clean and
-  never moved to an unsigned digest — but three immutable version tags are
+  So the containment ADR-0117 bought was holding — `:latest` verified clean and
+  never moved to an unsigned digest — but three immutable version tags were
   published that this repo's own documented `gh attestation verify` recipe
-  fails against, and those same three are the only tags in the last twenty with
-  **no GitHub Release at all**. The lesson is narrower than the ADR's: an
+  failed against, and those same three were the only tags in the last twenty
+  with **no GitHub Release at all**. The lesson is narrower than the ADR's: an
   approval gate with no expiry does not fail, it ACCUMULATES, and a partial
   cleanup leaves exactly the residue nobody is watching for.
+
+  **Cleared on 28 August, and the clearing found the thing the ADR missed.** All
+  three were approved; each resumed only `sign-attest-publish` (their `build`
+  job had completed days or weeks earlier), so no image was rebuilt and
+  `:latest` did not move — those tags' workflows predate ADR-0117 and have no
+  `promote-latest` job at all. `10.0.0`, `10.0.1` and `8.1.0` now verify, and
+  every published version tag from `v5.1.0` onward is attested.
+
+  **`gh release create` takes the "Latest" badge, and a backfill therefore hands
+  it to an OLD version.** Predicted not to happen and it happened anyway: the
+  moment `v10.0.0`'s release was published the badge left `v10.0.4` for it. The
+  prediction rested on yesterday's four backfills appearing not to have moved
+  it — but they DID, and `v10.0.3`/`v10.0.4` publishing an hour later took it
+  back, so the evidence that looked like "backfills are safe" was really "two
+  later releases masked it". Restored with `gh release edit v10.0.4 --latest`.
+  **The workflow's `gh release create` passes no `--latest` flag**, so any
+  future out-of-order publish does this again: a consumer reading the badge, or
+  any tool that follows `/releases/latest`, is pointed at a superseded version
+  for as long as nobody looks. The narrow fix is `--latest=false` on any
+  backfill; the durable one is for the workflow to decide the flag rather than
+  inherit a default that assumes releases only ever go forward.
 
   **A gate that is sensitive to its own toolchain blocked everything behind it.**
   `build:preview-overlay:check` compares a committed bundle byte-for-byte

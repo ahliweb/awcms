@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:e492f7d859c9630075750a69caf99779af6d741c3649a34bcea973025b92fbfa -->
+<!-- i18n-source-hash: sha256:55bccac23102633d233e7701be99c788ab3b73f4012438ad116789d4bfc96129 -->
 
 # AWCMS — Project State & Continuation
 
@@ -418,6 +418,30 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   sekali**. Pelajarannya lebih sempit dari ADR-nya: gerbang approval tanpa masa
   kedaluwarsa tidak gagal, ia MENUMPUK, dan pembersihan parsial meninggalkan
   persis sisa yang tak diawasi siapa pun.
+
+  **Dibereskan 28 Agustus, dan pembereskan itu menemukan hal yang terlewat oleh
+  ADR-nya.** Ketiganya disetujui; masing-masing hanya melanjutkan
+  `sign-attest-publish` (job `build`-nya sudah rampung berhari-hari atau
+  berminggu-minggu sebelumnya), jadi tak ada image yang dibangun ulang dan
+  `:latest` tidak bergerak — workflow di tag-tag itu mendahului ADR-0117 dan tak
+  punya job `promote-latest` sama sekali. `10.0.0`, `10.0.1` dan `8.1.0` kini
+  terverifikasi, dan setiap tag versi terbit sejak `v5.1.0` sudah berbadge
+  atestasi.
+
+  **`gh release create` MEREBUT badge "Latest", jadi sebuah backfill
+  menyerahkannya kepada versi LAMA.** Diprediksi tidak akan terjadi dan tetap
+  terjadi: begitu release `v10.0.0` terbit, badge itu meninggalkan `v10.0.4`
+  untuknya. Prediksinya bersandar pada empat backfill kemarin yang tampak tidak
+  memindahkannya — padahal MEMINDAHKAN, dan `v10.0.3`/`v10.0.4` yang terbit satu
+  jam kemudian merebutnya kembali, sehingga bukti yang tampak seperti "backfill
+  itu aman" sebenarnya "dua release berikutnya menutupinya". Dipulihkan dengan
+  `gh release edit v10.0.4 --latest`. **`gh release create` di workflow tidak
+  mengoper flag `--latest` apa pun**, jadi setiap penerbitan di luar urutan akan
+  mengulanginya: konsumen yang membaca badge itu, atau alat apa pun yang
+  mengikuti `/releases/latest`, diarahkan ke versi usang selama tak ada yang
+  memeriksa. Perbaikan sempitnya `--latest=false` pada setiap backfill;
+  perbaikan tahan-lamanya adalah membuat workflow MEMUTUSKAN flag itu, bukan
+  mewarisi default yang mengandaikan rilis selalu bergerak maju.
 
   **Gerbang yang sensitif terhadap toolchain-nya sendiri memblokir semua yang di
   belakangnya.** `build:preview-overlay:check` membandingkan bundle ter-commit
