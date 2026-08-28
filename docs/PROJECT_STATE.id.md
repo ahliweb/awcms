@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:d105206f33e47d2a4b59fd7c3ab064723c3df8e6efe6cbf50dd24a689783d49a -->
+<!-- i18n-source-hash: sha256:c3f97b9e200dc8e1c05e3c780d7291fc3af4dd5d37ead5a2316392cb948c78c2 -->
 
 # AWCMS — Project State & Continuation
 
@@ -508,6 +508,39 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   itu ada untuk gagal-tertutup, dan lintas-origin justru kasus yang tak
   dirancangnya. Cooldown per-alamat bisa jadi jawaban yang lebih baik ketimbang
   tantangan. Butuh keputusan, jadi ia tinggal di sini alih-alih menjadi tambalan.
+
+  **Diputuskan dan ditutup hari itu juga — dan Turnstile DITOLAK.** Cacatnya
+  nyata, tetapi pembingkaiannya keliru. Pembatas per-IP membatasi seberapa cepat
+  satu PENGIRIM mengirim; ia tak bisa membatasi seberapa banyak surat diterima
+  satu PENERIMA, sebab orang yang disurati tak menyumbang IP apa pun pada
+  permintaan itu. Satu IP saja menopang 1.440 pesan sehari pada default, dan
+  upsert-nya menerbitkan ulang token konfirmasi pada SETIAP kiriman untuk alamat
+  yang bukan `active` dan bukan `suppressed` — jadi tiap permintaan yang
+  diterima mengantrekan satu surat lagi, atas nama deployment ini dan di atas
+  reputasi pengirimannya. Sebuah tantangan menjawab "siapa yang boleh mengirim",
+  yaitu sumbu yang justru sudah terjaga. Plafon yang ditambahkan justru
+  per-ALAMAT: `NEWSLETTER_CONFIRMATION_COOLDOWN_SEC` (default 900 dtk) sebagai
+  predikat di dalam upsert yang sudah ada — tanpa migrasi, sebab
+  `confirmation_sent_at` memang sudah ada di barisnya, dan di DALAM statement
+  alih-alih baca-lalu-tulis agar dua kiriman bersamaan tak bisa sama-sama
+  melihat timestamp basi lalu sama-sama mengirim.
+
+  **Dua properti bersifat memikul beban dan keduanya tidak kentara.**
+  Penolakannya SENYAP — ia bergabung ke empat cabang tak-terlihat yang sudah ada
+  sehingga endpoint tetap punya satu jawaban netral, sebab respons cooldown yang
+  bisa dibedakan akan membangun ulang orakel enumerasi pelanggan yang justru
+  dirancang ADR-0103 untuk ditolak, dari satu tempat yang tak akan dicari
+  siapa pun. Dan kiriman yang ditolak MEMBIARKAN barisnya: memutar
+  `confirmation_token_hash` akan membuat penyerang bisa membatalkan tautan surat
+  seorang pelanggan sungguhan hanya dengan mengirimkan alamatnya, mengubah
+  plafon itu menjadi penolakan atas langganan yang dilindunginya.
+
+  Turnstile tetap tak diadopsi di sini atas dasar alasannya, bukan karena
+  kelalaian: `TURNSTILE_EXPECTED_HOSTNAME` bernilai tunggal dan widget-nya akan
+  diselesaikan di hostname SITUS, jadi pemeriksaan yang ada untuk gagal-tertutup
+  justru akan gagal pada kasus yang sah. Himpunannya masih tanpa gerbang —
+  `TURNSTILE_REQUIRED_WHEN_ENABLED` adalah daftar ENV, bukan registry action —
+  dan itu tetap terbuka.
 
   **Yang bersih, disebutkan agar tak diturunkan ulang.** Tak ada regresi isolasi
   tenant, ABAC, RLS, N+1, maupun jsonb-binding — `access:chokepoint`,

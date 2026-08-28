@@ -110,17 +110,33 @@ export type SubscribeOutcome = {
  * applied for abuse, and doing it here rather than in a caller means no future
  * caller can forget.
  *
+ * ## A second confirmation to the same address waits for the cooldown
+ *
+ * The route's rate limiter is keyed on the client IP, so it bounds how fast one
+ * SENDER can submit. It cannot bound how much mail one RECIPIENT receives: the
+ * person being mailed contributes no IP to the request, and anyone willing to
+ * rotate addresses could make this deployment mail-bomb a stranger — in its own
+ * name, on its own sending reputation. `confirmationCooldownSeconds` is the
+ * ceiling on the other axis, and the two are not substitutes for one another.
+ *
+ * It is a predicate on the upsert rather than a read-then-write for the same
+ * reason the whole statement is one statement: two concurrent submissions for
+ * one address would both read a stale `confirmation_sent_at` and both send.
+ *
  * ## The caller cannot tell which branch ran
  *
- * A new row, a re-subscribe, an already-active address and a suppressed one all
- * return the same SHAPE, and the endpoint answers the same body for all four.
- * That is what stops the public endpoint being an enumeration oracle.
+ * A new row, a re-subscribe, an already-active address, a suppressed one and an
+ * address inside its cooldown all return the same SHAPE, and the endpoint
+ * answers the same body for all five. That is what stops the public endpoint
+ * being an enumeration oracle — and it is why the cooldown had to join the
+ * existing silent branches instead of introducing an answer of its own.
  */
 export async function subscribe(
   tx: Bun.SQL,
   tenantId: string,
   request: SubscriptionRequest,
-  source: string
+  source: string,
+  confirmationCooldownSeconds: number
 ): Promise<SubscribeOutcome> {
   const token = generateSubscriptionToken();
   const tokenHash = hashSubscriptionToken(token);
@@ -144,12 +160,32 @@ export async function subscribe(
           updated_at = now()
       WHERE awcms_newsletter_subscribers.status <> 'suppressed'
         AND awcms_newsletter_subscribers.status <> 'active'
+        -- The per-RECIPIENT ceiling. The route's limiter bounds one SENDER, and
+        -- the person being mailed has no IP in the request at all — so an IP
+        -- limiter cannot protect them, and rotating IPs turned this endpoint
+        -- into a mail-bomb aimed at a stranger, in this deployment's own name.
+        --
+        -- Enforced in the SAME statement as the upsert, not read-then-write:
+        -- two concurrent submissions for one address would both read a stale
+        -- confirmation_sent_at and both send. ON CONFLICT serialises them on
+        -- the row, so the second sees the first's write and is refused.
+        --
+        -- now() is transaction-start time in Postgres, which is what is wanted
+        -- here: it is compared against a stored column, never against an
+        -- application clock.
+        AND (
+          awcms_newsletter_subscribers.confirmation_sent_at IS NULL
+          OR awcms_newsletter_subscribers.confirmation_sent_at
+             < now() - make_interval(secs => ${confirmationCooldownSeconds})
+        )
     RETURNING id
   `) as { id: string }[];
 
-  // No row means the upsert's WHERE refused it: suppressed, or already active.
-  // Both are cases where no mail should go out, and neither is distinguishable
-  // to the caller.
+  // No row means the upsert's WHERE refused it: suppressed, already active, or
+  // inside the per-address cooldown. All three are cases where no mail should
+  // go out, and NONE of them is distinguishable to the caller — the cooldown
+  // joins the existing branches rather than adding a new observable answer,
+  // which is what keeps the endpoint from becoming an enumeration oracle.
   return { confirmationToken: rows.length > 0 ? token : null };
 }
 

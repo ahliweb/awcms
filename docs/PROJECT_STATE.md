@@ -498,6 +498,35 @@ pioneered directly here after the ADR-0047 freeze.)
   be the better answer than a challenge. Needs a decision, so it stays here
   rather than becoming a patch.
 
+  **Decided and closed the same day — and Turnstile was REFUSED.** The defect
+  was real but the framing was wrong. A per-IP limiter bounds how fast one
+  SENDER submits; it cannot bound how much mail one RECIPIENT gets, because the
+  person being mailed contributes no IP to the request. One IP alone sustained
+  1,440 messages a day at the default, and the upsert re-issued a confirmation
+  token on EVERY submission for a non-`active`, non-`suppressed` address — so
+  each accepted request enqueued another email, in this deployment's name and on
+  its sending reputation. A challenge answers "who may submit", which is the
+  axis that was already defended. The ceiling added instead is per-ADDRESS:
+  `NEWSLETTER_CONFIRMATION_COOLDOWN_SEC` (default 900 s) as a predicate inside
+  the existing upsert — no migration, since `confirmation_sent_at` was already
+  on the row, and inside the statement rather than read-then-write so two
+  concurrent submissions cannot both see a stale timestamp and both send.
+
+  **Two properties were load-bearing and neither was obvious.** The refusal is
+  SILENT — it joins the four existing invisible branches so the endpoint keeps
+  one neutral answer, because a distinguishable cooldown response would rebuild
+  the subscriber-enumeration oracle ADR-0103 designed it not to be, from the one
+  place nobody would look. And a refused repeat leaves the row ALONE: rotating
+  `confirmation_token_hash` would let an attacker invalidate a real subscriber's
+  emailed link just by submitting their address, turning the ceiling into a
+  denial of the subscription it protects.
+
+  Turnstile stays unadopted here on its merits, not by omission:
+  `TURNSTILE_EXPECTED_HOSTNAME` is single-valued and the widget would be solved
+  on the SITE's hostname, so the check that exists to fail closed would fail on
+  the legitimate case. The set still has no gate — `TURNSTILE_REQUIRED_WHEN_ENABLED`
+  is an ENV list, not an action registry — and that remains open.
+
   **What was clean, stated so it is not re-derived.** No tenant-isolation, ABAC,
   RLS, N+1 or jsonb-binding regression — `access:chokepoint`, `db:tenant-context`
   and `api:body-limit` all pass across 308 route files, and the build stays
