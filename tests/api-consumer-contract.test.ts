@@ -186,7 +186,7 @@ describe("the live contract", () => {
  * a fourth consumed surface here has to be a deliberate edit in both places.
  */
 describe("consumed vs committed", () => {
-  test("exactly ten surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+  test("exactly thirteen surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
     // If this fails, one of two things happened, and they need opposite fixes:
     //   - awcms-astro started (or stopped) calling a surface -> update both
     //     this list and the marker block in that repo, in the same change;
@@ -224,11 +224,25 @@ describe("consumed vs committed", () => {
     // on account of it.
     //
     // The tenth, `/analytics/collect`, is in that same reader-browser class and
-    // breaks its rule again: it is the only consumed path that must carry a
+    // breaks its rule again: it is the first consumed path that must carry a
     // HEADER. `security.checkOrigin` refuses a cross-origin POST whose content
     // type is form-like, so only `application/json` gets through — which is what
     // the `OPTIONS` handler from #637 exists for. Three reader-browser paths,
     // two opposite header rules, and no way to tell them apart from this side.
+    //
+    // The eleventh to thirteenth — the three `newsletter` paths — are the same
+    // class again and break the rule that had held for all ten: they WRITE. A
+    // subscription makes this deployment send mail to an address a stranger
+    // typed, so a wrong shape does not blank a page, it sends something (or
+    // silently stops sending it) to the person who asked.
+    //
+    // They also arrived by the intended route at its shortest: frozen as
+    // COMMITTED in #748 on 27 August with ADR-0118, moved here on 28 August when
+    // `ahliweb/awcms-astro`#90 shipped the form in its v0.4.0 — one day in the
+    // promise block. That is the split working, not a formality skipped: the
+    // caller was written FIRST and held behind a flag precisely because four
+    // measured blockers in this repo made the endpoint unreachable, and it could
+    // not be un-held until they were closed here.
     expect(Object.keys(CONSUMED_PATHS)).toEqual([
       "/api/v1/blog/posts",
       "/api/v1/media/objects",
@@ -239,7 +253,10 @@ describe("consumed vs committed", () => {
       "/api/v1/blog/widgets",
       "/api/v1/site-search/query",
       "/api/v1/site-search/suggest",
-      "/api/v1/analytics/collect"
+      "/api/v1/analytics/collect",
+      "/api/v1/newsletter/subscribe",
+      "/api/v1/newsletter/confirm",
+      "/api/v1/newsletter/unsubscribe"
     ]);
   });
 

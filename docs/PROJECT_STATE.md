@@ -360,6 +360,125 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **INSPECTION ROUND — 28 August 2026: the tracker was empty, and the repo was
+  still one step behind its own consumer.**
+
+  A full-repo inspection with nothing open: 0 issues, 0 PRs, CI green on `main`,
+  `main` level with `origin/main`. Everything below was measured rather than
+  read — the whole gate suite, `typecheck`, 6,869 tests, the build, the GitHub
+  release state, the container registry, and the consumer repo's own gate.
+
+  **The one gap that mattered was invisible from inside this repo.**
+  `/api/v1/newsletter/subscribe`, `/confirm` and `/unsubscribe` were frozen as
+  COMMITTED on 27 August by ADR-0118 — the change that made them reachable from
+  a browser at all. `ahliweb/awcms-astro`#90 shipped the form the next morning
+  and released it as v0.4.0, so the promise became a dependency and this repo's
+  list still said otherwise. **The neighbour had already answered the question**:
+  its `tests/kontrak-awcms.test.mjs` asserts an exact set of thirteen called
+  surfaces with all three among them, and its failure message names the
+  obligation out loud — tell `awcms`, because that repo composes its consumer
+  contract from this list. Nothing here could have gone red: both lists are
+  frozen into the same fixture, so `CONSUMER_PATHS` was already correct and only
+  the DISTINCTION was wrong. **Done** — all three moved to `CONSUMED_PATHS`,
+  with the write class recorded (see below).
+
+  **The reader-browser class stopped being read-only, and that is the part worth
+  carrying forward.** The ten consumed paths before these were build calls,
+  reads, or a beacon whose whole answer is `202`. A subscription makes this
+  deployment SEND MAIL to an address a stranger typed, so a wrong shape does not
+  blank a page — it sends something, or silently stops sending it, to the person
+  who asked. It is the one breakage on that list a reader would report as a
+  fault of the newsroom rather than of the site. The neutral 200 is frozen for
+  the same reason: a consumer that distinguishes "already subscribed" rebuilds
+  the subscriber oracle the endpoint refuses to be.
+
+  **Three release runs were still parked at the approval gate, and the ADR-0117
+  cleanup had been partial.** That ADR declined to repair the stalled runs it
+  found; four of them (`v8.0.0`, `v9.0.0`, `v9.1.0`, `v9.1.1`) were nonetheless
+  approved on 27 August and got their Releases at 22:05. **Three were missed** —
+  `v8.1.0` (waiting since 11 August), `v10.0.0` and `v10.0.1` — each showing
+  `Build image + SBOM: success` / `Sign, attest, publish: waiting`. Measured
+  against the registry rather than inferred:
+
+  ```
+  latest   exit=0            ← signed, resolves to v10.0.4
+  10.0.4   exit=0
+  10.0.1   exit=1  HTTP 404  ← image published, no attestation
+  10.0.0   exit=1  HTTP 404
+  8.1.0    exit=1  HTTP 404
+  ```
+
+  So the containment ADR-0117 bought was holding — `:latest` verified clean and
+  never moved to an unsigned digest — but three immutable version tags were
+  published that this repo's own documented `gh attestation verify` recipe
+  failed against, and those same three were the only tags in the last twenty
+  with **no GitHub Release at all**. The lesson is narrower than the ADR's: an
+  approval gate with no expiry does not fail, it ACCUMULATES, and a partial
+  cleanup leaves exactly the residue nobody is watching for.
+
+  **Cleared on 28 August, and the clearing found the thing the ADR missed.** All
+  three were approved; each resumed only `sign-attest-publish` (their `build`
+  job had completed days or weeks earlier), so no image was rebuilt and
+  `:latest` did not move — those tags' workflows predate ADR-0117 and have no
+  `promote-latest` job at all. `10.0.0`, `10.0.1` and `8.1.0` now verify, and
+  every published version tag from `v5.1.0` onward is attested.
+
+  **`gh release create` takes the "Latest" badge, and a backfill therefore hands
+  it to an OLD version.** Predicted not to happen and it happened anyway: the
+  moment `v10.0.0`'s release was published the badge left `v10.0.4` for it. The
+  prediction rested on yesterday's four backfills appearing not to have moved
+  it — but they DID, and `v10.0.3`/`v10.0.4` publishing an hour later took it
+  back, so the evidence that looked like "backfills are safe" was really "two
+  later releases masked it". Restored with `gh release edit v10.0.4 --latest`.
+  **The workflow's `gh release create` passes no `--latest` flag**, so any
+  future out-of-order publish does this again: a consumer reading the badge, or
+  any tool that follows `/releases/latest`, is pointed at a superseded version
+  for as long as nobody looks. The narrow fix is `--latest=false` on any
+  backfill; the durable one is for the workflow to decide the flag rather than
+  inherit a default that assumes releases only ever go forward.
+
+  **A gate that is sensitive to its own toolchain blocked everything behind it.**
+  `build:preview-overlay:check` compares a committed bundle byte-for-byte
+  against a fresh one, so it fails on any Bun that is not the pinned `1.3.14`
+  (local was `1.4.0`). Two consequences beyond the false red: the single failure
+  in 6,869 tests is `tests/blog-preview-overlay.test.ts`, which shells out to
+  the same gate and asserts `toContain("OK")`; and in the `check` chain the gate
+  sits immediately before `typecheck && … && test && build`, so on any
+  non-pinned Bun it hides every stage that matters. Regenerating the bundle
+  "fixes" it locally and reddens CI. **Not fixed — deliberately left open** as
+  its own decision (raise the CI pin to the `packageManager` field, or compare
+  semantically); the one-line mitigation of moving the gate after `test` is
+  worth doing regardless.
+
+  **The Turnstile set has no gate, and the newsletter is outside it.** Six
+  anonymous surfaces call `enforceTurnstileIfRequired` — setup/initialize,
+  register, login (×2), password/forgot, password/reset, invitations/accept —
+  each with its own action constant so a token cannot be replayed across forms.
+  `POST /api/v1/newsletter/subscribe` writes a row and enqueues mail behind
+  nothing but 5 requests / 300 s per IP. Until ADR-0118 it was unreachable from
+  a browser, so the omission cost nothing; it is reachable now.
+  `TURNSTILE_REQUIRED_WHEN_ENABLED` is an ENV list, not an action registry, so
+  "which endpoints must challenge" is maintained by hand across five files and
+  nothing reads it. **Not fixed, and not a copy-the-login-pattern job**:
+  `TURNSTILE_EXPECTED_HOSTNAME` is a single value and the widget would be solved
+  on the SITE's hostname, not this one — that check exists to fail closed, and
+  cross-origin is the case it was not designed for. A per-address cooldown may
+  be the better answer than a challenge. Needs a decision, so it stays here
+  rather than becoming a patch.
+
+  **What was clean, stated so it is not re-derived.** No tenant-isolation, ABAC,
+  RLS, N+1 or jsonb-binding regression — `access:chokepoint`, `db:tenant-context`
+  and `api:body-limit` all pass across 308 route files, and the build stays
+  inside its asset budget (reader 21.4 kB / 24 kB). The `#743` sidecar fix was
+  applied to its sibling too: `updateBlogPage` carries the same three
+  `content_json` branches as `updateBlogPost`, under a docblock saying plainly
+  that no consumer stores a page sidecar today and that it is changed anyway,
+  because leaving one of two identical functions holding the defect is how it
+  comes back. `site-search/suggest` shares `query`'s CORS through
+  `withPublicSearchTenant` — grepping for the header STRING says otherwise, and
+  that is the same grep-the-definition-not-the-call error this repo keeps
+  re-learning.
+
 - **SCOPE ROUND — 26 August 2026: the premise both open cutover issues stood on
   was withdrawn, and the 301 obligation went with it.**
 
