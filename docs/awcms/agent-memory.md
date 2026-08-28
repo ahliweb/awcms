@@ -1019,7 +1019,7 @@ description: "Gerbang approval `release` menggerbangi TANDA TANGAN, bukan PENERB
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-08-27T23:07:55.053Z
+  modified: 2026-08-28T03:29:20.978Z
 ---
 
 Dari 2026-08-28 (ADR-0117, PR #746). Dua hal yang mahal kalau diturunkan ulang.
@@ -1072,6 +1072,23 @@ benar, lalu verifikasi lewat `gh api repos/:o/:r/releases/latest --jq .tag_name`
 **Selalu periksa flag Latest sesudah menerbitkan rilis apa pun yang BUKAN yang
 paling baru.** Catatan terkait: memperbaiki workflow di `main` TIDAK memperbaiki
 run tertahan — run yang dipicu push tag mengeksekusi workflow versi TAG-nya.
+
+**2a. KONFIRMASI 2026-08-28, dan cara catatan ini sempat DIABAIKAN.** Tiga run
+sisa (`v8.1.0`, `v10.0.0`, `v10.0.1`) disetujui; badge langsung pindah ke
+`v10.0.0`. Yang penting bukan faktanya — sudah tertulis di atas — melainkan
+alasan ia diprediksi TIDAK terjadi: state saat itu diperiksa
+(`/releases/latest` → `v10.0.4`, padahal empat backfill kemarin terbit pukul
+22:05) lalu disimpulkan "berarti backfill tidak merebut badge". Salah:
+backfill-nya MEREBUT, dan `v10.0.3` (22:36) + `v10.0.4` (23:06) merebutnya
+kembali sejam kemudian. **State AKHIR tak bisa menjawab pertanyaan tentang
+URUTAN — dua peristiwa yang saling menutupi terlihat seperti satu peristiwa yang
+tak pernah terjadi.** Sekelas dengan cacat induknya di §1: sama-sama soal urutan
+yang tak meninggalkan jejak pada artefak mana pun. Kalau memory sudah menyebut
+sebuah jebakan, jangan mencari bukti pembatalnya di state sekarang — jebakannya
+soal transisi. Pulihkan dengan `gh release edit <tag> --latest`.
+
+Yang masih TERBUKA: `gh release create` di `release.yml` tak mengoper flag
+`--latest` apa pun, jadi setiap penerbitan di luar urutan mengulanginya.
 
 **2b. `docker buildx imagetools create` MENGUBAH digest — ia BUKAN retag.**
 Ini menggagalkan `v10.0.3`, rilis pertama yang menjalankan `promote-latest`.
