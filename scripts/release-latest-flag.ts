@@ -1,6 +1,12 @@
 #!/usr/bin/env bun
 /**
- * release-latest-flag.ts — `bun run release:latest-flag` (ADR-0119).
+ * release-latest-flag.ts — invoked as `bun scripts/release-latest-flag.ts <tag>`
+ * from `release.yml` (ADR-0119).
+ *
+ * Deliberately NOT a `package.json` script. It reads its input from STDIN and
+ * exists to be one stage of a pipe inside one workflow step; a `bun run` alias
+ * would only advertise it as something a human runs by hand, which would be a
+ * command that hangs waiting on a pipe that is not there.
  *
  * Memutuskan apakah rilis yang sedang diterbitkan boleh memikul badge
  * **"Latest"** GitHub, lalu mencetak `true` atau `false` untuk dioper apa adanya
