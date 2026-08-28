@@ -54,22 +54,32 @@ const FIXTURE_PATH =
  * ## "Calls" stopped meaning "the build calls" on 23 August 2026
  *
  * Seven of these are called by `astro build` over there, from a machine holding
- * a read-only credential. THREE are called by the READER's BROWSER, anonymously
- * and cross-origin — the two `site-search` entries and the analytics beacon —
- * and that difference is invisible from this side, because the gate over there
- * extracts string literals from `src/` without knowing who executes them.
+ * a read-only credential. SIX are called by the READER's BROWSER, anonymously
+ * and cross-origin — the two `site-search` entries, the analytics beacon, and
+ * the three `newsletter` paths — and that difference is invisible from this
+ * side, because the gate over there extracts string literals from `src/`
+ * without knowing who executes them.
  *
- * The three do not even share one rule. The two search paths must carry NO
- * custom header, because nothing answers a preflight for them. The beacon MUST
- * carry `content-type: application/json`, because `checkOrigin` refuses the
- * alternatives — and its `OPTIONS` handler exists for the preflight that
- * follows. Making them consistent, in either direction, kills one of them in a
- * reader's browser.
+ * The six do not even share one rule. The two search paths must carry NO custom
+ * header, because nothing answers a preflight for them. The beacon and the
+ * three newsletter paths MUST carry `content-type: application/json`, because
+ * `checkOrigin` refuses the alternatives — and each has an `OPTIONS` handler
+ * precisely for the preflight that follows. Making them consistent, in either
+ * direction, kills one of them in a reader's browser.
+ *
+ * ## Since 28 August 2026 one of them WRITES
+ *
+ * Every reader-browser path before the newsletter was a read, or a beacon whose
+ * whole answer is `202`. A subscription makes this deployment SEND MAIL to an
+ * address a stranger typed, so a wrong shape here does not merely blank a page
+ * — it sends something, or silently stops sending it, to the person who asked.
+ * That is the one class of breakage on this list a reader would report as a
+ * fault of the newsroom rather than of the site.
  *
  * It is written here because it changes what breaking one costs. A shape change
  * on a build-called path reddens a build somebody is watching. A shape change on
- * these two fails silently in a stranger's browser, on a site that was published
- * weeks ago and will not be rebuilt because of it.
+ * the other six fails silently in a stranger's browser, on a site that was
+ * published weeks ago and will not be rebuilt because of it.
  *
  * The neighbour repo is the authority for this list, and it has a gate for it:
  * `tests/kontrak-awcms.test.mjs` there asserts an exact set of surfaces,
@@ -126,7 +136,13 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/site-search/suggest":
     "the typeahead behind the same box, same origin rule, same anonymity (ADR-0107). Consumed through a `<datalist>` there, debounced client-side; this repo still enforces its own `min_query_length` and per-IP limit, because a consumer's debounce is a courtesy and not a control.",
   "/api/v1/analytics/collect":
-    "one page view, posted from the READER's browser (#597 item 9; `awcms-astro` ADR-0044 decided WHETHER, and its `src/lib/beacon.ts` is the caller). Third of the reader-browser class and the only one that must carry a HEADER: `security.checkOrigin` refuses a cross-origin POST whose content type is form-like, so only `application/json` gets through — which is what the `OPTIONS` handler added in #637 exists for, and why `navigator.sendBeacon` cannot be used there. The consumer calls it WITHOUT credentials by decision, so the `awcms_visitor_key` cookie this endpoint sets is discarded by the browser and every view arrives as a first visit; nothing here should be changed on the assumption that a repeat visitor is recognisable. Frozen: the request body (`tenantCode`, `path`, optional `referrer`), its bounds, and the always-`202` answer."
+    "one page view, posted from the READER's browser (#597 item 9; `awcms-astro` ADR-0044 decided WHETHER, and its `src/lib/beacon.ts` is the caller). Third of the reader-browser class and the FIRST that must carry a HEADER: `security.checkOrigin` refuses a cross-origin POST whose content type is form-like, so only `application/json` gets through — which is what the `OPTIONS` handler added in #637 exists for, and why `navigator.sendBeacon` cannot be used there. The consumer calls it WITHOUT credentials by decision, so the `awcms_visitor_key` cookie this endpoint sets is discarded by the browser and every view arrives as a first visit; nothing here should be changed on the assumption that a repeat visitor is recognisable. Frozen: the request body (`tenantCode`, `path`, optional `referrer`), its bounds, and the always-`202` answer.",
+  "/api/v1/newsletter/subscribe":
+    "a reader subscribes from the site's own page, in their own browser, cross-origin and anonymously (ADR-0103 built it, ADR-0118 made it reachable). `src/lib/newsletter.ts` and `src/components/FormBuletin.astro` there. FOURTH of the reader-browser class and the FIRST THAT WRITES: it sends mail on this deployment's behalf, which is why its CORS grant is narrower than the beacon's (no credentials) and why its tenant comes from an `Origin` verified against `awcms_tenant_domains` rather than from the host chain — the host of such a request is this CMS, and the default-tenant fallback would have put a stranger's address in somebody else's list. Frozen: the request body (`email`, optional `locale`), the ALWAYS-neutral 200 body, and the 400 that speaks about the request rather than about any address. The neutral answer is a CONTRACT, not a courtesy: a consumer that distinguishes 'already subscribed' rebuilds the oracle this endpoint refuses to be. Promised as COMMITTED in #748 and moved here when `ahliweb/awcms-astro`#90 shipped the form in its v0.4.0.",
+  "/api/v1/newsletter/confirm":
+    "the POST behind the link in the confirmation email, made by the page the SITE serves at `/newsletter/confirm` (ADR-0070: the family's reader pages are not in this repo; `src/components/views/HalamanTokenBuletin.astro` is that page). This is where `consent_at` is written, so it is the endpoint double opt-in actually depends on — and the reason the link is built on the GRANTED origin rather than on this one, where no such page exists. Frozen: the `{ token }` body and the neutral 200.",
+  "/api/v1/newsletter/unsubscribe":
+    "the same shape from the same kind of page, and PRD §30 makes it the one that must never require proving who you are. Sharing `HalamanTokenBuletin.astro` with `/confirm` there is deliberate — two pages that differ only in which endpoint they POST to. Frozen: the `{ token }` body and the neutral 200."
 };
 
 /**
@@ -144,12 +160,6 @@ export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
  * acquire the authority of a contract.
  */
 export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
-  "/api/v1/newsletter/subscribe":
-    "ADR-0118 — a reader subscribes from the site's own page, in their own browser, cross-origin and anonymously. FOURTH of the reader-browser class, and the first that WRITES: it sends mail on this deployment's behalf, which is why its CORS grant is narrower than the beacon's (no credentials) and why its tenant comes from an `Origin` verified against `awcms_tenant_domains` rather than from the host chain — the host of such a request is this CMS, and the default-tenant fallback would have put a stranger's address in somebody else's list. Frozen: the request body (`email`, optional `locale`), the ALWAYS-neutral 200 body, and the 400 that speaks about the request rather than about any address. `awcms-astro`#79 wrote the caller and held it behind a flag until this entry existed.",
-  "/api/v1/newsletter/confirm":
-    "ADR-0118 — the POST behind the link in the confirmation email, made by the page the SITE serves at `/newsletter/confirm` (ADR-0070: the family's reader pages are not in this repo). This is where `consent_at` is written, so it is the endpoint double opt-in actually depends on. Frozen: the `{ token }` body and the neutral 200.",
-  "/api/v1/newsletter/unsubscribe":
-    "ADR-0118 — the same shape from the same kind of page, and PRD §30 makes it the one that must never require proving who you are. Frozen: the `{ token }` body and the neutral 200.",
   "/api/v1/auth/session":
     "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":

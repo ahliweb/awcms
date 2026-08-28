@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:32e5d3db63ec7807ce4300d1f0133770d359c49c55f972794ce2c0a3244ce9b5 -->
+<!-- i18n-source-hash: sha256:e492f7d859c9630075750a69caf99779af6d741c3649a34bcea973025b92fbfa -->
 
 # AWCMS — Project State & Continuation
 
@@ -359,6 +359,109 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN INSPEKSI — 28 Agustus 2026: tracker kosong, dan repo ini masih
+  tertinggal satu langkah dari konsumennya sendiri.**
+
+  Inspeksi seluruh repo tanpa satu pun yang terbuka: 0 issue, 0 PR, CI hijau di
+  `main`, `main` sejajar dengan `origin/main`. Semua di bawah ini DIUKUR, bukan
+  dibaca — seluruh rangkaian gerbang, `typecheck`, 6.869 tes, build, state rilis
+  GitHub, container registry, dan gerbang milik repo konsumen.
+
+  **Satu-satunya celah yang berarti justru tak terlihat dari dalam repo ini.**
+  `/api/v1/newsletter/subscribe`, `/confirm` dan `/unsubscribe` dibekukan sebagai
+  COMMITTED pada 27 Agustus oleh ADR-0118 — perubahan yang membuat ketiganya
+  terjangkau dari peramban sama sekali. `ahliweb/awcms-astro`#90 menerbitkan
+  formulirnya keesokan paginya dan merilisnya sebagai v0.4.0, jadi janji itu
+  sudah menjadi ketergantungan sementara daftar di repo ini masih berkata lain.
+  **Tetangganya sudah menjawab pertanyaan itu**: `tests/kontrak-awcms.test.mjs`
+  di sana menegaskan himpunan PERSIS tiga belas permukaan terpanggil dengan
+  ketiganya di dalamnya, dan pesan gagalnya menyebut kewajibannya terang-terangan
+  — beri tahu `awcms`, sebab repo itu menyusun kontrak konsumennya dari daftar
+  ini. Tak ada yang bisa memerah di sini: kedua daftar dibekukan ke fixture yang
+  sama, sehingga `CONSUMER_PATHS` sudah benar dan yang salah hanya
+  PEMBEDAANNYA. **Selesai** — ketiganya dipindahkan ke `CONSUMED_PATHS`, dengan
+  kelas-tulisnya dicatat (lihat di bawah).
+
+  **Kelas peramban-pembaca berhenti menjadi hanya-baca, dan itulah bagian yang
+  layak dibawa ke depan.** Sepuluh jalur consumed sebelum ini adalah panggilan
+  build, pembacaan, atau beacon yang seluruh jawabannya `202`. Sebuah langganan
+  membuat deployment ini MENGIRIM SURAT ke alamat yang diketik orang asing, jadi
+  bentuk yang salah bukan mengosongkan halaman — ia mengirimkan sesuatu, atau
+  diam-diam berhenti mengirimkannya, kepada orang yang memintanya. Itulah satu
+  kerusakan di daftar tersebut yang akan dilaporkan pembaca sebagai kesalahan
+  ruang redaksi, bukan kesalahan situs. Jawaban 200 yang netral dibekukan dengan
+  alasan yang sama: konsumen yang membedakan "sudah berlangganan" membangun
+  ulang orakel pelanggan yang justru ditolak oleh endpoint itu.
+
+  **Tiga run rilis masih terparkir di gerbang approval, dan pembersihan ADR-0117
+  ternyata PARSIAL.** ADR itu menolak memperbaiki run tertahan yang ditemukannya;
+  empat di antaranya (`v8.0.0`, `v9.0.0`, `v9.1.0`, `v9.1.1`) toh disetujui pada
+  27 Agustus dan mendapat Release-nya pukul 22:05. **Tiga terlewat** — `v8.1.0`
+  (menunggu sejak 11 Agustus), `v10.0.0` dan `v10.0.1` — masing-masing
+  menunjukkan `Build image + SBOM: success` / `Sign, attest, publish: waiting`.
+  Diukur terhadap registry, bukan dikira-kira:
+
+  ```
+  latest   exit=0            ← bertanda tangan, menunjuk v10.0.4
+  10.0.4   exit=0
+  10.0.1   exit=1  HTTP 404  ← image terbit, tanpa atestasi
+  10.0.0   exit=1  HTTP 404
+  8.1.0    exit=1  HTTP 404
+  ```
+
+  Jadi penahanan yang dibeli ADR-0117 memang bertahan — `:latest` terverifikasi
+  bersih dan tak pernah pindah ke digest tak bertanda tangan — tetapi ada tiga
+  tag versi immutable terbit yang JUSTRU GAGAL terhadap resep
+  `gh attestation verify` yang didokumentasikan repo ini sendiri, dan ketiganya
+  pula satu-satunya tag dalam dua puluh terakhir yang **tanpa GitHub Release sama
+  sekali**. Pelajarannya lebih sempit dari ADR-nya: gerbang approval tanpa masa
+  kedaluwarsa tidak gagal, ia MENUMPUK, dan pembersihan parsial meninggalkan
+  persis sisa yang tak diawasi siapa pun.
+
+  **Gerbang yang sensitif terhadap toolchain-nya sendiri memblokir semua yang di
+  belakangnya.** `build:preview-overlay:check` membandingkan bundle ter-commit
+  bita-per-bita dengan bundle segar, jadi ia gagal pada Bun apa pun yang bukan
+  `1.3.14` yang dipatok (lokal `1.4.0`). Dua akibat di luar merah palsunya: satu
+  kegagalan dari 6.869 tes adalah `tests/blog-preview-overlay.test.ts`, yang
+  memanggil gerbang yang sama lalu meng-assert `toContain("OK")`; dan di rantai
+  `check` gerbang itu duduk persis sebelum `typecheck && … && test && build`,
+  sehingga pada Bun tak-terpatok ia MENYEMBUNYIKAN setiap tahap yang penting.
+  Meregenerasi bundle "memperbaikinya" secara lokal dan memerahkan CI. **Tidak
+  diperbaiki — sengaja dibiarkan terbuka** sebagai keputusan tersendiri (naikkan
+  patokan CI ke field `packageManager`, atau bandingkan secara semantik);
+  mitigasi satu baris berupa memindahkan gerbang ke setelah `test` tetap layak
+  dikerjakan.
+
+  **Himpunan Turnstile tak punya gerbang, dan newsletter berada di luarnya.**
+  Enam permukaan anonim memanggil `enforceTurnstileIfRequired` —
+  setup/initialize, register, login (×2), password/forgot, password/reset,
+  invitations/accept — masing-masing dengan konstanta action-nya sendiri agar
+  satu token tak bisa diputar-ulang lintas formulir.
+  `POST /api/v1/newsletter/subscribe` menulis baris dan mengantrekan surat hanya
+  di balik 5 permintaan / 300 dtk per IP. Sampai ADR-0118 ia tak terjangkau dari
+  peramban, jadi kelalaian itu tak berbiaya; sekarang ia terjangkau.
+  `TURNSTILE_REQUIRED_WHEN_ENABLED` adalah daftar ENV, bukan registry action,
+  jadi "endpoint mana yang wajib menantang" dipelihara dengan tangan di lima
+  berkas dan tak ada yang membacanya. **Tidak diperbaiki, dan BUKAN pekerjaan
+  salin-pola-login**: `TURNSTILE_EXPECTED_HOSTNAME` bernilai tunggal sedangkan
+  widget-nya akan diselesaikan di hostname SITUS, bukan hostname ini — pemeriksaan
+  itu ada untuk gagal-tertutup, dan lintas-origin justru kasus yang tak
+  dirancangnya. Cooldown per-alamat bisa jadi jawaban yang lebih baik ketimbang
+  tantangan. Butuh keputusan, jadi ia tinggal di sini alih-alih menjadi tambalan.
+
+  **Yang bersih, disebutkan agar tak diturunkan ulang.** Tak ada regresi isolasi
+  tenant, ABAC, RLS, N+1, maupun jsonb-binding — `access:chokepoint`,
+  `db:tenant-context` dan `api:body-limit` semuanya lolos di 308 berkas rute, dan
+  build tetap di dalam anggaran asetnya (pembaca 21,4 kB / 24 kB). Perbaikan
+  sidecar `#743` diterapkan pula pada SAUDARANYA: `updateBlogPage` membawa tiga
+  cabang `content_json` yang sama dengan `updateBlogPost`, di bawah docblock yang
+  menyatakan terus terang bahwa tak ada konsumen yang menyimpan sidecar halaman
+  hari ini dan ia tetap diubah, sebab meninggalkan salah satu dari dua fungsi
+  identik memegang cacatnya adalah cara cacat itu kembali.
+  `site-search/suggest` berbagi CORS milik `query` lewat `withPublicSearchTenant`
+  — meng-grep STRING header-nya berkata sebaliknya, dan itu galat
+  grep-definisi-bukan-panggilan yang sama yang terus dipelajari ulang repo ini.
 
 - **PUTARAN LINGKUP — 26 Agustus 2026: premis yang dipijak kedua issue cutover
   terbuka DICABUT, dan kewajiban 301-nya ikut bersamanya.**
