@@ -1,5 +1,290 @@
 # awcms
 
+## 10.1.0
+
+### Minor Changes
+
+- ad08825: feat(newsletter): the subscribe endpoints answer a reader's browser on another origin, and resolve that origin's tenant
+  
+  The `newsletter` module shipped on 21 August with three anonymous public
+  endpoints built to be called from a public page. Per ADR-0070 that page is not
+  in this repo — it is a statically built `awcms-astro` site on another origin —
+  and from there **not one of the three was reachable**. Four blockers, measured
+  against this repo's own source, each hiding the next:
+  
+  1. **No `OPTIONS`.** The contract is JSON, so every cross-origin POST is
+     preflighted. Nothing answered, so the POST was never sent.
+  2. **No `Access-Control-Allow-Origin`.** An answered preflight would have been
+     followed by a POST this server accepted and the browser discarded.
+  3. **The tenant resolved from the HOST, which is this CMS.** A subscription from
+     a site would have landed in whichever tenant owns this deployment's hostname,
+     or in `PUBLIC_DEFAULT_TENANT_ID`. Not a failure anybody would have seen — a
+     **wrong success**, and FR-NWL-002's isolation defeated by the request meant to
+     be bound by it.
+  4. **The confirmation link was built on THIS origin**, where
+     `/newsletter/confirm` does not exist. Every confirmation email ever sent
+     linked to a 404 here, so `consent_at` could never be written and no
+     subscriber could ever become `active`. Double opt-in was not partly
+     reachable; it was unreachable.
+  
+  `site_search` met blockers 1–3 and solved them in ADR-0107. The newsletter's own
+  docblock claimed to mirror that module "exactly" — it mirrored the half that did
+  not have the problem.
+  
+  ## What changed
+  
+  **ADR-0118** follows ADR-0107 rather than inventing a second cross-origin
+  policy.
+  
+  - `domain/newsletter-cors.ts` — `content-type` is the only allowed header (it is
+    what keeps the request out of Astro's form-like branch, where `checkOrigin`
+    answers 403), `POST, OPTIONS` the only methods, never `*`, and **no
+    `Access-Control-Allow-Credentials`**: the deliberate difference from the visit
+    beacon, which needs one for its cookie. Nothing here reads or sets a cookie,
+    and a wider grant on endpoints that send mail is bought for nothing.
+  - `application/public-newsletter-preflight.ts` — one `OPTIONS` implementation
+    for all three routes. Always `204`: a refusal is the ABSENCE of a grant, never
+    a status code, because an origin that learns it was refused has learned that
+    some other origin would not have been. Classified from the header first and
+    rate-limited **before** the domain lookup, under the POST's own key.
+  - `withPublicNewsletterTenant` — resolves a cross-origin request's tenant with
+    `resolvePublicTenantByHost` and nothing else: no env default, no setup-state
+    default. A refused origin pays the same latency pad an unresolved host does.
+  - The confirmation link is built on the **granted** origin, safe to echo
+    precisely because the request only reached that branch by resolving a tenant
+    through `awcms_tenant_domains`.
+  - The three paths enter `COMMITTED_PATHS` with the fixture regenerated, so the
+    shape is frozen before `awcms-astro` makes the call real.
+  
+  ## What this deliberately does not fix
+  
+  A deployment with **no site in front of it** still cannot confirm: the
+  same-origin link keeps pointing at `/newsletter/confirm` here, and this repo
+  serves no such page. Adding public reader pages here would contradict ADR-0070.
+  
+  A `429` and a validation `400` carry no CORS grant — both are answered before
+  the origin is classified, because the limiter deliberately runs before any
+  database read. Following ADR-0107 both still carry `Vary: Origin`.
+
+### Patch Changes
+
+- 70f5f8f: chore(api): the three newsletter paths are CONSUMED now, not merely promised
+  
+  `/api/v1/newsletter/subscribe`, `/confirm` and `/unsubscribe` were frozen as
+  COMMITTED on 27 August in the change that made them reachable at all (ADR-0118)
+  — a shape this repo agreed to keep for a consumer that could not yet call it.
+  `ahliweb/awcms-astro`#90 shipped the form on 28 August and released it as its
+  v0.4.0, so all three move to `CONSUMED_PATHS`.
+  
+  That is the direction the cross-repo Definition of Done requires — freeze here
+  first, call there second — and the split is only worth having if entries
+  actually move. A promise and a dependency both deserve stability and fail
+  differently: breaking a committed path breaks a design that has been agreed,
+  breaking a consumed one breaks something that exists.
+  
+  The neighbour is the authority and already answered. Its
+  `tests/kontrak-awcms.test.mjs` asserts an exact set of **thirteen** called
+  surfaces with the three newsletter paths among them, and its failure message
+  says so out loud: tell `awcms`, because that repo composes its consumer contract
+  from this list. This repo still said ten.
+  
+  ## What is recorded, beyond the move
+  
+  **One of these WRITES, and none of the ten before it did.** Every reader-browser
+  path so far was a read, or a beacon whose entire answer is `202`. A subscription
+  makes this deployment send mail to an address a stranger typed, so a wrong shape
+  does not blank a page — it sends something, or silently stops sending it, to the
+  person who asked. That is the one breakage on this list a reader would report as
+  a fault of the newsroom rather than of the site, and it is written into the
+  docblock and the gate's own comment rather than left to be inferred from three
+  paths that look like every other `POST`.
+  
+  **The neutral 200 is part of the frozen shape, not a courtesy.** The endpoint
+  answers identically for a new address, an already-active one, a suppressed one
+  and a host resolving to no tenant. A consumer that distinguishes them rebuilds
+  the subscriber oracle the endpoint refuses to be — from the one place nobody
+  would think to look for it.
+  
+  **The reader-browser class now splits six ways on header rules, not three.** The
+  two search paths must carry NO custom header, because nothing answers a
+  preflight for them; the beacon and these three MUST send
+  `content-type: application/json`, because `checkOrigin` refuses the
+  alternatives. Making them consistent in either direction kills one of them in a
+  reader's browser.
+  
+  No behaviour changes: `CONSUMER_PATHS` is the union of both lists, so the frozen
+  fixture is byte-identical and the same fifteen paths stay guarded.
+- b0ec11b: fix(release): the "Latest" badge was inherited from a default that assumes releases move forward
+  
+  ADR-0117 stopped the container tag `:latest` moving before the approval that
+  signs it, and it worked — `:latest` verifies clean against `v10.0.4`. It did not
+  consider the OTHER "latest" in the same workflow.
+  
+  `gh release create` was called with **no `--latest` flag**, so it inherited
+  GitHub's default. That default encodes an assumption: releases only ever move
+  forward. **This repo breaks that assumption by design** — the `release`
+  environment gate exists so a human signs before publication, and a gate a human
+  must reach is a gate that can be reached late. ADR-0117 accepted exactly that
+  consequence; it did not follow it one step further, to what happens when
+  somebody eventually approves a run that has been parked for two weeks.
+  
+  On 28 August 2026 the three remaining parked runs (`v8.1.0`, waiting since 11
+  August, plus `v10.0.0` and `v10.0.1`) were approved so their published images
+  would get the attestations they lacked. That worked. It also moved the badge:
+  within seconds `GET /releases/latest` returned **`v10.0.0`** — a version four
+  releases superseded, and what anything following that endpoint would resolve.
+  
+  ## Why it was not predicted, which is the useful half
+  
+  It was predicted *not* to happen, on evidence that looked solid: four releases
+  had been backfilled the previous evening and `/releases/latest` still reported
+  `v10.0.4`. The inference — "backfilling does not take the badge" — was wrong.
+  Those four **did** take it, and `v10.0.3` and `v10.0.4` publishing an hour later
+  took it back.
+  
+  **Final state cannot answer a question about ordering.** Two events that cancel
+  out are indistinguishable from one that never occurred — the same class as
+  ADR-0117's own defect, which was the ordering of two individually-correct jobs
+  leaving no trace in any artefact.
+  
+  ## What changed (ADR-0119)
+  
+  - The flag is **always passed and always computed**. Latest only when no
+    published release has a higher version; drafts and pre-releases excluded
+    (GitHub never badges either); non-`vX.Y.Z` tags ignored on both sides, because
+    this repo carries prefix-less legacy tags.
+  - The comparison is a **pure function with tests** — `shouldMarkReleaseLatest`,
+    beside the other `release:verify` checks — not shell inside a `run:` block.
+    Untested logic on the release path is how this arrived.
+  - The I/O bridge **fails closed to `false`**, asymmetric on purpose: a wrong
+    `false` leaves a release unbadged, which is visible and one `gh release edit`
+    from fixed; a wrong `true` moves the badge and nothing reports it.
+  - The badge is **re-read after publishing** and the job fails if it disagrees —
+    ADR-0117's amendment lesson applied in advance rather than after.
+  - `release.yml` is **asserted, not trusted**: the test reassembles every real
+    `gh release create` invocation from its continuation lines and requires an
+    explicit `--latest=`, excluding comments, because the workflow discusses the
+    command in prose twice and a substring search finds a comment first.
+  
+  The rule is tested against the incident as it actually stood, and the parity
+  test was proven to go red with the flag removed.
+- 0a0336c: fix(newsletter): the subscribe endpoint would mail-bomb any address, one IP at a time
+  
+  `POST /api/v1/newsletter/subscribe` is anonymous and sends mail. Its only
+  defence was a per-IP limiter — 5 requests per 300 s — and the upsert behind it
+  re-issued a confirmation token on **every** submission for an address that was
+  not already `active` or `suppressed`. So each accepted request enqueued another
+  email to whatever address the body named.
+  
+  **A per-IP limiter cannot defend the person being mailed, because that person
+  contributes no IP to the request.** One IP alone sustains 1,440 messages a day
+  at the default; rotating IPs removes even that. The mail goes out in this
+  deployment's name, from its sending domain, on its sending reputation — and for
+  a newsroom the resulting complaint is about the newsroom.
+  
+  This was reachable only from 27 August. Until ADR-0118 the endpoint answered no
+  preflight and no browser could call it, so the omission had cost nothing; making
+  it reachable made it live.
+  
+  ## The fix: a ceiling on the other axis
+  
+  `confirmation_sent_at` already existed on the row — no migration. The upsert's
+  `WHERE` gains one predicate, so a second confirmation to the same address is
+  refused until the cooldown has passed (`NEWSLETTER_CONFIRMATION_COOLDOWN_SEC`,
+  default 900 s).
+  
+  It is a predicate **inside the existing statement**, not a read-then-write: two
+  concurrent submissions for one address would both read a stale timestamp and
+  both send. `ON CONFLICT` serialises them on the row, so the second sees the
+  first's write and is refused.
+  
+  **The refusal is silent, and had to be.** A new row, a re-subscribe, an already
+  active address, a suppressed one and an address inside its cooldown now all
+  return the same neutral 200. Giving the cooldown a distinguishable answer would
+  have rebuilt the subscriber-enumeration oracle ADR-0103 designed the endpoint
+  not to be — from the one place nobody would look for it.
+  
+  **A refused repeat leaves the row untouched.** It does not rotate
+  `confirmation_token_hash`, so the link already sitting in somebody's inbox keeps
+  working. Rotating it would have let an attacker invalidate a real subscriber's
+  confirmation link simply by submitting their address — turning the ceiling into
+  a denial of the subscription it was added to protect.
+  
+  ## Why not Turnstile
+  
+  Six anonymous surfaces already call `enforceTurnstileIfRequired`, and adding a
+  seventh looked like the obvious move. It is not a fit here:
+  `TURNSTILE_EXPECTED_HOSTNAME` is a single value and the widget would be solved
+  on the SITE's hostname, not this one — that check exists to fail closed, and
+  cross-origin is the case it was not designed for. A challenge also asks the
+  wrong question: it bounds who may submit, and the defect was about who receives.
+  The two are complementary rather than alternative, and only one of them is
+  needed to close this.
+  
+  ## Proven against a real database
+  
+  Six integration tests, because the ceiling is SQL and a mocked `Bun.SQL` would
+  answer however the test told it to: first submission issues a token; an
+  immediate repeat issues none; the stored token hash and timestamp are unchanged
+  by a refused repeat; a genuine retry after the window is served again (a ceiling
+  that never lifts is an outage, not a ceiling); a cooldown of zero reproduces the
+  old behaviour exactly; and a suppressed address stays refused however far its
+  timestamp is aged. Removing the predicate turns two of the six red.
+- 9eb68f7: fix(gate): `build:preview-overlay:check` said STALE when it meant "different Bun"
+  
+  The gate rebuilds `public/js/blog-preview-overlay.js` in memory and compares
+  bytes. A minified bundle is the output of a specific bundler, so those bytes
+  change when the bundler does — which means the comparison was asking two
+  questions and reporting only one answer: "was the artefact rebuilt after its
+  source changed", and "is this machine running the same Bun that produced it".
+  
+  On a developer machine one minor ahead of the `1.3.14` pin it answered
+  `is STALE` — a claim about the artefact — when the artefact was correct and the
+  toolchain differed.
+  
+  ## Why that was worse than a false red
+  
+  - **It failed the test suite too.** `tests/blog-preview-overlay.test.ts` shells
+    out to the gate, so the single failure in a 6,869-test run was this, on a tree
+    with nothing wrong with it.
+  - **It hid every stage behind it.** In the `check` chain the gate sits
+    immediately before `typecheck && … && test && build`, and `&&` stops there —
+    so off the pin, `bun run check` never reached the stages that matter.
+  - **Its remedy made things worse.** The message names
+    `bun run build:preview-overlay`, and running that off the pin writes a bundle
+    CI rejects. The gate handed out the instruction that breaks the thing it
+    guards, and the resulting commit reddens CI for everyone.
+  
+  ## What changed
+  
+  The Bun version is now a stated **precondition** instead of a hidden
+  assumption, read from `packageManager` so the pin is not written down twice.
+  `family:conformance:check` already asserts CI's `bun-version:` set equals
+  {`packageManager` pin, `engines` floor}, so that reading cannot drift from the
+  version CI installs.
+  
+  - **On the pin** — unchanged, full strength: a byte difference is `STALE` and
+    exits 1. This is what CI runs, in every job.
+  - **Off the pin** — a difference is reported as `UNVERIFIED` and exits 0, saying
+    which Bun is running, which is pinned, and that rebuilding here is not the
+    fix.
+  - **`build:preview-overlay` now REFUSES to write off the pin**, rather than
+    warning: a warning above a successful write reads as success, and by then the
+    wrong bytes are already staged. `--allow-version-mismatch` exists for the one
+    legitimate case — deliberately moving the pin, where the new Bun *is* the
+    correct builder.
+  - Two outcomes stay version-independent and still fail anywhere: a **missing**
+    artefact, and a **match** (a match is a match, whoever built it).
+  
+  ## Proven in both directions, not just asserted
+  
+  The strict branch was exercised by pointing the pin at the running Bun and then
+  introducing a genuine source change: the gate fails, and passes again once the
+  bundle is rebuilt. The test carries the same precondition rather than accepting
+  any output — off the pin it asserts the half that was broken (must not claim
+  staleness, must not exit non-zero); on the pin, which is CI, it demands `OK`
+  exactly as before.
+
 ## 10.0.4
 
 ### Patch Changes
