@@ -445,10 +445,28 @@ pioneered directly here after the ADR-0047 freeze.)
   the same gate and asserts `toContain("OK")`; and in the `check` chain the gate
   sits immediately before `typecheck && … && test && build`, so on any
   non-pinned Bun it hides every stage that matters. Regenerating the bundle
-  "fixes" it locally and reddens CI. **Not fixed — deliberately left open** as
-  its own decision (raise the CI pin to the `packageManager` field, or compare
-  semantically); the one-line mitigation of moving the gate after `test` is
-  worth doing regardless.
+  "fixes" it locally and reddens CI — the gate handed out the instruction that
+  breaks the thing it guards.
+
+  **Fixed on 28 August by making the version a stated PRECONDITION rather than
+  a hidden assumption.** The pin is read from `packageManager` (not written
+  down a second time), and `family:conformance:check` already asserts CI's
+  `bun-version:` set equals {that pin, the `engines` floor}, so the reading
+  cannot drift from the Bun CI installs. On the pin the gate is unchanged and
+  full-strength — a byte difference is `STALE`, exit 1, and that is what every
+  CI job runs. Off the pin it reports `UNVERIFIED` and exits 0. `build:` now
+  REFUSES to write off the pin instead of warning, because a warning above a
+  successful write reads as success and the wrong bytes are already staged by
+  then; `--allow-version-mismatch` covers the one legitimate case, moving the
+  pin itself. A missing artefact and a matching one stay version-independent.
+
+  **The general lesson is about what a diagnostic is allowed to CLAIM.** The
+  bytes really did differ, so the gate was not wrong about its observation —
+  it was wrong about what the observation established, and it stated the
+  stronger of two available conclusions. A check that cannot separate its
+  subject from its environment must say so rather than pick. Both branches were
+  proven by pointing the pin at the running Bun and introducing a genuine source
+  change, because a gate nobody has watched fail is a gate nobody has tested.
 
   **The Turnstile set has no gate, and the newsletter is outside it.** Six
   anonymous surfaces call `enforceTurnstileIfRequired` — setup/initialize,

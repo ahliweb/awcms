@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:55bccac23102633d233e7701be99c788ab3b73f4012438ad116789d4bfc96129 -->
+<!-- i18n-source-hash: sha256:b38f5881e8a27b4ec21023e34f0385e5fa0245623eaa17db8998edf8a03050f5 -->
 
 # AWCMS — Project State & Continuation
 
@@ -451,11 +451,31 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   memanggil gerbang yang sama lalu meng-assert `toContain("OK")`; dan di rantai
   `check` gerbang itu duduk persis sebelum `typecheck && … && test && build`,
   sehingga pada Bun tak-terpatok ia MENYEMBUNYIKAN setiap tahap yang penting.
-  Meregenerasi bundle "memperbaikinya" secara lokal dan memerahkan CI. **Tidak
-  diperbaiki — sengaja dibiarkan terbuka** sebagai keputusan tersendiri (naikkan
-  patokan CI ke field `packageManager`, atau bandingkan secara semantik);
-  mitigasi satu baris berupa memindahkan gerbang ke setelah `test` tetap layak
-  dikerjakan.
+  Meregenerasi bundle "memperbaikinya" secara lokal dan memerahkan CI — gerbang
+  itu membagikan instruksi yang justru merusak hal yang dijaganya.
+
+  **Diperbaiki 28 Agustus dengan menjadikan versi sebagai PRASYARAT yang
+  dinyatakan, bukan asumsi tersembunyi.** Patokannya dibaca dari
+  `packageManager` (tidak ditulis kedua kalinya), dan `family:conformance:check`
+  sudah menegaskan himpunan `bun-version:` di CI sama dengan {patokan itu, lantai
+  `engines`}, jadi pembacaannya tak bisa hanyut dari Bun yang benar-benar
+  dipasang CI. Pada patokannya gerbang ini TIDAK berubah dan berkekuatan penuh —
+  beda bita berarti `STALE`, exit 1, dan itulah yang dijalankan setiap job CI.
+  Di luar patokan ia melaporkan `UNVERIFIED` dan exit 0. Perintah `build:` kini
+  MENOLAK menulis di luar patokan alih-alih memperingatkan, sebab peringatan di
+  atas penulisan yang sukses dibaca sebagai sukses dan bita yang salah sudah
+  ter-stage saat itu; `--allow-version-mismatch` menutup satu kasus sah, yaitu
+  memindahkan patokannya sendiri. Artefak yang HILANG dan yang COCOK tetap
+  tak-bergantung-versi.
+
+  **Pelajaran umumnya tentang apa yang boleh DIKLAIM sebuah diagnostik.** Bitanya
+  memang berbeda, jadi gerbang itu tidak keliru soal pengamatannya — ia keliru
+  soal apa yang dibuktikan pengamatan itu, dan memilih kesimpulan yang lebih kuat
+  dari dua yang tersedia. Pemeriksaan yang tak bisa memisahkan subjeknya dari
+  lingkungannya WAJIB mengatakannya, bukan memilih. Kedua cabangnya dibuktikan
+  dengan mengarahkan patokan ke Bun yang sedang berjalan lalu memasukkan
+  perubahan sumber sungguhan, sebab gerbang yang belum pernah dilihat GAGAL
+  adalah gerbang yang belum diuji.
 
   **Himpunan Turnstile tak punya gerbang, dan newsletter berada di luarnya.**
   Enam permukaan anonim memanggil `enforceTurnstileIfRequired` —
