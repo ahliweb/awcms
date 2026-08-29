@@ -190,4 +190,22 @@ describe("release.yml actually uses the decision", () => {
     expect(workflow).toContain("releases/latest");
     expect(workflow).toContain("Verify the badge landed where it was decided");
   });
+
+  test("`sign-attest-publish` installs Bun before invoking it", () => {
+    // `sign-attest-publish` runs in its own isolated job (`needs: build`), so
+    // the `Setup Bun` step from `validate` does not carry over — the decision
+    // step's `bun scripts/release-latest-flag.ts` needs its own install.
+    const jobStart = workflow.indexOf("sign-attest-publish:");
+    expect(jobStart).toBeGreaterThan(-1);
+
+    const bunInvocation = workflow.indexOf(
+      "bun scripts/release-latest-flag.ts",
+      jobStart
+    );
+    expect(bunInvocation).toBeGreaterThan(jobStart);
+
+    const setupBun = workflow.indexOf("oven-sh/setup-bun@", jobStart);
+    expect(setupBun).toBeGreaterThan(jobStart);
+    expect(setupBun).toBeLessThan(bunInvocation);
+  });
 });
