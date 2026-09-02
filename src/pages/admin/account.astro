@@ -232,18 +232,12 @@ const themeOptions = [
 ];
 ---
 
-<AdminLayout title={t("My account")}>
-  <header class="page-header fade-in-up">
-    <h1 id="account-heading">{t("My account")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Your name, the language and theme you read this admin in, your password, and the devices and sign-in methods attached to your account. Everything here is about you — nothing on this page can change anyone else."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("My account")}
+  description={t(
+    "Your name, the language and theme you read this admin in, your password, and the devices and sign-in methods attached to your account. Everything here is about you — nothing on this page can change anyone else."
+  )}
+>
   {
     loadError && (
       <p class="state-notice fade-in-up" id="account-load-error">

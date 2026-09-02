@@ -157,18 +157,12 @@ const resourceTypesValue =
 const showIndexActions = canReconcile || canRebuild;
 ---
 
-<AdminLayout title="Site search">
-  <header class="page-header fade-in-up">
-    <h1 id="site-search-heading">{t("Site search")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The tenant's full-text search index over published content: how fresh it is, what it contains, the last runs, and the items that failed to index. The index is a projection of public content only \u2014 it is never an authorization source."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Site search")}
+  description={t(
+    "The tenant's full-text search index over published content: how fresh it is, what it contains, the last runs, and the items that failed to index. The index is a projection of public content only \u2014 it is never an authorization source."
+  )}
+>
   {
     !canReadIndex && !canReadSettings && !canReadDiagnostics && (
       <p class="state-notice fade-in-up" id="site-search-denied">

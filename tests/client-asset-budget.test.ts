@@ -22,6 +22,7 @@ import {
   evaluateBudget,
   formatFailure,
   measureClientAssets,
+  FONT_BUDGET_BYTES,
   PER_FILE_BUDGET_BYTES,
   PUBLIC_ASSET_AUDIENCE,
   READER_BUDGET_BYTES,
@@ -32,7 +33,12 @@ import {
 const BUDGET: Budget = {
   readerBudgetBytes: 100,
   appBudgetBytes: 100,
-  perFileBudgetBytes: 60
+  fontBudgetBytes: 100,
+  perFileBudgetBytes: 60,
+  // ADR-0120 — stylesheets carry their own per-file ceiling. Deliberately
+  // DIFFERENT from the script one in this fixture, so a test that mixes them up
+  // fails instead of passing by coincidence.
+  perFileCssBudgetBytes: 90
 };
 
 /** Two declared public files, so fixtures can exercise both audiences. */
@@ -245,7 +251,7 @@ describe("evaluateBudget", () => {
     expect(report.ok).toBe(false);
     expect(report.overApp).toBe(false);
     expect(report.oversizedFiles).toEqual([
-      { path: "_astro/chunk.js", bytes: 70 }
+      { path: "_astro/chunk.js", bytes: 70, budgetBytes: 60 }
     ]);
   });
 
@@ -337,10 +343,66 @@ describe("the real budget constants and registry", () => {
     expect(READER_BUDGET_BYTES).toBeLessThan(PER_FILE_BUDGET_BYTES);
   });
 
-  test("every declared audience is one of the two known values", () => {
+  test("every declared audience is one of the three known values", () => {
     for (const audience of Object.values(PUBLIC_ASSET_AUDIENCE)) {
-      expect(["reader", "app"]).toContain(audience);
+      expect(["reader", "app", "font"]).toContain(audience);
     }
+  });
+
+  // ADR-0120. The font budget's whole argument is that a 104 KB step change
+  // inside the app ceiling would have destroyed an instrument that catches
+  // 600 B steps. That argument only holds while the two are separate numbers,
+  // so assert the separation rather than trusting the docblock to survive.
+  test("fonts are measured against their own ceiling, not the app one", () => {
+    const fonts = Object.entries(PUBLIC_ASSET_AUDIENCE)
+      .filter(([, audience]) => audience === "font")
+      .map(([file]) => file);
+
+    expect(fonts.length).toBeGreaterThan(0);
+
+    for (const file of fonts) {
+      expect(file.startsWith("fonts/")).toBe(true);
+      expect(classifyAsset(file)).toBe("font");
+    }
+
+    expect(FONT_BUDGET_BYTES).toBeGreaterThan(0);
+    expect(FONT_BUDGET_BYTES).not.toBe(APP_BUDGET_BYTES);
+  });
+
+  // A font subset's size is set by the glyph count of a script, not by anything
+  // a reviewer can split — so the per-file rule, whose premise is "an island
+  // bundled a dependency", must not fire on one. `jetbrains-mono-latin.woff2`
+  // is 31,432 B against a 27,000 B script ceiling, so this exemption is load
+  // bearing today rather than hypothetical.
+  test("a font over the per-file script budget is not reported oversized", () => {
+    const report = evaluateBudget(
+      {
+        totalBytes: 40_000,
+        files: [{ path: "fonts/big.woff2", bytes: 40_000 }]
+      },
+      BUDGET,
+      { "fonts/big.woff2": "font" }
+    );
+
+    expect(report.oversizedFiles).toEqual([]);
+    expect(report.fontBytes).toBe(40_000);
+    expect(report.overFont).toBe(true);
+  });
+
+  // The stylesheet ceiling is a SEPARATE number, and the fixture sets it above
+  // the script one, so a file that passes as CSS and fails as JS proves the
+  // gate is reading the extension rather than one shared constant.
+  test("a stylesheet is measured against the CSS per-file budget", () => {
+    const report = evaluateBudget(
+      {
+        totalBytes: 70,
+        files: [{ path: "_astro/admin.css", bytes: 70 }]
+      },
+      BUDGET,
+      {}
+    );
+
+    expect(report.oversizedFiles).toEqual([]);
   });
 
   test("the registry is frozen, so a consumer cannot widen it at runtime", () => {

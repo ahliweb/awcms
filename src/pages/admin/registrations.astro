@@ -96,18 +96,12 @@ const canReject = screen.state === "allowed" && screen.data.canReject;
 const columnCount = canApprove || canReject ? 4 : 3;
 ---
 
-<AdminLayout title="Registration requests">
-  <header class="page-header fade-in-up">
-    <h1 id="registrations-heading">{t("Registration requests")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "People who asked to join this tenant. Approving creates their account and emails them a link to set a password \u2014 it does not set one for them. Rejecting creates nothing and notifies nobody."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Registration requests")}
+  description={t(
+    "People who asked to join this tenant. Approving creates their account and emails them a link to set a password \u2014 it does not set one for them. Rejecting creates nothing and notifies nobody."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="registrations-denied">

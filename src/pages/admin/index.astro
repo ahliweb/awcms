@@ -154,7 +154,9 @@ const ICON_MODULES =
       <div class="dashboard">
         <div class="kpi-grid stagger-children">
           <article class="kpi kpi--primary fade-in-up">
-            <span class="kpi-icon" set:html={ICON_USERS} />
+            <div class="kpi-head">
+              <span class="kpi-icon" set:html={ICON_USERS} />
+            </div>
             <span class="kpi-value">
               {dashboard.tenantActivity.activeUserCount}
             </span>
@@ -162,7 +164,9 @@ const ICON_MODULES =
           </article>
 
           <article class="kpi kpi--info fade-in-up">
-            <span class="kpi-icon" set:html={ICON_OFFICE} />
+            <div class="kpi-head">
+              <span class="kpi-icon" set:html={ICON_OFFICE} />
+            </div>
             <span class="kpi-value">
               {dashboard.tenantActivity.activeOfficeCount}
             </span>
@@ -170,7 +174,9 @@ const ICON_MODULES =
           </article>
 
           <article class="kpi kpi--success fade-in-up">
-            <span class="kpi-icon" set:html={ICON_SHIELD} />
+            <div class="kpi-head">
+              <span class="kpi-icon" set:html={ICON_SHIELD} />
+            </div>
             <span class="kpi-value">{dashboard.accessAudit.allowCount}</span>
             <span class="kpi-label">
               {t("Allow ({days} days)", {
@@ -186,22 +192,26 @@ const ICON_MODULES =
               syncNeedsAttention ? "kpi--warning" : "kpi--muted"
             ]}
           >
-            <span class="kpi-icon" set:html={ICON_SYNC} />
+            <div class="kpi-head">
+              <span class="kpi-icon" set:html={ICON_SYNC} />
+              {syncNeedsAttention && (
+                <span class="kpi-status">
+                  <span class="badge badge--warning">
+                    {t("Needs attention")}
+                  </span>
+                </span>
+              )}
+              {syncNotConfigured && (
+                <span class="kpi-status">
+                  <span class="badge badge--muted">{t("Not configured")}</span>
+                </span>
+              )}
+            </div>
             <span class="kpi-value">
               {dashboard.syncHealth.activeNodeCount}/
               {dashboard.syncHealth.totalNodeCount}
             </span>
             <span class="kpi-label">{t("Active nodes")}</span>
-            {syncNeedsAttention && (
-              <span class="kpi-status">
-                <span class="badge badge--warning">{t("Needs attention")}</span>
-              </span>
-            )}
-            {syncNotConfigured && (
-              <span class="kpi-status">
-                <span class="badge badge--muted">{t("Not configured")}</span>
-              </span>
-            )}
           </article>
         </div>
 
@@ -399,21 +409,43 @@ const ICON_MODULES =
     margin-bottom: var(--sp-4);
   }
 
+  /*
+   * ADR-0120 — the tile is a COLUMN (icon row, value, label), not a two-column
+   * grid with a badge floated over it.
+   *
+   * The old shape put the icon in column 1 spanning both rows and pinned the
+   * status badge `position: absolute` to the top-right, with a comment
+   * explaining that this kept tiles the same height whether or not they carried
+   * one. It did — and it also let the badge sit ON TOP of the number. With
+   * "Belum dikonfigurasi" against "0/0", the badge covered the value entirely:
+   * the one tile that had something to say was the one you could not read.
+   *
+   * A header row solves what the absolute positioning was solving — every tile
+   * has the row, with or without a badge, so heights still match — with nothing
+   * overlapping.
+   */
   .kpi {
     --kpi-accent: var(--color-primary);
     position: relative;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto;
-    align-items: center;
-    gap: 0 var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
     padding: var(--sp-4);
     padding-left: calc(var(--sp-4) + 3px);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-xs);
     overflow: hidden;
+  }
+
+  /* Icon on the left, status badge (if any) on the right. */
+  .kpi-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    min-height: 32px;
   }
 
   /* The accent is a bar, not a tinted border — a 3px rule reads as a category
@@ -446,15 +478,16 @@ const ICON_MODULES =
     --kpi-accent: var(--color-border);
   }
 
+  /* Grid placement dropped with the grid. 32px to match `.admin-tile--lg`, so a
+     dashboard tile and a panel tile are one object. */
   .kpi-icon {
-    grid-column: 1;
-    grid-row: 1 / 3;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
     background: color-mix(in srgb, var(--kpi-accent) 15%, transparent);
     color: var(--kpi-accent);
   }
@@ -462,34 +495,31 @@ const ICON_MODULES =
   /* `set:html`-injected SVG is not reached by Astro's scoped selector, so it
      has to be sized through :global(). */
   .kpi-icon :global(svg) {
-    width: 22px;
-    height: 22px;
+    width: 16px;
+    height: 16px;
   }
 
   .kpi-value {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: end;
-    font-size: var(--fs-2xl);
+    font-size: 29px;
     font-weight: var(--fw-bold);
     line-height: 1;
-    letter-spacing: var(--tracking-tight);
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
   }
 
+  /* Pulled tight under the value: the pair is one statement, and the 11px
+     column gap belongs between the header row and the number, not inside it. */
   .kpi-label {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: start;
+    margin-top: -9px;
     font-size: var(--fs-sm);
     color: var(--color-text-muted);
   }
 
-  /* Pinned to the corner so tiles keep a uniform height whether or not they
-     carry a badge. */
+  /* In flow now — see `.kpi`. `min-width: 0` so a long badge ellipsises inside
+     the header row rather than widening the tile past its grid track. */
   .kpi-status {
-    position: absolute;
-    top: var(--sp-3);
-    right: var(--sp-3);
+    min-width: 0;
+    overflow: hidden;
   }
 
   /* ── Detail cards ─────────────────────────────────────────────────────*/

@@ -41,11 +41,23 @@ import { THEME_STORAGE_KEY } from "../security/theme-init-script";
 const ORDER = ["system", "light", "dark"] as const;
 type ThemeMode = (typeof ORDER)[number];
 
-const ICONS: Record<ThemeMode, string> = {
-  system: "🖥️",
-  light: "☀️",
-  dark: "🌙"
-};
+/*
+ * ADR-0120 — the three glyphs are now SVGs RENDERED BY THE COMPONENT, and this
+ * module only chooses which one is visible.
+ *
+ * They used to be emoji assigned with `icon.textContent = ICONS[mode]`. Two
+ * reasons that had to change, and the second is the one that matters:
+ *
+ *   1. Emoji render from the platform's own font — 🖥️ is a beige CRT on one
+ *      machine and a flat glyph on another — so the one control that never
+ *      matched the rest of the topbar was the one telling you about appearance.
+ *   2. Swapping to SVG by assigning markup would mean `innerHTML` in client
+ *      code. The values would be our own constants and therefore safe, but it
+ *      establishes an `innerHTML` seam in the admin shell for decoration, which
+ *      is a bad seam to have available. Rendering all three server-side and
+ *      toggling `hidden` needs no markup assignment at all.
+ */
+const MODE_ICON_SELECTOR = ".theme-toggle-icon";
 
 function isThemeMode(value: string | null): value is ThemeMode {
   return value === "system" || value === "light" || value === "dark";
@@ -71,16 +83,28 @@ function resolveTheme(mode: ThemeMode): "light" | "dark" {
 function applyButtonState(button: HTMLElement, mode: ThemeMode): void {
   button.dataset.mode = mode;
 
-  const icon = button.querySelector(".theme-toggle-icon");
-  const label = button.querySelector(".theme-toggle-label");
-
-  if (icon) {
-    icon.textContent = ICONS[mode];
+  // Every mode's glyph is in the DOM; exactly one is shown. `hidden` (not
+  // `style.display`) because `tokens.css` makes that attribute authoritative.
+  for (const icon of button.querySelectorAll<HTMLElement>(MODE_ICON_SELECTOR)) {
+    icon.hidden = icon.dataset.mode !== mode;
   }
+
+  const label = button.querySelector(".theme-toggle-label");
 
   if (label) {
     label.textContent = labelFor(button, mode);
   }
+
+  /*
+   * The accessible name has to follow the state too.
+   *
+   * The button's `aria-label` is a fixed "Change colour theme", which describes
+   * the ACTION but never says which mode is active — and the visible label is
+   * hidden at phone widths, so on a phone a screen-reader user had no way to
+   * know whether they were in system, light or dark. `aria-description` carries
+   * the current mode without replacing the action name.
+   */
+  button.setAttribute("aria-description", labelFor(button, mode));
 }
 
 function init(): void {

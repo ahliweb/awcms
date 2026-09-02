@@ -288,18 +288,12 @@ const assignmentColumns = canRevokeAssignment ? 7 : 6;
 const decidedColumns = canRevokeException ? 7 : 6;
 ---
 
-<AdminLayout title="Business scope">
-  <header class="page-header fade-in-up">
-    <h1 id="business-scope-heading">{t("Business scope")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Which part of the organisation a person's authority covers, the segregation-of-duties conflicts that produced, and the time-bounded exceptions someone approved to work past one."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Business scope")}
+  description={t(
+    "Which part of the organisation a person's authority covers, the segregation-of-duties conflicts that produced, and the time-bounded exceptions someone approved to work past one."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="business-scope-denied">

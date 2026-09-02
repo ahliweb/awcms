@@ -134,18 +134,12 @@ function severityVariant(severity: string): string {
 }
 ---
 
-<AdminLayout title="Audit trail">
-  <header class="page-header fade-in-up">
-    <h1 id="audit-trail-heading">{t("Audit trail")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Append-only record of high-risk actions taken in this tenant \u2014 who did what, to which resource, and when. Sensitive values are redacted before an event is ever stored, so nothing here can be un-redacted."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Audit trail")}
+  description={t(
+    "Append-only record of high-risk actions taken in this tenant \u2014 who did what, to which resource, and when. Sensitive values are redacted before an event is ever stored, so nothing here can be un-redacted."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="audit-trail-denied">

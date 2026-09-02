@@ -127,17 +127,14 @@ function payloadSummary(payload: Record<string, unknown>): string {
 const columnCount = canDelete ? 7 : 6;
 ---
 
-<AdminLayout title="Form drafts">
-  <header class="page-header fade-in-up">
-    <h1 id="form-drafts-heading">{t("Form drafts")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Server-side scratch state for multi-step forms. Drafts are created by the wizards of other modules \u2014 this screen is for inspecting and clearing them, not for authoring. The newest 100 matching drafts are shown; narrow the list with the filters below. Purged automatically by"
-        )
-      }<code>{t("form-drafts:purge")}</code>.
-    </p>
-  </header>
+<AdminLayout title={t("Form drafts")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Server-side scratch state for multi-step forms. Drafts are created by the wizards of other modules \u2014 this screen is for inspecting and clearing them, not for authoring. The newest 100 matching drafts are shown; narrow the list with the filters below. Purged automatically by"
+      )
+    }<code>{t("form-drafts:purge")}</code>.</Fragment
+  >
 
   {
     !canRead && (

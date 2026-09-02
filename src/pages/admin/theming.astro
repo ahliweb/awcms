@@ -186,18 +186,12 @@ const activeThemeName =
 const showLifecycleActions = canPublish || canRetire || canPreview;
 ---
 
-<AdminLayout title="Theming">
-  <header class="page-header fade-in-up">
-    <h1 id="theming-heading">{t("Theming")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Choose one of the reviewed, built-in themes and configure it by data \u2014 design tokens, layout slots, media asset ids, section order and nav placement. There is no uploaded code and no raw CSS: every value is validated against the theme's own declared grammar before it can reach the published stylesheet. The lifecycle is draft \u2192 validate \u2192 preview \u2192 publish, with rollback and retire moving the live pointer only; published versions are immutable."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Theming")}
+  description={t(
+    "Choose one of the reviewed, built-in themes and configure it by data \u2014 design tokens, layout slots, media asset ids, section order and nav placement. There is no uploaded code and no raw CSS: every value is validated against the theme's own declared grammar before it can reach the published stylesheet. The lifecycle is draft \u2192 validate \u2192 preview \u2192 publish, with rollback and retire moving the live pointer only; published versions are immutable."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="theming-denied">

@@ -26,16 +26,35 @@
 /* ==================================================================== */
 /* Page header — title + supporting description                         */
 /* ==================================================================== */
+/*
+ * ADR-0120 — the SHELL owns the page title now.
+ *
+ * `AdminLayout` renders breadcrumb, `<h1>`, description and the screen's
+ * actions in one band above a rule, so a screen no longer positions its own
+ * heading. These rules stay because a screen may still head a SUB-section, and
+ * because 48 templates use the class — they are the same treatment one level
+ * down rather than a second page title.
+ */
 .page-header {
   margin-bottom: var(--sp-5);
 }
 
+.page-header h1,
+.page-header h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-snug);
+}
+
 .page-header .page-description {
   margin: var(--sp-2) 0 0;
-  max-width: 68ch;
+  max-width: 70ch;
   color: var(--color-text-muted);
   font-size: var(--fs-sm);
   line-height: var(--lh-normal);
+  text-wrap: pretty;
 }
 
 /* Action row that sits under a header (e.g. a count + a right-aligned CTA). */
@@ -51,8 +70,11 @@
 /* ==================================================================== */
 /* Panel / section wrapper — a titled surface card                       */
 /* ==================================================================== */
+/* ADR-0120 — unchanged in shape, restyled to the redesigned card surface. The
+   framed variant (header strip + edge-to-edge rule) is `.admin-frame` in
+   `admin.css`; see that block for why it is a separate name. */
 .admin-panel {
-  padding: var(--sp-4);
+  padding: var(--sp-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -69,8 +91,13 @@
   align-items: baseline;
   gap: var(--sp-2);
   margin: 0 0 var(--sp-3);
-  font-size: var(--fs-lg);
-  line-height: var(--lh-tight);
+  /* ADR-0120 — down from `--fs-lg`. The shell's `<h1>` is 24px; a section
+     heading inside the page must sit clearly below it, and at 20px the two
+     competed. */
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-snug);
 }
 
 .admin-section-title .count-pill {
@@ -106,38 +133,84 @@
   }
 }
 
+/*
+ * ADR-0120 — the stat card is INVERTED: value first, label under it.
+ *
+ * It used to read label-then-value, which is how a form field reads. A stat
+ * card is scanned, not read: the eye wants the number, and the word is what
+ * explains the number it already found. The design reference makes the same
+ * choice, and it is why the value can carry the large type while the label
+ * stays at body size.
+ *
+ * `.stat-head` is an optional first row for an icon tile (`.admin-tile`) and a
+ * delta, so a screen can add either without a second card class.
+ */
 .stat-card {
-  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: var(--sp-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
 }
 
+.stat-card .stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.stat-card .stat-delta {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card .stat-delta[data-tone="success"] {
+  color: var(--color-success-on-soft);
+}
+
+.stat-card .stat-delta[data-tone="danger"] {
+  color: var(--color-danger-on-soft);
+}
+
+/* `order` puts the value above the label without either needing to move in the
+   markup — so a screen keeps writing label-then-value (which is the sensible
+   reading order for a screen reader) while the eye gets value-then-label. */
 .stat-card .stat-label {
+  order: 2;
   font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-normal);
   color: var(--color-text-muted);
 }
 
 .stat-card .stat-value {
-  margin-top: var(--sp-2);
-  font-size: var(--fs-2xl);
+  order: 1;
+  margin-top: 0;
+  font-size: 29px;
   font-weight: var(--fw-bold);
-  line-height: var(--lh-tight);
+  letter-spacing: -0.03em;
+  line-height: 1;
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
   word-break: break-word;
 }
 
 .stat-card .stat-value.stat-value--mono {
   font-family: var(--font-mono);
   font-size: var(--fs-lg);
+  letter-spacing: 0;
 }
 
 .stat-card .stat-hint {
-  margin-top: var(--sp-2);
+  order: 3;
+  margin-top: 0;
   font-size: var(--fs-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
 }
 
 /* Quick-link tiles (dashboard shortcuts). */
@@ -159,17 +232,25 @@
 .quick-link {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   min-height: 48px;
   padding: var(--sp-3) var(--sp-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--color-text);
   text-decoration: none;
   font-weight: var(--fw-semibold);
   font-size: var(--fs-sm);
   box-shadow: var(--shadow-xs);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.quick-link:hover {
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
 }
 
 .quick-link .quick-link-arrow {
@@ -200,15 +281,17 @@
   color: var(--color-text-muted);
 }
 
+/* ADR-0120 — a rounded square rather than a circle, matching `.admin-tile`.
+   A circle among cards and pills read as an avatar. */
 .empty-state .empty-state-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-full);
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-lg);
   background: var(--color-surface-2);
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   font-size: var(--fs-lg);
   line-height: 1;
 }
@@ -227,25 +310,29 @@
 /* ==================================================================== */
 /* Status badge — additive variants (composes admin.css .status-badge)   */
 /* ==================================================================== */
+/* ADR-0120 — tinted, matching the variants in `admin.css`. Both files must
+   agree: they style the SAME element, and a solid `info` beside a tinted
+   `success` in one table is the drift this pairing exists to avoid. */
 .status-badge[data-variant="info"] {
-  background: var(--color-info-strong);
-  color: var(--color-primary-contrast);
+  background: var(--color-info-soft);
+  color: var(--color-info-on-soft);
 }
 
 .status-badge[data-variant="danger"] {
-  background: var(--color-danger-strong);
-  color: var(--color-primary-contrast);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
 }
 
-/* A subtle "dot" prefix so a badge reads as a live status pill. */
+/*
+ * The dot is now laid out by the flex rule in `admin.css` (`gap`), so the
+ * `margin-right` + `vertical-align` pair here would double the spacing and
+ * push it off the text baseline. Only the size differs from that rule, and it
+ * is set to match: 5px, because at 6px the dot reads as a bullet rather than
+ * as a status light.
+ */
 .status-badge .status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: var(--sp-1);
-  border-radius: var(--radius-full);
-  background: currentcolor;
-  vertical-align: baseline;
+  width: 5px;
+  height: 5px;
 }
 
 /* ==================================================================== */
@@ -267,6 +354,7 @@
 }
 
 .btn-inline:hover {
+  color: var(--color-primary-on-soft);
   background: var(--color-primary-soft);
   color: var(--color-primary-hover);
 }

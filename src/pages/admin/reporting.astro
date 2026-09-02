@@ -267,17 +267,14 @@ const showExportActions = canTriggerExport && projectionKeys.length > 0;
 const exportConfigColumns = canConfigureExports ? 6 : 5;
 ---
 
-<AdminLayout title="Reporting operations">
-  <header class="page-header fade-in-up">
-    <h1 id="reporting-heading">{t("Reporting operations")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Read-model health and delivery: the freshness of every registered projection, the rebuilds and reconciliations run against them, the email queue, and the scheduled exports built from them. The tenant activity, access & audit, sync health and module usage views live on the"
-        )
-      }<a href="/admin">{t("dashboard")}</a>.
-    </p>
-  </header>
+<AdminLayout title={t("Reporting operations")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Read-model health and delivery: the freshness of every registered projection, the rebuilds and reconciliations run against them, the email queue, and the scheduled exports built from them. The tenant activity, access & audit, sync health and module usage views live on the"
+      )
+    }<a href="/admin">{t("dashboard")}</a>.</Fragment
+  >
 
   {
     !canSeeAnything && (

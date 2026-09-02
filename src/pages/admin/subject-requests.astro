@@ -88,21 +88,18 @@ const pending = requests.filter(
 );
 ---
 
-<AdminLayout title="Subject requests">
-  <header class="page-header fade-in-up">
-    <h1 id="subject-requests-heading">{t("Subject requests")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Exports and erasures answered for a named person. A subject is answered"
-        )
-      }<strong>{t("per tenant")}</strong>{
-        t(
-          ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each."
-        )
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Subject requests")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Exports and erasures answered for a named person. A subject is answered"
+      )
+    }<strong>{t("per tenant")}</strong>{
+      t(
+        ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each."
+      )
+    }</Fragment
+  >
 
   {
     !canRead && (

@@ -99,18 +99,12 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
     .concat(policy.resourceType ? ` / ${policy.resourceType}` : "");
 ---
 
-<AdminLayout title="Access policies">
-  <header class="page-header fade-in-up">
-    <h1 id="access-policies-heading">{t("Access policies")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Access policies")}
+  description={t(
+    "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="access-policies-denied">

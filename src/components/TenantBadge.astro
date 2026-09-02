@@ -63,6 +63,17 @@ const canSwitch = availableTenants.length > 0;
     </form>
   ) : (
     <div class="tenant-badge" role="status" aria-label={ariaLabel}>
+      {/* ADR-0120 — the design reference draws this as a workspace SWITCHER: a
+          bordered pill with a chevron. The chevron is deliberately NOT adopted.
+          The header above explains why at length — one identity is scoped to
+          exactly one tenant, so there is nothing to switch to — and a chevron is
+          precisely the "looks like a switcher that happens to be off" affordance
+          that reasoning rejects. What IS adopted is the mark tile and the pill
+          shape, which say "you are inside this workspace" without promising a
+          menu. */}
+      <span class="tenant-badge-mark" aria-hidden="true">
+        {tenantName.trim().charAt(0).toUpperCase() || "?"}
+      </span>
       <span class="tenant-badge-text">{tenantName}</span>
     </div>
   )
@@ -72,30 +83,52 @@ const canSwitch = availableTenants.length > 0;
   .tenant-badge {
     display: inline-flex;
     align-items: center;
+    gap: 8px;
     max-width: 14rem;
-    background: var(--color-surface-2);
+    height: 34px;
+    padding: 0 10px;
+    background: transparent;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--sp-1) var(--sp-3);
-    font-size: var(--fs-sm);
+    border-radius: 9px;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
     color: var(--color-text);
   }
 
-  /* Long tenant names must not push the topbar controls off-screen. */
+  .tenant-badge-mark {
+    display: grid;
+    place-items: center;
+    width: 19px;
+    height: 19px;
+    flex: none;
+    border-radius: 5px;
+    background: var(--color-primary-soft);
+    color: var(--color-primary-on-soft);
+    font-size: 10px;
+    font-weight: var(--fw-bold);
+  }
+
   .tenant-badge-text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .tenant-switch-select {
-    appearance: none;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--sp-1) var(--sp-3);
-    min-height: 44px;
-    font-size: var(--fs-sm);
-    color: var(--color-text);
+    height: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  /* The topbar is a fixed 58px row that cannot wrap; the tenant name is the
+     first thing to give way, because the sidebar and dashboard both name it. */
+  @media (max-width: 1023.98px) {
+    .tenant-badge {
+      display: none;
+    }
   }
 </style>

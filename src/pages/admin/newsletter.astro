@@ -134,18 +134,12 @@ function linkWith(overrides: Record<string, string | null>): string {
 const columnCount = canConfigure ? 6 : 5;
 ---
 
-<AdminLayout title="Newsletter">
-  <header class="page-header fade-in-up">
-    <h1 id="newsletter-heading">{t("Newsletter")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Newsletter")}
+  description={t(
+    "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="newsletter-denied">

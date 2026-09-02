@@ -268,19 +268,16 @@ const selectedTask = selectedInstanceId
   : null;
 ---
 
-<AdminLayout title="Approvals">
-  <header class="page-header fade-in-up">
-    <h1 id="approvals-heading">{t("Approvals")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Tasks awaiting a decision, the history behind them, and the delegations that let someone else decide on your behalf. Overdue tasks are escalated by"
-        )
-      }<code>{t("workflow:escalations:dispatch")}</code>{
-        t("; escalation notifies, it never decides.")
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Approvals")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Tasks awaiting a decision, the history behind them, and the delegations that let someone else decide on your behalf. Overdue tasks are escalated by"
+      )
+    }<code>{t("workflow:escalations:dispatch")}</code>{
+      t("; escalation notifies, it never decides.")
+    }</Fragment
+  >
 
   {
     !canSeeAnything && (

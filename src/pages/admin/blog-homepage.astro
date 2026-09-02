@@ -178,18 +178,12 @@ const selectedSlugs = configSlugs(editing);
 const columnCount = 6 + (canConfigure ? 1 : 0);
 ---
 
-<AdminLayout title="Homepage composition">
-  <header class="page-header fade-in-up">
-    <h1 id="homepage-heading">{t("Homepage composition")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Homepage composition")}
+  description={t(
+    "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
+  )}
+>
   {
     screen.state === "denied" && (
       <p class="state-notice" id="homepage-denied">

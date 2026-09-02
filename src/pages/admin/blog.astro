@@ -430,19 +430,16 @@ const selectedPost = selectedPostId
   : null;
 ---
 
-<AdminLayout title="Blog posts">
-  <header class="page-header fade-in-up">
-    <h1 id="blog-heading">{t("Blog posts")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The post lifecycle: draft, review, scheduled, published, archived. Pages, taxonomy, presentation and homepage composition are separate screens. Scheduled posts are published by"
-        )
-      }<code>{t("blog:publish:scheduled")}</code>{
-        t("\u2014 scheduling sets the time, it does not publish.")
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Blog posts")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "The post lifecycle: draft, review, scheduled, published, archived. Pages, taxonomy, presentation and homepage composition are separate screens. Scheduled posts are published by"
+      )
+    }<code>{t("blog:publish:scheduled")}</code>{
+      t("\u2014 scheduling sets the time, it does not publish.")
+    }</Fragment
+  >
 
   {
     !canRead && (

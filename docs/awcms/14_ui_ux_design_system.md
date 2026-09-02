@@ -27,39 +27,66 @@ Tokens are implemented as CSS custom properties, scoped to `:root` and overridde
 
 ### Semantic colours
 
-| Token                      | Light     | Dark      | Function                      |
-| -------------------------- | --------- | --------- | ----------------------------- |
-| `--color-bg`               | `#f7f8fa` | `#0e1116` | Application background        |
-| `--color-surface`          | `#ffffff` | `#161b22` | Card/panel                    |
-| `--color-surface-2`        | `#eef1f5` | `#1f262e` | Secondary panel               |
-| `--color-border`           | `#d8dee6` | `#2b333c` | Line/divider                  |
-| `--color-text`             | `#1a1f26` | `#e6edf3` | Primary text                  |
-| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Secondary text                |
-| `--color-primary`          | `#2563eb` | `#3b82f6` | Primary action                |
-| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Text on top of primary        |
-| `--color-success`          | `#16a34a` | `#22c55e` | Success/posted                |
-| `--color-warning`          | `#d97706` | `#f59e0b` | Warning/held/pending approval |
-| `--color-danger`           | `#dc2626` | `#ef4444` | Error/insufficient balance    |
-| `--color-info`             | `#0891b2` | `#06b6d4` | Info/sync                     |
-| `--color-focus`            | `#2563eb` | `#60a5fa` | Focus ring                    |
-| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Solid fill + white text       |
-| `--color-success-strong`   | `#12873d` | `#178841` | Solid fill + white text       |
-| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Solid fill + white text       |
+| Token                      | Light     | Dark      | Function                         |
+| -------------------------- | --------- | --------- | -------------------------------- |
+| `--color-bg`               | `#f5f7fa` | `#0d1117` | Application background           |
+| `--color-surface`          | `#ffffff` | `#151b23` | Card/panel                       |
+| `--color-surface-2`        | `#eef1f5` | `#1c232c` | Secondary panel, chips           |
+| `--color-surface-3`        | `#f7f9fc` | `#11171e` | Recessed: `<thead>`, input fill  |
+| `--color-border`           | `#dde3ea` | `#2a323c` | Decorative line/divider          |
+| `--color-border-soft`      | `#e8edf3` | `#232a33` | Internal rule (table/panel rows) |
+| `--color-border-strong`    | `#858b92` | `#656d77` | Control boundary (WCAG 1.4.11)   |
+| `--color-text`             | `#141a21` | `#e6edf3` | Primary text                     |
+| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Secondary text                   |
+| `--color-text-faint`       | `#646f7a` | `#808a95` | Column labels, timestamps, hints |
+| `--color-primary`          | `#2563eb` | `#3b82f6` | Primary action                   |
+| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Text on top of primary           |
+| `--color-success`          | `#12873d` | `#3fbf6b` | Success/posted                   |
+| `--color-warning`          | `#b45309` | `#e0a13a` | Warning/held/pending approval    |
+| `--color-danger`           | `#dc2626` | `#f26a6a` | Error/insufficient balance       |
+| `--color-info`             | `#0e7490` | `#3cb8cf` | Info/sync                        |
+| `--color-focus`            | `#2563eb` | `#60a5fa` | Focus ring                       |
+| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Solid fill + white text          |
+| `--color-success-strong`   | `#12873d` | `#178841` | Solid fill + white text          |
+| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Solid fill + white text          |
+| `--color-info-strong`      | `#0e7490` | `#0e7490` | Solid fill + white text          |
+| `--color-primary-soft`     | `#e8effc` | `#16233b` | Tinted background for a state    |
+| `--color-success-soft`     | `#e4f5ea` | `#12301d` | Tinted background for a state    |
+| `--color-warning-soft`     | `#fdf1de` | `#2e2312` | Tinted background for a state    |
+| `--color-danger-soft`      | `#fdeaea` | `#331818` | Tinted background for a state    |
+| `--color-info-soft`        | `#e0f2f6` | `#0f2a30` | Tinted background for a state    |
+| `--color-primary-on-soft`  | `#1d4ed8` | `#60a5fa` | Text on `--color-primary-soft`   |
+| `--color-success-on-soft`  | `#0f7434` | `#3fbf6b` | Text on `--color-success-soft`   |
+| `--color-warning-on-soft`  | `#9a4507` | `#e0a13a` | Text on `--color-warning-soft`   |
+| `--color-danger-on-soft`   | `#c81e1e` | `#f26a6a` | Text on `--color-danger-soft`    |
+| `--color-info-on-soft`     | `#0b6076` | `#3cb8cf` | Text on `--color-info-soft`      |
 
-> **`-strong` vs the plain token.** The plain `--color-primary`/`--color-success`/`--color-danger` are meant to be used as _text/icon/border_ on top of `--color-surface`/`--color-surface-2` — the contrast required there is different from the _solid fill_ case with `--color-primary-contrast` (white) on top of it (CTA buttons, error banners, solid status pills such as "Posted"/"Rejected"). Measured (WCAG relative-luminance formula): the plain tokens with white text reach only 3.19–3.76:1 in some combinations (below the AA 4.5:1). The `-strong` tokens are variants darkened just enough (dark theme specifically; the light theme partly passes already without darkening) so that white text on top of them is always ≥4.5:1 — use these tokens, not the plain ones, every time `--color-primary-contrast` is rendered directly on top of a semantic colour fill. **Planned**: the contrast audit itself must be redone when these tokens are implemented in this repo, not assumed to be automatically identical.
+> **One hue, three roles ([ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md)).** A semantic colour carries up to three values, because the contrast arithmetic differs by what it sits on:
+>
+> | Family      | Job                                         | Used by                                |
+> | ----------- | ------------------------------------------- | -------------------------------------- |
+> | `--color-X` | text/icon/border on `--color-surface`       | links; the outlined `.btn-danger`      |
+> | `-strong`   | solid fill under `--color-primary-contrast` | `.btn-primary`; the topbar avatar disc |
+> | `-on-soft`  | text on `--color-X-soft`                    | status badges; the active sidebar link |
+>
+> Using the wrong one of the three is the single most-repeated defect in this repo's UI history — Issue #434, PR #720, and twice more during the ADR-0120 redesign. **It is no longer a matter of remembering.** `bun run design:token-contrast:check` (part of `bun run check`) measures a registry of 25 pairs across both themes and fails below WCAG 2.1 AA. Adding a pairing to CSS means adding a line to that registry.
+>
+> `--color-border` vs `--color-border-strong` is the same split applied to lines. WCAG 2.1 **1.4.11 Non-text Contrast** requires 3:1 for a boundary that identifies an operable component; `--color-border` measures 1.29:1 and deliberately stays that way, because 1.4.11 governs controls, not decorative separators. Inputs, selects, textareas and the search shell use `--color-border-strong`; card edges and table rules use `--color-border`.
 
 ### Other scales
 
-| Category    | Token                                  | Value                                              |
-| ----------- | -------------------------------------- | -------------------------------------------------- |
-| Font family | `--font-sans`                          | system-ui, Inter, sans-serif                       |
-| Font mono   | `--font-mono`                          | ui-monospace, monospace (numbers/account code/SKU) |
-| Font size   | `--fs-xs..2xl`                         | 12 · 14 · 16 · 18 · 20 · 24 · 32 px                |
-| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px             |
-| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                               |
-| Shadow      | `--shadow-sm/md/lg`                    | card/dialog elevation                              |
-| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                        |
-| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                         |
+| Category    | Token                                  | Value                                            |
+| ----------- | -------------------------------------- | ------------------------------------------------ |
+| Font family | `--font-sans`                          | Public Sans (self-hosted), system-ui, sans-serif |
+| Font mono   | `--font-mono`                          | JetBrains Mono (self-hosted), ui-monospace       |
+| Font size   | `--fs-2xs..3xl`                        | 11 · 12 · 14 · 16 · 18 · 20 · 24 · 32 · 40 px    |
+| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px           |
+| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                             |
+| Shadow      | `--shadow-sm/md/lg`                    | card/dialog elevation                            |
+| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                      |
+| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                       |
+
+> **The typeface is self-hosted, and that is a CSP requirement rather than a preference.** This repo's `default-src 'self'` policy names no `font-src` or `style-src`, so both fall through to it and `fonts.googleapis.com`/`fonts.gstatic.com` are blocked with no visible error on the page. Five latin/latin-ext `woff2` subsets live in `public/fonts/` (104,004 B), are `unicode-range`-gated, and are measured against their own `FONT_BUDGET_BYTES` in `scripts/client-asset-budget.ts`. A public content page loads none of them — `css/public-content.css` declares no `@font-face`. The system stack stays behind them and is what renders during `font-display: swap` and on a LAN/offline deployment whose font files fail.
 
 ### Theming
 

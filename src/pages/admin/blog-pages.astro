@@ -296,19 +296,16 @@ const editingBodyText = editingPage
   : null;
 ---
 
-<AdminLayout title="Blog pages">
-  <header class="page-header fade-in-up">
-    <h1 id="pages-heading">{t("Blog pages")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Standing site content \u2014 about, contact, policies. Pages have a narrower lifecycle than posts:"
-        )
-      }<strong>{t("draft, published, archived")}</strong>{
-        t(", with no review queue and no scheduling. Posts live on")
-      }<a href="/admin/blog">{t("the blog console")}</a>.
-    </p>
-  </header>
+<AdminLayout title={t("Blog pages")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Standing site content \u2014 about, contact, policies. Pages have a narrower lifecycle than posts:"
+      )
+    }<strong>{t("draft, published, archived")}</strong>{
+      t(", with no review queue and no scheduling. Posts live on")
+    }<a href="/admin/blog">{t("the blog console")}</a>.</Fragment
+  >
 
   {
     !canRead && (

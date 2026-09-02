@@ -150,21 +150,18 @@ function formatTimestamp(value: Date | string | null): string {
 const messageColumns = canCancel ? 8 : 7;
 ---
 
-<AdminLayout title="Push notifications">
-  <header class="page-header fade-in-up">
-    <h1 id="push-notifications-heading">{t("Push notifications")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The device push outbox. A notification is queued in the same transaction as the thing that caused it; delivery happens afterwards, on the"
-        )
-      }<code>{t("push:dispatch")}</code>{
-        t(
-          "schedule. A subscription the push service reports as gone is disabled rather than deleted, so it can still answer &quot;why did this user stop getting notifications&quot;."
-        )
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Push notifications")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "The device push outbox. A notification is queued in the same transaction as the thing that caused it; delivery happens afterwards, on the"
+      )
+    }<code>{t("push:dispatch")}</code>{
+      t(
+        "schedule. A subscription the push service reports as gone is disabled rather than deleted, so it can still answer &quot;why did this user stop getting notifications&quot;."
+      )
+    }</Fragment
+  >
 
   {
     !canSeeAnything && (

@@ -233,18 +233,12 @@ const conflictColumns = canResolveConflicts ? 7 : 6;
 const queueColumns = canRetryQueue ? 7 : 6;
 ---
 
-<AdminLayout title="Sync & storage">
-  <header class="page-header fade-in-up">
-    <h1 id="sync-heading">{t("Sync & storage")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Offline/LAN replication: the nodes that push and pull, the conflicts that need a human decision, and the object upload queue. Nodes authenticate with an HMAC signature, not a session \u2014 this screen manages them, it never performs a sync."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Sync & storage")}
+  description={t(
+    "Offline/LAN replication: the nodes that push and pull, the conflicts that need a human decision, and the object upload queue. Nodes authenticate with an HMAC signature, not a session \u2014 this screen manages them, it never performs a sync."
+  )}
+>
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="sync-denied">

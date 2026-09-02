@@ -165,18 +165,12 @@ function statusVariant(status: string): string {
 }
 ---
 
-<AdminLayout title="Tenants">
-  <header class="page-header fade-in-up">
-    <h1 id="tenants-heading">{t("Tenants")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Every party this deployment serves. Provisioning creates a tenant with its head office and owner account in one transaction \u2014 the same code path the setup wizard uses, so the two cannot drift."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Tenants")}
+  description={t(
+    "Every party this deployment serves. Provisioning creates a tenant with its head office and owner account in one transaction \u2014 the same code path the setup wizard uses, so the two cannot drift."
+  )}
+>
   {
     !canRead && isPlatformTenant && (
       <p class="state-notice fade-in-up" id="tenants-denied">

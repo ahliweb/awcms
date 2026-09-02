@@ -87,18 +87,12 @@ const canMutate = canUpdate || canAssign;
 const colCount = canMutate ? 6 : 5;
 ---
 
-<AdminLayout title="User groups">
-  <header class="page-header fade-in-up">
-    <h1 id="user-groups-heading">{t("User groups")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "A group is a subject: it can hold role grants, and everyone in it holds them too. Granting a group a role is done from the role assignment surface \u2014 this screen manages who is in which group."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("User groups")}
+  description={t(
+    "A group is a subject: it can hold role grants, and everyone in it holds them too. Granting a group a role is done from the role assignment surface \u2014 this screen manages who is in which group."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="user-groups-denied">

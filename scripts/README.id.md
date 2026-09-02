@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:a30f6abb78ceda9a5366a3090c1c1e3ac2a452a904529e50311d47adce6c8f8d -->
+<!-- i18n-source-hash: sha256:06b6ad9fb5e28a271d62989fb4d2a02cbdada027ea617a8e5bd668bc8211ae02 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-123 target menjalankan berkas di `scripts/`; 55 di antaranya
+124 target menjalankan berkas di `scripts/`; 56 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -83,6 +83,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `db:work-class:check`                     | `work-class-registry-check.ts`                 | ✅   |
 | `db:work-class:generate`                  | `work-class-registry-generate.ts`              | —    |
 | `deps:audit:check`                        | `dependency-audit-check.ts`                    | ✅   |
+| `design:token-contrast:check`             | `design-token-contrast-check.ts`               | ✅   |
 | `docs:i18n:stamp`                         | `docs-i18n-stamp.mjs`                          | —    |
 | `docs:i18n:stamp:check`                   | `docs-i18n-stamp.mjs`                          | ✅   |
 | `domain-events:deliveries:purge`          | `domain-event-deliveries-purge.ts`             | —    |

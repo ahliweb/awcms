@@ -193,19 +193,16 @@ const hasTenantWideHold = holds.some(
 );
 ---
 
-<AdminLayout title="Data lifecycle">
-  <header class="page-header fade-in-up">
-    <h1 id="data-lifecycle-heading">{t("Data lifecycle")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Retention, archive and purge for the high-volume tables each module declares \u2014 plus the legal holds that override them. Real archive and purge run only as the scheduled"
-        )
-      }<code>{t("data-lifecycle:archive-purge")}</code>{
-        t("job; this screen plans, records and holds, it never deletes.")
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Data lifecycle")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Retention, archive and purge for the high-volume tables each module declares \u2014 plus the legal holds that override them. Real archive and purge run only as the scheduled"
+      )
+    }<code>{t("data-lifecycle:archive-purge")}</code>{
+      t("job; this screen plans, records and holds, it never deletes.")
+    }</Fragment
+  >
 
   {
     !showAnything && (

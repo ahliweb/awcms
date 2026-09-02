@@ -103,18 +103,12 @@ function statusVariant(status: string): string {
 }
 ---
 
-<AdminLayout title="Tenant domains">
-  <header class="page-header fade-in-up">
-    <h1 id="tenant-domains-heading">{t("Tenant domains")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Hostname/subdomain mappings for this tenant. Add a mapping, verify ownership (manual-first), and choose one active primary. Deleting a mapping frees its hostname for reuse."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Tenant domains")}
+  description={t(
+    "Hostname/subdomain mappings for this tenant. Add a mapping, verify ownership (manual-first), and choose one active primary. Deleting a mapping frees its hostname for reuse."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="tenant-domains-denied">

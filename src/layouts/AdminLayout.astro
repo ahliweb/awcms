@@ -90,6 +90,7 @@ import {
 import { fetchSidebarArrangement } from "../modules/module-management/application/sidebar-menu-config";
 import { listModules } from "../modules";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
+import { resolveAdminIcon, ADMIN_ICON_PATHS } from "../lib/ui/admin-icons";
 import packageJson from "../../package.json";
 
 /** Shown in the sidebar footer; single source of truth is package.json. */
@@ -97,6 +98,26 @@ const appVersion = packageJson.version;
 
 interface Props {
   title: string;
+  /**
+   * ADR-0120 — the one-line answer to "what is this screen for", rendered under
+   * the `<h1>` in the page-header band.
+   *
+   * Optional, and the band renders without it. That is deliberate rather than
+   * lax: 48 screens adopt this shell, and a required prop would mean either 48
+   * simultaneous edits or 48 placeholder sentences, and a placeholder sentence
+   * is worse than none — it occupies the slot where a real one would go and
+   * nothing ever notices it is filler.
+   */
+  description?: string;
+  /**
+   * Breadcrumb segment between "AWCMS" and the page title — normally the
+   * sidebar section the screen sits in.
+   *
+   * When omitted it is DERIVED from the composed sidebar below, so a screen
+   * gets the right crumb without naming it. A screen only passes this when it
+   * has no sidebar entry at all (a detail page reached from a list, say).
+   */
+  breadcrumb?: string;
 }
 
 /**
@@ -106,7 +127,11 @@ interface Props {
  * highlighted. The current entry is now derived from `Astro.url.pathname`,
  * which cannot disagree with itself.
  */
-const { title } = Astro.props;
+const { title, description, breadcrumb } = Astro.props;
+
+/** See the heading block below for why both a prop and a slot exist. */
+const hasPageDescriptionSlot = Astro.slots.has("page-description");
+
 const ssr = Astro.locals.ssrContext;
 
 if (!ssr) {
@@ -264,9 +289,91 @@ const navSections = applySidebarTypeOverrides(
   arrangement
 );
 
-/** Decorative topbar avatar (aria-hidden). Static SVG — no CSP cost. */
-const ICON_USER =
-  '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path></svg>';
+/**
+ * ADR-0120 — the breadcrumb's middle segment, derived rather than declared.
+ *
+ * `composeSidebarSections` already knows which section the current path sits
+ * in, because it just marked that entry `isCurrent`. Reading the answer back
+ * out is free and cannot disagree with the sidebar; asking 48 pages to pass a
+ * `breadcrumb` prop would recreate exactly the drift the `active` prop caused
+ * before it was removed (see the note above `const { title }`: `/admin/comments`
+ * never passed one and was never highlighted).
+ *
+ * An explicit `breadcrumb` prop still wins, for the screens that have no
+ * sidebar entry of their own.
+ */
+const currentSection = navSections.find((section) =>
+  section.groups.some((group) => group.entries.some((entry) => entry.isCurrent))
+);
+
+/*
+ * `tx("menu-section", …)`, NOT the raw `section.label`.
+ *
+ * The raw value is the English `msgid`. Rendering it directly put "System" in
+ * the breadcrumb while the sidebar heading two centimetres to its left read
+ * "SISTEM" — the same section, named twice, in two languages, on one screen.
+ * Section labels take the `menu-section` context for the reason the sidebar
+ * already documents: "System" is also a theme mode, and gettext has no other
+ * way to keep three translations of one English word apart.
+ */
+const currentSectionLabel =
+  breadcrumb ??
+  (currentSection ? tx("menu-section", currentSection.label) : undefined);
+
+/**
+ * Every nav entry, flattened, for the command palette.
+ *
+ * This is the SAME array the sidebar renders — deliberately, and it is the
+ * whole security argument for the palette. `composeSidebarSections` has already
+ * filtered by `ssr.permissions` and the tenant's disabled modules, so the
+ * palette cannot surface a screen the menu would not. It is not a second
+ * decision that has to be kept in step with the first; it is the first
+ * decision, displayed twice.
+ *
+ * `search` is lowercased HERE rather than in the browser so matching never
+ * depends on the client's locale casing rules — see the client module for the
+ * Turkish-`I` case that motivates it.
+ */
+const paletteEntries = navSections.flatMap((section) =>
+  section.groups.flatMap((group) =>
+    group.entries.map((entry) => {
+      const label = t(entry.label);
+      const group_ = tx("menu-section", section.label);
+
+      return {
+        path: entry.path,
+        label,
+        group: group_,
+        icon: resolveAdminIcon(entry.icon),
+        search: `${label} ${group_} ${entry.path}`.toLowerCase()
+      };
+    })
+  )
+);
+
+/**
+ * ADR-0120 — avatar initials, and the ONE line beside them.
+ *
+ * The design reference draws a two-line account cluster: display name over
+ * email address. This shell has NEITHER. `SsrContext` carries `tenantId`,
+ * `tenantUserId`, `identityId`, `roles`, `permissions`, `tokenHash` and the
+ * display preferences — no name, no email. Reading one would mean a third query
+ * on every `/admin/*` render for chrome.
+ *
+ * So the cluster renders ONE line: the role list, which is what this topbar has
+ * always shown and is genuinely useful ("am I acting as owner here?"). A second
+ * line is not faked, and initials come from the same roles rather than from an
+ * invented name — an owner's avatar reading "OW" is at least true.
+ *
+ * `·` rather than an empty circle when there are no roles, so the topbar's
+ * geometry never changes shape based on data.
+ */
+const accountInitials =
+  ssr.roles
+    .slice(0, 2)
+    .map((role) => role.trim().charAt(0))
+    .filter((char) => char.length > 0)
+    .join("") || "·";
 ---
 
 <!doctype html>
@@ -303,14 +410,72 @@ const ICON_USER =
       />
 
       <header class="admin-topbar">
-        <label class="admin-nav-toggle" for="admin-nav-toggle">
-          <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
-          <span class="sr-only">{t("Toggle navigation menu")}</span>
-        </label>
-        <a href="/admin" class="admin-brand">AWCMS</a>
-        <TenantBadge tenantName={tenantName} ariaLabel={t("Active tenant")} />
+        <div class="admin-brand-cluster">
+          <label class="admin-nav-toggle" for="admin-nav-toggle">
+            <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
+            <span class="sr-only">{t("Toggle navigation menu")}</span>
+          </label>
+          <a href="/admin" class="admin-brand">
+            {
+              /* ADR-0120 — a letterform tile, not an image file: it costs no
+                request on a page that renders for every `/admin/*` hit, it
+                inherits the theme, and it cannot 404. */
+            }
+            <span class="admin-brand-mark" aria-hidden="true">A</span>
+            {
+              /* Wrapped so the wordmark can be hidden at phone widths while the
+                mark stays. A bare text node cannot be targeted by CSS, and the
+                topbar is a fixed-height row that must fit — see the phone-width
+                block in admin.css. The link keeps its full accessible name
+                either way, because the text is hidden with `display: none`
+                only on the SPAN, and the mark carries `aria-hidden`. */
+            }
+            <span class="admin-brand-text">AWCMS</span>
+          </a>
+        </div>
+
+        {
+          /* ADR-0120 — the command-palette launcher. A `<button>` rather than an
+            `<input>`, because it opens a dialog instead of accepting text where
+            it stands. It is rendered only when there is something to search:
+            with no visible nav entries the dialog below is absent, and a button
+            that opens nothing is worse than no button. */
+        }
+        {
+          paletteEntries.length > 0 && (
+            <button
+              type="button"
+              id="admin-palette-open"
+              class="admin-palette-open"
+              aria-haspopup="dialog"
+              aria-controls="admin-palette"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+                focusable="false"
+                class="admin-palette-open-icon"
+              >
+                <path d={ADMIN_ICON_PATHS.search} />
+              </svg>
+              <span class="admin-palette-open-label">
+                {t("Search screens")}
+              </span>
+              <kbd class="admin-kbd">Ctrl K</kbd>
+            </button>
+          )
+        }
+
         <div class="admin-topbar-spacer"></div>
+
         <div class="admin-topbar-right">
+          <TenantBadge tenantName={tenantName} ariaLabel={t("Active tenant")} />
           <SyncIndicator
             active={syncActive}
             activeLabel={t("Sync active")}
@@ -328,42 +493,28 @@ const ICON_USER =
               choice can be stored against the principal and not merely cookied. */
           }
           <LanguageSwitcher persist />
+          <div class="admin-topbar-divider" aria-hidden="true"></div>
           <div class="admin-user-menu">
             {
-              /* ADR-0096 — the avatar is a LINK now. The header note above
-                recorded it as "a plain tile, not a link: micro's points at
-                `/admin/profile`, a page awcms does not have". That page exists,
-                as `/admin/account`. The glyph stays `aria-hidden`, so the
-                accessible name comes from the link's own label rather than from
-                decoration. */
+              /* ADR-0096 — the avatar is a LINK. ADR-0120 turned it into an
+                initials disc: a stroked person-glyph at 26px reads as a smudge,
+                where two letters read as a person. Both the disc and the role
+                line are `aria-hidden`/decorative-adjacent — the accessible name
+                comes from the link's own label, so a screen reader announces
+                "My account", not "OW owner". */
             }
             <a
               href="/admin/account"
-              class="admin-avatar-link"
+              class="admin-account-link"
               aria-label={t("My account")}
             >
-              <span
-                class="admin-avatar"
-                aria-hidden="true"
-                set:html={ICON_USER}
-              />
+              <span class="admin-avatar" aria-hidden="true">
+                {accountInitials}
+              </span>
+              <span class="admin-account-meta" aria-hidden="true">
+                <span class="admin-account-name" id="admin-roles">{roles}</span>
+              </span>
             </a>
-            <span class="admin-roles" id="admin-roles">{roles}</span>
-            {
-              /* The busy label travels as a data attribute rather than a string
-                in the script: client code cannot reach the catalog (it is a
-                server module, and shipping it would send both languages to every
-                browser), and this is the same seam `ThemeToggle` uses for its
-                three mode labels. */
-            }
-            <button
-              type="button"
-              id="admin-logout"
-              class="admin-logout"
-              data-label-busy={t("Signing out…")}
-            >
-              {t("Log out")}
-            </button>
           </div>
         </div>
       </header>
@@ -391,41 +542,128 @@ const ICON_USER =
             <ul class="admin-sidebar-groups">
               {
                 navSections.map((section) => (
-                  <li class="admin-sidebar-group">
-                    <span class="admin-sidebar-group-label">
-                      {tx("menu-section", section.label)}
-                    </span>
-                    <ul class="admin-sidebar-modules">
-                      {section.groups.map((group) => (
-                        <li class="admin-sidebar-module">
-                          {group.moduleLabel !== null && (
-                            <span class="admin-sidebar-module-label">
-                              {t(group.moduleLabel)}
-                            </span>
-                          )}
-                          <ul class="admin-sidebar-links">
-                            {group.entries.map((entry) => (
-                              <li>
-                                <a
-                                  href={entry.path}
-                                  aria-current={
-                                    entry.isCurrent ? "page" : undefined
-                                  }
-                                >
-                                  {t(entry.label)}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      ))}
-                    </ul>
+                  <li>
+                    {/* ADR-0120 — sections COLLAPSE, via `<details>`/`<summary>`
+                        rather than script. This shell's header records why awcms
+                        kept a CSS-only drawer where awcms-micro used JS: a
+                        script-free control is strictly better under
+                        `default-src 'self'`. Same problem, same answer — and
+                        `<details>` brings the implicit `aria-expanded`, keyboard
+                        operation and state exposure for free.
+
+                        `open` on every section, so the default is the full menu.
+                        Nothing persists the toggle, and a remembered-collapsed
+                        section would hide a screen from someone who does not
+                        know it collapses. */}
+                    <details class="admin-sidebar-group" open>
+                      <summary class="admin-sidebar-group-label">
+                        <span class="admin-sidebar-group-label-text">
+                          {tx("menu-section", section.label)}
+                        </span>
+                        <svg
+                          class="admin-sidebar-caret"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.4"
+                          stroke-linecap="round"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </summary>
+                      <ul class="admin-sidebar-modules">
+                        {section.groups.map((group) => (
+                          <li class="admin-sidebar-module">
+                            {group.moduleLabel !== null && (
+                              <span class="admin-sidebar-module-label">
+                                {t(group.moduleLabel)}
+                              </span>
+                            )}
+                            <ul class="admin-sidebar-links">
+                              {group.entries.map((entry) => (
+                                <li>
+                                  <a
+                                    href={entry.path}
+                                    aria-current={
+                                      entry.isCurrent ? "page" : undefined
+                                    }
+                                  >
+                                    {/* ADR-0120 — `entry.icon` was a field the
+                                        contract declared, the composition
+                                        checker validated, and NOTHING rendered.
+                                        This is the read that makes it real.
+                                        `resolveAdminIcon` never echoes an
+                                        unknown name back, so a bad descriptor
+                                        value becomes a neutral dot rather than
+                                        attribute content. */}
+                                    <svg
+                                      class="admin-sidebar-icon"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="1.8"
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      aria-hidden="true"
+                                      focusable="false"
+                                    >
+                                      <path d={resolveAdminIcon(entry.icon)} />
+                                    </svg>
+                                    <span class="admin-sidebar-link-label">
+                                      {t(entry.label)}
+                                    </span>
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   </li>
                 ))
               }
             </ul>
           </nav>
           <div class="admin-sidebar-footer">
+            {
+              /* ADR-0120 — sign-out moved here from the topbar. It is the last
+                thing in the navigation, which is where it belongs and where
+                every other admin puts it; in a fixed-height topbar it was a
+                bordered button competing with four other controls.
+
+                The busy label travels as a data attribute rather than a string
+                in the script: client code cannot reach the catalog (it is a
+                server module, and shipping it would send both languages to every
+                browser), and this is the same seam `ThemeToggle` uses for its
+                three mode labels. */
+            }
+            <button
+              type="button"
+              id="admin-logout"
+              class="admin-logout"
+              data-label-busy={t("Signing out…")}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="17"
+                height="17"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
+                ></path>
+              </svg>
+              {t("Log out")}
+            </button>
             <span class="admin-sidebar-version">
               {t("Version")}
               <span class="admin-sidebar-version-value">v{appVersion}</span>
@@ -434,16 +672,145 @@ const ICON_USER =
         </aside>
 
         <main class="admin-main" id="admin-main" tabindex="-1">
-          <nav class="admin-breadcrumb" aria-label={t("Breadcrumb")}>
-            <ol>
-              <li><a href="/admin">AWCMS</a></li>
-              <li aria-current="page">{title}</li>
-            </ol>
-          </nav>
-          <slot />
+          {
+            /* ADR-0120 — the page-header band: breadcrumb, title, description
+              and the screen's own actions, above one rule, at the same inline
+              padding as the body below it.
+
+              Before this every screen positioned its own `<h1>` and its own
+              primary button, and no two agreed on where either belonged. The
+              `page-actions` slot is what lets a screen put its button here
+              instead of inventing a place for it. */
+          }
+          <div class="admin-page-head">
+            <nav class="admin-breadcrumb" aria-label={t("Breadcrumb")}>
+              <ol>
+                <li><a href="/admin">AWCMS</a></li>
+                {currentSectionLabel && <li>{currentSectionLabel}</li>}
+                <li aria-current="page">{title}</li>
+              </ol>
+            </nav>
+            <div class="admin-page-head-main">
+              <div class="admin-page-heading">
+                <h1>{title}</h1>
+                {
+                  /* Two ways to fill one slot, because the screens genuinely
+                    need both.
+
+                    Thirty screens have a description that is a single `t(…)`
+                    call, and a `description` prop is the least ceremony for
+                    those. Fifteen have one carrying inline markup — a `<code>`
+                    naming a job, a link to the screen that owns a setting — and
+                    a prop cannot carry an element. Rewriting those fifteen into
+                    plain sentences would delete real information to satisfy the
+                    shape of a prop.
+
+                    `Astro.slots.has` rather than an always-present `<p>` with a
+                    slot inside it: an empty paragraph still occupies its
+                    line-height, which would leave a ragged gap under the title
+                    of every screen that has no description at all. */
+                }
+                {
+                  description !== undefined && (
+                    <p class="admin-page-description">{description}</p>
+                  )
+                }
+                {
+                  description === undefined && hasPageDescriptionSlot && (
+                    <p class="admin-page-description">
+                      <slot name="page-description" />
+                    </p>
+                  )
+                }
+              </div>
+              <div class="admin-page-actions">
+                <slot name="page-actions" />
+              </div>
+            </div>
+          </div>
+          <div class="admin-page-body">
+            <slot />
+          </div>
         </main>
       </div>
     </div>
+
+    {
+      /* ADR-0120 — the command palette.
+
+        Every entry is rendered SERVER-SIDE, already filtered by
+        `composeSidebarSections` against this caller's permissions and the
+        tenant's disabled modules. The client script only shows and hides them,
+        so the palette cannot surface a screen the sidebar would not — not by
+        policy, but because it has nothing else to show. See
+        `src/lib/ui/admin-command-palette.ts` for why that beats a search
+        endpoint here.
+
+        A native `<dialog>`: `showModal()` supplies the focus trap, Escape,
+        page inertness, the backdrop and focus restoration, none of which is
+        then ours to own. */
+    }
+    {
+      paletteEntries.length > 0 && (
+        <dialog
+          id="admin-palette"
+          class="admin-palette"
+          aria-label={t("Search screens")}
+        >
+          <div class="admin-palette-search">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d={ADMIN_ICON_PATHS.search} />
+            </svg>
+            <input
+              type="text"
+              id="admin-palette-input"
+              class="admin-palette-input"
+              autocomplete="off"
+              placeholder={t("Type a screen name…")}
+              aria-label={t("Type a screen name…")}
+            />
+            <kbd class="admin-kbd">Esc</kbd>
+          </div>
+          <ul class="admin-palette-results">
+            {paletteEntries.map((entry) => (
+              <li data-search={entry.search}>
+                <a href={entry.path}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d={entry.icon} />
+                  </svg>
+                  <span class="admin-palette-label">{entry.label}</span>
+                  <span class="admin-palette-group">{entry.group}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p class="admin-palette-empty" id="admin-palette-empty" hidden>
+            {t("No screen matches that.")}
+          </p>
+        </dialog>
+      )
+    }
 
     <script>
       // The import forces Astro to bundle this to an EXTERNAL file — an
@@ -473,6 +840,13 @@ const ICON_USER =
       import { lockElement } from "../lib/ui/admin-form-client";
       import "../lib/ui/language-switcher-client";
       import "../lib/ui/theme-toggle-client";
+      // ADR-0120. Loaded here for the same reason as the two above: this block
+      // already has a cross-chunk import (`lockElement`), which is what keeps
+      // the whole script external. A `<script>` inside a component would be
+      // folded and inlined, and the CSP would then refuse it.
+      import { initAdminCommandPalette } from "../lib/ui/admin-command-palette";
+
+      initAdminCommandPalette();
 
       const logoutButton = document.getElementById(
         "admin-logout"

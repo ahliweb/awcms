@@ -155,19 +155,13 @@ const rows: RolePermRow[] = canConfigure
 const colCount = canConfigure ? 5 : 4;
 ---
 
-<AdminLayout title="Roles">
-  <header class="page-header fade-in-up">
-    <h1 id="roles-heading">{t("Roles")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "RBAC roles for this tenant and the permissions granted to each. System roles (such as {role}) are protected and cannot be deleted.",
-          { role: "owner" }
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Roles")}
+  description={t(
+    "RBAC roles for this tenant and the permissions granted to each. System roles (such as {role}) are protected and cannot be deleted.",
+    { role: "owner" }
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="roles-denied">

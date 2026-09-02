@@ -202,21 +202,18 @@ const consumerColumns = canManageConsumers ? 6 : 5;
 const deliveryColumns = canReplay ? 7 : 6;
 ---
 
-<AdminLayout title="Domain events">
-  <header class="page-header fade-in-up">
-    <h1 id="domain-events-heading">{t("Domain events")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The transactional outbox and its consumers. Events are recorded in the same transaction as the change that caused them; delivery is what happens afterwards, on the"
-        )
-      }<code>{t("domain-events:dispatch")}</code>{
-        t(
-          "schedule. A dead-lettered delivery has exhausted its attempts and will not be retried until it is replayed."
-        )
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Domain events")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "The transactional outbox and its consumers. Events are recorded in the same transaction as the change that caused them; delivery is what happens afterwards, on the"
+      )
+    }<code>{t("domain-events:dispatch")}</code>{
+      t(
+        "schedule. A dead-lettered delivery has exhausted its attempts and will not be retried until it is replayed."
+      )
+    }</Fragment
+  >
 
   {
     !canSeeAnything && (

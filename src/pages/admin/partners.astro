@@ -124,18 +124,12 @@ const maxExpiry = new Date(
   .slice(0, 10);
 ---
 
-<AdminLayout title="Partner access">
-  <header class="page-header fade-in-up">
-    <h1 id="partners-heading">{t("Partner access")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Who from outside this organisation can reach this tenant, and until when. Severing a partnership revokes every grant under it \u2014 memberships deactivated, sessions killed \u2014 in one step."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Partner access")}
+  description={t(
+    "Who from outside this organisation can reach this tenant, and until when. Severing a partnership revokes every grant under it \u2014 memberships deactivated, sessions killed \u2014 in one step."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="partners-denied">

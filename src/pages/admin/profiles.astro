@@ -59,18 +59,12 @@ const profiles: PartyRow[] =
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
 ---
 
-<AdminLayout title="Profiles">
-  <header class="page-header fade-in-up">
-    <h1 id="profiles-heading">{t("Profiles")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The tenant's central directory of people and organizations. Sensitive identifiers (email, phone, NIK) are never listed here \u2014 they are surfaced only through the dedicated, masked identifiers view."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Profiles")}
+  description={t(
+    "The tenant's central directory of people and organizations. Sensitive identifiers (email, phone, NIK) are never listed here \u2014 they are surfaced only through the dedicated, masked identifiers view."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="profiles-denied">

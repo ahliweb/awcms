@@ -264,17 +264,14 @@ const editingWidget =
     : null;
 ---
 
-<AdminLayout title="Blog presentation">
-  <header class="page-header fade-in-up">
-    <h1 id="presentation-heading">{t("Blog presentation")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "How the blog looks: page templates, navigation menus, sidebar and footer widgets, and the theme mode. Content itself lives on"
-        )
-      }<a href="/admin/blog">{t("the blog console")}</a>.
-    </p>
-  </header>
+<AdminLayout title={t("Blog presentation")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "How the blog looks: page templates, navigation menus, sidebar and footer widgets, and the theme mode. Content itself lives on"
+      )
+    }<a href="/admin/blog">{t("the blog console")}</a>.</Fragment
+  >
 
   {
     section === null && (

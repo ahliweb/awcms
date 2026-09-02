@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:4f6ae062b3f7b2fc1874d6ab54a8969f3fdd25b3507a6b483886ff83c2522226 -->
+<!-- i18n-source-hash: sha256:f32dbf2439a80af911d85684ab79d870356fa78843eafe0f43e0c07d9871824c -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -29,39 +29,66 @@ Token diimplementasikan sebagai CSS custom properties, di-scope ke `:root` dan o
 
 ### Warna semantik
 
-| Token                      | Light     | Dark      | Fungsi                           |
-| -------------------------- | --------- | --------- | -------------------------------- |
-| `--color-bg`               | `#f7f8fa` | `#0e1116` | Latar aplikasi                   |
-| `--color-surface`          | `#ffffff` | `#161b22` | Kartu/panel                      |
-| `--color-surface-2`        | `#eef1f5` | `#1f262e` | Panel sekunder                   |
-| `--color-border`           | `#d8dee6` | `#2b333c` | Garis/pembatas                   |
-| `--color-text`             | `#1a1f26` | `#e6edf3` | Teks utama                       |
-| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Teks sekunder                    |
-| `--color-primary`          | `#2563eb` | `#3b82f6` | Aksi utama                       |
-| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Teks di atas primary             |
-| `--color-success`          | `#16a34a` | `#22c55e` | Sukses/posted                    |
-| `--color-warning`          | `#d97706` | `#f59e0b` | Peringatan/held/pending approval |
-| `--color-danger`           | `#dc2626` | `#ef4444` | Error/saldo tidak cukup          |
-| `--color-info`             | `#0891b2` | `#06b6d4` | Info/sync                        |
-| `--color-focus`            | `#2563eb` | `#60a5fa` | Cincin fokus                     |
-| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Fill solid + teks putih          |
-| `--color-success-strong`   | `#12873d` | `#178841` | Fill solid + teks putih          |
-| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Fill solid + teks putih          |
+| Token                      | Terang    | Gelap     | Fungsi                                     |
+| -------------------------- | --------- | --------- | ------------------------------------------ |
+| `--color-bg`               | `#f5f7fa` | `#0d1117` | Latar aplikasi                             |
+| `--color-surface`          | `#ffffff` | `#151b23` | Kartu/panel                                |
+| `--color-surface-2`        | `#eef1f5` | `#1c232c` | Panel sekunder, chip                       |
+| `--color-surface-3`        | `#f7f9fc` | `#11171e` | Permukaan recessed: `<thead>`, isian input |
+| `--color-border`           | `#dde3ea` | `#2a323c` | Garis/pemisah dekoratif                    |
+| `--color-border-soft`      | `#e8edf3` | `#232a33` | Garis internal (baris tabel/panel)         |
+| `--color-border-strong`    | `#858b92` | `#656d77` | Batas kontrol (WCAG 1.4.11)                |
+| `--color-text`             | `#141a21` | `#e6edf3` | Teks utama                                 |
+| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Teks sekunder                              |
+| `--color-text-faint`       | `#646f7a` | `#808a95` | Label kolom, timestamp, hint               |
+| `--color-primary`          | `#2563eb` | `#3b82f6` | Aksi utama                                 |
+| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Teks di atas primary                       |
+| `--color-success`          | `#12873d` | `#3fbf6b` | Sukses/posted                              |
+| `--color-warning`          | `#b45309` | `#e0a13a` | Peringatan/ditahan/menunggu approval       |
+| `--color-danger`           | `#dc2626` | `#f26a6a` | Error/saldo tidak cukup                    |
+| `--color-info`             | `#0e7490` | `#3cb8cf` | Info/sinkronisasi                          |
+| `--color-focus`            | `#2563eb` | `#60a5fa` | Cincin fokus                               |
+| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Fill solid + teks putih                    |
+| `--color-success-strong`   | `#12873d` | `#178841` | Fill solid + teks putih                    |
+| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Fill solid + teks putih                    |
+| `--color-info-strong`      | `#0e7490` | `#0e7490` | Fill solid + teks putih                    |
+| `--color-primary-soft`     | `#e8effc` | `#16233b` | Latar bertint untuk sebuah state           |
+| `--color-success-soft`     | `#e4f5ea` | `#12301d` | Latar bertint untuk sebuah state           |
+| `--color-warning-soft`     | `#fdf1de` | `#2e2312` | Latar bertint untuk sebuah state           |
+| `--color-danger-soft`      | `#fdeaea` | `#331818` | Latar bertint untuk sebuah state           |
+| `--color-info-soft`        | `#e0f2f6` | `#0f2a30` | Latar bertint untuk sebuah state           |
+| `--color-primary-on-soft`  | `#1d4ed8` | `#60a5fa` | Teks di atas `--color-primary-soft`        |
+| `--color-success-on-soft`  | `#0f7434` | `#3fbf6b` | Teks di atas `--color-success-soft`        |
+| `--color-warning-on-soft`  | `#9a4507` | `#e0a13a` | Teks di atas `--color-warning-soft`        |
+| `--color-danger-on-soft`   | `#c81e1e` | `#f26a6a` | Teks di atas `--color-danger-soft`         |
+| `--color-info-on-soft`     | `#0b6076` | `#3cb8cf` | Teks di atas `--color-info-soft`           |
 
-> **`-strong` vs token polos.** `--color-primary`/`--color-success`/`--color-danger` polos ditujukan untuk dipakai sebagai _teks/ikon/border_ di atas `--color-surface`/`--color-surface-2` — kontras yang diperlukan berbeda dari kasus _fill solid_ + `--color-primary-contrast` (putih) di atasnya (tombol CTA, banner error, status pill solid seperti "Posted"/"Rejected"). Diukur (formula WCAG relative-luminance): token polos dengan teks putih hanya 3.19–3.76:1 di beberapa kombinasi (di bawah AA 4.5:1). Token `-strong` adalah varian yang di-gelapkan secukupnya (khusus tema gelap; tema terang sebagian sudah lulus tanpa perlu digelapkan) agar teks putih di atasnya selalu ≥4.5:1 — pakai token ini, bukan yang polos, setiap kali `--color-primary-contrast` dirender langsung di atas fill warna semantik. **Rencana**: audit kontrasnya sendiri harus diulang saat token ini diimplementasikan di repo ini, bukan diasumsikan otomatis identik.
+> **Satu hue, tiga peran ([ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md)).** Sebuah warna semantik memikul sampai tiga nilai, karena aritmetika kontrasnya berbeda menurut latar yang memuatnya:
+>
+> | Keluarga    | Pekerjaan                                      | Dipakai oleh                       |
+> | ----------- | ---------------------------------------------- | ---------------------------------- |
+> | `--color-X` | teks/ikon/border di atas `--color-surface`     | tautan; `.btn-danger` bergaris     |
+> | `-strong`   | fill solid di bawah `--color-primary-contrast` | `.btn-primary`; disk avatar topbar |
+> | `-on-soft`  | teks di atas `--color-X-soft`                  | chip status; tautan sidebar aktif  |
+>
+> Memakai satu dari tiga yang salah adalah cacat UI paling berulang dalam sejarah repo ini — Issue #434, PR #720, dan dua kali lagi selama redesign ADR-0120. **Ia bukan lagi soal mengingat.** `bun run design:token-contrast:check` (bagian dari `bun run check`) mengukur registry berisi 25 pasangan di kedua tema dan gagal di bawah WCAG 2.1 AA. Menambah pasangan di CSS berarti menambah baris di registry itu.
+>
+> `--color-border` vs `--color-border-strong` adalah pembelahan yang sama diterapkan pada garis. WCAG 2.1 **1.4.11 Non-text Contrast** menuntut 3:1 untuk batas yang mengidentifikasi komponen yang bisa dioperasikan; `--color-border` mengukur 1.29:1 dan sengaja tetap begitu, sebab 1.4.11 mengatur kontrol, bukan pemisah dekoratif. Input, select, textarea, dan shell pencarian memakai `--color-border-strong`; tepi kartu dan garis tabel memakai `--color-border`.
 
 ### Skala lain
 
-| Kategori    | Token                                  | Nilai                                         |
-| ----------- | -------------------------------------- | --------------------------------------------- |
-| Font family | `--font-sans`                          | system-ui, Inter, sans-serif                  |
-| Font mono   | `--font-mono`                          | ui-monospace, monospace (angka/kode akun/SKU) |
-| Font size   | `--fs-xs..2xl`                         | 12 · 14 · 16 · 18 · 20 · 24 · 32 px           |
-| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px        |
-| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                          |
-| Shadow      | `--shadow-sm/md/lg`                    | elevasi kartu/dialog                          |
-| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                   |
-| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                    |
+| Kategori    | Token                                  | Nilai                                                |
+| ----------- | -------------------------------------- | ---------------------------------------------------- |
+| Font family | `--font-sans`                          | Public Sans (di-host sendiri), system-ui, sans-serif |
+| Font mono   | `--font-mono`                          | JetBrains Mono (di-host sendiri), ui-monospace       |
+| Font size   | `--fs-2xs..3xl`                        | 11 · 12 · 14 · 16 · 18 · 20 · 24 · 32 · 40 px        |
+| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px               |
+| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                                 |
+| Shadow      | `--shadow-sm/md/lg`                    | elevasi kartu/dialog                                 |
+| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                          |
+| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                           |
+
+> **Typeface-nya di-host sendiri, dan itu tuntutan CSP, bukan preferensi.** Kebijakan `default-src 'self'` repo ini tidak menyebut `font-src` maupun `style-src`, jadi keduanya jatuh ke sana dan `fonts.googleapis.com`/`fonts.gstatic.com` diblokir tanpa error yang terlihat di halaman. Lima subset `woff2` latin/latin-ext hidup di `public/fonts/` (104.004 B), ber-`unicode-range`, dan diukur terhadap `FONT_BUDGET_BYTES` sendiri di `scripts/client-asset-budget.ts`. Halaman konten publik tidak memuat satu pun — `css/public-content.css` tidak mendeklarasikan `@font-face`. Stack sistem tetap di belakangnya dan itulah yang merender selama `font-display: swap` dan pada deployment LAN/offline yang berkas font-nya gagal.
 
 ### Theming
 

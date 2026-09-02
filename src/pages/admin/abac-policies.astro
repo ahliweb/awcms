@@ -78,18 +78,14 @@ const canCreate = canConfigure;
 const canUpdate = canConfigure;
 ---
 
-<AdminLayout title="ABAC policies">
-  <header class="page-header fade-in-up">
-    <h1 id="abac-policies-heading">{t("ABAC policies")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Per-tenant custom access policies. This table is empty by default \u2014 the evaluator applies the built-in role/permission rules, and custom policies are an opt-in extension surface."
-        )
-      }
-    </p>
-    {
-      /*
+<AdminLayout
+  title={t("ABAC policies")}
+  description={t(
+    "Per-tenant custom access policies. This table is empty by default — the evaluator applies the built-in role/permission rules, and custom policies are an opt-in extension surface."
+  )}
+>
+  {
+    /*
         The screen used to say only that the table is empty by default, which
         reads as "nothing here yet" rather than "nothing written here takes
         effect". Policies authored on THIS screen keep `is_dsl_managed = false`
@@ -98,15 +94,14 @@ const canUpdate = canConfigure;
         every request in the tenant. But an operator writing a rule here and
         expecting it to bite deserves to be told, not to discover it.
       */
+  }
+  <p class="state-notice" id="abac-policies-inert-notice">
+    {
+      t(
+        "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
+      )
     }
-    <p class="state-notice" id="abac-policies-inert-notice">
-      {
-        t(
-          "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
-        )
-      }
-    </p>
-  </header>
+  </p>
 
   {
     !canRead && (
