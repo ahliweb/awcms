@@ -30,25 +30,35 @@ import {
  * the permission — every endpoint still runs session + tenant context +
  * default-deny ABAC.
  *
- * ## EVERY lifecycle action is a JOB (ADR-0052 corrected this)
+ * ## Import is job-only; activation/rollback are job AND HTTP (ADR-0052 → ADR-0053)
  *
- * Import, activation, and rollback are all `awcms_worker` jobs, dry-run by
- * default, never HTTP calls.
+ * Import never had an HTTP surface, per ADR-0046 §5 ("no request-time subject
+ * for an ABAC guard to evaluate"). It is the only one of the three lifecycle
+ * actions that is exclusively a job.
  *
- * Activation and rollback used to be ABAC-gated endpoints, on the reasoning that
- * "who switched the platform to which version" is a request-path decision. That
- * reasoning was wrong in a way that mattered: the permissions it required
+ * Activation and rollback are different, and their history matters. They
+ * shipped as ABAC-gated tenant endpoints, on the reasoning that "who switched
+ * the platform to which version" is a request-path decision. That reasoning was
+ * wrong in a way that mattered: the permissions it required
  * (`dataset.configure`/`.restore`) sat in the GLOBAL catalog, which
  * `setup/initialize` grants wholesale to every tenant's `owner` — so an ordinary
  * tenant owner could swap the dataset served to every OTHER tenant, and ABAC saw
  * nothing wrong because it evaluates the permission, not who the action affects.
  *
- * These tables are global (no `tenant_id`, no RLS). There is no tenant the
- * action belongs to, so there is no tenant permission that can honestly express
- * it — the same conclusion ADR-0046 §5 already reached for import ("no
- * request-time subject for an ABAC guard to evaluate"). Hence the permission
- * catalog now has no `import`, no `configure`, and no `restore` action: seeding
- * any of them would advertise a surface that does not exist.
+ * ADR-0052 (1 August 2026) deleted both the endpoints and the permissions
+ * (`sql/084`) rather than guard them, because the primitive that could gate a
+ * cross-tenant action safely — a permission scope the blanket grant could
+ * exclude — did not exist yet. ADR-0053 (2 August 2026, one day later) built
+ * that primitive and brought both back: `dataset.configure`/`.restore` are real,
+ * `scope: "platform"` permissions again (`sql/085`, see `permissions` below),
+ * and `access-guard.ts` refuses them unless the acting tenant IS the platform
+ * tenant. `POST /api/v1/idn-regions/datasets/{id}/activate` and `/rollback` are
+ * live endpoints, not history.
+ *
+ * The operator jobs below (`idn-regions:activate`/`:rollback`) were never
+ * removed and remain the path for CI, a recovery shell, or a deployment whose
+ * platform tenant cannot log in. The two doors are not equivalent — see
+ * `description` for the audit divergence between them.
  *
  * ## `type: "system"` — divergence from awcms-mini, on purpose
  *
@@ -76,7 +86,7 @@ export const idnAdminRegionsModule = defineModule({
   type: "system",
   isCore: false,
   description:
-    "Versioned master data for Indonesia's administrative hierarchy — province / regency-city / district / village (38 / 514 / 7,285 / 83,762 rows in the currently vendored dataset) — for address forms, branch and coverage mapping, and regional reporting (ADR-0046). Owns `awcms_idn_region_datasets` and `awcms_idn_admin_regions` (sql/080), both GLOBAL reference data with no tenant_id and no RLS: the rows are identical for every tenant, exactly like the permission and module registries, and both are registered in `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` so each role's privileges are declared explicitly rather than inherited. Data comes from the vendored third-party dataset `cahyadsn/wilayah` (MIT) under `data/idn-admin-regions/`, whose bytes, checksums, upstream commit, and per-file Kepmendagri decree reference are committed alongside it — this is a community packaging of the decree, NOT an official Kementerian Dalam Negeri API or export, and that caveat is carried in code and in the API response. Importing parses the vendored SQL dump as TEXT (no SQL engine, no MySQL, no network), validates it whole (unparsed line, duplicate code, orphaned parent, or a missing tier all fail the import rather than importing a partial hierarchy), and writes one new dataset version alongside the previous one — never over it, which is what makes rollback a status flip instead of a re-import. Import runs as the `awcms_worker` job `bun run idn-regions:import` (dry-run by default, `--commit` to write) and always lands `validated`; making a version the one that is SERVED is a separate operator job (`bun run idn-regions:activate`, with `bun run idn-regions:rollback` to undo), also dry-run by default. ADR-0052 moved those two off HTTP: they change the data served to EVERY tenant, so no tenant-scoped permission can honestly authorize them, and the permissions that used to gate them are revoked by `sql/084`. The single-active rule is enforced by a partial unique index in the database rather than by an application check two concurrent callers could interleave through. The read-only lookup API (`/api/v1/idn-regions/*`) defaults to the active dataset, supports tier/parent/name filters with keyset pagination, and can be pointed at a superseded version for comparison.",
+    "Versioned master data for Indonesia's administrative hierarchy — province / regency-city / district / village (38 / 514 / 7,285 / 83,762 rows in the currently vendored dataset) — for address forms, branch and coverage mapping, and regional reporting (ADR-0046). Owns `awcms_idn_region_datasets` and `awcms_idn_admin_regions` (sql/080), both GLOBAL reference data with no tenant_id and no RLS: the rows are identical for every tenant, exactly like the permission and module registries, and both are registered in `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` so each role's privileges are declared explicitly rather than inherited. Data comes from the vendored third-party dataset `cahyadsn/wilayah` (MIT) under `data/idn-admin-regions/`, whose bytes, checksums, upstream commit, and per-file Kepmendagri decree reference are committed alongside it — this is a community packaging of the decree, NOT an official Kementerian Dalam Negeri API or export, and that caveat is carried in code and in the API response. Importing parses the vendored SQL dump as TEXT (no SQL engine, no MySQL, no network), validates it whole (unparsed line, duplicate code, orphaned parent, or a missing tier all fail the import rather than importing a partial hierarchy), and writes one new dataset version alongside the previous one — never over it, which is what makes rollback a status flip instead of a re-import. Import runs as the `awcms_worker` job `bun run idn-regions:import` (dry-run by default, `--commit` to write) and always lands `validated`; making a version the one that is SERVED is a separate operator job (`bun run idn-regions:activate`, with `bun run idn-regions:rollback` to undo), also dry-run by default. Both are also reachable over HTTP — `POST /api/v1/idn-regions/datasets/{id}/activate` and `/rollback` — gated on the platform-scoped permissions `dataset.configure`/`.restore` (ADR-0053, seeded by `sql/085`): excluded from the blanket grant every new tenant's `owner` receives, and refused by the authorization chokepoint unless the acting tenant IS the platform tenant. ADR-0052 had revoked both permissions and removed both endpoints for a day (`sql/084`) precisely because that platform scope did not exist yet to gate them safely; ADR-0053 built it and brought both back. The two doors are not equivalent: the HTTP endpoint writes an `awcms_audit_events` row to the platform tenant's log, while the operator job writes none, because that table is tenant-scoped and this action is global — a deliberate, documented cost of the job path, not an oversight. The single-active rule is enforced by a partial unique index in the database rather than by an application check two concurrent callers could interleave through. The read-only lookup API (`/api/v1/idn-regions/*`) defaults to the active dataset, supports tier/parent/name filters with keyset pagination, and can be pointed at a superseded version for comparison.",
   dependencies: ["tenant_admin", "identity_access"],
   api: {
     openApiPath: "openapi/modules/idn-admin-regions.openapi.yaml",
@@ -115,11 +125,11 @@ export const idnAdminRegionsModule = defineModule({
           "A platform operator activates a reviewed dataset version deliberately. Automatic activation would publish a dataset nobody read."
       },
       purpose:
-        "Choose which imported dataset version the platform SERVES (`--dataset <code|uuid>`). Dry-run by default; `--commit` writes. ADR-0052 moved this off HTTP: it swaps data served to every tenant, so no tenant permission can express it.",
+        "Choose which imported dataset version the platform SERVES (`--dataset <code|uuid>`). Dry-run by default; `--commit` writes. Also reachable over HTTP as `POST /api/v1/idn-regions/datasets/{id}/activate`, gated on the platform-scoped `dataset.configure` permission (ADR-0053) — this job is the path for CI, a recovery shell, or a deployment whose platform tenant cannot log in.",
       recommendedSchedule:
         "manually, by a platform operator, after reviewing an imported version — never on a timer",
       environmentNotes:
-        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Safe in offline/LAN deployments. Writes no `awcms_audit_events` row: that table is tenant-scoped and this action is global (ADR-0052 §Konsekuensi); the evidence is `status`/`activated_at` on the dataset row plus this command's output.",
+        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Safe in offline/LAN deployments. Writes no `awcms_audit_events` row: that table is tenant-scoped and this action is global — a cost ADR-0052 accepted for this job path and ADR-0053 left standing even after restoring the HTTP endpoint, which now writes that audit row instead (to the platform tenant's log). The evidence for a job run is `status`/`activated_at` on the dataset row plus this command's output.",
       safeInOfflineLan: true
     },
     {

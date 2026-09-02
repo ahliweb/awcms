@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:fc63aaabcf5b686ff2409a97ff9e6d8fe4866e3874fe4778346d5a08f39b4175 -->
+<!-- i18n-source-hash: sha256:30c1c3652aa0cca9b48fabc2c6c6bb4e46cceba5ec6d168b7e064f8a486c0a10 -->
 
 # `idn_admin_regions` — wilayah administrasi Indonesia
 
@@ -8,15 +8,15 @@ Master data berversi untuk hierarki administrasi Indonesia — **provinsi /
 kabupaten-kota / kecamatan / desa** — diakui oleh
 [ADR-0046](../../../docs/adr/0046-idn-admin-regions-module-admission.md).
 
-| Aspek           | Nilai                                                                                                      |
-| --------------- | ---------------------------------------------------------------------------------------------------------- |
-| Kunci / tipe    | `idn_admin_regions` · `system`, `isCore: false`                                                            |
-| Tabel           | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                                         |
-| Izin            | `region.read`, `dataset.read` (`sql/081`; `dataset.configure`/`.restore` dicabut oleh `sql/084`, ADR-0052) |
-| API             | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)                                 |
-| Job             | `bun run idn-regions:import`                                                                               |
-| Dataset         | `data/idn-admin-regions/` — `cahyadsn/wilayah` yang di-vendor (MIT)                                        |
-| Bergantung pada | `tenant_admin`, `identity_access` — tidak ada yang bergantung pada modul ini                               |
+| Aspek           | Nilai                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kunci / tipe    | `idn_admin_regions` · `system`, `isCore: false`                                                                                                                                       |
+| Tabel           | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                                                                                                                    |
+| Izin            | `region.read`, `dataset.read` (`sql/081`); `dataset.configure`/`.restore`, `scope: platform` (`sql/085`, ADR-0053 — sempat dicabut `sql/084`/ADR-0052, dikembalikan keesokan harinya) |
+| API             | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)                                                                                                            |
+| Job             | `bun run idn-regions:import`                                                                                                                                                          |
+| Dataset         | `data/idn-admin-regions/` — `cahyadsn/wilayah` yang di-vendor (MIT)                                                                                                                   |
+| Bergantung pada | `tenant_admin`, `identity_access` — tidak ada yang bergantung pada modul ini                                                                                                          |
 
 ## Sumber, lisensi, dan klaim yang TIDAK dibuat modul ini
 
@@ -107,22 +107,41 @@ terpenuhi:
 | `GET /api/v1/idn-regions/regions/{code}` | `region.read`  | Satu wilayah + jalur leluhur yang diresolusikan |
 | `GET /api/v1/idn-regions/datasets`       | `dataset.read` | Versi + provenans + peringatan                  |
 
-Setiap endpoint di sini **hanya-baca**. Aktivasi dan rollback dulu duduk di
-tabel ini dan kini hilang — [ADR-0052](../../../docs/adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
-menjadikannya job operator:
+Setiap endpoint di tabel ini **hanya-baca**. Aktivasi dan rollback BUKAN
+hanya-baca dan BUKAN bagian tabel ini, tapi keduanya juga tidak hilang — ada dua
+jalur untuk mencapainya:
 
 ```bash
+# job operator — CI, shell pemulihan, atau deployment yang tenant platformnya tak bisa login
 bun run idn-regions:activate -- --dataset <code|uuid>            # dry run
 bun run idn-regions:activate -- --dataset <code|uuid> --commit   # menyajikannya
 bun run idn-regions:rollback --commit                            # batalkan
 ```
 
-Keduanya mengubah dataset yang disajikan ke **setiap** tenant, tetapi izinnya
-disemai ke katalog global yang di-`grant` `setup/initialize` secara borongan ke
-`owner` tiap tenant — sehingga seorang owner tenant biasa memegang wewenang atas
-data yang disajikan ke tenant lain. Tabel-tabel ini tidak punya `tenant_id` dan
-tidak punya RLS: tidak ada tenant yang memiliki aksi itu, jadi tidak ada izin
-tenant yang bisa mengungkapkannya secara jujur.
+```http
+# HTTP — konsol /admin/idn-regions
+POST /api/v1/idn-regions/datasets/{id}/activate
+POST /api/v1/idn-regions/datasets/rollback
+```
+
+Keduanya mengubah dataset yang disajikan ke **setiap** tenant, yang justru
+sebabnya izin yang menggerbangi jalur HTTP (`dataset.configure`/`.restore`)
+ber-`scope: "platform"` (ADR-0053, `sql/085`): dikecualikan dari katalog
+borongan yang di-`grant` `setup/initialize` ke `owner` tiap tenant baru, dan
+ditolak chokepoint otorisasi kecuali tenant yang bertindak ADALAH tenant
+platform. Dulu tidak begini — izinnya pertama kali dirilis sebagai izin tenant
+BIASA, sehingga seorang owner tenant biasa memegang wewenang atas data yang
+disajikan ke tenant lain, yang justru sebabnya
+[ADR-0052](../../../docs/adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
+menghapus kedua endpoint dan izinnya selama satu hari (`sql/084`): gerbang
+platform yang bisa membatasinya dengan aman belum ada.
+[ADR-0053](../../../docs/adr/0053-platform-scoped-permissions.md) membangunnya
+dan mengembalikan keduanya.
+
+Kedua jalur itu TIDAK setara: endpoint HTTP menulis baris `awcms_audit_events`,
+ke log tenant platform; job operator tidak menulis apa pun, karena tabel itu
+tenant-scoped sedangkan aksinya global — biaya yang sengaja diterima dan
+didokumentasikan pada jalur job, bukan kelalaian.
 
 Kueri secara bawaan memakai dataset **active**; `?dataset=<code>` membaca versi
 tertentu, dan itulah yang membuat menyimpan versi superseded sepadan dengan

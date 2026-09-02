@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a2573640a70b996f249d5c6005388d19276efd8669016f56c93b13056642e499 -->
+<!-- i18n-source-hash: sha256:1d36f925e70dec654cebd06a4e4969a29135d3ec8a9327b70a4de6a32b86f979 -->
 
 # AWCMS — Project State & Continuation
 
@@ -91,13 +91,22 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
   aksi lintas-tenant **wajib** punya gerbang platform-scoped dan **tidak boleh** masuk
   katalog yang di-seed ke role tenant.
 - [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) menutup temuan
-  terbuka itu di kode: aktivasi/rollback dataset wilayah jadi **job operator**
-  (`bun run idn-regions:activate` / `:rollback`, dry-run default), endpoint HTTP-nya
-  dihapus, dan kedua permission dicabut dari katalog (`sql/084`). Menggerbanginya dengan
-  kredensial mesin DITOLAK: kredensial mesin baca-saja (ADR-0049), jadi melebarkannya
-  justru membuat token build yang bocor bisa mengganti dataset global. Biaya yang
-  diterima & dinyatakan: baris audit hilang, karena `awcms_audit_events` tenant-scoped
-  sedangkan aksinya global.
+  terbuka itu di kode — untuk satu hari: aktivasi/rollback dataset wilayah jadi **job
+  operator** (`bun run idn-regions:activate` / `:rollback`, dry-run default), endpoint
+  HTTP-nya dihapus, dan kedua permission dicabut dari katalog (`sql/084`). Menggerbanginya
+  dengan kredensial mesin DITOLAK: kredensial mesin baca-saja (ADR-0049), jadi
+  melebarkannya justru membuat token build yang bocor bisa mengganti dataset global.
+  Biaya yang diterima & dinyatakan: baris audit hilang, karena `awcms_audit_events`
+  tenant-scoped sedangkan aksinya global.
+- [ADR-0053](adr/0053-platform-scoped-permissions.md), keesokan harinya, membangun
+  primitif yang belum dimiliki ADR-0052 — `awcms_permissions.scope` (`tenant`/`platform`,
+  `sql/085`), dikecualikan dari grant borongan dan ditolak chokepoint kecuali tenant yang
+  bertindak ADALAH tenant platform — lalu **mengembalikan endpoint maupun permission-nya**
+  sebagai `scope: "platform"`. Job operatornya tetap ada, bukan digantikan:
+  `POST /api/v1/idn-regions/datasets/{id}/activate`/`rollback` hidup lagi, begitu juga
+  `bun run idn-regions:activate`/`:rollback`. Kedua jalur itu tetap berbeda soal audit —
+  endpoint HTTP kini menulis baris `awcms_audit_events` ke log tenant platform, sedangkan
+  job tidak menulis apa pun, tak berubah dari biaya yang diterima ADR-0052.
 
 ## 2. Inventori ringkas
 

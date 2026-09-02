@@ -91,13 +91,21 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
   a cross-tenant action **must** have a platform-scoped gate and **must not** enter the
   catalogue that is seeded to tenant roles.
 - [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) closes that open
-  finding in the code: region dataset activation/rollback becomes an **operator job**
-  (`bun run idn-regions:activate` / `:rollback`, dry-run by default), its HTTP endpoints are
-  removed, and both permissions are revoked from the catalogue (`sql/084`). Gating it with
+  finding in the code — for one day: region dataset activation/rollback becomes an **operator
+  job** (`bun run idn-regions:activate` / `:rollback`, dry-run by default), its HTTP endpoints
+  are removed, and both permissions are revoked from the catalogue (`sql/084`). Gating it with
   machine credentials was REJECTED: machine credentials are read-only (ADR-0049), so widening
   them would instead make a leaked build token able to swap the global dataset. The cost
   accepted & stated: the audit row is lost, because `awcms_audit_events` is tenant-scoped
   while the action is global.
+- [ADR-0053](adr/0053-platform-scoped-permissions.md), the very next day, builds the primitive
+  ADR-0052 was missing — `awcms_permissions.scope` (`tenant`/`platform`, `sql/085`), excluded
+  from the blanket grant and refused by the chokepoint unless the acting tenant IS the platform
+  tenant — and **restores both the endpoints and the permissions** as `scope: "platform"`. The
+  operator jobs are kept alongside them, not replaced: `POST /api/v1/idn-regions/datasets/{id}/activate`/`rollback`
+  are live again, and so is `bun run idn-regions:activate`/`:rollback`. The two paths still
+  differ on audit — the HTTP endpoint now writes its `awcms_audit_events` row to the platform
+  tenant's log, while the job writes none, unchanged from ADR-0052's accepted cost.
 
 ## 2. Inventory at a glance
 
