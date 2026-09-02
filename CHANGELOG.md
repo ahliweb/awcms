@@ -1,5 +1,178 @@
 # awcms
 
+## 10.2.0
+
+### Minor Changes
+
+- 4c42131: feat(ui): redesign the admin surface, and gate the contrast promise it kept breaking (ADR-0120)
+  
+  The supplied design canvas (shell + ten screens) is adopted across all 48 admin
+  screens, the login surface and the four other auth pages. Three things in it
+  were not ordinary work.
+  
+  **The canvas's status colour pairing fails WCAG, and this repo had already found
+  that defect class twice.** `--color-X` as text on `--color-X-soft` measures
+  4.48 / 4.07 / 4.50 / 4.17 / 4.65:1 in the light theme — three of five below the
+  4.5:1 that `docs/awcms/14_ui_ux_design_system.md` §Aksesibilitas promises, and
+  the fourth with no margin. Issue #434 found the same class (white on
+  `--color-primary`, 3.68:1) and PR #720 found it again in `StatusBadge`, inside a
+  file whose own comment described the rule it was breaking. So a semantic colour
+  now carries up to three values, each named for the background it sits on:
+  `--color-X` (text on a surface), `-strong` (solid fill under white text, already
+  present) and the new `-on-soft` (text on the matching tint).
+  
+  **`--color-border` measured 1.29:1 against its surface.** WCAG 2.1 §1.4.11 asks
+  3:1 for a boundary that identifies an operable component, and an input's fill
+  differs from the card around it by 1.03:1 — that line is the only thing locating
+  the field. `--color-border-strong` is added for controls; `--color-border` stays
+  a hairline on purpose, because 1.4.11 governs controls rather than decorative
+  separators, and darkening card edges and table rules would turn a dense surface
+  into a grid. This predates the redesign: the previous `#d8dee6` measured 1.35:1.
+  
+  **Prose failed to stop this four times, so the measurement is now a gate.**
+  `bun run design:token-contrast:check` joins `bun run check`: it reads
+  `tokens.css`, resolves dark as an override layer over light, and asserts a
+  registry of 25 foreground/background pairs — 50 measurements — refusing colour
+  notations it cannot parse rather than skipping them. Its own first version was
+  green for the wrong reason, matching `:root[data-theme="dark"]` inside
+  `tokens.css`'s header comment so the dark theme silently inherited every light
+  value; it is anchored to the start of a line now, and the bug is recorded in the
+  script.
+  
+  Also in this change:
+  
+  - **The shell owns the page title.** `AdminLayout` renders a header band
+    (breadcrumb, `<h1>`, description, `page-actions` slot) and 45 screens stopped
+    rendering their own — they had been showing their name twice, and for 20 of
+    them the layout's copy was untranslated English beside a translated `<h1>`.
+    The breadcrumb's middle segment is derived from the composed sidebar rather
+    than passed by each page.
+  - **`ModuleDescriptor.navigation[].icon` is live.** It had been declared in the
+    contract, validated by the composition checker and threaded through two type
+    layers while no module set it and nothing rendered it. A `labelKey`-keyed
+    default table now fills it, and a descriptor's own value still wins.
+  - **A command palette** (Cmd/Ctrl+K) that filters the nav entries already
+    rendered into the page, so it cannot surface a screen the sidebar would not —
+    structurally, not by policy. A native `<dialog>`, no fetch, 1,369 B.
+  - **The typeface is self-hosted.** `default-src 'self'` blocks Google Fonts
+    outright, so Public Sans and JetBrains Mono ship as five `unicode-range`-gated
+    latin subsets in `public/fonts/`. They are measured against a new `font`
+    audience in `scripts/client-asset-budget.ts` rather than folded into
+    `APP_BUDGET_BYTES`, whose job is catching 600 B per-screen growth and which a
+    104 KB step change would have destroyed. A public content page loads none of
+    them; the reader budget is unchanged at 21,415 B.
+  - **`APP_BUDGET_BYTES` 193,500 → 218,000**, with the gate's own question
+    answered by measurement: JS +1,369 B and CSS +19,466 B, all of the latter in
+    the two stylesheets every screen already loads. Not the Issue #552
+    duplication shape — the opposite, since 45 screens shed their header markup.
+  
+  Deliberately not adopted from the canvas: the tenant **switcher** (one identity
+  is scoped to one tenant, so the chevron would be exactly the fake affordance
+  `TenantBadge.astro` already argues against) and the two-line account cluster
+  (`SsrContext` carries neither a display name nor an email, and chrome does not
+  justify a third query per `/admin/*` render).
+
+### Patch Changes
+
+- 655d4dd: chore(deps): bump astro 7.2.4 → 7.2.9 — and the three other places that pin it
+  
+  Dependabot's PR (#757) changed `package.json` and `bun.lock` and failed two CI
+  jobs, because in this repo the Astro version is **declared in four places and
+  asserted between them**:
+  
+  1. `package.json` `dependencies.astro` — what Dependabot changed;
+  2. `awcms-family-compatibility.yaml` `stack.astro.declared` — asserted equal to
+     (1) by `family:conformance:check`, which is why both the `quality` and the
+     `minimum-supported` jobs went red rather than just one;
+  3. and 4. the stack table in `docs/awcms/family-compatibility.md` **and its
+     Indonesian mirror**, asserted equal to (2) by
+     `tests/family-compatibility-doc-parity.test.ts`.
+  
+  Fixing only (2) still leaves two failing assertions, which is the point of the
+  arrangement: the manifest is the family contract `awcms-astro` binds against,
+  and a contract that can drift from its own published table is not one. Nothing
+  here required judgement — but nothing here was automatic either, and a bump
+  merged without it would have reddened `main`.
+  
+  `DATABASE_URL="" bun run check` is green on the result (5,981 pass, 0 fail),
+  including the Astro build and `check:astro-frontmatter:check`.
+- 7b91faa: fix(ci): install Bun in the release publish job before deciding the "Latest" badge
+  
+  `sign-attest-publish` runs `bun scripts/release-latest-flag.ts` to decide the
+  "Latest" badge (ADR-0119), but that job runs in its own isolated `needs: build`
+  job — the `Setup Bun` step from `validate` does not carry over, so the
+  invocation had no `bun` on `PATH`. `.github/workflows/release.yml` now installs
+  the pinned Bun toolchain in `sign-attest-publish` before that decision step
+  runs.
+  
+  A regression test was added (`tests/release-latest-flag.test.ts`) asserting
+  that `sign-attest-publish` installs Bun (`oven-sh/setup-bun@`) before invoking
+  `bun scripts/release-latest-flag.ts`.
+- 4c42131: docs(ui,i18n): the design system and four skills described systems that were never built
+  
+  Bringing the documentation in line with the ADR-0120 redesign turned up a
+  larger problem in the same files: three separate capabilities were documented
+  as plans that had in fact shipped, or as shipped things that had in fact been
+  deleted. Prose that is confidently wrong is worse than prose that is missing,
+  because an agent following it writes code against names that do not exist.
+  
+  **The i18n section and the `awcms-i18n` skill described a pipeline that was
+  designed and then built differently.** Both said i18n was "not yet implemented
+  in this repo" and named an `i18n/` directory, a `messages.pot` template,
+  `bun run i18n:extract`, `i18n:pot:check`, `i18n:parity:check`,
+  `scripts/i18n-extract.ts`, `src/lib/i18n/translate.ts`,
+  `src/lib/i18n/locale.ts` and `src/lib/i18n/error-messages.ts` — none of which
+  exist. What ADR-0095 shipped is `locales/{en,id}.po`, hand-maintained, compiled
+  by `i18n:compile`, verified by `i18n:catalog:check` and `i18n:screens:check`,
+  with the **English sentence as the msgid** rather than a `namespace.key`, and
+  with plurals implemented rather than deferred. Both are rewritten against the
+  code, and the skill carries a note saying what it used to claim.
+  
+  **Seven skills and doc 14 told callers to use `postJson`**, which was deleted
+  on 22 August 2026 (PROJECT_STATE D12 — it had zero callers and a docblock
+  claiming otherwise). Doc 14 also named `submitJson`/`showBanner`, which never
+  existed here. The fix is not a better list of names: every one of these now
+  says to run `grep -n "^export" src/lib/ui/admin-form-client.ts` first, and the
+  real surface (`onSubmit`/`onAction`/`mutateAndReload`/`messageBox` and friends)
+  is written down where the invented one used to be.
+  
+  **The mobile drawer has no JavaScript.** Doc 14 and `awcms-ui-screen` both
+  described an `aria-expanded` toggle, a hand-written focus trap, `inert` on the
+  rest of the page, and `Esc`-to-close, and pointed readers at `<script>`
+  comments in `AdminLayout.astro`. It is a CSS-only checkbox drawer and that
+  script does not exist. The docs now say so, and say plainly what it costs: no
+  `Esc`, no focus trap — acceptable for a nav drawer whose links stay reachable,
+  and explicitly not a licence to build an input-taking modal the same way.
+  
+  Also brought current for ADR-0120: the admin shell diagram and the rule that
+  the shell owns the page title; the split-panel auth screen across all five
+  public auth pages; the three-role colour split and WCAG 1.4.11 in
+  §Accessibility, with `design:token-contrast:check` named as the thing that
+  proves it; the 44px → 38px control height as a stated trade rather than a
+  regression to be "fixed"; the live `navigation[].icon` field in
+  `awcms-module-management`; and, in `awcms-browser-test`, the two harness traps
+  that produced confidently wrong passes during this work — Playwright's
+  `viewport` (not `viewportSize`), and pointing a browser at a built server
+  rather than `astro dev`, whose CSS arrives as a module script the CSP blocks.
+- 5244be3: chore(actions): bump github/codeql-action to 4.37.9 and anchore/sbom-action to 0.24.2 — as one change, because half a CodeQL bump breaks CodeQL
+  
+  Dependabot opened these as three PRs (#758, #759, #760) and **two of them were
+  individually un-mergeable, for a reason no single PR could show.**
+  `github/codeql-action/init` and `.../analyze` are pinned to the same SHA and
+  must stay that way: `init` writes a config file stamped with its own version and
+  `analyze` refuses to read one from a different version. #759 moved `analyze`
+  alone and #760 moved `init` alone, so each PR's own CodeQL run failed with
+  `Loaded a configuration file for version '4.37.8', but running version
+  '4.37.9'`. Merging either one first would have put that failure on `main`.
+  
+  Both halves move here in one commit. `anchore/sbom-action` (0.24.0 → 0.24.2,
+  both call sites in `release.yml`) joins them because it is the same class of
+  change and was blocked only by the changeset gate, which correctly does not
+  exempt workflow files.
+  
+  No behaviour change to the application; this touches CI and release plumbing
+  only. The SHAs are the ones Dependabot resolved, unchanged.
+
 ## 10.1.0
 
 ### Minor Changes
