@@ -5965,7 +5965,7 @@ description: "Peringatan \"FIKTIF / belum ada\" di sebuah skill bisa jadi SALAH 
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-07-26T22:25:24.581Z
+  modified: 2026-09-02T08:29:22.265Z
 ---
 
 `awcms-auth-online-hardening/SKILL.md` (diverifikasi 2026-07-18) memasang banner
@@ -5980,13 +5980,39 @@ milik repo LAIN (tak pernah benar di sini), sementara alasan desainnya berlaku.
 Audit 2018-07-18 memeriksa lapis pertama, menemukannya kosong, lalu menyimpulkan
 tentang lapis kedua.
 
+**Dikonfirmasi ulang 2 Sep 2026 (PR #761) — TIGA instansi lagi, dan arahnya
+BOLAK-BALIK:**
+
+1. **"Rencana" yang ternyata SUDAH mendarat.** `docs/awcms/14_ui_ux_design_system.md`
+   §Internationalization + `awcms-i18n/SKILL.md` sama-sama menulis "belum
+   diimplementasikan di repo ini" dan menyebut direktori `i18n/`, `messages.pot`,
+   `i18n:extract`, `i18n:pot:check`, `i18n:parity:check`, `translate.ts`,
+   `locale.ts`, `error-messages.ts` — **tak satu pun ada**. ADR-0095 mengirim yang
+   BERBEDA: `locales/*.po` dirawat tangan, `i18n:compile`, dua gerbang
+   (`i18n:catalog:check` + `i18n:screens:check`), **msgid = kalimat Inggrisnya**
+   bukan `namespace.key`, dan jamak SUDAH ada.
+2. **"Pakai fungsi ini" untuk fungsi yang DIHAPUS.** 7 skill + doc 14 + doc 15
+   menyuruh memanggil `postJson`; ia dihapus 22 Agu 2026 (PROJECT_STATE D12, nol
+   pemanggil). Doc 14 juga menyebut `submitJson`/`showBanner` yang tak pernah ada.
+3. **Mekanisme yang berganti jenis.** Doc 14 + `awcms-ui-screen` menjelaskan drawer
+   sidebar sebagai JS (`aria-expanded`, focus trap tulisan tangan, `inert`,
+   Esc-menutup) dan menunjuk "komentar `<script>` di `AdminLayout.astro`". Ia
+   CSS-only (checkbox + dua `<label>`); script itu tidak ada.
+
 **Why:** koreksi negatif ("ini tidak ada") menua persis sebalik arah koreksi
 positif ("ini sudah ada"), dan tak ada gate yang menangkapnya — `check:docs`
 memeriksa tautan & rujukan `sql/NNN`, bukan klaim keberadaan fitur.
+`skills:check` memverifikasi path/ADR/`bun run` yang DISEBUT, bukan yang
+SEHARUSNYA disebut — jadi prosa yang menamai berkas fiktif lolos selama ia tak
+menuliskannya sebagai path backtick satu baris.
 
 **How to apply:** saat menemukan banner "belum ada/fiktif" di skill mana pun,
 **verifikasi ke kode dulu** (`ls src/lib/...`, `find src -iname`) sebelum
-mempercayainya ATAU sebelum membangun dari nol. Bila badan skill berasal dari
+mempercayainya ATAU sebelum membangun dari nol. Sebaliknya juga: sebelum
+memanggil fungsi yang disebut prosa, `grep -n "^export" <file>` — bukan percaya
+daftar namanya. Saat memperbaiki, **tulis apa yang dulu diklaim** ("revisi
+terdahulu menyebut X, yang dihapus tanggal Y") — itulah satu-satunya hal yang
+menghentikan koreksi yang sama diulang putaran berikutnya. Bila badan skill berasal dari
 repo keluarga lain, jangan hapus isinya — tulis tabel **§Peta ke artefak nyata**
 (nama micro → nama awcms) dan tandai eksplisit item yang memang sengaja TIDAK
 ada, supaya "tak ada" tidak terbaca sebagai "belum dikerjakan". Lihat
