@@ -31,6 +31,8 @@
  * for the gate that now reads `dist/` instead of trusting a comment like this
  * one.
  */
+import { ADMIN_ICON_PATHS } from "../lib/ui/admin-icons";
+
 interface Props {
   ariaLabel?: string;
   systemLabel?: string;
@@ -44,55 +46,75 @@ const {
   lightLabel = "Light",
   darkLabel = "Dark"
 } = Astro.props;
+
+/**
+ * Order matters only for the DOM; the cycle order lives in the client module.
+ * `system` is rendered visible because that is the mode the button starts in
+ * before the client reads `localStorage` — so the icon is never absent, even
+ * for the frame before hydration or if the script fails to load.
+ */
+const MODE_ICONS = [
+  { key: "system", path: ADMIN_ICON_PATHS.monitor },
+  { key: "light", path: ADMIN_ICON_PATHS.sun },
+  { key: "dark", path: ADMIN_ICON_PATHS.moon }
+] as const;
 ---
 
 <button
   type="button"
   id="theme-toggle"
-  class="theme-toggle"
+  class="admin-topbar-btn theme-toggle"
   data-mode="system"
   data-label-system={systemLabel}
   data-label-light={lightLabel}
   data-label-dark={darkLabel}
   aria-label={ariaLabel}
 >
-  <span class="theme-toggle-icon" aria-hidden="true">🖥️</span>
+  {
+    /* ADR-0120 — all three glyphs render; `theme-toggle-client.ts` shows one by
+      toggling `hidden`. Rendering them here rather than assigning markup in the
+      client is what keeps `innerHTML` out of the admin shell entirely. They are
+      `aria-hidden` because the button already has a name and a description. */
+  }
+  {
+    MODE_ICONS.map((mode) => (
+      <svg
+        class="theme-toggle-icon"
+        data-mode={mode.key}
+        hidden={mode.key !== "system"}
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d={mode.path} />
+      </svg>
+    ))
+  }
   <span class="theme-toggle-label">{systemLabel}</span>
 </button>
 
 <style>
-  .theme-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-1);
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--sp-1) var(--sp-2);
-    font-size: var(--fs-sm);
-    color: var(--color-text);
-    cursor: pointer;
+  /*
+   * ADR-0120 — the button's box comes from `.admin-topbar-btn` in `admin.css`,
+   * so the theme, language and tenant controls cannot drift into three
+   * different heights inside a fixed-height topbar. Only what is specific to
+   * this control lives here.
+   */
+  .theme-toggle-icon {
+    flex: none;
   }
 
-  .theme-toggle:hover {
-    background: var(--color-surface-2);
-  }
-
-  .theme-toggle:focus-visible {
-    outline: 3px solid var(--color-focus);
-    outline-offset: 2px;
-  }
-
-  /* Touch target >= 44px on tablet/mobile; desktop admin keeps the compact
-     density above. */
   @media (max-width: 767.98px) {
-    .theme-toggle {
-      min-height: 44px;
-      min-width: 44px;
-    }
-
-    /* Icon alone on phones — the topbar already carries brand, tenant badge,
-       roles and logout, and the word is redundant next to the glyph. */
+    /* Icon alone on phones — the topbar is a fixed 58px row and the word is
+       redundant next to the glyph. The mode still reaches assistive tech
+       through `aria-description`, which the client keeps in step. */
     .theme-toggle-label {
       display: none;
     }

@@ -4506,3 +4506,12 @@ msgstr ""
 
 msgid "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
 msgstr ""
+
+msgid "Search screens"
+msgstr ""
+
+msgid "Type a screen name…"
+msgstr ""
+
+msgid "No screen matches that."
+msgstr ""

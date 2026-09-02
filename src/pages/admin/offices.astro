@@ -112,18 +112,12 @@ const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const showActions = canUpdate || canDelete;
 ---
 
-<AdminLayout title="Offices">
-  <header class="page-header fade-in-up">
-    <h1 id="offices-heading">{t("Offices")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The tenant's office hierarchy. Offices can be edited inline, soft-deleted, and restored \u2014 deleted offices are listed separately so they remain reachable."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Offices")}
+  description={t(
+    "The tenant's office hierarchy. Offices can be edited inline, soft-deleted, and restored \u2014 deleted offices are listed separately so they remain reachable."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="offices-denied">

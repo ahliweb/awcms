@@ -1,0 +1,91 @@
+---
+/**
+ * The brand half of the split auth screen — ADR-0120.
+ *
+ * ## Why a component rather than markup in each page
+ *
+ * Five pages render the auth surface (`/login`, `/register`,
+ * `/forgot-password`, `/reset-password`, `/accept-invitation`). They are
+ * standalone `.astro` documents with their own `<html>` — there is no auth
+ * LAYOUT to put this in — so the alternative was five copies of the same
+ * panel, which is the shape `auth.css`'s own header describes as "three
+ * drifting copies of 300 lines".
+ *
+ * ## Why it is `aria-hidden`
+ *
+ * It carries no instruction, no control and no information a person needs to
+ * sign in: a wordmark, a headline, a sentence, three capability chips. On a
+ * screen reader it would be forty words of preamble before the form. Hiding it
+ * costs nothing, because the form half already names the product ("Signing in
+ * to AWCMS") and every actionable thing lives there.
+ *
+ * The panel is also hidden below 900px (see `auth.css`), where a decorative
+ * half-screen would push the form itself below the fold on a phone.
+ *
+ * ## Strings are literal English, deliberately
+ *
+ * Every one of these five pages is literal English today — `login.astro` writes
+ * `<h1>Sign in</h1>`, not `{t("Sign in")}` — because the unauthenticated
+ * surface has no resolved session and therefore no stored locale preference to
+ * resolve one from. `i18n:screens:check` scans `src/pages/admin/` only, and its
+ * ledger is at zero; adding `t()` here would be a scope change to the auth
+ * surface rather than part of this redesign, and half-translating it would be
+ * worse than either end state.
+ */
+interface Props {
+  /**
+   * Optional override of the headline, for a page where "sign in" is not what
+   * is about to happen (accepting an invitation, say). Defaults to the
+   * product-level statement, which is true on every one of these pages.
+   */
+  headline?: string;
+  subline?: string;
+}
+
+const {
+  headline = "One admin surface for every tenant, module and audit trail.",
+  subline = "AWCMS keeps content, identity and operations in one governed workspace — with every decision logged."
+} = Astro.props;
+
+/**
+ * The capability chips.
+ *
+ * Three, and all three are load-bearing claims this repo can actually make:
+ * RLS-enforced multi-tenancy, default-deny ABAC, and an append-only audit
+ * trail. Marketing copy on a sign-in screen that the product does not do is a
+ * bad thing to ship; these are the three things it most demonstrably does.
+ */
+const CAPABILITIES = [
+  "Multi-tenant",
+  "ABAC access control",
+  "Full audit trail"
+];
+
+/**
+ * The host, shown in the panel's footer.
+ *
+ * The design reference puts a monospace hostname there, and it is the one piece
+ * of text on this panel that is worth being real: an operator with a staging and
+ * a production deployment can tell which one they are signing into before
+ * typing a password. A literal string would be wrong on every deployment but
+ * one.
+ */
+const host = Astro.url.host;
+---
+
+<aside class="auth-brand-panel" aria-hidden="true">
+  <div class="auth-brand-panel-mark">
+    <span class="auth-brand-panel-tile">A</span>
+    <span class="auth-brand-panel-word">AWCMS</span>
+  </div>
+
+  <div class="auth-brand-panel-body">
+    <p class="auth-brand-panel-headline">{headline}</p>
+    <p class="auth-brand-panel-sub">{subline}</p>
+    <ul class="auth-brand-panel-chips">
+      {CAPABILITIES.map((capability) => <li>{capability}</li>)}
+    </ul>
+  </div>
+
+  <p class="auth-brand-panel-foot">{host}</p>
+</aside>

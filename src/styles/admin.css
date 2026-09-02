@@ -143,9 +143,34 @@
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+  /*
+   * ADR-0120 — kepadatan admin. `--fs-base` (16px) tetap ukuran dokumen dan
+   * halaman publik; permukaan admin adalah alat kerja padat dengan tabel
+   * berkolom banyak, dan 14px adalah ukuran yang dipakai referensi desain
+   * untuk seluruh badan layar. Di-set di `.admin-body`, bukan di `body`,
+   * supaya halaman auth dan landing tidak ikut menyusut.
+   */
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
 }
 
 /* ---- Topbar (sticky) ------------------------------------------------ */
+/*
+ * ADR-0120 — tingginya sekarang TETAP (`--admin-topbar-h`), dan itu bukan
+ * kosmetik. Sidebar `position: sticky` harus tahu di mana topbar berakhir
+ * (`top`) dan berapa tinggi yang tersisa (`height: calc(100vh - …)`), dan
+ * sebelumnya tinggi itu adalah angka ajaib yang disalin ke beberapa tempat
+ * lalu berubah diam-diam saat topbar tumbuh. Satu custom property berarti
+ * topbar, sidebar, scrim, dan sticky panel editor tidak bisa lagi berselisih.
+ */
+.admin-shell {
+  --admin-topbar-h: 58px;
+  --admin-sidebar-w: 244px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 .admin-topbar {
   position: sticky;
   top: 0;
@@ -153,70 +178,186 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
+  height: var(--admin-topbar-h);
+  padding: 0 var(--sp-4);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-/* Column wrapper so the topbar/sidebar/main stack fills the viewport height
-   (the sidebar's `margin-top: auto` version footer depends on a full-height
-   column, not on `.admin-body` alone). */
-.admin-shell {
+/* Brand cluster: hamburger + mark + wordmark. The fixed minimum width is what
+   lines the wordmark up with the sidebar below it. */
+.admin-brand-cluster {
   display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .admin-brand-cluster {
+    min-width: calc(var(--admin-sidebar-w) - 20px);
+  }
 }
 
 .admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   font-weight: var(--fw-bold);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text);
   text-decoration: none;
   white-space: nowrap;
 }
 
-/* Pushes the right-hand control group away from brand + tenant badge. The
-   brand used to carry `margin-right: auto` itself; the badge now sits between
-   them, so the spacer has to be its own element. */
+.admin-brand:hover {
+  text-decoration: none;
+}
+
+/* The mark is a letterform tile, not an image: it costs no request, inherits
+   the theme, and cannot 404. */
+.admin-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+}
+
+/*
+ * Command-palette launcher. It LOOKS like a search field and is a `<button>`,
+ * because it opens a dialog rather than accepting text in place — a real
+ * `<input>` here would promise typing that goes nowhere until the dialog is up.
+ */
+/*
+ * `flex: 1 1 200px` — the basis is load bearing.
+ *
+ * With a bare `flex: 1` this shared the free space with `.admin-topbar-spacer`,
+ * which also carries `flex: 1`. On a 1440px screen with the full right-hand
+ * cluster (tenant, sync, theme, language, account) that left the launcher about
+ * 180px wide and its label rendered as "Search sc…". The basis reserves a
+ * readable width BEFORE either element starts sharing what is left over, and
+ * `max-width` still stops it spanning the whole bar on an empty topbar.
+ */
+.admin-palette-open {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 480px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface-3);
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-palette-open:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text-muted);
+}
+
+/*
+ * This class exists because a `style="flex:none"` attribute did NOT work.
+ *
+ * The CSP is `default-src 'self'` with no `style-src` of its own, and a style
+ * ATTRIBUTE is inline style: the browser refused it and reported
+ * "Applying inline style violates the following Content Security Policy
+ * directive". The magnifier then shrank as the label grew. Nothing about that
+ * is visible in `bun run build` or in the markup — only a real browser
+ * enforcing the header shows it, which is what caught this one.
+ *
+ * Stated plainly for the next person: there are NO inline style attributes in
+ * this admin, and there cannot be. Every value goes in a stylesheet.
+ */
+.admin-palette-open-icon {
+  flex: none;
+}
+
+.admin-palette-open-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-kbd {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Pushes the right-hand control group away from brand + palette. */
 .admin-topbar-spacer {
   flex: 1;
 }
 
-/* The topbar now carries hamburger + brand + tenant badge + theme toggle +
-   roles + logout. At phone widths that runs past the right edge and forces a
-   whole-page horizontal scroll, so let the row wrap and drop the spacer that
-   only makes sense on one line. Roles are secondary chrome — the tenant badge
-   is the identity that matters here — so they give way first. */
+/*
+ * ADR-0120 — the topbar is now a FIXED-height single row, so it can no longer
+ * wrap; things drop out instead, in a deliberate order.
+ *
+ * The previous rule let the row wrap at phone widths. That was right for a row
+ * whose height was free, and wrong for one the sticky sidebar measures: a
+ * wrapped topbar is 116px tall while `--admin-topbar-h` still says 58, and the
+ * sidebar underneath is offset by exactly that difference.
+ *
+ * What gives way, in order: the palette launcher and tenant switcher (reachable
+ * from the sidebar and the dashboard), then the sync wording (the dot IS the
+ * signal), then — in the block at the foot of this file — the brand WORDMARK
+ * and the language select's option text.
+ *
+ * The account role line does NOT drop, and an earlier `display: none` for it
+ * here was DEAD CODE: `.admin-account-meta` is declared below with
+ * `display: flex` at the same specificity, so the later rule won and the line
+ * rendered on a phone regardless. It is removed rather than moved, because the
+ * line is genuinely wanted and is already bounded by `max-width: 150px` plus an
+ * ellipsis — a long role list cannot widen the row.
+ */
+@media (max-width: 1023.98px) {
+  .admin-palette-open,
+  .admin-tenant-switch {
+    display: none;
+  }
+}
+
 @media (max-width: 767.98px) {
   .admin-topbar {
-    flex-wrap: wrap;
-    gap: var(--sp-2) var(--sp-3);
+    padding: 0 var(--sp-3);
+    gap: var(--sp-2);
   }
 
-  .admin-topbar-spacer {
-    display: none;
-  }
-
-  .admin-roles {
-    display: none;
-  }
-
-  /* Keep the sync dot (it is the signal) but drop its wording, same trade as
-     the theme toggle's label. */
   .admin-topbar .sync-indicator-label {
     display: none;
-  }
-
-  .admin-avatar {
-    width: 32px;
-    height: 32px;
   }
 }
 
 .admin-topbar-right {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   min-width: 0;
 }
 
@@ -225,6 +366,118 @@
   align-items: center;
   gap: var(--sp-2);
   min-width: 0;
+}
+
+/* Vertical hairline separating the account cluster from the toggles. */
+.admin-topbar-divider {
+  width: 1px;
+  height: 24px;
+  flex: none;
+  margin: 0 3px;
+  background: var(--color-border);
+}
+
+/*
+ * Shared metrics for the small square/pill controls in the topbar (theme,
+ * language, tenant). Declared once so they cannot drift into three heights —
+ * which is what a 58px row makes immediately visible.
+ */
+.admin-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-topbar-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.admin-topbar-btn--icon {
+  padding: 0;
+}
+
+/* Tenant switcher — reads as the workspace you are currently inside. */
+.admin-tenant-switch {
+  height: 34px;
+  font-size: var(--fs-xs);
+  color: var(--color-text);
+}
+
+.admin-tenant-switch-mark {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  flex: none;
+  border-radius: 5px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+}
+
+/* Account cluster: avatar + name/email stack. */
+.admin-account-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 9px 0 4px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-account-link:hover {
+  background: var(--color-surface-2);
+  text-decoration: none;
+}
+
+.admin-account-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 150px;
+  line-height: 1.15;
+}
+
+.admin-account-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.admin-account-roles {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--color-text-faint);
 }
 
 /* Circular avatar tile. Now the visible part of a LINK to /admin/account
@@ -249,17 +502,23 @@
   color: var(--color-text);
 }
 
+/* ADR-0120 — a filled initials disc rather than an outlined glyph tile. It
+   reads as a person at 26px where a stroked icon reads as a smudge. */
 .admin-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
+  border: 0;
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .admin-roles {
@@ -272,27 +531,47 @@
   white-space: nowrap;
 }
 
+/*
+ * ADR-0120 — sign-out MOVED to the sidebar footer, where the design puts it.
+ *
+ * The rules stay here (rather than moving to a `.admin-sidebar-*` name) because
+ * `#admin-logout` is wired by `AdminLayout`'s bundled script by id, and renaming
+ * both at once buys nothing. What changed is the shape: in the topbar it was a
+ * bordered button competing with four other controls; in the sidebar it is the
+ * last row of the nav list and is styled like one, turning danger-coloured only
+ * on hover.
+ */
 .admin-logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   min-height: 36px;
-  padding: var(--sp-1) var(--sp-3);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  padding: var(--sp-2) 10px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 0;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  font: inherit;
   font-size: var(--fs-sm);
+  text-align: left;
   white-space: nowrap;
   transition:
     background-color var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard);
+    color var(--motion-fast) var(--ease-standard);
 }
 .admin-logout:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  color: var(--color-danger);
 }
 .admin-logout:disabled {
   cursor: not-allowed;
   opacity: 0.75;
+}
+
+.admin-logout svg {
+  flex: none;
 }
 
 /* ---- Nav toggle (hamburger) — mobile only, CSS-only checkbox hack --- */
@@ -309,19 +588,36 @@
   border: 0;
 }
 
+/*
+ * ADR-0120 — 36px on touch, 32px on pointer. WCAG 2.2 AA (2.5.8 Target Size
+ * Minimum) asks for 24px; both clear it. The larger touch value is kept
+ * because this is the ONE control on a phone with no alternative route — the
+ * drawer it opens is the entire navigation.
+ */
 .admin-nav-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  color: var(--color-text);
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 .admin-nav-toggle:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+@media (min-width: 1024px) {
+  .admin-nav-toggle {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 /* Three-bar icon drawn with a span + its pseudo-elements. */
@@ -387,10 +683,12 @@
   flex: 1;
 }
 
-/* Scrim (mobile only) — a <label> that also closes the drawer on tap. */
+/* Scrim (mobile only) — a <label> that also closes the drawer on tap.
+   ADR-0120: starts BELOW the topbar rather than at `inset: 0`, so the theme,
+   language and account controls stay reachable while the drawer is open. */
 .admin-scrim {
   position: fixed;
-  inset: 0;
+  inset: var(--admin-topbar-h) 0 0;
   z-index: calc(var(--z-drawer) - 1);
   background: var(--color-overlay);
   opacity: 0;
@@ -405,16 +703,17 @@
 .admin-sidebar {
   /* Base = off-canvas drawer (mobile-first). */
   position: fixed;
-  top: 0;
+  top: var(--admin-topbar-h);
   bottom: 0;
   left: 0;
   z-index: var(--z-drawer);
-  width: min(80vw, 280px);
-  padding: var(--sp-4) var(--sp-3);
+  width: min(82vw, 264px);
+  display: flex;
+  flex-direction: column;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
-  overflow-y: auto;
+  overflow: hidden;
   transform: translateX(-100%);
   visibility: hidden;
   transition:
@@ -422,20 +721,17 @@
     visibility var(--motion-base) var(--ease-out);
 }
 
-/* The sidebar is now a column: nav on top, version footer pinned to the
-   bottom by the footer's own `margin-top: auto`. */
-.admin-sidebar {
-  display: flex;
-  flex-direction: column;
-}
-
+/* The scrolling region. Kept separate from `.admin-sidebar` so the sign-out
+   footer stays pinned while the nav list scrolls under it — a `margin-top:auto`
+   footer inside a scroller scrolls away with the list instead. */
 .admin-sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 12px 20px;
 }
 
-/* ---- Grouped navigation (section label -> links) ------------------- */
+/* ---- Grouped navigation (section -> module -> links) --------------- */
 .admin-sidebar ul {
   list-style: none;
   margin: 0;
@@ -445,23 +741,75 @@
 .admin-sidebar-groups {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: 18px;
 }
 
+/*
+ * ADR-0120 — sections COLLAPSE now, and they do it with `<details>`/`<summary>`
+ * rather than script.
+ *
+ * That is not a stylistic preference. The header of this shell records that
+ * awcms deliberately kept a CSS-only drawer where awcms-micro used JS, because
+ * a script-free control is strictly better under `default-src 'self'`. A
+ * collapsible section is the same problem, and `<details>` is the same answer —
+ * with the accessibility already built in (`aria-expanded` is implicit, Enter
+ * and Space both work, and the open/closed state is exposed to assistive tech
+ * without a single attribute of our own).
+ *
+ * The consequence, stated rather than hidden: open/closed is NOT remembered
+ * across navigations, because nothing persists it. Every section ships `open`,
+ * so the default state is the full menu — the state an operator would have
+ * chosen anyway, and the one that never hides a screen from someone who does
+ * not know it collapses.
+ */
 .admin-sidebar-group-label {
-  display: block;
-  padding: 0 var(--sp-3);
-  margin-bottom: var(--sp-1);
-  font-size: var(--fs-xs);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-2xs);
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  list-style: none;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-sidebar-group-label::-webkit-details-marker {
+  display: none;
+}
+
+.admin-sidebar-group-label:hover {
   color: var(--color-text-muted);
 }
 
-/* Second level: the owning module's name, muted and smaller than the section
-   heading above it. Core entries (Dashboard) carry no module label and their
-   links sit directly under the section heading. */
+.admin-sidebar-group-label-text {
+  flex: 1;
+}
+
+/* Caret drawn in CSS — one rotating chevron, no icon asset. */
+.admin-sidebar-caret {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.admin-sidebar-group[open] > .admin-sidebar-group-label .admin-sidebar-caret {
+  transform: rotate(0deg);
+}
+
+.admin-sidebar-group:not([open]) > .admin-sidebar-group-label
+  .admin-sidebar-caret {
+  transform: rotate(-90deg);
+}
+
+/* Second level: the owning module's name. Core entries (Dashboard) carry no
+   module label and their links sit directly under the section heading. */
 .admin-sidebar-modules {
   display: flex;
   flex-direction: column;
@@ -470,10 +818,10 @@
 
 .admin-sidebar-module-label {
   display: block;
-  padding: 0 var(--sp-3);
+  padding: 0 10px;
   margin-bottom: 2px;
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
+  font-size: var(--fs-2xs);
+  color: var(--color-text-faint);
 }
 
 .admin-sidebar-links {
@@ -482,35 +830,51 @@
   gap: 2px;
 }
 
-/* Version pinned to the bottom regardless of how many nav items there are. */
+/* Sign-out pinned to the bottom, above the version line. */
 .admin-sidebar-footer {
-  margin-top: auto;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--color-border);
+  flex: none;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--color-border-soft);
 }
 
 .admin-sidebar-version {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
+  align-items: baseline;
+  gap: var(--sp-1);
+  padding: var(--sp-2) 10px 0;
+  font-size: var(--fs-2xs);
+  color: var(--color-text-faint);
 }
 
 .admin-sidebar-version-value {
+  font-family: var(--font-mono);
   font-weight: var(--fw-semibold);
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * ADR-0120 — nav links carry an ICON now, and the active state is a soft tint
+ * rather than a solid primary fill.
+ *
+ * The solid fill was legible but visually loud: with one item filled solid
+ * blue, the eye reads the sidebar as a control panel rather than a list, and
+ * the filled row competes with the primary action button on the page it opened.
+ * A tinted background keeps the "you are here" signal without shouting.
+ *
+ * The text colour is `--color-primary-on-soft`, NOT `--color-primary`. See that
+ * token's comment in `tokens.css`: the obvious pairing measures 4.48:1 and
+ * fails AA, which is a bad way for the one element that answers "where am I" to
+ * fail.
+ */
 .admin-sidebar a {
-  padding: var(--sp-2) var(--sp-3);
-  min-height: 44px;
   display: flex;
   align-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
+  gap: 10px;
+  padding: var(--sp-2) 10px;
+  min-height: 34px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
   text-decoration: none;
   font-size: var(--fs-sm);
   transition:
@@ -519,13 +883,32 @@
 }
 
 .admin-sidebar a:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  text-decoration: none;
 }
 
 .admin-sidebar a[aria-current="page"] {
-  background: var(--color-primary-strong);
-  color: var(--color-primary-contrast);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
   font-weight: var(--fw-semibold);
+}
+
+/* The glyph. `flex: none` so a long label never squeezes it, and slightly
+   dimmed so the label stays the thing being read. */
+.admin-sidebar-icon {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  opacity: 0.85;
+}
+
+.admin-sidebar-link-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Drawer open (checkbox checked) — slide in + reveal scrim. */
@@ -539,15 +922,74 @@
   pointer-events: auto;
 }
 
+/* ---- Main column --------------------------------------------------- */
 .admin-main {
-  padding: var(--sp-4);
+  flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
 }
 
-.admin-main h1 {
-  margin-top: 0;
+/*
+ * ADR-0120 — the page header is a BAND, not just an `<h1>`.
+ *
+ * Breadcrumb, title, one-line description and the screen's primary/secondary
+ * actions sit together above a rule, at a fixed inline padding shared with the
+ * content below it. Before this, every screen positioned its own title and its
+ * own action button, and no two screens agreed on where either belonged.
+ */
+.admin-page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px clamp(var(--sp-4), 3vw, 34px) 0;
+}
+
+.admin-page-head-main {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-page-heading {
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.admin-main h1,
+.admin-page-heading h1 {
+  margin: 0;
   font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-tight);
   line-height: var(--lh-tight);
+}
+
+.admin-page-description {
+  margin: 0;
+  max-width: 70ch;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  text-wrap: pretty;
+}
+
+/* Slot for the screen's own primary/secondary buttons. */
+.admin-page-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.admin-page-body {
+  flex: 1;
+  padding: 22px clamp(var(--sp-4), 3vw, 34px) 44px;
 }
 
 /* ---- Breadcrumb ---------------------------------------------------- */
@@ -555,30 +997,48 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1);
-  margin: 0 0 var(--sp-4);
+  align-items: center;
+  gap: 7px;
+  margin: 0;
   padding: 0;
-  font-size: var(--fs-sm);
-  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  color: var(--color-text-faint);
 }
 
 .admin-breadcrumb li + li::before {
   content: "/";
-  margin-right: var(--sp-1);
+  margin-right: 7px;
 }
 
 .admin-breadcrumb a {
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
 }
 
 .admin-breadcrumb a:hover {
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
-/* ---- Desktop: static sidebar, no drawer/toggle/scrim --------------- */
-@media (min-width: 768px) {
-  .admin-nav-toggle,
-  .admin-nav-toggle-checkbox,
+.admin-breadcrumb [aria-current="page"] {
+  color: var(--color-text-muted);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Desktop: static sidebar; the toggle COLLAPSES it -------------- */
+/*
+ * ADR-0120 — the breakpoint moved from 768px to 1024px, and the hamburger
+ * survives above it instead of being hidden.
+ *
+ * At 768px the 220px sidebar left ~540px for tables with six columns, so the
+ * drawer was appearing at widths where it was not yet needed and disappearing
+ * at widths where the content was already cramped. 1024px is where a 244px
+ * sidebar still leaves a usable content column.
+ *
+ * Above it the SAME checkbox now means something different: not "open the
+ * drawer" but "collapse the sidebar", for an operator who wants the full width
+ * for a wide table. One control, one piece of state, no script — the drawer and
+ * the collapse are the same mechanism read at two sizes.
+ */
+@media (min-width: 1024px) {
   .admin-scrim {
     display: none;
   }
@@ -588,31 +1048,51 @@
   }
 
   .admin-sidebar {
-    position: static;
+    position: sticky;
+    top: var(--admin-topbar-h);
+    height: calc(100vh - var(--admin-topbar-h));
     z-index: auto;
-    width: 220px;
+    width: var(--admin-sidebar-w);
     flex-shrink: 0;
     box-shadow: none;
     transform: none;
     visibility: visible;
-    overflow-y: visible;
+    transition: width var(--motion-fast) var(--ease-standard);
   }
 
-  .admin-main {
-    flex: 1;
-    padding: var(--sp-5);
+  /* Collapsed: width to zero rather than `display: none`, so the width
+     transition has something to animate and the links stay in the a11y tree
+     only while they are actually reachable (`overflow: hidden` clips them, and
+     `visibility` below removes them). */
+  .admin-nav-toggle-checkbox:checked ~ .admin-layout .admin-sidebar {
+    width: 0;
+    border-right-color: transparent;
+    visibility: hidden;
   }
 }
 
 /* ==================================================================== */
 /* Data table                                                           */
 /* ==================================================================== */
+/*
+ * ADR-0120 — one table look, expressed once for both names.
+ *
+ * `.data-table` and `.admin-table` are two vocabularies for the same object
+ * (see the `.admin-table` block below for how that happened). The redesign
+ * gives them identical metrics HERE rather than restyling each: a `<thead>` on
+ * `--color-surface-3` with `--fs-2xs` uppercase tracked labels in
+ * `--color-text-faint`, rows separated by `--color-border-soft` (the INTERNAL
+ * rule) inside a card bounded by `--color-border` (the OUTER one), and a hover
+ * tint that lands on the recessed surface rather than the hover surface — a row
+ * should settle under the pointer, not lift.
+ */
 .data-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .data-table {
@@ -623,34 +1103,50 @@
 
 .data-table caption {
   text-align: left;
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   font-weight: var(--fw-semibold);
   color: var(--color-text-muted);
 }
 
 .data-table th,
 .data-table td {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
 .data-table th {
-  background: var(--color-bg);
-  color: var(--color-text-muted);
-  font-weight: var(--fw-semibold);
+  background: var(--color-surface-3);
+  color: var(--color-text-faint);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
   white-space: nowrap;
+}
+
+/* The last row's rule would otherwise double up with the card border. */
+.data-table tbody tr:last-child > * {
+  border-bottom: 0;
 }
 
 .data-table tbody tr {
   transition: background-color var(--motion-fast) var(--ease-standard);
 }
 .data-table tbody tr:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-surface-3);
+}
+
+/* Numeric columns line up on the decimal only with tabular figures; without
+   this a column of counts jitters as the digits change. */
+.data-table .num,
+.data-table [data-numeric] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table-empty {
-  padding: var(--sp-4);
+  padding: var(--sp-6) var(--sp-4);
   text-align: center;
   color: var(--color-text-muted);
 }
@@ -713,27 +1209,56 @@
 /* ==================================================================== */
 /* Status badge                                                         */
 /* ==================================================================== */
+/*
+ * ADR-0120 — status badges are TINTED now, not solid.
+ *
+ * Solid fills were chosen so white text would clear 4.5:1, and they did. The
+ * cost only shows at list scale: a table of forty rows with a solid green,
+ * amber or red pill in every one reads as a warning panel, and the pill — the
+ * least important thing in the row — is the loudest. The tinted pair
+ * (`--color-X` on `--color-X-soft`, both measured >=4.5:1 in `tokens.css`) says
+ * the same thing at the weight the information deserves.
+ *
+ * `--color-warning` was the worst of the old set and not only aesthetically:
+ * `warning` used `--color-text` on `--color-warning`, which in the DARK theme
+ * put near-black text on amber inside an otherwise dark row.
+ */
 .status-badge {
-  display: inline-block;
-  padding: 2px var(--sp-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* The leading dot repeats the status in a second channel, so the badge does not
+   rely on hue alone (WCAG 1.4.1 Use of Colour). */
+.status-badge .status-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: currentcolor;
 }
 
 .status-badge[data-variant="success"] {
-  background: var(--color-success-strong);
-  color: var(--color-primary-contrast);
+  background: var(--color-success-soft);
+  color: var(--color-success-on-soft);
 }
 
 .status-badge[data-variant="neutral"] {
-  background: var(--color-border);
-  color: var(--color-text);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
 }
 
 .status-badge[data-variant="warning"] {
-  background: var(--color-warning);
-  color: var(--color-text);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
 }
 
 /* ==================================================================== */
@@ -768,12 +1293,22 @@
   }
 }
 
+/*
+ * ADR-0120 — 38px, down from 44px.
+ *
+ * 44 was a touch-target floor. WCAG 2.2 AA (2.5.8) asks 24px, and this is a
+ * pointer-first admin — but the real argument is that the buttons beside these
+ * fields are 36px, and a filter bar with 44px inputs against 36px buttons looks
+ * mis-set on every screen that has one. Controls that ARE touch-first (the nav
+ * toggle, the drawer links) keep their larger targets and say so where they are
+ * defined.
+ */
 .admin-create-form input,
 .admin-create-form select,
 .admin-create-form textarea {
-  min-height: 44px;
+  min-height: 38px;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
@@ -835,7 +1370,7 @@
   padding: var(--sp-1) var(--sp-3);
   background: var(--color-surface);
   color: var(--color-text);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--fs-sm);
@@ -996,6 +1531,16 @@
   color: inherit;
 }
 
+/*
+ * ADR-0120 — 38px, down from 44px.
+ *
+ * 44 was a touch-target floor. WCAG 2.2 AA (2.5.8) asks 24px, and this is a
+ * pointer-first admin — but the real argument is that the buttons beside these
+ * fields are 36px, and a filter bar with 44px inputs against 36px buttons looks
+ * mis-set on every screen that has one. Controls that ARE touch-first (the nav
+ * toggle, the drawer links) keep their larger targets and say so where they are
+ * defined.
+ */
 .admin-form input,
 .admin-form select,
 .admin-form textarea,
@@ -1003,9 +1548,9 @@
 .admin-field select,
 .admin-field textarea {
   width: 100%;
-  min-height: 44px;
+  min-height: 38px;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
@@ -1104,6 +1649,16 @@
  * on them measures below 4.5:1. This is exactly the "solid fill with
  * `--color-primary-contrast` on top" case that comment names.
  */
+/*
+ * ADR-0120 — 36px tall, `--radius-md`, semibold.
+ *
+ * The height came down from 44px. That number was a touch-target floor, and it
+ * is the wrong floor for a pointer-first admin: WCAG 2.2 AA (2.5.8) asks 24px,
+ * and 44px buttons in a toolbar strip beside 36px inputs made every filter bar
+ * look mis-set. Controls that are genuinely touch-first — the nav toggle, the
+ * mobile drawer links — keep their larger targets and say so where they are
+ * defined.
+ */
 .btn,
 .btn-primary,
 .btn-secondary,
@@ -1111,25 +1666,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-2);
-  min-height: 44px;
-  padding: var(--sp-2) var(--sp-4);
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 var(--sp-4);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font: inherit;
   font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-semibold);
   line-height: var(--lh-snug);
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard);
 }
 
+.btn:hover,
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-danger:hover {
+  text-decoration: none;
+}
+
 .btn-primary {
   background: var(--color-primary-strong);
   color: var(--color-primary-contrast);
+  box-shadow: var(--shadow-xs);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
@@ -1143,11 +1707,37 @@
 }
 .btn:hover:not(:disabled),
 .btn-secondary:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  background: var(--color-surface-2);
 }
 
+/*
+ * Destructive actions are OUTLINED, not filled.
+ *
+ * A solid red button is the loudest object on any screen, and in this admin the
+ * destructive action is almost never the one being encouraged — it sits beside
+ * "Cancel" at the end of a row. Outlining it keeps the colour signal (and the
+ * same 4.5:1 text contrast, since the text is now on `--color-surface`) while
+ * letting the primary action stay the emphasised one. `.btn-danger--solid` is
+ * there for the genuine exception: a confirmation dialog whose whole purpose IS
+ * the destructive act.
+ */
 .btn-danger {
+  background: transparent;
+  border-color: var(--color-danger);
+  /* `--color-danger`, NOT `--color-danger-strong`: strong is darkened for white
+     text on a fill, and in the dark theme that same darkening measures 3.83:1
+     as text on `--color-surface`. The plain token is the one tuned for exactly
+     this job (4.82:1 light / 5.84:1 dark). */
+  color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
+}
+
+.btn-danger--solid {
   background: var(--color-danger-strong);
+  border-color: transparent;
   color: var(--color-primary-contrast);
 }
 
@@ -1160,8 +1750,8 @@
 }
 
 .btn-small {
-  min-height: 32px;
-  padding: var(--sp-1) var(--sp-3);
+  min-height: 30px;
+  padding: 0 11px;
   font-size: var(--fs-xs);
 }
 
@@ -1260,12 +1850,32 @@
   color: var(--color-text-muted);
 }
 
+/*
+ * ADR-0120 — `justify-content: space-between` REMOVED, and it was a real defect
+ * rather than a taste change.
+ *
+ * `/admin/index.astro` writes `<span class="card-icon">` then `<h2>`, and its
+ * own scoped rule lays them out left-to-right with a gap. It does not declare
+ * `justify-content`, so this rule's `space-between` still applied through the
+ * cascade — and pushed every dashboard card's title to the RIGHT EDGE, metres
+ * from the icon that labels it. Three cards on the main dashboard read that way.
+ *
+ * Nothing needs `space-between` here: the one element that must sit at the far
+ * end is `.card-header-badge`, which already carries `margin-left: auto`. That
+ * is also why the fix is a removal rather than `justify-content: flex-start` —
+ * the property simply has no business in this rule.
+ */
 .card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
+}
+
+/* The badge is what goes to the far end — see above. Declared here so the
+   behaviour does not depend on a page-scoped rule that happens to repeat it. */
+.card-header-badge {
+  margin-left: auto;
 }
 
 .row {
@@ -1327,10 +1937,17 @@
  * shared metrics are declared once for both, so the two names cannot drift into
  * two different tables.
  */
+/* ADR-0120 — the wrapper is a card now, matching `.data-table-scroll`, so the
+   two names produce the same object rather than a bordered table and a bare
+   one. */
 .admin-table-wrap,
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .admin-table {
@@ -1341,25 +1958,68 @@
 
 .admin-table th,
 .admin-table td {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-soft);
   vertical-align: top;
 }
 
 .admin-table th {
-  color: var(--color-text-muted);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  background: var(--color-surface-3);
+  color: var(--color-text-faint);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: 0.09em;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.admin-table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-table tbody tr:hover {
+  background: var(--color-surface-3);
+}
+
+.admin-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.admin-table .num,
+.admin-table [data-numeric] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .table-empty {
-  padding: var(--sp-5);
+  padding: var(--sp-6) var(--sp-4);
   text-align: center;
   color: var(--color-text-muted);
+}
+
+/* Pagination / summary strip pinned under a table, inside the same card. */
+.admin-table-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--color-surface-3);
+  border-top: 1px solid var(--color-border-soft);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.admin-table-foot-spacer {
+  flex: 1;
+}
+
+.admin-table-page {
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-actions {
@@ -1428,10 +2088,20 @@
   font-size: var(--fs-sm);
 }
 
+/*
+ * ADR-0120 — 38px, down from 44px.
+ *
+ * 44 was a touch-target floor. WCAG 2.2 AA (2.5.8) asks 24px, and this is a
+ * pointer-first admin — but the real argument is that the buttons beside these
+ * fields are 36px, and a filter bar with 44px inputs against 36px buttons looks
+ * mis-set on every screen that has one. Controls that ARE touch-first (the nav
+ * toggle, the drawer links) keep their larger targets and say so where they are
+ * defined.
+ */
 .field-input {
-  min-height: 44px;
+  min-height: 38px;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
@@ -1506,4 +2176,668 @@
   margin: 0;
   list-style: none;
   line-height: var(--lh-relaxed);
+}
+
+/* ==================================================================== */
+/* ADR-0120 — components the redesign introduces                        */
+/* ==================================================================== */
+/*
+ * Everything below is NEW vocabulary, not a restyle of something above.
+ *
+ * It lives in `admin.css` rather than `admin-screens.css` for the reason the
+ * card/form block above already gives: `AdminLayout` always loads this file,
+ * while `admin-screens.css` is a per-screen import that a new page can simply
+ * forget — which is exactly how `.admin-card` went a whole wave of screens
+ * without a definition.
+ */
+
+/* ---- Sidebar count badge ------------------------------------------- */
+/* A pending count on a nav item (moderation queue, approvals). Danger-tinted
+   because every one of them means "something is waiting on a person". */
+.admin-sidebar-count {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Sync pill (topbar) -------------------------------------------- */
+.admin-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.admin-sync-pill[data-active="true"] {
+  background: var(--color-success-soft);
+  color: var(--color-success-on-soft);
+}
+
+.admin-sync-pill[data-active="false"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
+}
+
+.admin-sync-pill-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: currentcolor;
+}
+
+/* ---- Command palette ------------------------------------------------ */
+/*
+ * A `<dialog>`, opened with `showModal()`.
+ *
+ * That element is the reason this is ~40 lines of script instead of ~200: the
+ * platform provides the focus trap, the Escape handler, the inertness of the
+ * page behind it, the `::backdrop`, and the return of focus to the opener. Each
+ * of those is a thing hand-rolled modals get wrong, and none of them is code we
+ * have to own.
+ */
+.admin-palette {
+  width: min(560px, 92vw);
+  max-width: none;
+  padding: 0;
+  margin: 14vh auto auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.admin-palette::backdrop {
+  background: var(--color-overlay);
+}
+
+.admin-palette-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px var(--sp-4);
+  border-bottom: 1px solid var(--color-border-soft);
+  color: var(--color-text-faint);
+}
+
+.admin-palette-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--fs-base);
+  outline: none;
+}
+
+.admin-palette-results {
+  max-height: 344px;
+  overflow-y: auto;
+  padding: 7px;
+  margin: 0;
+  list-style: none;
+}
+
+.admin-palette-results a {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.admin-palette-results a:hover,
+.admin-palette-results a:focus-visible {
+  background: var(--color-surface-2);
+  text-decoration: none;
+}
+
+.admin-palette-results svg {
+  flex: none;
+  color: var(--color-text-faint);
+}
+
+.admin-palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-palette-group {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-normal);
+  color: var(--color-text-faint);
+}
+
+/* Shown when the filter matches nothing. Not an error — the operator is simply
+   still typing. */
+.admin-palette-empty {
+  padding: var(--sp-5) var(--sp-4);
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/* ---- Toolbar / filter strip ---------------------------------------- */
+/*
+ * The row of search box, filter chips and right-aligned actions that sits above
+ * a list. Twenty-odd screens hand-built some version of this; it is one object.
+ */
+.admin-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+.admin-toolbar-spacer {
+  flex: 1;
+}
+
+/* Search box: a bordered shell wrapping a borderless input, so the magnifier
+   sits INSIDE the field rather than beside it. */
+.admin-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 220px;
+  max-width: 340px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text-faint);
+}
+
+.admin-search:focus-within {
+  border-color: var(--color-focus);
+}
+
+.admin-search svg {
+  flex: none;
+}
+
+.admin-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+/*
+ * Filter chips. `.admin-chip` is a LINK on most screens (filtering is a URL
+ * state, so it must survive a reload and be shareable) and a button where the
+ * filter is genuinely client-side.
+ */
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-chip:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+/*
+ * The selected chip is marked with `aria-current="page"` (for links) or
+ * `aria-pressed="true"` (for buttons), NOT with a `.is-active` class.
+ *
+ * Same reason the sidebar uses `aria-current`: the attribute that tells
+ * assistive technology which filter is on is then the same attribute that draws
+ * it, so the two cannot disagree. A class can be applied to the wrong chip and
+ * nothing notices; a wrong `aria-current` is wrong out loud.
+ */
+.admin-chip[aria-current="page"],
+.admin-chip[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+}
+
+.admin-chip-count {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-normal);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-chip[aria-current="page"] .admin-chip-count,
+.admin-chip[aria-pressed="true"] .admin-chip-count {
+  color: inherit;
+}
+
+/* Compact select that matches the chip/search metrics. */
+.admin-select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+/* ---- Bulk-selection bar -------------------------------------------- */
+/* Appears above a table once rows are ticked. Tinted rather than filled so it
+   reads as a state of the list, not a new page region. */
+.admin-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: var(--sp-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Frame (card with a header strip) ------------------------------- */
+/*
+ * The third card shape, and it needs its own name for a reason worth stating.
+ *
+ * `.admin-card` (above) is a padded box. `.admin-panel` (in
+ * `admin-screens.css`) is ALSO a padded box — a second name for the same
+ * object, used by ~20 screens. `.admin-frame` is genuinely different: a header
+ * strip, then a body with its own padding, with the rule between them running
+ * EDGE TO EDGE. A padded card cannot do that; its padding stops the rule short,
+ * which is precisely the difference between a titled box and a framed one.
+ *
+ * It is NOT called `.admin-panel--framed`. That would be a modifier on a class
+ * whose base rule sets the padding this shape must not have, so every use would
+ * be one rule fighting another, and `admin-screens.css` loads AFTER this file —
+ * the base would win. A different shape gets a different name.
+ */
+.admin-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.admin-frame-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px var(--sp-4);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.admin-frame-head h2,
+.admin-frame-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-frame-body {
+  padding: var(--sp-4);
+}
+
+/* Tight body for a panel that holds nothing but key/value rows. */
+.admin-frame-body--rows {
+  padding: 6px var(--sp-4) 14px;
+}
+
+.admin-frame-note {
+  flex: none;
+  max-width: 50%;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The icon tile beside a panel title, and beside a stat value. `data-tone`
+ * picks the pair; the default is the neutral surface tint.
+ *
+ * The tones deliberately reuse the `-soft` / `-on-soft` pairs rather than
+ * inventing icon colours, so an icon and the status badge that means the same
+ * thing are the same colour.
+ */
+.admin-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-surface-2);
+  color: var(--color-text-faint);
+}
+
+.admin-tile--lg {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.admin-tile[data-tone="primary"] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+}
+.admin-tile[data-tone="success"] {
+  background: var(--color-success-soft);
+  color: var(--color-success-on-soft);
+}
+.admin-tile[data-tone="warning"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
+}
+.admin-tile[data-tone="danger"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
+}
+.admin-tile[data-tone="info"] {
+  background: var(--color-info-soft);
+  color: var(--color-info-on-soft);
+}
+
+/* Key/value row inside a panel body. */
+.admin-kv {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.admin-kv:last-child {
+  border-bottom: 0;
+}
+
+.admin-kv-key {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.admin-kv-value {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.admin-kv-value[data-tone="success"] {
+  color: var(--color-success-on-soft);
+}
+.admin-kv-value[data-tone="danger"] {
+  color: var(--color-danger-on-soft);
+}
+.admin-kv-value[data-tone="muted"] {
+  color: var(--color-text-muted);
+}
+
+/* ---- Section nav (settings-style left rail) ------------------------- */
+.admin-section-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .admin-section-layout {
+    grid-template-columns: 212px minmax(0, 1fr);
+  }
+
+  .admin-section-nav {
+    position: sticky;
+    top: calc(var(--admin-topbar-h) + var(--sp-4));
+  }
+}
+
+.admin-section-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-section-nav a {
+  display: block;
+  padding: var(--sp-2) 11px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+}
+
+.admin-section-nav a:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.admin-section-nav a[aria-current="page"] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Settings rows (label + hint on the left, control on the right) - */
+.admin-setting-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+  align-items: start;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.admin-setting-row:last-child {
+  border-bottom: 0;
+}
+
+@media (min-width: 720px) {
+  .admin-setting-row {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+}
+
+.admin-setting-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.admin-setting-label > span:first-child {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.admin-setting-hint {
+  font-size: var(--fs-xs);
+  color: var(--color-text-faint);
+  line-height: var(--lh-normal);
+}
+
+/* ---- Definition list used for read-only detail panes ---------------- */
+.admin-dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 0;
+}
+
+.admin-dl dt {
+  padding: 10px 0 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}
+
+.admin-dl dd {
+  margin: 0;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: var(--fs-sm);
+}
+
+.admin-dl dd:last-child {
+  border-bottom: 0;
+}
+
+/* ---- Monospace / code fragments ------------------------------------- */
+/* Slugs, ids, resource paths and timestamps. Tabular figures so a column of
+   them lines up, and `break-all` because an id must never widen a table. */
+/*
+ * `nowrap` on the shared rule, `break-all` only on `.cell-code`.
+ *
+ * These started as one rule with `word-break: break-all`, which is right for an
+ * identifier (one long id must never widen a table) and wrong for everything
+ * else: it broke `2026-09-02 01:58:27` across two lines mid-second in the audit
+ * trail's timestamp column. A timestamp is a fixed-width atom — if the column
+ * is too narrow the TABLE should scroll, which it can, because every table here
+ * sits in an `overflow-x: auto` wrapper.
+ */
+.admin-mono,
+.cell-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.admin-mono {
+  white-space: nowrap;
+}
+
+/* Identifiers, paths and hashes: break anywhere rather than widen the table. */
+.cell-code {
+  word-break: break-all;
+}
+
+.admin-code-inline {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  word-break: break-all;
+}
+
+/* ---- Reduced motion ------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar,
+  .admin-chip,
+  .admin-tile,
+  .admin-palette-open,
+  .admin-topbar-btn,
+  .admin-account-link,
+  .admin-sidebar-caret,
+  .admin-table tbody tr {
+    transition: none;
+  }
+}
+
+/* ==================================================================== */
+/* ADR-0120 — the topbar at phone widths                                */
+/* ==================================================================== */
+/*
+ * The topbar is a FIXED 58px row that cannot wrap (the sticky sidebar measures
+ * `--admin-topbar-h`, so a wrapped topbar and an offset sidebar are the same
+ * bug). Everything therefore has to FIT, and at 390px it did not: the row
+ * overflowed the viewport by 91px, clipping the wordmark to "AWC" and pushing
+ * the account link off-screen entirely.
+ *
+ * That was invisible until the browser was actually given a phone viewport.
+ * Every earlier check ran at Playwright's default 1280px because the context
+ * option had been misspelled (`viewportSize` instead of `viewport`), so the
+ * "mobile" runs were desktop runs wearing a mobile label — a green result for a
+ * test that was not running.
+ *
+ * What gives way here, and why:
+ *
+ *   - the WORDMARK, not the mark. The tile still identifies the product and
+ *     still links to `/admin`; the six letters beside it are the redundant half.
+ *   - the language SELECT's width. It cannot be hidden — it is the only way to
+ *     change locale, and unlike the palette or the tenant pill it has no second
+ *     home in the sidebar — so it shrinks to its flag plus the native chevron.
+ *     The accessible name is unaffected: it comes from the `sr-only` `<label>`.
+ */
+@media (max-width: 767.98px) {
+  .admin-brand-text {
+    display: none;
+  }
+
+  /* Flag + chevron only. `text-indent` moves the option text out of view
+     without `display: none`, which on a `<select>` would take the control with
+     it, and without `font-size: 0`, which some engines apply to the dropdown
+     list as well. */
+  .admin-topbar .locale-switcher-select {
+    width: 2.25rem;
+    min-width: 0;
+    text-indent: -100vw;
+  }
 }

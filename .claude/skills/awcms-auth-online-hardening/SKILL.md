@@ -535,7 +535,7 @@ issue**, and none was needed:
   Mutations (policy save, provider create/update/delete) go through the
   REAL `PATCH /api/v1/identity/sso/policy` /
   `POST|PATCH|DELETE /api/v1/identity/sso/providers[/{id}]` endpoints via
-  `sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`) — every mutation still runs
+  `sendJson` (`src/lib/ui/admin-form-client.ts`) — every mutation still runs
   through those endpoints' own ABAC + break-glass + audit logic; this
   page never writes to the database directly.
 - **Two independent gates control what renders** (issue's own acceptance

@@ -290,8 +290,19 @@ How it works:
 - `composeSidebarSections` filters per caller: modules disabled for the tenant
   are dropped, `requiredPermission` decides whether a link is visible. Empty
   sections are not rendered.
-- Labels: this base has no gettext catalog, so `labelKey` is resolved via the
-  `SIDEBAR_LABELS` table in the same file. Adding a nav entry = adding a label.
+- Labels: `labelKey` resolves through the `SIDEBAR_LABELS` table in the same
+  file to the **English source string**, which `AdminLayout` then translates with
+  `tx("menu-section", …)` / `t(…)` against the gettext catalogues in `locales/`.
+  (An earlier version of this line said "this base has no gettext catalog" —
+  ADR-0095 built one; the table survived because it is keyed on `labelKey`, and
+  what it returns is now translatable source text rather than the final label.)
+  Adding a nav entry = adding a label **and** its `.po` entries.
+- Icons: `navigation[].icon` is **live** since ADR-0120. It had been declared in
+  the contract, validated by the composition checker and threaded through two
+  type layers while no module set it and nothing rendered it. A descriptor's own
+  value wins; otherwise `DEFAULT_SIDEBAR_ICONS` (also `labelKey`-keyed) supplies
+  one. Path data lives in `src/lib/ui/admin-icons.ts`, and an unknown name
+  renders a neutral dot rather than being echoed into an SVG attribute.
 
 **The gate `tests/admin-navigation-registry.test.ts`** enforces both directions: every
 `navigation[].path` must have a real page under `src/pages/admin/**`, and every

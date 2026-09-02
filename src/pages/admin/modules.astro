@@ -95,18 +95,12 @@ const canReadSettings =
 const canToggle = canEnable || canDisable;
 ---
 
-<AdminLayout title="Modules">
-  <header class="page-header fade-in-up">
-    <h1 id="modules-heading">{t("Modules")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Per-module enablement for this tenant. Core modules cannot be disabled, and a module other enabled modules depend on will refuse to turn off."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Modules")}
+  description={t(
+    "Per-module enablement for this tenant. Core modules cannot be disabled, and a module other enabled modules depend on will refuse to turn off."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="modules-denied">

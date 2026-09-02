@@ -88,18 +88,12 @@ const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const reasons = [...SUPPRESSION_REASONS];
 ---
 
-<AdminLayout title="Email suppression">
-  <header class="page-header fade-in-up">
-    <h1 id="email-suppression-heading">{t("Email suppression")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Addresses this tenant will not send to. A suppressed address receives nothing \u2014 including password resets \u2014 so an account can look broken when it is only unreachable. This is where to check, and where to undo it."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Email suppression")}
+  description={t(
+    "Addresses this tenant will not send to. A suppressed address receives nothing \u2014 including password resets \u2014 so an account can look broken when it is only unreachable. This is where to check, and where to undo it."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="email-suppression-denied">

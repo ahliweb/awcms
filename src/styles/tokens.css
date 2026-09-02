@@ -6,25 +6,188 @@
  * tenant oleh aplikasi turunan. Di-scope ke `:root` (light, default) dengan
  * override `:root[data-theme="dark"]`; resolusi tema (system/light/dark)
  * dilakukan oleh skrip inline di `src/layouts/AdminLayout.astro`.
+ *
+ * ADR-0120 — nilai warna, bayangan, dan typeface di bawah adalah hasil
+ * redesign permukaan admin. Yang BERUBAH hanya nilainya; nama token tidak,
+ * karena 48 layar admin membacanya. Itu yang membuat satu perubahan di berkas
+ * ini menggeser seluruh permukaan sekaligus, bukan 48 perubahan terpisah.
  */
+
+/* ==================================================================== */
+/* Typeface — di-host sendiri, WAJIB, bukan preferensi estetika         */
+/* ==================================================================== */
+/*
+ * CSP repo ini `default-src 'self'` TANPA `'unsafe-inline'` dan TANPA
+ * direktif `font-src`/`style-src` sendiri (lihat
+ * `src/lib/security/security-headers.ts`). Artinya keduanya jatuh ke
+ * `default-src`, dan `fonts.googleapis.com`/`fonts.gstatic.com` — jalur yang
+ * dipakai referensi desain — DIBLOKIR browser tanpa pesan yang terlihat di
+ * halaman. Meng-host sendiri bukan optimasi: itu satu-satunya cara typeface
+ * ini bisa tampil sama sekali di bawah kebijakan yang sudah ada, dan ia tidak
+ * melebarkan CSP satu origin pun.
+ *
+ * `font-display: swap` — teks terbaca sejak paint pertama dengan stack sistem,
+ * lalu berganti. Admin ini dipakai di jaringan kantor yang tidak selalu cepat;
+ * `block` akan menahan seluruh teks di belakang unduhan font.
+ *
+ * `unicode-range` menjaga `latin-ext` TIDAK diunduh sampai ada karakter yang
+ * benar-benar membutuhkannya. Halaman berbahasa Indonesia/Inggris biasa tidak
+ * pernah menyentuh berkas itu.
+ */
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/public-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/public-sans-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+    U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/*
+ * Italic hanya `latin`. Editor blok (ADR-0100) punya dekorator `em`, jadi
+ * italic ASLI dibutuhkan — tetapi italic ber-diakritik latin-ext praktis tidak
+ * pernah muncul, dan browser mensintesis oblique untuk kasus itu tanpa merusak
+ * apa pun.
+ */
+@font-face {
+  font-family: "Public Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/public-sans-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+    U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   color-scheme: light;
 
   /* Warna semantik (light) */
-  --color-bg: #f7f8fa;
+  --color-bg: #f5f7fa;
   --color-surface: #ffffff;
   --color-surface-2: #eef1f5;
-  --color-border: #d8dee6;
-  --color-text: #1a1f26;
+  --color-border: #dde3ea;
+  --color-text: #141a21;
   --color-text-muted: #5b6672;
   --color-primary: #2563eb;
   --color-primary-contrast: #ffffff;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
+  --color-success: #12873d;
+  --color-warning: #b45309;
   --color-danger: #dc2626;
-  --color-info: #0891b2;
+  --color-info: #0e7490;
   --color-focus: #2563eb;
+
+  /*
+   * ADR-0120 — tiga token permukaan/teks baru yang dituntut redesign.
+   *
+   * `--color-surface-3` adalah permukaan RECESSED: latar `<thead>`, footer
+   * paginasi, dan isian input. Sebelumnya semuanya memakai `--color-surface-2`,
+   * yang di layar ini juga dipakai sebagai chip/pill — jadi baris tabel dan
+   * badge punya latar identik dan hierarkinya rata. Dua peran, dua token.
+   *
+   * `--color-border-soft` adalah garis pemisah INTERNAL (antar baris tabel,
+   * antar baris panel). `--color-border` tetap garis LUAR kartu. Memakai satu
+   * token untuk keduanya membuat tabel padat terbaca seperti kisi.
+   *
+   * `--color-text-faint` adalah tingkat ketiga teks (label kolom, timestamp,
+   * hint) di bawah `--color-text-muted`.
+   *
+   * NILAINYA SENGAJA BERBEDA dari referensi desain, dan ini satu-satunya
+   * tempat redesign ini menolak angka kanvasnya. Kanvas memakai `#8b959f`
+   * (light) / `#6d7883` (dark); diukur, keduanya 3.04:1 dan 3.87:1 terhadap
+   * permukaannya — di bawah 4.5:1 WCAG 2.1 AA yang
+   * `docs/awcms/14_ui_ux_design_system.md` §Aksesibilitas janjikan. Itu akan
+   * baik-baik saja untuk dekorasi, tetapi token ini mewarnai HEADER KOLOM
+   * tabel, timestamp jejak audit, dan hint field — teks yang membawa
+   * informasi dan harus terbaca.
+   *
+   * Diukur terhadap KETIGA permukaan yang benar-benar memuatnya, bukan hanya
+   * `--color-surface`. Itu yang menangkap kesalahan: percobaan pertama
+   * (`#6b7681`) lolos 4.63:1 di `--color-surface` dan GAGAL 4.39:1 di
+   * `--color-surface-3` — yaitu latar `<thead>`, tepat tempat token ini paling
+   * banyak dipakai. Nilai akhir lolos di ketiganya:
+   *
+   *   terang `#646f7a`  surface 5.13 · surface-3 4.86 · surface-2 4.52
+   *   gelap  `#808a95`  surface 4.94 · surface-3 5.14 · surface-2 4.51
+   *
+   * Ini pola yang sama dengan varian `-strong` di bawah, dan alasannya sama:
+   * angka desain benar untuk peran yang dibayangkannya, dan salah untuk peran
+   * yang benar-benar dipakai kode.
+   */
+  --color-surface-3: #f7f9fc;
+  --color-border-soft: #e8edf3;
+  --color-text-faint: #646f7a;
+
+  /*
+   * ADR-0120 — garis batas KONTROL, dan ini token yang ditemukan gerbang, bukan
+   * mata.
+   *
+   * WCAG 2.1 **1.4.11 Non-text Contrast** (level AA, yang dijanjikan
+   * `docs/awcms/14_ui_ux_design_system.md` §Aksesibilitas) menuntut 3:1 untuk
+   * "informasi visual yang diperlukan untuk mengidentifikasi komponen antarmuka".
+   * Diukur, `--color-border` adalah 1.29:1 (terang) dan 1.34:1 (gelap) terhadap
+   * permukaannya. Isian input hanya berbeda 1.03:1 dari kartu di sekelilingnya,
+   * jadi garis itu SATU-SATUNYA yang memberi tahu di mana kotak isian berada —
+   * persis kasus yang dijelaskan kriteria tersebut.
+   *
+   * Ini cacat yang sudah ada sebelum redesign, bukan yang dibawanya:
+   * `--color-border` lama (`#d8dee6`) mengukur 1.35:1. Tidak ada yang
+   * memeriksanya karena belum ada yang bisa memeriksanya.
+   *
+   * `--color-border` TIDAK digelapkan untuk memperbaikinya, dan itu keputusan,
+   * bukan kompromi. 1.4.11 berlaku untuk KONTROL, bukan untuk pemisah dekoratif
+   * — tepi kartu, garis antar baris tabel, dan hairline pembatas tidak
+   * mengidentifikasi apa pun yang bisa dioperasikan, dan menggelapkan semuanya
+   * akan mengubah permukaan padat ini menjadi kisi. Jadi peran itu dibelah:
+   * `--color-border` tetap garis dekoratif, `--color-border-strong` adalah tepi
+   * kontrol.
+   *
+   * Diukur terhadap ketiga permukaan yang bisa berada di sisi mana pun garis:
+   *
+   *   terang `#858b92`  surface 3.44 · surface-3 3.26 · surface-2 3.04
+   *   gelap  `#656d77`  surface 3.30 · surface-3 3.44 · surface-2 3.02
+   *
+   * Nilai ini lebih gelap dari hairline referensi desain. Itu disengaja: kanvas
+   * desain tidak diukur terhadap 1.4.11, dan janji dokumen 14 lebih mengikat
+   * daripada nilai kanvas.
+   */
+  --color-border-strong: #858b92;
 
   /*
    * "-strong" variants — Issue #434 (UX/UI audit). `--color-primary`,
@@ -59,13 +222,88 @@
   --color-primary-hover: #1d4ed8;
   --color-primary-soft: #e8effc;
   --color-surface-hover: #f0f3f8;
-  --color-overlay: rgba(15, 23, 42, 0.5);
+  --color-overlay: rgba(15, 23, 42, 0.45);
+
+  /*
+   * ADR-0120 — tint `-soft` untuk empat status lain, melengkapi
+   * `--color-primary-soft` yang sudah ada. Ini latar chip status, ikon tile,
+   * dan blok callout: warna status pada intensitas rendah dengan teks status
+   * PENUH di atasnya (mis. `--color-success` di atas `--color-success-soft`),
+   * bukan `--color-primary-contrast`.
+   *
+   * Itu sebabnya pasangan ini TIDAK memakai varian `-strong`: `-strong` ada
+   * untuk teks putih di atas isian pekat, dan di sini tidak ada teks putih.
+   */
+  --color-success-soft: #e4f5ea;
+  --color-warning-soft: #fdf1de;
+  --color-danger-soft: #fdeaea;
+  --color-info-soft: #e0f2f6;
+
+  /*
+   * ADR-0120 — warna TEKS di atas tint `-soft` di atas. Keluarga ketiga, dan
+   * ia ada karena naluri yang jelas ternyata salah.
+   *
+   * Naluri itu: pakai `--color-X` di atas `--color-X-soft`. Itu yang dilakukan
+   * referensi desain, dan itu yang seharusnya berhasil — keduanya hue yang
+   * sama, satu pekat satu pucat. Diukur di tema TERANG:
+   *
+   *   primary  #2563eb di atas #e8effc   4.48:1   GAGAL
+   *   success  #12873d di atas #e4f5ea   4.07:1   GAGAL
+   *   warning  #b45309 di atas #fdf1de   4.50:1   tepat di ambang
+   *   danger   #dc2626 di atas #fdeaea   4.17:1   GAGAL
+   *   info     #0e7490 di atas #e0f2f6   4.65:1   lolos
+   *
+   * Tiga dari lima gagal 4.5:1, dan yang keempat tidak punya sisa ruang sama
+   * sekali. Ini bukan detail: pasangan inilah yang mewarnai chip status di
+   * setiap baris tabel, tautan sidebar aktif, dan chip filter terpilih.
+   *
+   * Token dasarnya TIDAK boleh digelapkan untuk memperbaikinya — `--color-X`
+   * benar di atas `--color-surface`, yang merupakan pemakaian utamanya sebagai
+   * teks/tautan/border. Yang salah adalah satu nilai memikul dua latar.
+   *
+   * Nilai di bawah digelapkan sampai lolos dengan margin, hue dipertahankan.
+   * Di tema GELAP arahnya terbalik dan token dasarnya sudah lolos sendiri, jadi
+   * blok `[data-theme="dark"]` menyetelnya kembali ke nilai dasar. Diukur:
+   *
+   *   terang  primary 5.80 · success 5.20 · warning 5.83 · danger 4.95 · info 6.17
+   *   gelap   primary 6.17 · success 6.05 · warning 6.83 · danger 5.48 · info 6.42
+   *
+   * Ini pelajaran yang sama dengan varian `-strong` di atas, ditemukan lagi di
+   * arah berlawanan — di sana teks putih di atas isian pekat, di sini teks
+   * pekat di atas isian pucat. Bahwa ia ditemukan dua kali adalah alasan
+   * `scripts/design-token-contrast-check.ts` sekarang ada: pasangan berikutnya
+   * tidak boleh lagi bergantung pada seseorang yang ingat mengukurnya.
+   */
+  --color-primary-on-soft: #1d4ed8;
+  --color-success-on-soft: #0f7434;
+  --color-warning-on-soft: #9a4507;
+  --color-danger-on-soft: #c81e1e;
+  --color-info-on-soft: #0b6076;
 
   /* Font */
-  --font-sans: system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  /*
+   * ADR-0120 — Public Sans (`@font-face` di atas) menggantikan stack sistem
+   * sebagai lapis pertama. Stack sistem TETAP di belakangnya dan bukan
+   * formalitas: ia yang dipakai saat `font-display: swap` masih menunggu, dan
+   * ia satu-satunya yang tersisa pada deployment LAN/offline yang menyajikan
+   * berkas font-nya gagal.
+   */
+  --font-sans:
+    "Public Sans", system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
 
-  /* Font size (xs .. 3xl) */
+  /* Font size (2xs .. 3xl) */
+  /*
+   * ADR-0120 — `--fs-2xs` adalah ukuran label kolom tabel dan eyebrow
+   * bertype-uppercase-ber-tracking. Referensi desain memakai 10.5px; dinaikkan
+   * ke 11px karena huruf kapital 10.5px dengan `letter-spacing: .09em` sudah di
+   * bawah batas nyaman baca, dan pada ukuran itu satu piksel adalah ~10%
+   * tingginya. Ini SATU-SATUNYA ukuran di bawah `--fs-xs`, dan sengaja tidak
+   * ada yang lebih kecil: kalau sebuah teks perlu lebih kecil dari ini, yang
+   * salah adalah kepadatan layarnya.
+   */
+  --fs-2xs: 11px;
   --fs-xs: 12px;
   --fs-sm: 14px;
   --fs-base: 16px;
@@ -111,9 +349,10 @@
 
   /* Shadow / elevation */
   --shadow-xs: 0 1px 1px rgba(15, 23, 42, 0.05);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.18);
+  --shadow-sm:
+    0 1px 2px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.09);
+  --shadow-lg: 0 18px 48px rgba(15, 23, 42, 0.18);
 
   /*
    * Motion tokens (UI/UX overhaul foundation). Standard durations + easing
@@ -160,19 +399,30 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --color-bg: #0e1116;
-  --color-surface: #161b22;
-  --color-surface-2: #1f262e;
-  --color-border: #2b333c;
+  --color-bg: #0d1117;
+  --color-surface: #151b23;
+  --color-surface-2: #1c232c;
+  --color-border: #2a323c;
   --color-text: #e6edf3;
   --color-text-muted: #9aa7b2;
   --color-primary: #3b82f6;
   --color-primary-contrast: #ffffff;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-info: #06b6d4;
+  --color-success: #3fbf6b;
+  --color-warning: #e0a13a;
+  --color-danger: #f26a6a;
+  --color-info: #3cb8cf;
   --color-focus: #60a5fa;
+
+  /* ADR-0120 — lihat blok `:root` untuk peran ketiganya. `--color-surface-3`
+     dalam tema gelap lebih GELAP dari `--color-surface`, bukan lebih terang:
+     permukaan recessed menjauh dari cahaya di kedua tema, dan membalik arahnya
+     akan membuat `<thead>` melayang di atas kartunya sendiri. */
+  --color-surface-3: #11171e;
+  --color-border-soft: #232a33;
+  --color-text-faint: #808a95;
+  /* ADR-0120 — lihat blok `:root`. Arahnya terbalik di sini: garis kontrol
+     harus lebih TERANG dari permukaannya, bukan lebih gelap. */
+  --color-border-strong: #656d77;
 
   /* See :root's comment above — darkened so white text on a solid fill of
      these stays >=4.5:1 in the dark theme too (the plain tokens above are
@@ -193,10 +443,33 @@
   --color-surface-hover: #1c2430;
   --color-overlay: rgba(0, 0, 0, 0.6);
 
+  /* ADR-0120 — pasangan gelap dari tint `-soft`. Ini bukan versi transparan
+     dari nilai terang: di atas latar gelap sebuah tint harus lebih GELAP dari
+     permukaannya agar chip tidak menyala, sementara teks statusnya tetap
+     warna status penuh. */
+  --color-success-soft: #12301d;
+  --color-warning-soft: #2e2312;
+  --color-danger-soft: #331818;
+  --color-info-soft: #0f2a30;
+
+  /*
+   * ADR-0120 — lihat blok `:root` untuk pengukuran lengkapnya. Di tema gelap
+   * arahnya terbalik: latarnya yang gelap, jadi tint `-soft` menjauh dari teks
+   * alih-alih mendekat, dan keempat token dasar sudah lolos 4.5:1 sendiri
+   * (5.48–6.83:1). Hanya `primary` yang butuh nilai berbeda: `--color-primary`
+   * gelap di atas `--color-primary-soft` gelap hanya 4.34:1, jadi ia naik ke
+   * nilai `--color-focus` yang lebih terang.
+   */
+  --color-primary-on-soft: #60a5fa;
+  --color-success-on-soft: #3fbf6b;
+  --color-warning-on-soft: #e0a13a;
+  --color-danger-on-soft: #f26a6a;
+  --color-info-on-soft: #3cb8cf;
+
   --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
 }
 
 /* Reset minimal */

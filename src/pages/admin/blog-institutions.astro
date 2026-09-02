@@ -160,18 +160,12 @@ const columnCount = 6 + (showsRowActions ? 1 : 0);
 const hasFilter = branchFilter !== undefined;
 ---
 
-<AdminLayout title="Institutions">
-  <header class="page-header fade-in-up">
-    <h1 id="institutions-heading">{t("Institutions")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Institutions")}
+  description={t(
+    "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
+  )}
+>
   {
     screen.state === "denied" && (
       <p class="state-notice" id="institutions-denied">

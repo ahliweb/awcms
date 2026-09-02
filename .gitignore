@@ -136,3 +136,7 @@ data/seputarborneo-legacy/seputarborneo-rubrik-redirects.*.json
 # hand-edited. See ADR-0114 and `data/seputarborneo-legacy/README.md`.
 data/seputarborneo-legacy/article-paths.json
 data/seputarborneo-legacy/article-paths.tsv
+
+# The supplied design reference (ADR-0120). A 1.1 MB binary design source;
+# kept locally as provenance rather than committed.
+redesign/

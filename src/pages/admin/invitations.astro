@@ -130,18 +130,12 @@ function isPending(invitation: InvitationView): boolean {
 }
 ---
 
-<AdminLayout title="Invitations">
-  <header class="page-header fade-in-up">
-    <h1 id="invitations-heading">{t("Invitations")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Offers of an account in this tenant. An invitation names the roles its holder will get, and those roles stay inert until it is accepted \u2014 nothing here grants anything on its own."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Invitations")}
+  description={t(
+    "Offers of an account in this tenant. An invitation names the roles its holder will get, and those roles stay inert until it is accepted \u2014 nothing here grants anything on its own."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="invitations-denied">

@@ -225,18 +225,12 @@ const mfaContradiction =
   !deployment.mfaEnrollmentEnabled;
 ---
 
-<AdminLayout title="Authentication & security">
-  <header class="page-header fade-in-up">
-    <h1 id="security-heading">{t("Authentication & security")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "How this tenant signs in: password and SSO policy, break-glass accounts, and MFA enforcement. Changes here go through the same guarded, audited endpoints an API client would use."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Authentication & security")}
+  description={t(
+    "How this tenant signs in: password and SSO policy, break-glass accounts, and MFA enforcement. Changes here go through the same guarded, audited endpoints an API client would use."
+  )}
+>
   {
     !canReadAnything && (
       <p class="state-notice fade-in-up" id="security-denied">

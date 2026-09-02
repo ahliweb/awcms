@@ -72,18 +72,12 @@ const profile: SiteProfileView | null =
   screen.state === "allowed" ? screen.data.profile : null;
 ---
 
-<AdminLayout title={t("Site profile")}>
-  <header class="page-header fade-in-up">
-    <h1>{t("Site profile")}</h1>
-    <p class="page-subtitle">
-      {
-        t(
-          "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Site profile")}
+  description={t(
+    "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
+  )}
+>
   {
     !canRead && (
       <p class="admin-empty" id="site-profile-denied">

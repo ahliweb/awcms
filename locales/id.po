@@ -4494,3 +4494,12 @@ msgstr "Simulasikan"
 
 msgid "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
 msgstr "Kebijakan yang dibuat di sini tersimpan tetapi tidak pernah dievaluasi. Kebijakan yang dikonsultasikan evaluator ada di layar Kebijakan akses."
+
+msgid "Search screens"
+msgstr "Cari layar"
+
+msgid "Type a screen name…"
+msgstr "Ketik nama layar…"
+
+msgid "No screen matches that."
+msgstr "Tidak ada layar yang cocok."

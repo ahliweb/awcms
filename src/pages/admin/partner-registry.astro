@@ -101,18 +101,12 @@ const canSuspend = screen.state === "allowed" && screen.data.canSuspend;
 const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
 ---
 
-<AdminLayout title="Partner registry">
-  <header class="page-header fade-in-up">
-    <h1 id="partner-registry-heading">{t("Partner registry")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Which tenants on this deployment may be engaged as partners. A row here grants nothing \u2014 it is the precondition a customer's engagement checks. Whether a partner actually reaches a customer is that customer's decision, taken on their own Partner access screen."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Partner registry")}
+  description={t(
+    "Which tenants on this deployment may be engaged as partners. A row here grants nothing \u2014 it is the precondition a customer's engagement checks. Whether a partner actually reaches a customer is that customer's decision, taken on their own Partner access screen."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="partner-registry-denied">

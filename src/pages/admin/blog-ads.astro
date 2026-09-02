@@ -141,18 +141,12 @@ function formatWindow(placement: AdPlacementView): string {
 }
 ---
 
-<AdminLayout title="Advertisement inventory">
-  <header class="page-header fade-in-up">
-    <h1 id="ads-heading">{t("Advertisement inventory")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Every slot the public pages offer, and the creatives booked into them. A slot with nothing scheduled renders an availability notice, not a gap in the layout."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Advertisement inventory")}
+  description={t(
+    "Every slot the public pages offer, and the creatives booked into them. A slot with nothing scheduled renders an availability notice, not a gap in the layout."
+  )}
+>
   {
     screen.state === "denied" && (
       <p class="state-notice" id="ads-denied">

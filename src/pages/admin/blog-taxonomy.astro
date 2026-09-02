@@ -167,17 +167,14 @@ const termColumns = 5 + (showsRowActions ? 1 : 0);
 const hasFilter = typeFilter !== undefined;
 ---
 
-<AdminLayout title="Blog taxonomy">
-  <header class="page-header fade-in-up">
-    <h1 id="taxonomy-heading">{t("Blog taxonomy")}</h1>
-    <p class="page-description">
-      {t("Categories and tags for")}<a href="/admin/blog">{t("blog posts")}</a>{
-        t(
-          ". Categories may nest; tags may not. Terms are assigned to a post from the post itself, not from here."
-        )
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Blog taxonomy")}>
+  <Fragment slot="page-description"
+    >{t("Categories and tags for")}<a href="/admin/blog">{t("blog posts")}</a>{
+      t(
+        ". Categories may nest; tags may not. Terms are assigned to a post from the post itself, not from here."
+      )
+    }</Fragment
+  >
 
   {
     !canRead && (

@@ -160,8 +160,25 @@ Ordering inside the run is not `fullyParallel` alone — see convention 7.
    Put `<script>` as a top-level element with no conditional; guard in JS
    (`const el = getElementById(...); el?.addEventListener(...)`). CSS: use
    an external stylesheet (`build.inlineStylesheets: "never"`), not an inline
-   `<style>`. Run E2E against the production build (`build && start`), not
-   `dev` (the dev server injects inline HMR which this CSP blocks).
+   `<style>`, and **never an inline `style=` attribute** — `default-src 'self'`
+   has no `'unsafe-inline'`, so the browser drops it silently and nothing in the
+   build says so.
+
+   Run E2E and any screenshot pass against the production build
+   (`bun run build`, then `dist/standalone-entry.mjs`), **not** `dev`. Under
+   Vite the stylesheets are served as `<script type="module" src="…css">`,
+   which this CSP blocks — so a dev-server screenshot is not "slightly
+   different", it is a **completely unstyled page**, and it looks like a broken
+   redesign rather than a broken harness.
+
+   Two harness traps that produce confidently wrong passes:
+   - **`newContext({viewport: …})`, not `viewportSize`.** The latter is not a
+     valid option, is silently ignored, and every "mobile" screenshot is then a
+     1280px desktop one wearing a mobile label. Assert the width you asked for.
+   - **Assert the page, not the status.** A 200 can be a rendered refusal, and
+     an Astro component that throws renders as a 404 with the `ReferenceError`
+     only in the server log. Check for the element, and check
+     `document.documentElement.scrollWidth <= innerWidth` for overflow.
 
 7. **Every new spec must be classified into a WAVE, and the read wave is
    enforced at run time.** All specs share ONE seeded tenant, so a spec that

@@ -37,7 +37,7 @@ Any one of: many fields across categories, a clear input order is needed, a
 final review is needed before submit, or there are enough fields that one big
 form invites input mistakes. Keep using a plain form for simple input (rename,
 change status, one or two fields) — plain forms in this repo itself use
-hand-rolled markup + `lockElement`/`sendJson`/`postJson`
+hand-rolled markup + `lockElement`/`sendJson`
 (`src/lib/ui/admin-form-client.ts`, see skill `awcms-ui-screen`), not any
 wizard component.
 
@@ -68,11 +68,12 @@ directly.
    submit attempt (not per button click) — skill `awcms-idempotency`.
 4. **Anti-double-submit** — in awcms-mini this uses `lockElement`/`submitJson`/
    `showBanner` (the awcms-mini version of `src/lib/ui/admin-form-client.ts`,
-   which has more exports than this repo's version). **This repo itself today
-   only has `lockElement`/`sendJson`/`postJson`** (verify:
-   `grep -n "^export" src/lib/ui/admin-form-client.ts`) — if the wizard is
-   built before those extra functions exist, adapt to the three functions that
-   do exist, do not assume `submitJson`/`showBanner` are already here.
+   whose export list differs from this repo's). **Here the equivalents are
+   `lockElement` + `messageBox` + `sendJson`, wired through `onSubmit`/
+   `onAction`** — always verify with
+   `grep -n "^export" src/lib/ui/admin-form-client.ts` before writing against
+   it. Do not assume `submitJson`/`showBanner` (never existed here) or
+   `postJson` (deleted in August 2026).
 5. **Focus moves to the panel heading** every time the step changes
    (`tabindex="-1"` momentarily, then `.focus()`) — see `focusPanelHeading()`
    in the awcms-mini fixture.

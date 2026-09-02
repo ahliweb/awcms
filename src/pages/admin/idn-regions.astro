@@ -165,18 +165,12 @@ function statusVariant(status: string): string {
 const numberFormatter = new Intl.NumberFormat("en-US");
 ---
 
-<AdminLayout title="Region datasets">
-  <header class="page-header fade-in-up">
-    <h1 id="idn-regions-heading">{t("Region datasets")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "The Indonesia administrative-region hierarchy (province, regency/city, district, village) that address forms and regional reports read from. Versions are imported on deploy; exactly one is served at a time, to every tenant."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Region datasets")}
+  description={t(
+    "The Indonesia administrative-region hierarchy (province, regency/city, district, village) that address forms and regional reports read from. Versions are imported on deploy; exactly one is served at a time, to every tenant."
+  )}
+>
   {
     !canReadDatasets && (
       <p class="state-notice fade-in-up" id="idn-regions-denied">

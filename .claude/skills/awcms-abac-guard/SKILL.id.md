@@ -5,7 +5,7 @@ description: Terapkan kontrol akses RBAC+ABAC default-deny plus RLS pada endpoin
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:04dc6658354cac11881e437f91c689177de7684d041c28b88de2477bece82273 -->
+<!-- i18n-source-hash: sha256:a61b007be1e90bf668ee851ae117997ae061a6fd8c3b929981ccf9b3d6d90cfb -->
 
 # AWCMS — ABAC Guard & Tenant Isolation
 
@@ -191,7 +191,7 @@ CONFLICT DO NOTHING`; migrasi terapan immutable — jangan edit `sql/005`).
 - Query resource soft-deletable default `deleted_at IS NULL`; `includeDeleted`, `restore`, dan `purge` wajib ABAC eksplisit.
 - Contoh batas peran: operator ditolak akses pajak/export/assign role; cross-tenant selalu blocked.
 - `tenantUserId`/`identityId` berasal dari auth middleware, **bukan** header public mentah.
-- **Layar admin write-form** memakai `sendJson`/`postJson`/`lockElement`
+- **Layar admin write-form** memakai `sendJson`/`lockElement`
   (`src/lib/ui/admin-form-client.ts`, skill `awcms-ui-screen`) untuk
   memanggil endpoint mutation — pastikan gate/permission yang dicek untuk
   menampilkan tombol/form itu adalah `action` yang SAMA dan SUDAH ter-seed

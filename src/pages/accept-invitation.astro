@@ -44,6 +44,7 @@ import "../styles/motion.css";
 import "../styles/auth.css";
 import { openUrlParams } from "../lib/security/secure-url-params";
 import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
+import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 
 const sealed = Astro.url.searchParams.get("p")?.trim() ?? "";
 let token = "";
@@ -71,147 +72,153 @@ const hasToken = token.length > 0;
   </head>
   <body class="auth-body">
     <main class="auth">
-      <div class="auth-card">
-        <div class="auth-head">
-          <div class="auth-brand">
-            <span class="auth-mark" aria-hidden="true">A</span>
-            <span class="auth-wordmark">AWCMS</span>
+      <AuthBrandPanel
+        headline="You have been invited to a workspace."
+        subline="Accepting creates your account and grants exactly the roles the person who invited you chose."
+      />
+      <div class="auth-form-panel">
+        <div class="auth-card">
+          <div class="auth-head">
+            <div class="auth-brand">
+              <span class="auth-mark" aria-hidden="true">A</span>
+              <span class="auth-wordmark">AWCMS</span>
+            </div>
+            <h1 class="auth-title">Accept your invitation</h1>
+            <p class="auth-subtitle" id="invitation-summary">
+              Choose a password to finish setting up your account.
+            </p>
           </div>
-          <h1 class="auth-title">Accept your invitation</h1>
-          <p class="auth-subtitle" id="invitation-summary">
-            Choose a password to finish setting up your account.
-          </p>
-        </div>
 
-        {
-          !hasToken ? (
-            <>
-              <p class="auth-error" role="alert">
-                This invitation link is invalid or has expired.
-              </p>
-              <nav class="auth-links" aria-label="Account access">
-                <a href="/login">Back to sign in</a>
-              </nav>
-            </>
-          ) : (
-            <>
-              <form id="invitation-form" class="auth-form" novalidate>
-                <p
-                  id="invitation-error"
-                  class="auth-error"
-                  role="alert"
-                  hidden
-                />
-
-                <input
-                  id="invitation-token"
-                  name="token"
-                  type="hidden"
-                  value={token}
-                />
-
-                {tenantId ? (
-                  <input
-                    id="invitation-tenant"
-                    name="tenantId"
-                    type="hidden"
-                    value={tenantId}
+          {
+            !hasToken ? (
+              <>
+                <p class="auth-error" role="alert">
+                  This invitation link is invalid or has expired.
+                </p>
+                <nav class="auth-links" aria-label="Account access">
+                  <a href="/login">Back to sign in</a>
+                </nav>
+              </>
+            ) : (
+              <>
+                <form id="invitation-form" class="auth-form" novalidate>
+                  <p
+                    id="invitation-error"
+                    class="auth-error"
+                    role="alert"
+                    hidden
                   />
-                ) : (
-                  <div class="auth-field">
-                    <label for="invitation-tenant">Tenant ID</label>
+
+                  <input
+                    id="invitation-token"
+                    name="token"
+                    type="hidden"
+                    value={token}
+                  />
+
+                  {tenantId ? (
                     <input
                       id="invitation-tenant"
                       name="tenantId"
-                      type="text"
-                      required
-                      autocomplete="off"
-                      spellcheck={false}
+                      type="hidden"
+                      value={tenantId}
                     />
-                  </div>
-                )}
+                  ) : (
+                    <div class="auth-field">
+                      <label for="invitation-tenant">Tenant ID</label>
+                      <input
+                        id="invitation-tenant"
+                        name="tenantId"
+                        type="text"
+                        required
+                        autocomplete="off"
+                        spellcheck={false}
+                      />
+                    </div>
+                  )}
 
-                <div class="auth-field">
-                  <label for="invitation-display-name">Your name</label>
-                  <input
-                    id="invitation-display-name"
-                    name="displayName"
-                    type="text"
-                    autocomplete="name"
-                    maxlength={120}
-                  />
-                  <p class="auth-hint">
-                    Optional. Leave it blank to keep the name you were invited
-                    under.
-                  </p>
-                </div>
-
-                <div class="auth-field">
-                  <label for="invitation-password">Password</label>
-                  <div class="auth-password">
+                  <div class="auth-field">
+                    <label for="invitation-display-name">Your name</label>
                     <input
-                      id="invitation-password"
-                      name="password"
+                      id="invitation-display-name"
+                      name="displayName"
+                      type="text"
+                      autocomplete="name"
+                      maxlength={120}
+                    />
+                    <p class="auth-hint">
+                      Optional. Leave it blank to keep the name you were invited
+                      under.
+                    </p>
+                  </div>
+
+                  <div class="auth-field">
+                    <label for="invitation-password">Password</label>
+                    <div class="auth-password">
+                      <input
+                        id="invitation-password"
+                        name="password"
+                        type="password"
+                        required
+                        autocomplete="new-password"
+                        minlength={MIN_PASSWORD_LENGTH}
+                      />
+                      <button
+                        type="button"
+                        id="invitation-password-toggle"
+                        class="auth-password-toggle"
+                        aria-pressed="false"
+                        aria-label="Show password"
+                      >
+                        <span class="auth-password-toggle-label">Show</span>
+                      </button>
+                    </div>
+                    <p class="auth-hint">
+                      At least {MIN_PASSWORD_LENGTH} characters.
+                    </p>
+                  </div>
+
+                  <div class="auth-field">
+                    <label for="invitation-confirm">Confirm password</label>
+                    <input
+                      id="invitation-confirm"
+                      name="confirmPassword"
                       type="password"
                       required
                       autocomplete="new-password"
-                      minlength={MIN_PASSWORD_LENGTH}
                     />
-                    <button
-                      type="button"
-                      id="invitation-password-toggle"
-                      class="auth-password-toggle"
-                      aria-pressed="false"
-                      aria-label="Show password"
-                    >
-                      <span class="auth-password-toggle-label">Show</span>
-                    </button>
                   </div>
-                  <p class="auth-hint">
-                    At least {MIN_PASSWORD_LENGTH} characters.
-                  </p>
-                </div>
 
-                <div class="auth-field">
-                  <label for="invitation-confirm">Confirm password</label>
-                  <input
-                    id="invitation-confirm"
-                    name="confirmPassword"
-                    type="password"
-                    required
-                    autocomplete="new-password"
-                  />
-                </div>
+                  <button
+                    type="submit"
+                    id="invitation-submit"
+                    class="auth-submit"
+                  >
+                    Accept invitation
+                  </button>
+                </form>
 
-                <button
-                  type="submit"
-                  id="invitation-submit"
-                  class="auth-submit"
+                <p
+                  id="invitation-notice"
+                  class="auth-notice"
+                  role="status"
+                  hidden
+                />
+
+                <nav
+                  class="auth-links"
+                  id="invitation-login-link"
+                  aria-label="Account access"
+                  hidden
                 >
-                  Accept invitation
-                </button>
-              </form>
+                  <a href="/login">Sign in to your new account</a>
+                </nav>
+              </>
+            )
+          }
 
-              <p
-                id="invitation-notice"
-                class="auth-notice"
-                role="status"
-                hidden
-              />
-
-              <nav
-                class="auth-links"
-                id="invitation-login-link"
-                aria-label="Account access"
-                hidden
-              >
-                <a href="/login">Sign in to your new account</a>
-              </nav>
-            </>
-          )
-        }
-
-        <p class="auth-foot">Secured workspace access · AWCMS</p>
+          <p class="auth-foot">Secured workspace access · AWCMS</p>
+        </div>
       </div>
     </main>
 

@@ -103,18 +103,12 @@ const showActions =
   canConfigure || canAssign || canReadSessions || canRevokeSessions;
 ---
 
-<AdminLayout title="Users">
-  <header class="page-header fade-in-up">
-    <h1 id="users-heading">{t("Users")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Tenant users, their status, and their assigned roles. Login identifiers are masked here \u2014 they are personal data and are never shown in full in a list view."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Users")}
+  description={t(
+    "Tenant users, their status, and their assigned roles. Login identifiers are masked here \u2014 they are personal data and are never shown in full in a list view."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="users-denied">

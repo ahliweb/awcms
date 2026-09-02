@@ -191,18 +191,12 @@ const sessionCells = sessions.map((s) =>
 );
 ---
 
-<AdminLayout title="Visitor Analytics">
-  <header class="page-header fade-in-up">
-    <h1 id="analytics-heading">{t("Visitor analytics")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Privacy-first human visitor statistics. Visitor identifiers are stored as salted hashes, never raw, unless explicitly enabled. Figures are server-rendered from this tenant's own data."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Visitor analytics")}
+  description={t(
+    "Privacy-first human visitor statistics. Visitor identifiers are stored as salted hashes, never raw, unless explicitly enabled. Figures are server-rendered from this tenant's own data."
+  )}
+>
   {
     !canView && (
       <p class="state-notice fade-in-up" id="analytics-denied">

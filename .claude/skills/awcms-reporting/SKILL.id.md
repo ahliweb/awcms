@@ -5,7 +5,7 @@ description: Kelola modul reporting AWCMS — lima view management reporting liv
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:634fd7fe64d53801c4bb61d7a0ac07bcfbd6c18b94c565d062cce95d085579bf -->
+<!-- i18n-source-hash: sha256:06d0ac5b3b4ff30f7cb14724e61f7e205b07ee71785e1edd541b6ec9c0171d14 -->
 
 # AWCMS — Reporting (live views + projections)
 
@@ -193,11 +193,11 @@ lebih sempit yang didaftarkan modul turunan.
 `/admin/reporting` (`src/pages/admin/reporting.astro`, PR #335 — README modul sempat memerikan <!-- historis:mulai -->`/admin/reporting/projections`<!-- historis:selesai --> + helper `submitJson` yang TIDAK PERNAH ADA di repo ini)
 — setiap mutation (rebuild/cancel/reconcile/export) lewat endpoint
 `/api/v1/reports/*` yang REAL, tanpa shortcut privileged. Pakai
-`sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`, lihat skill
+`sendJson`/`onAction` (`src/lib/ui/admin-form-client.ts`, lihat skill
 `awcms-ui-screen`) untuk memanggilnya — **catatan**: README modul ini
-menyebut `submitJson`, yang TIDAK ADA di `admin-form-client.ts` versi repo
-ini (verifikasi: `grep -n "^export" src/lib/ui/admin-form-client.ts`); pakai
-`sendJson`/`postJson` yang benar-benar ada.
+menyebut `submitJson`, yang TIDAK PERNAH ADA di sini, dan skill-skill lama
+menyebut `postJson`, yang SUDAH DIHAPUS Agustus 2026. Selalu
+`grep -n "^export" src/lib/ui/admin-form-client.ts` sebelum menulis kodenya.
 
 ## Belum tersedia
 

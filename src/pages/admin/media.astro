@@ -319,18 +319,12 @@ const canActOnAny = canDelete || canRestore || canPurge || canUpdate;
 const columnCount = canActOnAny ? 9 : 8;
 ---
 
-<AdminLayout title="Media library">
-  <header class="page-header fade-in-up">
-    <h1 id="media-heading">{t("Media library")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Every media object this tenant has registered, in any state \u2014 including the ones that never finished uploading or failed verification. Deleting is reversible; purging is not, and clears the registry row rather than the stored file."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("Media library")}
+  description={t(
+    "Every media object this tenant has registered, in any state \u2014 including the ones that never finished uploading or failed verification. Deleting is reversible; purging is not, and clears the registry row rather than the stored file."
+  )}
+>
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="media-denied">

@@ -66,19 +66,16 @@ const templates: TemplateRow[] =
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
 ---
 
-<AdminLayout title="Email templates">
-  <header class="page-header fade-in-up">
-    <h1 id="email-templates-heading">{t("Email templates")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "Transactional email templates for this tenant, including inactive ones. Subject and body are captured for the"
-        )
-      }<code>en</code>{
-        t("locale; the endpoint validates and escapes the content.")
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Email templates")}>
+  <Fragment slot="page-description"
+    >{
+      t(
+        "Transactional email templates for this tenant, including inactive ones. Subject and body are captured for the"
+      )
+    }<code>en</code>{
+      t("locale; the endpoint validates and escapes the content.")
+    }</Fragment
+  >
 
   {
     !canRead && (

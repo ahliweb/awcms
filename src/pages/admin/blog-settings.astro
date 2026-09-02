@@ -116,7 +116,7 @@ const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 const VISIBILITY_OPTIONS = ["public", "private"] as const;
 ---
 
-<AdminLayout title="Blog settings">
+<AdminLayout title={t("Blog settings")}>
   <h1>{t("Blog settings")}</h1>
 
   {

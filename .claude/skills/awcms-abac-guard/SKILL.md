@@ -188,7 +188,7 @@ flowchart LR
 - A query on a soft-deletable resource defaults to `deleted_at IS NULL`; `includeDeleted`, `restore`, and `purge` require explicit ABAC.
 - Example role boundaries: an operator is denied tax/export/role-assign access; cross-tenant is always blocked.
 - `tenantUserId`/`identityId` come from the auth middleware, **not** from a raw public header.
-- **Admin write-form screens** use `sendJson`/`postJson`/`lockElement`
+- **Admin write-form screens** use `sendJson`/`lockElement`
   (`src/lib/ui/admin-form-client.ts`, skill `awcms-ui-screen`) to call the
   mutation endpoint — make sure the gate/permission checked in order to show
   that button/form is the SAME `action` and is ALREADY seeded in

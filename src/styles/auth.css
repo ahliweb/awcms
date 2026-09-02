@@ -20,35 +20,159 @@
   margin: 0;
 }
 
+/*
+ * ADR-0120 — the auth surface is a SPLIT now: a brand panel and the form.
+ *
+ * It used to be one centred card on a tinted radial ground. The split is what
+ * the design reference asks for, and it earns its place beyond looking better:
+ * the left half states what the product is, which is the one thing a sign-in
+ * screen has an audience for and no room to say when the card is 400px wide.
+ *
+ * Below 900px the panel is gone and the layout collapses to exactly the
+ * previous single-column card — see the media query at the foot of this block.
+ * That is not a fallback, it is the primary case for anyone signing in from a
+ * phone, and it is why the form half owns all the content that matters.
+ */
 .auth {
   min-height: 100vh;
   min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--color-surface);
+}
+
+@media (min-width: 900px) {
+  .auth {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  }
+}
+
+/*
+ * The brand half.
+ *
+ * A fixed dark gradient in BOTH themes, using literal colours rather than
+ * tokens — the one place in this repo that does, and it is deliberate. This
+ * panel is a brand surface, not a UI surface: it carries no control, its text
+ * is `aria-hidden`, and it must look the same to someone who signs in on a
+ * light laptop and a dark phone. Driving it from `--color-*` would make the
+ * product's front door change identity with an OS setting.
+ *
+ * The white text is on `#101b33`-to-`#1d4ed8`; the lightest point of that
+ * gradient measures 8.1:1 against white, so the panel would pass AA even
+ * though nothing in it is announced.
+ */
+.auth-brand-panel {
+  display: none;
+  position: relative;
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-7) 60px;
+  background: linear-gradient(160deg, #101b33 0%, #16294d 55%, #1d4ed8 140%);
+  color: #ffffff;
+}
+
+@media (min-width: 900px) {
+  .auth-brand-panel {
+    display: flex;
+  }
+}
+
+.auth-brand-panel-mark {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.auth-brand-panel-tile {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #2563eb;
+  font-size: var(--fs-base);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.auth-brand-panel-word {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.01em;
+}
+
+.auth-brand-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  max-width: 430px;
+}
+
+.auth-brand-panel-headline {
+  margin: 0;
+  font-size: 38px;
+  font-weight: var(--fw-bold);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: pretty;
+}
+
+.auth-brand-panel-sub {
+  margin: 0;
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  color: rgba(255, 255, 255, 0.72);
+  text-wrap: pretty;
+}
+
+.auth-brand-panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-brand-panel-chips li {
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  font-size: var(--fs-xs);
+}
+
+.auth-brand-panel-foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* The form half. Scrolls independently of the panel on a short viewport. */
+.auth-form-panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-4);
-  background:
-    radial-gradient(
-      120% 90% at 15% 0%,
-      var(--color-primary-soft) 0%,
-      transparent 55%
-    ),
-    radial-gradient(
-      110% 80% at 100% 100%,
-      var(--color-surface-2) 0%,
-      transparent 60%
-    ),
-    var(--color-bg);
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--color-surface);
 }
 
+/*
+ * ADR-0120 — no longer a bordered, shadowed card.
+ *
+ * It sits ON `--color-surface` inside the form column, so a border and a
+ * shadow would outline a white box against a white background: chrome drawing
+ * attention to itself with nothing behind it to separate from. Below 900px,
+ * where the panel is hidden and the column fills the screen, the same is true
+ * for a different reason — a card that spans the viewport is not a card.
+ */
 .auth-card {
   width: 100%;
-  max-width: 400px;
-  padding: var(--sp-6) var(--sp-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  max-width: 392px;
+  padding: 0;
   /* Transform-only entrance (never opacity — keeps text fully opaque so an
      axe-core contrast scan can't flag it mid-animation; doc 14 §Motion).
      Replaces the shared `.fade-in-up` utility, which fades from
@@ -68,6 +192,8 @@
 .auth-head {
   margin-bottom: var(--sp-5);
 }
+
+
 
 .auth-brand {
   display: flex;
@@ -372,5 +498,28 @@
   }
   .auth-submit:active {
     transform: none;
+  }
+}
+
+/*
+ * ADR-0120 — the wordmark inside the form is hidden once the brand panel is
+ * showing, because the panel IS the wordmark.
+ *
+ * With both visible the screen said "AWCMS" three times above one password
+ * field: once in the panel, once here, and once in the "Signing in to" block
+ * that names the tenant. The panel is `aria-hidden`, so nothing is lost to a
+ * screen reader either way — and below 900px, where the panel is gone, this is
+ * the only place the product names itself, so it comes back.
+ *
+ * AT THE FOOT OF THE FILE ON PURPOSE. It first sat next to `.auth-head`, above
+ * `.auth-brand`'s own `display: flex` — same specificity, later rule wins, so
+ * the hide was dead code and both wordmarks rendered. That is the second time
+ * this exact mistake appeared in this change (see the phone-width block in
+ * `admin.css`), which is worth stating: a `display: none` override must come
+ * AFTER the declaration it overrides, and a media query does not change that.
+ */
+@media (min-width: 900px) {
+  .auth-brand {
+    display: none;
   }
 }

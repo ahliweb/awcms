@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:a376696ab9a0a581dc43c11bf2052f985782ca5fc78459f2dd065b94ba781525 -->
+<!-- i18n-source-hash: sha256:9625f0c2177a030d3978a07d4ecec20eb111d594ace8ac7798d365e4864f2a2e -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -164,8 +164,26 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
    Taruh `<script>` sebagai elemen top-level tanpa conditional; guard di JS
    (`const el = getElementById(...); el?.addEventListener(...)`). CSS: pakai
    stylesheet eksternal (`build.inlineStylesheets: "never"`), bukan `<style>`
-   inline. Jalankan E2E terhadap build produksi (`build && start`), bukan
-   `dev` (dev server menyuntik HMR inline yang diblokir CSP ini).
+   inline, dan **jangan pernah atribut `style=` inline** — `default-src 'self'`
+   tanpa `'unsafe-inline'`, jadi browser membuangnya diam-diam dan tak ada
+   satu pun bagian build yang memberitahu.
+
+   Jalankan E2E dan setiap sesi screenshot terhadap build produksi
+   (`bun run build`, lalu `dist/standalone-entry.mjs`), **bukan** `dev`. Di
+   bawah Vite, stylesheet disajikan sebagai `<script type="module" src="…css">`
+   yang diblokir CSP ini — jadi screenshot dev-server bukan "sedikit berbeda",
+   melainkan **halaman tanpa gaya sama sekali**, dan itu tampak seperti
+   redesign yang rusak, bukan harness yang rusak.
+
+   Dua jebakan harness yang menghasilkan "lulus" yang percaya diri tapi salah:
+   - **`newContext({viewport: …})`, bukan `viewportSize`.** Yang terakhir
+     bukan opsi valid, diabaikan diam-diam, dan setiap screenshot "mobile"
+     lalu sebenarnya 1280px desktop berlabel mobile. Asersikan lebar yang
+     kamu minta.
+   - **Asersikan halamannya, bukan status-nya.** 200 bisa berarti penolakan
+     yang dirender, dan komponen Astro yang melempar muncul sebagai 404
+     dengan `ReferenceError`-nya hanya di log server. Cek elemennya, dan cek
+     `document.documentElement.scrollWidth <= innerWidth` untuk overflow.
 
 7. **Setiap spec baru WAJIB diklasifikasikan ke sebuah GELOMBANG, dan
    gelombang baca ditegakkan saat RUNTIME.** Semua spec berbagi SATU tenant

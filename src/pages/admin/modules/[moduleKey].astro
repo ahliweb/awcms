@@ -85,17 +85,25 @@ function pretty(value: Record<string, unknown>): string {
 }
 ---
 
-<AdminLayout title={`Module settings — ${moduleKey}`}>
-  <header class="page-header fade-in-up">
-    <h1 id="module-settings-heading">{t("Module settings")}</h1>
-    <p class="page-description">
-      {t("Per-tenant overrides for")}<code>{moduleKey}</code>{
-        t(
-          ". The module ships defaults in code; this tenant may override them key by key. What the rest of the system reads is the two merged together."
-        )
-      }
-    </p>
-  </header>
+<AdminLayout title={t("Module settings")} breadcrumb={t("Modules")}>
+  {
+    /* ADR-0120 — the title is now `t("Module settings")` rather than the
+      template literal `` `Module settings — ${moduleKey}` ``. The module key is
+      not lost: it moves into the description below, where it was already being
+      shown, and it stops being the one admin title that was untranslated
+      English AND carried an interpolation the catalogue could never reach.
+
+      `breadcrumb` is passed explicitly because this screen is reached FROM the
+      modules list and has no sidebar entry of its own, so the shell has nothing
+      to derive the middle crumb from. */
+  }
+  <Fragment slot="page-description">
+    {t("Per-tenant overrides for")}<code>{moduleKey}</code>{
+      t(
+        ". The module ships defaults in code; this tenant may override them key by key. What the rest of the system reads is the two merged together."
+      )
+    }
+  </Fragment>
 
   {
     !canRead && (

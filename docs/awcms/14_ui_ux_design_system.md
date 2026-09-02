@@ -2,13 +2,13 @@
 
 # Part 14 — UI/UX Design System and Screen Specifications
 
-> **Document status (2026-07-14):** The `awcms` repo is still at the re-foundation stage ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **no ERP module code has been implemented yet**. This document adapts the design system standards/patterns already proven in the [awcms-mini](https://github.com/ahliweb/awcms-mini) base into the **target architecture** for the AWCMS ERP platform. The parts that are already live in awcms-mini (tokens, concrete components such as `DataTable.astro`/`ConfirmDialog.astro`, i18n) are reframed here as a **binding plan** for when the relevant module starts being built, not as something already running in this repo. The screen/component examples are switched to the ERP domain (ledger, purchase order, stock adjustment, payroll run), replacing the retail/POS examples in the source.
+> **Document status (2026-09-02):** **No ERP module code has been implemented yet** ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — the ledger/purchase-order/payroll screens below remain a target architecture. Everything that is not ERP-specific **is live in this repo and describes running code**: the design tokens, the admin shell and its header band, the five auth screens, the state pattern, theming, and i18n. Two sections are labelled where they diverge — there is still no `src/components/ui` component library (screens use shared CSS classes instead), and the client error-code map described under i18n does not exist. Sections that say "planned" mean it; sections that do not, do not.
 
 ## Purpose
 
 This document defines the AWCMS **UI/UX design** requirements that will complement the operational SOP and the module blueprint when they are written. It covers design principles, design tokens, the component library, information architecture, screen specifications (wireframes), state patterns, accessibility, i18n, and theming — so that the ERP frontend can be implemented consistently from the first module onwards.
 
-Related: `15_frontend_architecture_integration.md` (architecture & wiring), the operational SOP document (to follow). The planned enforcing skill: **`awcms-ui-screen`** (`.claude/skills/`, following the `awcms-mini-ui-screen` pattern).
+Related: `15_frontend_architecture_integration.md` (architecture & wiring), the operational SOP document (to follow). The enforcing skills: **`awcms-ui-screen`** (building a screen) and **`awcms-ux-review`** (auditing one), both in `.claude/skills/`.
 
 ## UI/UX design principles
 
@@ -27,39 +27,66 @@ Tokens are implemented as CSS custom properties, scoped to `:root` and overridde
 
 ### Semantic colours
 
-| Token                      | Light     | Dark      | Function                      |
-| -------------------------- | --------- | --------- | ----------------------------- |
-| `--color-bg`               | `#f7f8fa` | `#0e1116` | Application background        |
-| `--color-surface`          | `#ffffff` | `#161b22` | Card/panel                    |
-| `--color-surface-2`        | `#eef1f5` | `#1f262e` | Secondary panel               |
-| `--color-border`           | `#d8dee6` | `#2b333c` | Line/divider                  |
-| `--color-text`             | `#1a1f26` | `#e6edf3` | Primary text                  |
-| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Secondary text                |
-| `--color-primary`          | `#2563eb` | `#3b82f6` | Primary action                |
-| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Text on top of primary        |
-| `--color-success`          | `#16a34a` | `#22c55e` | Success/posted                |
-| `--color-warning`          | `#d97706` | `#f59e0b` | Warning/held/pending approval |
-| `--color-danger`           | `#dc2626` | `#ef4444` | Error/insufficient balance    |
-| `--color-info`             | `#0891b2` | `#06b6d4` | Info/sync                     |
-| `--color-focus`            | `#2563eb` | `#60a5fa` | Focus ring                    |
-| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Solid fill + white text       |
-| `--color-success-strong`   | `#12873d` | `#178841` | Solid fill + white text       |
-| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Solid fill + white text       |
+| Token                      | Light     | Dark      | Function                         |
+| -------------------------- | --------- | --------- | -------------------------------- |
+| `--color-bg`               | `#f5f7fa` | `#0d1117` | Application background           |
+| `--color-surface`          | `#ffffff` | `#151b23` | Card/panel                       |
+| `--color-surface-2`        | `#eef1f5` | `#1c232c` | Secondary panel, chips           |
+| `--color-surface-3`        | `#f7f9fc` | `#11171e` | Recessed: `<thead>`, input fill  |
+| `--color-border`           | `#dde3ea` | `#2a323c` | Decorative line/divider          |
+| `--color-border-soft`      | `#e8edf3` | `#232a33` | Internal rule (table/panel rows) |
+| `--color-border-strong`    | `#858b92` | `#656d77` | Control boundary (WCAG 1.4.11)   |
+| `--color-text`             | `#141a21` | `#e6edf3` | Primary text                     |
+| `--color-text-muted`       | `#5b6672` | `#9aa7b2` | Secondary text                   |
+| `--color-text-faint`       | `#646f7a` | `#808a95` | Column labels, timestamps, hints |
+| `--color-primary`          | `#2563eb` | `#3b82f6` | Primary action                   |
+| `--color-primary-contrast` | `#ffffff` | `#ffffff` | Text on top of primary           |
+| `--color-success`          | `#12873d` | `#3fbf6b` | Success/posted                   |
+| `--color-warning`          | `#b45309` | `#e0a13a` | Warning/held/pending approval    |
+| `--color-danger`           | `#dc2626` | `#f26a6a` | Error/insufficient balance       |
+| `--color-info`             | `#0e7490` | `#3cb8cf` | Info/sync                        |
+| `--color-focus`            | `#2563eb` | `#60a5fa` | Focus ring                       |
+| `--color-primary-strong`   | `#2563eb` | `#3472d8` | Solid fill + white text          |
+| `--color-success-strong`   | `#12873d` | `#178841` | Solid fill + white text          |
+| `--color-danger-strong`    | `#dc2626` | `#d73d3d` | Solid fill + white text          |
+| `--color-info-strong`      | `#0e7490` | `#0e7490` | Solid fill + white text          |
+| `--color-primary-soft`     | `#e8effc` | `#16233b` | Tinted background for a state    |
+| `--color-success-soft`     | `#e4f5ea` | `#12301d` | Tinted background for a state    |
+| `--color-warning-soft`     | `#fdf1de` | `#2e2312` | Tinted background for a state    |
+| `--color-danger-soft`      | `#fdeaea` | `#331818` | Tinted background for a state    |
+| `--color-info-soft`        | `#e0f2f6` | `#0f2a30` | Tinted background for a state    |
+| `--color-primary-on-soft`  | `#1d4ed8` | `#60a5fa` | Text on `--color-primary-soft`   |
+| `--color-success-on-soft`  | `#0f7434` | `#3fbf6b` | Text on `--color-success-soft`   |
+| `--color-warning-on-soft`  | `#9a4507` | `#e0a13a` | Text on `--color-warning-soft`   |
+| `--color-danger-on-soft`   | `#c81e1e` | `#f26a6a` | Text on `--color-danger-soft`    |
+| `--color-info-on-soft`     | `#0b6076` | `#3cb8cf` | Text on `--color-info-soft`      |
 
-> **`-strong` vs the plain token.** The plain `--color-primary`/`--color-success`/`--color-danger` are meant to be used as _text/icon/border_ on top of `--color-surface`/`--color-surface-2` — the contrast required there is different from the _solid fill_ case with `--color-primary-contrast` (white) on top of it (CTA buttons, error banners, solid status pills such as "Posted"/"Rejected"). Measured (WCAG relative-luminance formula): the plain tokens with white text reach only 3.19–3.76:1 in some combinations (below the AA 4.5:1). The `-strong` tokens are variants darkened just enough (dark theme specifically; the light theme partly passes already without darkening) so that white text on top of them is always ≥4.5:1 — use these tokens, not the plain ones, every time `--color-primary-contrast` is rendered directly on top of a semantic colour fill. **Planned**: the contrast audit itself must be redone when these tokens are implemented in this repo, not assumed to be automatically identical.
+> **One hue, three roles ([ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md)).** A semantic colour carries up to three values, because the contrast arithmetic differs by what it sits on:
+>
+> | Family      | Job                                         | Used by                                |
+> | ----------- | ------------------------------------------- | -------------------------------------- |
+> | `--color-X` | text/icon/border on `--color-surface`       | links; the outlined `.btn-danger`      |
+> | `-strong`   | solid fill under `--color-primary-contrast` | `.btn-primary`; the topbar avatar disc |
+> | `-on-soft`  | text on `--color-X-soft`                    | status badges; the active sidebar link |
+>
+> Using the wrong one of the three is the single most-repeated defect in this repo's UI history — Issue #434, PR #720, and twice more during the ADR-0120 redesign. **It is no longer a matter of remembering.** `bun run design:token-contrast:check` (part of `bun run check`) measures a registry of 25 pairs across both themes and fails below WCAG 2.1 AA. Adding a pairing to CSS means adding a line to that registry.
+>
+> `--color-border` vs `--color-border-strong` is the same split applied to lines. WCAG 2.1 **1.4.11 Non-text Contrast** requires 3:1 for a boundary that identifies an operable component; `--color-border` measures 1.29:1 and deliberately stays that way, because 1.4.11 governs controls, not decorative separators. Inputs, selects, textareas and the search shell use `--color-border-strong`; card edges and table rules use `--color-border`.
 
 ### Other scales
 
-| Category    | Token                                  | Value                                              |
-| ----------- | -------------------------------------- | -------------------------------------------------- |
-| Font family | `--font-sans`                          | system-ui, Inter, sans-serif                       |
-| Font mono   | `--font-mono`                          | ui-monospace, monospace (numbers/account code/SKU) |
-| Font size   | `--fs-xs..2xl`                         | 12 · 14 · 16 · 18 · 20 · 24 · 32 px                |
-| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px             |
-| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                               |
-| Shadow      | `--shadow-sm/md/lg`                    | card/dialog elevation                              |
-| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                        |
-| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                         |
+| Category    | Token                                  | Value                                            |
+| ----------- | -------------------------------------- | ------------------------------------------------ |
+| Font family | `--font-sans`                          | Public Sans (self-hosted), system-ui, sans-serif |
+| Font mono   | `--font-mono`                          | JetBrains Mono (self-hosted), ui-monospace       |
+| Font size   | `--fs-2xs..3xl`                        | 11 · 12 · 14 · 16 · 18 · 20 · 24 · 32 · 40 px    |
+| Spacing     | `--sp-1..8`                            | 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 px           |
+| Radius      | `--radius-sm/md/lg/full`               | 4 · 8 · 12 · 9999 px                             |
+| Shadow      | `--shadow-sm/md/lg`                    | card/dialog elevation                            |
+| Z-index     | `--z-nav/drawer/dropdown/dialog/toast` | 100 · 150 · 200 · 300 · 400                      |
+| Breakpoint  | `sm/md/lg/xl`                          | 640 · 768 · 1024 · 1280 px                       |
+
+> **The typeface is self-hosted, and that is a CSP requirement rather than a preference.** This repo's `default-src 'self'` policy names no `font-src` or `style-src`, so both fall through to it and `fonts.googleapis.com`/`fonts.gstatic.com` are blocked with no visible error on the page. Five latin/latin-ext `woff2` subsets live in `public/fonts/` (104,004 B), are `unicode-range`-gated, and are measured against their own `FONT_BUDGET_BYTES` in `scripts/client-asset-budget.ts`. A public content page loads none of them — `css/public-content.css` declares no `@font-face`. The system stack stays behind them and is what renders during `font-display: swap` and on a LAN/offline deployment whose font files fail.
 
 ### Theming
 
@@ -88,31 +115,33 @@ Rules:
 
 The base components are planned to live in `src/components/ui`, used across personas and across ERP modules.
 
-| Component                                 | Key notes                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Button                                    | primary/secondary/ghost/danger variants; loading & disabled states                                                                                                                                                                                                                                                                                                                                                |
-| Input / NumberInput                       | label, hint, error; NumberInput for qty/price/journal amounts (mono)                                                                                                                                                                                                                                                                                                                                              |
-| Select / Combobox                         | Combobox supports account/product/vendor/employee search                                                                                                                                                                                                                                                                                                                                                          |
-| Checkbox / Radio / Switch                 | switch for consent & feature toggles                                                                                                                                                                                                                                                                                                                                                                              |
-| Dialog / Drawer                           | focus trapped, `Esc` closes — planned as a native `<dialog>` (`showModal()` provides the browser's built-in focus trap + Esc-to-close) for confirming destructive actions (e.g. voiding a journal, cancelling a PO), replacing the `window.confirm`/`window.prompt` pattern. The admin sidebar itself (mobile drawer) is NOT a `<dialog>` — it stays a static `<nav>` on desktop, its focus trap written by hand. |
-| Toast                                     | success/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                  |
-| Table / DataGrid                          | sorting, keyset pagination, sticky columns, row density — used for the journal entry, purchase order, stock adjustment and payroll run lists; scroll-container shell + accessible `<caption>` + standard empty row; row rendering (badges, forms, per-row buttons) remains the caller's responsibility                                                                                                            |
-| Badge / StatusPill                        | colour-coded lifecycle status (draft/pending approval/posted/rejected/void/quarantine) — `success/warning/danger/info/neutral` variants, using the `-strong` tokens for fill+white text except `warning`, which keeps dark text so it stays AA in both themes                                                                                                                                                     |
-| ArchiveFilter                             | `active`, `archived`, `all` toggle/filter for permitted roles                                                                                                                                                                                                                                                                                                                                                     |
-| Card / Panel                              | content container                                                                                                                                                                                                                                                                                                                                                                                                 |
-| FormField                                 | wraps label+input+error consistently — a label/hint/error wrapper with a default slot for the native control (the caller still sets `type`/`name`/`required`)                                                                                                                                                                                                                                                     |
-| Tabs                                      | entity detail (account, purchase order, product, employee)                                                                                                                                                                                                                                                                                                                                                        |
-| Pagination                                | keyset (next/prev), not large offsets — two prev/next buttons dispatching `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                                         |
-| `FilterBar`                               | container toolbar for list filter controls (`role="search"` + a mandatory label); it does not handle the filter logic itself — that remains the page's responsibility, same as `DataTable`                                                                                                                                                                                                                        |
-| `ActionBanner`                            | post-mutation success/error feedback banner (`role="alert"`); used consistently by `showBanner()` in the admin client helper (see doc 15) without manual duplication per screen                                                                                                                                                                                                                                   |
-| SearchBar                                 | debounced, fast results (target <300ms)                                                                                                                                                                                                                                                                                                                                                                           |
-| EmptyState / ErrorState / LoadingSkeleton | mandatory for every list/detail                                                                                                                                                                                                                                                                                                                                                                                   |
-| KeyboardHint                              | shows the active shortcuts on high-volume entry screens (journal, goods receipt, stock count)                                                                                                                                                                                                                                                                                                                     |
-| SyncIndicator / OfflineBanner             | connection status & sync queue                                                                                                                                                                                                                                                                                                                                                                                    |
-| MoneyText / MaskedText                    | IDR formatting & masking of sensitive data (salary, bank account, NPWP)                                                                                                                                                                                                                                                                                                                                           |
-| `StateNotice`                             | shared denied/error banner; `kind="error"` closes the Error branch of the state pattern on SSR screens (see §Mandatory state pattern)                                                                                                                                                                                                                                                                             |
+| Component                                 | Key notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button                                    | primary/secondary/ghost/danger variants; loading & disabled states                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Input / NumberInput                       | label, hint, error; NumberInput for qty/price/journal amounts (mono)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Select / Combobox                         | Combobox supports account/product/vendor/employee search                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Checkbox / Radio / Switch                 | switch for consent & feature toggles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Dialog / Drawer                           | focus trapped, `Esc` closes — a native `<dialog>` opened with `showModal()`, which supplies the focus trap, Esc-to-close, inertness, the backdrop and focus restore without a line of script. The **command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) is the worked example in this repo; confirming destructive actions is still `window.confirm` and is the next thing to move. The admin sidebar itself (mobile drawer) is NOT a `<dialog>` — it stays a static `<nav>` on desktop, its focus trap written by hand. |
+| Toast                                     | success/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Table / DataGrid                          | sorting, keyset pagination, sticky columns, row density — used for the journal entry, purchase order, stock adjustment and payroll run lists; scroll-container shell + accessible `<caption>` + standard empty row; row rendering (badges, forms, per-row buttons) remains the caller's responsibility                                                                                                                                                                                                                                   |
+| Badge / StatusPill                        | colour-coded lifecycle status (draft/pending approval/posted/rejected/void/quarantine) — `success/warning/danger/info/neutral` variants. Since [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md) the shipped `.status-badge` is a **tint** badge: `--color-X-soft` fill with `--color-X-on-soft` text. Use `-strong` + white text only where the badge is a solid fill                                                                                                                                       |
+| ArchiveFilter                             | `active`, `archived`, `all` toggle/filter for permitted roles                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Card / Panel                              | content container                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| FormField                                 | wraps label+input+error consistently — a label/hint/error wrapper with a default slot for the native control (the caller still sets `type`/`name`/`required`)                                                                                                                                                                                                                                                                                                                                                                            |
+| Tabs                                      | entity detail (account, purchase order, product, employee)                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Pagination                                | keyset (next/prev), not large offsets — two prev/next buttons dispatching `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `FilterBar`                               | container toolbar for list filter controls (`role="search"` + a mandatory label); it does not handle the filter logic itself — that remains the page's responsibility, same as `DataTable`                                                                                                                                                                                                                                                                                                                                               |
+| `ActionBanner`                            | post-mutation success/error feedback banner (`role="alert"`); used consistently by `showBanner()` in the admin client helper (see doc 15) without manual duplication per screen                                                                                                                                                                                                                                                                                                                                                          |
+| SearchBar                                 | debounced, fast results (target <300ms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| EmptyState / ErrorState / LoadingSkeleton | mandatory for every list/detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| KeyboardHint                              | shows the active shortcuts on high-volume entry screens (journal, goods receipt, stock count)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| SyncIndicator / OfflineBanner             | connection status & sync queue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| MoneyText / MaskedText                    | IDR formatting & masking of sensitive data (salary, bank account, NPWP)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `StateNotice`                             | shared denied/error banner; `kind="error"` closes the Error branch of the state pattern on SSR screens (see §Mandatory state pattern)                                                                                                                                                                                                                                                                                                                                                                                                    |
 
-The planned non-visual client helper (`src/lib/ui/admin-form-client.ts`, following the awcms-mini pattern) — `submitJson`/`showBanner`/`lockElement` are shared by the `<script>` of every admin screen for fetch+banner+anti-double-submit; not an Astro component, but the same source of truth for the "lock the triggering button while a mutation is in flight" pattern in §Form UX. The non-visual counterpart for `ConfirmDialog.astro` (e.g. `confirm-dialog-client.ts`) follows the same pattern.
+The non-visual client helper `src/lib/ui/admin-form-client.ts` **exists and is shared by the `<script>` of every admin screen** for fetch + message + anti-double-submit. Its real surface is `onSubmit`/`onSubmitAll`/`onAction`/`mutateAndReload` (the wiring), `sendJson`/`sendJsonRequest`/`sendJsonForData` (the request), `lockElement` + `messageBox` (the feedback), and the field readers `field`/`inputValue`/`blankToNull`/`checkboxChecked`/`integerValue`/`localDateTimeToInstant`. **Read the exports before writing against it** — `grep -n "^export" src/lib/ui/admin-form-client.ts` — because earlier revisions of this document named a `submitJson`/`showBanner` pair that never existed, and several skills still tell you to call `postJson`, which was **deleted on 22 August 2026** (PROJECT_STATE D12 — zero callers, and a docblock claiming otherwise).
+
+Importing from this module is mandatory rather than merely DRY: under `default-src 'self'` Astro inlines an import-free `<script>` and the CSP then blocks it silently, while a script that imports from this module is bundled to an external `/_astro/*.js` that `'self'` permits.
 
 ### Incremental migration of large screens (a pattern, not a status)
 
@@ -146,25 +175,32 @@ Menu items are filtered by the user's effective permissions (RBAC/ABAC). Menus w
 
 ## Layout shell
 
-### Auth screen (login) — modern, mobile-first
+### Auth screen (login) — split panel, mobile-first
 
-`src/pages/login.astro` is the **canonical** public auth screen pattern (UI/UX overhaul, Issue #166/#215): an `.auth-card` centred on top of a subtle radial-gradient background (`--color-primary-soft` + `--color-surface-2` + `--color-bg`), elevation `--shadow-lg`, radius `--radius-xl`. Other public auth screens (forgot/reset password, if added later) follow this pattern.
+`src/pages/login.astro` is the **canonical** public auth screen pattern (UI/UX overhaul, Issue #166/#215; split panel added by [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md)). All **five** public auth screens — `login`, `register`, `forgot-password`, `reset-password`, `accept-invitation` — share it: `<main class="auth">` is a two-column grid at ≥900px holding `AuthBrandPanel.astro` and an `.auth-form-panel` wrapping the `.auth-card`.
 
 ```text
-┌───────────────────────────┐
-│  [A]  AWCMS                │  ← brand: .auth-mark (gradient badge) + .auth-wordmark
-│  Sign in                   │  ← .auth-title (h1)
-│  Welcome back. Sign in…    │  ← .auth-subtitle
-│  ┌───────────────────────┐ │
-│  │ SIGNING IN TO         │ │  ← .auth-tenant-context (single-tenant mode)
-│  │ <Tenant name>         │ │
-│  └───────────────────────┘ │
-│  Login identifier  [_____] │
-│  Password     [____] [Show]│  ← .auth-password + show/hide toggle
-│  [      Sign in         ]  │  ← .auth-submit (primary)
-│  Secured workspace access  │  ← .auth-foot
-└───────────────────────────┘
+┌──────────────────────────┬────────────────────────────┐
+│ [A] AWCMS                │  [A]  AWCMS                │ ← .auth-brand
+│                          │  Sign in                   │ ← .auth-title (h1)
+│ Headline                 │  Welcome back. Sign in…    │ ← .auth-subtitle
+│ Subline                  │  ┌───────────────────────┐ │
+│ · chip · chip · chip     │  │ SIGNING IN TO         │ │ ← .auth-tenant-context
+│                          │  │ <Tenant name>         │ │   (single-tenant mode)
+│                          │  └───────────────────────┘ │
+│                          │  Login identifier  [_____] │
+│                          │  Password     [____] [Show]│ ← + show/hide toggle
+│ host.example             │  [      Sign in         ]  │ ← .auth-submit (primary)
+│                          │  Secured workspace access  │ ← .auth-foot
+│  AuthBrandPanel          │                            │
+│  aria-hidden="true"      │                            │
+└──────────────────────────┴────────────────────────────┘
+        ↑ collapses away entirely below 900px
 ```
+
+The brand half is **`aria-hidden="true"` and carries no information that is not also in the form half.** It is decoration that happens to be large; a screen reader that read it would announce the product name twice before reaching the first field. Below 900px it is not rendered at all rather than stacked above the card, because someone who came to sign in on a phone should reach the first field without scrolling. Its footer prints `Astro.url.host`, so a deployment identifies itself without a config value that could drift from the URL people actually typed.
+
+Its gradient uses **literal colours rather than surface tokens**, deliberately: it is a brand surface, not a UI surface, and it must look the same in both themes. `--color-*` tokens flip with `data-theme`; a brand panel that inverted with the OS preference would be a different brand at night.
 
 Pattern rules (already implemented — follow them, do not regress):
 
@@ -174,25 +210,42 @@ Pattern rules (already implemented — follow them, do not regress):
 - **Custom select**: the caret is drawn via CSS (`.auth-select::after`, a border trick), not a `data:` URI SVG — staying CSP-safe; the native `<select>` is still used.
 - **Card entrance** `@keyframes auth-card-rise` = `transform`-only (translateY), NOT the `.fade-in-up` utility which starts from `opacity:0` (see §Motion — avoid axe contrast flags on main text). Include a local reduced-motion guard.
 - **Strict CSP (single-owner)**: `tokens.css`/`motion.css` + the scoped `<style>` are all emitted as external same-origin `<link>`s (`build.inlineStylesheets: "never"`, `astro.config.mjs`); the login script is a bundled module (not `is:inline`); the only `is:inline` `<script src>` is the Cloudflare Turnstile loader, and only when `isTurnstileRequired()` (`src/lib/security/turnstile.ts`).
-- **i18n**: the strings on this screen are still hardcoded EN — following the `.po`/`.pot` extraction pipeline (§Internationalization, "planned pipeline"); when that pipeline is switched on, move them to `t("auth.login.*")` all at once (not partially).
+- **i18n**: the strings on these five screens are still literal English. That is a real remaining gap, not a plan waiting on tooling — the catalogues exist (§Internationalization) and `i18n:screens:check` covers `/admin/*` rather than the public auth pages, so nothing measures this. Translating them means adding the sentences to `locales/*.po` and wrapping them; do it in one pass per page, and prefer doing all five together so the wording stays consistent.
 
 ### Admin shell (desktop-first, responsive drawer below `--bp-md`)
 
 ```text
-┌───────────────────────────────────────────────────────────┐
-│ Topbar: [Logo] [Tenant badge] [Search] [Sync●] [🔔] [👤]  │
-├───────────┬───────────────────────────────────────────────┤
-│ Sidebar   │  Breadcrumb                                    │
-│  Dashboard│  ┌─────────────────────────────────────────┐  │
-│  Finance  │  │  Content (list/detail/form)             │  │
-│  Inventory│  │  - LoadingSkeleton / EmptyState / Error │  │
-│  Procure  │  │                                         │  │
-│  HR       │  └─────────────────────────────────────────┘  │
-│  Reports  │                                               │
-└───────────┴───────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ [☰] [A] AWCMS │ [🔍 Search…        Ctrl K] │ [Tenant] [🌐] [◐] [👤] │
+├──────────────────┬─────────────────────────────────────────────────┤
+│ ▾ SECTION        │  AWCMS › Section › Screen        ← .admin-       │
+│   Module         │  Screen title              [Primary action]      │
+│   ▪ Screen       │  One line of description       ← page-actions    │
+│   ▪ Screen ◄─────┼──────────────────────────────────── one rule ────│
+│ ▾ SECTION        │  ┌───────────────────────────────────────────┐   │
+│   ▪ Screen       │  │ Content (list/detail/form)                │   │
+│                  │  │ LoadingSkeleton / EmptyState / StateNotice│   │
+│ ─────────────    │  └───────────────────────────────────────────┘   │
+│ [→] Log out      │                                                  │
+│ Version v10.x    │                                                  │
+└──────────────────┴─────────────────────────────────────────────────┘
 ```
 
-**Responsive (planned)**: below `--bp-md` (768px), the sidebar above turns into an off-canvas drawer — hidden (`transform: translateX(-100%)`) until the topbar hamburger button (`#admin-nav-toggle`, `aria-expanded`/`aria-controls`) is pressed. While open: a scrim (`#admin-sidebar-scrim`) closes the drawer when clicked, `Esc` closes it and returns focus to the toggle button, focus moves to the first nav item when it opens, and the rest of the page (topbar/main) is marked `inert` while the drawer is open (a hand-written focus trap). The skip link (`.skip-link`) and `aria-current="page"` on the active link are consistent at both breakpoints. At `--bp-md` and above, the sidebar stays static-always-visible and the toggle button is hidden (`display: none`, which automatically removes it from the tab order).
+**The shell owns the page title** ([ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md)). `AdminLayout.astro` renders the whole `.admin-page-head` band — breadcrumb, `<h1>`, description, and a `page-actions` slot for the screen's own primary button. **A screen must not render its own `<h1>` or its own `<header class="page-header">`.** Before this, all 45 such screens printed their name twice, once from the layout's `title` prop and once from their own heading — and for 20 of them the two were in different languages, because the prop was literal English while the heading went through `t()`.
+
+- `title` (required) is the `<h1>` and the last breadcrumb crumb.
+- `description` (optional) or the `page-description` slot fills the line beneath it; the slot exists for the screens whose description contains a link or a `<code>`.
+- `breadcrumb` (optional) overrides the middle crumb, which is otherwise **derived** from the composed sidebar — `composeSidebarSections` already knows which entry is current, and asking 45 pages to name their own section would recreate exactly the drift the removed `active` prop caused.
+
+**Sidebar sections collapse** via `<details open>`/`<summary>` — no script, which under this CSP is strictly better, and `<details>` brings the implicit `aria-expanded`, the keyboard behaviour and the disclosure semantics for free. The open state is deliberately **not** remembered: a section that came back collapsed would hide screens from someone who does not know it collapses. Each link carries an icon resolved from `ModuleDescriptor.navigation[].icon`, falling back to a `labelKey`-keyed default table (`sidebar-menu.ts`); path data is a frozen map in `src/lib/ui/admin-icons.ts` and an unknown name renders a neutral dot rather than being echoed into an SVG attribute.
+
+**The command palette** (`Ctrl`/`⌘`+`K`, or the topbar search shell) is a native `<dialog>` opened with `showModal()`. It filters **the nav entries already rendered into the page** — so it structurally cannot surface a screen the sidebar would not, rather than relying on a second permission check staying in sync with the first. No fetch, 1,369 B.
+
+**Desktop collapse**: at ≥1024px the same `#admin-nav-toggle` checkbox that drives the mobile drawer instead collapses the sidebar to zero width, so a dense table can have the full viewport. One control, two behaviours, no script.
+
+**Responsive**: below `--bp-md` (768px), the sidebar turns into an off-canvas drawer — **CSS-only**, driven by a visually hidden but keyboard-focusable checkbox (`#admin-nav-toggle`) whose `<label>` is the topbar hamburger; a second `<label>` is the scrim that closes it on tap. Nothing to be blocked by CSP, and nothing to fail if a bundle does not load. The closed drawer is `visibility: hidden`, which is what takes its links out of the tab order — `transform` alone would leave them focusable behind the page.
+
+The cost of choosing CSS is stated plainly: there is **no `Esc`-to-close and no focus trap** on this drawer, because both require script. That is acceptable for a nav drawer whose links are all still reachable and whose scrim is a large tap target; it would not be acceptable for a modal that takes input, which is why the command palette is a real `<dialog>` instead. The skip link (`.skip-link`) and `aria-current="page"` on the active link are consistent at both breakpoints. At `--bp-md` and above, the sidebar is static, and the same toggle takes on its desktop-collapse meaning at ≥1024px.
 
 **Tenant badge, not a tenant switcher**: the topbar shows `TenantBadge.astro` — a non-interactive badge (`<div role="status">`) on a single-tenant deployment, NOT a dropdown control that looks active but is `disabled`. The reason: a REAL switcher control may only be rendered when `availableTenants` (a component prop) holds a list computed SERVER-side from real authorization data — showing an interactive control (even a disabled one) without a genuine tenant-switch capability would imply a security capability that does not exist and is not checked anywhere, violating the acceptance criterion "No authorization decision relies on hidden/disabled UI alone".
 
@@ -277,64 +330,60 @@ stateDiagram-v2
 
 ## Accessibility (WCAG 2.1 AA)
 
-- Text contrast at least 4.5:1 (check the tokens).
+- **1.4.3 Contrast (text)** — at least 4.5:1. Do not check this by eye or by reasoning about the tokens: run `bun run design:token-contrast:check`, which measures a registry of 25 pairs across both themes and is part of `bun run check`. Picking the wrong one of `--color-X` / `-strong` / `-on-soft` is the most-repeated UI defect in this repo's history (Issue #434, PR #720, and twice more in ADR-0120), and every one of those four was written by someone who had read this line.
+- **1.4.11 Non-text Contrast (controls)** — 3:1 for the boundary that identifies an operable component. Inputs, selects, textareas and the search shell use `--color-border-strong`; an input's fill differs from the card behind it by 1.03:1, so that border is the only thing saying where the field is. `--color-border` (1.29:1) is for decorative separators only — card edges and table rules — and stays a hairline on purpose.
 - Every control is focusable & keyboard-operable; the tab order is logical.
 - The focus ring is visible (`--color-focus`); never `outline:none` without a replacement.
 - Explicit labels for every input; errors are announced (`aria-live`).
-- Dialogs trap focus; `Esc` closes; focus returns to the trigger.
-- Touch targets ≥ 44px for the mobile portal.
+- Dialogs trap focus; `Esc` closes; focus returns to the trigger. Prefer a native `<dialog>` + `showModal()`, which gives all three plus page inertness and the backdrop with no script.
+- **Target size.** Touch targets ≥ 44px on the mobile portal and on genuinely touch-first controls (the nav toggle, the drawer links), which say so where they are defined. Admin form controls are **38px** since ADR-0120: WCAG 2.2 AA (2.5.8) asks 24px, this is a pointer-first back-office, and 44px inputs beside 36px buttons made every filter bar look mis-set. That is a deliberate trade, not an oversight — do not "restore" it to 44 without changing the buttons too.
 - Do not rely on colour alone for status (add an icon/text).
 - Show/hide password toggle: `aria-pressed` + `aria-label` that follow the state, wired via `addEventListener` (not an inline `onclick` — the CSP is `default-src 'self'`). Example: `login.astro` `#password-toggle`.
 - Custom controls that hide the native one (e.g. a styled `<select>`): draw the affordance (caret) via CSS `::after`, not a `data:` URI; the native `<select>` is still used so the built-in keyboard + a11y behaviour remains.
 
 ## Internationalization (i18n)
 
-> **Status:** planned to follow the proven awcms-mini i18n pattern (a pure `.po` parser with no dependencies, a catalogue loader, `t()`, locale resolution, formatters) — **not yet implemented in this repo**. When it is built, follow the design below as a binding baseline, not an open draft.
+> **Status: implemented** ([ADR-0095](../adr/0095-the-interface-speaks-the-readers-language.md)) — a pure `.po` parser with no dependencies, compiled catalogues, `t()`/`tn()`/`tx()`, locale resolution in the middleware, and locale-aware formatters. This banner previously read "not yet implemented in this repo" and named an `i18n/` directory that has never existed; it aged in the opposite direction for long enough that the paragraphs below still describe a pipeline that was designed and then built differently. **Trust the script names in `package.json` over any prose here.**
 
 i18n uses **two separate layers** according to the source of the text:
 
-**1. Static UI strings** (application chrome: labels, buttons, titles, error messages, navigation) → **standard gettext `.po`/`.pot` catalogue files**, **bundled with the application**, not in the database. One `messages.pot` template + one file per locale (`en.po`, `id.po`). Message keys are `namespace.key` (e.g. `auth.login.submit`, `error.access_denied`). Every UI string is rendered through the `t(key, params)` helper; **there is no hardcoded text**.
+**1. Static UI strings** (application chrome: labels, buttons, titles, error messages, navigation) → **gettext `.po` catalogue files in `locales/`**, bundled with the application, not in the database. One file per locale (`en.po`, `id.po`); there is **no `.pot` template** and no extraction step. The **msgid is the English source string itself** (`t("Skip to main content")`), not a `namespace.key` — so an untranslated locale degrades to readable English rather than to `auth.login.submit`, and a reviewer reads the sentence in the diff. Every UI string goes through `t()` / `tn()` (plural) / `tx()` (context).
 
 **2. User-entered data** (content typed by users that must appear in multiple languages, e.g. product descriptions/approval notes) → stored **in the database for every active locale** (one value per active language), **not** in `.po`. The per-language storage pattern will be documented in `docs/awcms/04_erd_data_dictionary.md` §Multi-language content (once written). `.po` is only for the developers' static text, the DB is for dynamic user content.
 
-- **Minimum locales (planned)**: **en** and **id** (the architecture is ready for ms/ar — the `default_locale` column stays free `text`, not an `enum`/`CHECK`, so ms/ar can be added without a schema migration; the UI only shows locales that actually have a catalogue). **Default = `en`** (`awcms_tenants.default_locale`).
-- **Locale resolution**: the `awcms_locale` cookie (set by the language switcher) → the tenant's `default_locale` → fallback `en`. Planned to be resolved in `src/middleware.ts` **before** any `/admin/*` page renders — not inside the layout, because a page's frontmatter runs before the frontmatter of the layout that wraps it.
+- **Minimum locales**: **en** and **id** (the architecture is ready for ms/ar — the `default_locale` column stays free `text`, not an `enum`/`CHECK`, so ms/ar can be added without a schema migration; the UI only shows locales that actually have a catalogue). **Default = `en`** (`awcms_tenants.default_locale`).
+- **Locale resolution**: the `awcms_locale` cookie (set by the language switcher) → the tenant's `default_locale` → fallback `en`. Resolved in `src/middleware.ts` **before** any `/admin/*` page renders — not inside the layout, because a page's frontmatter runs before the frontmatter of the layout that wraps it.
 - **Cookie, not localStorage**: unlike the theme toggle (pure CSS, which can be "fixed up" on the client before paint), the locale changes text that has already been SSR-rendered — the server must know the locale **before** rendering, and only a cookie is sent along with the request.
 - **The language switcher** (`LanguageSwitcher.astro`) shows a **flag icon** per language + that language's own native name, not translated into the active locale (e.g. 🇬🇧 English, 🇮🇩 Bahasa Indonesia); choosing one sets the cookie and then does a full reload (not an instant swap like the theme).
-- **i18n'd error messages**: error codes are mapped to `error.*` keys (`src/lib/i18n/error-messages.ts`); for client-side action banners, the `{code: message}` map is injected as a `<script type="application/json">` in the page (the `.po` catalogue can only be read server-side via `Bun.file`).
+- **Error messages, and the seam that is still open.** There is no `src/lib/i18n/error-messages.ts` and no injected `{code: message}` map — an earlier revision of this document described both as if they existed. What screens actually do is map `errorCode` to text **per screen**, inline (`blog-ads.astro`, `blog-homepage.astro`), which means the same code can read differently on two screens and a new code is easy to leave unhandled. The catalogue itself is a server module, so client code genuinely cannot reach it; the pattern that works today is the one `AdminLayout` uses for its own script — pass the translated string down as a `data-*` attribute. A central map is worth building; do not describe it as built.
 - **Local formatting**: numbers/currency (IDR + locale-appropriate thousands separators) and dates (`Asia/Jakarta`, `Intl.DateTimeFormat`/`NumberFormat`) are locale-aware — `src/lib/i18n/format.ts`.
 
-### Extraction, parity, and obsolete keys (planned pipeline)
+### Compilation, coverage, and the two gates
 
-> **Not implemented yet.** This whole subsection is a pipeline
-> plan, not tooling you can call today: there is no
-> `i18n/` directory in this repo, and there is no `i18n:extract`,
-> `i18n:pot:check`, or `i18n:parity:check` key in `package.json` — nor
-> is there a `scripts/i18n-extract.ts`. Read every `bun run i18n:*` below
-> as a target specification, not as a step-by-step guide
-> that can already be run.
+The catalogues are **hand-maintained and machine-verified** — the reverse of the extraction pipeline this section used to describe. `bun run i18n:compile` turns each `locales/*.po` into a `src/lib/i18n/catalogs/*.generated.ts` that the server imports; nothing parses `.po` at request time.
 
-`i18n/messages.pot` is **not hand-written** — the `scripts/i18n-extract.ts` pipeline (`bun run i18n:extract`) will scan every `.astro`/`.ts`/`.tsx` under `src/` for each `t("key")` call, then rewrite `messages.pot` (alphabetically sorted, one `#: file:line` comment per key, deterministic).
+**Adding a new UI string:**
 
-**Adding a new UI string** (the planned flow):
+1. Use `t("The English sentence")` — or `tn()` for a count, `tx()` when the same English word needs two translations by context.
+2. Add the `msgid`/`msgstr` pair to `locales/en.po` **and** `locales/id.po`. There is nothing to extract; the gate below is what tells you if you forgot.
+3. Run `bun run i18n:compile` and commit the regenerated `catalogs/*.generated.ts` alongside the `.po` files.
 
-1. Use `t("namespace.key", params?)` in the source as usual.
-2. Run `bun run i18n:extract` — the new key is added to `i18n/messages.pot` automatically.
-3. Fill in the `msgstr` for that new key in `i18n/en.po` **and** `i18n/id.po` (a manual step — extraction only manages the key inventory, it does not translate).
-4. Commit all three files (`messages.pot`, `en.po`, `id.po`) together.
-5. `bun run i18n:pot:check` (part of `bun run check`) will verify that the committed `messages.pot` is identical to the result of regenerating it from source. `bun run i18n:parity:check` will verify: (a) the key sets of `en.po`/`id.po`/`messages.pot` are identical, (b) every key that has a `{name}`-style placeholder in `en.po` has exactly the same placeholder in `id.po` (and vice versa).
+**Two gates, deliberately separate** ([ADR-0095](../adr/0095-the-interface-speaks-the-readers-language.md)):
 
-**Dynamic key patterns** (`t(\`namespace.${variable}\`)`, `t(entry.labelKey)`, `t(key)`from a map such as`ERROR_CODE_KEYS`) cannot be found by a plain string-literal scan — they will be handled through a `DYNAMIC_KEY_FAMILIES`table and an explicit`labelKey:`/`ERROR_CODE_KEYS` scan, following the awcms-mini pattern.
+- `bun run i18n:catalog:check` — **consistency.** Recompiles every `.po` and compares bytes (so a `.generated.ts` cannot drift from its source); asserts every msgid the code asks for is declared; checks each catalogue's `nplurals` against the code's plural table; checks placeholder parity between msgid and msgstr; and reports the still-untranslated `id` count against a ledger that **may only shrink**.
+- `bun run i18n:screens:check` — **coverage.** Finds admin screens still rendering literal English text nodes, against its own shrink-only ledger of named screens. A new screen cannot join a list that never grows.
 
-**Obsolete keys** (present in `en.po`/`id.po` but no longer found by `bun run i18n:extract` anywhere in the source) will be reported as a warning, not deleted automatically; they are marked with the `#~ ` prefix (the gettext convention) instead of being removed outright.
+Fusing the two would produce a gate that is green while every answer it gives is wrong; both scripts' headers say so at length.
 
-**Plural forms**: following the awcms-mini decision, this catalogue is planned **not** to use gettext `msgid_plural`/`msgstr[n]` in the early stage — an explicit design decision, with a tripwire in `i18n:parity:check` that fails if `msgid_plural` ever appears without a complete parser implementation.
+What the coverage gate deliberately does **not** scan: attributes. `aria-label="Close"` needs translating just as much, but `class="admin-card"` looks identical to the scanner, and a gate that reports class names trains its readers to ignore it. So a screen that passes may still have an untranslated `placeholder` or `aria-label` — check those by hand.
+
+**Plural forms are implemented**, not deferred: `tn()` plus a `PLURAL_FORM_COUNT` table in `src/lib/i18n/locales.ts`. Indonesian declares `nplurals=1` because it does not inflect for number; the `plural=` expression in a `.po` header is read to be **verified, never evaluated**.
 
 ```mermaid
 flowchart LR
   subgraph Static
-    POT[messages.pot] --> PO[en.po / id.po]
-    PO --> T["t(key, params)"]
+    PO[locales/en.po · id.po] --> Gen["i18n:compile → catalogs/*.generated.ts"]
+    Gen --> T["t / tn / tx"]
   end
   subgraph Content
     DB[(DB per active locale)] --> Pick[Pick the active locale value]
@@ -371,7 +420,8 @@ flowchart LR
 - Every list/detail has a loading/empty/error state.
 - Navigation is permission-filtered; the endpoints stay protected by ABAC.
 - The operational entry screen can be fully operated via keyboard.
-- Contrast & focus meet AA.
+- Contrast & focus meet AA — **demonstrated by `bun run design:token-contrast:check` passing**, plus an axe pass in a real browser for anything the token registry cannot see (opacity, gradients, images behind text). A pairing added to CSS with no line in that registry is not measured; adding the line is part of adding the rule.
+- No screen renders its own `<h1>`; the title, description and primary action go through `AdminLayout`'s header band and its `page-actions` slot.
 - All strings go through i18n; numbers/currency/dates are locally formatted.
 - Sensitive data is displayed masked according to role.
 - Soft-deleted resources do not appear in the default list/search; the archive filter and restore only appear when the effective permissions allow it.

@@ -268,18 +268,12 @@ function redirectStateVariant(state: string): string {
 const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
 ---
 
-<AdminLayout title="SEO & Distribution">
-  <header class="page-header fade-in-up">
-    <h1 id="seo-heading">{t("SEO & distribution")}</h1>
-    <p class="page-description">
-      {
-        t(
-          "This tenant's public metadata defaults, discovery surfaces (robots.txt, sitemap, feeds), redirect rules, and the privacy-minimized 404 log. Bulk import and automatic URL-change capture are API-only; the redirect policy below governs the latter."
-        )
-      }
-    </p>
-  </header>
-
+<AdminLayout
+  title={t("SEO & distribution")}
+  description={t(
+    "This tenant's public metadata defaults, discovery surfaces (robots.txt, sitemap, feeds), redirect rules, and the privacy-minimized 404 log. Bulk import and automatic URL-change capture are API-only; the redirect policy below governs the latter."
+  )}
+>
   <!-- ================= Tenant SEO defaults ================= -->
   <section class="admin-section fade-in-up" aria-labelledby="seo-config-title">
     <h2 class="admin-section-title" id="seo-config-title">

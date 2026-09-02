@@ -29,33 +29,26 @@ const label = active ? activeLabel : inactiveLabel;
 ---
 
 <div
-  class="sync-indicator"
+  class="admin-sync-pill sync-indicator"
   data-status={active ? "active" : "inactive"}
+  data-active={active ? "true" : "false"}
   role="status"
 >
-  <span class="sync-indicator-dot" aria-hidden="true"></span>
+  <span class="admin-sync-pill-dot" aria-hidden="true"></span>
   <span class="sync-indicator-label">{label}</span>
 </div>
 
 <style>
-  .sync-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-1);
-    font-size: var(--fs-sm);
-    color: var(--color-text-muted);
-    white-space: nowrap;
-  }
-
-  .sync-indicator-dot {
-    width: 8px;
-    height: 8px;
-    flex-shrink: 0;
-    border-radius: var(--radius-full);
-    background: var(--color-danger);
-  }
-
-  .sync-indicator[data-status="active"] .sync-indicator-dot {
-    background: var(--color-success);
-  }
+  /*
+   * ADR-0120 — the box and both colour pairs come from `.admin-sync-pill` in
+   * `admin.css`, which reads them from the `-soft` / `-on-soft` token pairs the
+   * status badges use. That is the point: "sync is off" in the topbar and a
+   * warning badge in a table are now the same colour, because they are the same
+   * statement.
+   *
+   * Nothing is left to declare here. The rules that used to live in this block
+   * set a bare dot on `--color-danger` with muted text beside it; red for "no
+   * offline node is registered" overstated a state the component's own header
+   * describes as "not a fault, only that nothing is pushing". Amber says that.
+   */
 </style>

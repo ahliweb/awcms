@@ -64,6 +64,7 @@ import {
   LOGIN_TURNSTILE_ACTION
 } from "../lib/security/turnstile";
 import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
+import AuthBrandPanel from "../components/AuthBrandPanel.astro";
 
 const turnstileActive = isTurnstileRequired();
 const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
@@ -87,129 +88,134 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
   </head>
   <body class="auth-body">
     <main class="auth">
-      <div class="auth-card">
-        <div class="auth-head">
-          <div class="auth-brand">
-            <span class="auth-mark" aria-hidden="true">A</span>
-            <span class="auth-wordmark">AWCMS</span>
+      <AuthBrandPanel />
+      <div class="auth-form-panel">
+        <div class="auth-card">
+          <div class="auth-head">
+            <div class="auth-brand">
+              <span class="auth-mark" aria-hidden="true">A</span>
+              <span class="auth-wordmark">AWCMS</span>
+            </div>
+            <h1 class="auth-title">Sign in</h1>
+            <p class="auth-subtitle">
+              Welcome back. Sign in to your workspace.
+            </p>
           </div>
-          <h1 class="auth-title">Sign in</h1>
-          <p class="auth-subtitle">Welcome back. Sign in to your workspace.</p>
-        </div>
 
-        <form id="login-form" class="auth-form" novalidate>
-          <p id="login-error" class="auth-error" role="alert" hidden></p>
+          <form id="login-form" class="auth-form" novalidate>
+            <p id="login-error" class="auth-error" role="alert" hidden></p>
 
-          {
-            singleTenant && (
-              <div class="auth-tenant-context">
-                <span class="auth-tenant-context-label">Signing in to</span>
-                <span class="auth-tenant-context-name">
-                  {singleTenant.name}
-                </span>
-                <input
-                  id="tenant-id"
-                  name="tenantId"
-                  type="hidden"
-                  value={singleTenant.id}
-                />
-              </div>
-            )
-          }
-
-          {
-            tenantPickerMode === "select" && (
-              <div class="auth-field">
-                <label for="tenant-id">Organization</label>
-                <div class="auth-select">
-                  <select
+            {
+              singleTenant && (
+                <div class="auth-tenant-context">
+                  <span class="auth-tenant-context-label">Signing in to</span>
+                  <span class="auth-tenant-context-name">
+                    {singleTenant.name}
+                  </span>
+                  <input
                     id="tenant-id"
                     name="tenantId"
-                    required
-                    autocomplete="organization"
-                  >
-                    <option value="" disabled selected>
-                      Choose your organization
-                    </option>
-                    {tenantOptions.map((tenant) => (
-                      <option value={tenant.id}>{tenant.name}</option>
-                    ))}
-                  </select>
+                    type="hidden"
+                    value={singleTenant.id}
+                  />
                 </div>
-              </div>
-            )
-          }
+              )
+            }
 
-          {
-            tenantPickerMode === "manual" && (
-              <div class="auth-field">
-                <label for="tenant-id">Tenant ID</label>
-                <input
-                  id="tenant-id"
-                  name="tenantId"
-                  type="text"
-                  required
-                  autocomplete="off"
-                  spellcheck={false}
-                />
-              </div>
-            )
-          }
+            {
+              tenantPickerMode === "select" && (
+                <div class="auth-field">
+                  <label for="tenant-id">Organization</label>
+                  <div class="auth-select">
+                    <select
+                      id="tenant-id"
+                      name="tenantId"
+                      required
+                      autocomplete="organization"
+                    >
+                      <option value="" disabled selected>
+                        Choose your organization
+                      </option>
+                      {tenantOptions.map((tenant) => (
+                        <option value={tenant.id}>{tenant.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )
+            }
 
-          <div class="auth-field">
-            <label for="login-identifier">Login identifier</label>
-            <input
-              id="login-identifier"
-              name="loginIdentifier"
-              type="text"
-              required
-              autocomplete="username"
-              spellcheck={false}
-            />
-          </div>
+            {
+              tenantPickerMode === "manual" && (
+                <div class="auth-field">
+                  <label for="tenant-id">Tenant ID</label>
+                  <input
+                    id="tenant-id"
+                    name="tenantId"
+                    type="text"
+                    required
+                    autocomplete="off"
+                    spellcheck={false}
+                  />
+                </div>
+              )
+            }
 
-          <div class="auth-field">
-            <label for="password">Password</label>
-            <div class="auth-password">
+            <div class="auth-field">
+              <label for="login-identifier">Login identifier</label>
               <input
-                id="password"
-                name="password"
-                type="password"
+                id="login-identifier"
+                name="loginIdentifier"
+                type="text"
                 required
-                autocomplete="current-password"
+                autocomplete="username"
+                spellcheck={false}
               />
-              <button
-                type="button"
-                id="password-toggle"
-                class="auth-password-toggle"
-                aria-pressed="false"
-                aria-label="Show password"
-              >
-                <span class="auth-password-toggle-label">Show</span>
-              </button>
             </div>
-          </div>
 
-          {
-            turnstileActive && turnstileSiteKey && (
-              <div
-                class="cf-turnstile auth-turnstile"
-                data-sitekey={turnstileSiteKey}
-                data-action={LOGIN_TURNSTILE_ACTION}
-              />
-            )
-          }
+            <div class="auth-field">
+              <label for="password">Password</label>
+              <div class="auth-password">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  autocomplete="current-password"
+                />
+                <button
+                  type="button"
+                  id="password-toggle"
+                  class="auth-password-toggle"
+                  aria-pressed="false"
+                  aria-label="Show password"
+                >
+                  <span class="auth-password-toggle-label">Show</span>
+                </button>
+              </div>
+            </div>
 
-          <button type="submit" id="login-submit" class="auth-submit">
-            Sign in
-          </button>
-        </form>
+            {
+              turnstileActive && turnstileSiteKey && (
+                <div
+                  class="cf-turnstile auth-turnstile"
+                  data-sitekey={turnstileSiteKey}
+                  data-action={LOGIN_TURNSTILE_ACTION}
+                />
+              )
+            }
 
-        <nav class="auth-links" aria-label="Account recovery">
-          <a href="/forgot-password">Forgot your password?</a>
-        </nav>
+            <button type="submit" id="login-submit" class="auth-submit">
+              Sign in
+            </button>
+          </form>
 
-        <p class="auth-foot">Secured workspace access · AWCMS</p>
+          <nav class="auth-links" aria-label="Account recovery">
+            <a href="/forgot-password">Forgot your password?</a>
+          </nav>
+
+          <p class="auth-foot">Secured workspace access · AWCMS</p>
+        </div>
       </div>
     </main>
 

@@ -255,12 +255,109 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_seo": "SEO & distribution"
 };
 
+/**
+ * `labelKey` -> icon name, resolved by `src/lib/ui/admin-icons.ts` (ADR-0120).
+ *
+ * ## Why this table exists at all
+ *
+ * `ModuleDescriptor.navigation[].icon` has been in the contract, validated by
+ * the composition checker, and threaded through `SidebarDefaultEntry` and
+ * `ComposedEntry` since the sidebar was ported. It was also DEAD, in both
+ * directions: no descriptor in each module's `module.ts` set it, and
+ * `AdminLayout.astro` never read it. A field declared, validated, carried
+ * through two type layers, and rendered by nothing.
+ *
+ * The redesign needs an icon per entry, so the honest options were to fill in
+ * `icon` across 21 descriptors or to default it here. This table does the
+ * latter, and the descriptor field now genuinely WINS over it (see
+ * `buildDefaultSidebarModel`) — so the contract field is live rather than
+ * ceremonial, without a change that touches every module to prove it.
+ *
+ * ## Keyed on `labelKey`, not on path or module
+ *
+ * `labelKey` is the identifier this file already gates for completeness in both
+ * directions (`tests/admin-navigation-registry.test.ts`, and the i18n sidebar
+ * test). Keying on the same thing means a new screen that forgets an icon is
+ * caught by the assertion that already exists, and a retired screen cannot
+ * leave an orphan here.
+ *
+ * A missing entry is NOT an error: `resolveAdminIcon` falls back to a neutral
+ * dot. That is deliberate — an icon is decoration on a labelled link, and a
+ * sidebar should never fail to render because a glyph was not chosen.
+ */
+export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
+  "admin.layout.nav_dashboard": "dashboard",
+  "admin.layout.nav_account": "user",
+  // System / platform.
+  "admin.layout.nav_tenants": "building",
+  "admin.layout.nav_offices": "building",
+  "admin.layout.nav_tenant_domains": "globe",
+  "admin.layout.nav_modules": "puzzle",
+  "admin.layout.nav_sidebar_menu": "layers",
+  "admin.layout.nav_form_drafts": "file",
+  "admin.layout.nav_site_search": "search",
+  "admin.layout.nav_site_profile": "gear",
+  "admin.layout.nav_theming": "palette",
+  "admin.layout.nav_email_templates": "mail",
+  "admin.layout.nav_email_suppression": "flag",
+  "admin.layout.nav_audit_trail": "clock",
+  "admin.layout.nav_seo": "link",
+  // Content.
+  "admin.layout.nav_blog": "doc",
+  "admin.layout.nav_blog_pages": "page",
+  "admin.layout.nav_blog_taxonomy": "tag",
+  "admin.layout.nav_blog_institutions": "building",
+  "admin.layout.nav_blog_homepage": "home",
+  "admin.layout.nav_blog_ads": "ads",
+  "admin.layout.nav_blog_presentation": "layers",
+  "admin.layout.nav_blog_settings": "gear",
+  "admin.layout.nav_media": "image",
+  // Engagement.
+  "admin.layout.nav_comments": "chat",
+  "admin.layout.nav_newsletter": "mail",
+  "admin.layout.nav_push_notifications": "bell",
+  // Operations.
+  "admin.layout.nav_visitor_analytics": "chart",
+  "admin.layout.nav_data_lifecycle": "database",
+  "admin.layout.nav_subject_requests": "shield",
+  "admin.layout.nav_idn_regions": "map",
+  "admin.layout.nav_reporting": "chart",
+  "admin.layout.nav_approvals": "check",
+  "admin.layout.nav_domain_events": "bolt",
+  "admin.layout.nav_sync": "sync",
+  // Identity.
+  "admin.layout.nav_profiles": "user",
+  "admin.layout.nav_users": "users",
+  "admin.layout.nav_roles": "key",
+  "admin.layout.nav_abac_policies": "shield",
+  "admin.layout.nav_access_policies": "shield",
+  "admin.layout.nav_user_groups": "users",
+  "admin.layout.nav_registrations": "inbox",
+  "admin.layout.nav_security": "lock",
+  "admin.layout.nav_partners": "handshake",
+  "admin.layout.nav_partner_registry": "handshake",
+  "admin.layout.nav_machine_credentials": "key",
+  "admin.layout.nav_invitations": "send",
+  "admin.layout.nav_business_scope": "layers"
+};
+
 /** Display name for the synthetic core group. Rendered as a module sub-label. */
 export const CORE_GROUP_LABEL = "General";
 
 /** Resolve a label key, falling back to the key itself so a gap is visible rather than blank. */
 export function resolveSidebarLabel(labelKey: string): string {
   return SIDEBAR_LABELS[labelKey] ?? labelKey;
+}
+
+/**
+ * Icon name for a label key, or `undefined` when none is mapped.
+ *
+ * `undefined` rather than a fallback string, so the ONE place that decides what
+ * an unmapped entry looks like is `resolveAdminIcon` in the presentation layer.
+ * Two fallbacks would eventually be two different glyphs.
+ */
+export function resolveSidebarIcon(labelKey: string): string | undefined {
+  return DEFAULT_SIDEBAR_ICONS[labelKey];
 }
 
 /** One default (code-derived) entry, before any filtering. */
@@ -325,6 +422,7 @@ export function buildDefaultSidebarModel(
     moduleName: CORE_GROUP_LABEL,
     typeKey: "system",
     labelKey: core.labelKey,
+    icon: resolveSidebarIcon(core.labelKey),
     order: core.order
   }));
 
@@ -343,7 +441,11 @@ export function buildDefaultSidebarModel(
           nav.group ??
           DEFAULT_FALLBACK_TYPE,
         labelKey: nav.labelKey,
-        icon: nav.icon,
+        // ADR-0120 — the descriptor's own `icon` WINS; the table is the
+        // default. That ordering is what makes the contract field live rather
+        // than ceremonial: a module that wants its own glyph sets one and it
+        // takes effect, and every module that does not still gets an icon.
+        icon: nav.icon ?? resolveSidebarIcon(nav.labelKey),
         order: nav.order ?? 0,
         requiredPermission: nav.requiredPermission
       });
