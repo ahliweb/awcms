@@ -5,7 +5,7 @@ description: Kelola modul tenant_admin AWCMS — tenant root, hierarki office (C
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:0dfa9760752809ef035bb3fbb2378ef2883aaec03f1382d8b01b1196ba3a7c94 -->
+<!-- i18n-source-hash: sha256:99e57e1a82d3ff62843bd0c9913d94d5d669b46fa666c73d4dca0134b654ba72 -->
 
 # AWCMS — Tenant Admin (office, tenant settings, setup wizard)
 
@@ -62,7 +62,7 @@ tenant-settings-directory.ts` (`fetchTenantSettings`/`updateTenantSettings`),
   sama skill `awcms-performance`'s pagination keyset). Layar admin
   `admin/offices.astro`: create form, inline edit per-baris, soft-delete
   per-baris, section "Deleted offices" + tombol Restore — semua gate hanya
-  UX, script bundled eksternal lewat `sendJson`/`postJson`
+  UX, script bundled eksternal lewat `sendJson`
   (`src/lib/ui/admin-form-client.ts`, lihat skill `awcms-ui-screen`).
 - **Tidak ada office yang `is_system`-protected** — beda dari role (skill
   `awcms-abac-guard`'s invariant `is_system`), office `head_office` hasil

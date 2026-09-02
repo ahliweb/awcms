@@ -61,7 +61,7 @@ tenant-settings-directory.ts` (`fetchTenantSettings`/`updateTenantSettings`),
   pattern as the `awcms-performance` skill's keyset pagination). The admin
   screen `admin/offices.astro`: create form, per-row inline edit, per-row
   soft-delete, a "Deleted offices" section + a Restore button — all of those
-  gates are UX only, the script is bundled externally through `sendJson`/`postJson`
+  gates are UX only, the script is bundled externally through `sendJson`
   (`src/lib/ui/admin-form-client.ts`, see the `awcms-ui-screen` skill).
 - **No office is `is_system`-protected** — unlike roles (the `awcms-abac-guard`
   skill's `is_system` invariant), the `head_office` office produced by bootstrap

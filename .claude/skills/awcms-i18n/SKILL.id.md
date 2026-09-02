@@ -1,72 +1,83 @@
 ---
 name: awcms-i18n
-description: Tambah/ubah string UI atau konten multi-bahasa AWCMS yang benar. Gunakan saat menambah teks UI baru, menambah locale, memformat angka/mata uang/tanggal, atau menambah field konten yang perlu multi-bahasa. Menegakkan katalog .po gettext (default en, min en+id), resolusi locale via middleware, dan konvensi konten multi-bahasa doc 04 sesuai Issue #433.
+description: Tambah/ubah string UI atau konten multi-bahasa AWCMS yang benar. Gunakan saat menambah teks UI baru, menambah locale, memformat angka/mata uang/tanggal, atau menambah field konten yang perlu multi-bahasa. Menegakkan katalog .po gettext di locales/ (default en, min en+id), resolusi locale via middleware, dan konvensi konten multi-bahasa doc 04 sesuai ADR-0095.
 ---
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:8205365e99e36f38d47fe4f0d4a16ea5350bd6892285e68c273ba68ad5a00473 -->
+<!-- i18n-source-hash: sha256:b6126789cca44590666480d9ad41f8322fb1e7f2f23cb4c0ac822299953bd841 -->
 
 # AWCMS — i18n (String UI & Konten Multi-bahasa)
 
-Sumber kebenaran: **`docs/awcms/14_ui_ux_design_system.md`** §Internationalization dan **`docs/awcms/04_erd_data_dictionary.md`** §Konten multi-bahasa. Implementasi referensi: `src/lib/i18n/`, `i18n/{messages.pot,en.po,id.po}` (Issue #433).
+Sumber kebenaran: **[ADR-0095](../../../docs/adr/0095-the-interface-speaks-the-readers-language.id.md)**, `docs/awcms/14_ui_ux_design_system.id.md` §Internasionalisasi, dan `docs/awcms/04_erd_data_dictionary.id.md` §Konten multi-bahasa. Implementasi: `src/lib/i18n/`, katalog di `locales/{en,id}.po`.
 
-## Dua lapisan — jangan campur
+> **Skill ini ditulis ulang 2 September 2026 karena menjelaskan sistem yang tidak pernah dibangun.** Ia menyebut direktori `i18n/`, template `messages.pot`, `bun run i18n:extract`, `i18n:pot:check`, `i18n:parity:check`, `scripts/i18n-extract.ts`, `src/lib/i18n/translate.ts`, `src/lib/i18n/locale.ts`, dan `src/lib/i18n/error-messages.ts` — **tak satu pun ada**. Yang benar-benar dikirim ADR-0095 lebih kecil dan berbeda jenisnya: katalog yang dirawat tangan, dikompilasi, dengan dua gerbang pemverifikasi dan tanpa langkah ekstraksi. Kalau ada yang bertentangan dengan `package.json` atau `grep -n "^export" src/lib/i18n/index.ts`, percayai kodenya.
 
-1. **String UI statis** (label, tombol, pesan error, navigasi) → katalog `.po`/`.pot` gettext, **bukan** database. Kunci `namespace.key` (mis. `admin.settings.save_button`, `error.access_denied`).
-2. **Konten data multi-bahasa** (input pengguna — nama produk, deskripsi, dst.) → disimpan di database **per locale aktif** (JSONB per-locale atau tabel translasi `(entity_id, locale, field, value)`), **bukan** di `.po`. Sudah ada contoh nyata untuk dicontek, bukan cuma pola abstrak: `awcms_email_templates.subject_template`/`text_body_template`/`html_body_template` (`sql/014`) — JSONB per-locale `{"en": "...", "id": "..."}`, minimal salah satu locale terisi, fallback locale yang sama (`locale → en → key mentah`) dengan katalog `.po` di atas. Modul domain baru (mis. `blog_content`, epic #536) yang butuh field konten multi-bahasa (judul/isi post, dsb.) ikuti pola ini persis, jangan bikin skema translasi baru yang berbeda tanpa alasan kuat.
+## Dua lapis — jangan dicampur
+
+1. **String UI statis** (label, tombol, pesan error, navigasi) → katalog `.po` gettext di `locales/`, **bukan** database.
+2. **Konten data multi-bahasa** (input pengguna — nama produk, deskripsi) → disimpan di database **per locale aktif** (JSONB per-locale atau tabel translation `(entity_id, locale, field, value)`), **bukan** di `.po`. Contoh nyata yang bisa dicontoh: `awcms_email_templates.subject_template`/`text_body_template`/`html_body_template` (`sql/014`) — JSONB per-locale `{"en": "…", "id": "…"}`, minimal satu locale terisi, rantai fallback yang sama. Modul domain baru mengikuti ini persis; jangan menciptakan skema translation kedua.
+
+## msgid ITU kalimat Inggrisnya
+
+**Tidak ada identifier `namespace.key`**. `t("Skip to main content")`, bukan `t("admin.layout.skip_link")`. Tiga konsekuensi yang perlu dipahami:
+
+- Locale yang belum diterjemahkan turun ke bahasa Inggris yang terbaca, bukan ke sebuah key.
+- Reviewer membaca kalimat sesungguhnya di dalam diff, jadi copy yang buruk bisa tertangkap.
+- Mengubah teks Inggrisnya **mengubah msgid-nya**, yang membuat terjemahannya yatim. Itu memang disengaja — kalimat yang diubah biasanya perlu diterjemahkan ulang — tetapi artinya sekadar merapikan copy pun berarti menyunting katalog.
+
+Pakai `tx("konteks", "Order")` bila satu kata Inggris yang sama butuh dua terjemahan berbeda (nomina vs verba). Tanpanya, salah satunya selalu keliru.
 
 ## Menambah string UI baru
 
-1. Pakai di server: `const t = await createTranslator(locale)` (`src/lib/i18n/translate.ts`), lalu `t("namespace.key", params?)`. Fallback chain: `locale → en → key mentah` — tidak pernah crash pada key hilang.
-2. Jalankan `bun run i18n:extract` (`scripts/i18n-extract.ts`, Issue #694) — men-scan seluruh `t("...")` di `src/` dan menulis ulang `i18n/messages.pot` secara **deterministik** (terurut alfabetis, `#: file:line` per key). Key barumu otomatis masuk template ini; **jangan** edit `messages.pot` dengan tangan lagi.
-3. Isi `msgstr` untuk key baru itu di `i18n/en.po` **dan** `i18n/id.po` — ini tetap langkah manual (extraction cuma mengurus inventaris key, bukan menerjemahkan).
-4. Commit ketiga berkas (`messages.pot`, `en.po`, `id.po`) bersamaan. `bun run i18n:pot:check` (bagian `bun run check`) gagal kalau `messages.pot` yang di-commit tidak identik dengan hasil regenerasi dari source — tanda kamu lupa langkah 2.
-5. Pakai di client script (`<script>` inline di halaman `.astro`): **tidak bisa** memanggil `createTranslator` (katalog server-side only) — injeksikan string yang dibutuhkan lewat `<script type="application/json" set:html={JSON.stringify(clientStrings)} />` di frontmatter, baca di client script (pola `login.astro`, `admin/access-users.astro`).
-6. Pesan error banner: petakan kode error (doc 05) ke key ter-lokalisasi via `translateErrorCode`/`buildClientErrorMessages` (`src/lib/i18n/error-messages.ts`) — jangan hardcode pesan per kode error di tiap halaman.
+1. **Sisi server:** `const { t, tn, tx } = getTranslator(locale)` (`src/lib/i18n`), lalu `t("Kalimat Inggrisnya", { name })`. Placeholder hanya `{name}` — tidak ada `%s`/`%d`. Placeholder tanpa nilai padanan dibiarkan apa adanya, bukan dikosongkan.
+2. **Tambahkan pasangannya dengan tangan** ke `locales/en.po` **dan** `locales/id.po`. Tak ada yang perlu diekstrak; gerbang di bawah inilah yang memberitahu kalau kamu lupa.
+3. **`bun run i18n:compile`** lalu commit `src/lib/i18n/catalogs/*.generated.ts` hasil regenerasi bersama berkas `.po`-nya. `i18n:catalog:check` mengompilasi ulang dan membandingkan byte, jadi berkas generated yang basi = gerbang merah, bukan perbedaan senyap.
+4. **Script klien tidak bisa menerjemahkan.** Katalognya modul server, dan mengirimkannya berarti mengirim kedua bahasa ke setiap browser. Kirim string yang sudah diterjemahkan sebagai atribut `data-*` — pola yang dipakai `AdminLayout.astro` untuk label busy tombol keluar, dan `ThemeToggle` untuk tiga label mode-nya.
+5. **Pesan per error code** saat ini dipetakan **per layar, inline** (`blog-ads.astro`, `blog-homepage.astro`). Tidak ada `translateErrorCode`/`buildClientErrorMessages` dan tidak ada `src/lib/i18n/error-messages.ts`, apa pun kata dokumen lama. Peta terpusat layak dibangun; sampai itu ada, ikuti pola lokalnya dan jaga konsistensi kalimatnya dengan tangan.
 
-## Dynamic key (t(\`ns.${var}\`), t(entry.labelKey), t(key) dari map)
+## Dua gerbang, sengaja dipisah
 
-Sebuah literal-string scan tidak bisa menemukan key yang dipakai secara dinamis. Tiga pola nyata di codebase ini ditangani eksplisit oleh `scripts/i18n-extract.ts` supaya key yang benar-benar dipakai tidak salah ditandai "obsolete":
+- **`bun run i18n:catalog:check` — konsistensi.** Mengompilasi ulang setiap `.po` dan membandingkan byte; memastikan setiap msgid yang diminta kode sudah dideklarasikan; mencocokkan `nplurals` tiap katalog dengan `PLURAL_FORM_COUNT`; memeriksa paritas `{placeholder}` antara msgid dan msgstr; melaporkan jumlah `id` yang belum diterjemahkan terhadap **ledger yang hanya boleh MENGECIL**.
+- **`bun run i18n:screens:check` — cakupan.** Mencari layar admin yang masih merender teks Inggris literal, terhadap ledger-nya sendiri berisi nama-nama layar yang juga hanya boleh mengecil. Layar yang baru ditambahkan wajib diterjemahkan karena ia tidak bisa bergabung ke daftar yang tidak pernah bertambah.
 
-- `t(\`admin.blog.status.${post.status}\`)`(template-literal interpolation) — resolusi lewat`DYNAMIC_KEY_FAMILIES`table di`scripts/i18n-extract.ts`, memetakan prefix ke suffix konkret dari domain enum aslinya (pola sama seperti `CONFIG_EXEMPTIONS`, Issue #689). **Menambah pola baru ini di source WAJIB diikuti entry baru di tabel itu** — kalau tidak, `bun run i18n:extract`/`i18n:pot:check` gagal (bukan diam-diam under-extract).
-- `t(entry.labelKey)` (nav menu) — resolusi dari definisi literal `labelKey: "admin.layout.nav_x"` di tiap `src/modules/*/module.ts`, bukan dari call site-nya.
-- `t(key)` dari `ERROR_CODE_KEYS` (`src/lib/i18n/error-messages.ts`) — resolusi dari value map itu sendiri.
+Menyatukan keduanya akan menghasilkan gerbang yang hijau sementara semua jawabannya salah; header kedua skrip itu menjelaskannya panjang lebar. **Jangan menaikkan ledger mana pun** — begitulah utang terjemahan menjadi permanen.
 
-## Placeholder parity, obsolete key, plural forms (Issue #694)
+Yang sengaja **tidak** dipindai gerbang cakupan: atribut. `aria-label="Close"` sama butuhnya diterjemahkan, tetapi `class="admin-card"` terlihat identik bagi pemindai, dan gerbang yang melaporkan nama kelas melatih pembacanya untuk mengabaikannya. Jadi layar yang lolos masih bisa punya `placeholder`, `aria-label`, atau `title` yang belum diterjemahkan — periksa itu dengan tangan.
 
-- **Placeholder**: `{name}`-style adalah satu-satunya format placeholder yang dipakai katalog ini (tidak ada `%s`/`%d`). `bun run i18n:parity:check` gagal kalau `en.po` dan `id.po` punya set placeholder berbeda untuk key yang sama — translator yang lupa menyalin `{name}` akan tertangkap di CI, bukan diam-diam tampil sebagai teks `{name}` mentah.
-- **Obsolete key**: `bun run i18n:extract` melaporkan (bukan menghapus) key yang ada di `en.po` tapi tidak ditemukan di source manapun. Sebelum dihapus, pastikan bukan dynamic key (lihat bagian di atas); kalau memang tidak dipakai, tandai `#~ ` (gettext obsolete marker) di ketiga berkas alih-alih dihapus langsung.
-- **Plural forms**: katalog ini **tidak** memakai `msgid_plural`/`msgstr[n]` sama sekali (keputusan desain saat ini, bukan kelalaian — `po-parser.ts` juga belum mengimplementasikan parsing plural). `bun run i18n:parity:check` menyertakan tripwire yang gagal kalau `msgid_plural` pernah muncul.
+## Bentuk jamak SUDAH diimplementasikan
+
+`tn("1 file", "%d files", count)` — dengan `PLURAL_FORM_COUNT` dan `PLURAL_SELECTOR` di `src/lib/i18n/locales.ts`. Bahasa Indonesia mendeklarasikan `nplurals=1` karena tidak berinfleksi untuk jumlah ("satu berkas" / "dua berkas"). Ekspresi `plural=` di header `.po` **dibaca untuk DIVERIFIKASI, tidak pernah dievaluasi** — `i18n:catalog:check` memastikan ia setuju dengan tabel di kode, bukan menjalankannya.
 
 ## Resolusi locale — WAJIB di middleware, bukan di layout
 
-**Gotcha nyata (Issue #433)**: frontmatter sebuah halaman Astro berjalan **lebih dulu** daripada frontmatter layout yang membungkusnya. Me-resolve locale (cookie → `default_locale` tenant → `en`) di dalam layout (`AdminLayout.astro`) membuat shell ter-render benar tapi konten halaman tetap bahasa default — bug nyata yang pernah terjadi dan sudah diperbaiki.
+**Jebakan nyata:** frontmatter sebuah halaman Astro berjalan **sebelum** frontmatter layout yang membungkusnya. Meresolusi locale di dalam `AdminLayout.astro` membuat shell benar sementara isi halaman tetap di bahasa default — bug yang benar-benar pernah terjadi.
 
-- Resolusi locale **HARUS** terjadi di `src/middleware.ts` (`resolveRequestLocale`/`resolveLocale`, `src/lib/i18n/locale.ts`), disimpan di `Astro.locals.locale`, dan setiap halaman/layout membaca `Astro.locals.locale` langsung — **jangan** re-resolve locale sendiri di layout atau halaman manapun.
-- Precedence: cookie `awcms_locale` → `SsrContext.tenantDefaultLocale` (dibawa dari query yang sudah ada di `resolveSsrContext`, tanpa round-trip DB baru) → fallback `en`.
+- Resolusi terjadi di `src/middleware.ts` lewat `resolveRequestLocale` (`src/lib/i18n/request-locale.ts`), disimpan di `Astro.locals`, dan setiap halaman/layout membacanya dari sana. **Jangan meresolusi ulang locale di layout atau halaman.**
+- Presedensi: cookie `awcms_locale` (`LOCALE_COOKIE_NAME`) → `default_locale` tenant yang dibawa `SsrContext` (tanpa round-trip DB baru) → `DEFAULT_LOCALE` (`en`).
 
 ## Language switcher
 
-`src/components/LanguageSwitcher.astro` — set cookie lalu **reload penuh** (`window.location.reload()`), **bukan** swap instan seperti theme toggle. Alasan: locale mengubah teks yang di-render SSR, bukan cuma CSS — swap instan tidak bisa membaca ulang katalog server-side. Tampilkan ikon bendera + nama asli bahasa (`LOCALE_FLAGS`/`LOCALE_LABELS`, `src/lib/i18n/locale.ts`), bukan kode locale mentah (`en`/`id`).
+`src/components/LanguageSwitcher.astro` menyetel cookie lalu melakukan **reload penuh**, bukan pertukaran instan seperti theme toggle — locale mengubah teks yang dirender SSR, dan hanya cookie yang sampai ke server sebelum render. Tampilkan `LOCALE_FLAG` + `LOCALE_ENDONYM` (nama bahasa itu sendiri), bukan kode mentahnya.
 
 ## Formatter locale-aware
 
-`src/lib/i18n/format.ts` — `formatNumber`/`formatCurrencyIDR`/`formatDate`/`formatDateTime` (`Intl.NumberFormat`/`DateTimeFormat`, tag `en-US`/`id-ID`, timezone tetap `Asia/Jakarta`). **Gotcha**: `Intl.NumberFormat` currency style menyisipkan U+00A0 (no-break space) antara simbol dan angka, bukan spasi biasa — assertion test harus pakai karakter itu persis, bukan `" "`.
+`src/lib/i18n/format.ts` — `formatNumber`/`formatCurrency`/`formatDate`/`formatDateTime`, di atas `Intl` dengan `LOCALE_INTL_TAG` dan timezone dipatok `Asia/Jakarta`. **Jebakan**: gaya currency `Intl.NumberFormat` menyisipkan U+00A0 (spasi tanpa-putus) antara simbol dan angka, bukan spasi biasa — test yang mengasersikan `" "` gagal karena alasan yang tak terlihat di diff.
 
 ## Menambah locale baru (`ms`/`ar`, dst.)
 
-1. Tambah ke `SUPPORTED_LOCALES` (`src/lib/i18n/locale.ts`) + `LOCALE_LABELS`/`LOCALE_FLAGS` + tag `INTL_LOCALE_TAG` (`format.ts`).
-2. Tambah `i18n/<locale>.po` dengan keyset identik ke `en.po`.
-3. Kolom DB `default_locale` mungkin sudah menerima nilai itu (doc 04 §ERD) untuk kompatibilitas mundur — tapi UI (`LanguageSwitcher`, dropdown Settings) hanya boleh menawarkan locale yang **benar-benar punya katalog** (`SUPPORTED_LOCALES`), jangan tawarkan locale tanpa terjemahan nyata.
+1. Tambahkan ke `SUPPORTED_LOCALES` + `LOCALE_ENDONYM`/`LOCALE_FLAG`/`LOCALE_INTL_TAG` + `PLURAL_FORM_COUNT`/`PLURAL_SELECTOR` (`src/lib/i18n/locales.ts`).
+2. Tambahkan `locales/<locale>.po` dengan himpunan msgid sama seperti `en.po`, lalu `bun run i18n:compile`.
+3. **Periksa fontnya.** Subset yang di-self-host di `public/fonts/` hanya latin/latin-ext (ADR-0120); locale beraksara lain butuh subsetnya ditambahkan, dan `FONT_BUDGET_BYTES` di `scripts/client-asset-budget.ts` adalah tempat biaya itu jadi terlihat.
+4. Kolom DB `default_locale` bertipe `text` bebas, jadi tak perlu migration — tetapi UI hanya boleh menawarkan locale yang benar-benar punya katalog.
 
 ## Verifikasi
 
-- Ganti locale (switcher/cookie/`default_locale` tenant) → seluruh UI berpindah bahasa tanpa string tersisa hardcode, **termasuk konten halaman**, bukan cuma shell layout.
-- Tidak ada flash bahasa salah saat SSR.
-- `bun run check` hijau (termasuk `i18n:pot:check` dan `i18n:parity:check`); keyset + placeholder `.po` identik di tiga berkas.
-- Formatter IDR/tanggal mengikuti locale/timezone yang benar.
+- Ganti locale (switcher/cookie/`default_locale` tenant) → seluruh UI berganti bahasa, **termasuk isi halaman**, bukan cuma shell-nya.
+- Tidak ada kedipan bahasa yang salah saat SSR.
+- `bun run i18n:catalog:check` dan `bun run i18n:screens:check` hijau, tanpa satu pun ledger dinaikkan.
+- Formatter IDR/tanggal mengikuti locale dan timezone yang benar.
 
 ## Skill terkait
 
-`awcms-ui-screen` (memakai `t()`/formatter saat membangun layar), `awcms-ux-review` (audit string hardcode yang lolos ekstraksi).
+`awcms-ui-screen` (memakai `t()`/formatter saat membangun layar), `awcms-ux-review` (mengaudit string hardcode), `awcms-module-management` (`labelKey` → `SIDEBAR_LABELS` → diterjemahkan layout).

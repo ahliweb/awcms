@@ -1,16 +1,16 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:f32dbf2439a80af911d85684ab79d870356fa78843eafe0f43e0c07d9871824c -->
+<!-- i18n-source-hash: sha256:a31907df6eedceef26ea8073fcc8523a95ced28cc6c4ca92184379b6d72ef551 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
-> **Status dokumen (2026-07-14):** Repo `awcms` masih pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **belum ada kode modul ERP yang diimplementasikan**. Dokumen ini mengadaptasi standar/pola design system yang sudah terbukti di base [awcms-mini](https://github.com/ahliweb/awcms-mini) menjadi **arsitektur target** untuk platform ERP AWCMS. Bagian yang di awcms-mini sudah live (token, komponen konkret seperti `DataTable.astro`/`ConfirmDialog.astro`, i18n) di sini direframe sebagai **rencana yang mengikat** saat modul terkait mulai dibangun, bukan sesuatu yang sudah berjalan di repo ini. Contoh layar/komponen diganti ke domain ERP (ledger, purchase order, stock adjustment, payroll run) menggantikan contoh retail/POS di sumber.
+> **Status dokumen (2026-09-02):** **Belum ada kode modul ERP yang diimplementasikan** ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — layar ledger/purchase-order/payroll di bawah tetap arsitektur target. Segala yang bukan khusus-ERP **hidup di repo ini dan menjelaskan kode yang berjalan**: design token, admin shell dan pita header-nya, kelima layar auth, state pattern, theming, dan i18n. Dua bagian ditandai di tempat mereka menyimpang — masih belum ada component library `src/components/ui` (layar memakai kelas CSS bersama), dan peta error-code klien yang dijelaskan di bagian i18n tidak ada. Bagian yang menulis "rencana" memang berarti rencana; yang tidak, tidak.
 
 ## Tujuan
 
 Dokumen ini menetapkan kebutuhan **desain UI/UX** AWCMS yang akan melengkapi SOP operasional dan blueprint modul saat ditulis. Berisi design principle, design token, component library, information architecture, spesifikasi layar (wireframe), state pattern, aksesibilitas, i18n, dan theming — agar frontend ERP dapat diimplementasikan konsisten sejak modul pertama dibangun.
 
-Terkait: `15_frontend_architecture_integration.md` (arsitektur & wiring), dokumen SOP operasional (menyusul). Skill penegak yang direncanakan: **`awcms-ui-screen`** (`.claude/skills/`, mengikuti pola `awcms-mini-ui-screen`).
+Terkait: `15_frontend_architecture_integration.md` (arsitektur & wiring), dokumen SOP operasional (menyusul). Skill penegaknya: **`awcms-ui-screen`** (membangun layar) dan **`awcms-ux-review`** (mengauditnya), keduanya di `.claude/skills/`.
 
 ## Prinsip desain UI/UX
 
@@ -117,31 +117,33 @@ Aturan:
 
 Komponen dasar direncanakan di `src/components/ui`, dipakai lintas persona dan lintas modul ERP.
 
-| Komponen                                  | Catatan penting                                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Button                                    | varian primary/secondary/ghost/danger; state loading & disabled                                                                                                                                                                                                                                                                                                                                |
-| Input / NumberInput                       | label, hint, error; NumberInput untuk qty/harga/nominal jurnal (mono)                                                                                                                                                                                                                                                                                                                          |
-| Select / Combobox                         | Combobox mendukung search akun/produk/vendor/karyawan                                                                                                                                                                                                                                                                                                                                          |
-| Checkbox / Radio / Switch                 | switch untuk consent & feature toggle                                                                                                                                                                                                                                                                                                                                                          |
-| Dialog / Drawer                           | fokus terperangkap, `Esc` menutup — direncanakan sebagai `<dialog>` native (`showModal()` menyediakan focus trap + Esc-to-close bawaan browser) untuk konfirmasi aksi destruktif (mis. void jurnal, batalkan PO), menggantikan pola `window.confirm`/`window.prompt`. Sidebar admin sendiri (drawer mobile) BUKAN `<dialog>` — tetap `<nav>` statis di desktop, focus trap-nya ditulis manual. |
-| Toast                                     | sukses/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                |
-| Table / DataGrid                          | sort, pagination keyset, kolom sticky, row density — dipakai untuk daftar entri jurnal, purchase order, stock adjustment, payroll run; shell scroll-container + `<caption>` aksesibel + empty-row standar; row rendering (badge, form, tombol per baris) tetap tanggung jawab pemanggil                                                                                                        |
-| Badge / StatusPill                        | status lifecycle (draft/pending approval/posted/rejected/void/quarantine) berkode warna — varian `success/warning/danger/info/neutral`, memakai token `-strong` untuk fill+teks putih kecuali `warning` yang memakai teks gelap tetap agar AA di kedua tema                                                                                                                                    |
-| ArchiveFilter                             | toggle/filter `aktif`, `arsip`, `semua` untuk role berizin                                                                                                                                                                                                                                                                                                                                     |
-| Card / Panel                              | kontainer konten                                                                                                                                                                                                                                                                                                                                                                               |
-| FormField                                 | membungkus label+input+error konsisten — wrapper label/hint/error dengan slot default untuk kontrol asli (caller tetap mengatur `type`/`name`/`required`)                                                                                                                                                                                                                                      |
-| Tabs                                      | detail entity (akun, purchase order, produk, karyawan)                                                                                                                                                                                                                                                                                                                                         |
-| Pagination                                | keyset (next/prev), bukan offset besar — dua tombol prev/next yang men-dispatch `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                |
-| `FilterBar`                               | toolbar kontainer untuk kontrol filter list (`role="search"` + label wajib); tidak menangani logic filter itu sendiri — tetap tanggung jawab halaman, sama seperti `DataTable`                                                                                                                                                                                                                 |
-| `ActionBanner`                            | banner feedback sukses/error pasca-mutation (`role="alert"`); dipakai konsisten oleh `showBanner()` di helper klien admin (lihat doc 15) tanpa duplikasi manual per layar                                                                                                                                                                                                                      |
-| SearchBar                                 | debounce, hasil cepat (target <300ms)                                                                                                                                                                                                                                                                                                                                                          |
-| EmptyState / ErrorState / LoadingSkeleton | wajib untuk tiap list/detail                                                                                                                                                                                                                                                                                                                                                                   |
-| KeyboardHint                              | menampilkan shortcut aktif di layar entri tinggi-volume (jurnal, penerimaan barang, stock opname)                                                                                                                                                                                                                                                                                              |
-| SyncIndicator / OfflineBanner             | status koneksi & antrean sync                                                                                                                                                                                                                                                                                                                                                                  |
-| MoneyText / MaskedText                    | format IDR & masking data sensitif (gaji, rekening bank, NPWP)                                                                                                                                                                                                                                                                                                                                 |
-| `StateNotice`                             | denied/error banner bersama; `kind="error"` menutup cabang Error state pattern di layar SSR (lihat §State pattern wajib)                                                                                                                                                                                                                                                                       |
+| Komponen                                  | Catatan penting                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button                                    | varian primary/secondary/ghost/danger; state loading & disabled                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Input / NumberInput                       | label, hint, error; NumberInput untuk qty/harga/nominal jurnal (mono)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Select / Combobox                         | Combobox mendukung search akun/produk/vendor/karyawan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Checkbox / Radio / Switch                 | switch untuk consent & feature toggle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Dialog / Drawer                           | fokus terperangkap, `Esc` menutup — `<dialog>` native yang dibuka `showModal()`, yang memasok focus trap, Esc-to-close, inert-nya halaman, backdrop, dan pengembalian fokus tanpa satu baris script pun. **Command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) adalah contoh kerjanya di repo ini; konfirmasi aksi destruktif masih `window.confirm` dan itulah yang berikutnya perlu dipindahkan. Sidebar admin sendiri (drawer mobile) BUKAN `<dialog>` — tetap `<nav>` statis di desktop, focus trap-nya ditulis manual. |
+| Toast                                     | sukses/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Table / DataGrid                          | sort, pagination keyset, kolom sticky, row density — dipakai untuk daftar entri jurnal, purchase order, stock adjustment, payroll run; shell scroll-container + `<caption>` aksesibel + empty-row standar; row rendering (badge, form, tombol per baris) tetap tanggung jawab pemanggil                                                                                                                                                                                                                                                     |
+| Badge / StatusPill                        | status lifecycle (draft/pending approval/posted/rejected/void/quarantine) berkode warna — varian `success/warning/danger/info/neutral`. Sejak [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md) `.status-badge` yang dikirim adalah badge **tint**: isian `--color-X-soft` dengan teks `--color-X-on-soft`. Pakai `-strong` + teks putih hanya bila badge-nya isian solid                                                                                                                                    |
+| ArchiveFilter                             | toggle/filter `aktif`, `arsip`, `semua` untuk role berizin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Card / Panel                              | kontainer konten                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FormField                                 | membungkus label+input+error konsisten — wrapper label/hint/error dengan slot default untuk kontrol asli (caller tetap mengatur `type`/`name`/`required`)                                                                                                                                                                                                                                                                                                                                                                                   |
+| Tabs                                      | detail entity (akun, purchase order, produk, karyawan)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Pagination                                | keyset (next/prev), bukan offset besar — dua tombol prev/next yang men-dispatch `CustomEvent("awcms:paginate")`                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `FilterBar`                               | toolbar kontainer untuk kontrol filter list (`role="search"` + label wajib); tidak menangani logic filter itu sendiri — tetap tanggung jawab halaman, sama seperti `DataTable`                                                                                                                                                                                                                                                                                                                                                              |
+| `ActionBanner`                            | banner feedback sukses/error pasca-mutation (`role="alert"`); dipakai konsisten oleh `showBanner()` di helper klien admin (lihat doc 15) tanpa duplikasi manual per layar                                                                                                                                                                                                                                                                                                                                                                   |
+| SearchBar                                 | debounce, hasil cepat (target <300ms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| EmptyState / ErrorState / LoadingSkeleton | wajib untuk tiap list/detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| KeyboardHint                              | menampilkan shortcut aktif di layar entri tinggi-volume (jurnal, penerimaan barang, stock opname)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| SyncIndicator / OfflineBanner             | status koneksi & antrean sync                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| MoneyText / MaskedText                    | format IDR & masking data sensitif (gaji, rekening bank, NPWP)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `StateNotice`                             | denied/error banner bersama; `kind="error"` menutup cabang Error state pattern di layar SSR (lihat §State pattern wajib)                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
-Helper klien non-visual yang direncanakan (`src/lib/ui/admin-form-client.ts`, mengikuti pola awcms-mini) — `submitJson`/`showBanner`/`lockElement` dipakai bersama oleh `<script>` tiap layar admin untuk fetch+banner+anti-double-submit; bukan komponen Astro, tapi sumber kebenaran yang sama untuk pola "kunci tombol pemicu selama mutation in-flight" di §Form UX. Pasangan non-visual untuk `ConfirmDialog.astro` (mis. `confirm-dialog-client.ts`) mengikuti pola yang sama.
+Helper klien non-visual `src/lib/ui/admin-form-client.ts` **ADA dan dipakai bersama oleh `<script>` tiap layar admin** untuk fetch + pesan + anti-double-submit. Permukaan sesungguhnya: `onSubmit`/`onSubmitAll`/`onAction`/`mutateAndReload` (perangkaian), `sendJson`/`sendJsonRequest`/`sendJsonForData` (permintaan), `lockElement` + `messageBox` (umpan balik), dan pembaca field `field`/`inputValue`/`blankToNull`/`checkboxChecked`/`integerValue`/`localDateTimeToInstant`. **Baca daftar ekspornya sebelum menulis kodenya** — `grep -n "^export" src/lib/ui/admin-form-client.ts` — karena revisi terdahulu dokumen ini menyebut pasangan `submitJson`/`showBanner` yang tidak pernah ada, dan beberapa skill masih menyuruh memanggil `postJson`, yang **dihapus 22 Agustus 2026** (PROJECT_STATE D12 — nol pemanggil, dengan docblock yang mengklaim sebaliknya).
+
+Import dari modul ini wajib, bukan sekadar DRY: di bawah `default-src 'self'` Astro meng-inline `<script>` tanpa import lalu CSP memblokirnya diam-diam, sedangkan script yang meng-import dari modul ini dibundel ke `/_astro/*.js` eksternal yang diizinkan `'self'`.
 
 ### Migrasi bertahap layar besar (pola, bukan status)
 
@@ -175,25 +177,32 @@ Item menu difilter oleh permission efektif user (RBAC/ABAC). Menu tanpa akses di
 
 ## Layout shell
 
-### Auth screen (login) — modern, mobile-first
+### Auth screen (login) — split panel, mobile-first
 
-`src/pages/login.astro` adalah pola layar auth publik **kanonis** (UI/UX overhaul, Issue #166/#215): kartu `.auth-card` terpusat di atas background radial-gradient halus (`--color-primary-soft` + `--color-surface-2` + `--color-bg`), elevasi `--shadow-lg`, radius `--radius-xl`. Layar auth publik lain (forgot/reset password bila ditambah kelak) mengikuti pola ini.
+`src/pages/login.astro` adalah pola layar auth publik **kanonis** (UI/UX overhaul, Issue #166/#215; split panel ditambahkan [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md)). **Kelima** layar auth publik — `login`, `register`, `forgot-password`, `reset-password`, `accept-invitation` — memakainya bersama: `<main class="auth">` adalah grid dua kolom pada ≥900px yang memuat `AuthBrandPanel.astro` dan `.auth-form-panel` yang membungkus `.auth-card`.
 
 ```text
-┌───────────────────────────┐
-│  [A]  AWCMS                │  ← brand: .auth-mark (badge gradient) + .auth-wordmark
-│  Sign in                   │  ← .auth-title (h1)
-│  Welcome back. Sign in…    │  ← .auth-subtitle
-│  ┌───────────────────────┐ │
-│  │ SIGNING IN TO         │ │  ← .auth-tenant-context (mode single-tenant)
-│  │ <Tenant name>         │ │
-│  └───────────────────────┘ │
-│  Login identifier  [_____] │
-│  Password     [____] [Show]│  ← .auth-password + toggle show/hide
-│  [      Sign in         ]  │  ← .auth-submit (primary)
-│  Secured workspace access  │  ← .auth-foot
-└───────────────────────────┘
+┌──────────────────────────┬────────────────────────────┐
+│ [A] AWCMS                │  [A]  AWCMS                │ ← .auth-brand
+│                          │  Sign in                   │ ← .auth-title (h1)
+│ Headline                 │  Welcome back. Sign in…    │ ← .auth-subtitle
+│ Subline                  │  ┌───────────────────────┐ │
+│ · chip · chip · chip     │  │ SIGNING IN TO         │ │ ← .auth-tenant-context
+│                          │  │ <Tenant name>         │ │   (mode single-tenant)
+│                          │  └───────────────────────┘ │
+│                          │  Login identifier  [_____] │
+│                          │  Password     [____] [Show]│ ← + toggle show/hide
+│ host.example             │  [      Sign in         ]  │ ← .auth-submit (primary)
+│                          │  Secured workspace access  │ ← .auth-foot
+│  AuthBrandPanel          │                            │
+│  aria-hidden="true"      │                            │
+└──────────────────────────┴────────────────────────────┘
+        ↑ hilang sepenuhnya di bawah 900px
 ```
+
+Paruh brand itu **`aria-hidden="true"` dan tidak memuat informasi yang tidak ada juga di paruh form.** Ia dekorasi yang kebetulan besar; pembaca layar yang membacanya akan mengumumkan nama produk dua kali sebelum sampai ke field pertama. Di bawah 900px ia tidak dirender sama sekali alih-alih ditumpuk di atas kartu, karena orang yang datang untuk masuk lewat ponsel semestinya mencapai field pertama tanpa menggulir. Footer-nya mencetak `Astro.url.host`, jadi sebuah deployment mengidentifikasi dirinya sendiri tanpa nilai konfigurasi yang bisa melenceng dari URL yang benar-benar diketik orang.
+
+Gradiennya memakai **warna literal, bukan token surface**, dengan sengaja: itu permukaan brand, bukan permukaan UI, dan ia harus tampak sama di kedua tema. Token `--color-*` berbalik mengikuti `data-theme`; panel brand yang ikut terbalik mengikuti preferensi OS akan menjadi brand yang berbeda saat malam.
 
 Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
 
@@ -203,25 +212,42 @@ Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
 - **Select kustom**: caret digambar via CSS (`.auth-select::after`, trik border), bukan `data:` URI SVG — tetap CSP-safe; native `<select>` tetap dipakai.
 - **Entrance kartu** `@keyframes auth-card-rise` = `transform`-saja (translateY), BUKAN utility `.fade-in-up` yang dari `opacity:0` (lihat §Motion — hindari flag kontras axe pada teks utama). Sertakan guard reduced-motion lokal.
 - **CSP ketat (single-owner)**: `tokens.css`/`motion.css` + `<style>` scoped semua di-emit sebagai `<link>` eksternal same-origin (`build.inlineStylesheets: "never"`, `astro.config.mjs`); script login = modul yang di-bundle (bukan `is:inline`); satu-satunya `is:inline` `<script src>` adalah loader Cloudflare Turnstile, dan hanya saat `isTurnstileRequired()` (`src/lib/security/turnstile.ts`).
-- **i18n**: string layar ini masih hardcode EN — mengikuti pipeline ekstraksi `.po`/`.pot` (§Internationalization, "rencana pipeline"); saat pipeline itu diaktifkan, ganti ke `t("auth.login.*")` sekaligus (jangan sebagian).
+- **i18n**: string di kelima layar ini masih bahasa Inggris literal. Itu celah nyata yang tersisa, bukan rencana yang menunggu tooling — katalognya sudah ada (§Internationalization) dan `i18n:screens:check` mencakup `/admin/*`, bukan halaman auth publik, jadi tak ada yang mengukurnya. Menerjemahkannya berarti menambahkan kalimat-kalimatnya ke `locales/*.po` lalu membungkusnya; kerjakan sekali jalan per halaman, dan sebaiknya kelimanya sekaligus agar pilihan katanya konsisten.
 
 ### Admin shell (desktop-first, responsive drawer di bawah `--bp-md`)
 
 ```text
-┌───────────────────────────────────────────────────────────┐
-│ Topbar: [Logo] [Tenant badge] [Search] [Sync●] [🔔] [👤]  │
-├───────────┬───────────────────────────────────────────────┤
-│ Sidebar   │  Breadcrumb                                    │
-│  Dashboard│  ┌─────────────────────────────────────────┐  │
-│  Finance  │  │  Konten (list/detail/form)              │  │
-│  Inventory│  │  - LoadingSkeleton / EmptyState / Error │  │
-│  Procure  │  │                                         │  │
-│  HR       │  └─────────────────────────────────────────┘  │
-│  Laporan  │                                               │
-└───────────┴───────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ [☰] [A] AWCMS │ [🔍 Cari…          Ctrl K] │ [Tenant] [🌐] [◐] [👤] │
+├──────────────────┬─────────────────────────────────────────────────┤
+│ ▾ SECTION        │  AWCMS › Section › Layar         ← .admin-       │
+│   Modul          │  Judul layar               [Aksi utama]          │
+│   ▪ Layar        │  Satu baris deskripsi          ← page-actions    │
+│   ▪ Layar ◄──────┼────────────────────────────────── satu garis ────│
+│ ▾ SECTION        │  ┌───────────────────────────────────────────┐   │
+│   ▪ Layar        │  │ Konten (list/detail/form)                 │   │
+│                  │  │ LoadingSkeleton / EmptyState / StateNotice│   │
+│ ─────────────    │  └───────────────────────────────────────────┘   │
+│ [→] Keluar       │                                                  │
+│ Versi v10.x      │                                                  │
+└──────────────────┴─────────────────────────────────────────────────┘
 ```
 
-**Responsif (direncanakan)**: di bawah `--bp-md` (768px), sidebar di atas berubah jadi off-canvas drawer — disembunyikan (`transform: translateX(-100%)`) sampai tombol hamburger topbar (`#admin-nav-toggle`, `aria-expanded`/`aria-controls`) ditekan. Saat terbuka: scrim (`#admin-sidebar-scrim`) menutup drawer bila diklik, `Esc` menutup dan mengembalikan fokus ke tombol toggle, fokus berpindah ke item nav pertama saat dibuka, dan sisa halaman (topbar/main) diberi `inert` selama drawer terbuka (focus trap manual). Skip-link (`.skip-link`) dan `aria-current="page"` pada link aktif konsisten di kedua breakpoint. Di `--bp-md` ke atas, sidebar tetap statis-selalu-tampil, tombol toggle disembunyikan (`display: none`, otomatis keluar dari urutan tab).
+**Shell yang memiliki judul halaman** ([ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md)). `AdminLayout.astro` merender seluruh pita `.admin-page-head` — breadcrumb, `<h1>`, deskripsi, dan slot `page-actions` untuk tombol utama milik layar. **Sebuah layar tidak boleh merender `<h1>`-nya sendiri atau `<header class="page-header">`-nya sendiri.** Sebelum ini, ke-45 layar semacam itu mencetak namanya dua kali, sekali dari prop `title` layout dan sekali dari headingnya sendiri — dan pada 20 di antaranya keduanya berbeda bahasa, karena prop-nya bahasa Inggris literal sementara heading-nya lewat `t()`.
+
+- `title` (wajib) menjadi `<h1>` dan crumb terakhir.
+- `description` (opsional) atau slot `page-description` mengisi baris di bawahnya; slot itu ada untuk layar yang deskripsinya memuat tautan atau `<code>`.
+- `breadcrumb` (opsional) menimpa crumb tengah, yang selain itu **diturunkan** dari sidebar terkomposisi — `composeSidebarSections` sudah tahu entri mana yang aktif, dan meminta 45 halaman menyebut section-nya sendiri akan mengulang persis drift yang dulu disebabkan prop `active` yang sudah dihapus.
+
+**Section sidebar bisa dilipat** lewat `<details open>`/`<summary>` — tanpa script, yang di bawah CSP ini jelas lebih baik, dan `<details>` membawa `aria-expanded` implisit, perilaku keyboard, dan semantik disclosure secara cuma-cuma. Status terbukanya sengaja **tidak** diingat: section yang kembali terlipat akan menyembunyikan layar dari orang yang tidak tahu ia bisa terlipat. Tiap tautan membawa ikon yang diresolusi dari `ModuleDescriptor.navigation[].icon`, dengan fallback tabel default berkunci `labelKey` (`sidebar-menu.ts`); data path-nya peta beku di `src/lib/ui/admin-icons.ts` dan nama tak dikenal merender titik netral alih-alih digemakan ke dalam atribut SVG.
+
+**Command palette** (`Ctrl`/`⌘`+`K`, atau shell pencarian di topbar) adalah `<dialog>` native yang dibuka `showModal()`. Ia memfilter **entri nav yang sudah dirender ke dalam halaman** — sehingga secara struktural ia tidak bisa memunculkan layar yang tidak akan ditampilkan sidebar, alih-alih bergantung pada pemeriksaan izin kedua yang harus tetap sinkron dengan yang pertama. Tanpa fetch, 1.369 B.
+
+**Pelipatan di desktop**: pada ≥1024px checkbox `#admin-nav-toggle` yang sama yang menggerakkan drawer mobile justru melipat sidebar ke lebar nol, sehingga tabel padat bisa memakai seluruh viewport. Satu kontrol, dua perilaku, tanpa script.
+
+**Responsif**: di bawah `--bp-md` (768px), sidebar berubah jadi off-canvas drawer — **CSS-only**, digerakkan checkbox yang tersembunyi secara visual tetapi tetap bisa difokus keyboard (`#admin-nav-toggle`) yang `<label>`-nya adalah hamburger topbar; `<label>` kedua adalah scrim yang menutupnya saat disentuh. Tak ada yang bisa diblokir CSP, dan tak ada yang gagal bila sebuah bundle tidak termuat. Drawer tertutup memakai `visibility: hidden`, dan itulah yang mengeluarkan tautannya dari urutan tab — `transform` saja akan meninggalkannya tetap bisa difokus di balik halaman.
+
+Ongkos memilih CSS dinyatakan terus terang: drawer ini **tidak punya `Esc`-untuk-menutup dan tidak punya focus trap**, karena keduanya butuh script. Itu dapat diterima untuk drawer navigasi yang semua tautannya tetap terjangkau dan scrim-nya target sentuh besar; ia tidak akan dapat diterima untuk modal penerima input — itulah sebabnya command palette memakai `<dialog>` sungguhan. Skip-link (`.skip-link`) dan `aria-current="page"` pada link aktif konsisten di kedua breakpoint. Di `--bp-md` ke atas sidebar bersifat statis, dan toggle yang sama mengambil makna pelipatan-desktop pada ≥1024px.
 
 **Tenant badge, bukan tenant switcher**: topbar menampilkan `TenantBadge.astro` — badge non-interaktif (`<div role="status">`) pada deployment single-tenant, BUKAN kontrol dropdown yang seolah aktif tapi `disabled`. Alasan: kontrol switcher SUNGGUHAN hanya boleh dirender bila `availableTenants` (prop komponen) berisi daftar yang dihitung SERVER-side dari data otorisasi nyata — menampilkan kontrol interaktif (walau disabled) tanpa kapabilitas switch tenant yang sungguhan akan menyiratkan kapabilitas keamanan yang tidak ada dan tidak diperiksa di manapun, melanggar acceptance criterion "No authorization decision relies on hidden/disabled UI alone".
 
@@ -306,64 +332,60 @@ stateDiagram-v2
 
 ## Aksesibilitas (WCAG 2.1 AA)
 
-- Kontras teks minimal 4.5:1 (cek token).
+- **1.4.3 Kontras (teks)** — minimal 4.5:1. Jangan memeriksanya dengan mata atau dengan menalar tokennya: jalankan `bun run design:token-contrast:check`, yang mengukur registry 25 pasangan di kedua tema dan merupakan bagian dari `bun run check`. Salah memilih satu dari `--color-X` / `-strong` / `-on-soft` adalah cacat UI paling berulang dalam sejarah repo ini (Issue #434, PR #720, dan dua kali lagi di ADR-0120), dan keempatnya ditulis orang yang sudah membaca baris ini.
+- **1.4.11 Non-text Contrast (kontrol)** — 3:1 untuk batas yang mengidentifikasi komponen yang bisa dioperasikan. Input, select, textarea, dan shell pencarian memakai `--color-border-strong`; isian sebuah input hanya berbeda 1,03:1 dari kartu di belakangnya, jadi border itulah satu-satunya yang menyatakan di mana field-nya. `--color-border` (1.29:1) hanya untuk pemisah dekoratif — tepi kartu dan garis tabel — dan sengaja tetap setipis itu.
 - Semua kontrol dapat difokus & dioperasikan keyboard; urutan tab logis.
 - Cincin fokus terlihat (`--color-focus`), jangan `outline:none` tanpa pengganti.
 - Label eksplisit untuk setiap input; error diumumkan (`aria-live`).
-- Dialog memerangkap fokus; `Esc` menutup; fokus kembali ke pemicu.
-- Target sentuh ≥ 44px untuk portal mobile.
+- Dialog memerangkap fokus; `Esc` menutup; fokus kembali ke pemicu. Utamakan `<dialog>` native + `showModal()`, yang memberi ketiganya plus inert-nya halaman dan backdrop tanpa script.
+- **Ukuran target.** Target sentuh ≥ 44px di portal mobile dan pada kontrol yang memang touch-first (toggle nav, tautan drawer), yang menyatakannya di tempat mereka didefinisikan. Kontrol form admin **38px** sejak ADR-0120: WCAG 2.2 AA (2.5.8) minta 24px, ini back-office pointer-first, dan input 44px di samping tombol 36px membuat setiap filter bar tampak tak sejajar. Itu pertukaran yang disengaja, bukan kelalaian — jangan "mengembalikannya" ke 44 tanpa mengubah tombolnya juga.
 - Jangan mengandalkan warna saja untuk status (tambah ikon/teks).
 - Toggle show/hide password: `aria-pressed` + `aria-label` yang mengikuti state, di-wire via `addEventListener` (bukan `onclick` inline — CSP `default-src 'self'`). Contoh: `login.astro` `#password-toggle`.
 - Kontrol kustom yang menyembunyikan native (mis. `<select>` bergaya): gambar afordansi (caret) via CSS `::after`, bukan `data:` URI; native `<select>` tetap dipakai agar keyboard + a11y bawaan tetap ada.
 
 ## Internationalization (i18n)
 
-> **Status:** direncanakan mengikuti pola i18n awcms-mini yang sudah terbukti (parser `.po` murni tanpa dependency, katalog loader, `t()`, resolusi locale, formatter) — **belum diimplementasikan di repo ini**. Saat dibangun, ikuti desain berikut sebagai baseline yang mengikat, bukan draf terbuka.
+> **Status: sudah diimplementasikan** ([ADR-0095](../adr/0095-the-interface-speaks-the-readers-language.id.md)) — parser `.po` murni tanpa dependency, katalog terkompilasi, `t()`/`tn()`/`tx()`, resolusi locale di middleware, dan formatter sadar-locale. Banner ini sebelumnya berbunyi "belum diimplementasikan di repo ini" dan menyebut direktori `i18n/` yang tidak pernah ada; ia menua ke arah yang berlawanan cukup lama sehingga paragraf-paragraf di bawah masih menjelaskan pipeline yang dirancang lalu dibangun secara berbeda. **Percayai nama skrip di `package.json` di atas prosa mana pun di sini.**
 
 i18n memakai **dua lapisan terpisah** sesuai sumber teksnya:
 
-**1. String UI statis** (chrome aplikasi: label, tombol, judul, pesan error, navigasi) → **file katalog `.po`/`.pot` standar gettext**, di-**bundle bersama aplikasi**, bukan di database. Satu template `messages.pot` + satu berkas per locale (`en.po`, `id.po`). Kunci pesan `namespace.key` (mis. `auth.login.submit`, `error.access_denied`). Semua string UI dirender lewat helper `t(key, params)`; **tidak ada teks hardcode**.
+**1. String UI statis** (chrome aplikasi: label, tombol, judul, pesan error, navigasi) → **berkas katalog `.po` gettext di `locales/`**, di-bundle bersama aplikasi, bukan di database. Satu berkas per locale (`en.po`, `id.po`); **tidak ada template `.pot`** dan tidak ada langkah ekstraksi. **msgid-nya adalah string sumber bahasa Inggris itu sendiri** (`t("Skip to main content")`), bukan `namespace.key` — sehingga locale yang belum diterjemahkan turun ke bahasa Inggris yang terbaca alih-alih ke `auth.login.submit`, dan reviewer membaca kalimatnya di dalam diff. Semua string UI lewat `t()` / `tn()` (jamak) / `tx()` (konteks).
 
 **2. Data input pengguna** (konten yang diketik user dan perlu tampil multi-bahasa, mis. deskripsi produk/catatan approval) → disimpan **di database untuk setiap locale aktif** (satu nilai per bahasa aktif), **bukan** di `.po`. Pola penyimpanan per-bahasa akan didokumentasikan di `docs/awcms/04_erd_data_dictionary.md` §Konten multi-bahasa (saat ditulis). `.po` hanya untuk teks statis pengembang, DB untuk konten dinamis pengguna.
 
-- **Locale minimal (rencana)**: **en** dan **id** (arsitektur siap ms/ar — kolom `default_locale` tetap `text` bebas, bukan `enum`/`CHECK`, agar ms/ar bisa ditambah tanpa migration schema; UI hanya menampilkan locale yang benar-benar punya katalog). **Default = `en`** (`awcms_tenants.default_locale`).
-- **Resolusi locale**: cookie `awcms_locale` (diset language switcher) → `default_locale` tenant → fallback `en`. Direncanakan diresolusi di `src/middleware.ts` **sebelum** halaman `/admin/*` mana pun dirender — bukan di dalam layout, karena frontmatter halaman berjalan lebih dulu daripada frontmatter layout yang membungkusnya.
+- **Locale minimal**: **en** dan **id** (arsitektur siap ms/ar — kolom `default_locale` tetap `text` bebas, bukan `enum`/`CHECK`, agar ms/ar bisa ditambah tanpa migration schema; UI hanya menampilkan locale yang benar-benar punya katalog). **Default = `en`** (`awcms_tenants.default_locale`).
+- **Resolusi locale**: cookie `awcms_locale` (diset language switcher) → `default_locale` tenant → fallback `en`. Diresolusi di `src/middleware.ts` **sebelum** halaman `/admin/*` mana pun dirender — bukan di dalam layout, karena frontmatter halaman berjalan lebih dulu daripada frontmatter layout yang membungkusnya.
 - **Cookie, bukan localStorage**: berbeda dari toggle tema (CSS murni, bisa "diperbaiki" di klien sebelum paint), locale mengubah teks yang sudah di-render SSR — server harus tahu locale **sebelum** merender, dan hanya cookie yang ikut terkirim bersama request.
 - **Language switcher** (`LanguageSwitcher.astro`) menampilkan **ikon bendera** per bahasa + nama asli bahasa itu sendiri, bukan diterjemahkan ke locale aktif (mis. 🇬🇧 English, 🇮🇩 Bahasa Indonesia); memilih men-set cookie lalu reload penuh (bukan swap instan seperti tema).
-- **Pesan error ter-i18n**: kode error dipetakan ke key `error.*` (`src/lib/i18n/error-messages.ts`); untuk banner aksi client-side, peta `{code: pesan}` di-inject sebagai `<script type="application/json">` di halaman (katalog `.po` hanya bisa dibaca server-side via `Bun.file`).
+- **Pesan error, dan celah yang masih terbuka.** Tidak ada `src/lib/i18n/error-messages.ts` dan tidak ada peta `{code: pesan}` yang di-inject — revisi terdahulu dokumen ini menjelaskan keduanya seolah ada. Yang sebenarnya dilakukan layar adalah memetakan `errorCode` ke teks **per layar**, inline (`blog-ads.astro`, `blog-homepage.astro`), yang berarti kode yang sama bisa berbunyi berbeda di dua layar dan kode baru mudah terlewat. Katalognya memang modul server, jadi kode klien betul-betul tidak bisa mencapainya; pola yang berjalan hari ini adalah pola yang dipakai `AdminLayout` untuk script-nya sendiri — kirim string yang sudah diterjemahkan sebagai atribut `data-*`. Peta terpusat layak dibangun; jangan menuliskannya seolah sudah dibangun.
 - **Format lokal**: angka/mata uang (IDR + pemisah ribuan sesuai locale) dan tanggal (`Asia/Jakarta`, `Intl.DateTimeFormat`/`NumberFormat`) sadar-locale — `src/lib/i18n/format.ts`.
 
-### Extraction, parity, dan obsolete key (rencana pipeline)
+### Kompilasi, cakupan, dan dua gerbangnya
 
-> **Belum diimplementasikan.** Seluruh subbagian ini adalah rencana
-> pipeline, bukan tooling yang bisa dipanggil hari ini: tidak ada
-> direktori `i18n/` di repo ini, dan tidak ada key `i18n:extract`,
-> `i18n:pot:check`, atau `i18n:parity:check` di `package.json` — juga
-> tidak ada `scripts/i18n-extract.ts`. Baca setiap `bun run i18n:*` di
-> bawah sebagai spesifikasi target, bukan panduan langkah-demi-langkah
-> yang sudah bisa dijalankan.
+Katalognya **dirawat tangan dan diverifikasi mesin** — kebalikan dari pipeline ekstraksi yang dulu dijelaskan bagian ini. `bun run i18n:compile` mengubah setiap `locales/*.po` menjadi `src/lib/i18n/catalogs/*.generated.ts` yang di-import server; tak ada yang mem-parse `.po` saat request.
 
-`i18n/messages.pot` **tidak ditulis tangan** — pipeline `scripts/i18n-extract.ts` (`bun run i18n:extract`) akan men-scan seluruh `.astro`/`.ts`/`.tsx` di `src/` untuk setiap pemanggilan `t("key")`, lalu menulis ulang `messages.pot` (terurut alfabetis, satu komentar `#: file:line` per key, deterministik).
+**Menambah string UI baru:**
 
-**Menambah string UI baru** (alur yang direncanakan):
+1. Pakai `t("Kalimat Inggrisnya")` — atau `tn()` untuk jumlah, `tx()` bila satu kata Inggris butuh dua terjemahan menurut konteks.
+2. Tambahkan pasangan `msgid`/`msgstr` ke `locales/en.po` **dan** `locales/id.po`. Tak ada yang perlu diekstrak; gerbang di bawah inilah yang memberitahu kalau kamu lupa.
+3. Jalankan `bun run i18n:compile` dan commit `catalogs/*.generated.ts` hasil regenerasi bersama berkas `.po`-nya.
 
-1. Pakai `t("namespace.key", params?)` di source seperti biasa.
-2. Jalankan `bun run i18n:extract` — key baru otomatis masuk `i18n/messages.pot`.
-3. Isi `msgstr` untuk key baru itu di `i18n/en.po` **dan** `i18n/id.po` (langkah manual — extraction hanya mengurus inventaris key, bukan menerjemahkan).
-4. Commit ketiga berkas (`messages.pot`, `en.po`, `id.po`) bersamaan.
-5. `bun run i18n:pot:check` (bagian dari `bun run check`) akan memverifikasi `messages.pot` yang di-commit identik dengan hasil regenerasi dari source. `bun run i18n:parity:check` akan memverifikasi: (a) key set `en.po`/`id.po`/`messages.pot` identik, (b) setiap key yang punya placeholder `{name}`-style di `en.po` punya placeholder yang sama persis di `id.po` (dan sebaliknya).
+**Dua gerbang, sengaja dipisah** ([ADR-0095](../adr/0095-the-interface-speaks-the-readers-language.id.md)):
 
-**Pola dynamic key** (`t(\`namespace.${variable}\`)`, `t(entry.labelKey)`, `t(key)`dari map seperti`ERROR_CODE_KEYS`) tidak bisa ditemukan lewat scan string literal biasa — akan ditangani lewat `DYNAMIC_KEY_FAMILIES`table dan scan`labelKey:`/`ERROR_CODE_KEYS` eksplisit, mengikuti pola awcms-mini.
+- `bun run i18n:catalog:check` — **konsistensi.** Mengompilasi ulang setiap `.po` dan membandingkan byte (sehingga `.generated.ts` tak bisa melenceng dari sumbernya); memastikan setiap msgid yang diminta kode sudah dideklarasikan; mencocokkan `nplurals` tiap katalog dengan tabel jamak di kode; memeriksa paritas placeholder antara msgid dan msgstr; dan melaporkan jumlah `id` yang belum diterjemahkan terhadap ledger yang **hanya boleh mengecil**.
+- `bun run i18n:screens:check` — **cakupan.** Mencari layar admin yang masih merender teks Inggris literal, terhadap ledger-nya sendiri berisi nama-nama layar yang juga hanya boleh mengecil. Layar baru tak bisa bergabung ke daftar yang tidak pernah bertambah.
 
-**Key obsolete** (ada di `en.po`/`id.po` tapi sudah tidak ditemukan `bun run i18n:extract` di source manapun) akan dilaporkan sebagai peringatan, bukan dihapus otomatis; ditandai prefix `#~ ` (konvensi gettext) alih-alih dihapus langsung.
+Menyatukan keduanya akan menghasilkan gerbang yang hijau sementara semua jawabannya salah; header kedua skrip itu menjelaskannya panjang lebar.
 
-**Plural forms**: mengikuti keputusan awcms-mini, katalog ini direncanakan **tidak** memakai `msgid_plural`/`msgstr[n]` gettext pada tahap awal — keputusan desain eksplisit, dengan tripwire di `i18n:parity:check` yang gagal kalau `msgid_plural` pernah muncul tanpa implementasi parser yang lengkap.
+Yang sengaja **tidak** dipindai gerbang cakupan: atribut. `aria-label="Close"` sama butuhnya diterjemahkan, tetapi `class="admin-card"` terlihat identik bagi pemindai, dan gerbang yang melaporkan nama kelas melatih pembacanya untuk mengabaikannya. Jadi layar yang lolos masih bisa punya `placeholder` atau `aria-label` yang belum diterjemahkan — periksa itu dengan tangan.
+
+**Bentuk jamak sudah diimplementasikan**, bukan ditunda: `tn()` plus tabel `PLURAL_FORM_COUNT` di `src/lib/i18n/locales.ts`. Bahasa Indonesia mendeklarasikan `nplurals=1` karena tidak berinfleksi untuk jumlah; ekspresi `plural=` di header `.po` dibaca untuk **DIVERIFIKASI, tidak pernah dievaluasi**.
 
 ```mermaid
 flowchart LR
   subgraph Statis
-    POT[messages.pot] --> PO[en.po / id.po]
-    PO --> T["t(key, params)"]
+    PO[locales/en.po · id.po] --> Gen["i18n:compile → catalogs/*.generated.ts"]
+    Gen --> T["t / tn / tx"]
   end
   subgraph Konten
     DB[(DB per locale aktif)] --> Pick[Pilih nilai locale aktif]
@@ -400,7 +422,8 @@ flowchart LR
 - Setiap list/detail memiliki loading/empty/error state.
 - Navigasi difilter permission; endpoint tetap dilindungi ABAC.
 - Layar entri operasional dapat dioperasikan penuh via keyboard.
-- Kontras & fokus memenuhi AA.
+- Kontras & fokus memenuhi AA — **dibuktikan dengan lolosnya `bun run design:token-contrast:check`**, ditambah pass axe di browser sungguhan untuk apa pun yang tak bisa dilihat registry token (opacity, gradien, gambar di balik teks). Pasangan yang ditambahkan ke CSS tanpa baris di registry itu tidak terukur; menambahkan barisnya adalah bagian dari menambahkan aturannya.
+- Tak ada layar yang merender `<h1>`-nya sendiri; judul, deskripsi, dan aksi utama lewat pita header `AdminLayout` dan slot `page-actions`-nya.
 - Semua string melalui i18n; angka/mata uang/tanggal terformat lokal.
 - Data sensitif tampil ter-mask sesuai role.
 - Soft-deleted resource tidak muncul di list/search default; archive filter dan restore hanya muncul bila permission efektif mengizinkan.

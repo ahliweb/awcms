@@ -142,7 +142,7 @@ first.
 - `GET /auth/me` to hydrate the context (roles, default entity/warehouse, permissions for filtering navigation).
 - Logout `POST /auth/logout` → invalidate the session + delete the cookie.
 - Tokens/secrets are **never** stored in localStorage, which third-party scripts can access.
-- The `/login` page (`src/pages/login.astro`) = a mobile-first auth card (doc 14 §Auth screen): brand + title/subtitle, an adaptive tenant field (single-tenant readout / `<select>` / manual, read server-side from the root table `awcms_tenants`), a CSP-safe show/hide password toggle, and an anti-double-submit submit (`lockElement` + `sendJson`/`postJson`). Its script is a bundled module (not inline — it complies with the CSP `default-src 'self'`); `tokens.css`/`motion.css`/scoped `<style>` are all emitted as external `<link>`s (`build.inlineStylesheets: "never"`).
+- The `/login` page (`src/pages/login.astro`) = a mobile-first **split panel** (doc 14 §Auth screen): an `aria-hidden` `AuthBrandPanel.astro` beside the form card at ≥900px and absent below it, then brand + title/subtitle, an adaptive tenant field (single-tenant readout / `<select>` / manual, read server-side from the root table `awcms_tenants`), a CSP-safe show/hide password toggle, and an anti-double-submit submit (`lockElement` + `sendJson`). Its script is a bundled module (not inline — it complies with the CSP `default-src 'self'`); `tokens.css`/`motion.css`/scoped `<style>` are all emitted as external `<link>`s (`build.inlineStylesheets: "never"`).
 
 ```mermaid
 sequenceDiagram

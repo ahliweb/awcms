@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](15_frontend_architecture_integration.md)
 
-<!-- i18n-source-hash: sha256:57bb144f7b9b88961530194e2e59cf1b6a1915f022d883b911c804016bc4503b -->
+<!-- i18n-source-hash: sha256:b0a48ebe414fcafc5a6a057a911111c56da22e604a9ddf765772dc83c909f0f1 -->
 
 # Bagian 15 — Arsitektur Frontend dan Integrasi Frontend–Backend
 
@@ -144,7 +144,7 @@ lebih dulu.
 - `GET /auth/me` untuk hidrasi konteks (roles, default entitas/gudang, permission untuk filter navigasi).
 - Logout `POST /auth/logout` → invalidasi sesi + hapus cookie.
 - Token/secret **tidak pernah** disimpan di localStorage yang dapat diakses skrip pihak ketiga.
-- Halaman `/login` (`src/pages/login.astro`) = kartu auth mobile-first (doc 14 §Auth screen): brand + judul/subjudul, field tenant adaptif (readout single-tenant / `<select>` / manual, dibaca SSR dari tabel root `awcms_tenants`), toggle show/hide password CSP-safe, dan submit anti-double-submit (`lockElement` + `sendJson`/`postJson`). Script-nya modul yang di-bundle (bukan inline — patuh CSP `default-src 'self'`); `tokens.css`/`motion.css`/`<style>` scoped semua di-emit `<link>` eksternal (`build.inlineStylesheets: "never"`).
+- Halaman `/login` (`src/pages/login.astro`) = **split panel** mobile-first (doc 14 §Auth screen): `AuthBrandPanel.astro` yang `aria-hidden` di samping kartu form pada ≥900px dan absen di bawahnya, lalu brand + judul/subjudul, field tenant adaptif (readout single-tenant / `<select>` / manual, dibaca SSR dari tabel root `awcms_tenants`), toggle show/hide password CSP-safe, dan submit anti-double-submit (`lockElement` + `sendJson`). Script-nya modul yang di-bundle (bukan inline — patuh CSP `default-src 'self'`); `tokens.css`/`motion.css`/`<style>` scoped semua di-emit `<link>` eksternal (`build.inlineStylesheets: "never"`).
 
 ```mermaid
 sequenceDiagram

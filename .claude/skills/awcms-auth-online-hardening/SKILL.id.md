@@ -5,7 +5,7 @@ description: Konteks desain lintas-fitur untuk pengerasan auth online awcms (Tur
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:7a9948dbb808464ba74a1ed2d4bd4cf50501a8441dfd472a485d6a24a8e9a5e3 -->
+<!-- i18n-source-hash: sha256:7b0ee3a335a87cb3781df0e03df460837bb7da5e199d6a1cab3683a23567b031 -->
 
 # AWCMS — Full-Online Auth Security Hardening
 
@@ -532,7 +532,7 @@ issue**, and none was needed:
   Mutations (policy save, provider create/update/delete) go through the
   REAL `PATCH /api/v1/identity/sso/policy` /
   `POST|PATCH|DELETE /api/v1/identity/sso/providers[/{id}]` endpoints via
-  `sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`) — every mutation still runs
+  `sendJson` (`src/lib/ui/admin-form-client.ts`) — every mutation still runs
   through those endpoints' own ABAC + break-glass + audit logic; this
   page never writes to the database directly.
 - **Two independent gates control what renders** (issue's own acceptance

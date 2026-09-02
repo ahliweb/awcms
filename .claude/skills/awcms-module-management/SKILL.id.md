@@ -5,7 +5,7 @@ description: Kelola/konsumsi sistem Module Management AWCMS (registry base, vali
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:e9e368bcf6091d5dcb4f60cae17d079914abe7dc04ddfca38524c9a6173f1a40 -->
+<!-- i18n-source-hash: sha256:bec28fbaf3cbb8c7c744fdc45996cbc5cf15151b0615dd68272a46081b5d0cd4 -->
 
 # AWCMS — Module Management System
 
@@ -295,8 +295,21 @@ Cara kerjanya:
 - `composeSidebarSections` menyaring per pemanggil: modul yang di-disable tenant
   dibuang, `requiredPermission` menentukan link terlihat atau tidak. Section
   kosong tidak dirender.
-- Label: base ini tak punya katalog gettext, jadi `labelKey` di-resolve lewat
-  tabel `SIDEBAR_LABELS` di berkas yang sama. Tambah entri nav = tambah label.
+- Label: `labelKey` di-resolve lewat tabel `SIDEBAR_LABELS` di berkas yang sama
+  menjadi **string sumber bahasa Inggris**, yang lalu diterjemahkan
+  `AdminLayout` dengan `tx("menu-section", …)` / `t(…)` terhadap katalog
+  gettext di `locales/`. (Versi lama baris ini menyebut "base ini tak punya
+  katalog gettext" — ADR-0095 membangunnya; tabelnya bertahan karena berkunci
+  pada `labelKey`, dan yang dikembalikannya kini teks sumber yang bisa
+  diterjemahkan, bukan label final.) Tambah entri nav = tambah label **dan**
+  entri `.po`-nya.
+- Ikon: `navigation[].icon` **hidup** sejak ADR-0120. Sebelumnya ia
+  dideklarasikan di kontrak, divalidasi composition checker, dan dialirkan
+  lewat dua lapis tipe sementara tak ada modul yang mengisinya dan tak ada yang
+  merendernya. Nilai milik descriptor menang; kalau tidak ada,
+  `DEFAULT_SIDEBAR_ICONS` (juga berkunci `labelKey`) yang menyediakan. Data
+  path-nya di `src/lib/ui/admin-icons.ts`, dan nama tak dikenal merender titik
+  netral alih-alih digemakan ke dalam atribut SVG.
 
 **Gate `tests/admin-navigation-registry.test.ts`** menegakkan dua arah: tiap
 `navigation[].path` harus punya halaman nyata di `src/pages/admin/**`, dan tiap

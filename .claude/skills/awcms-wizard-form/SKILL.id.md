@@ -5,7 +5,7 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:f52132aa55584de4c4171376968381c0ab95ca8c27bdb9f0caeeab3839c868b1 -->
+<!-- i18n-source-hash: sha256:6ff838cedfa417c9e8703d4bc3162788b56235959b72e8bb3080a8b6e4e34d1c -->
 
 # AWCMS — Reusable Wizard Form (belum ada di sini)
 
@@ -40,7 +40,7 @@ Salah satu: banyak field lintas kategori, urutan input jelas dibutuhkan,
 perlu review akhir sebelum submit, atau field-nya cukup banyak sehingga
 satu form besar rawan salah input. Tetap pakai form biasa untuk input
 sederhana (ganti nama, ubah status, satu-dua field) — form biasa di repo
-ini sendiri memakai hand-rolled markup + `lockElement`/`sendJson`/`postJson`
+ini sendiri memakai hand-rolled markup + `lockElement`/`sendJson`
 (`src/lib/ui/admin-form-client.ts`, lihat skill `awcms-ui-screen`), bukan
 komponen wizard apa pun.
 
@@ -71,12 +71,12 @@ diputuskan ulang, bukan sesuatu yang bisa langsung diimpor.
    attempt submit (bukan per klik tombol) — skill `awcms-idempotency`.
 4. **Anti-double-submit** — di awcms-mini pakai `lockElement`/`submitJson`/
    `showBanner` (`src/lib/ui/admin-form-client.ts` versi awcms-mini, yang
-   punya export lebih banyak daripada versi repo ini). **Repo ini sendiri
-   hari ini hanya punya `lockElement`/`sendJson`/`postJson`** (verifikasi:
-   `grep -n "^export" src/lib/ui/admin-form-client.ts`) — kalau wizard
-   dibangun sebelum fungsi tambahan itu ada, adaptasi ke tiga
-   fungsi yang ada, jangan asumsikan `submitJson`/`showBanner` sudah ada di
-   sini.
+   daftar export-nya berbeda dari repo ini). **Di sini padanannya
+   `lockElement` + `messageBox` + `sendJson`, dirangkai lewat `onSubmit`/
+   `onAction`** — selalu verifikasi dengan
+   `grep -n "^export" src/lib/ui/admin-form-client.ts` sebelum menulis
+   kodenya. Jangan asumsikan `submitJson`/`showBanner` (tidak pernah ada di
+   sini) atau `postJson` (dihapus Agustus 2026).
 5. **Fokus berpindah ke judul panel** setiap step berubah (`tabindex="-1"`
    sesaat lalu `.focus()`) — lihat `focusPanelHeading()` di fixture
    awcms-mini.

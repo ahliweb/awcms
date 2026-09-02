@@ -191,11 +191,11 @@ narrower permission registered by a derived module.
 `/admin/reporting` (`src/pages/admin/reporting.astro`, PR #335 — the module README once described <!-- historis:mulai -->`/admin/reporting/projections`<!-- historis:selesai --> + a `submitJson` helper that NEVER EXISTED in this repo)
 — every mutation (rebuild/cancel/reconcile/export) goes through the REAL
 `/api/v1/reports/*` endpoints, with no privileged shortcut. Use
-`sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`, see the
+`sendJson`/`onAction` (`src/lib/ui/admin-form-client.ts`, see the
 `awcms-ui-screen` skill) to call them — **note**: this module's README
-mentions `submitJson`, which DOES NOT EXIST in this repo's version of
-`admin-form-client.ts` (verify: `grep -n "^export" src/lib/ui/admin-form-client.ts`); use
-the `sendJson`/`postJson` that actually exist.
+mentions `submitJson`, which does not exist here, and older skills named
+`postJson`, which was deleted in August 2026. Always
+`grep -n "^export" src/lib/ui/admin-form-client.ts` before writing against it.
 
 ## Not yet available
 
