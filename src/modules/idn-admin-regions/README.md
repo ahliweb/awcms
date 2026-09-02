@@ -6,15 +6,15 @@ Versioned master data for Indonesia's administrative hierarchy — **province /
 regency-city / district / village** — admitted by
 [ADR-0046](../../../docs/adr/0046-idn-admin-regions-module-admission.md).
 
-| Aspect      | Value                                                                                                    |
-| ----------- | -------------------------------------------------------------------------------------------------------- |
-| Key / type  | `idn_admin_regions` · `system`, `isCore: false`                                                          |
-| Tables      | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                                       |
-| Permissions | `region.read`, `dataset.read` (`sql/081`; `dataset.configure`/`.restore` revoked by `sql/084`, ADR-0052) |
-| API         | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)                               |
-| Job         | `bun run idn-regions:import`                                                                             |
-| Dataset     | `data/idn-admin-regions/` — vendored `cahyadsn/wilayah` (MIT)                                            |
-| Depends on  | `tenant_admin`, `identity_access` — nothing depends on this module                                       |
+| Aspect      | Value                                                                                                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key / type  | `idn_admin_regions` · `system`, `isCore: false`                                                                                                                                   |
+| Tables      | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                                                                                                                |
+| Permissions | `region.read`, `dataset.read` (`sql/081`); `dataset.configure`/`.restore`, `scope: platform` (`sql/085`, ADR-0053 — briefly revoked by `sql/084`/ADR-0052, restored the next day) |
+| API         | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)                                                                                                        |
+| Job         | `bun run idn-regions:import`                                                                                                                                                      |
+| Dataset     | `data/idn-admin-regions/` — vendored `cahyadsn/wilayah` (MIT)                                                                                                                     |
+| Depends on  | `tenant_admin`, `identity_access` — nothing depends on this module                                                                                                                |
 
 ## Source, licence, and the claim this module does NOT make
 
@@ -100,21 +100,41 @@ An import fails — rather than importing what it could — when any of these ho
 | `GET /api/v1/idn-regions/regions/{code}` | `region.read`  | One region + resolved ancestor path             |
 | `GET /api/v1/idn-regions/datasets`       | `dataset.read` | Versions + provenance + caveat                  |
 
-Every endpoint here is **read-only**. Activation and rollback used to sit in this
-table and are gone — [ADR-0052](../../../docs/adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
-made them operator jobs:
+Every endpoint in this table is **read-only**. Activation and rollback are NOT
+read-only and are NOT in this table, but they are not gone either — they are
+reachable two ways:
 
 ```bash
+# operator job — CI, a recovery shell, or a deployment whose platform tenant cannot log in
 bun run idn-regions:activate -- --dataset <code|uuid>            # dry run
 bun run idn-regions:activate -- --dataset <code|uuid> --commit   # serves it
 bun run idn-regions:rollback --commit                            # undo
 ```
 
-They changed the dataset served to **every** tenant, but their permissions were
-seeded into the global catalog that `setup/initialize` grants wholesale to each
-tenant's `owner` — so an ordinary tenant owner held authority over data served to
-other tenants. These tables have no `tenant_id` and no RLS: there is no tenant the
-action belongs to, so no tenant permission can honestly express it.
+```http
+# HTTP — the /admin/idn-regions console
+POST /api/v1/idn-regions/datasets/{id}/activate
+POST /api/v1/idn-regions/datasets/rollback
+```
+
+They change the dataset served to **every** tenant, which is exactly why the
+permissions that gate the HTTP path (`dataset.configure`/`.restore`) are
+`scope: "platform"` (ADR-0053, `sql/085`): excluded from the blanket catalogue
+`setup/initialize` grants every new tenant's `owner`, and refused by the
+authorization chokepoint unless the acting tenant IS the platform tenant. It was
+not always this way — the permissions first shipped as ORDINARY tenant
+permissions, so an ordinary tenant owner held authority over data served to
+other tenants, which is exactly why
+[ADR-0052](../../../docs/adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
+deleted both the endpoints and the permissions for a day (`sql/084`): the
+platform scope that could gate them safely did not exist yet.
+[ADR-0053](../../../docs/adr/0053-platform-scoped-permissions.md) built it and
+brought both back.
+
+The two doors are not equivalent: the HTTP endpoint writes an
+`awcms_audit_events` row, to the platform tenant's log; the operator job writes
+none, because that table is tenant-scoped and this action is global — a
+deliberate, documented cost of the job path, not an oversight.
 
 Queries default to the **active** dataset; `?dataset=<code>` reads a specific
 version, which is what makes keeping superseded versions worth the rows. With
