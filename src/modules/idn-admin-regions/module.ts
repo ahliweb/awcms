@@ -129,7 +129,7 @@ export const idnAdminRegionsModule = defineModule({
       recommendedSchedule:
         "manually, by a platform operator, after reviewing an imported version — never on a timer",
       environmentNotes:
-        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Safe in offline/LAN deployments. Writes no `awcms_audit_events` row: that table is tenant-scoped and this action is global — a cost ADR-0052 accepted for this job path and ADR-0053 left standing even after restoring the HTTP endpoint, which now writes that audit row instead (to the platform tenant's log). The evidence for a job run is `status`/`activated_at` on the dataset row plus this command's output.",
+        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Runs from the `awcms-jobs` image (`ghcr.io/ahliweb/awcms-jobs`); the `runtime` image that serves the application does not carry `scripts/` and cannot execute this command. Safe in offline/LAN deployments. Writes no `awcms_audit_events` row: that table is tenant-scoped and this action is global — a cost ADR-0052 accepted for this job path and ADR-0053 left standing even after restoring the HTTP endpoint, which now writes that audit row instead (to the platform tenant's log). The evidence for a job run is `status`/`activated_at` on the dataset row plus this command's output.",
       safeInOfflineLan: true
     },
     {
@@ -144,7 +144,7 @@ export const idnAdminRegionsModule = defineModule({
       recommendedSchedule:
         "manually, by a platform operator, to recover from a bad activation — never on a timer",
       environmentNotes:
-        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Safe in offline/LAN deployments. Same audit caveat as `idn-regions:activate`.",
+        "Pure PostgreSQL operation as `awcms_worker` — no network egress. Runs from the `awcms-jobs` image (`ghcr.io/ahliweb/awcms-jobs`); the `runtime` image that serves the application does not carry `scripts/` and cannot execute this command. Safe in offline/LAN deployments. Same audit caveat as `idn-regions:activate`.",
       safeInOfflineLan: true
     }
   ],

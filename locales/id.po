@@ -472,6 +472,9 @@ msgstr "Tidak dapat memulai penyiapan. Silakan coba lagi."
 msgid "That code is not right. Try the next one."
 msgstr "Kode itu tidak tepat. Coba kode berikutnya."
 
+msgid "That command runs in the awcms-jobs image ({image}), not in the application container serving this page."
+msgstr "Perintah itu berjalan di image awcms-jobs ({image}), bukan di kontainer aplikasi yang menyajikan halaman ini."
+
 msgid "Could not confirm the code. Please try again."
 msgstr "Tidak dapat mengonfirmasi kode. Silakan coba lagi."
 
@@ -735,8 +738,8 @@ msgstr "Analitik tidak dapat dimuat saat ini. Silakan coba lagi nanti."
 msgid "and is served only when someone chooses it here."
 msgstr "dan hanya disajikan ketika seseorang memilihnya di sini."
 
-msgid "and set the three"
-msgstr "dan setel ketiga"
+msgid "Then set the three"
+msgstr "Lalu setel ketiga"
 
 msgid "An exception lets one person hold both halves of a conflict for a bounded window. Approving is the whole point of the checker half of this flow — and the person who asked for it, and the person it is for, are both refused."
 msgstr "Pengecualian membuat satu orang bisa memegang kedua sisi sebuah konflik untuk jangka waktu terbatas. Menyetujui adalah inti dari sisi pemeriksa pada alur ini — dan orang yang memintanya, serta orang yang dituju, sama-sama ditolak."
@@ -2421,8 +2424,8 @@ msgstr "Induk"
 msgid "Parent category"
 msgstr "Kategori induk"
 
-msgid "parses the dump vendored in the repository. Importing never activates — a new version lands as"
-msgstr "mem-parse dump yang di-vendor di repositori. Mengimpor tidak pernah mengaktifkan — versi baru mendarat sebagai"
+msgid "It parses the dump vendored in the repository. Importing never activates — a new version lands as"
+msgstr "Ia mem-parse dump yang di-vendor di repositori. Mengimpor tidak pernah mengaktifkan — versi baru mendarat sebagai"
 
 msgid "Partner"
 msgstr "Mitra"
@@ -2970,8 +2973,8 @@ msgstr "Jalankan"
 msgid "Run a reconcile to build the index for the first time."
 msgstr "Jalankan rekonsiliasi untuk membangun indeks pertama kali."
 
-msgid "Run {command} on the deployment to import the vendored dataset."
-msgstr "Jalankan {command} di deployment untuk mengimpor dataset yang di-vendor."
+msgid "Run {command} to import the vendored dataset."
+msgstr "Jalankan {command} untuk mengimpor dataset yang di-vendor."
 
 msgid "Run history"
 msgstr "Riwayat eksekusi"

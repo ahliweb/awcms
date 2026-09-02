@@ -221,7 +221,11 @@ const messageColumns = canCancel ? 8 : 7;
                 "Push is enabled but no valid VAPID key pair is configured, so a browser cannot subscribe. Generate one with"
               )}
               <code>{t("bun run push:vapid:generate")}</code>
-              {t("and set the three")}
+              {t(
+                "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
+                { image: "ghcr.io/ahliweb/awcms-jobs" }
+              )}
+              {t("Then set the three")}
               <code>{t("PUSH_VAPID_*")}</code>
               {t("variables.")}
             </p>

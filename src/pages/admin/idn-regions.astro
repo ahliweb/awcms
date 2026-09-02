@@ -328,9 +328,12 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                         {t("No versions imported")}
                       </span>
                       <span class="empty-state-text">
+                        {t("Run {command} to import the vendored dataset.", {
+                          command: "bun run idn-regions:import -- --commit"
+                        })}{" "}
                         {t(
-                          "Run {command} on the deployment to import the vendored dataset.",
-                          { command: "bun run idn-regions:import -- --commit" }
+                          "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
+                          { image: "ghcr.io/ahliweb/awcms-jobs" }
                         )}
                       </span>
                     </div>
@@ -432,7 +435,11 @@ const numberFormatter = new Intl.NumberFormat("en-US");
           {t("New versions arrive by deploy, not from this screen:")}
           <code>{t("bun run idn-regions:import -- --commit")}</code>
           {t(
-            "parses the dump vendored in the repository. Importing never activates \u2014 a new version lands as"
+            "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
+            { image: "ghcr.io/ahliweb/awcms-jobs" }
+          )}
+          {t(
+            "It parses the dump vendored in the repository. Importing never activates \u2014 a new version lands as"
           )}
           <span class="cell-code">{t("validated")}</span>
           {t("and is served only when someone chooses it here.")}
