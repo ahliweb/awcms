@@ -475,6 +475,9 @@ msgstr ""
 msgid "That code is not right. Try the next one."
 msgstr ""
 
+msgid "That command runs in the awcms-jobs image ({image}), not in the application container serving this page."
+msgstr ""
+
 msgid "Could not confirm the code. Please try again."
 msgstr ""
 
@@ -736,7 +739,7 @@ msgstr ""
 msgid "and is served only when someone chooses it here."
 msgstr ""
 
-msgid "and set the three"
+msgid "Then set the three"
 msgstr ""
 
 msgid "An exception lets one person hold both halves of a conflict for a bounded window. Approving is the whole point of the checker half of this flow — and the person who asked for it, and the person it is for, are both refused."
@@ -2434,7 +2437,7 @@ msgstr ""
 msgid "Parent category"
 msgstr ""
 
-msgid "parses the dump vendored in the repository. Importing never activates — a new version lands as"
+msgid "It parses the dump vendored in the repository. Importing never activates — a new version lands as"
 msgstr ""
 
 msgid "Partner"
@@ -2983,7 +2986,7 @@ msgstr ""
 msgid "Run a reconcile to build the index for the first time."
 msgstr ""
 
-msgid "Run {command} on the deployment to import the vendored dataset."
+msgid "Run {command} to import the vendored dataset."
 msgstr ""
 
 msgid "Run history"
