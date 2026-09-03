@@ -16,8 +16,14 @@
  *
  * Skipped unless a real database is configured (see tests/integration/harness.ts).
  */
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -34,6 +40,8 @@ import {
 import {
   commitDatasetImport,
   deriveDatasetCode,
+  planDatasetImport,
+  recordRejectedImport,
   type DatasetImportPlan
 } from "../../src/modules/idn-admin-regions/application/dataset-import";
 import {
@@ -81,6 +89,64 @@ const SAMPLE_ROWS = [
   { code: "31.71.01", name: "Gambir", lineNumber: 8 },
   { code: "31.71.01.1001", name: "Gambir", lineNumber: 9 }
 ];
+
+/**
+ * A genuinely invalid upstream dump (Issue #768) — one region CODE repeated
+ * with a different name, the exact "the dataset contradicts itself about a
+ * real place" case `wilayah-dump-parser.ts` flags as `duplicateCodes`. Written
+ * to a throwaway directory and run through the REAL `planDatasetImport` (file
+ * read, checksum, manifest match, parse, normalize, tier check) rather than a
+ * hand-built plan object, so this proves the production path, not a
+ * simulation of it.
+ */
+async function writeInvalidDumpFixture(): Promise<{
+  rootDir: string;
+  dumpPath: string;
+  manifestPath: string;
+}> {
+  const rootDir = await mkdtemp(
+    path.join(tmpdir(), "idn-regions-rejected-test-")
+  );
+  const dumpRelativePath = "data/idn-admin-regions/wilayah-test.sql";
+  const manifestRelativePath = "data/idn-admin-regions/manifest.json";
+
+  const dumpText = [
+    "-- test fixture: duplicate region code (Issue #768)",
+    "('11','Aceh'),",
+    "('11.01','Kabupaten Aceh Selatan'),",
+    "('11.01','Kabupaten Aceh Selatan Duplicate'),",
+    "('11.01.01','Bakongan'),",
+    "('11.01.01.2001','Keude Bakongan');"
+  ].join("\n");
+
+  await mkdir(path.join(rootDir, "data/idn-admin-regions"), {
+    recursive: true
+  });
+  await writeFile(path.join(rootDir, dumpRelativePath), dumpText, "utf8");
+
+  const fileSha256 = createHash("sha256").update(dumpText).digest("hex");
+
+  await writeFile(
+    path.join(rootDir, manifestRelativePath),
+    JSON.stringify({
+      upstream: { commit: "test0000000000000000000000000000000000" },
+      files: [
+        {
+          path: "wilayah-test.sql",
+          sha256: fileSha256,
+          decreeReference: "Test Decree"
+        }
+      ]
+    }),
+    "utf8"
+  );
+
+  return {
+    rootDir,
+    dumpPath: dumpRelativePath,
+    manifestPath: manifestRelativePath
+  };
+}
 
 function planFor(suffix: string): DatasetImportPlan {
   const { regions } = normalizeRegionRows(SAMPLE_ROWS);
@@ -383,5 +449,139 @@ suite("idn_admin_regions (real PostgreSQL)", () => {
     // honest if the fixture is ever trimmed.
     expect(Number(counts?.provinces_without_parent)).toBe(2);
     expect(Number(counts?.districts_without_term)).toBe(2);
+  });
+
+  /**
+   * Issue #768 — `rejected` was declared (sql/080's CHECK, `DatasetStatus`,
+   * `statusVariant()`) and written by nothing. These prove the fix RUNS, not
+   * just that the source reads correctly:
+   *
+   *   1. a genuinely invalid dump — run through the real `planDatasetImport`,
+   *      not a hand-built plan — lands as exactly one `rejected` row, with
+   *      provenance and a non-empty reason, and zero region rows;
+   *   2. a previously active dataset is untouched by that failure;
+   *   3. re-running the identical bad dump is a no-op on the row: no second
+   *      row, no thrown unique-violation.
+   */
+  describe("Issue #768 — a rejected import is recorded, not just logged", () => {
+    let rootDir: string | undefined;
+
+    afterEach(async () => {
+      if (rootDir) {
+        await rm(rootDir, { recursive: true, force: true });
+        rootDir = undefined;
+      }
+    });
+
+    test("a genuinely invalid dump lands as one `rejected` row, with provenance and a reason, and zero regions", async () => {
+      const sql = getAdminSql();
+      const fixture = await writeInvalidDumpFixture();
+      rootDir = fixture.rootDir;
+
+      const plan = await planDatasetImport(fixture);
+
+      // Driven through the real parser/normalizer: exactly the duplicate-code
+      // problem, nothing else (all four tiers are present, so no "missing
+      // tier" error; the checksum matches the manifest, so no mismatch error).
+      expect(plan.errors).toHaveLength(1);
+      expect(plan.errors[0]).toContain("duplicate region code");
+
+      // `commitDatasetImport` must still refuse to write anything for this
+      // plan — this is the invariant `recordRejectedImport` must not weaken.
+      await expect(
+        asTx(sql, (tx) => commitDatasetImport(tx, plan))
+      ).rejects.toThrow();
+
+      const result = await recordRejectedImport(sql, plan);
+      expect(result.status).toBe("rejected");
+      expect(result.inserted).toBe(true);
+
+      const rows = (await sql.unsafe(
+        `SELECT status, row_count, rejection_reason, source_repository,
+                source_commit_sha, source_file_sha256
+         FROM awcms_idn_region_datasets
+         WHERE id = $1`,
+        [result.datasetId]
+      )) as {
+        status: string;
+        row_count: number;
+        rejection_reason: string | null;
+        source_repository: string;
+        source_commit_sha: string;
+        source_file_sha256: string;
+      }[];
+
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!;
+      expect(row.status).toBe("rejected");
+      expect(row.row_count).toBe(0);
+      expect(row.rejection_reason).toBeTruthy();
+      expect(row.rejection_reason).toContain("duplicate region code");
+      expect(row.source_commit_sha).toBe(plan.sourceCommitSha);
+      expect(row.source_file_sha256).toBe(plan.sourceFileSha256);
+      expect(row.source_repository.length).toBeGreaterThan(0);
+
+      const regionCount = (await sql.unsafe(
+        "SELECT count(*)::int AS count FROM awcms_idn_admin_regions"
+      )) as { count: number }[];
+      expect(regionCount[0]?.count).toBe(0);
+
+      const datasetCount = (await sql.unsafe(
+        "SELECT count(*)::int AS count FROM awcms_idn_region_datasets"
+      )) as { count: number }[];
+      expect(datasetCount[0]?.count).toBe(1);
+    });
+
+    test("the previously active dataset stays active and untouched by a rejected import", async () => {
+      const sql = getAdminSql();
+
+      await asTx(sql, (tx) => commitDatasetImport(tx, planFor("active")));
+      const [good] = await listDatasets(sql);
+      await asTx(sql, (tx) => activateDataset(tx, good!.id));
+
+      const fixture = await writeInvalidDumpFixture();
+      rootDir = fixture.rootDir;
+      const plan = await planDatasetImport(fixture);
+      expect(plan.errors.length).toBeGreaterThan(0);
+
+      await recordRejectedImport(sql, plan);
+
+      const active = await getActiveDataset(sql);
+      expect(active?.id).toBe(good!.id);
+      expect(active?.status).toBe("active");
+      expect(active?.rowCount).toBe(good!.rowCount);
+
+      // The good dataset's own regions are untouched — only the rejected
+      // dataset's (zero) rows could have changed anything.
+      const regionCount = (await sql.unsafe(
+        "SELECT count(*)::int AS count FROM awcms_idn_admin_regions"
+      )) as { count: number }[];
+      expect(regionCount[0]?.count).toBe(SAMPLE_ROWS.length);
+    });
+
+    test("re-running the same bad dump does not duplicate the row or throw", async () => {
+      const sql = getAdminSql();
+      const fixture = await writeInvalidDumpFixture();
+      rootDir = fixture.rootDir;
+
+      const plan = await planDatasetImport(fixture);
+
+      const first = await recordRejectedImport(sql, plan);
+      expect(first.inserted).toBe(true);
+
+      // Re-running is NOT wrapped in try/catch: a thrown unique-violation here
+      // would fail this test with that exception, which is exactly what "does
+      // not throw" means to assert.
+      const second = await recordRejectedImport(sql, plan);
+      expect(second.inserted).toBe(false);
+      expect(second.datasetId).toBe(first.datasetId);
+      expect(second.datasetCode).toBe(first.datasetCode);
+
+      const rows = (await sql.unsafe(
+        `SELECT count(*)::int AS count FROM awcms_idn_region_datasets WHERE dataset_code = $1`,
+        [plan.datasetCode]
+      )) as { count: number }[];
+      expect(rows[0]?.count).toBe(1);
+    });
   });
 });

@@ -21700,6 +21700,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+          description: Why a `rejected` dataset failed validation — the joined problems planDatasetImport reported (unparsed lines, duplicate codes, orphaned parents, a missing tier). Null for every other status. Render as escaped text, never HTML.
     IdnRegionItem:
       type: object
       required:

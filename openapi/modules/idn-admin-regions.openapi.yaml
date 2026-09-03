@@ -356,6 +356,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+          description: Why a `rejected` dataset failed validation — the joined problems planDatasetImport reported (unparsed lines, duplicate codes, orphaned parents, a missing tier). Null for every other status. Render as escaped text, never HTML.
     IdnRegionSourceProvenance:
       type: object
       description: Static, code-level facts about WHICH upstream project this data is vendored from — true of every import, unlike the per-import fields on IdnRegionDataset.

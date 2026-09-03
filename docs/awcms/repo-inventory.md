@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 24    |
-| Migrations                          | 148   |
+| Migrations                          | 149   |
 | `awcms_*` tables                    | 152   |
 | Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
@@ -197,6 +197,7 @@
 | 146 | `sql/146_awcms_identity_public_byline.sql`                         |
 | 147 | `sql/147_awcms_blog_pages_drop_legacy_provenance.sql`              |
 | 148 | `sql/148_awcms_permission_description_resync.sql`                  |
+| 149 | `sql/149_awcms_idn_admin_regions_rejection_reason.sql`             |
 
 ### Tables & Row-Level Security
 

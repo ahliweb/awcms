@@ -461,6 +461,14 @@
   color: var(--color-text-muted);
 }
 
+/* Rejected-dataset failure reason (Issue #768) — escaped text, never HTML. */
+.data-table td .cell-error {
+  color: var(--color-danger-on-soft);
+  font-size: var(--fs-xs);
+  margin: var(--sp-2) 0 0;
+  white-space: pre-line;
+}
+
 /* On small screens, when a table opts into the card/stack layout, drop the
    scroll wrapper's frame so we don't nest a border around the cards. */
 @media (max-width: 767.98px) {

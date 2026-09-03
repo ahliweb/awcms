@@ -36,6 +36,8 @@ export type DatasetSummary = {
   sourceFileSha256: string;
   createdAt: string;
   activatedAt: string | null;
+  /** Why a `rejected` dataset failed validation (Issue #768). Null for every other status. */
+  rejectionReason: string | null;
 };
 
 export class DatasetLifecycleError extends Error {
@@ -61,6 +63,7 @@ type DatasetRow = {
   source_file_sha256: string;
   created_at: string;
   activated_at: string | null;
+  rejection_reason: string | null;
 };
 
 /**
@@ -80,7 +83,8 @@ const DATASET_COLUMNS = `
   source_reference,
   source_file_sha256,
   ${utcMicrosecondTextSql("created_at", "Z")} AS created_at,
-  ${utcMicrosecondTextSql("activated_at", "Z")} AS activated_at
+  ${utcMicrosecondTextSql("activated_at", "Z")} AS activated_at,
+  rejection_reason
 `;
 
 function toSummary(row: DatasetRow): DatasetSummary {
@@ -95,7 +99,8 @@ function toSummary(row: DatasetRow): DatasetSummary {
     sourceReference: row.source_reference,
     sourceFileSha256: row.source_file_sha256,
     createdAt: row.created_at,
-    activatedAt: row.activated_at
+    activatedAt: row.activated_at,
+    rejectionReason: row.rejection_reason
   };
 }
 

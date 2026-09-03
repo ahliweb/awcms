@@ -2785,6 +2785,9 @@ msgstr ""
 msgid "Reject"
 msgstr ""
 
+msgid "Rejected:"
+msgstr ""
+
 msgid "Release"
 msgstr ""
 

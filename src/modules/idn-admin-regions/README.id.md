@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:30c1c3652aa0cca9b48fabc2c6c6bb4e46cceba5ec6d168b7e064f8a486c0a10 -->
+<!-- i18n-source-hash: sha256:d4e4542e1cd6eb1a786bb24a88b1712fbcd82a4e1d756a01a7ba0429b256933a -->
 
 # `idn_admin_regions` — wilayah administrasi Indonesia
 
@@ -98,6 +98,39 @@ terpenuhi:
 | Wilayah yang induknya tidak ada                   | Hierarki yang kehilangan bagian tengahnya merusak picker, tanpa terlihat   |
 | Sebuah tingkat dengan nol baris                   | Secara struktural bukan hierarki utuh — kemungkinan besar berkas terpotong |
 | Checksum ≠ manifes                                | Provenans yang tercatat akan jadi fiksi                                    |
+
+## Impor yang gagal kini terlihat ([Issue #768](https://github.com/ahliweb/awcms/issues/768))
+
+`awcms_idn_region_datasets.status` selalu mengizinkan `rejected` (CHECK
+constraint di `sql/080`), tapi tak ada yang pernah menulisnya: impor yang
+gagal juga tidak menulis baris dataset, sehingga kegagalannya hanya ada di
+log shell/CI milik siapa pun yang menjalankannya. Di `/admin/idn-regions`,
+"dataset yang gagal diimpor" dan "dataset yang tak pernah dicoba" terlihat
+identik.
+
+`bun run idn-regions:import --commit` kini mencatat kegagalan itu, bukan
+hanya melaporkannya:
+
+- **Nol baris wilayah tetap ditulis** untuk percobaan yang ditolak — bagian
+  desain ini tidak berubah.
+- Sebuah baris dataset `rejected` DITULIS, dengan provenans dump yang dicoba
+  (repositori, commit, checksum, rujukan keputusan) dan `rejection_reason`
+  (`sql/149`) — masalah validasi yang sama yang dicetak perintah ini,
+  digabung dengan baris baru. Ia dirender di `/admin/idn-regions` sebagai
+  **teks yang di-escape**, tidak pernah sebagai HTML.
+- Penulisannya adalah **pernyataan yang di-commit sendiri**, terpisah dari
+  transaksi impor yang mungkin dibuka atau tidak — inilah persis masalah yang
+  ingin ditutup: baris penolakan yang lenyap bersama rollback.
+- **Menjalankan ulang dump buruk yang sama adalah no-op pada barisnya**: kode
+  dataset bersifat deterministik (commit + checksum), sehingga percobaan
+  kedua memperbarui reason/timestamp baris `rejected` yang sudah ada di
+  tempat (`ON CONFLICT … DO UPDATE … WHERE status = 'rejected'`), bukannya
+  gagal pada constraint unik atau menumpuk duplikat.
+- Dry run (tanpa `--commit`) tetap tidak menulis apa pun, termasuk baris
+  rejected — kontrak "parse, validasi, laporkan" tidak berubah.
+- Dataset `rejected` tidak pernah bisa diaktifkan — `activateDataset` hanya
+  menerima `validated` atau `superseded` — dan `/admin/idn-regions` tidak
+  pernah merender tombol "Serve this version" untuknya.
 
 ## API lookup
 
