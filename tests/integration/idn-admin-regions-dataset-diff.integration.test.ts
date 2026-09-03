@@ -19,9 +19,16 @@
  *      non-negotiable this repo's other pagination tests hold to (a bound
  *      proven against a one-row fixture proves nothing).
  *   4. Both read shapes are CONSTANT-QUERY regardless of how many rows the two
- *      datasets hold (`countQueries`), and `sql/150`'s two indexes are what
- *      the planner actually uses — not a Seq Scan of either dataset's rows —
- *      against a fixture too large for a full scan to be a coincidence.
+ *      datasets hold (`countQueries`), and `sql/150`'s two indexes genuinely
+ *      COVER both query shapes.
+ *
+ *      That last one is deliberately not "the plan contains no Seq Scan". CI
+ *      disproved that assertion: with two datasets in the table, one dataset is
+ *      half the rows, and at that selectivity a sequential scan is correctly
+ *      the cheaper plan. Asserting otherwise measures the planner's crossover
+ *      threshold on CI hardware, which moves. What `sql/150` permanently owes
+ *      us is that a covering index EXISTS for each shape, so the planner is
+ *      constrained and the plan is required to name it.
  *
  * Skipped unless a real database is configured (see tests/integration/harness.ts).
  */
@@ -263,10 +270,10 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
       // Two disjoint code spaces (Aceh-only vs. Jakarta-only), each built from
       // the shared fixture's own rows so tier assignment stays realistic.
       const from = await asTx(sql, (tx) =>
-        commitDatasetImport(tx, planFor("disjoint-from", FROM_ROWS.slice(0, 5)))
+        commitDatasetImport(tx, planFor("DF", FROM_ROWS.slice(0, 5)))
       );
       const to = await asTx(sql, (tx) =>
-        commitDatasetImport(tx, planFor("disjoint-to", FROM_ROWS.slice(5)))
+        commitDatasetImport(tx, planFor("DT", FROM_ROWS.slice(5)))
       );
 
       const added = await diffDatasetsPage(sql, {
@@ -475,46 +482,87 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
      * reason (a timing assertion on shared CI hardware is a coin flip; a plan
      * is not).
      */
-    test("the tier-count aggregate does not Seq Scan the dataset (sql/150)", async () => {
+    /**
+     * What this asserts, and why it is not "the plan contains no Seq Scan".
+     *
+     * The first version of this test asserted exactly that, and CI proved it
+     * wrong: with two datasets of `LARGE_ROW_COUNT` rows each, ONE dataset is
+     * half the table, and at 50% selectivity a sequential scan genuinely IS
+     * the cheaper plan. Postgres was declining the index correctly; the
+     * assertion was false precision on a fixture too small for an index scan
+     * to ever win — the same shape as the 48,832-buffers-vs-27 measurement
+     * error recorded in PROJECT_STATE, arrived at from the other direction.
+     *
+     * Seeding enough noise datasets to make the planner prefer the index would
+     * make the assertion true, but it would be measuring the PLANNER's
+     * threshold on CI hardware, which moves. The property `sql/150` actually
+     * owes us is narrower and permanent: that an index EXISTS which covers
+     * this query shape. So the planner's hand is forced and the plan is
+     * required to name that index. Deterministic at any fixture size.
+     */
+    test("sql/150's index covers the tier-count aggregate", async () => {
       const { fromId } = await seedLargePair();
       const admin = getAdminSql();
 
-      const rows = (await admin.unsafe(
-        `EXPLAIN (ANALYZE, FORMAT TEXT)
-         SELECT level, COUNT(*)::int AS region_count
-         FROM awcms_idn_admin_regions
-         WHERE dataset_id = $1
-         GROUP BY level`,
-        [fromId]
-      )) as Record<string, string>[];
-      const text = rows.map((row) => Object.values(row)[0]).join("\n");
+      // A REAL transaction, not this file's `asTx` (which only casts the
+      // pooled connection): `SET LOCAL` outside a transaction is a no-op that
+      // merely warns, so the planner would never actually be constrained and
+      // this test would prove nothing.
+      const text = await admin.begin(async (tx: Bun.TransactionSQL) => {
+        await tx.unsafe("SET LOCAL enable_seqscan = off");
+        const rows = (await tx.unsafe(
+          `EXPLAIN (ANALYZE, FORMAT TEXT)
+           SELECT level, COUNT(*)::int AS region_count
+           FROM awcms_idn_admin_regions
+           WHERE dataset_id = $1
+           GROUP BY level`,
+          [fromId]
+        )) as Record<string, string>[];
+        return rows.map((row) => Object.values(row)[0]).join("\n");
+      });
 
-      expect(text).not.toContain("Seq Scan on awcms_idn_admin_regions");
+      expect(text).toContain("awcms_idn_admin_regions_dataset_level_idx");
     });
 
-    test("the added/removed/renamed join does not Seq Scan either dataset (sql/150)", async () => {
+    /**
+     * Same reasoning as the tier-count test above. The index this names is the
+     * COVERING one — `(dataset_id, code) INCLUDE (official_name)` — so the
+     * assertion also proves the `INCLUDE` is pulling its weight: a plain
+     * `(dataset_id, code)` index would still be named here, but the rename
+     * comparison would have to visit the heap for `official_name`, which is
+     * the whole reason `sql/150` carries the payload column.
+     */
+    test("sql/150's covering index serves the added/removed/renamed join", async () => {
       const { fromId, toId } = await seedLargePair();
       const admin = getAdminSql();
 
-      const rows = (await admin.unsafe(
-        `EXPLAIN (ANALYZE, FORMAT TEXT)
-         SELECT code, a.official_name AS old_name, b.official_name AS new_name
-         FROM (
-           SELECT code, official_name FROM awcms_idn_admin_regions
-           WHERE dataset_id = $1
-         ) a
-         FULL OUTER JOIN (
-           SELECT code, official_name FROM awcms_idn_admin_regions
-           WHERE dataset_id = $2
-         ) b USING (code)
-         WHERE a.code IS NOT NULL AND b.code IS NOT NULL
-           AND a.official_name IS DISTINCT FROM b.official_name
-         ORDER BY code ASC
-         LIMIT 51`,
-        [fromId, toId]
-      )) as Record<string, string>[];
-      const text = rows.map((row) => Object.values(row)[0]).join("\n");
+      // A REAL transaction, not this file's `asTx` (which only casts the
+      // pooled connection): `SET LOCAL` outside a transaction is a no-op that
+      // merely warns, so the planner would never actually be constrained and
+      // this test would prove nothing.
+      const text = await admin.begin(async (tx: Bun.TransactionSQL) => {
+        await tx.unsafe("SET LOCAL enable_seqscan = off");
+        const rows = (await tx.unsafe(
+          `EXPLAIN (ANALYZE, FORMAT TEXT)
+           SELECT code, a.official_name AS old_name, b.official_name AS new_name
+           FROM (
+             SELECT code, official_name FROM awcms_idn_admin_regions
+             WHERE dataset_id = $1
+           ) a
+           FULL OUTER JOIN (
+             SELECT code, official_name FROM awcms_idn_admin_regions
+             WHERE dataset_id = $2
+           ) b USING (code)
+           WHERE a.code IS NOT NULL AND b.code IS NOT NULL
+             AND a.official_name IS DISTINCT FROM b.official_name
+           ORDER BY code ASC
+           LIMIT 51`,
+          [fromId, toId]
+        )) as Record<string, string>[];
+        return rows.map((row) => Object.values(row)[0]).join("\n");
+      });
 
+      expect(text).toContain("awcms_idn_admin_regions_dataset_code_name_idx");
       expect(text).not.toContain("Seq Scan on awcms_idn_admin_regions");
     });
   });
