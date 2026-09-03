@@ -76,6 +76,14 @@ import {
   type RegionRecord,
   type RegionQueryResult
 } from "../../modules/idn-admin-regions/application/region-lookup";
+import {
+  getDatasetTierCounts,
+  buildTierComparison,
+  diffDatasetsPage,
+  type DatasetDiffKind,
+  type DatasetDiffPage,
+  type TierComparisonRow
+} from "../../modules/idn-admin-regions/application/dataset-diff";
 import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext;
@@ -166,6 +174,21 @@ const explicitRegionLevel =
 const regionLevel: number | null =
   explicitRegionLevel ?? (regionSearchParam || regionParentCode ? null : 1);
 
+/**
+ * Dataset comparison (Issue #766) query params — same idiom as the region
+ * browser above: everything rides the query string, re-validated here rather
+ * than trusted. `compareFrom`/`compareTo` are dataset CODEs (not ids), so a
+ * comparison link is bookmarkable and matches the `?dataset=<code>` spelling
+ * the lookup API already uses. Their defaults (active vs. the version being
+ * considered) can only be resolved once the dataset list is loaded, so the raw
+ * params are threaded into `load` below rather than defaulted here.
+ */
+const compareFromParam = readParam("compareFrom");
+const compareToParam = readParam("compareTo");
+const addedAfterParam = readParam("addedAfter");
+const removedAfterParam = readParam("removedAfter");
+const renamedAfterParam = readParam("renamedAfter");
+
 /** Builds a link to this screen with the given query params overridden. */
 function regionQueryLink(overrides: Record<string, string | null>): string {
   const params = new URLSearchParams(Astro.url.search);
@@ -176,6 +199,25 @@ function regionQueryLink(overrides: Record<string, string | null>): string {
   const query = params.toString();
   return query ? `/admin/idn-regions?${query}` : "/admin/idn-regions";
 }
+
+/**
+ * Issue #766 — the read-only comparison between two dataset versions,
+ * reachable from the activate row. Gated on `dataset.read` alone (the same
+ * tenant-scoped permission the "Imported versions" table already requires),
+ * NOT the platform-scoped `dataset.configure`/`.restore`: a non-platform
+ * tenant must be able to audit what it was served last week against what it
+ * is served now, even though it can never flip the switch itself.
+ */
+type DatasetCompareResult = {
+  fromCode: string;
+  toCode: string;
+  /** Same dataset picked on both sides — every count/list below is trivially empty. */
+  sameVersion: boolean;
+  tierRows: TierComparisonRow[];
+  diffs: Record<DatasetDiffKind, DatasetDiffPage>;
+};
+
+const EMPTY_DIFF_PAGE: DatasetDiffPage = { items: [], nextCursor: null };
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's.
@@ -231,6 +273,88 @@ const screen = await loadAdminScreen({
           })
         : null;
 
+    // Issue #766 — dataset version comparison. Defaults resolved here (not at
+    // the top of the frontmatter) because "active vs. the version being
+    // considered" needs the dataset list `listDatasets` just fetched:
+    //   - `from` defaults to the ACTIVE dataset's code;
+    //   - `to` defaults to the most recently imported OTHER version — the
+    //     newest entry in `datasets` (already ordered `created_at DESC`) that
+    //     is not the resolved `from`, which is exactly "the version being
+    //     considered" when reached from the top of the console rather than
+    //     from a specific row's "Compare with active" link.
+    const activeDatasetForCompare = datasets.find(
+      (dataset) => dataset.status === "active"
+    );
+    const compareFromCode: string | null =
+      compareFromParam ?? activeDatasetForCompare?.datasetCode ?? null;
+    const compareToCode: string | null =
+      compareToParam ??
+      datasets.find((dataset) => dataset.datasetCode !== compareFromCode)
+        ?.datasetCode ??
+      null;
+
+    let compare: DatasetCompareResult | null = null;
+
+    if (canReadDatasets && compareFromCode && compareToCode) {
+      const fromDataset = datasets.find(
+        (dataset) => dataset.datasetCode === compareFromCode
+      );
+      const toDataset = datasets.find(
+        (dataset) => dataset.datasetCode === compareToCode
+      );
+
+      if (fromDataset && toDataset) {
+        if (fromDataset.id === toDataset.id) {
+          // Comparing a version with itself: every count and list below would
+          // be identical/empty by construction, so skip the five queries
+          // entirely rather than run a join that can only answer "nothing".
+          compare = {
+            fromCode: fromDataset.datasetCode,
+            toCode: toDataset.datasetCode,
+            sameVersion: true,
+            tierRows: buildTierComparison(),
+            diffs: {
+              added: EMPTY_DIFF_PAGE,
+              removed: EMPTY_DIFF_PAGE,
+              renamed: EMPTY_DIFF_PAGE
+            }
+          };
+        } else {
+          // Sequential, on the one reserved transaction connection — same
+          // discipline as every other read on this screen.
+          const fromTierCounts = await getDatasetTierCounts(tx, fromDataset.id);
+          const toTierCounts = await getDatasetTierCounts(tx, toDataset.id);
+
+          const added = await diffDatasetsPage(tx, {
+            fromDatasetId: fromDataset.id,
+            toDatasetId: toDataset.id,
+            kind: "added",
+            afterCode: addedAfterParam
+          });
+          const removed = await diffDatasetsPage(tx, {
+            fromDatasetId: fromDataset.id,
+            toDatasetId: toDataset.id,
+            kind: "removed",
+            afterCode: removedAfterParam
+          });
+          const renamed = await diffDatasetsPage(tx, {
+            fromDatasetId: fromDataset.id,
+            toDatasetId: toDataset.id,
+            kind: "renamed",
+            afterCode: renamedAfterParam
+          });
+
+          compare = {
+            fromCode: fromDataset.datasetCode,
+            toCode: toDataset.datasetCode,
+            sameVersion: false,
+            tierRows: buildTierComparison(fromTierCounts, toTierCounts),
+            diffs: { added, removed, renamed }
+          };
+        }
+      }
+    }
+
     return {
       canReadDatasets,
       canReadRegions,
@@ -238,6 +362,9 @@ const screen = await loadAdminScreen({
       regionPage,
       parentRegion,
       selectedRegion,
+      compare,
+      compareFromCode,
+      compareToCode,
       canActivate: await can({
         moduleKey: "idn_admin_regions",
         activityCode: "dataset",
@@ -269,6 +396,13 @@ const datasets: DatasetSummary[] =
   screen.state === "allowed" ? screen.data.datasets : [];
 const canActivate = screen.state === "allowed" && screen.data.canActivate;
 const canRollback = screen.state === "allowed" && screen.data.canRollback;
+
+const compare: DatasetCompareResult | null =
+  screen.state === "allowed" ? screen.data.compare : null;
+const compareFromCode: string | null =
+  screen.state === "allowed" ? screen.data.compareFromCode : null;
+const compareToCode: string | null =
+  screen.state === "allowed" ? screen.data.compareToCode : null;
 
 const regionPage: RegionQueryResult =
   screen.state === "allowed"
@@ -470,13 +604,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                 <th scope="col">{t("Imported")}</th>
                 <th scope="col">{t("Activated")}</th>
                 <th scope="col">{t("Provenance")}</th>
+                <th scope="col">{t("Compare")}</th>
                 {canActivate && <th scope="col">{t("Action")}</th>}
               </tr>
             </thead>
             <tbody>
               {datasets.length === 0 && (
                 <tr>
-                  <td class="data-table-empty" colspan={canActivate ? 7 : 6}>
+                  <td class="data-table-empty" colspan={canActivate ? 8 : 7}>
                     <div class="empty-state">
                       <span class="empty-state-icon" aria-hidden="true">
                         📦
@@ -564,6 +699,32 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                         </p>
                       )}
                   </td>
+                  <td data-label="Compare">
+                    {/* Issue #766 — reachable from the row about to be
+                        activated, so the comparison is in front of the
+                        operator at the moment of the decision. `compareFrom`
+                        is reset to null (falling back to the active dataset)
+                        rather than carried over from the current URL, so this
+                        link always means "compare with what is served now". */}
+                    {dataset.status === "active" ? (
+                      <span class="cell-muted">{t("Currently active")}</span>
+                    ) : (
+                      <a
+                        class="btn-inline"
+                        href={
+                          regionQueryLink({
+                            compareTo: dataset.datasetCode,
+                            compareFrom: null,
+                            addedAfter: null,
+                            removedAfter: null,
+                            renamedAfter: null
+                          }) + "#idn-regions-compare"
+                        }
+                      >
+                        {t("Compare with active")}
+                      </a>
+                    )}
+                  </td>
                   {canActivate && (
                     <td data-label="Action">
                       {dataset.status === "validated" ? (
@@ -587,6 +748,227 @@ const numberFormatter = new Intl.NumberFormat("en-US");
         </div>
       </section>
     )
+  }
+
+  {
+    canReadDatasets && (
+      <section class="admin-section fade-in-up" id="idn-regions-compare">
+        <h2 class="admin-section-title">{t("Compare dataset versions")}</h2>
+        <p class="page-description">
+          {t(
+            "See exactly what changes before you activate a version: per-tier counts on both sides, codes added, codes removed, and regions whose name changed. Defaults to the active version against the one being considered."
+          )}
+        </p>
+
+        {/* A GET form, like the region browser's filter — linkable, works
+            with JavaScript disabled, ships no bundle. Submitting it carries
+            no `*After` cursor, so choosing a new pair always starts each list
+            from its first page rather than resuming a stale one. */}
+        <form class="admin-create-form fade-in-up" method="get">
+          <p class="form-legend">{t("Versions to compare")}</p>
+
+          <label for="compare-from">
+            {t("From")}
+            <select id="compare-from" name="compareFrom">
+              {datasets.map((dataset) => (
+                <option
+                  value={dataset.datasetCode}
+                  selected={dataset.datasetCode === compareFromCode}
+                >
+                  {dataset.datasetCode} ({dataset.status})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label for="compare-to">
+            {t("To")}
+            <select id="compare-to" name="compareTo">
+              {datasets.map((dataset) => (
+                <option
+                  value={dataset.datasetCode}
+                  selected={dataset.datasetCode === compareToCode}
+                >
+                  {dataset.datasetCode} ({dataset.status})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button type="submit" class="module-toggle">
+            {t("Compare")}
+          </button>
+        </form>
+
+        {datasets.length < 2 && (
+          <p class="page-description">
+            {t(
+              "Import at least two versions to compare them — there is nothing to compare a single version against."
+            )}
+          </p>
+        )}
+
+        {datasets.length >= 2 && !compare && (
+          <p class="page-description">
+            {t("Choose two versions above to see what differs between them.")}
+          </p>
+        )}
+
+        {compare && compare.sameVersion && (
+          <p class="page-description" id="idn-regions-compare-same-version">
+            {t("{from} and {to} are the same version — nothing differs.", {
+              from: compare.fromCode,
+              to: compare.toCode
+            })}
+          </p>
+        )}
+
+        {compare && !compare.sameVersion && (
+          <div class="data-table-scroll">
+            <table class="data-table" id="idn-regions-compare-tiers">
+              <caption class="sr-only">
+                {t("Per-tier region counts, {from} versus {to}", {
+                  from: compare.fromCode,
+                  to: compare.toCode
+                })}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Tier")}</th>
+                  <th scope="col">
+                    <span class="cell-code">{compare.fromCode}</span>
+                  </th>
+                  <th scope="col">
+                    <span class="cell-code">{compare.toCode}</span>
+                  </th>
+                  <th scope="col">{t("Delta")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compare.tierRows.map((row) => (
+                  <tr>
+                    <td data-label="Tier">{regionTierLabel(row.level)}</td>
+                    <td data-label={compare!.fromCode}>
+                      {numberFormatter.format(row.fromCount)}
+                    </td>
+                    <td data-label={compare!.toCode}>
+                      {numberFormatter.format(row.toCount)}
+                    </td>
+                    <td data-label="Delta">
+                      {row.delta === 0 ? (
+                        <span class="cell-muted">0</span>
+                      ) : (
+                        <span
+                          class={row.delta < 0 ? "cell-error" : "cell-code"}
+                        >
+                          {row.delta > 0 ? `+${row.delta}` : row.delta}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    // Three SIBLING sections, one per diff kind — the same "several
+    // independently laid out panels under one gate" shape the region browser
+    // above already uses, rather than nesting a second heading level inside
+    // one section. Each list is capped and keyset-paged on `code`
+    // independently: choosing "next page" on `added` must not disturb
+    // `removed`/`renamed`'s own cursor.
+    canReadDatasets &&
+      compare &&
+      !compare.sameVersion &&
+      (
+        [
+          {
+            kind: "added" as const,
+            after: "addedAfter",
+            title: t("Codes added"),
+            empty: t("No codes were added.")
+          },
+          {
+            kind: "removed" as const,
+            after: "removedAfter",
+            title: t("Codes removed"),
+            empty: t("No codes were removed.")
+          },
+          {
+            kind: "renamed" as const,
+            after: "renamedAfter",
+            title: t("Renamed regions"),
+            empty: t("No region name changed.")
+          }
+        ] as const
+      ).map(({ kind, after, title, empty }) => {
+        const page = compare!.diffs[kind];
+        return (
+          <section
+            class="admin-section fade-in-up"
+            id={`idn-regions-compare-${kind}`}
+          >
+            <h2 class="admin-section-title">
+              {title}
+              <span class="count-pill">{page.items.length}</span>
+            </h2>
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <caption class="sr-only">{title}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Code")}</th>
+                    <th scope="col">
+                      {kind === "added" ? t("Name") : t("Old name")}
+                    </th>
+                    {kind === "renamed" && <th scope="col">{t("New name")}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {page.items.length === 0 && (
+                    <tr>
+                      <td
+                        class="data-table-empty"
+                        colspan={kind === "renamed" ? 3 : 2}
+                      >
+                        {empty}
+                      </td>
+                    </tr>
+                  )}
+                  {page.items.map((item) => (
+                    <tr>
+                      <td data-label="Code">
+                        <span class="cell-code">{item.code}</span>
+                      </td>
+                      <td data-label="Name">
+                        {kind === "added" ? item.newName : item.oldName}
+                      </td>
+                      {kind === "renamed" && (
+                        <td data-label="New name">{item.newName}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {page.nextCursor && (
+              <p class="page-description">
+                <a
+                  class="quick-link"
+                  href={regionQueryLink({ [after]: page.nextCursor })}
+                >
+                  {t("Next page")}
+                </a>
+              </p>
+            )}
+          </section>
+        );
+      })
   }
 
   {

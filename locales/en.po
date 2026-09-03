@@ -4625,3 +4625,63 @@ msgstr ""
 
 msgid "Region {code} was not found in this dataset."
 msgstr ""
+
+msgid "Compare dataset versions"
+msgstr ""
+
+msgid "See exactly what changes before you activate a version: per-tier counts on both sides, codes added, codes removed, and regions whose name changed. Defaults to the active version against the one being considered."
+msgstr ""
+
+msgid "Versions to compare"
+msgstr ""
+
+msgid "To"
+msgstr ""
+
+msgid "Compare"
+msgstr ""
+
+msgid "Compare with active"
+msgstr ""
+
+msgid "Currently active"
+msgstr ""
+
+msgid "Import at least two versions to compare them — there is nothing to compare a single version against."
+msgstr ""
+
+msgid "Choose two versions above to see what differs between them."
+msgstr ""
+
+msgid "{from} and {to} are the same version — nothing differs."
+msgstr ""
+
+msgid "Per-tier region counts, {from} versus {to}"
+msgstr ""
+
+msgid "Delta"
+msgstr ""
+
+msgid "Codes added"
+msgstr ""
+
+msgid "Codes removed"
+msgstr ""
+
+msgid "Renamed regions"
+msgstr ""
+
+msgid "Old name"
+msgstr ""
+
+msgid "New name"
+msgstr ""
+
+msgid "No codes were added."
+msgstr ""
+
+msgid "No codes were removed."
+msgstr ""
+
+msgid "No region name changed."
+msgstr ""
