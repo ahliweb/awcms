@@ -87,6 +87,18 @@ export type DatasetImportResult = {
   status: "validated";
 };
 
+/**
+ * Issue #768 — result of {@link recordRejectedImport}. `inserted: false` means
+ * the same bad dump was recorded before and this call only refreshed its
+ * reason/timestamp; it is NOT an error condition.
+ */
+export type DatasetRejectionResult = {
+  datasetId: string;
+  datasetCode: string;
+  status: "rejected";
+  inserted: boolean;
+};
+
 export class DatasetImportError extends Error {
   constructor(
     message: string,
@@ -375,5 +387,110 @@ export async function commitDatasetImport(
     datasetCode: plan.datasetCode,
     rowCount: plan.rowCount,
     status: "validated"
+  };
+}
+
+/**
+ * Records a FAILED validation as its own `rejected` dataset row (Issue #768,
+ * option A) — the provenance of the dump that was attempted, plus why it
+ * failed. Zero region rows are ever written for it: this function never
+ * touches `awcms_idn_admin_regions`.
+ *
+ * ## Why this takes a plain `Bun.SQL`, never a `Bun.TransactionSQL`
+ *
+ * The caller (`idn-regions-import.ts`) never opens an import transaction for a
+ * plan that already failed `planDatasetImport` — `commitDatasetImport` throws
+ * before its first statement when `plan.errors` is non-empty, so there is
+ * nothing here to nest inside and roll back with. Calling this with the plain
+ * pooled client means the INSERT below is its OWN statement, committed the
+ * instant it succeeds. That is deliberate, not incidental: if a future caller
+ * ever tried recording the rejection from inside the same transaction that
+ * failed the import (e.g. a constraint violation discovered mid-`INSERT`),
+ * the rejected row would roll back right along with it — silently recreating
+ * the exact defect this function exists to fix. Record the rejection AFTER
+ * the failed attempt's transaction (if any) has already been rolled back or
+ * never opened, on a fresh connection/statement.
+ *
+ * ## The re-run-the-same-bad-dump case
+ *
+ * `dataset_code` is deterministic (upstream commit + file checksum), so
+ * re-running identical bytes recomputes the identical code. `ON CONFLICT …
+ * DO UPDATE … WHERE status = 'rejected'` makes that an update-in-place
+ * (refreshed reason and timestamp) instead of a unique-violation or a second,
+ * duplicate row an operator would have to puzzle over — no `error.errno`/
+ * `error.code` branching needed, since the database resolves the collision
+ * declaratively in one round trip. If the existing row somehow is NOT
+ * `rejected` (only possible if the same bytes previously validated — not
+ * achievable through this pipeline, since a fixed `planDatasetImport` result
+ * for identical bytes is deterministic), the `WHERE` guard refuses to touch it
+ * and this function reports the existing row without altering it.
+ */
+export async function recordRejectedImport(
+  sql: Bun.SQL,
+  plan: DatasetImportPlan,
+  options: { importedBy?: string | null } = {}
+): Promise<DatasetRejectionResult> {
+  if (plan.errors.length === 0) {
+    throw new Error(
+      "recordRejectedImport called with a plan that passed validation — call commitDatasetImport instead."
+    );
+  }
+
+  // Joined with newlines, not JSON: this lands in a `text` column rendered
+  // verbatim (escaped) on /admin/idn-regions, and a human reading a list of
+  // validation problems wants line breaks, not an array literal.
+  const reason = plan.errors.join("\n");
+
+  const inserted = (await sql`
+    INSERT INTO awcms_idn_region_datasets
+      (dataset_code, source_repository, source_path, source_commit_sha,
+       source_license, source_reference, source_file_sha256, row_count,
+       status, rejection_reason, created_by)
+    VALUES
+      (${plan.datasetCode}, ${IDN_ADMIN_REGIONS_SOURCE_REPOSITORY},
+       ${IDN_ADMIN_REGIONS_SOURCE_PATH}, ${plan.sourceCommitSha},
+       ${IDN_ADMIN_REGIONS_SOURCE_LICENSE}, ${plan.decreeReference},
+       ${plan.sourceFileSha256}, 0, 'rejected', ${reason},
+       ${options.importedBy ?? null})
+    ON CONFLICT (dataset_code) DO UPDATE
+      SET rejection_reason = EXCLUDED.rejection_reason,
+          created_at = now()
+      WHERE awcms_idn_region_datasets.status = 'rejected'
+    RETURNING id, dataset_code, (xmax = 0) AS inserted
+  `) as { id: string; dataset_code: string; inserted: boolean }[];
+
+  const row = inserted[0];
+
+  if (row) {
+    return {
+      datasetId: row.id,
+      datasetCode: row.dataset_code,
+      status: "rejected",
+      inserted: row.inserted
+    };
+  }
+
+  // The `WHERE` guard refused the update: the conflicting row exists with a
+  // status other than `rejected`. Report it rather than throw — see the
+  // doc comment above for why this should be unreachable in practice.
+  const existing = (await sql`
+    SELECT id, dataset_code FROM awcms_idn_region_datasets
+    WHERE dataset_code = ${plan.datasetCode}
+  `) as { id: string; dataset_code: string }[];
+
+  const found = existing[0];
+
+  if (!found) {
+    throw new DatasetImportError(
+      "Failed to record the rejected dataset, and no conflicting row was found either.",
+      plan.errors
+    );
+  }
+
+  return {
+    datasetId: found.id,
+    datasetCode: found.dataset_code,
+    status: "rejected",
+    inserted: false
   };
 }

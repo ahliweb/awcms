@@ -92,6 +92,37 @@ An import fails — rather than importing what it could — when any of these ho
 | A tier with zero rows                   | Structurally not a full hierarchy — most likely a truncated file |
 | Checksum ≠ the manifest                 | The recorded provenance would be fiction                         |
 
+## A failed import is now visible ([Issue #768](https://github.com/ahliweb/awcms/issues/768))
+
+`awcms_idn_region_datasets.status` always admitted `rejected` (`sql/080`'s
+CHECK constraint), but nothing ever wrote it: a failed import wrote **no**
+dataset row either, so the failure existed only in the shell/CI log of
+whoever ran `--commit`. On `/admin/idn-regions`, "a dataset that failed to
+import" and "a dataset never attempted" looked identical.
+
+`bun run idn-regions:import --commit` now records the failure instead of
+only reporting it:
+
+- **Zero region rows are ever written** for a rejected attempt — that part of
+  the design does not change.
+- A `rejected` dataset row IS written, with the attempted dump's provenance
+  (repository, commit, checksum, decree reference) and a `rejection_reason`
+  (`sql/149`) — the same validation problems this command prints, joined by
+  newline. It renders on `/admin/idn-regions` as **escaped text**, never HTML.
+- The write is its **own committed statement**, independent of whatever import
+  transaction did or did not open — the concern this exists to close is
+  exactly a rejection row that vanishes with a rollback.
+- **Re-running the same bad dump is a no-op on the row**: the dataset code is
+  deterministic (commit + checksum), so the second attempt updates the
+  existing `rejected` row's reason/timestamp in place (`ON CONFLICT … DO
+UPDATE … WHERE status = 'rejected'`) rather than erroring on the unique
+  constraint or piling up duplicates.
+- A dry run (no `--commit`) still writes nothing at all, rejected row
+  included — the "parse, validate, report" contract is unchanged.
+- A `rejected` dataset can never be activated — `activateDataset` only accepts
+  `validated` or `superseded` — and `/admin/idn-regions` never renders a
+  "Serve this version" button for one.
+
 ## Lookup API
 
 | Method + path                            | Permission     | Notes                                           |

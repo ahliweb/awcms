@@ -396,6 +396,16 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                         </p>
                       )}
                     </details>
+                    {dataset.status === "rejected" &&
+                      dataset.rejectionReason && (
+                        <p class="cell-error">
+                          {/* Escaped TEXT, never HTML — the reason is the
+                              validation problems joined by planDatasetImport,
+                              which can contain arbitrary dump content. */}
+                          <strong>{t("Rejected:")}</strong>{" "}
+                          {dataset.rejectionReason}
+                        </p>
+                      )}
                   </td>
                   {canActivate && (
                     <td data-label="Action">

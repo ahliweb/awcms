@@ -898,6 +898,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Registration requests": ["Permintaan pendaftaran"],
   "Reinstate": ["Pulihkan kembali"],
   "Reject": ["Tolak"],
+  "Rejected:": ["Ditolak:"],
   "Release": ["Lepaskan"],
   "Release hold": ["Lepaskan penahanan"],
   "Release reason": ["Alasan pelepasan"],
