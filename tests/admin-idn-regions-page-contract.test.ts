@@ -214,7 +214,16 @@ describe("/admin/idn-regions region browser (Issue #767)", () => {
 
   test("ships zero client JavaScript — filtering and paging are GET links/forms", async () => {
     const page = await readFile(PAGE, "utf8");
-    const scriptBlocks = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    // Case-insensitive, and tolerant of attributes on BOTH tags. This guard's
+    // whole job is to notice a second script block, so a pattern that only
+    // matched a bare lower-case `<script>` would sail past `<SCRIPT>` or
+    // `<script type="module">` and report 1 while there were 2 — a gate with a
+    // blind spot for the thing it exists to catch (CodeQL `js/bad-tag-filter`,
+    // alert #154). The closing form is widened in the same edit rather than one
+    // variant per scan, since the rule reports these one at a time.
+    const scriptBlocks = [
+      ...page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script(?:[\s/][^>]*)?>/gi)
+    ];
 
     expect(scriptBlocks.length).toBe(1);
     // The one <script> block belongs to the dataset console's activate/
