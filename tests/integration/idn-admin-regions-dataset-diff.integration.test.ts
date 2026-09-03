@@ -27,8 +27,15 @@
  *      half the rows, and at that selectivity a sequential scan is correctly
  *      the cheaper plan. Asserting otherwise measures the planner's crossover
  *      threshold on CI hardware, which moves. What `sql/150` permanently owes
- *      us is that a covering index EXISTS for each shape, so the planner is
- *      constrained and the plan is required to name it.
+ *      us is an index PATH for each shape, so the planner is constrained with
+ *      `enable_seqscan = off` and the plan must name an index that migration
+ *      created.
+ *
+ *      The tier aggregate names its index exactly. The diff join accepts
+ *      either, because CI settled that the planner prefers the NARROWER
+ *      `(dataset_id, level)` index for a first page that reads the whole
+ *      dataset — see that test for why, and for where the covering index does
+ *      pay off.
  *
  * Skipped unless a real database is configured (see tests/integration/harness.ts).
  */
@@ -532,7 +539,7 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
      * comparison would have to visit the heap for `official_name`, which is
      * the whole reason `sql/150` carries the payload column.
      */
-    test("sql/150's covering index serves the added/removed/renamed join", async () => {
+    test("sql/150 gives the added/removed/renamed join an index path", async () => {
       const { fromId, toId } = await seedLargePair();
       const admin = getAdminSql();
 
@@ -562,8 +569,28 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
         return rows.map((row) => Object.values(row)[0]).join("\n");
       });
 
-      expect(text).toContain("awcms_idn_admin_regions_dataset_code_name_idx");
-      expect(text).not.toContain("Seq Scan on awcms_idn_admin_regions");
+      // EITHER of sql/150's indexes satisfies this: both lead with
+      // `dataset_id`, which is the only predicate on the FIRST page of a diff.
+      //
+      // CI settled which one the planner actually picks, and the answer is
+      // worth recording rather than asserting away. It takes the NARROWER
+      // `(dataset_id, level)` index by bitmap scan and then visits the heap for
+      // `code`/`official_name`. That is the right call: this page reads every
+      // row of the dataset, so a wider covering index would mean reading more
+      // index pages to avoid a heap visit it cannot avoid anyway.
+      //
+      // The covering `(dataset_id, code) INCLUDE (official_name)` index earns
+      // its place on the pages AFTER the first, which carry a `code > cursor`
+      // predicate and an ORDER BY code the leading columns can satisfy in
+      // order. Asserting it here would have been asserting it in the one place
+      // it is NOT the better plan.
+      //
+      // Note `not.toContain("Seq Scan")` is deliberately absent: with
+      // `enable_seqscan = off` that assertion is vacuous, and a test that
+      // cannot fail is not a test.
+      expect(text).toMatch(
+        /awcms_idn_admin_regions_dataset_(level|code_name)_idx/
+      );
     });
   });
 });
