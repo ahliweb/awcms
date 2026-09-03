@@ -133,12 +133,15 @@ export const DELIBERATELY_UNSCREENED: Readonly<Record<string, string>> = {
   // Enqueues a notification to an explicit set of users — plausible as an
   // inter-module API, and forcing a button onto it invents an affordance whose
   // correct shape nobody has decided.
-  "email.notification.create": "inter-module API, not an operator affordance",
+  "email.notification.create": "inter-module API, not an operator affordance"
 
-  // The lookup surface other modules' forms consume, not a page of its own.
-  // `/admin/idn-regions` drives `dataset.read`/`dataset.configure` instead.
-  "idn_admin_regions.region.read":
-    "lookup API for other modules' forms; /admin/idn-regions drives dataset.*"
+  // `idn_admin_regions.region.read` USED to sit here ("lookup API for other
+  // modules' forms; /admin/idn-regions drives dataset.* instead"). Issue #767
+  // found that reasoning described a permission with no caller at all — the
+  // lookup API had never acquired ANY consumer, admin or otherwise — and gave
+  // `/admin/idn-regions` a region browser panel that claims it directly.
+  // Removed rather than left to read as a still-current decision about a
+  // screen that has since been built.
 };
 
 export type Coverage = {

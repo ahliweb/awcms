@@ -12,6 +12,13 @@
  * every tenant that is not the platform — the failure looking like a broken
  * feature rather than a refused one. The page must check both halves.
  *
+ * Issue #767 added a SECOND, independently-readable panel — the region
+ * browser, gated on `region.read` — so the page's entry `authorize` became an
+ * ANY-OF array (the same shape `/admin/domain-events` uses). A viewer holding
+ * only `region.read` must still enter the page and see that one panel; a
+ * viewer holding only `dataset.read` must still see the dataset console and
+ * nothing the region browser needs.
+ *
  * Pure — no database, no network. Runs in `quality` on every PR.
  */
 import { readFile } from "node:fs/promises";
@@ -24,7 +31,9 @@ const PAGE = "src/pages/admin/idn-regions.astro";
 const ROUTES = [
   "src/pages/api/v1/idn-regions/datasets/index.ts",
   "src/pages/api/v1/idn-regions/datasets/[id]/activate.ts",
-  "src/pages/api/v1/idn-regions/datasets/rollback.ts"
+  "src/pages/api/v1/idn-regions/datasets/rollback.ts",
+  "src/pages/api/v1/idn-regions/regions/index.ts",
+  "src/pages/api/v1/idn-regions/regions/[code].ts"
 ];
 
 type Triple = `${string}.${string}.${string}`;
@@ -68,7 +77,9 @@ function declaredTriples(): Set<Triple> {
 describe("/admin/idn-regions permission gates", () => {
   test("every key the page gates on is declared by the module descriptor", async () => {
     const pageKeys = pageTriplesFrom(await readFile(PAGE, "utf8"));
-    expect(pageKeys.size).toBe(3);
+    // dataset.read + dataset.configure + dataset.restore + region.read
+    // (Issue #767 added the fourth, for the region browser panel).
+    expect(pageKeys.size).toBe(4);
 
     const declared = declaredTriples();
     expect(declared.size).toBe(4);
@@ -131,9 +142,27 @@ describe("/admin/idn-regions permission gates", () => {
     // `scope` is optional and absent MEANS tenant, so the claim is stated the
     // way the chokepoint reads it: anything that is not `platform` is tenant.
     expect(scopeOf("read")).not.toBe("platform");
+    // Issue #767 — the entry gate is now an ANY-OF array (dataset.read OR
+    // region.read), not a single request, so both tenant reads are asserted
+    // as array entries rather than as the page's sole `authorize:` object.
+    expect(page).toMatch(/authorize:\s*\[/);
     expect(page).toMatch(
-      /authorize:\s*\{\s*moduleKey:\s*"idn_admin_regions",\s*activityCode:\s*"dataset",\s*action:\s*"read"/
+      /\{\s*moduleKey:\s*"idn_admin_regions",\s*activityCode:\s*"dataset",\s*action:\s*"read"\s*\}/
     );
+    expect(page).toMatch(
+      /\{\s*moduleKey:\s*"idn_admin_regions",\s*activityCode:\s*"region",\s*action:\s*"read"\s*\}/
+    );
+
+    // `region.read` is tenant-scoped too — the region browser must not
+    // acquire a platform check by accident.
+    const regionReadScope = (
+      listModules().find((module) => module.key === "idn_admin_regions")
+        ?.permissions ?? []
+    ).find(
+      (permission) =>
+        permission.activityCode === "region" && permission.action === "read"
+    )?.scope;
+    expect(regionReadScope).not.toBe("platform");
   });
 
   test("the page never mutates directly — it posts to the guarded endpoints", async () => {
@@ -169,5 +198,60 @@ describe("/admin/idn-regions permission gates", () => {
     // data it is served.
     expect(nav!.requiredPermission).toBe("idn_admin_regions.dataset.read");
     expect(declaredTriples().has(nav!.requiredPermission as Triple)).toBe(true);
+  });
+});
+
+describe("/admin/idn-regions region browser (Issue #767)", () => {
+  test("reads through the module's own lookup functions, never raw SQL", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain("queryRegions(");
+    expect(page).toContain("getRegionByCode(");
+    expect(page).toContain(
+      'from "../../modules/idn-admin-regions/application/region-lookup"'
+    );
+  });
+
+  test("ships zero client JavaScript — filtering and paging are GET links/forms", async () => {
+    const page = await readFile(PAGE, "utf8");
+    const scriptBlocks = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+
+    expect(scriptBlocks.length).toBe(1);
+    // The one <script> block belongs to the dataset console's activate/
+    // rollback buttons (Idempotency-Key mutations); the region browser must
+    // add nothing to it — no call to the lookup API, no reference to its
+    // query params.
+    expect(scriptBlocks[0]![1]).not.toContain("/api/v1/idn-regions/regions");
+    expect(scriptBlocks[0]![1]).not.toContain("regionQueryLink");
+    expect(scriptBlocks[0]![1]).not.toContain("queryRegions");
+
+    expect(page).toMatch(/<form[^>]*method="get"[^>]*>/);
+  });
+
+  test("keyset-pages on nextCursor, not a bare limit", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain("regionPage.nextCursor");
+    expect(page).toContain("regionQueryLink({ after: regionPage.nextCursor })");
+  });
+
+  test("distinguishes no_active_dataset from an empty result set", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain('regionReason === "no_active_dataset"');
+    expect(page).toContain('regionReason === "dataset_not_found"');
+    expect(page).toContain("idn-regions-browser-no-active-dataset");
+    // A distinct id from the "no rows matched" empty state inside the table.
+    expect(page).not.toMatch(
+      /id="idn-regions-browser-no-active-dataset"[\s\S]{0,40}No regions match/
+    );
+  });
+
+  test("drill-down uses level + parentCode, and honours dataset=<code>", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain("parentCode: region.code");
+    expect(page).toContain("level: String(region.level + 1)");
+    expect(page).toContain("regionDatasetParam");
   });
 });

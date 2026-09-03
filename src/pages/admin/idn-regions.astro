@@ -30,6 +30,29 @@
  * (`data/idn-admin-regions/`) and belongs to a deploy, not to a browser
  * (ADR-0046 §5). The screen says so rather than leaving a reader to wonder
  * where the button is.
+ *
+ * ## The region browser (Issue #767) is a SEPARATE panel with its OWN gate
+ *
+ * `idn_admin_regions.region.read` shipped with the module and, until this
+ * panel, had no caller anywhere — not the lookup API's own route files, not
+ * `awcms-astro`, nothing. It is a TENANT permission (unlike `dataset.configure`
+ * /`.restore`), because reading the hierarchy is ordinary tenant work, so this
+ * panel must render for a viewer who holds `region.read` and NOTHING else on
+ * this module — no `dataset.read`, no platform scope, no write buttons.
+ *
+ * That is why `authorize` below is an ANY-OF array rather than the single
+ * `dataset.read` request it used to be: `loadAdminScreen`'s `entry` array
+ * reports each request's own answer, so the dataset console renders on
+ * `entry[0]` and the region browser renders on `entry[1]`, independently. A
+ * viewer holding only one of the two sees exactly one panel, not a denial —
+ * the same any-of shape `/admin/domain-events` already uses for three
+ * independently-readable panels.
+ *
+ * Browsing is entirely server-rendered `GET` forms and plain links — query
+ * params (`level`, `parentCode`, `search`, `dataset`, `after`, `code`) that
+ * mirror the API's own — so it ships ZERO client JavaScript. The asset budget
+ * for this build had 4,193 bytes of headroom; a client data layer for 91,599
+ * rows was never going to be the honest way to spend it.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
@@ -46,6 +69,13 @@ import {
   type DatasetSummary
 } from "../../modules/idn-admin-regions/application/dataset-lifecycle";
 import { IDN_ADMIN_REGIONS_PROVENANCE } from "../../modules/idn-admin-regions/domain/source-provenance";
+import {
+  queryRegions,
+  getRegionByCode,
+  REGION_PAGE_LIMIT_DEFAULT,
+  type RegionRecord,
+  type RegionQueryResult
+} from "../../modules/idn-admin-regions/application/region-lookup";
 import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext;
@@ -87,37 +117,139 @@ try {
   platformResolutionFailed = true;
 }
 
+/**
+ * The region browser's filters ride the query string, like the audit trail's
+ * `method="get"` form — linkable, works with JavaScript disabled, ships no
+ * bundle. Every value is re-validated here rather than trusted: a hand-edited
+ * query string must degrade this read-only screen gracefully, never error it.
+ */
+function readParam(name: string): string | null {
+  return Astro.url.searchParams.get(name)?.trim() || null;
+}
+
+/** Shape-checked the same way `GET /api/v1/idn-regions/regions/{code}` checks it. */
+const REGION_CODE_PATTERN = /^[0-9]+(\.[0-9]+){0,3}$/;
+
+const regionSearchParam = readParam("search");
+const regionDatasetParam = readParam("dataset");
+const regionAfterParam = readParam("after");
+
+const regionParentCodeParam = readParam("parentCode");
+const regionParentCode =
+  regionParentCodeParam && REGION_CODE_PATTERN.test(regionParentCodeParam)
+    ? regionParentCodeParam
+    : null;
+
+const regionSelectedCodeParam = readParam("code");
+const regionSelectedCode =
+  regionSelectedCodeParam && REGION_CODE_PATTERN.test(regionSelectedCodeParam)
+    ? regionSelectedCodeParam
+    : null;
+
+const regionLevelParam = readParam("level");
+const parsedRegionLevel = regionLevelParam ? Number(regionLevelParam) : null;
+const explicitRegionLevel =
+  parsedRegionLevel !== null &&
+  Number.isInteger(parsedRegionLevel) &&
+  parsedRegionLevel >= 1 &&
+  parsedRegionLevel <= 4
+    ? parsedRegionLevel
+    : null;
+
+/**
+ * A malformed or absent `level` does not error the screen — it falls back to
+ * the province tier as a landing page, UNLESS a search or a parent is already
+ * narrowing the query, in which case forcing a tier would silently answer a
+ * different question than the one the URL asks (searching "Bakongan" across
+ * every tier, not just provinces).
+ */
+const regionLevel: number | null =
+  explicitRegionLevel ?? (regionSearchParam || regionParentCode ? null : 1);
+
+/** Builds a link to this screen with the given query params overridden. */
+function regionQueryLink(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null || value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/idn-regions?${query}` : "/admin/idn-regions";
+}
+
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's.
 //
-// `dataset.read` is TENANT-scoped; `dataset.configure` and `dataset.restore`
-// are PLATFORM-scoped (ADR-0052/0053). That is why the hand-written
-// `holds… && isPlatformTenant` mirroring is gone rather than ported: `can(...)`
-// runs the same ADR-0053 gate the endpoint runs, so the screen no longer keeps
-// a SECOND copy of the platform rule that could drift from the first.
+// `dataset.read` and `region.read` are BOTH tenant-scoped, and independently
+// readable: an ANY-OF entry (the same shape `/admin/domain-events` uses for
+// three panels) means a viewer holding only `region.read` gets the region
+// browser and nothing else, rather than a blanket denial. `dataset.configure`
+// and `dataset.restore` are PLATFORM-scoped (ADR-0052/0053) and stay decided
+// by `can(...)`, which runs the same ADR-0053 gate the endpoint runs, so the
+// screen never keeps a second copy of the platform rule that could drift from
+// it.
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
-  authorize: {
-    moduleKey: "idn_admin_regions",
-    activityCode: "dataset",
-    action: "read"
+  authorize: [
+    { moduleKey: "idn_admin_regions", activityCode: "dataset", action: "read" },
+    { moduleKey: "idn_admin_regions", activityCode: "region", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const canReadDatasets = entry[0]!;
+    const canReadRegions = entry[1]!;
+
+    // One transaction, one awaited query at a time, in the order declared —
+    // concurrent queries on a single transaction connection leak it, so
+    // nothing here runs in parallel (`Promise.all` included).
+    const datasets = canReadDatasets ? await listDatasets(tx) : [];
+
+    const regionPage: RegionQueryResult = canReadRegions
+      ? await queryRegions(tx, {
+          datasetCode: regionDatasetParam,
+          level: regionLevel,
+          parentCode: regionParentCode,
+          search: regionSearchParam,
+          limit: REGION_PAGE_LIMIT_DEFAULT,
+          afterCode: regionAfterParam
+        })
+      : { datasetCode: null, items: [], nextCursor: null };
+
+    // The breadcrumb for "browsing children of X" — a point lookup by the
+    // parent's own code, not a second listing query.
+    const parentRegion =
+      canReadRegions && regionParentCode
+        ? await getRegionByCode(tx, regionParentCode, {
+            datasetCode: regionDatasetParam
+          })
+        : null;
+
+    const selectedRegion =
+      canReadRegions && regionSelectedCode
+        ? await getRegionByCode(tx, regionSelectedCode, {
+            datasetCode: regionDatasetParam
+          })
+        : null;
+
+    return {
+      canReadDatasets,
+      canReadRegions,
+      datasets,
+      regionPage,
+      parentRegion,
+      selectedRegion,
+      canActivate: await can({
+        moduleKey: "idn_admin_regions",
+        activityCode: "dataset",
+        action: "configure"
+      }),
+      canRollback: await can({
+        moduleKey: "idn_admin_regions",
+        activityCode: "dataset",
+        action: "restore"
+      })
+    };
   },
-  load: async ({ tx, can }) => ({
-    // One transaction, one awaited query at a time. Concurrent queries on a
-    // single transaction connection leak it, so nothing here runs in parallel.
-    datasets: await listDatasets(tx),
-    canActivate: await can({
-      moduleKey: "idn_admin_regions",
-      activityCode: "dataset",
-      action: "configure"
-    }),
-    canRollback: await can({
-      moduleKey: "idn_admin_regions",
-      activityCode: "dataset",
-      action: "restore"
-    })
-  }),
   onError: (error) => {
     logAdminPageError(
       "admin/idn-regions.astro: failed to load dataset console",
@@ -127,12 +259,35 @@ const screen = await loadAdminScreen({
   }
 });
 
-const canReadDatasets = screen.state !== "denied";
+/** At least one of the two entry permissions passed — SOME panel will render. */
+const canEnterPage = screen.state !== "denied";
 const loadError = screen.state === "error" || platformResolutionFailed;
+const canReadDatasets =
+  screen.state === "allowed" && screen.data.canReadDatasets;
+const canReadRegions = screen.state === "allowed" && screen.data.canReadRegions;
 const datasets: DatasetSummary[] =
   screen.state === "allowed" ? screen.data.datasets : [];
 const canActivate = screen.state === "allowed" && screen.data.canActivate;
 const canRollback = screen.state === "allowed" && screen.data.canRollback;
+
+const regionPage: RegionQueryResult =
+  screen.state === "allowed"
+    ? screen.data.regionPage
+    : { datasetCode: null, items: [], nextCursor: null };
+const regionItems: RegionRecord[] = regionPage.items;
+const regionReason = regionPage.reason ?? null;
+const parentRegion =
+  screen.state === "allowed" ? screen.data.parentRegion : null;
+const selectedRegion =
+  screen.state === "allowed" ? screen.data.selectedRegion : null;
+
+/** Tier label shared by the filter form, the results table, and the details panel. */
+function regionTierLabel(level: number): string {
+  if (level === 1) return t("Province");
+  if (level === 2) return t("Regency/City");
+  if (level === 3) return t("District");
+  return t("Village");
+}
 
 /**
  * Held the permission but is not the platform tenant — worth explaining, not
@@ -172,9 +327,11 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   )}
 >
   {
-    !canReadDatasets && (
+    !canEnterPage && (
       <p class="state-notice fade-in-up" id="idn-regions-denied">
-        {t("You do not have permission to view region datasets.")}
+        {t(
+          "You do not have permission to view region datasets or look up Indonesia administrative regions."
+        )}
       </p>
     )
   }
@@ -455,6 +612,288 @@ const numberFormatter = new Intl.NumberFormat("en-US");
           {t("and is served only when someone chooses it here.")}
         </p>
       </section>
+    )
+  }
+
+  {
+    canReadRegions && (
+      <>
+        <section
+          class="admin-section fade-in-up"
+          id="idn-regions-browser-filter"
+        >
+          <h2 class="admin-section-title">{t("Browse regions")}</h2>
+          <p class="page-description">
+            {t(
+              "Drill down by tier — province, regency/city, district, village — or search by name. Pages are 50 rows at a time."
+            )}
+          </p>
+          {/* A GET form: it navigates with query params, so filtering works
+              with JavaScript disabled and ships no bundle — the same
+              pattern as the audit trail and media library filters. */}
+          <form class="admin-create-form fade-in-up" method="get" role="search">
+            <p class="form-legend">{t("Filter")}</p>
+
+            <label for="region-filter-level">
+              {t("Tier")}
+              <select id="region-filter-level" name="level">
+                <option value="" selected={regionLevel === null}>
+                  {t("Any tier")}
+                </option>
+                {[1, 2, 3, 4].map((levelOption) => (
+                  <option
+                    value={String(levelOption)}
+                    selected={regionLevel === levelOption}
+                  >
+                    {regionTierLabel(levelOption)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label for="region-filter-parent">
+              {t("Parent code")}
+              <input
+                type="text"
+                id="region-filter-parent"
+                name="parentCode"
+                value={regionParentCode ?? ""}
+                placeholder="11.01"
+              />
+            </label>
+
+            <label for="region-filter-search">
+              {t("Name")}
+              <input
+                type="text"
+                id="region-filter-search"
+                name="search"
+                value={regionSearchParam ?? ""}
+                placeholder={t("Search by name…")}
+              />
+            </label>
+
+            <label for="region-filter-dataset">
+              {t("Dataset code (optional)")}
+              <input
+                type="text"
+                id="region-filter-dataset"
+                name="dataset"
+                value={regionDatasetParam ?? ""}
+                placeholder={t("Leave blank for the active dataset")}
+              />
+            </label>
+
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            {(regionSearchParam ||
+              regionParentCode ||
+              regionDatasetParam ||
+              regionLevel !== 1) && (
+              <a class="btn-inline" href="/admin/idn-regions">
+                {t("Reset to provinces")}
+              </a>
+            )}
+          </form>
+
+          {parentRegion?.region && (
+            <p class="page-description" id="idn-regions-browser-breadcrumb">
+              {t("Browsing children of: {path}", {
+                path:
+                  parentRegion.region.fullPathName ?? parentRegion.region.name
+              })}{" "}
+              <a
+                class="btn-inline"
+                href={regionQueryLink({
+                  level: String(parentRegion.region.level),
+                  parentCode: parentRegion.region.parentCode,
+                  code: null,
+                  after: null
+                })}
+              >
+                {t("Up one level")}
+              </a>
+            </p>
+          )}
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          id="idn-regions-browser-results"
+        >
+          <h2 class="admin-section-title">
+            {t("Regions")}
+            <span class="count-pill">{regionItems.length}</span>
+          </h2>
+
+          {regionReason === "no_active_dataset" && (
+            <div class="empty-state" id="idn-regions-browser-no-active-dataset">
+              <span class="empty-state-icon" aria-hidden="true">
+                🗺
+              </span>
+              <span class="empty-state-title">{t("No active dataset")}</span>
+              <span class="empty-state-text">
+                {t(
+                  "No region dataset has been activated yet, so there is nothing to browse. Ask a platform operator to activate an imported version."
+                )}
+              </span>
+            </div>
+          )}
+
+          {regionReason === "dataset_not_found" && (
+            <div class="empty-state" id="idn-regions-browser-dataset-not-found">
+              <span class="empty-state-icon" aria-hidden="true">
+                🗺
+              </span>
+              <span class="empty-state-title">{t("Dataset not found")}</span>
+              <span class="empty-state-text">
+                {t("No dataset with the code {code} exists.", {
+                  code: regionDatasetParam ?? ""
+                })}
+              </span>
+            </div>
+          )}
+
+          {regionReason === null && (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <caption class="sr-only">
+                  {t(
+                    "Indonesia administrative regions matching the current filter"
+                  )}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Code")}</th>
+                    <th scope="col">{t("Name")}</th>
+                    <th scope="col">{t("Tier")}</th>
+                    <th scope="col">{t("Action")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {regionItems.length === 0 && (
+                    <tr>
+                      <td class="data-table-empty" colspan={4}>
+                        <div class="empty-state">
+                          <span class="empty-state-icon" aria-hidden="true">
+                            🔍
+                          </span>
+                          <span class="empty-state-title">
+                            {t("No regions match this filter")}
+                          </span>
+                          <span class="empty-state-text">
+                            {t(
+                              "Try a different tier, parent, or name, or clear the filter."
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {regionItems.map((region) => (
+                    <tr>
+                      <td data-label="Code">
+                        <span class="cell-code">{region.code}</span>
+                      </td>
+                      <td data-label="Name">
+                        {region.name}
+                        {region.localTerm && (
+                          <span class="cell-muted"> ({region.localTerm})</span>
+                        )}
+                      </td>
+                      <td data-label="Tier">{regionTierLabel(region.level)}</td>
+                      <td data-label="Action">
+                        {region.level < 4 && (
+                          <a
+                            class="btn-inline"
+                            href={regionQueryLink({
+                              level: String(region.level + 1),
+                              parentCode: region.code,
+                              search: null,
+                              after: null,
+                              code: null
+                            })}
+                          >
+                            {t("Browse children")}
+                          </a>
+                        )}{" "}
+                        <a
+                          class="btn-inline"
+                          href={regionQueryLink({ code: region.code })}
+                        >
+                          {t("View path")}
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {regionReason === null && regionPage.nextCursor && (
+            <p class="page-description" id="idn-regions-browser-next">
+              <a
+                class="quick-link"
+                href={regionQueryLink({ after: regionPage.nextCursor })}
+              >
+                {t("Next page")}
+              </a>
+            </p>
+          )}
+        </section>
+
+        {regionSelectedCode && (
+          <section
+            class="admin-section fade-in-up"
+            id="idn-regions-browser-selected"
+          >
+            <h2 class="admin-section-title">{t("Selected region")}</h2>
+            {selectedRegion?.region ? (
+              <>
+                <p>
+                  <strong>{t("Code:")}</strong>{" "}
+                  <span class="cell-code">{selectedRegion.region.code}</span>
+                </p>
+                <p>
+                  <strong>{t("Name:")}</strong> {selectedRegion.region.name}
+                </p>
+                <p>
+                  <strong>{t("Tier:")}</strong>{" "}
+                  {regionTierLabel(selectedRegion.region.level)}
+                </p>
+                {selectedRegion.region.localTerm && (
+                  <p>
+                    <strong>{t("Local term:")}</strong>{" "}
+                    {selectedRegion.region.localTerm}
+                  </p>
+                )}
+                <p>
+                  <strong>{t("Resolved path:")}</strong>{" "}
+                  {selectedRegion.region.fullPathName ??
+                    selectedRegion.region.name}
+                </p>
+                <p>
+                  <strong>{t("Dataset:")}</strong>{" "}
+                  <span class="cell-code">{selectedRegion.dataset}</span>
+                </p>
+                <a class="btn-inline" href={regionQueryLink({ code: null })}>
+                  {t("Close")}
+                </a>
+              </>
+            ) : (
+              <p class="page-description">
+                {selectedRegion?.reason === "no_active_dataset"
+                  ? t("No region dataset has been activated yet.")
+                  : t("Region {code} was not found in this dataset.", {
+                      code: regionSelectedCode
+                    })}
+              </p>
+            )}
+          </section>
+        )}
+      </>
     )
   }
 </AdminLayout>

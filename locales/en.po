@@ -4521,3 +4521,107 @@ msgstr ""
 
 msgid "No screen matches that."
 msgstr ""
+
+# --- /admin/idn-regions region browser (Issue #767) ---
+
+msgid "Province"
+msgstr ""
+
+msgid "Regency/City"
+msgstr ""
+
+msgid "District"
+msgstr ""
+
+msgid "Village"
+msgstr ""
+
+msgid "You do not have permission to view region datasets or look up Indonesia administrative regions."
+msgstr ""
+
+msgid "Browse regions"
+msgstr ""
+
+msgid "Drill down by tier — province, regency/city, district, village — or search by name. Pages are 50 rows at a time."
+msgstr ""
+
+msgid "Tier"
+msgstr ""
+
+msgid "Any tier"
+msgstr ""
+
+msgid "Parent code"
+msgstr ""
+
+msgid "Search by name…"
+msgstr ""
+
+msgid "Dataset code (optional)"
+msgstr ""
+
+msgid "Leave blank for the active dataset"
+msgstr ""
+
+msgid "Reset to provinces"
+msgstr ""
+
+msgid "Browsing children of: {path}"
+msgstr ""
+
+msgid "Up one level"
+msgstr ""
+
+msgid "No active dataset"
+msgstr ""
+
+msgid "No region dataset has been activated yet, so there is nothing to browse. Ask a platform operator to activate an imported version."
+msgstr ""
+
+msgid "Dataset not found"
+msgstr ""
+
+msgid "No dataset with the code {code} exists."
+msgstr ""
+
+msgid "Indonesia administrative regions matching the current filter"
+msgstr ""
+
+msgid "No regions match this filter"
+msgstr ""
+
+msgid "Try a different tier, parent, or name, or clear the filter."
+msgstr ""
+
+msgid "Browse children"
+msgstr ""
+
+msgid "View path"
+msgstr ""
+
+msgid "Selected region"
+msgstr ""
+
+msgid "Code:"
+msgstr ""
+
+msgid "Name:"
+msgstr ""
+
+msgid "Tier:"
+msgstr ""
+
+msgid "Local term:"
+msgstr ""
+
+msgid "Resolved path:"
+msgstr ""
+
+msgid "Dataset:"
+msgstr ""
+
+msgid "No region dataset has been activated yet."
+msgstr ""
+
+msgid "Region {code} was not found in this dataset."
+msgstr ""
