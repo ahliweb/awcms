@@ -71,7 +71,7 @@ awcms/
 
 ```json
 {
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "bun --bun astro dev",
     "build": "bun --bun astro build",

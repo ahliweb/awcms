@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](11_implementation_blueprint.md)
 
-<!-- i18n-source-hash: sha256:d6e12f64875a4c6b9e055d3a1ddd1b3b643773d9f656758c9d82a1e5ad928265 -->
+<!-- i18n-source-hash: sha256:2096bb91d25d203146c85a94b0d9b80bf5d33d69f7ddba9471c2e180933f382f -->
 
 # Bagian 11 — Implementation Blueprint per Sprint
 
@@ -73,7 +73,7 @@ awcms/
 
 ```json
 {
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "bun --bun astro dev",
     "build": "bun --bun astro build",

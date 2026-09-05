@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:930964e6e510c7f31d86632b1479517bf2d8737caffe5ada1b1e429c9e03c9c5 -->
+<!-- i18n-source-hash: sha256:f27d75e4a799d734c9e7044b8319ac03838eba77dda99d50613d0afc8b5ad83f -->
 
 # AWCMS — Project State & Continuation
 
@@ -470,7 +470,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   **Gerbang yang sensitif terhadap toolchain-nya sendiri memblokir semua yang di
   belakangnya.** `build:preview-overlay:check` membandingkan bundle ter-commit
   bita-per-bita dengan bundle segar, jadi ia gagal pada Bun apa pun yang bukan
-  `1.3.14` yang dipatok (lokal `1.4.0`). Dua akibat di luar merah palsunya: satu
+  versi yang dipatok di `packageManager` (lokal berada di versi lain). Dua
+  akibat di luar merah palsunya: satu
   kegagalan dari 6.869 tes adalah `tests/blog-preview-overlay.test.ts`, yang
   memanggil gerbang yang sama lalu meng-assert `toContain("OK")`; dan di rantai
   `check` gerbang itu duduk persis sebelum `typecheck && … && test && build`,

@@ -92,7 +92,7 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 CRON_TZ=UTC
 
-AWCMS_RUN=docker run --rm --network container:eel59mczdlkidkm5a6fhbdeh -v /opt/awcms:/app -w /app --env-file /etc/awcms/worker.env oven/bun:1.3.14-alpine bun run
+AWCMS_RUN=docker run --rm --network container:eel59mczdlkidkm5a6fhbdeh -v /opt/awcms:/app -w /app --env-file /etc/awcms/worker.env oven/bun:1.4.2-alpine bun run
 AWCMS_PGRUN=docker run --rm --network container:eel59mczdlkidkm5a6fhbdeh -v /var/backups/awcms:/backup -v /opt/awcms/deploy/backup:/scripts:ro --env-file /etc/awcms/backup.env postgres:18.4 bash
 AWCMS_LOG=/var/log/awcms
 
