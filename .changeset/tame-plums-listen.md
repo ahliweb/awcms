@@ -1,5 +1,0 @@
----
-"awcms": patch
----
-
-fix(ui,idn-regions,push): three operator-facing admin instructions named a `bun run` job command without naming where it can run. `Dockerfile.production`'s `runtime` stage (what actually serves `/admin/idn-regions` and `/admin/push-notifications`) carries only `dist/`, not `scripts/` — an operator who reads either screen and runs the printed command in that container gets `Script not found`. Only the separately published `jobs` image (`ghcr.io/ahliweb/awcms-jobs`, built by `release.yml`) carries `scripts/` and can run it. `/admin/idn-regions`'s empty state and its "What this data is, and is not" caveat, and `/admin/push-notifications`'s VAPID-unconfigured notice, now name the `awcms-jobs` image explicitly, sharing one translated sentence across all three instead of inventing the wording three times. `idn-admin-regions/module.ts`'s `jobs[]` `environmentNotes` for `idn-regions:activate`/`:rollback` gained the same fact. Copy and metadata only — no behavior, schema, or API change.
