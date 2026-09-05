@@ -461,8 +461,9 @@ pioneered directly here after the ADR-0047 freeze.)
 
   **A gate that is sensitive to its own toolchain blocked everything behind it.**
   `build:preview-overlay:check` compares a committed bundle byte-for-byte
-  against a fresh one, so it fails on any Bun that is not the pinned `1.3.14`
-  (local was `1.4.0`). Two consequences beyond the false red: the single failure
+  against a fresh one, so it fails on any Bun that is not the version pinned
+  in `packageManager` (local was on a different version). Two consequences
+  beyond the false red: the single failure
   in 6,869 tests is `tests/blog-preview-overlay.test.ts`, which shells out to
   the same gate and asserts `toContain("OK")`; and in the `check` chain the gate
   sits immediately before `typecheck && … && test && build`, so on any

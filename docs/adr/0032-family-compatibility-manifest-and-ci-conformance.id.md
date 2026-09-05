@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0032-family-compatibility-manifest-and-ci-conformance.md)
 
-<!-- i18n-source-hash: sha256:5f763f742961b59d01e04add0a59a5bd3d8b97bc9a67fa4de2de0906926c4737 -->
+<!-- i18n-source-hash: sha256:c3ecb9e8f52ffd9c8a67745440b6b2f0dc85fc8b11bdeedee54a2696e8318bbc -->
 
 # ADR-0032 — Compatibility manifest keluarga AWCMS dan CI conformance terhadap standar AWCMS-Mini
 
@@ -51,7 +51,7 @@ Kontrak **Astro SSR build/start on Bun** TIDAK punya test standalone di suite co
 
 ### 5. Compatibility matrix: current DAN minimum-supported dijalankan nyata
 
-Job `quality` mem-pin Bun current (1.3.14); job terpisah `minimum-supported` men-setup dan MENJALANKAN floor `engines.bun >=1.3.0` (Bun 1.3.0) untuk subset bermakna: `bun install --frozen-lockfile`, `typecheck`, `build` (Astro SSR), `family:conformance:check`. Diverifikasi nyata: Bun 1.3.0 menjalankan subset itu bersih. Gate sendiri meng-assert himpunan versi Bun di CI = TEPAT {current, minimum} (`stack.bun.ci` + `stack.bun.ciMinimum`, dan `ciMinimum` == floor `engines`), sehingga menghapus job minimum-supported memerahkan gate. Astro/@astrojs/node/TypeScript "minimum" == range caret current-nya (`^7.0.7`/`^11.0.2`/`^7.0.2`), jadi tak butuh cell terpisah; PostgreSQL hanya mendeklarasikan 18.4 (tanpa floor terpisah), jadi tak ada gap PG minimum.
+Job `quality` mem-pin Bun current (1.4.2); job terpisah `minimum-supported` men-setup dan MENJALANKAN floor `engines.bun >=1.3.0` (Bun 1.3.0) untuk subset bermakna: `bun install --frozen-lockfile`, `typecheck`, `build` (Astro SSR), `family:conformance:check`. Diverifikasi nyata: Bun 1.3.0 menjalankan subset itu bersih. Gate sendiri meng-assert himpunan versi Bun di CI = TEPAT {current, minimum} (`stack.bun.ci` + `stack.bun.ciMinimum`, dan `ciMinimum` == floor `engines`), sehingga menghapus job minimum-supported memerahkan gate. Astro/@astrojs/node/TypeScript "minimum" == range caret current-nya (`^7.0.7`/`^11.0.2`/`^7.0.2`), jadi tak butuh cell terpisah; PostgreSQL hanya mendeklarasikan 18.4 (tanpa floor terpisah), jadi tak ada gap PG minimum.
 
 ### 6. Intentional divergence butuh alasan + owner + review date + ADR
 
