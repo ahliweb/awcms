@@ -77,7 +77,8 @@ export const READ_WAVE: readonly string[] = [
   // Anonymous GETs against the public blog. Read-wave in the strictest sense:
   // it never logs in and never touches tenant state, and it needs no content
   // fixture because an empty blog index is itself a `200`.
-  "public-blog-locale-prefix.e2e.ts"
+  "public-blog-locale-prefix.e2e.ts",
+  "responsive-360.e2e.ts"
 ];
 
 /**

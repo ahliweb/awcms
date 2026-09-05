@@ -92,30 +92,14 @@
  * third one appearing is a decision rather than a surprise.
  */
 import { test, expect, type Page } from "./support/e2e-read-wave";
-import { readdirSync } from "node:fs";
-import path from "node:path";
 
-import { requiresPlatformScope } from "./support/admin-screen-authorize";
+import { discoverAdminRoutes, ADMIN_PAGES_ROOT } from "./support/admin-routes";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
 const password = process.env.E2E_PASSWORD;
 
 const seeded = Boolean(tenantId && loginIdentifier && password);
-
-const HERE = path.dirname(new URL(import.meta.url).pathname);
-const ADMIN_PAGES_ROOT = path.resolve(HERE, "../../src/pages/admin");
-
-/**
- * A route the filesystem yielded: its URL, the source file it came from, and
- * whether entering it needs a permission no tenant owner can hold.
- */
-type AdminRoute = {
-  url: string;
-  source: string;
-  dynamic: boolean;
-  platformScoped: boolean;
-};
 
 /**
  * What the seeded owner is owed by a screen.
@@ -125,42 +109,6 @@ type AdminRoute = {
  * status and shell checks; only the contents-vs-refusal question is left open.
  */
 type Expectation = "contents" | "either";
-
-/**
- * Every `/admin` route, derived from the pages directory.
- *
- * `index.astro` is the section root (`/admin`); a `[param]` segment is reported
- * as dynamic so the caller must supply a real value rather than requesting a
- * URL with a literal bracket in it.
- */
-export function discoverAdminRoutes(
-  root: string,
-  prefix = "/admin"
-): AdminRoute[] {
-  const routes: AdminRoute[] = [];
-
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const full = path.join(root, entry.name);
-
-    if (entry.isDirectory()) {
-      routes.push(...discoverAdminRoutes(full, `${prefix}/${entry.name}`));
-      continue;
-    }
-
-    if (!entry.name.endsWith(".astro")) continue;
-
-    const base = entry.name.slice(0, -".astro".length);
-    const url = base === "index" ? prefix : `${prefix}/${base}`;
-    routes.push({
-      url,
-      source: path.relative(process.cwd(), full),
-      dynamic: url.includes("["),
-      platformScoped: requiresPlatformScope(full)
-    });
-  }
-
-  return routes.sort((a, b) => a.url.localeCompare(b.url));
-}
 
 const routes = discoverAdminRoutes(ADMIN_PAGES_ROOT);
 const staticRoutes = routes.filter((route) => !route.dynamic);
