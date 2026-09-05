@@ -1328,6 +1328,23 @@
   resize: vertical;
 }
 
+/*
+ * `/admin/seo`'s noindex `<select>` pushed the whole page 36px past 360:
+ * unlike `input`/`textarea` above, a `<select>` has no CSS-declared width, so
+ * as a flex item of `.admin-create-form` its automatic `min-width` computes to
+ * its CONTENT's intrinsic width — here, the un-truncated text of its longest
+ * `<option>` — and a flex item never shrinks below that on its own. `input`
+ * and `textarea` never hit this because they size from `size`/rows or `width`,
+ * not from the text inside them. `min-width: 0` removes that floor so the
+ * control can shrink like its siblings; `max-width: 100%` then caps it at
+ * whatever width the flex layout actually gives it, matching the `textarea`
+ * rule above.
+ */
+.admin-create-form select {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (min-width: 640px) {
   .admin-create-form textarea {
     min-width: 260px;
@@ -1940,8 +1957,27 @@
 /* ADR-0120 — the wrapper is a card now, matching `.data-table-scroll`, so the
    two names produce the same object rather than a bordered table and a bare
    one. */
+/*
+ * `position: relative` — the missing half of the scroll clip.
+ *
+ * `/admin/account`'s sessions table sat inside this wrapper already and still
+ * scrolled the whole PAGE sideways at 360px: its "Actions" header cell holds a
+ * bare `<span class="sr-only">`, which is `position: absolute` with no
+ * top/left of its own (`tokens.css`). An absolutely-positioned box with no
+ * offsets keeps its normal-flow ("static") position, but the position is
+ * resolved against its CONTAINING BLOCK — the nearest positioned ancestor —
+ * not against whichever element visually clips it. Without a `position` here,
+ * that ancestor was `.admin-layout` (`position: relative`, several levels up
+ * and outside this wrapper's `overflow-x: auto`), so the span rendered at the
+ * table's full unclipped width and dragged `document.documentElement`'s
+ * scrollWidth out past the viewport with it — the table itself was already
+ * correctly contained and scrollable, only this one escaping child was not.
+ * Making the wrapper itself the containing block puts the span back inside
+ * the box that actually clips it.
+ */
 .admin-table-wrap,
 .table-scroll {
+  position: relative;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border: 1px solid var(--color-border);
