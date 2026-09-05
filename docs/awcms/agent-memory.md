@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 126.**
+**Jumlah memory saat snapshot terakhir: 127.**
 
 ## Sengaja TIDAK disertakan
 
@@ -50,7 +50,8 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Sapuan N+1 berbasis SINTAKS itu buta](awcms-n1-scanner-syntax-blind-spot.md) — pindai fungsi penerbit SQL transitif (34→45); `LIMIT` telanjang pada baca ganti-seluruhnya = DATA HILANG; gerbang kontrak konsumen membekukan PROSA
 - [`bun run check` berhenti di gerbang KE-4](awcms-memory-docs-check-blocks-gate-chain.md) — `memory:docs:check` melenceng = typecheck/test/build LOKAL tak pernah jalan; CI buta soal ini
 - [`sql/NNN` baru membasikan 4 KLAIM RENTANG](awcms-sql-nnn-range-cascade.md) — menggantung DUA subagent berturut-turut; historis ≠ rentang
-- [Asersi plan mengukur PLANNER, bukan indeks](awcms-query-plan-assertions-measure-the-planner.md) — "no Seq Scan" hampa saat `enable_seqscan=off`; `asTx` palsu bikin `SET LOCAL` no-op
+- [Asersi plan mengukur PLANNER, bukan indeks](awcms-query-plan-assertions-measure-the-planner.md) — "no Seq Scan" hampa saat `enable_seqscan=off`; KOREKSI #780: nama indeks pun FLAKY, asersikan NODE (`Bitmap Index Scan **on**`, bukan `using`)
+- [E2E dulu TANPA uji viewport sama sekali](awcms-e2e-had-no-viewport-testing.md) — gerbang 360px (#777) menemukan 2 layar; penyebabnya containing-block `sr-only` & `min-width:auto` flex, BUKAN wrapper hilang
 - [Standar keamanan/performa = dokumen HIDUP](awcms-standards-anchor-and-second-pass.md) — C19 ledger hanya-mengecil 121→11 (pindahkan JAWABANNYA bukan pekerjaannya); `sql/NNN` baru menyentuh 6 dokumen
 - [Skill DIGERBANGI CI](awcms-skills-now-gated.md) — ADR-0062 `skills:check`; path arsip WAJIB `awcms-mini:src/…`; ekstraktor hanya lihat backtick SATU BARIS
 - [Skill "FIKTIF" bisa salah ARAH](awcms-stale-skill-flips-direction.md) — banner "belum ada" menua sebalik arah dan agen MENGIKUTI skill; wajib §Peta ke artefak nyata
@@ -2527,6 +2528,52 @@ Keputusan terbuka saat eksekusi: resolusi `submit`, seed
 `awcms_workflow_definitions` (workflowKey PR + node approval), resolver
 business-scope nyata yang diinject di route approve. Increment-2 (ditunda): SSR
 UI, reporting projector cursor_table, docker/backup, upgrade-path.
+`````
+
+<!-- memory-file: awcms-e2e-had-no-viewport-testing.md -->
+
+`````markdown
+---
+name: awcms-e2e-had-no-viewport-testing
+description: "Suite E2E dulu HANYA jalan di Desktop Chrome 1280x720 — gerbang 360px (PR #777) menemukan 2 layar admin yang menyeret halaman ke samping"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-09-05T13:47:21.750Z
+---
+
+Sampai PR #777 (5 Sep 2026) `grep -rn "viewport" tests/e2e/` mengembalikan **NOL**.
+Seluruh suite jalan di `devices["Desktop Chrome"]` (1280x720), jadi tidak ada satu pun
+layar admin yang pernah dimuat pada lebar ponsel — "admin jalan di mobile" adalah klaim
+TANPA tes.
+
+`tests/e2e/responsive-360.e2e.ts` sekarang menyapu setiap rute `/admin` statis yang
+DITEMUKAN dari filesystem pada 360x640 dan mengasersikan
+`document.documentElement.scrollWidth <= 360`. Ia ikut jalan di CI otomatis karena job
+`E2E smoke` menjalankan `bun run test:e2e` (seluruh suite) — bukti ia benar-benar jalan:
+jumlah tes CI naik 35 → 37.
+
+Temuan nyata pada run pertama, dan **dua-duanya bukan "tabel lupa dibungkus"** — tabelnya
+SUDAH di dalam `.table-scroll`:
+
+1. `/admin/account` **613px**. `<span class="sr-only">` (`position: absolute`, tanpa
+   offset) di sel header tidak punya leluhur ber-`position`, jadi containing block-nya
+   lari ke `.admin-layout` DI LUAR wrapper — ia dirender pada lebar tabel penuh yang tak
+   terpotong. Obat: `position: relative` pada `.admin-table-wrap, .table-scroll`.
+2. `/admin/seo` **396px**. `<select>` sebagai flex item: `min-width: auto` otomatis
+   mengunci ke lebar intrinsik teks `<option>` TERPANJANG dan flex item tak pernah
+   menyusut di bawah itu. Obat: `min-width: 0; max-width: 100%`.
+
+**Why:** dua cacat ini lolos 58 gerbang + CodeQL + review bertahun-tahun karena tidak ada
+yang PERNAH meminta halamannya pada lebar ponsel. Gerbang yang tidak ada tidak menemukan
+apa pun.
+
+**How to apply:** spec baru WAJIB terdaftar di `READ_WAVE`/`WRITE_WAVE`
+(`tests/e2e/support/e2e-waves.ts`) atau `tests/e2e-wave-classification.test.ts`
+memerahkan CI. Read-wave WAJIB impor `test` dari `./support/e2e-read-wave` (penegakan
+read-only saat RUNTIME). JANGAN impor satu `.e2e.ts` dari `.e2e.ts` lain — Playwright
+akan mendaftarkan `test()` file yang diimpor ke suite file pengimpor; ekstrak helper ke
+`tests/e2e/support/`. Lihat [[awcms-e2e-shared-tenant-state]].
 `````
 
 <!-- memory-file: awcms-e2e-shared-tenant-state.md -->
@@ -5358,7 +5405,7 @@ description: "Asersi \"plan tidak boleh Seq Scan\" mengukur AMBANG PLANNER, buka
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-09-03T22:13:53.169Z
+  modified: 2026-09-05T13:47:03.391Z
 ---
 
 Asersi `expect(plan).not.toContain("Seq Scan")` terasa seperti membuktikan sebuah
@@ -5384,11 +5431,31 @@ Dan jebakan penutupnya: begitu `enable_seqscan = off` dipasang, `not.toContain("
 **Why:** yang secara permanen terutang oleh sebuah migration indeks bukanlah
 pilihan planner, melainkan **adanya JALUR indeks** untuk bentuk query itu.
 
-**How to apply:** paksa tangan planner (`SET LOCAL enable_seqscan = off` di dalam
-transaksi SUNGGUHAN) lalu asersikan plan **menyebut nama indeks** yang dibuat
-migration itu — terima beberapa nama bila lebih dari satu indeks sah. JANGAN
-asersikan operator plan-nya. Catat di komentar indeks mana yang sebenarnya dipilih
-dan mengapa. Awas: helper `asTx` di beberapa suite integrasi hanya meng-CAST koneksi
+**KOREKSI 5 Sep 2026 (PR #780) — "asersikan NAMA indeks" ternyata SALAH juga.**
+Nasihat itu memerahkan `main` pada commit yang HANYA mengubah 130 baris dokumentasi.
+Sebabnya bukan ANALYZE (sudah ada): `awcms_idn_admin_regions` punya **lima** indeks
+yang semuanya berawalan `dataset_id`, jadi untuk filter `dataset_id` saja ada
+beberapa jalur yang biayanya benar-benar bersaing dan tie-break-nya bisa berayun
+pada sampling ANALYZE sendiri. 15 kali jalan → 1 gagal, planner memilih indeks
+KETIGA yang tak disebut asersi mana pun. ANALYZE menstabilkan **input** planner,
+bukan **output**-nya. Melebarkan ke pola nama (`_dataset_\w+_idx`) juga masih salah:
+`..._dataset_code_key` dan `..._pkey` tidak berakhiran `_idx`, padahal `code_key`
+(UNIQUE `(dataset_id, code)`) justru jalur kuat untuk query itu.
+
+**How to apply:** asersikan **NODE akses indeks**-nya, bukan nama indeksnya:
+
+    /(?:Index Only Scan|Index Scan) using <tabel>_\w+|Bitmap Index Scan on <tabel>_\w+/
+
+Benar untuk SEMUA indeks tabel itu, salah untuk `Seq Scan on <tabel>` (tak ada nama
+indeks sesudahnya). **BACA label node dari EXPLAIN SUNGGUHAN, jangan ditebak** —
+query ini merender `Bitmap Index Scan **on** <indeks>`, BUKAN `using`, jadi matcher
+yang cuma memakai `using` diam-diam tidak cocok dengan bentuk yang sebenarnya
+diproduksi. Pakai SATU konstanta bersama untuk `toMatch` DAN `not.toMatch` supaya
+sisi negatif sama ketatnya. Buktikan masih bisa gagal: drop semua indeksnya di
+transaksi yang di-rollback dan pastikan tes MERAH.
+
+Tetap: paksa tangan planner dengan `SET LOCAL enable_seqscan = off` di transaksi
+SUNGGUHAN. Awas: helper `asTx` di beberapa suite integrasi hanya meng-CAST koneksi
 pool, bukan membuka transaksi — `SET LOCAL` di luar transaksi adalah no-op yang cuma
 memberi warning; pakai `sql.begin(...)`. Lihat [[awcms-benchmark-must-bind-like-caller]].
 `````
