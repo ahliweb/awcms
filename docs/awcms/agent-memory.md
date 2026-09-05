@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 123.**
+**Jumlah memory saat snapshot terakhir: 126.**
 
 ## Sengaja TIDAK disertakan
 
@@ -48,6 +48,9 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Grep CALL-nya, bukan DEFINISInya](awcms-grep-the-call-not-the-definition.md) — 3× berulang: `seo_title()` 9 definisi/0 panggilan masuk ADR ter-merge; kolasi ci MySQL vs kesamaan Postgres
 - [Cari SAUDARA endpoint-nya dulu](awcms-check-the-sibling-endpoint.md) — 2× berulang (#716 sync, #722 analytics): satu kembar diperkeras, satunya tidak; rasional registry MEMBENARKAN keputusan
 - [Sapuan N+1 berbasis SINTAKS itu buta](awcms-n1-scanner-syntax-blind-spot.md) — pindai fungsi penerbit SQL transitif (34→45); `LIMIT` telanjang pada baca ganti-seluruhnya = DATA HILANG; gerbang kontrak konsumen membekukan PROSA
+- [`bun run check` berhenti di gerbang KE-4](awcms-memory-docs-check-blocks-gate-chain.md) — `memory:docs:check` melenceng = typecheck/test/build LOKAL tak pernah jalan; CI buta soal ini
+- [`sql/NNN` baru membasikan 4 KLAIM RENTANG](awcms-sql-nnn-range-cascade.md) — menggantung DUA subagent berturut-turut; historis ≠ rentang
+- [Asersi plan mengukur PLANNER, bukan indeks](awcms-query-plan-assertions-measure-the-planner.md) — "no Seq Scan" hampa saat `enable_seqscan=off`; `asTx` palsu bikin `SET LOCAL` no-op
 - [Standar keamanan/performa = dokumen HIDUP](awcms-standards-anchor-and-second-pass.md) — C19 ledger hanya-mengecil 121→11 (pindahkan JAWABANNYA bukan pekerjaannya); `sql/NNN` baru menyentuh 6 dokumen
 - [Skill DIGERBANGI CI](awcms-skills-now-gated.md) — ADR-0062 `skills:check`; path arsip WAJIB `awcms-mini:src/…`; ekstraktor hanya lihat backtick SATU BARIS
 - [Skill "FIKTIF" bisa salah ARAH](awcms-stale-skill-flips-direction.md) — banner "belum ada" menua sebalik arah dan agen MENGIKUTI skill; wajib §Peta ke artefak nyata
@@ -4412,6 +4415,45 @@ vs net-baru. Modul net-baru (tenant-domain, visitor-analytics, data-lifecycle) =
 aditif aman; modul yg micro pakai untuk MENGGANTI infra lama = wave khusus.
 `````
 
+<!-- memory-file: awcms-memory-docs-check-blocks-gate-chain.md -->
+
+`````markdown
+---
+name: awcms-memory-docs-check-blocks-gate-chain
+description: "memory:docs:check adalah gerbang KE-4 dari 58 dalam rantai && — begitu ia melenceng, typecheck/test/build LOKAL tidak pernah jalan sama sekali"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-09-03T22:13:30.375Z
+---
+
+`bun run check` adalah rantai `&&` berisi 58 gerbang. `memory:docs:check` duduk di
+posisi **ke-4**. Begitu ia gagal, **semua yang sesudahnya tidak dieksekusi** —
+typecheck, 5.9k test, `build`, asset budget. Perintahnya keluar dengan pesan yang
+terlihat seperti masalah dokumen, sementara yang sebenarnya terjadi adalah
+verifikasi lokal berhenti total.
+
+Ia membandingkan `docs/awcms/agent-memory.md` dengan direktori memory agent
+**lokal per-device** (`~/.claude/projects/<slug>/memory/`). Jadi:
+
+- **CI selalu hijau** — skripnya `exit 0` bila direktori memory tidak ada, dan di
+  runner memang tidak ada. Ini kegagalan kapabilitas-verifikasi LOKAL, bukan cacat produksi.
+- Ia melenceng **setiap kali agen menulis memory baru**, termasuk memory ini sendiri.
+- Perbaikannya rutin dan sudah berpola di repo: `bun run memory:docs:sync` lalu
+  commit sebagai chore tersendiri (preseden #733, #735, #751, #770).
+
+**Why:** 3 Sep 2026 baseline di `main` merah karena ini (123 berkas memory vs
+snapshot #751). Lima subagent nyaris dikirim untuk memverifikasi kerjanya dengan
+perintah yang sebetulnya berhenti di gerbang 4 — sinyal hijau/merah dari gerbang
+5–58 tidak pernah ada.
+
+**How to apply:** **jalankan `bun run check` di `main` SEBELUM men-dispatch agent
+apa pun**, dan bila gagal di `memory:docs:check`, sync + land dulu sebagai PR
+chore. Jangan pernah menyuruh agent menjalankan `memory:docs:sync` atau
+meng-commit `docs/awcms/agent-memory.md` — itu menyapu catatan pribadi ke dalam
+PR yang tak berhubungan. Lihat [[awcms-full-check-before-pr]].
+`````
+
 <!-- memory-file: awcms-mfa-moved-to-principal.md -->
 
 `````markdown
@@ -5307,6 +5349,50 @@ tapi butuh `EXPLAIN` data nyata dulu.
 "tiga round trip per halaman, bukan lima puluh satu". Jangan cari N+1 di sana.
 `````
 
+<!-- memory-file: awcms-query-plan-assertions-measure-the-planner.md -->
+
+`````markdown
+---
+name: awcms-query-plan-assertions-measure-the-planner
+description: "Asersi \"plan tidak boleh Seq Scan\" mengukur AMBANG PLANNER, bukan indeks; dan dengan enable_seqscan=off asersi itu jadi HAMPA"
+metadata: 
+  node_type: memory
+  type: feedback
+  modified: 2026-09-03T22:13:53.169Z
+---
+
+Asersi `expect(plan).not.toContain("Seq Scan")` terasa seperti membuktikan sebuah
+indeks bekerja. Ia tidak. Ia mengukur **ambang crossover planner pada perangkat
+keras CI**, yang bergerak.
+
+Dua kali gagal di CI pada 3 Sep 2026 (Issue #766):
+
+1. **Fixture terlalu kecil.** Dua dataset × 3.000 baris = satu dataset adalah
+   SETENGAH tabel. Pada selektivitas 50% sequential scan memang plan yang lebih
+   murah — Postgres menolak indeks dengan BENAR, asersinya yang salah.
+2. **Menyebut indeks yang bukan pilihannya.** Dengan `enable_seqscan = off`,
+   join diff mengambil indeks yang lebih SEMPIT `(dataset_id, level)` via bitmap
+   lalu ke heap — bukan indeks covering `(dataset_id, code) INCLUDE (official_name)`.
+   Benar: halaman PERTAMA membaca seluruh dataset tanpa predikat pada `code`,
+   jadi indeks yang lebih lebar hanya berarti lebih banyak halaman indeks demi
+   menghindari kunjungan heap yang tak terhindarkan. Indeks covering baru berbayar
+   pada halaman SESUDAHNYA yang membawa `code > cursor` + `ORDER BY code`.
+
+Dan jebakan penutupnya: begitu `enable_seqscan = off` dipasang, `not.toContain("Seq Scan")`
+**tidak bisa gagal** — tes yang tak bisa gagal bukan tes.
+
+**Why:** yang secara permanen terutang oleh sebuah migration indeks bukanlah
+pilihan planner, melainkan **adanya JALUR indeks** untuk bentuk query itu.
+
+**How to apply:** paksa tangan planner (`SET LOCAL enable_seqscan = off` di dalam
+transaksi SUNGGUHAN) lalu asersikan plan **menyebut nama indeks** yang dibuat
+migration itu — terima beberapa nama bila lebih dari satu indeks sah. JANGAN
+asersikan operator plan-nya. Catat di komentar indeks mana yang sebenarnya dipilih
+dan mengapa. Awas: helper `asTx` di beberapa suite integrasi hanya meng-CAST koneksi
+pool, bukan membuka transaksi — `SET LOCAL` di luar transaksi adalah no-op yang cuma
+memberi warning; pakai `sql.begin(...)`. Lihat [[awcms-benchmark-must-bind-like-caller]].
+`````
+
 <!-- memory-file: awcms-recommendation-rounds-live-in-project-state.md -->
 
 `````markdown
@@ -5920,6 +6006,49 @@ tunggal), [[awcms-module-composition-port-notes]] (registry aggregator+gate),
 [[awcms-applied-migration-immutable]] (sql/029/030 baru, jangan edit terapan).
 
 **Review adversarial (workflow #181) — temuan MEDIUM/HIGH nyata:** self-approval exception butuh DUA sumbu independensi, bukan satu. `approveSoDConflictException` semula hanya menolak `requested_by == approver`; TAPI route create menerima `subjectTenantUserId` sembarang (requester boleh mengajukan atas nama subjek lain — pola sah untuk compliance officer). Tanpa cek `subject == approver`, beneficiary yang memegang `.approve` bisa menyetujui bypass-nya SENDIRI (mandiri/kolusi). Fix: tolak juga saat `existing.subject_tenant_user_id === actorTenantUserId` (baca dari baris DB, bukan body). Uji `subject`-as-approver ditolak + concurrency race PAKAI DUA approver valid (bukan approver-vs-subject, karena subject kini invalid → bukan lagi bukti CAS murni). Pelajaran umum: untuk approval-lifecycle apa pun, cek independensi approver terhadap SEMUA aktor yang diuntungkan (requester DAN subject/beneficiary), bukan cuma submitter.
+`````
+
+<!-- memory-file: awcms-sql-nnn-range-cascade.md -->
+
+`````markdown
+---
+name: awcms-sql-nnn-range-cascade
+description: "Menambah sql/NNN membuat KLAIM RENTANG di 4 dokumen basi, dan cascade artefak ter-generate; ini MENGGANTUNG dua subagent berturut-turut"
+metadata: 
+  node_type: memory
+  type: project
+  modified: 2026-09-03T22:13:18.347Z
+---
+
+Menambah satu `sql/NNN` di awcms bukan perubahan satu berkas. `check:docs` memvalidasi
+rujukan `sql/NNN`, dan **empat dokumen menyatakan RENTANG-nya**:
+
+- `docs/ARCHITECTURE.md` (~baris 22) — `` `sql/001`-`sql/NNN` `` (tanda hubung)
+- `docs/ARCHITECTURE.id.md` (~baris 24) — sama
+- `.claude/skills/README.md` (~baris 44) — `` `sql/001`–`sql/NNN` `` (EN DASH, ejaan berbeda)
+- `.claude/skills/README.id.md` (~baris 46) — sama
+
+**Bedakan dua hal:** klaim RENTANG (basi, wajib dinaikkan) vs rujukan HISTORIS ke
+`sql/NNN` tertentu di `CHANGELOG.md` / `docs/PROJECT_STATE.md` (masih benar,
+JANGAN disentuh). `sed` global merusak yang kedua.
+
+Cascade penuhnya, dalam urutan yang benar:
+`repo:inventory:generate` → `project-state:inventory:generate` → `bun run format`
+→ `docs:i18n:stamp` → `bun run check`. Skrip stamp memperingatkan sendiri:
+**FORMAT DULU, BARU STAMP** — memformat sumber Inggris sesudah stamp membuat
+hash mirror-nya basi lagi.
+
+**Why:** 3 Sep 2026, cascade ini menggantung DUA subagent Sonnet berturut-turut
+(#768 `sql/149`, #766 `sql/150`) — masing-masing ~30 menit tanpa satu pun tool
+call, keduanya mati saat sedang memburu rujukan rentang. Pikiran terakhir kedua
+agent itu persis kalimat "ada rujukan sql/NNN basi, mari perbaiki".
+
+**How to apply:** saat sebuah tugas menambah `sql/NNN`, **sebutkan keempat berkas
+rentang itu di brief agent sejak awal** beserta peringatan historis-vs-rentang.
+Bila agent menggantung >15 menit tanpa penulisan berkas dan tanpa proses `bun`,
+ia memang wedged: `TaskStop` lalu selesaikan sendiri — pekerjaannya biasanya
+sudah 95% ada di working tree. Lihat [[awcms-subagent-branch-hazard]] dan
+[[awcms-generated-artifact-merge-drift]].
 `````
 
 <!-- memory-file: awcms-stacked-pr-no-ci.md -->
