@@ -31,11 +31,27 @@
  *      `enable_seqscan = off` and the plan must name an index that migration
  *      created.
  *
- *      The tier aggregate names its index exactly. The diff join accepts
- *      either, because CI settled that the planner prefers the NARROWER
- *      `(dataset_id, level)` index for a first page that reads the whole
- *      dataset — see that test for why, and for where the covering index does
- *      pay off.
+ *      Both the tier aggregate and the diff join accept any index-scan access
+ *      NODE naming any index this table actually owns, not one or two
+ *      specific index names. This table carries five indexes that all lead
+ *      with `dataset_id` (`sql/080`'s `dataset_code_key`/`dataset_parent_idx`/
+ *      `dataset_name_idx`/`dataset_level_idx`, plus `sql/150`'s
+ *      `dataset_code_name_idx`), so a query that only filters on `dataset_id`
+ *      has several genuinely competitive access paths, and an ANALYZE right
+ *      before the EXPLAIN (added below) makes the planner's INPUTS
+ *      deterministic without making its OUTPUT deterministic when paths are
+ *      this close in cost — reproduced locally, `dataset_parent_idx` won 1
+ *      run in 15, on both queries, in the same run. Two narrower attempts at
+ *      an assertion each flaked on that in turn: naming one or two specific
+ *      indexes (CI picked a third), then a `..._idx`-suffixed name PATTERN
+ *      (`dataset_code_key`, a real contender for both queries, does not end
+ *      in `_idx`). What `sql/150` (and `sql/080` before it) permanently owe
+ *      us is that SOME index serves each query — matched by the actual
+ *      EXPLAIN text an index-scan node produces (`INDEX_SCAN_ON_THIS_TABLE`,
+ *      declared at the top of the "bounded at scale" describe block, read off
+ *      real Postgres 18 plans rather than assumed), not by any name of the
+ *      index it happens to be. See the failability test at the end of that
+ *      block for proof that dropping all five still fails both assertions.
  *
  * Skipped unless a real database is configured (see tests/integration/harness.ts).
  */
@@ -325,6 +341,24 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
     // This table is GLOBAL (ADR-0046 §3) — no tenant seeding needed, unlike
     // every other integration suite's fixtures.
 
+    /**
+     * Matches an index-scan access NODE naming one of this table's own
+     * indexes, in EXPLAIN (FORMAT TEXT) — not a specific index's name. Read
+     * off real Postgres 18 plans against this exact fixture (not guessed):
+     * Postgres renders a plain or Index Only Scan as
+     * `Index [Only ]Scan using <indexname> on <table>`, but a Bitmap Index
+     * Scan (the node this table's queries actually got in every combination
+     * of its six indexes that was probed — see the two tests below) as
+     * `Bitmap Index Scan on <indexname>`, with "on" instead of "using" and no
+     * table name at all. A regex built from only the first form — the
+     * mistake this file made twice already — silently fails to match the
+     * scan this table's queries actually run, without ever naming a Seq Scan.
+     * `Seq Scan on <table>` carries neither connector word, so it cannot
+     * match either branch.
+     */
+    const INDEX_SCAN_ON_THIS_TABLE =
+      /(?:Index Only Scan|Index Scan) using awcms_idn_admin_regions_\w+|Bitmap Index Scan on awcms_idn_admin_regions_\w+/;
+
     /** Comfortably more than DATASET_DIFF_PAGE_LIMIT_DEFAULT (50) and MAX (200). */
     const LARGE_ROW_COUNT = 3000;
 
@@ -402,6 +436,14 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
         FROM generate_series(1, ${LARGE_ROW_COUNT - SHARED_COUNT}) AS n
       `;
 
+      // Explicit, not left to autovacuum: autovacuum's ANALYZE runs
+      // asynchronously, so a plan pulled immediately after this insert would
+      // otherwise be reading default or stale statistics — a race whose
+      // outcome depends on CI scheduling, not on the schema. This makes the
+      // planner's inputs deterministic; it does NOT make its choice of index
+      // deterministic when two indexes are genuinely cost-competitive (see
+      // the "sql/150 gives the added/removed/renamed join an index path"
+      // test below for what that means for what gets asserted there).
       await admin.unsafe("ANALYZE awcms_idn_admin_regions");
 
       return { fromId, toId };
@@ -504,8 +546,32 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
      * make the assertion true, but it would be measuring the PLANNER's
      * threshold on CI hardware, which moves. The property `sql/150` actually
      * owes us is narrower and permanent: that an index EXISTS which covers
-     * this query shape. So the planner's hand is forced and the plan is
-     * required to name that index. Deterministic at any fixture size.
+     * this query shape. So the planner's hand is forced with
+     * `enable_seqscan = off`.
+     *
+     * The second version of this test then named that index exactly —
+     * `dataset_level_idx`, the obvious pick since it is the only one that
+     * puts `level` in the index itself. CI flaked on THAT too: this table's
+     * OTHER four `dataset_id`-leading indexes (plus a fifth,
+     * `dataset_code_key`, which does not even end in `_idx`) can each serve
+     * this query as a Bitmap Index Scan feeding the aggregate from the heap,
+     * since `level` is read from every matching row regardless of which index
+     * found them. Which one wins the cost comparison depends on ANALYZE's
+     * sampling, not on the schema — reproduced locally, `dataset_parent_idx`
+     * won 1 run in 15.
+     *
+     * The third version then tried matching a NAME PATTERN instead of one
+     * name — `/awcms_idn_admin_regions_dataset_\w+_idx/` — which is exactly
+     * as wrong for a different reason: `dataset_code_key` is a real,
+     * genuinely competitive index for this shape and it does not match that
+     * pattern, so if it is ever the one chosen, a perfectly index-backed plan
+     * would fail the assertion. What this test actually owes is not a name
+     * pattern but a NODE: does the plan contain an index-scan access node
+     * naming any index on this table (`INDEX_SCAN_ON_THIS_TABLE`, declared at
+     * the top of this describe block, matched against real Postgres 18 output
+     * for this exact query — see its own comment for the two node shapes that
+     * turned out to matter). See the failability test at the end of this
+     * describe block for proof it is not vacuous.
      */
     test("sql/150's index covers the tier-count aggregate", async () => {
       const { fromId } = await seedLargePair();
@@ -528,16 +594,37 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
         return rows.map((row) => Object.values(row)[0]).join("\n");
       });
 
-      expect(text).toContain("awcms_idn_admin_regions_dataset_level_idx");
+      expect(text).toMatch(INDEX_SCAN_ON_THIS_TABLE);
     });
 
     /**
-     * Same reasoning as the tier-count test above. The index this names is the
-     * COVERING one — `(dataset_id, code) INCLUDE (official_name)` — so the
-     * assertion also proves the `INCLUDE` is pulling its weight: a plain
-     * `(dataset_id, code)` index would still be named here, but the rename
+     * Related to the tier-count test above, but NOT the same assertion. When
+     * the covering `(dataset_id, code) INCLUDE (official_name)` index wins
+     * here, it also proves the `INCLUDE` is pulling its weight — a plain
+     * `(dataset_id, code)` index would still serve the join, but the rename
      * comparison would have to visit the heap for `official_name`, which is
      * the whole reason `sql/150` carries the payload column.
+     *
+     * But the covering index does not always win this one, and this test used
+     * to assert that it was ONE OF two specific names — CI proved that
+     * unstable too (see the file header): with two access paths this close in
+     * cost, gathering fresh statistics before measuring (below) makes the
+     * planner's INPUTS deterministic, but not necessarily its output, because
+     * a marginal cost tie can still turn on sampling noise in those
+     * statistics.
+     *
+     * The next fix tried a name PATTERN instead of an enumerated list —
+     * `/awcms_idn_admin_regions_dataset_\w+_idx/` — and that is also wrong:
+     * `dataset_code_key`, the pre-existing `sql/080` unique index this query
+     * could equally use, does not end in `_idx`, so a run where the planner
+     * picks it would fail an assertion on a plan that is genuinely
+     * index-backed. What this test actually owes is a NODE, not a name: does
+     * the plan contain an index-scan access node naming any index on this
+     * table (`INDEX_SCAN_ON_THIS_TABLE`, declared at the top of this describe
+     * block — see its comment for the two node shapes Postgres 18 actually
+     * emits here, which is not the shape a first guess would assume). The
+     * sibling test right after drops every index this table owns and shows
+     * the plan falls back to a Seq Scan — proof this assertion is not free.
      */
     test("sql/150 gives the added/removed/renamed join an index path", async () => {
       const { fromId, toId } = await seedLargePair();
@@ -569,28 +656,118 @@ suite("idn_admin_regions dataset diff (real PostgreSQL, Issue #766)", () => {
         return rows.map((row) => Object.values(row)[0]).join("\n");
       });
 
-      // EITHER of sql/150's indexes satisfies this: both lead with
-      // `dataset_id`, which is the only predicate on the FIRST page of a diff.
+      // Any index this table owns satisfies this, because `dataset_id` is the
+      // only predicate on the FIRST page of a diff and every index here leads
+      // with it. Earlier versions of this test named exactly one or two of
+      // them, then a `_idx`-suffixed name pattern that still excluded the
+      // pre-existing `dataset_code_key` unique index — see this test's
+      // docblock above for why each of those broke. This asserts the NODE:
+      // does the plan contain an index-scan access node naming any index on
+      // `awcms_idn_admin_regions`, regardless of which one. See the next test
+      // for proof it can still fail.
       //
-      // CI settled which one the planner actually picks, and the answer is
-      // worth recording rather than asserting away. It takes the NARROWER
-      // `(dataset_id, level)` index by bitmap scan and then visits the heap for
-      // `code`/`official_name`. That is the right call: this page reads every
-      // row of the dataset, so a wider covering index would mean reading more
-      // index pages to avoid a heap visit it cannot avoid anyway.
-      //
-      // The covering `(dataset_id, code) INCLUDE (official_name)` index earns
-      // its place on the pages AFTER the first, which carry a `code > cursor`
-      // predicate and an ORDER BY code the leading columns can satisfy in
-      // order. Asserting it here would have been asserting it in the one place
-      // it is NOT the better plan.
-      //
-      // Note `not.toContain("Seq Scan")` is deliberately absent: with
-      // `enable_seqscan = off` that assertion is vacuous, and a test that
-      // cannot fail is not a test.
-      expect(text).toMatch(
-        /awcms_idn_admin_regions_dataset_(level|code_name)_idx/
-      );
+      // Note `not.toContain("Seq Scan")` is deliberately absent as the WHOLE
+      // assertion: with `enable_seqscan = off` that alone is vacuous, and a
+      // test that cannot fail is not a test.
+      expect(text).toMatch(INDEX_SCAN_ON_THIS_TABLE);
+    });
+
+    /**
+     * `INDEX_SCAN_ON_THIS_TABLE` accepts any index-scan node naming any index
+     * this table owns — the failure mode that guards against is a completely
+     * different one from "which index did the planner pick": a schema change
+     * that removes every dataset_id-scoped index on `awcms_idn_admin_regions`
+     * without anyone touching this test. Prove it can still fail: drop all
+     * five of `sql/080`'s and `sql/150`'s dataset_id-leading indexes and
+     * confirm BOTH queries above fall back to a Seq Scan even with
+     * `enable_seqscan = off` forcing it away whenever an index exists —
+     * `enable_seqscan` biases the cost comparison, it does not forbid the
+     * plan when no index remains. `Seq Scan on <table>` carries neither of
+     * the connector words (`using`/`on an index`) `INDEX_SCAN_ON_THIS_TABLE`
+     * requires, so the negative assertions below are exactly as strict as the
+     * positive ones above — not "not literally the string `Seq Scan`", but
+     * "not an index-scan node naming an index of this table's".
+     *
+     * The drop is inside a transaction that is rolled back, so the schema
+     * `sql/080`/`sql/150` created is untouched — same technique as
+     * `unbounded-reads.integration.test.ts`'s "dropping the index brings the
+     * scan back" test.
+     */
+    test("dropping every dataset-scoped index brings the scan back — the assertions above are not free", async () => {
+      const { fromId, toId } = await seedLargePair();
+      const admin = getAdminSql();
+
+      let aggregateText = "";
+      let joinText = "";
+
+      try {
+        await admin.begin(async (tx: Bun.TransactionSQL) => {
+          await tx.unsafe(
+            "DROP INDEX awcms_idn_admin_regions_dataset_code_key"
+          );
+          await tx.unsafe(
+            "DROP INDEX awcms_idn_admin_regions_dataset_parent_idx"
+          );
+          await tx.unsafe(
+            "DROP INDEX awcms_idn_admin_regions_dataset_name_idx"
+          );
+          await tx.unsafe(
+            "DROP INDEX awcms_idn_admin_regions_dataset_level_idx"
+          );
+          await tx.unsafe(
+            "DROP INDEX awcms_idn_admin_regions_dataset_code_name_idx"
+          );
+          await tx.unsafe("ANALYZE awcms_idn_admin_regions");
+          await tx.unsafe("SET LOCAL enable_seqscan = off");
+
+          const aggregateRows = (await tx.unsafe(
+            `EXPLAIN (ANALYZE, FORMAT TEXT)
+             SELECT level, COUNT(*)::int AS region_count
+             FROM awcms_idn_admin_regions
+             WHERE dataset_id = $1
+             GROUP BY level`,
+            [fromId]
+          )) as Record<string, string>[];
+          aggregateText = aggregateRows
+            .map((row) => Object.values(row)[0])
+            .join("\n");
+
+          const joinRows = (await tx.unsafe(
+            `EXPLAIN (ANALYZE, FORMAT TEXT)
+             SELECT code, a.official_name AS old_name, b.official_name AS new_name
+             FROM (
+               SELECT code, official_name FROM awcms_idn_admin_regions
+               WHERE dataset_id = $1
+             ) a
+             FULL OUTER JOIN (
+               SELECT code, official_name FROM awcms_idn_admin_regions
+               WHERE dataset_id = $2
+             ) b USING (code)
+             WHERE a.code IS NOT NULL AND b.code IS NOT NULL
+               AND a.official_name IS DISTINCT FROM b.official_name
+             ORDER BY code ASC
+             LIMIT 51`,
+            [fromId, toId]
+          )) as Record<string, string>[];
+          joinText = joinRows.map((row) => Object.values(row)[0]).join("\n");
+
+          // `expect().rejects` hangs on this pool harness (see
+          // `unbounded-reads.integration.test.ts`), so the rollback is a
+          // thrown sentinel caught outside, exactly like that file's
+          // precedent.
+          throw new Error("__rollback__");
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== "__rollback__") {
+          throw error;
+        }
+      }
+
+      expect(aggregateText).toContain("Seq Scan");
+      expect(aggregateText).not.toMatch(INDEX_SCAN_ON_THIS_TABLE);
+
+      expect(joinText).toContain("Seq Scan");
+      expect(joinText).not.toMatch(INDEX_SCAN_ON_THIS_TABLE);
     });
   });
 });
