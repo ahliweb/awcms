@@ -166,7 +166,7 @@ const DOCUMENTED_EXCEPTIONS: {
       "application function with no alternate implementation, and a port " +
       "would relocate the concrete import rather than remove it. The call " +
       "site itself checks `resolveModuleEnabled(tx, tenantId, " +
-      "\"seo_distribution\")` before calling, so a tenant without it " +
+      '"seo_distribution")` before calling, so a tenant without it ' +
       "enabled degrades safely to no capture. Revisit if redirect capture " +
       "ever needs a swappable adapter."
   }
