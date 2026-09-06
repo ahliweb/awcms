@@ -61,6 +61,12 @@ type PublicAdPlacement = {
   linkUrl: string | null;
   mediaPublicUrl: string;
   mediaAltText: string | null;
+  /**
+   * Editorial-disclosure classification (Issue #783) — `standard`,
+   * `advertorial`, or `sponsored`. A build client renders a disclosure label
+   * ("Advertisement"/"Sponsored content") next to a placement that needs one.
+   */
+  contentClass: ActiveAdPlacementForRendering["contentClass"];
 };
 
 function toPublic(ad: ActiveAdPlacementForRendering): PublicAdPlacement {
@@ -69,7 +75,8 @@ function toPublic(ad: ActiveAdPlacementForRendering): PublicAdPlacement {
     name: ad.name,
     linkUrl: ad.linkUrl,
     mediaPublicUrl: ad.mediaPublicUrl,
-    mediaAltText: ad.mediaAltText
+    mediaAltText: ad.mediaAltText,
+    contentClass: ad.contentClass
   };
 }
 

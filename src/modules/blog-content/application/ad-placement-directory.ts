@@ -1,6 +1,7 @@
 import { escapeHtml } from "../../../lib/html/escape";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import type {
+  AdContentClass,
   AdPlacementKey,
   AdRotationMode,
   AdTarget,
@@ -61,6 +62,13 @@ export type AdPlacementView = {
   endsAt: Date | null;
   targetType: AdTargetType;
   targetId: string | null;
+  /**
+   * Editorial-disclosure classification (Issue #783) — `standard` unless the
+   * placement was booked as `advertorial`/`sponsored`. See
+   * `ad-placement-policy.ts`'s `AdContentClass` for the vocabulary and why it
+   * lives on the placement row rather than the referenced media object.
+   */
+  contentClass: AdContentClass;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -85,6 +93,7 @@ type AdPlacementRow = {
   ends_at: Date | null;
   target_type: AdTargetType;
   target_id: string | null;
+  content_class: AdContentClass;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -116,6 +125,7 @@ function toView(row: AdPlacementRow): AdPlacementView {
     endsAt: row.ends_at,
     targetType: row.target_type,
     targetId: row.target_id,
+    contentClass: row.content_class,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -138,15 +148,18 @@ export async function createAdPlacement(
     WITH written AS (
     INSERT INTO awcms_news_portal_ad_placements
       (tenant_id, placement_key, name, media_object_id, link_url, rotation_mode,
-       priority, is_active, starts_at, ends_at, target_type, target_id)
+       priority, is_active, starts_at, ends_at, target_type, target_id,
+       content_class)
     VALUES (
       ${tenantId}, ${input.placementKey}, ${input.name}, ${input.mediaObjectId},
       ${input.linkUrl}, ${input.rotationMode}, ${input.priority}, ${input.isActive},
-      ${input.startsAt}, ${input.endsAt}, ${input.targetType}, ${input.targetId}
+      ${input.startsAt}, ${input.endsAt}, ${input.targetType}, ${input.targetId},
+      ${input.contentClass}
     )
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
       rotation_mode, priority, is_active, starts_at, ends_at, target_type,
-      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
+      target_id, content_class, created_at, updated_at, deleted_at, deleted_by,
+      delete_reason
     )
     -- The write and the media resolution in ONE statement (finding D17). A
     -- data-modifying CTE keeps the resolved media fields consistent with every
@@ -158,8 +171,8 @@ export async function createAdPlacement(
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
       m.status AS media_status,
       p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
-      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
-      p.deleted_by, p.delete_reason
+      p.target_type, p.target_id, p.content_class, p.created_at, p.updated_at,
+      p.deleted_at, p.deleted_by, p.delete_reason
     FROM written p
     LEFT JOIN awcms_news_media_objects m
       ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
@@ -194,8 +207,8 @@ export async function fetchAdPlacementById(
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
       m.status AS media_status,
       p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
-      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
-      p.deleted_by, p.delete_reason
+      p.target_type, p.target_id, p.content_class, p.created_at, p.updated_at,
+      p.deleted_at, p.deleted_by, p.delete_reason
     FROM awcms_news_portal_ad_placements p
     -- LEFT, and the media predicate is in the ON clause: a placement whose
     -- object was soft-deleted must still appear in an ADMIN list, reported as
@@ -221,8 +234,8 @@ export async function listAdPlacements(
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
       m.status AS media_status,
       p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
-      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
-      p.deleted_by, p.delete_reason
+      p.target_type, p.target_id, p.content_class, p.created_at, p.updated_at,
+      p.deleted_at, p.deleted_by, p.delete_reason
     FROM awcms_news_portal_ad_placements p
     -- LEFT, and the media predicate is in the ON clause: a placement whose
     -- object was soft-deleted must still appear in an ADMIN list, reported as
@@ -268,11 +281,13 @@ export async function updateAdPlacement(
         ends_at = CASE WHEN ${input.endsAt === undefined} THEN ends_at ELSE ${input.endsAt ?? null} END,
         target_type = COALESCE(${input.targetType ?? null}, target_type),
         target_id = CASE WHEN ${input.targetType === undefined} THEN target_id ELSE ${input.targetId ?? null} END,
+        content_class = COALESCE(${input.contentClass ?? null}, content_class),
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
       rotation_mode, priority, is_active, starts_at, ends_at, target_type,
-      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
+      target_id, content_class, created_at, updated_at, deleted_at, deleted_by,
+      delete_reason
     )
     -- The write and the media resolution in ONE statement (finding D17). A
     -- data-modifying CTE keeps the resolved media fields consistent with every
@@ -284,8 +299,8 @@ export async function updateAdPlacement(
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
       m.status AS media_status,
       p.link_url, p.rotation_mode, p.priority, p.is_active, p.starts_at, p.ends_at,
-      p.target_type, p.target_id, p.created_at, p.updated_at, p.deleted_at,
-      p.deleted_by, p.delete_reason
+      p.target_type, p.target_id, p.content_class, p.created_at, p.updated_at,
+      p.deleted_at, p.deleted_by, p.delete_reason
     FROM written p
     LEFT JOIN awcms_news_media_objects m
       ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
@@ -354,6 +369,8 @@ export type ActiveAdPlacementForRendering = {
   createdAt: Date;
   mediaPublicUrl: string;
   mediaAltText: string | null;
+  /** Editorial-disclosure classification (Issue #783) — see `AdContentClass`. */
+  contentClass: AdContentClass;
 };
 
 type ActiveAdPlacementRow = {
@@ -365,6 +382,7 @@ type ActiveAdPlacementRow = {
   created_at: Date;
   media_public_url: string;
   media_alt_text: string | null;
+  content_class: AdContentClass;
 };
 
 /**
@@ -414,6 +432,7 @@ export async function listActiveAdPlacementsForRendering(
 
   const rows = (await tx`
     SELECT p.id, p.name, p.link_url, p.rotation_mode, p.priority, p.created_at,
+      p.content_class,
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
       m.status AS media_status
     FROM awcms_news_portal_ad_placements p
@@ -447,7 +466,8 @@ export async function listActiveAdPlacementsForRendering(
       priority: row.priority,
       createdAt: row.created_at,
       mediaPublicUrl: row.media_public_url,
-      mediaAltText: row.media_alt_text
+      mediaAltText: row.media_alt_text,
+      contentClass: row.content_class
     }));
 }
 

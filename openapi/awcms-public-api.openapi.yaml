@@ -19368,6 +19368,14 @@ components:
           type: string
           format: uuid
           nullable: true
+        contentClass:
+          description: "Editorial-disclosure classification (Issue #783). Omit for a plain ad or organic content."
+          type: string
+          enum:
+            - standard
+            - advertorial
+            - sponsored
+          default: standard
     AdPlacementItem:
       type: object
       required:
@@ -19382,6 +19390,7 @@ components:
         - rotationMode
         - priority
         - isActive
+        - contentClass
         - createdAt
         - updatedAt
       additionalProperties: false
@@ -19460,6 +19469,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        contentClass:
+          type: string
+          enum:
+            - standard
+            - advertorial
+            - sponsored
+          description: "Editorial-disclosure classification (Issue #783). A property of this BOOKING, not of the referenced media object — the same creative can run as `standard` in one slot and `sponsored` in another. Defaults to `standard`."
         createdAt:
           type: string
           format: date-time
@@ -19525,6 +19541,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        contentClass:
+          description: "Editorial-disclosure classification (Issue #783)."
+          type: string
+          enum:
+            - standard
+            - advertorial
+            - sponsored
     AnalyticsSummary:
       type: object
       properties:
@@ -22872,6 +22895,13 @@ components:
         mediaAltText:
           type: string
           nullable: true
+        contentClass:
+          type: string
+          enum:
+            - standard
+            - advertorial
+            - sponsored
+          description: "Editorial-disclosure classification (Issue #783). `standard` is a plain ad or organic content needing no disclosure; `advertorial` is editorial-styled content that is actually paid for; `sponsored` is content explicitly sponsored/underwritten by a third party. A consumer renders a disclosure label next to any placement that is not `standard`."
     PublicBlogPageDetail:
       type: object
       properties:

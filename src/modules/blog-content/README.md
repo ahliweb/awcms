@@ -795,6 +795,29 @@ to required**: ad placement holds a real FK to a verified media object,
 and that is exactly why `news_portal` used to declare it non-optional. Absorbing
 its code means absorbing its constraint.
 
+### Ad placement editorial-disclosure classification (Issue #783)
+
+`awcms_news_portal_ad_placements` carries a `content_class` column
+(`sql/151`), `NOT NULL DEFAULT 'standard'`, CHECK-constrained to
+`standard | advertorial | sponsored`. It classifies the BOOKING (the
+placement row), not the referenced media object — the same creative can run
+as `standard` in one slot and `sponsored` in another, so putting the label on
+`awcms_news_media_objects` would force one classification onto every slot a
+creative is reused in.
+
+- `standard` — a plain ad or organic content; no reader-facing disclosure.
+- `advertorial` — editorial-styled content that is actually paid for.
+- `sponsored` — content explicitly sponsored/underwritten by a third party.
+
+Surfaced as `contentClass` on `GET /api/v1/news-portal/ad-placements/active`'s
+`PublicAdPlacement` projection, so a build client can render a disclosure
+label ("Advertisement"/"Sponsored content") next to a placement that needs
+one. Accepted and validated (rejecting any other value with `400
+VALIDATION_ERROR`) on `POST`/`PATCH /api/v1/news-portal/ad-placements[/{id}]`
+via `ad-placement-policy.ts`'s `AdContentClass`/`isAdContentClass`. Reuses the
+existing `blog_content.ad_placements.{read,configure}` permissions — no new
+permission was added.
+
 ## Not yet available (an explicit backlog, not an oversight)
 
 - Public page (static page) rendering — only posts have a public route in Issue #540, see §Public routes.

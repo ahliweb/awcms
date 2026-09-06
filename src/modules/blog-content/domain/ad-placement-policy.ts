@@ -103,6 +103,34 @@ export type AdTarget = {
 };
 
 /**
+ * Editorial-disclosure classification of a placement (Issue #783). This is a
+ * property of the BOOKING (the placement row), not of the referenced media
+ * object: the same creative can run as `standard` in one slot and `sponsored`
+ * in another, so classifying the asset itself would force one label onto
+ * every slot it is reused in. Migration 151 stores it as a CHECK-constrained
+ * column, `NOT NULL DEFAULT 'standard'` so every pre-existing row backfills to
+ * the unambiguous "no disclosure needed" case.
+ *
+ * `standard` — a plain ad or organic content; no reader-facing disclosure.
+ * `advertorial` — editorial-styled content that is actually paid for.
+ * `sponsored` — content explicitly sponsored/underwritten by a third party.
+ */
+export type AdContentClass = "standard" | "advertorial" | "sponsored";
+
+export const AD_CONTENT_CLASSES: readonly AdContentClass[] = [
+  "standard",
+  "advertorial",
+  "sponsored"
+];
+
+export function isAdContentClass(value: unknown): value is AdContentClass {
+  return (
+    typeof value === "string" &&
+    (AD_CONTENT_CLASSES as string[]).includes(value)
+  );
+}
+
+/**
  * `targetId` is required for `widget`/`post`/`page` and forbidden for
  * `global` — the same "type gates which reference is meaningful" convention
  * `menu-policy.ts` and the retired `ad-policy.ts` use. Migration 078 enforces
@@ -337,6 +365,7 @@ export type CreateAdPlacementInput = {
   endsAt: Date | null;
   targetType: AdTargetType;
   targetId: string | null;
+  contentClass: AdContentClass;
 };
 
 export type CreateAdPlacementValidationResult =
@@ -427,6 +456,19 @@ export function validateCreateAdPlacementInput(
 
   const target = validateAdTarget(record, errors);
 
+  let contentClass: AdContentClass = "standard";
+
+  if (record.contentClass !== undefined) {
+    if (!isAdContentClass(record.contentClass)) {
+      errors.push({
+        field: "contentClass",
+        message: `contentClass must be one of ${AD_CONTENT_CLASSES.join(", ")}.`
+      });
+    } else {
+      contentClass = record.contentClass;
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -444,7 +486,8 @@ export function validateCreateAdPlacementInput(
       startsAt,
       endsAt,
       targetType: target.targetType,
-      targetId: target.targetId
+      targetId: target.targetId,
+      contentClass
     }
   };
 }
@@ -461,6 +504,7 @@ export type UpdateAdPlacementInput = {
   endsAt?: Date | null;
   targetType?: AdTargetType;
   targetId?: string | null;
+  contentClass?: AdContentClass;
 };
 
 export type UpdateAdPlacementValidationResult =
@@ -598,6 +642,17 @@ export function validateUpdateAdPlacementInput(
       field: "targetType",
       message: "targetType is required when targetId is provided."
     });
+  }
+
+  if (record.contentClass !== undefined) {
+    if (!isAdContentClass(record.contentClass)) {
+      errors.push({
+        field: "contentClass",
+        message: `contentClass must be one of ${AD_CONTENT_CLASSES.join(", ")}.`
+      });
+    } else {
+      value.contentClass = record.contentClass;
+    }
   }
 
   if (errors.length > 0) {
