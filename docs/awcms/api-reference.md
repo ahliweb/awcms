@@ -6352,7 +6352,7 @@ Gated by blog_content.posts.read.
 - **operationId**: `blogUpdatePost`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first.
+Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first. Issue
 
 **Parameters**
 

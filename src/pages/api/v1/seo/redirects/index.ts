@@ -59,6 +59,16 @@ const CREATE_GUARD = {
 
 const IDEMPOTENCY_SCOPE = "seo_distribution_redirect_create";
 
+/**
+ * Issue #784 raised, and deliberately did NOT resolve, whether this should
+ * pre-collapse redirect CHAINS for a consumer instead of returning raw
+ * one-hop rows. Decision: leave it as-is. Chains are already bounded to
+ * <= `MAX_REDIRECT_HOPS` (`domain/redirect-chain.ts`) at write time
+ * (`redirect-safety.ts`'s `checkRedirectSafety`), and the one documented
+ * consumer (LenteraKalteng's build) already walks/guards them independently.
+ * Collapsing here would be a second place that same bounded walk has to stay
+ * correct, for no consumer that has asked for it.
+ */
 export const GET: APIRoute = async ({ request, cookies, url }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
 

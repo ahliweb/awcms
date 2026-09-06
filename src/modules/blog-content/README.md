@@ -424,6 +424,20 @@ The `blog_content.revisions.restore` permission is **explicitly required** — t
 
 Audit: `blog.post.revision_restored` (severity `warning`, `attributes: { revisionId, revisionNumber }`).
 
+## Slug-change redirect capture (Issue #784)
+
+Before this, a slug edit made the OLD slug unrecoverable — not on the post row (overwritten in place), not in `awcms_blog_revisions` (§When a new revision is created above: `slug` is explicitly one of the fields that does NOT trigger a revision, and the table has no `slug` column at all). Every previously-shared link to that post 404ed the moment an editor fixed a headline's slug, with nothing recording that it happened.
+
+`PATCH /api/v1/blog/posts/{id}` now calls `application/slug-change-redirect-capture.ts`'s `captureBlogPostSlugChangeRedirect` inside the SAME transaction as the post update, but only when `input.slug` is present AND differs from the post's currently-stored slug (a PATCH that omits `slug`, or resubmits the current one, is not a change and must not propose a redirect from a path to itself — this is also what makes a retry of a real slug-change PATCH naturally idempotent: the second call's `input.slug` already matches the now-current stored slug). It:
+
+1. Checks `resolveModuleEnabled(tx, tenantId, "seo_distribution")` first — a tenant that has not enabled `seo_distribution` keeps editing posts exactly as before, just without a redirect being proposed (`outcome: "module_disabled"`). This is a runtime check, not a `dependencies` edge in `module.ts`: `seo_distribution` is not declared as a `blog_content` dependency (see the file's own docblock for why — briefly, a hard `dependencies` edge would retroactively strand any tenant that already runs `blog_content` without `seo_distribution` enabled, with no gate warning it, since `tenant-module-lifecycle.ts`'s dependency warning is only computed for a currently-DISABLED module).
+2. Builds the old and new PUBLIC paths — `/blog/{tenantCode}/{slug}`, locale-prefixed via `withPublicLocalePrefix` exactly as `listLegacyRedirectMappings` and the internal-links preview route already do — so the source/target this writes are the literal paths a reader would hit, not a guess at them.
+3. Calls `seo_distribution`'s `captureUrlChangeRedirect` (ADR-0039) with `changeType: "slug_change"`, the tenant's OWN `url_change_auto_policy` (never overridden here — a tenant that wants review keeps getting a proposed, inactive rule), and the tenant's verified hosts.
+
+A `rejected` (conflict/loop/chain-too-long from `checkRedirectSafety`) or `invalid` outcome is logged as a warning and reported back in the response's `redirectCapture` field — it never fails or rolls back the post update. The redirect is additive tooling around the edit, not a precondition for it: `checkRedirectSafety` already refuses an unsafe rule before anything is persisted, so wiring this in cannot itself create an open redirect or a loop.
+
+`GET /api/v1/seo/redirects` was deliberately left UNCHANGED by this issue (raw one-hop rows, no chain pre-collapsing) — see that route's own doc comment for the reasoning.
+
 ## Scheduled publishing (Issue #541, restructured by Issue #640)
 
 `bun run blog:publish:scheduled` (`scripts/blog-scheduled-publish.ts`) — an internal worker, not an HTTP endpoint, scheduled by cron/a systemd timer (the same pattern as `scripts/form-draft-purge.ts`). For every active tenant it calls `blog-scheduled-publish.ts`'s `publishDueScheduledPosts(sql, tenantId, mediaPort, options?)`.
