@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ae6ed57acf5731dd9c51c7f55ab8d00a97a124647afbce9414e1e108634069ae -->
+<!-- i18n-source-hash: sha256:1df8173049868261e51f3f932690ef833e5a6c6bc216dc2fef1fb25656e9ef98 -->
 
 # Blog Content
 
@@ -425,6 +425,20 @@ Hanya rute untuk **post** — doc issue #541 §Routes cuma mendaftarkan tiga rut
 Permission `blog_content.revisions.restore` **eksplisit wajib** — tidak ada ownership override seperti `PATCH /api/v1/blog/posts/{id}` (author pemilik post tidak otomatis boleh restore revisinya sendiri tanpa permission itu; lihat §ABAC di §Admin API — Blog Posts untuk kontras pola). `Idempotency-Key` wajib (scope `blog_revision_restore`) — replay key yang sama mengembalikan response tersimpan tanpa menambah revisi kedua.
 
 Audit: `blog.post.revision_restored` (severity `warning`, `attributes: { revisionId, revisionNumber }`).
+
+## Penangkapan redirect saat slug berubah (Issue #784)
+
+Sebelum ini, mengubah slug membuat slug LAMA tidak dapat dipulihkan — tidak ada di baris post (ditimpa langsung), tidak ada di `awcms_blog_revisions` (§Kapan revisi baru dibuat di atas: `slug` secara eksplisit salah satu field yang TIDAK memicu revisi, dan tabelnya sama sekali tidak punya kolom `slug`). Setiap tautan yang sudah dibagikan ke post itu menjadi 404 begitu editor memperbaiki slug sebuah judul, tanpa ada yang mencatat kejadian itu.
+
+`PATCH /api/v1/blog/posts/{id}` kini memanggil `captureBlogPostSlugChangeRedirect` dari `application/slug-change-redirect-capture.ts` di dalam transaksi yang SAMA dengan update post, tetapi hanya ketika `input.slug` hadir DAN berbeda dari slug yang tersimpan saat ini (PATCH yang tidak menyertakan `slug`, atau mengirim ulang slug yang sama, bukan perubahan dan tidak boleh mengajukan redirect dari sebuah path ke dirinya sendiri — ini juga yang membuat retry PATCH perubahan-slug yang sungguhan otomatis idempoten: `input.slug` pada panggilan kedua sudah sama dengan slug yang tersimpan saat itu). Fungsi ini:
+
+1. Memeriksa `resolveModuleEnabled(tx, tenantId, "seo_distribution")` lebih dulu — tenant yang belum mengaktifkan `seo_distribution` tetap bisa mengedit post persis seperti sebelumnya, hanya saja tanpa redirect yang diajukan (`outcome: "module_disabled"`). Ini pemeriksaan runtime, bukan edge `dependencies` di `module.ts`: `seo_distribution` sengaja TIDAK dideklarasikan sebagai dependency `blog_content` (lihat docblock berkas itu sendiri untuk alasannya — singkatnya, edge `dependencies` yang keras akan secara retroaktif menjebak tenant mana pun yang sudah menjalankan `blog_content` tanpa `seo_distribution` aktif, tanpa ada gerbang yang memperingatkannya, karena peringatan dependency di `tenant-module-lifecycle.ts` hanya dihitung untuk modul yang sedang DINONAKTIFKAN).
+2. Membangun path PUBLIK lama dan baru — `/blog/{tenantCode}/{slug}`, diberi prefiks locale lewat `withPublicLocalePrefix` persis seperti yang sudah dilakukan `listLegacyRedirectMappings` dan rute pratinjau internal-links — sehingga source/target yang ditulis adalah path publik yang sungguh akan diakses pembaca, bukan tebakan.
+3. Memanggil `captureUrlChangeRedirect` milik `seo_distribution` (ADR-0039) dengan `changeType: "slug_change"`, `url_change_auto_policy` milik tenant itu SENDIRI (tidak pernah ditimpa di sini — tenant yang ingin peninjauan tetap mendapat aturan proposed/inactive), dan daftar host terverifikasi tenant tersebut.
+
+Outcome `rejected` (konflik/loop/chain-terlalu-panjang dari `checkRedirectSafety`) atau `invalid` dicatat sebagai warning dan dilaporkan balik di field `redirectCapture` pada response — ini tidak pernah menggagalkan atau me-rollback update post. Redirect ini adalah tooling tambahan di sekitar penyuntingan, bukan prasyaratnya: `checkRedirectSafety` sudah menolak aturan yang tidak aman sebelum apa pun disimpan, sehingga pengkabelan ini tidak bisa menciptakan open redirect atau loop.
+
+`GET /api/v1/seo/redirects` sengaja DIBIARKAN TIDAK BERUBAH oleh issue ini (baris satu-hop mentah, tanpa pra-penggabungan chain) — lihat komentar dokumentasi rute itu sendiri untuk alasannya.
 
 ## Scheduled publishing (Issue #541, direstrukturisasi Issue #640)
 

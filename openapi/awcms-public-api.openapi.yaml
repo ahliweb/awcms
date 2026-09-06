@@ -5238,7 +5238,7 @@ paths:
         - Blog Content
       operationId: blogUpdatePost
       summary: Update a blog post
-      description: Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first.
+      description: "Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first. Issue #784 — when `slug` is present and differs from the stored slug, the SAME transaction also captures an ADR-0039 redirect (proposed or active, per the tenant's url_change_auto_policy); see the response schema's `redirectCapture` field."
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
@@ -20271,6 +20271,35 @@ components:
           type: string
           nullable: true
           maxLength: 120
+        redirectCapture:
+          description: "Issue #784 — present ONLY on a `PATCH /api/v1/blog/posts/{id}` response whose body actually changed `slug` (absent otherwise, including on `GET`/`POST` and every lifecycle action). Reports what `captureUrlChangeRedirect` (ADR-0039) did with the resulting old->new path change, gated by the tenant's own `url_change_auto_policy` (`POST /api/v1/seo/redirects/capture-url-change` is the same seam, driven here automatically instead of by a caller). A `rejected` or `invalid` outcome never fails the post update itself — the slug change is additive tooling around the edit, not a precondition for it."
+          type: object
+          required:
+            - outcome
+          properties:
+            outcome:
+              type: string
+              enum:
+                - created
+                - proposed
+                - skipped
+                - module_disabled
+                - invalid
+                - rejected
+            redirectId:
+              description: Present only when outcome is "created" or "proposed".
+              type: string
+              format: uuid
+            code:
+              description: Present only when outcome is "rejected".
+              type: string
+              enum:
+                - SOURCE_CONFLICT
+                - REDIRECT_LOOP
+                - REDIRECT_CHAIN_TOO_LONG
+            message:
+              description: Present only when outcome is "rejected" — a human-readable reason no redirect was created.
+              type: string
     BlogPostSummary:
       type: object
       description: |

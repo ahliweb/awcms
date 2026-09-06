@@ -47,6 +47,7 @@ import {
 import { validateAndNormalizeContentJsonVideoBlocks } from "../../../../../modules/blog-content/domain/video-news-block-validation";
 import { evaluatePostUpdateAccess } from "../../../../../modules/blog-content/domain/post-access-policy";
 import { isSignificantContentChange } from "../../../../../modules/blog-content/domain/revision-policy";
+import { captureBlogPostSlugChangeRedirect } from "../../../../../modules/blog-content/application/slug-change-redirect-capture";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -121,7 +122,14 @@ export const GET: APIRoute = async ({ request, params, cookies }) => {
  * `workflows/tasks/{id}/decisions.ts` uses for its self-approval check.
  * Not idempotent (recommended, not required, per doc issue #538
  * §Idempotency Requirements) — same-body PATCH retries converge to the
- * same end state.
+ * same end state, which also makes the Issue #784 redirect capture below
+ * naturally idempotent: a retry's `input.slug` matches the now-current
+ * stored slug, so the diff that triggers capture is gone by the second call.
+ *
+ * Issue #784 — when `input.slug` differs from the stored slug,
+ * `captureBlogPostSlugChangeRedirect` turns the change into an ADR-0039
+ * redirect (proposed or active, per the tenant's `url_change_auto_policy`)
+ * in the SAME transaction, so the old slug is never silently unrecoverable.
  */
 export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -342,6 +350,33 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       return fail(404, "RESOURCE_NOT_FOUND", "Blog post not found.");
     }
 
+    // Issue #784 — a slug edit used to make the OLD slug unrecoverable (not on
+    // the post row, not in `awcms_blog_revisions`), so every previously-shared
+    // link silently 404ed. Only runs when `slug` actually changed value — a
+    // PATCH that omits it, or resubmits the current one, is not a change and
+    // must not propose a redirect from a path to itself. Gated by the
+    // tenant's own `url_change_auto_policy`; a rejection (conflict/loop/chain)
+    // or an unexpected `invalid` outcome is reported back and logged, never
+    // thrown — this is additive tooling around the edit, not a precondition
+    // for it (see `slug-change-redirect-capture.ts`'s docblock).
+    const redirectCapture =
+      input.slug !== undefined && input.slug !== post.slug
+        ? await captureBlogPostSlugChangeRedirect(
+            tx,
+            tenantId,
+            context.tenantUserId,
+            {
+              postId,
+              oldSlug: post.slug,
+              newSlug: updated.slug,
+              oldLocale: post.locale,
+              newLocale: updated.locale
+            },
+            correlationId,
+            now
+          )
+        : undefined;
+
     if (input.termIds) {
       await syncPostTermAssignments(tx, tenantId, postId, input.termIds);
     }
@@ -422,10 +457,16 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       tenantId,
       moduleKey: "blog_content",
       postId,
-      slug: updated.slug
+      slug: updated.slug,
+      redirectCaptureOutcome: redirectCapture?.outcome
     });
 
-    return ok({ ...updated, termIds, institutionIds });
+    return ok({
+      ...updated,
+      termIds,
+      institutionIds,
+      ...(redirectCapture ? { redirectCapture } : {})
+    });
   });
 };
 

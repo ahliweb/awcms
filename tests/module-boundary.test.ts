@@ -146,6 +146,29 @@ const DOCUMENTED_EXCEPTIONS: {
       "`identity:principal-access:check`, so a port adapter would have to live " +
       "there anyway and be called from here just the same. Revisit if tenant " +
       "bootstrap ever stops writing identity rows itself."
+  },
+  {
+    from: "blog_content",
+    to: "seo_distribution",
+    reason:
+      "Issue #784. `application/slug-change-redirect-capture.ts` calls " +
+      "`seo_distribution`'s `captureUrlChangeRedirect` directly so a blog " +
+      "post's slug change drives the ADR-0039 redirect-capture seam. It " +
+      "cannot be a `dependencies` edge: that would make tenant enablement " +
+      "of `blog_content` HARD-gated on `seo_distribution` also being " +
+      "enabled (`tenant-module-lifecycle.ts`'s `MODULE_DEPENDENCY_DISABLED`), " +
+      "silently stranding any tenant that already runs `blog_content` " +
+      "without `seo_distribution` enabled — with no gate warning it, since " +
+      "`module-matrix.ts`'s dependency warning is computed only for a " +
+      "currently-DISABLED module. It is not a capability either — " +
+      "`capabilities.consumes` is for a PORT-backed, swappable adapter " +
+      "(ADR-0011, this file's own type doc above); this is a plain " +
+      "application function with no alternate implementation, and a port " +
+      "would relocate the concrete import rather than remove it. The call " +
+      "site itself checks `resolveModuleEnabled(tx, tenantId, " +
+      '"seo_distribution")` before calling, so a tenant without it ' +
+      "enabled degrades safely to no capture. Revisit if redirect capture " +
+      "ever needs a swappable adapter."
   }
 ];
 
