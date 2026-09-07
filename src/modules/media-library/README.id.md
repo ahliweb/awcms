@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8c9f8fa620194d63747930b39cd439a91bf1563119c39edc739e45cced67cb7f -->
+<!-- i18n-source-hash: sha256:9771ababc64aec622021bcb017aaf527400c5d29761d247323832a87d4db716d -->
 
 # media_library
 
@@ -272,8 +272,8 @@ lepas.
 
 `sql/152` menambah permission media kesembilan,
 `media_library.media.adjudicate_rights`, dan
-`PATCH /api/v1/media/objects/{id}` kini memilih permission yang dibutuhkan
-dari BENTUK isi request body:
+`PATCH /api/v1/media/objects/{id}` kini mensyaratkan permission yang cocok
+dengan BENTUK isi request body:
 
 - Request yang **tidak** menyertakan `rightsVerificationStatus` hanya butuh
   `media.update`, persis seperti sebelumnya — tanpa regresi untuk kasus rutin.
@@ -285,11 +285,23 @@ dari BENTUK isi request body:
   sunting atas field yang bukan urusannya — menghadirkan kembali, satu
   tingkat lebih tinggi, kopling yang justru ingin dihapus pemisahan ini.
 - Request yang menyertakan `rightsVerificationStatus` **bersama** field rutin
-  butuh **kedua** permission — gerbang utama rute memeriksa `media.update`
-  (karena ada field rutin), dan handler membuat panggilan KEDUA
-  `authorizeInTransaction` untuk `media.adjudicate_rights` sebelum menulis
-  apa pun. Salah satu permission yang tidak ada menolak SELURUH request; tidak
-  ada tulis sebagian.
+  butuh **kedua** permission. Salah satu permission yang tidak ada menolak
+  SELURUH request; tidak ada tulis sebagian.
+
+Tidak ada satu permission pun yang sama untuk SEMUA bentuk yang diterima rute
+ini (reviewer status-only tidak pernah butuh `update`), jadi gerbang utama
+`authorize` memakai bentuk ARRAY any-of (`tenant-route.ts`) — diizinkan begitu
+pemanggil memegang SETIDAKNYA SATU dari keduanya, lewat chokepoint
+`authorizeInTransaction` yang sesungguhnya, untuk setiap pemanggil, baik body
+valid maupun tidak. `handler` kemudian membuat panggilan
+`authorizeInTransaction` per kelompok field — satu untuk `update` saat body
+menyentuh field rutin, satu untuk `adjudicate_rights` saat body menyentuh
+`rightsVerificationStatus`, dijalankan independen — yang memutuskan apa yang
+BENAR-BENAR dibutuhkan body tersebut. (Revisi rute ini sebelumnya memilih
+permission lewat fungsi dari body yang sudah di-parse; itu tanpa sengaja
+cocok dengan satu carve-out di `tenant-route.ts` yang dimaksudkan untuk PERSIS
+dua rute LAIN, membuat pemanggil dengan body tidak valid bisa melewati
+otorisasi sepenuhnya. Lihat PR #797.)
 
 `media_library.media.adjudicate_rights` di-seed (`sql/152`) tanpa grant default
 di luar inklusi katalog standar tenant-baru yang didapat setiap permission
@@ -303,6 +315,14 @@ content-editor. Header `sql/152` sendiri memuat alasan seeding lengkapnya,
 termasuk kenapa `scope = 'platform'` (alat ADR-0052/0053 untuk
 `idn_admin_regions.dataset.*`) bukan yang cocok di sini — permission ini tidak
 pernah melintasi batas tenant.
+
+**Batas cakupan yang diketahui, bukan cacat:** peran `owner` default sebuah
+tenant menerima SETIAP permission ber-scope tenant, `media.update` maupun
+`media.adjudicate_rights` sekaligus — invariant "owner = semua permission"
+yang sama yang selalu dimiliki grant `owner` modul lain. Jadi pemisahan ini
+melindungi terhadap peran KUSTOM yang sengaja dibuat tenant dengan hanya salah
+satu dari keduanya; ia tidak, dan tidak dimaksudkan untuk, mencegah akun owner
+itu sendiri melakukan keduanya.
 
 Form rights-editor `/admin/media` masih mengirim setiap field rutin tanpa
 syarat (desain awal Issue #615), tetapi kini meniadakan

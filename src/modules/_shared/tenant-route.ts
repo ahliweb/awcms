@@ -14,6 +14,7 @@ import {
   resolveAuthInputs,
   type AuthorizeResult
 } from "../identity-access/application/access-guard";
+import { createAuthorizationReadCache } from "../identity-access/application/authorization-read-cache";
 import type { AccessRequest } from "../identity-access/domain/access-control";
 import {
   isSuspensionExemptTenant,
@@ -140,9 +141,42 @@ export type TenantRouteConfig<TPrepared> = {
   /** Forwarded verbatim to `withTenant` (which defaults to its own 2000ms). */
   queueTimeoutMs?: number;
   /**
-   * The guard. A plain `AccessRequest` for the usual static case, or a function
-   * when it depends on what `prepare` parsed (e.g. an action that differs by
-   * request body).
+   * The guard. A plain `AccessRequest` for the usual static case; an ARRAY for
+   * "any one of these is enough"; or a function when the permission itself
+   * depends on what `prepare` parsed (e.g. an action that differs by request
+   * body).
+   *
+   * ## The array form — ANY-of, not the body-dependent kind
+   *
+   * Mirrors `loadAdminScreen`'s `authorize` (`lib/auth/admin-screen.ts`): allowed
+   * when AT LEAST ONE listed request is allowed, each evaluated through the one
+   * chokepoint (`authorizeInTransaction`, sharing one read cache so the session/
+   * tenant-state reads are not repeated per candidate) and each writing its own
+   * decision-log row. An EMPTY array denies — "no request authorizes this route"
+   * must never read as "any request does".
+   *
+   * This exists for a route with no permission common to every shape it accepts
+   * — Issue #794/PR #797's `PATCH /api/v1/media/objects/{id}`: a caller holding
+   * ONLY `media.update` may submit a routine-fields body, a caller holding ONLY
+   * `media.adjudicate_rights` may submit a status-only body, and neither
+   * permission is required of every caller. Because the array does not depend on
+   * `prepared`, it is evaluated EAGERLY like the plain-object form — see the next
+   * paragraph for why that distinction is load-bearing — and the route's
+   * `handler` still makes the FINAL, body-shape-specific `authorizeInTransaction`
+   * call(s) that decide what a given request actually needed; this array only
+   * answers "is it worth opening the handler at all".
+   *
+   * ## The function form CANNOT defer, and that is why it stays separate
+   *
+   * A callback receives `prepared` — the very thing `prepare` may have failed to
+   * produce — so it can only run once body parsing already succeeded. The two
+   * routes that need a body-dependent permission (`POST /api/v1/partners/:id/
+   * status`, `POST /api/v1/access/machine-credentials`) accept that: see the
+   * `heldPrepareRefusal` carve-out below, scoped to exactly those two by name. A
+   * route whose permission choice depends on the body should reach for the array
+   * form INSTEAD when the body-independent "does the caller hold any relevant
+   * permission at all" question has a real answer (as media rights does); the
+   * function form is for the narrower case where it does not.
    *
    * INFERENCE ORDER, when using the callback form: write `prepare` BEFORE
    * `authorize` in the object literal. TypeScript infers `TPrepared` from
@@ -153,6 +187,7 @@ export type TenantRouteConfig<TPrepared> = {
    */
   authorize:
     | AccessRequest
+    | readonly AccessRequest[]
     | ((
         context: TenantRouteRequestContext & { prepared: TPrepared }
       ) => AccessRequest);
@@ -688,6 +723,41 @@ function sqlClientForRoute(): Bun.SQL {
   return getDatabaseClient();
 }
 
+/**
+ * The any-of rule for `authorize`'s array form, as a pure function over
+ * already-evaluated results — mirrors `loadAdminScreen`'s `selectEntryOutcome`
+ * (`lib/auth/admin-screen.ts`), kept as a separate, smaller function here
+ * because a route needs the original `Response` a denial carries (its `code`/
+ * `message` body), where a screen only ever needed a status number to decide
+ * what to render.
+ *
+ * Kept pure and separate from the transaction it runs inside for the same
+ * reason `selectEntryOutcome` is: the interesting part is not "does it call
+ * the chokepoint" (the caller already did, once per candidate) but what it
+ * does with N answers, which is where an off-by-one reads as an access grant.
+ */
+function selectAnyAllowed(
+  results: readonly AuthorizeResult[]
+): AuthorizeResult {
+  // An empty array denies — "no request authorizes this route" must never
+  // read as "any request does". Unreachable through `defineTenantRoute`'s own
+  // call sites today (every array literal used has two entries), kept
+  // explicit rather than left to fall through to `results[0]`, which would
+  // throw on an empty array instead of denying.
+  if (results.length === 0) {
+    return {
+      allowed: false,
+      denied: fail(403, "ACCESS_DENIED", "Access denied.")
+    };
+  }
+
+  // The FIRST candidate's denial when none allowed: routes list their primary
+  // permission first, so the response describes the refusal a caller is most
+  // likely asking about, and it does not shift with which permission a given
+  // caller happens to be missing.
+  return results.find((result) => result.allowed) ?? results[0]!;
+}
+
 export function defineTenantRoute<TPrepared = undefined>(
   config: TenantRouteConfig<TPrepared>
 ): APIRoute {
@@ -758,6 +828,15 @@ export function defineTenantRoute<TPrepared = undefined>(
      * leaves is bounded to callers who already hold a live session — the
      * middleware boundary (`lib/security/api-body-auth-boundary.ts`) refuses
      * anonymous ones before the body is read at all.
+     *
+     * The ARRAY form is deliberately NOT `typeof ... === "function"` and never
+     * hits this branch: it does not read `prepared` at all, so it stays
+     * evaluable — and evaluated — even when `prepare` refused. A route that
+     * matched this check only because its guard happened to be computed from a
+     * function, without actually needing the body to pick a permission, is the
+     * exact defect Issue #794/PR #797 found (`PATCH /api/v1/media/objects/
+     * {id}`) — the fix was moving it to the array form below, not widening this
+     * carve-out to a third name.
      */
     if (heldPrepareRefusal && typeof config.authorize === "function") {
       return heldPrepareRefusal;
@@ -779,17 +858,52 @@ export function defineTenantRoute<TPrepared = undefined>(
       sql,
       tenantId,
       async (tx) => {
-        const auth = await authorizeInTransaction(
-          tx,
-          tenantId,
-          tokenHash,
-          requestContext.now,
-          guard,
-          {
-            ...config.authorizeOptions,
-            clientIp: resolveClientIp(request, clientAddress)
-          }
-        );
+        // Array form: any ONE of these allowed is enough to reach `handler` —
+        // see `authorize`'s own doc comment. Every candidate still goes through
+        // `authorizeInTransaction` (never a separate, ad-hoc check), and a
+        // shared read cache means the session/tenant-state reads happen once
+        // regardless of how many candidates there are (the same memo
+        // `loadAdminScreen` uses for its own any-of form, `authorization-read-
+        // cache.ts`).
+        //
+        // Unlike `loadAdminScreen`, this STOPS at the first allow rather than
+        // evaluating every candidate: a route's `handler` has no `entry`-style
+        // per-candidate readout to fill (nothing here reads "which of the N did
+        // this caller hold" the way a multi-panel screen does), so evaluating a
+        // permission the caller was never asked about would only write an extra
+        // decision-log row that reads as "adjudicate_rights was checked and
+        // denied" for a request that never needed it. The route's `handler`
+        // still makes its OWN body-shape-specific `authorizeInTransaction` calls
+        // afterwards — this loop only answers "is it worth opening the handler
+        // at all".
+        const requests: readonly AccessRequest[] = Array.isArray(guard)
+          ? guard
+          : [guard];
+
+        const authorizeOptions = {
+          ...config.authorizeOptions,
+          clientIp: resolveClientIp(request, clientAddress),
+          readCache: createAuthorizationReadCache()
+        };
+
+        const results: AuthorizeResult[] = [];
+
+        for (const request of requests) {
+          const result = await authorizeInTransaction(
+            tx,
+            tenantId,
+            tokenHash,
+            requestContext.now,
+            request,
+            authorizeOptions
+          );
+
+          results.push(result);
+
+          if (result.allowed) break;
+        }
+
+        const auth = selectAnyAllowed(results);
 
         if (!auth.allowed) {
           return auth.denied;

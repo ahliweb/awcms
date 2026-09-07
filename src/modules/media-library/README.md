@@ -266,8 +266,8 @@ without anyone deciding it, also granting the authority to publish a name —
 possibly a third party's, e.g. a freelance photographer's.
 
 `sql/152` adds a ninth media permission, `media_library.media.adjudicate_rights`,
-and `PATCH /api/v1/media/objects/{id}` now picks the required permission(s)
-from the SHAPE of the request body:
+and `PATCH /api/v1/media/objects/{id}` now requires the permission(s) that
+match the SHAPE of the request body:
 
 - A request that does **not** include `rightsVerificationStatus` needs only
   `media.update`, exactly as before — no regression for the routine case.
@@ -279,11 +279,21 @@ from the SHAPE of the request body:
   business touching — reintroducing, one level up, the exact coupling this
   split exists to remove.
 - A request that includes `rightsVerificationStatus` **together with** a
-  routine field needs **both** permissions — the route's primary guard checks
-  `media.update` (since a routine field is present), and the handler makes a
-  SECOND `authorizeInTransaction` call for `media.adjudicate_rights` before
-  writing anything. Either permission missing denies the WHOLE request; there
-  is no partial write.
+  routine field needs **both** permissions. Either permission missing denies
+  the WHOLE request; there is no partial write.
+
+Neither permission is common to every shape the route accepts (a
+status-only reviewer never needs `update`), so the primary `authorize` guard
+is the ANY-of array form (`tenant-route.ts`) — allowed once the caller holds
+AT LEAST ONE of the two, through the real `authorizeInTransaction` chokepoint,
+for every caller, valid body or not. The `handler` then makes the field-
+group-specific `authorizeInTransaction` call(s) — one for `update` when the
+body touches a routine field, one for `adjudicate_rights` when it touches
+`rightsVerificationStatus`, run independently — that decide what the ACTUAL
+body needs. (An earlier revision of this route picked the permission with a
+function of the parsed body instead; that accidentally matched a carve-out in
+`tenant-route.ts` meant for exactly two OTHER routes, letting a caller with an
+invalid body skip authorization entirely. See PR #797.)
 
 `media_library.media.adjudicate_rights` is seeded (`sql/152`) with no default
 grant beyond the standard new-tenant `owner` catalogue inclusion every
@@ -296,6 +306,13 @@ reviewer" role, not something that rides along with every content-editor
 grant. `sql/152`'s own header has the full seeding rationale, including why
 `scope = 'platform'` (ADR-0052/0053's tool for `idn_admin_regions.dataset.*`)
 is the wrong fit here — this permission never crosses a tenant boundary.
+
+**Known scope limit, not a defect:** a tenant's default `owner` role receives
+EVERY tenant-scope permission, `media.update` and `media.adjudicate_rights`
+both — the same "owner = every permission" invariant every other module's
+`owner` grant has always had. So this split protects against a CUSTOM role a
+tenant deliberately creates with only one of the two; it does not, and is not
+meant to, stop the owner account itself from doing either.
 
 `/admin/media`'s rights-editor form still submits every routine field
 unconditionally (Issue #615's original design), but now omits
