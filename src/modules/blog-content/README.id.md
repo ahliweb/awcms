@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1df8173049868261e51f3f932690ef833e5a6c6bc216dc2fef1fb25656e9ef98 -->
+<!-- i18n-source-hash: sha256:91a2adb01efd1f9914007934b5329f466948a23e4fe21293d306675a1e5fd12c -->
 
 # Blog Content
 
@@ -796,6 +796,30 @@ siapa pun.
 menjadi wajib**: ad placement memegang FK nyata ke objek media terverifikasi,
 dan itulah alasan `news_portal` dulu mendeklarasikannya non-optional. Menyerap
 kodenya berarti menyerap batasannya.
+
+### Klasifikasi disclosure editorial ad placement (Issue #783)
+
+`awcms_news_portal_ad_placements` memiliki kolom `content_class`
+(`sql/151`), `NOT NULL DEFAULT 'standard'`, dibatasi CHECK ke
+`standard | advertorial | sponsored`. Ini mengklasifikasikan BOOKING-nya
+(baris placement), bukan objek media yang direferensikan — creative yang sama
+bisa berjalan sebagai `standard` di satu slot dan `sponsored` di slot lain,
+jadi menaruh label di `awcms_news_media_objects` akan memaksakan satu
+klasifikasi ke setiap slot tempat creative itu dipakai ulang.
+
+- `standard` — iklan biasa atau konten organik; tidak perlu disclosure ke pembaca.
+- `advertorial` — konten bergaya editorial yang sebenarnya dibayar.
+- `sponsored` — konten yang secara eksplisit disponsori/dibiayai pihak ketiga.
+
+Disurfacekan sebagai `contentClass` pada proyeksi `PublicAdPlacement` milik
+`GET /api/v1/news-portal/ad-placements/active`, sehingga build client bisa
+merender label disclosure ("Advertisement"/"Sponsored content") di samping
+placement yang membutuhkannya. Diterima dan divalidasi (menolak nilai selain
+tiga itu dengan `400 VALIDATION_ERROR`) pada
+`POST`/`PATCH /api/v1/news-portal/ad-placements[/{id}]` lewat
+`ad-placement-policy.ts`'s `AdContentClass`/`isAdContentClass`. Memakai ulang
+permission `blog_content.ad_placements.{read,configure}` yang sudah ada —
+tidak ada permission baru yang ditambahkan.
 
 ## Belum tersedia (backlog eksplisit, bukan kelalaian)
 

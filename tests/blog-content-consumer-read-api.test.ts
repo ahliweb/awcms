@@ -179,4 +179,29 @@ describe("each endpoint reads the public predicate, never the editor's view", ()
     );
     expect(source).toContain("isAdTargetType");
   });
+
+  /**
+   * Issue #783 — the public projection must forward the editorial-disclosure
+   * classification VERBATIM, not drop it or hardcode a constant. This is the
+   * "mutation" the acceptance criteria calls out by name: if `toPublic` were
+   * reverted to the pre-#783 shape (or edited to hand back a fixed
+   * `"standard"` regardless of the row's real value), this exact assertion
+   * goes red — `listActiveAdPlacementsForRendering`'s own
+   * `ad-placement-content-class.integration.test.ts` proves the upstream
+   * data is correct, so a failure here can only mean the projection dropped
+   * or falsified it, not that the query lied.
+   */
+  test("the active endpoint's public projection forwards contentClass verbatim, not a hardcoded constant", async () => {
+    const source = stripComments(
+      await readFile(
+        "src/pages/api/v1/news-portal/ad-placements/active.ts",
+        "utf8"
+      )
+    );
+
+    expect(source).toContain("contentClass: ad.contentClass");
+    // Guards against a projection that keeps the field name but always
+    // answers "standard" regardless of the underlying row.
+    expect(source).not.toMatch(/contentClass:\s*"standard"/);
+  });
 });

@@ -9494,19 +9494,20 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
 
 ### Schema: AdPlacementCreateRequest
 
-| Field           | Type                                                                                                                                                                                                                             | Required | Nullable | Description                                                        |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------ |
-| `placementKey`  | enum(`header_banner`, `below_headline`, `homepage_middle`, `homepage_bottom`, `article_top`, `article_middle`, `article_bottom`, `sidebar_top`, `sidebar_middle`, `sidebar_bottom`, `category_archive_top`, `search_result_top`) | yes      | no       |                                                                    |
-| `name`          | string                                                                                                                                                                                                                           | yes      | no       |                                                                    |
-| `mediaObjectId` | string (uuid)                                                                                                                                                                                                                    | yes      | no       |                                                                    |
-| `linkUrl`       | string                                                                                                                                                                                                                           | no       | yes      |                                                                    |
-| `rotationMode`  | enum(`latest`, `priority`, `random_safe`, `weighted`)                                                                                                                                                                            | no       | no       |                                                                    |
-| `priority`      | integer                                                                                                                                                                                                                          | no       | no       |                                                                    |
-| `isActive`      | boolean                                                                                                                                                                                                                          | no       | no       |                                                                    |
-| `startsAt`      | string (date-time)                                                                                                                                                                                                               | no       | yes      |                                                                    |
-| `endsAt`        | string (date-time)                                                                                                                                                                                                               | no       | yes      |                                                                    |
-| `targetType`    | enum(`global`, `widget`, `post`, `page`)                                                                                                                                                                                         | no       | no       | Targeting scope (ADR-0044). Omit for a site-wide ad.               |
-| `targetId`      | string (uuid)                                                                                                                                                                                                                    | no       | yes      | Required for `widget`/`post`/`page`, must be omitted for `global`. |
+| Field           | Type                                                                                                                                                                                                                             | Required | Nullable | Description                                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------- |
+| `placementKey`  | enum(`header_banner`, `below_headline`, `homepage_middle`, `homepage_bottom`, `article_top`, `article_middle`, `article_bottom`, `sidebar_top`, `sidebar_middle`, `sidebar_bottom`, `category_archive_top`, `search_result_top`) | yes      | no       |                                                                                           |
+| `name`          | string                                                                                                                                                                                                                           | yes      | no       |                                                                                           |
+| `mediaObjectId` | string (uuid)                                                                                                                                                                                                                    | yes      | no       |                                                                                           |
+| `linkUrl`       | string                                                                                                                                                                                                                           | no       | yes      |                                                                                           |
+| `rotationMode`  | enum(`latest`, `priority`, `random_safe`, `weighted`)                                                                                                                                                                            | no       | no       |                                                                                           |
+| `priority`      | integer                                                                                                                                                                                                                          | no       | no       |                                                                                           |
+| `isActive`      | boolean                                                                                                                                                                                                                          | no       | no       |                                                                                           |
+| `startsAt`      | string (date-time)                                                                                                                                                                                                               | no       | yes      |                                                                                           |
+| `endsAt`        | string (date-time)                                                                                                                                                                                                               | no       | yes      |                                                                                           |
+| `targetType`    | enum(`global`, `widget`, `post`, `page`)                                                                                                                                                                                         | no       | no       | Targeting scope (ADR-0044). Omit for a site-wide ad.                                      |
+| `targetId`      | string (uuid)                                                                                                                                                                                                                    | no       | yes      | Required for `widget`/`post`/`page`, must be omitted for `global`.                        |
+| `contentClass`  | enum(`standard`, `advertorial`, `sponsored`)                                                                                                                                                                                     | no       | no       | Editorial-disclosure classification (Issue #783). Omit for a plain ad or organic content. |
 
 **Example**
 
@@ -9522,7 +9523,8 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z",
   "targetType": "global",
-  "targetId": "00000000-0000-0000-0000-000000000000"
+  "targetId": "00000000-0000-0000-0000-000000000000",
+  "contentClass": "standard"
 }
 ```
 
@@ -9541,6 +9543,7 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
 | `endsAt`        | string (date-time)                                                                                                                                                                                                               | no       | yes      |                                                                                                                                                                            |
 | `targetType`    | enum(`global`, `widget`, `post`, `page`)                                                                                                                                                                                         | no       | no       | Targeting scope (ADR-0044). Must be sent whenever `targetId` is sent — the pair moves together or not at all, so that switching to `global` also clears the stored target. |
 | `targetId`      | string (uuid)                                                                                                                                                                                                                    | no       | yes      | Required for `widget`/`post`/`page`, must be omitted for `global`. Sending it without `targetType` is a validation error.                                                  |
+| `contentClass`  | enum(`standard`, `advertorial`, `sponsored`)                                                                                                                                                                                     | no       | no       | Editorial-disclosure classification (Issue #783).                                                                                                                          |
 
 **Example**
 
@@ -9556,7 +9559,8 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z",
   "targetType": "global",
-  "targetId": "00000000-0000-0000-0000-000000000000"
+  "targetId": "00000000-0000-0000-0000-000000000000",
+  "contentClass": "standard"
 }
 ```
 

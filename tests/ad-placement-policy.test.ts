@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  AD_CONTENT_CLASSES,
   AD_PLACEMENT_KEYS,
   AD_PLACEMENT_PRESETS,
   AD_ROTATION_MODES,
   AD_TARGET_TYPES,
+  isAdContentClass,
   isAdPlacementKey,
   isAdRotationMode,
   isAdTargetType,
@@ -117,7 +119,10 @@ describe("validateCreateAdPlacementInput (Issue #638)", () => {
       // ADR-0044 §4: an ad with no stated target is site-wide, which is also
       // what every row written before migration 078 means.
       targetType: "global",
-      targetId: null
+      targetId: null,
+      // Issue #783: unclassified means "standard" — same "backfill to the
+      // unambiguous case" reasoning migration 151 applies at the DB layer.
+      contentClass: "standard"
     });
   });
 
@@ -361,5 +366,89 @@ describe("ad placement targeting (ADR-0044 §4)", () => {
     if (!result.valid) return;
     expect("targetType" in result.value).toBe(false);
     expect("targetId" in result.value).toBe(false);
+  });
+});
+
+/**
+ * Editorial-disclosure classification (Issue #783). `standard | advertorial |
+ * sponsored`, stored `NOT NULL DEFAULT 'standard'` at the DB layer (migration
+ * 151) — the validator's default here must agree with that column default, or
+ * a caller that omits the field would see different behaviour depending on
+ * whether validation or the database applied the fallback.
+ */
+describe("ad placement content class (Issue #783)", () => {
+  function createWith(extra: Record<string, unknown>) {
+    return validateCreateAdPlacementInput({
+      placementKey: "header_banner",
+      name: "Spring Sale",
+      mediaObjectId: VALID_MEDIA_ID,
+      ...extra
+    });
+  }
+
+  test("the declared vocabulary is exactly standard/advertorial/sponsored", () => {
+    expect(AD_CONTENT_CLASSES).toEqual([
+      "standard",
+      "advertorial",
+      "sponsored"
+    ]);
+
+    for (const value of AD_CONTENT_CLASSES) {
+      expect(isAdContentClass(value)).toBe(true);
+    }
+
+    expect(isAdContentClass("promotional")).toBe(false);
+    expect(isAdContentClass("")).toBe(false);
+    expect(isAdContentClass(undefined)).toBe(false);
+    expect(isAdContentClass(null)).toBe(false);
+    expect(isAdContentClass(1)).toBe(false);
+  });
+
+  test("create defaults to standard when contentClass is omitted", () => {
+    const result = createWith({});
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value.contentClass).toBe("standard");
+  });
+
+  test("create accepts and persists each of the three valid values", () => {
+    for (const contentClass of AD_CONTENT_CLASSES) {
+      const result = createWith({ contentClass });
+      expect(result.valid).toBe(true);
+      if (!result.valid) continue;
+      expect(result.value.contentClass).toBe(contentClass);
+    }
+  });
+
+  test("create rejects a value outside the declared vocabulary", () => {
+    const result = createWith({ contentClass: "promotional" });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((e) => e.field)).toContain("contentClass");
+  });
+
+  test("update: contentClass is absent from the value when not sent (no-op, not a silent reset to standard)", () => {
+    const result = validateUpdateAdPlacementInput({ name: "Renamed" });
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect("contentClass" in result.value).toBe(false);
+  });
+
+  test("update accepts and persists each of the three valid values", () => {
+    for (const contentClass of AD_CONTENT_CLASSES) {
+      const result = validateUpdateAdPlacementInput({ contentClass });
+      expect(result.valid).toBe(true);
+      if (!result.valid) continue;
+      expect(result.value.contentClass).toBe(contentClass);
+    }
+  });
+
+  test("update rejects a value outside the declared vocabulary", () => {
+    const result = validateUpdateAdPlacementInput({
+      contentClass: "promotional"
+    });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((e) => e.field)).toContain("contentClass");
   });
 });
