@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:06e2fdbe6e9ff9c9ca220d31169f945ed001cd9da16226a79c78a92c2b90f749 -->
+<!-- i18n-source-hash: sha256:8c9f8fa620194d63747930b39cd439a91bf1563119c39edc739e45cced67cb7f -->
 
 # media_library
 
@@ -61,9 +61,9 @@ change (fail-closed via readiness). Guarded by
 
 ```
 media-library/
-  module.ts                                  # descriptor: system, provides media_library, 9 permissions, reconcile job
+  module.ts                                  # descriptor: system, provides media_library, 11 permissions, reconcile job
   domain/
-    media-permissions.ts                     # MEDIA_PERMISSIONS (7) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
+    media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
     media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
@@ -252,3 +252,63 @@ tiga dari tujuh, dan hanya bersyarat**:
 Ini adalah pelebaran data yang sudah dikembalikan oleh rute yang ada,
 ber-gerbang `media_library.media.read` — tanpa endpoint baru, tanpa
 permission baru.
+
+### `media_library.media.adjudicate_rights` — membelah sisi TULIS (Issue #794)
+
+Issue #782/PR #791 (di atas) adalah yang mengubah `rightsVerificationStatus`
+dari sekadar flag editorial internal menjadi saklar yang menentukan apakah
+`creditLine`/`sourceName`/`copyrightStatus` menjadi publik. Sampai Issue #794,
+`PATCH /api/v1/media/objects/{id}` menggerbangi SELURUH form metadata rights —
+`creditLine`, `sourceName`, `copyrightStatus`, `rightsNotes`, DAN
+`rightsVerificationStatus` — di balik satu permission,
+`media_library.media.update` (`sql/137`, Issue #615). Artinya siapa pun yang
+bisa mengetik kredit foto juga bisa, dalam permintaan yang sama,
+men-self-attest-nya `'verified'` dan memicu disclosure publik di atas — tanpa
+reviewer kedua, tanpa otoritas terpisah, tanpa langkah workflow. Sebuah tenant
+yang memberi `media.update` ke peran content-editor rutin untuk tugas
+sehari-hari mengetik kredit, tanpa ada yang memutuskannya, juga memberi
+otoritas menerbitkan sebuah nama — mungkin milik pihak ketiga, mis. fotografer
+lepas.
+
+`sql/152` menambah permission media kesembilan,
+`media_library.media.adjudicate_rights`, dan
+`PATCH /api/v1/media/objects/{id}` kini memilih permission yang dibutuhkan
+dari BENTUK isi request body:
+
+- Request yang **tidak** menyertakan `rightsVerificationStatus` hanya butuh
+  `media.update`, persis seperti sebelumnya — tanpa regresi untuk kasus rutin.
+- Request yang menyertakan `rightsVerificationStatus` **dan tidak ada field
+  lain** hanya butuh `media.adjudicate_rights` SENDIRI. `media.update`
+  sengaja TIDAK ikut disyaratkan: tugas seorang rights reviewer sepenuhnya
+  adalah adjudikasi, bukan menyunting kredit yang diadjudikasinya, dan
+  mensyaratkan keduanya akan memaksa tenant juga memberi peran reviewer hak
+  sunting atas field yang bukan urusannya — menghadirkan kembali, satu
+  tingkat lebih tinggi, kopling yang justru ingin dihapus pemisahan ini.
+- Request yang menyertakan `rightsVerificationStatus` **bersama** field rutin
+  butuh **kedua** permission — gerbang utama rute memeriksa `media.update`
+  (karena ada field rutin), dan handler membuat panggilan KEDUA
+  `authorizeInTransaction` untuk `media.adjudicate_rights` sebelum menulis
+  apa pun. Salah satu permission yang tidak ada menolak SELURUH request; tidak
+  ada tulis sebagian.
+
+`media_library.media.adjudicate_rights` di-seed (`sql/152`) tanpa grant default
+di luar inklusi katalog standar tenant-baru yang didapat setiap permission
+ber-scope tenant — postur yang sama yang sudah dimiliki `media.update` sejak
+`sql/137`. TIDAK ADA peran lain, dan TIDAK ADA `owner` tenant yang SUDAH ADA,
+menerimanya tanpa grant yang disengaja (lewat editor peran, atau
+`bun run identity-access:permissions:backfill --tenant <code>`): ini dimaksudkan
+sebagai grant opt-in yang secara sadar diberikan tenant ke peran "rights
+reviewer" yang ditunjuk, bukan sesuatu yang ikut menumpang di setiap grant
+content-editor. Header `sql/152` sendiri memuat alasan seeding lengkapnya,
+termasuk kenapa `scope = 'platform'` (alat ADR-0052/0053 untuk
+`idn_admin_regions.dataset.*`) bukan yang cocok di sini — permission ini tidak
+pernah melintasi batas tenant.
+
+Form rights-editor `/admin/media` masih mengirim setiap field rutin tanpa
+syarat (desain awal Issue #615), tetapi kini meniadakan
+`rightsVerificationStatus` dari body kecuali nilainya benar-benar berubah dari
+yang dirender halaman — kalau tidak, setiap simpan lewat form itu, termasuk
+yang cuma membetulkan salah ketik pada kredit, akan ikut mensyaratkan
+`media.adjudicate_rights`. `<select>` rights-verification itu sendiri
+di-disable untuk pemanggil yang tidak punya `adjudicate_rights`, jadi tidak
+ada yang diundang mengubah keputusan yang akan ditolak endpoint.

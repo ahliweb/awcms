@@ -131,10 +131,17 @@ describe("rights verification is not the byte check", () => {
     expect(isRightsAdjudication("rejected")).toBe(true);
   });
 
-  test("the route gates on `update`, never on `verify`", async () => {
+  test("the route gates on `update` (and, since Issue #794, `adjudicate_rights`), never on `verify`", async () => {
     const source = stripComments(await readFile(ROUTE, "utf8"));
 
-    expect(source).toMatch(/action:\s*"update"/);
+    // Issue #794 split the PATCH route's guard into a function of the request
+    // body (`touchesRoutineRightsField(...) ? "update" : "adjudicate_rights"`),
+    // so `"update"` no longer sits immediately after `action:` — it is one of
+    // two literals inside the ternary. A bounded lookahead keeps this
+    // permissive about THAT shape while still failing if `update` disappeared
+    // from the guard entirely.
+    expect(source).toMatch(/action:[\s\S]{0,120}?"update"/);
+    expect(source).toMatch(/action:[\s\S]{0,120}?"adjudicate_rights"/);
     expect(source).not.toMatch(/action:\s*"verify"/);
   });
 });

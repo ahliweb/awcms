@@ -65,7 +65,10 @@ const PAGE_KEYS = [
   // its permission (`sql/137`) landed in the same change as this key, which is
   // the rule `media-permissions.ts` records after two keys survived three
   // reviews by being declared ahead of any code that checked them.
-  "media_library.media.update"
+  "media_library.media.update",
+  // Issue #794 — split OUT of `update` above, so the rights-verification
+  // control can be disabled for a caller the endpoint would 403 for.
+  "media_library.media.adjudicate_rights"
 ] as const;
 
 /**
@@ -118,11 +121,30 @@ function guardTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
   // Both spellings: these routes use the shared activity-code constant, and a
   // literal-only regex would see zero guards and pass vacuously.
+  //
+  // `action` itself has two shapes since Issue #794: a plain string literal
+  // (every guard except one), or the ternary
+  // `PATCH .../objects/{id}`'s primary guard uses to pick `update` vs
+  // `adjudicate_rights` from the request body's shape
+  // (`touchesRoutineRightsField(prepared.input) ? "update" :
+  // "adjudicate_rights"`). Matching only the first shape would make this
+  // scanner blind to `update` the moment that route stopped spelling it as a
+  // bare literal — exactly the class of defect a source-regex test can
+  // introduce by only ever being extended for the pattern it already knew
+  // about. Both string literals inside the ternary are real, reachable
+  // guards (one branch runs per request), so both count.
   const pattern =
-    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*(?:MEDIA_PERMISSION_ACTIVITY_CODE|"([a-z_]+)"),\s*action:\s*"([a-z_]+)"/g;
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*(?:MEDIA_PERMISSION_ACTIVITY_CODE|"([a-z_]+)"),\s*action:\s*(?:"([a-z_]+)"|[^{}]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)")/g;
 
   for (const match of source.matchAll(pattern)) {
-    found.add(`${match[1]}.${match[2] ?? "media"}.${match[3]}` as Triple);
+    const activityCode = match[2] ?? "media";
+
+    if (match[3]) {
+      found.add(`${match[1]}.${activityCode}.${match[3]}` as Triple);
+    } else if (match[4] && match[5]) {
+      found.add(`${match[1]}.${activityCode}.${match[4]}` as Triple);
+      found.add(`${match[1]}.${activityCode}.${match[5]}` as Triple);
+    }
   }
 
   return found;
@@ -153,14 +175,14 @@ describe("/admin/media permission gates", () => {
 
     // Non-vacuous: an empty `enforced` would make the subset check pass while
     // proving nothing, the shape of gate this repo has been burned by.
-    expect(enforced.size).toBe(6);
+    expect(enforced.size).toBe(7);
 
     expect([...pageKeys].filter((key) => !enforced.has(key))).toEqual([]);
   });
 
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
-    expect(declared.size).toBe(10);
+    expect(declared.size).toBe(11);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
@@ -169,7 +191,7 @@ describe("/admin/media permission gates", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the page claims exactly the lifecycle five plus read", async () => {
+  test("the page claims exactly the lifecycle six plus read", async () => {
     const pageKeys = pageTriplesFrom(await readFile(PAGE, "utf8"));
 
     expect([...pageKeys].sort()).toEqual([...PAGE_KEYS].sort());

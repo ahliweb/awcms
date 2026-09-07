@@ -13,6 +13,8 @@ import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../../lib/security/request-body-limit";
+import { authorizeInTransaction } from "../../../../../modules/identity-access/application/access-guard";
+import { resolveClientIp } from "../../../../../lib/security/rate-limit";
 import { MEDIA_PERMISSION_ACTIVITY_CODE } from "../../../../../modules/media-library/domain/media-permissions";
 import { validateSoftDeleteMediaObjectInput } from "../../../../../modules/media-library/domain/media-lifecycle-validation";
 import {
@@ -206,6 +208,42 @@ export const DELETE = defineTenantRoute<Prepared>({
  * anyway — every write on this surface takes one, and a rights adjudication
  * replayed by a retrying client would write a second audit entry claiming a
  * second decision.
+ *
+ * ## Issue #794 — splitting the adjudication OUT of `update`
+ *
+ * Since Issue #782/PR #791, `rightsVerificationStatus === 'verified'` makes
+ * `creditLine`/`sourceName`/`copyrightStatus` cross into the PUBLIC
+ * `GET /api/v1/media/objects` response (`resolvePublicMediaRightsFields`).
+ * Before that PR this field was a purely internal editorial flag and one
+ * permission for the whole form was harmless; after it, `media.update` alone
+ * let whoever could type a credit line also self-attest it cleared for
+ * publication — no second reviewer, no distinct authority. See `sql/152` and
+ * `media-permissions.ts`'s `adjudicate_rights` doc comment for the full case.
+ *
+ * The primary `authorize` guard below picks the permission from the SHAPE of
+ * the already-validated body:
+ *
+ *   * body touches only routine fields (`creditLine`/`sourceName`/
+ *     `copyrightStatus`/`rightsNotes`) -> `media.update`, unchanged from
+ *     before this issue. No regression for the common case.
+ *   * body touches ONLY `rightsVerificationStatus` -> `media.adjudicate_rights`
+ *     ALONE. This is the deliberate choice for a caller that holds
+ *     `adjudicate_rights` but not `media.update`: a rights reviewer's whole
+ *     job is the adjudication, not editing the credit line it adjudicates,
+ *     and requiring `media.update` too would force a tenant to also hand the
+ *     reviewer role edit rights over fields it has no business touching —
+ *     reintroducing, one level up, the exact coupling this issue exists to
+ *     remove.
+ *
+ * A request that touches BOTH kinds of field in one call needs BOTH
+ * permissions: the primary guard picks `media.update` (since routine fields
+ * are present), and the handler makes a SECOND `authorizeInTransaction` call
+ * for `adjudicate_rights` before doing anything — a caller holding only one
+ * of the two is denied 403 either way, never allowed to smuggle a rights
+ * decision in alongside an edit it has no adjudication authority for (or vice
+ * versa). ADR-0063 still holds: both checks go through the one chokepoint,
+ * `defineTenantRoute`'s wiring for the first and an explicit call for the
+ * second — never an ad-hoc comparison.
  */
 const RIGHTS_IDEMPOTENCY_SCOPE = "media_object_rights_update";
 
@@ -213,6 +251,19 @@ type RightsPrepared = {
   idempotencyKey: string;
   input: MediaRightsUpdateInput;
 };
+
+/** The four rights fields `media.update` alone still governs — everything in {@link MediaRightsUpdateInput} except the adjudication itself. */
+const ROUTINE_RIGHTS_FIELDS = [
+  "creditLine",
+  "sourceName",
+  "copyrightStatus",
+  "rightsNotes"
+] as const;
+
+/** Does this (already-validated) patch touch any field `media.update` alone governs? */
+function touchesRoutineRightsField(input: MediaRightsUpdateInput): boolean {
+  return ROUTINE_RIGHTS_FIELDS.some((field) => input[field] !== undefined);
+}
 
 export const PATCH = defineTenantRoute<RightsPrepared>({
   workClass: "interactive",
@@ -247,16 +298,68 @@ export const PATCH = defineTenantRoute<RightsPrepared>({
 
     return { idempotencyKey, input: validation.value };
   },
-  authorize: {
+  // Issue #794 — picks the permission from the SHAPE of the validated body.
+  // Routine fields (present or not) decide `update` vs `adjudicate_rights`;
+  // when BOTH kinds of field are present, `update` is the primary guard here
+  // and the handler makes a second `authorizeInTransaction` call for
+  // `adjudicate_rights` before touching anything. See this route's header for
+  // why "adjudicate_rights alone" (no `update`) is deliberately sufficient
+  // for a request that changes ONLY `rightsVerificationStatus`.
+  authorize: ({ prepared }) => ({
     moduleKey: "media_library",
     activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
-    action: "update"
-  },
-  handler: async ({ tx, auth, prepared, params, tenantId, locals }) => {
+    action: touchesRoutineRightsField(prepared.input)
+      ? "update"
+      : "adjudicate_rights"
+  }),
+  handler: async ({
+    tx,
+    auth,
+    prepared,
+    params,
+    tenantId,
+    locals,
+    tokenHash,
+    now,
+    request,
+    clientAddress
+  }) => {
     const objectId = params.id;
 
     if (!isMediaObjectId(objectId)) {
       return fail(400, "VALIDATION_ERROR", "Media object id must be a uuid.");
+    }
+
+    // The primary guard above only checked `adjudicate_rights` when the body
+    // touched NOTHING else. A combined request (routine field + verification
+    // status together) was authorized on `update` alone — this is the second
+    // half of that gate, run BEFORE any read/write below. A caller holding
+    // only one of the two permissions is denied here, never allowed to ride
+    // the other permission's approval for the field it does not cover.
+    if (
+      prepared.input.rightsVerificationStatus !== undefined &&
+      touchesRoutineRightsField(prepared.input)
+    ) {
+      const adjudication = await authorizeInTransaction(
+        tx,
+        tenantId,
+        tokenHash,
+        now,
+        {
+          moduleKey: "media_library",
+          activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
+          action: "adjudicate_rights"
+        },
+        // ADR-0092 — a hand-written second call is not one `defineTenantRoute`
+        // wires `clientIp` for automatically; passing it explicitly keeps the
+        // write-class machine-credential IP restriction enforced for this
+        // guard too, not silently switched off.
+        { clientIp: resolveClientIp(request, clientAddress) }
+      );
+
+      if (!adjudication.allowed) {
+        return adjudication.denied;
+      }
     }
 
     // The whole patch is in the hash: replaying a key with a different credit

@@ -4404,6 +4404,12 @@ msgstr "Dari mana berkas ini berasal, yang sering berbeda dari siapa yang dikred
 msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
 msgstr "Mengubahnya mencatat siapa yang memutuskan dan kapan, serta menulis entri audit. Mengembalikannya ke unverified menghapus keduanya."
 
+# Issue #794 — shown instead of the hint above when the caller lacks
+# media_library.media.adjudicate_rights, so the control's disabled state is
+# explained rather than left silent.
+msgid "Only a rights reviewer may change this (media_library.media.adjudicate_rights)."
+msgstr "Hanya rights reviewer yang boleh mengubah ini (media_library.media.adjudicate_rights)."
+
 # Issue #592 — the editor preview link on /admin/blog.
 
 msgid "Preview"

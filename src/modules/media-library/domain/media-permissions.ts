@@ -13,21 +13,25 @@
  *
  * ## Reachability in THIS base
  *
- * Seven keys, and ADR-0056 §A is why it is not the nine `awcms-mini`/`awcms-micro`
- * carry: `attach`/`detach` were REVOKED (`sql/087`). They described writes on a
- * relation this module stopped owning at ADR-0036 — a post's image is
+ * Nine keys today (`update` was the eighth, `sql/137`; `adjudicate_rights` is
+ * the ninth, `sql/152`, Issue #794). ADR-0056 §A is why the count is not the
+ * nine `awcms-mini`/`awcms-micro` carry PLUS these two: `attach`/`detach` were
+ * REVOKED (`sql/087`). They described writes on a relation this module
+ * stopped owning at ADR-0036 — a post's image is
  * `awcms_blog_posts.featured_media_id`, changed through `blog_content`'s
  * permission, not this module's. Both were seeded into a catalog every tenant
  * owner receives whole, while no route, function, or job ever checked them.
  *
- * Of the seven that remain, every one is enforced by real code:
+ * Of the nine that remain, every one is enforced by real code:
  * `create`/`verify`/`cancel` by the presigned-upload flow
  * (`POST /api/v1/media/news-images/upload-sessions`, `.../{id}/finalize`,
- * `.../{id}/cancel`), `read` by `GET /api/v1/media/objects`, and
- * `delete`/`restore`/`purge` by the object lifecycle endpoints (ADR-0056 §B).
- * Adding an eighth means writing the guard that checks it in the same change —
- * a key declared "ahead of its surface" is how the two revoked ones survived
- * three waves of review looking correct.
+ * `.../{id}/cancel`), `read` by `GET /api/v1/media/objects`, `update`/
+ * `adjudicate_rights` by `PATCH /api/v1/media/objects/{id}`
+ * (`src/pages/api/v1/media/objects/[id].ts`), and `delete`/`restore`/`purge`
+ * by the object lifecycle endpoints (ADR-0056 §B). Adding a key means writing
+ * the guard that checks it in the same change — a key declared "ahead of its
+ * surface" is how the two revoked ones survived three waves of review looking
+ * correct.
  *
  * This file remains the single source for the key strings: `module.ts`, the
  * guards, and `tests/media-library-module.test.ts`'s parity assertion all derive
@@ -60,6 +64,32 @@ export const MEDIA_PERMISSIONS = {
    * legal half read as done whenever a file sniffed clean.
    */
   update: "media_library.media.update",
+  /**
+   * Transition `rightsVerificationStatus` — the NINTH key (Issue #794,
+   * `sql/152`), split OUT of `update` above.
+   *
+   * Since Issue #782/PR #791, `rightsVerificationStatus === 'verified'` makes
+   * `creditLine`/`sourceName`/`copyrightStatus` cross into the PUBLIC
+   * `GET /api/v1/media/objects` response (`resolvePublicMediaRightsFields`).
+   * Before that PR the status was a purely internal editorial flag and one
+   * permission for the whole rights form was harmless; after it, the same
+   * permission let whoever could type a credit line also self-attest it
+   * cleared for publication — no second reviewer, no distinct authority.
+   *
+   * `PATCH /api/v1/media/objects/{id}` requires this ADDITIONALLY to `update`
+   * whenever the request body would touch a routine field AND the
+   * verification status in the same call; a request that changes ONLY
+   * `rightsVerificationStatus` requires this permission ALONE (see that
+   * route's header for the full reasoning) — so a tenant can staff a
+   * "rights reviewer" role that adjudicates without also being able to edit
+   * the credit line it is adjudicating.
+   *
+   * Seeded with no default role grant beyond the standard new-tenant `owner`
+   * catalogue inclusion every permission gets (`sql/152`'s own header) — no
+   * OTHER role, and no EXISTING tenant, receives it without a deliberate
+   * grant.
+   */
+  adjudicate_rights: "media_library.media.adjudicate_rights",
   /** Soft delete media object metadata. */
   delete: "media_library.media.delete",
   /** Restore a soft-deleted media object. */

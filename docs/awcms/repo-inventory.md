@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 24    |
-| Migrations                          | 151   |
+| Migrations                          | 152   |
 | `awcms_*` tables                    | 152   |
 | Tables with `FORCE` RLS             | 134   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 512   |
+| Test files                          | 513   |
 | Route files                         | 388   |
 | ADR                                 | 242   |
 
@@ -200,6 +200,7 @@
 | 149 | `sql/149_awcms_idn_admin_regions_rejection_reason.sql`             |
 | 150 | `sql/150_awcms_idn_admin_regions_dataset_diff_indexes.sql`         |
 | 151 | `sql/151_awcms_ad_placement_content_class.sql`                     |
+| 152 | `sql/152_awcms_media_rights_adjudication_permission.sql`           |
 
 ### Tables & Row-Level Security
 
@@ -364,7 +365,7 @@
 | ------------- | ---------- |
 | `(root)`      | 414        |
 | `e2e`         | 19         |
-| `integration` | 78         |
+| `integration` | 79         |
 | `unit`        | 1          |
 
 ### Routes
