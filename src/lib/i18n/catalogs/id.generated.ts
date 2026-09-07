@@ -781,6 +781,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page.": ["Satu baris per platform, maksimum {max}. Tautan wajib berupa URL http(s) absolut — ia dirender di setiap halaman publik."],
   "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen.": ["Satu ID objek media terverifikasi per baris, dalam urutan tampil. Antara 1 dan 20. ID tercantum di layar pustaka media."],
   "Online now": ["Daring sekarang"],
+  "Only a rights reviewer may change this (media_library.media.adjudicate_rights).": ["Hanya rights reviewer yang boleh mengubah ini (media_library.media.adjudicate_rights)."],
   "Only a scope type some module can RESOLVE is accepted — this base resolves": ["Hanya tipe cakupan yang bisa DISELESAIKAN oleh suatu modul yang diterima — basis ini menyelesaikan"],
   "Only for an address you have already proven belongs to this person. It mints an account with no evidence its holder controls the address.": ["Hanya untuk alamat yang sudah Anda buktikan milik orang ini. Ia mencetak akun tanpa bukti bahwa pemegangnya menguasai alamat itu."],
   "Only verified and attached objects resolve": ["Hanya objek terverifikasi dan terlampir yang terselesaikan"],

@@ -59,9 +59,9 @@ change (fail-closed via readiness). Guarded by
 
 ```
 media-library/
-  module.ts                                  # descriptor: system, provides media_library, 9 permissions, reconcile job
+  module.ts                                  # descriptor: system, provides media_library, 11 permissions, reconcile job
   domain/
-    media-permissions.ts                     # MEDIA_PERMISSIONS (7) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
+    media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
     media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
@@ -214,3 +214,111 @@ different facts.
 
 Read-only, so machine credentials ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
 may hold it.
+
+### Credit/rights fields on the public DTO (Issue #782)
+
+`sql/137` (Issue #615) gave every media object seven rights fields:
+`creditLine`, `sourceName`, `rightsNotes`, `copyrightStatus`,
+`rightsVerificationStatus`, `rightsVerifiedBy`, `rightsVerifiedAt`. Until
+Issue #782, none of them crossed the `GET /api/v1/media/objects` boundary — a
+derived news site could render a photo's alt text with no photographer
+credit, even though the credit existed on the row all along.
+
+`ResolvedMediaReferenceDTO` (`_shared/ports/media-library-port.ts`) now also
+carries `creditLine`, `sourceName`, and `copyrightStatus` — but **only three
+of the seven, and only conditionally**:
+
+- **`rightsVerifiedBy`/`rightsVerifiedAt` never cross at all.** They name an
+  internal reviewer and a review moment. Same posture
+  [ADR-0109](../../../docs/adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.md)
+  already took for `awcms_tenant_users.public_byline_name`: an internal
+  identity must never reach a public, credential-gated surface as a side
+  effect of some other field being published.
+- **`rightsNotes` never crosses either.** It can hold licensing terms and
+  contact details — editorial-internal, not a credit.
+- **`creditLine`/`sourceName`/`copyrightStatus` cross ONLY when
+  `rightsVerificationStatus === 'verified'`.** On anything else — the default
+  `'unverified'`, or an explicit `'rejected'` — all three come back `null`,
+  even when the underlying row has them populated. Fail-closed: nobody has
+  confirmed the newsroom may print this credit, so the endpoint does not print
+  it either. See `domain/media-rights-policy.ts#resolvePublicMediaRightsFields`
+  for the pure gate function and its full rationale, and
+  `application/media-library-port-adapter.ts`'s `resolveMediaReferences` for
+  where it is applied.
+
+This is a widening of data already returned by an existing
+`media_library.media.read`-gated route — no new endpoint, no new permission.
+
+### `media_library.media.adjudicate_rights` — splitting the WRITE side (Issue #794)
+
+Issue #782/PR #791 (above) is what turned `rightsVerificationStatus` from a
+purely internal editorial flag into the switch that decides whether
+`creditLine`/`sourceName`/`copyrightStatus` become public. Until Issue #794,
+`PATCH /api/v1/media/objects/{id}` gated the WHOLE rights-metadata form —
+`creditLine`, `sourceName`, `copyrightStatus`, `rightsNotes`, AND
+`rightsVerificationStatus` — behind the single permission
+`media_library.media.update` (`sql/137`, Issue #615). That meant whoever could
+type in a photo credit could also, in the same request, self-attest it
+`'verified'` and trigger the public disclosure above — no second reviewer, no
+distinct authority, no workflow step. A tenant granting `media.update` to a
+routine content-editor role for the everyday task of typing credit lines was,
+without anyone deciding it, also granting the authority to publish a name —
+possibly a third party's, e.g. a freelance photographer's.
+
+`sql/152` adds a ninth media permission, `media_library.media.adjudicate_rights`,
+and `PATCH /api/v1/media/objects/{id}` now requires the permission(s) that
+match the SHAPE of the request body:
+
+- A request that does **not** include `rightsVerificationStatus` needs only
+  `media.update`, exactly as before — no regression for the routine case.
+- A request that includes `rightsVerificationStatus` **and nothing else**
+  needs `media.adjudicate_rights` ALONE. `media.update` is deliberately not
+  also required: a rights reviewer's whole job is the adjudication, not
+  editing the credit line it adjudicates, and requiring both would force a
+  tenant to also hand the reviewer role edit rights over fields it has no
+  business touching — reintroducing, one level up, the exact coupling this
+  split exists to remove.
+- A request that includes `rightsVerificationStatus` **together with** a
+  routine field needs **both** permissions. Either permission missing denies
+  the WHOLE request; there is no partial write.
+
+Neither permission is common to every shape the route accepts (a
+status-only reviewer never needs `update`), so the primary `authorize` guard
+is the ANY-of array form (`tenant-route.ts`) — allowed once the caller holds
+AT LEAST ONE of the two, through the real `authorizeInTransaction` chokepoint,
+for every caller, valid body or not. The `handler` then makes the field-
+group-specific `authorizeInTransaction` call(s) — one for `update` when the
+body touches a routine field, one for `adjudicate_rights` when it touches
+`rightsVerificationStatus`, run independently — that decide what the ACTUAL
+body needs. (An earlier revision of this route picked the permission with a
+function of the parsed body instead; that accidentally matched a carve-out in
+`tenant-route.ts` meant for exactly two OTHER routes, letting a caller with an
+invalid body skip authorization entirely. See PR #797.)
+
+`media_library.media.adjudicate_rights` is seeded (`sql/152`) with no default
+grant beyond the standard new-tenant `owner` catalogue inclusion every
+tenant-scope permission gets — the same posture `media.update` itself has had
+since `sql/137`. No OTHER role, and no EXISTING tenant's `owner`, receives it
+without a deliberate grant (the role editor, or
+`bun run identity-access:permissions:backfill --tenant <code>`): this is meant
+to be an opt-in grant a tenant consciously makes to a designated "rights
+reviewer" role, not something that rides along with every content-editor
+grant. `sql/152`'s own header has the full seeding rationale, including why
+`scope = 'platform'` (ADR-0052/0053's tool for `idn_admin_regions.dataset.*`)
+is the wrong fit here — this permission never crosses a tenant boundary.
+
+**Known scope limit, not a defect:** a tenant's default `owner` role receives
+EVERY tenant-scope permission, `media.update` and `media.adjudicate_rights`
+both — the same "owner = every permission" invariant every other module's
+`owner` grant has always had. So this split protects against a CUSTOM role a
+tenant deliberately creates with only one of the two; it does not, and is not
+meant to, stop the owner account itself from doing either.
+
+`/admin/media`'s rights-editor form still submits every routine field
+unconditionally (Issue #615's original design), but now omits
+`rightsVerificationStatus` from the body unless it actually changed from the
+value the page rendered — otherwise every save through that form, including
+one that only fixed a typo in a credit line, would require
+`media.adjudicate_rights` too. The rights-verification `<select>` itself is
+disabled for a caller who lacks `adjudicate_rights`, so nobody is invited to
+change a decision the endpoint would refuse.

@@ -65,6 +65,19 @@ module outlived that module's retirement (ADR-0044).
 Both `bun run openapi:bundle` and `bun run api:spec:check` run entirely offline
 against files already in the repo — no network access, no external CLI.
 
+**No same-line trailing comments on a plain (unquoted) scalar** (Issue #786):
+YAML's plain-scalar grammar treats a whitespace-preceded `#` as a comment
+start wherever it appears, including in the middle of prose — so
+`description: Issue #591 fixed this` silently parses as `description: Issue`,
+with everything from ` #591` onward dropped, not an error. `bun run
+openapi:bundle`/`api:spec:check` now detects this shape and fails the build
+naming the file and field — but it cannot tell "you meant that `#` to be part
+of the text" from "you wrote a genuine, unrelated same-line comment after a
+correct value"; both look identical to the parser. Either way the fix is the
+same: quote the whole scalar with double quotes (`description: "Issue #591
+fixed this"`), or move a genuine comment onto its own line above the field
+instead of trailing it.
+
 ## What `api:spec:check` verifies (`scripts/api-spec-check.ts`)
 
 - **Bundle freshness** — the committed bundle byte-matches what

@@ -65,7 +65,10 @@ const PAGE_KEYS = [
   // its permission (`sql/137`) landed in the same change as this key, which is
   // the rule `media-permissions.ts` records after two keys survived three
   // reviews by being declared ahead of any code that checked them.
-  "media_library.media.update"
+  "media_library.media.update",
+  // Issue #794 — split OUT of `update` above, so the rights-verification
+  // control can be disabled for a caller the endpoint would 403 for.
+  "media_library.media.adjudicate_rights"
 ] as const;
 
 /**
@@ -118,11 +121,38 @@ function guardTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
   // Both spellings: these routes use the shared activity-code constant, and a
   // literal-only regex would see zero guards and pass vacuously.
+  //
+  // `action` itself has two shapes, kept since Issue #794 even though the
+  // route that motivated the second shape no longer needs it: a plain string
+  // literal (every guard today), or the ternary form
+  // `moduleKey/activityCode/action: cond ? "x" : "y"` a body-dependent FUNCTION
+  // guard would use. `PATCH .../objects/{id}` used exactly that ternary in its
+  // first cut (ADR-0121) — `authorize` was a function picking `update` vs
+  // `adjudicate_rights` from the parsed body — which turned out to be a live
+  // authorization-bypass bug (an invalid body skipped `authorizeInTransaction`
+  // entirely) and was reverted. The route's CURRENT guard is a static any-of
+  // ARRAY (`authorize: [{..., action: "update"}, {..., action:
+  // "adjudicate_rights"}]`, two plain literals, no ternary) as the primary
+  // gate, plus two independent `authorizeInTransaction` calls inside the
+  // handler — one per field group the body actually touches, each also a
+  // plain literal. Every one of those four call sites matches this pattern's
+  // FIRST alternative on its own. The ternary alternative is kept regardless:
+  // deleting it would make this scanner blind to `update` the instant some
+  // future body-dependent guard reintroduces that shape, which is exactly the
+  // class of defect a source-regex test can introduce by only ever being
+  // pared down to the pattern it currently sees.
   const pattern =
-    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*(?:MEDIA_PERMISSION_ACTIVITY_CODE|"([a-z_]+)"),\s*action:\s*"([a-z_]+)"/g;
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*(?:MEDIA_PERMISSION_ACTIVITY_CODE|"([a-z_]+)"),\s*action:\s*(?:"([a-z_]+)"|[^{}]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)")/g;
 
   for (const match of source.matchAll(pattern)) {
-    found.add(`${match[1]}.${match[2] ?? "media"}.${match[3]}` as Triple);
+    const activityCode = match[2] ?? "media";
+
+    if (match[3]) {
+      found.add(`${match[1]}.${activityCode}.${match[3]}` as Triple);
+    } else if (match[4] && match[5]) {
+      found.add(`${match[1]}.${activityCode}.${match[4]}` as Triple);
+      found.add(`${match[1]}.${activityCode}.${match[5]}` as Triple);
+    }
   }
 
   return found;
@@ -153,14 +183,14 @@ describe("/admin/media permission gates", () => {
 
     // Non-vacuous: an empty `enforced` would make the subset check pass while
     // proving nothing, the shape of gate this repo has been burned by.
-    expect(enforced.size).toBe(6);
+    expect(enforced.size).toBe(7);
 
     expect([...pageKeys].filter((key) => !enforced.has(key))).toEqual([]);
   });
 
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
-    expect(declared.size).toBe(10);
+    expect(declared.size).toBe(11);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
@@ -169,7 +199,7 @@ describe("/admin/media permission gates", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the page claims exactly the lifecycle five plus read", async () => {
+  test("the page claims exactly the lifecycle six plus read", async () => {
     const pageKeys = pageTriplesFrom(await readFile(PAGE, "utf8"));
 
     expect([...pageKeys].sort()).toEqual([...PAGE_KEYS].sort());

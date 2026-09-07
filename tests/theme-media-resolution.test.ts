@@ -41,7 +41,10 @@ function reference(publicUrl: string, altText: string | null = null) {
     mimeType: "image/png",
     width: null,
     height: null,
-    sizeBytes: null
+    sizeBytes: null,
+    creditLine: null,
+    sourceName: null,
+    copyrightStatus: null
   } satisfies ResolvedMediaReferenceDTO;
 }
 

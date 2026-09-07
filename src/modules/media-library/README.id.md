@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b50923d5687979a0daf8209d26131a380dad63b083bfefd5f43afbe1087d7c3c -->
+<!-- i18n-source-hash: sha256:9771ababc64aec622021bcb017aaf527400c5d29761d247323832a87d4db716d -->
 
 # media_library
 
@@ -61,9 +61,9 @@ change (fail-closed via readiness). Guarded by
 
 ```
 media-library/
-  module.ts                                  # descriptor: system, provides media_library, 9 permissions, reconcile job
+  module.ts                                  # descriptor: system, provides media_library, 11 permissions, reconcile job
   domain/
-    media-permissions.ts                     # MEDIA_PERMISSIONS (7) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
+    media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
     media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
@@ -216,3 +216,119 @@ berbeda.
 
 Read-only, jadi kredensial mesin ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
 boleh memegangnya.
+
+### Field kredit/rights pada DTO publik (Issue #782)
+
+`sql/137` (Issue #615) memberi setiap objek media tujuh field rights:
+`creditLine`, `sourceName`, `rightsNotes`, `copyrightStatus`,
+`rightsVerificationStatus`, `rightsVerifiedBy`, `rightsVerifiedAt`. Sampai
+Issue #782, tidak satu pun menyeberangi batas `GET /api/v1/media/objects` —
+sebuah situs berita turunan bisa merender alt text sebuah foto tanpa kredit
+fotografernya, padahal kreditnya sudah ada di baris itu sejak awal.
+
+`ResolvedMediaReferenceDTO` (`_shared/ports/media-library-port.ts`) kini juga
+membawa `creditLine`, `sourceName`, dan `copyrightStatus` — tetapi **hanya
+tiga dari tujuh, dan hanya bersyarat**:
+
+- **`rightsVerifiedBy`/`rightsVerifiedAt` tidak pernah menyeberang sama
+  sekali.** Keduanya menyebut seorang reviewer internal dan momen review.
+  Postur yang sama dengan yang sudah diambil
+  [ADR-0109](../../../docs/adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.md)
+  untuk `awcms_tenant_users.public_byline_name`: identitas internal tidak
+  boleh mencapai permukaan publik ber-kredensial sebagai efek samping field
+  lain yang diterbitkan.
+- **`rightsNotes` juga tidak pernah menyeberang.** Ia bisa memuat syarat
+  lisensi dan kontak — editorial-internal, bukan kredit.
+- **`creditLine`/`sourceName`/`copyrightStatus` menyeberang HANYA ketika
+  `rightsVerificationStatus === 'verified'`.** Pada keadaan lain — default
+  `'unverified'`, atau eksplisit `'rejected'` — ketiganya kembali sebagai
+  `null`, bahkan ketika baris di baliknya sudah terisi. Fail-closed: belum
+  ada yang mengonfirmasi ruang redaksi boleh mencetak kredit ini, jadi
+  endpoint pun tidak mencetaknya. Lihat
+  `domain/media-rights-policy.ts#resolvePublicMediaRightsFields` untuk fungsi
+  gerbang murni dan alasan lengkapnya, dan `resolveMediaReferences` di
+  `application/media-library-port-adapter.ts` untuk tempat ia diterapkan.
+
+Ini adalah pelebaran data yang sudah dikembalikan oleh rute yang ada,
+ber-gerbang `media_library.media.read` — tanpa endpoint baru, tanpa
+permission baru.
+
+### `media_library.media.adjudicate_rights` — membelah sisi TULIS (Issue #794)
+
+Issue #782/PR #791 (di atas) adalah yang mengubah `rightsVerificationStatus`
+dari sekadar flag editorial internal menjadi saklar yang menentukan apakah
+`creditLine`/`sourceName`/`copyrightStatus` menjadi publik. Sampai Issue #794,
+`PATCH /api/v1/media/objects/{id}` menggerbangi SELURUH form metadata rights —
+`creditLine`, `sourceName`, `copyrightStatus`, `rightsNotes`, DAN
+`rightsVerificationStatus` — di balik satu permission,
+`media_library.media.update` (`sql/137`, Issue #615). Artinya siapa pun yang
+bisa mengetik kredit foto juga bisa, dalam permintaan yang sama,
+men-self-attest-nya `'verified'` dan memicu disclosure publik di atas — tanpa
+reviewer kedua, tanpa otoritas terpisah, tanpa langkah workflow. Sebuah tenant
+yang memberi `media.update` ke peran content-editor rutin untuk tugas
+sehari-hari mengetik kredit, tanpa ada yang memutuskannya, juga memberi
+otoritas menerbitkan sebuah nama — mungkin milik pihak ketiga, mis. fotografer
+lepas.
+
+`sql/152` menambah permission media kesembilan,
+`media_library.media.adjudicate_rights`, dan
+`PATCH /api/v1/media/objects/{id}` kini mensyaratkan permission yang cocok
+dengan BENTUK isi request body:
+
+- Request yang **tidak** menyertakan `rightsVerificationStatus` hanya butuh
+  `media.update`, persis seperti sebelumnya — tanpa regresi untuk kasus rutin.
+- Request yang menyertakan `rightsVerificationStatus` **dan tidak ada field
+  lain** hanya butuh `media.adjudicate_rights` SENDIRI. `media.update`
+  sengaja TIDAK ikut disyaratkan: tugas seorang rights reviewer sepenuhnya
+  adalah adjudikasi, bukan menyunting kredit yang diadjudikasinya, dan
+  mensyaratkan keduanya akan memaksa tenant juga memberi peran reviewer hak
+  sunting atas field yang bukan urusannya — menghadirkan kembali, satu
+  tingkat lebih tinggi, kopling yang justru ingin dihapus pemisahan ini.
+- Request yang menyertakan `rightsVerificationStatus` **bersama** field rutin
+  butuh **kedua** permission. Salah satu permission yang tidak ada menolak
+  SELURUH request; tidak ada tulis sebagian.
+
+Tidak ada satu permission pun yang sama untuk SEMUA bentuk yang diterima rute
+ini (reviewer status-only tidak pernah butuh `update`), jadi gerbang utama
+`authorize` memakai bentuk ARRAY any-of (`tenant-route.ts`) — diizinkan begitu
+pemanggil memegang SETIDAKNYA SATU dari keduanya, lewat chokepoint
+`authorizeInTransaction` yang sesungguhnya, untuk setiap pemanggil, baik body
+valid maupun tidak. `handler` kemudian membuat panggilan
+`authorizeInTransaction` per kelompok field — satu untuk `update` saat body
+menyentuh field rutin, satu untuk `adjudicate_rights` saat body menyentuh
+`rightsVerificationStatus`, dijalankan independen — yang memutuskan apa yang
+BENAR-BENAR dibutuhkan body tersebut. (Revisi rute ini sebelumnya memilih
+permission lewat fungsi dari body yang sudah di-parse; itu tanpa sengaja
+cocok dengan satu carve-out di `tenant-route.ts` yang dimaksudkan untuk PERSIS
+dua rute LAIN, membuat pemanggil dengan body tidak valid bisa melewati
+otorisasi sepenuhnya. Lihat PR #797.)
+
+`media_library.media.adjudicate_rights` di-seed (`sql/152`) tanpa grant default
+di luar inklusi katalog standar tenant-baru yang didapat setiap permission
+ber-scope tenant — postur yang sama yang sudah dimiliki `media.update` sejak
+`sql/137`. TIDAK ADA peran lain, dan TIDAK ADA `owner` tenant yang SUDAH ADA,
+menerimanya tanpa grant yang disengaja (lewat editor peran, atau
+`bun run identity-access:permissions:backfill --tenant <code>`): ini dimaksudkan
+sebagai grant opt-in yang secara sadar diberikan tenant ke peran "rights
+reviewer" yang ditunjuk, bukan sesuatu yang ikut menumpang di setiap grant
+content-editor. Header `sql/152` sendiri memuat alasan seeding lengkapnya,
+termasuk kenapa `scope = 'platform'` (alat ADR-0052/0053 untuk
+`idn_admin_regions.dataset.*`) bukan yang cocok di sini — permission ini tidak
+pernah melintasi batas tenant.
+
+**Batas cakupan yang diketahui, bukan cacat:** peran `owner` default sebuah
+tenant menerima SETIAP permission ber-scope tenant, `media.update` maupun
+`media.adjudicate_rights` sekaligus — invariant "owner = semua permission"
+yang sama yang selalu dimiliki grant `owner` modul lain. Jadi pemisahan ini
+melindungi terhadap peran KUSTOM yang sengaja dibuat tenant dengan hanya salah
+satu dari keduanya; ia tidak, dan tidak dimaksudkan untuk, mencegah akun owner
+itu sendiri melakukan keduanya.
+
+Form rights-editor `/admin/media` masih mengirim setiap field rutin tanpa
+syarat (desain awal Issue #615), tetapi kini meniadakan
+`rightsVerificationStatus` dari body kecuali nilainya benar-benar berubah dari
+yang dirender halaman — kalau tidak, setiap simpan lewat form itu, termasuk
+yang cuma membetulkan salah ketik pada kredit, akan ikut mensyaratkan
+`media.adjudicate_rights`. `<select>` rights-verification itu sendiri
+di-disable untuk pemanggil yang tidak punya `adjudicate_rights`, jadi tidak
+ada yang diundang mengubah keputusan yang akan ditolak endpoint.

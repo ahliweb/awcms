@@ -143,7 +143,18 @@ export type AccessAction =
   // audited regardless of this classification (`isHighRiskAction` is metadata,
   // not a gate on idempotency/audit). (`read`/`update` for site_search reuse
   // existing union members.)
-  | "reconcile";
+  | "reconcile"
+  // Media library (Issue #794, `sql/152`): `adjudicate_rights` transitions
+  // `awcms_news_media_objects.rights_verification_status` — a HUMAN decision
+  // that a licence permits (or forbids) publication, distinct from `update`
+  // (routine credit-line/source/copyright-status/notes editing) since
+  // Issue #782/PR #791 gave `'verified'` a real, near-irreversible
+  // consequence: it makes the credit fields cross into the PUBLIC
+  // `GET /api/v1/media/objects` response. Before #782 this transition rode
+  // on `media.update` alone, which let whoever could type a credit line also
+  // self-attest it cleared for publication. Classified HIGH-RISK below: see
+  // that Set's own comment for why.
+  | "adjudicate_rights";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -274,7 +285,17 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "archive",
   // Data lifecycle (ADR-0037): releasing a legal hold removes a data-protection
   // safeguard — see the `AccessAction` union's own comment for `release`.
-  "release"
+  "release",
+  // Media library (Issue #794): a rights-verification transition is what makes
+  // a credit line cross into a public, machine-credentialed API response — the
+  // same public-disclosure blast radius as `publish`/`archive` above. Being
+  // high-risk does not itself change today's behaviour (the endpoint already
+  // requires `Idempotency-Key` unconditionally, and no SoD rule references
+  // this key yet), but it makes the action-time SoD check
+  // (`checkHighRiskSoDConflicts`) available the moment a tenant authors one —
+  // e.g. "the same subject may not both edit routine credit fields and
+  // adjudicate rights" — without a second code change.
+  "adjudicate_rights"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

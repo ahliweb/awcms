@@ -263,7 +263,7 @@ paths:
       operationId: accessEvaluate
       tags:
         - Identity & Access
-      summary: Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue #179).
+      summary: "Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue #179)."
       description: Returns what `evaluateAccess` would decide for the CALLER'S OWN access against the tenant's current active ABAC policies. Requires a valid session but no specific permission. The decision is recorded to the ABAC decision log.
       requestBody:
         required: true
@@ -296,7 +296,7 @@ paths:
       operationId: accessListAbacPolicies
       tags:
         - Identity & Access
-      summary: List the tenant's dynamic ABAC (DSL) policies (Issue #179).
+      summary: "List the tenant's dynamic ABAC (DSL) policies (Issue #179)."
       description: Reads every stored DSL policy for the tenant (active and inactive). Gated on `identity_access.abac_policies.read`.
       responses:
         "200":
@@ -369,7 +369,7 @@ paths:
       operationId: accessSimulateAbacPolicy
       tags:
         - Identity & Access
-      summary: Read-only ABAC decision simulation/preview (Issue #179; audited, never mutates).
+      summary: "Read-only ABAC decision simulation/preview (Issue #179; audited, never mutates)."
       description: Returns what `evaluateAccess` would decide for a hypothetical subject/request/environment against the tenant's active policies, plus a per-policy structural trace (no attribute VALUES, no PII). Writes no decision log. Gated on `identity_access.abac_policies.analyze`; simulating a DIFFERENT existing tenant user additionally requires `identity_access.access_control.read`.
       requestBody:
         required: true
@@ -409,7 +409,7 @@ paths:
       operationId: accessGetAbacPolicy
       tags:
         - Identity & Access
-      summary: Read one dynamic ABAC (DSL) policy (Issue #179).
+      summary: "Read one dynamic ABAC (DSL) policy (Issue #179)."
       description: Gated on `identity_access.abac_policies.read`. 404 when the policy does not exist in this tenant.
       responses:
         "200":
@@ -1912,7 +1912,7 @@ paths:
       operationId: listBusinessScopeAssignments
       tags:
         - Identity & Access
-      summary: List this tenant's business-scope assignments (Issue #180).
+      summary: "List this tenant's business-scope assignments (Issue #180)."
       description: >-
         Lists business-scope assignments for the caller's tenant, optionally
         filtered by status/tenantUserId/scopeType. Gated on
@@ -2120,7 +2120,7 @@ paths:
       operationId: listSoDConflictEvaluations
       tags:
         - Identity & Access
-      summary: List the SoD conflict evaluation log (Issue #181).
+      summary: "List the SoD conflict evaluation log (Issue #181)."
       description: >-
         Keyset-paginated, permission-gated segregation-of-duties conflict
         evaluation history (the conflict preview / audit view). Recorded for
@@ -2188,7 +2188,7 @@ paths:
       operationId: listSoDConflictExceptions
       tags:
         - Identity & Access
-      summary: List this tenant's SoD conflict exceptions (Issue #181).
+      summary: "List this tenant's SoD conflict exceptions (Issue #181)."
       description: >-
         Lists the tenant's segregation-of-duties conflict exceptions, optionally
         filtered by `status`/`ruleKey`. Gated on
@@ -6118,7 +6118,7 @@ components:
       additionalProperties: true
     AbacDslPolicy:
       type: object
-      description: One stored dynamic ABAC (DSL) policy (Issue #179). Applicability fields are wildcards when null.
+      description: "One stored dynamic ABAC (DSL) policy (Issue #179). Applicability fields are wildcards when null."
       properties:
         id:
           type: string
@@ -6372,7 +6372,7 @@ components:
           description: Assigned role codes (empty when the user holds no role).
     BusinessScopeAssignment:
       type: object
-      description: One business-scope assignment (Issue #180) — a subject granted a role/permission context restricted to one generic business scope, with effective dating and a lifecycle status.
+      description: "One business-scope assignment (Issue #180) — a subject granted a role/permission context restricted to one generic business scope, with effective dating and a lifecycle status."
       properties:
         id:
           type: string
@@ -6436,7 +6436,7 @@ components:
           format: date-time
     SoDConflictEvaluation:
       type: object
-      description: One append-only segregation-of-duties conflict-check decision log entry (Issue #181). Safe projection — no request/resource payload.
+      description: "One append-only segregation-of-duties conflict-check decision log entry (Issue #181). Safe projection — no request/resource payload."
       properties:
         id:
           type: string
@@ -6467,7 +6467,7 @@ components:
           format: date-time
     SoDConflictException:
       type: object
-      description: One segregation-of-duties conflict exception (Issue #181) — a scope-bound, time-bound, revocable, audited override to a detected conflict.
+      description: "One segregation-of-duties conflict exception (Issue #181) — a scope-bound, time-bound, revocable, audited override to a detected conflict."
       properties:
         id:
           type: string

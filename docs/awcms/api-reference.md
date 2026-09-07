@@ -801,7 +801,7 @@ ADR-0090. The grant dies, the membership it printed goes inactive, and every ses
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue
+### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue #179).
 
 - **operationId**: `accessEvaluate`
 - **Security**: bearerAuth + tenantHeader
@@ -937,7 +937,7 @@ ADR-0089/ADR-0090. Every live delegated-access grant under the partnership is re
 | 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                 | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue
+### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue #179).
 
 - **operationId**: `accessListAbacPolicies`
 - **Security**: bearerAuth + tenantHeader
@@ -972,7 +972,7 @@ Validates the condition DSL fail-closed before any write, so an invalid policy c
 | 403    | Access denied by RBAC/ABAC.                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | A policy with that policyCode already exists (RESOURCE_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/access/policies/{id}` — Read one dynamic ABAC (DSL) policy (Issue
+### `GET /api/v1/access/policies/{id}` — Read one dynamic ABAC (DSL) policy (Issue #179).
 
 - **operationId**: `accessGetAbacPolicy`
 - **Security**: bearerAuth + tenantHeader
@@ -1043,7 +1043,7 @@ Marks the policy active so the evaluator applies it. Gated on `identity_access.a
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/access/policies/simulate` — Read-only ABAC decision simulation/preview (Issue
+### `POST /api/v1/access/policies/simulate` — Read-only ABAC decision simulation/preview (Issue #179; audited, never mutates).
 
 - **operationId**: `accessSimulateAbacPolicy`
 - **Security**: bearerAuth + tenantHeader
@@ -2011,7 +2011,7 @@ It changes no credential and clears no lockout counter: ending stray sessions pr
 | 404    | Resource not found.                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | No provider account is currently linked (SSO_NOT_LINKED). | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/assignments` — List this tenant's business-scope assignments (Issue
+### `GET /api/v1/identity/business-scope/assignments` — List this tenant's business-scope assignments (Issue #180).
 
 - **operationId**: `listBusinessScopeAssignments`
 - **Security**: bearerAuth + tenantHeader
@@ -2088,7 +2088,7 @@ Revokes an active business-scope assignment (transitions it to `revoked`; append
 | 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | The assignment is not active, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/conflicts` — List the SoD conflict evaluation log (Issue
+### `GET /api/v1/identity/business-scope/conflicts` — List the SoD conflict evaluation log (Issue #181).
 
 - **operationId**: `listSoDConflictEvaluations`
 - **Security**: bearerAuth + tenantHeader
@@ -2113,7 +2113,7 @@ Keyset-paginated, permission-gated segregation-of-duties conflict evaluation his
 | 401    | Missing or invalid session.                                             | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                             | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/exceptions` — List this tenant's SoD conflict exceptions (Issue
+### `GET /api/v1/identity/business-scope/exceptions` — List this tenant's SoD conflict exceptions (Issue #181).
 
 - **operationId**: `listSoDConflictExceptions`
 - **Security**: bearerAuth + tenantHeader
@@ -5356,7 +5356,9 @@ Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifi
 - **operationId**: `mediaResolveObjects`
 - **Security**: bearerAuth + tenantHeader
 
-Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes, creditLine, sourceName, copyrightStatus}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+
+Issue #782 — `creditLine`/`sourceName`/`copyrightStatus` are populated ONLY when the object's rights-verification decision is `verified`; otherwise all three are `null`. This is a distinct verification concept from the upload-integrity `verified`/`attached` status below.
 
 An object resolves ONLY when it is `verified` or `attached`, belongs to the calling tenant, and is not soft-deleted. Everything else — unknown, cross-tenant, unverified, deleted — is returned in `unresolved` rather than dropped, so a caller can tell "this resource has no image" from "this resource's image reference is broken". A malformed (non-uuid) id is a 400 instead: "you sent junk" and "that object is not referenceable" are different facts.
 
@@ -5384,6 +5386,8 @@ Batch rather than one-per-id because a build feed resolves every image on a page
 - **Security**: bearerAuth + tenantHeader
 
 Gated on `media_library.media.update` (Issue #615, `sql/137`) — the eighth media permission, added together with this endpoint rather than ahead of it. Requires `Idempotency-Key`: `update` is not a high-risk action, but a rights adjudication replayed by a retrying client would write a second audit entry claiming a second decision.
+
+**Issue #794 — the permission split by request content.** Since Issue #782/PR #791, `rightsVerificationStatus === 'verified'` makes `creditLine`/`sourceName`/`copyrightStatus` cross into the PUBLIC `GET /api/v1/media/objects` response, so `media.update` alone let whoever could type a credit line also self-attest it cleared for publication. The body's SHAPE now decides the required permission(s): a request that omits `rightsVerificationStatus` needs only `media_library.media.update`, unchanged. A request that includes `rightsVerificationStatus` (any transition, including into or out of `verified`/`rejected`) additionally needs `media_library.media.adjudicate_rights` — UNLESS `rightsVerificationStatus` is the ONLY field present, in which case `media_library.media.adjudicate_rights` is sufficient on its own (a designated rights reviewer need not also hold `media.update` to adjudicate). Either permission missing from the combination the request actually needs denies the WHOLE request with `403 ACCESS_DENIED` — never a partial write.
 
 **Rights, not accessibility, and not the byte check.** This endpoint deliberately cannot edit `altText` (an accessibility obligation) or `caption` (editorial copy). It is also not `media.verify`: that permission and a `verified` object status mean the BYTES passed a MIME-sniff and checksum. Whether a licence permits publication is a person reading a contract, and one word for both would make the legal half read as done whenever a file sniffed clean.
 
@@ -6048,7 +6052,7 @@ Gated by blog_content.pages.read.
 - **operationId**: `blogUpdatePage`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first.
+Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first. Issue #787 (sibling of #784) — when `slug` is present and differs from the stored slug, the SAME transaction also captures an ADR-0039 redirect (proposed or active, per the tenant's url_change_auto_policy); see the response schema's `redirectCapture` field.
 
 **Parameters**
 

@@ -189,6 +189,16 @@ const screen = await loadAdminScreen({
       activityCode: "media",
       action: "update"
     }),
+    // Issue #794 — split OUT of `media.update`: whether this caller may
+    // change `rightsVerificationStatus` (the transition PATCH .../objects/{id}
+    // now separately gates). Resolved here, same reasoning as `canUpdate`
+    // above, so the rights-verification control below can be disabled for a
+    // caller the endpoint would 403 rather than let them submit and fail.
+    canAdjudicateRights: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "adjudicate_rights"
+    }),
     // The same guard `POST .../upload-sessions` enforces. Resolved here so the
     // uploader is not rendered to someone the endpoint would refuse — a form
     // that always 403s is worse than no form.
@@ -220,6 +230,8 @@ const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
 const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canAdjudicateRights =
+  screen.state === "allowed" && screen.data.canAdjudicateRights;
 
 /**
  * The rights editor opens through the QUERY STRING (`?rights=<id>`), the same
@@ -758,7 +770,23 @@ const columnCount = canActOnAny ? 9 : 8;
             <label class="form-label" for="media-rights-status">
               {t("Rights verification")}
             </label>
-            <select class="form-input" id="media-rights-status">
+            {/*
+             * Issue #794 — this transition now needs `media.adjudicate_rights`
+             * IN ADDITION to `media.update` (the permission that gates the rest
+             * of this form). Disabled rather than omitted for a caller who
+             * lacks it: the current decision is still worth showing, and the
+             * submit handler below reads `media-rights-status-original`
+             * (never this control) to decide whether the body may omit the
+             * field entirely — a disabled `<select>` still reports its
+             * (unchanged) `.value`, so disabling alone would not stop the
+             * request from requiring `adjudicate_rights` for a submit that
+             * changed nothing.
+             */}
+            <select
+              class="form-input"
+              id="media-rights-status"
+              disabled={!canAdjudicateRights}
+            >
               {RIGHTS_VERIFICATION_STATUSES.map((status) => (
                 <option
                   value={status}
@@ -768,10 +796,19 @@ const columnCount = canActOnAny ? 9 : 8;
                 </option>
               ))}
             </select>
+            <input
+              type="hidden"
+              id="media-rights-status-original"
+              value={rightsEditing.rightsVerificationStatus}
+            />
             <p class="form-hint">
-              {t(
-                "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
-              )}
+              {canAdjudicateRights
+                ? t(
+                    "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
+                  )
+                : t(
+                    "Only a rights reviewer may change this (media_library.media.adjudicate_rights)."
+                  )}
             </p>
           </div>
 
@@ -1026,11 +1063,26 @@ const columnCount = canActOnAny ? 9 : 8;
 
       rightsError.clear();
 
-      // Every field is sent every time, blanks included: this form shows the
-      // whole record, so an emptied box means "remove this", which the endpoint
-      // reads as `null`. Sending only the changed ones would need the page to
-      // track what changed, and the failure mode of getting that wrong is a
-      // credit silently surviving its own deletion.
+      // Every OTHER field is sent every time, blanks included: this form shows
+      // the whole record, so an emptied box means "remove this", which the
+      // endpoint reads as `null`. Sending only the changed ones would need the
+      // page to track what changed, and the failure mode of getting that wrong
+      // is a credit silently surviving its own deletion.
+      //
+      // `rightsVerificationStatus` is the ONE deliberate exception (Issue
+      // #794): the endpoint now requires `media.adjudicate_rights`
+      // ADDITIONALLY to `media.update` whenever this field is present in the
+      // body at all — not only when it differs from the stored value. Sending
+      // it unconditionally, the way the other four fields are sent, would mean
+      // every save through this form — including a caller who only fixed a
+      // typo in the credit line and never touched this control — would 403 for
+      // anyone who holds `media.update` but not `media.adjudicate_rights`.
+      // Comparing against `media-rights-status-original` (the value this page
+      // rendered, not whatever a disabled `<select>` still reports) is what
+      // keeps that the common, unaffected case.
+      const nextRightsStatus = inputValue("media-rights-status");
+      const originalRightsStatus = inputValue("media-rights-status-original");
+
       await mutateAndReload(
         submit,
         rightsError,
@@ -1043,7 +1095,9 @@ const columnCount = canActOnAny ? 9 : 8;
               sourceName: inputValue("media-rights-source"),
               rightsNotes: inputValue("media-rights-notes"),
               copyrightStatus: inputValue("media-rights-copyright"),
-              rightsVerificationStatus: inputValue("media-rights-status")
+              ...(nextRightsStatus !== originalRightsStatus
+                ? { rightsVerificationStatus: nextRightsStatus }
+                : {})
             },
             idempotency()
           ),

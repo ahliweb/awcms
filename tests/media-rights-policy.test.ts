@@ -30,6 +30,7 @@ import {
   isRightsAdjudication,
   isRightsVerificationStatus,
   MAX_CREDIT_LINE_LENGTH,
+  resolvePublicMediaRightsFields,
   RIGHTS_VERIFICATION_STATUSES,
   validateMediaRightsUpdateInput
 } from "../src/modules/media-library/domain/media-rights-policy";
@@ -38,6 +39,7 @@ const ROUTE = "src/pages/api/v1/media/objects/[id].ts";
 const DIRECTORY =
   "src/modules/media-library/application/media-object-directory.ts";
 const MIGRATION = "sql/137_awcms_media_rights_metadata.sql";
+const PORT = "src/modules/_shared/ports/media-library-port.ts";
 
 describe("the patch distinguishes 'leave alone' from 'clear'", () => {
   test("an omitted field is absent from the parsed value", () => {
@@ -129,10 +131,26 @@ describe("rights verification is not the byte check", () => {
     expect(isRightsAdjudication("rejected")).toBe(true);
   });
 
-  test("the route gates on `update`, never on `verify`", async () => {
+  test("the route gates on `update` and `adjudicate_rights` (never on `verify`) — an any-of primary guard plus two independent handler checks", async () => {
     const source = stripComments(await readFile(ROUTE, "utf8"));
 
-    expect(source).toMatch(/action:\s*"update"/);
+    // Issue #794's FIRST cut made the guard a FUNCTION of the request body
+    // (`touchesRoutineRightsField(...) ? "update" : "adjudicate_rights"`) —
+    // that shape matched `tenant-route.ts`'s `heldPrepareRefusal` carve-out by
+    // accident, and an invalid body skipped `authorizeInTransaction` entirely
+    // for every caller, zero-permission ones included. It was reverted; see
+    // ADR-0121. The SHIPPED guard is a static any-of ARRAY as the primary gate
+    // (`authorize: [{ ..., action: "update" }, { ..., action:
+    // "adjudicate_rights" }]`) — reachable once the caller holds at least one
+    // of the two — plus two independent, field-group-specific
+    // `authorizeInTransaction` calls inside the handler that decide what the
+    // ACTUAL body needs. `"update"` and `"adjudicate_rights"` therefore each
+    // appear TWICE as plain literals (once in the array, once in the
+    // handler), never inside a ternary. The bounded lookahead stays generous
+    // rather than pinning an exact literal distance, so it does not have to
+    // change again if the surrounding object literal's field order does.
+    expect(source).toMatch(/action:[\s\S]{0,120}?"update"/);
+    expect(source).toMatch(/action:[\s\S]{0,120}?"adjudicate_rights"/);
     expect(source).not.toMatch(/action:\s*"verify"/);
   });
 });
@@ -196,5 +214,90 @@ describe("the adjudication is stamped from the server, never from the body", () 
 
     expect(migration).toContain("'media_library', 'media', 'update'");
     expect(route).toContain("export const PATCH");
+  });
+});
+
+/**
+ * Issue #782 — three of the seven rights fields (`creditLine`, `sourceName`,
+ * `copyrightStatus`) may cross into the public `ResolvedMediaReferenceDTO`,
+ * and only once a human has verified the claim. Two never cross at all:
+ * `rightsVerifiedBy`/`rightsVerifiedAt` (ADR-0109's posture — an internal
+ * reviewer identity is not a public field) and `rightsNotes` (editorial
+ * working notes, not a credit).
+ */
+describe("the public media DTO gate (Issue #782)", () => {
+  const VERIFIED_MEDIA = {
+    creditLine: "Foto: Ani Wijaya",
+    sourceName: "Kantor Berita Kalteng",
+    copyrightStatus: "licensed" as const,
+    rightsVerificationStatus: "verified" as const
+  };
+
+  test("a verified object's credit/rights fields pass through unchanged", () => {
+    const result = resolvePublicMediaRightsFields(VERIFIED_MEDIA);
+
+    expect(result).toEqual({
+      creditLine: "Foto: Ani Wijaya",
+      sourceName: "Kantor Berita Kalteng",
+      copyrightStatus: "licensed"
+    });
+  });
+
+  test.each([
+    ["unverified — the default, nobody has adjudicated it", "unverified"],
+    ["rejected — a human explicitly refused it", "rejected"]
+  ])("%s: all three fields come back null", (_label, status) => {
+    const result = resolvePublicMediaRightsFields({
+      ...VERIFIED_MEDIA,
+      rightsVerificationStatus: status as "unverified" | "rejected"
+    });
+
+    // Fail-closed: the values are SUPPRESSED, not merely a different shape —
+    // an unadjudicated claim must never leak through as "best effort".
+    expect(result).toEqual({
+      creditLine: null,
+      sourceName: null,
+      copyrightStatus: null
+    });
+  });
+
+  test("the gate never receives, and so can never leak, the verifier identity or editorial notes", () => {
+    // The function's own parameter type has no `rightsVerifiedBy`/
+    // `rightsVerifiedAt`/`rightsNotes` — this is enforced at compile time
+    // (see the type below), not by a runtime check. What this test pins is
+    // the SOURCE shape, so a future widening of the parameter type is caught
+    // even before anyone passes it a row that has those fields set.
+    expect(resolvePublicMediaRightsFields.length).toBe(1);
+    expect(Object.keys(resolvePublicMediaRightsFields(VERIFIED_MEDIA))).toEqual(
+      ["creditLine", "sourceName", "copyrightStatus"]
+    );
+  });
+
+  test("the public port type declares exactly the three new fields, and none of the excluded four", async () => {
+    const port = stripComments(
+      await readFile("src/modules/_shared/ports/media-library-port.ts", "utf8")
+    );
+    const start = port.indexOf("export type ResolvedMediaReferenceDTO = {");
+    expect(start).toBeGreaterThan(-1);
+    const end = port.indexOf("};", start);
+    expect(end).toBeGreaterThan(start);
+    const dtoBlock = port.slice(start, end);
+
+    expect(dtoBlock).toContain("creditLine:");
+    expect(dtoBlock).toContain("sourceName:");
+    expect(dtoBlock).toContain("copyrightStatus:");
+
+    // Positive proof the type itself was never widened past the decision in
+    // Issue #782 — not just that today's adapter happens not to populate them.
+    expect(dtoBlock).not.toContain("rightsVerifiedBy");
+    expect(dtoBlock).not.toContain("rightsVerifiedAt");
+    expect(dtoBlock).not.toContain("rightsNotes");
+    expect(dtoBlock).not.toContain("rightsVerificationStatus");
+  });
+
+  test("the port file still imports nothing (neutral-ground rule)", async () => {
+    const port = await readFile(PORT, "utf8");
+
+    expect(port).not.toMatch(/^import /m);
   });
 });

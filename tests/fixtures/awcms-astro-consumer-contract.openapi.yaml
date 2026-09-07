@@ -629,7 +629,9 @@ paths:
         - News Media
       summary: Batch-resolve media object ids to their public reference.
       description: |
-        Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+        Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes, creditLine, sourceName, copyrightStatus}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+
+        Issue #782 — `creditLine`/`sourceName`/`copyrightStatus` are populated ONLY when the object's rights-verification decision is `verified`; otherwise all three are `null`. This is a distinct verification concept from the upload-integrity `verified`/`attached` status below.
 
         An object resolves ONLY when it is `verified` or `attached`, belongs to the calling tenant, and is not soft-deleted. Everything else — unknown, cross-tenant, unverified, deleted — is returned in `unresolved` rather than dropped, so a caller can tell "this resource has no image" from "this resource's image reference is broken". A malformed (non-uuid) id is a 400 instead: "you sent junk" and "that object is not referenceable" are different facts.
 
@@ -1411,7 +1413,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Issue
+          description: "Issue #591 — when the scheduled-publish job archives this post. Null = stays published until archived by hand."
         createdAt:
           type: string
           format: date-time
@@ -1439,6 +1441,35 @@ components:
           type: string
           nullable: true
           maxLength: 120
+        redirectCapture:
+          description: "Issue #784 — present ONLY on a `PATCH /api/v1/blog/posts/{id}` response whose body actually changed `slug` (absent otherwise, including on `GET`/`POST` and every lifecycle action). Reports what `captureUrlChangeRedirect` (ADR-0039) did with the resulting old->new path change, gated by the tenant's own `url_change_auto_policy` (`POST /api/v1/seo/redirects/capture-url-change` is the same seam, driven here automatically instead of by a caller). A `rejected` or `invalid` outcome never fails the post update itself — the slug change is additive tooling around the edit, not a precondition for it."
+          type: object
+          required:
+            - outcome
+          properties:
+            outcome:
+              type: string
+              enum:
+                - created
+                - proposed
+                - skipped
+                - module_disabled
+                - invalid
+                - rejected
+            redirectId:
+              description: Present only when outcome is "created" or "proposed".
+              type: string
+              format: uuid
+            code:
+              description: Present only when outcome is "rejected".
+              type: string
+              enum:
+                - SOURCE_CONFLICT
+                - REDIRECT_LOOP
+                - REDIRECT_CHAIN_TOO_LONG
+            message:
+              description: Present only when outcome is "rejected" — a human-readable reason no redirect was created.
+              type: string
     BlogPostSummary:
       type: object
       description: |
@@ -1952,6 +1983,26 @@ components:
         sizeBytes:
           type: integer
           nullable: true
+        creditLine:
+          type: string
+          nullable: true
+          description: "Issue #782. The photo credit — what gets printed beside the image. `null` unless the source object's rights claim has been HUMAN-verified (internal `rightsVerificationStatus = 'verified'`); an unverified or rejected claim never reaches this field, even if the object has a credit line on file."
+        sourceName:
+          type: string
+          nullable: true
+          description: "Issue #782. Where the file came from (often distinct from who is credited). Same verification gate as `creditLine`: `null` unless the rights claim has been verified."
+        copyrightStatus:
+          type: string
+          nullable: true
+          enum:
+            - unknown
+            - owned
+            - licensed
+            - public_domain
+            - permission_granted
+            - fair_use
+            - null
+          description: 'Issue #782. Same verification gate as `creditLine`/`sourceName`: `null` unless the rights claim has been verified — including when the underlying object''s copyright status is the real, non-null `''unknown''` value (verification and "unknown" are different facts, and only one of them is nullability here).'
     SessionIntrospection:
       type: object
       description: Safe claims for a live session (ADR-0049 §7). Deliberately excludes the raw login identifier that GET /api/v1/auth/me returns.

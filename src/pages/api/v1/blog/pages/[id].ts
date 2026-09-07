@@ -35,6 +35,7 @@ import {
 import { validateAndNormalizeContentJsonVideoBlocks } from "../../../../../modules/blog-content/domain/video-news-block-validation";
 import { evaluatePageUpdateAccess } from "../../../../../modules/blog-content/domain/page-access-policy";
 import { isSignificantContentChange } from "../../../../../modules/blog-content/domain/revision-policy";
+import { captureBlogPageSlugChangeRedirect } from "../../../../../modules/blog-content/application/slug-change-redirect-capture";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -101,6 +102,13 @@ export const GET: APIRoute = async ({ request, params, cookies }) => {
  * `blog_content.pages.update` (doc issue #539: "must follow the same
  * auth, tenant, RBAC/ABAC, ... patterns introduced in the blog post
  * API").
+ *
+ * Issue #787 (sibling of #784) — when `input.slug` differs from the stored
+ * slug, `captureBlogPageSlugChangeRedirect` turns the change into an
+ * ADR-0039 redirect (proposed or active, per the tenant's
+ * `url_change_auto_policy`) in the SAME transaction, mirroring exactly what
+ * #784/PR #785 wired up for `PATCH /api/v1/blog/posts/{id}`, so a page slug
+ * edit never silently makes the old, previously-shared path unrecoverable.
  */
 export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -311,6 +319,33 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       return fail(404, "RESOURCE_NOT_FOUND", "Blog page not found.");
     }
 
+    // Issue #787 (sibling of #784) — a slug edit used to make the OLD slug
+    // unrecoverable, so every previously-shared link to the page silently
+    // 404ed. Only runs when `slug` actually changed value — a PATCH that
+    // omits it, or resubmits the current one, is not a change and must not
+    // propose a redirect from a path to itself. Gated by the tenant's own
+    // `url_change_auto_policy`; a rejection (conflict/loop/chain) or an
+    // unexpected `invalid` outcome is reported back and logged, never
+    // thrown — this is additive tooling around the edit, not a precondition
+    // for it (see `slug-change-redirect-capture.ts`'s docblock).
+    const redirectCapture =
+      input.slug !== undefined && input.slug !== page.slug
+        ? await captureBlogPageSlugChangeRedirect(
+            tx,
+            tenantId,
+            context.tenantUserId,
+            {
+              pageId,
+              oldSlug: page.slug,
+              newSlug: updated.slug,
+              oldLocale: page.locale,
+              newLocale: updated.locale
+            },
+            correlationId,
+            now
+          )
+        : undefined;
+
     if (isSignificantContentChange(input)) {
       await createBlogRevision(
         tx,
@@ -356,7 +391,10 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       "blog.page.updated"
     );
 
-    return ok(updated);
+    return ok({
+      ...updated,
+      ...(redirectCapture ? { redirectCapture } : {})
+    });
   });
 };
 
