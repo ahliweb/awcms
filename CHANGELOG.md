@@ -1,5 +1,81 @@
 # awcms
 
+## 10.3.0
+
+### Minor Changes
+
+- 8309195: feat(media-library): expose verified photo credit fields on the public media DTO (Issue #782)
+  
+  `ResolvedMediaReferenceDTO` (`_shared/ports/media-library-port.ts`), returned by `GET /api/v1/media/objects` and every in-process `MediaLibraryPort.resolveMediaReferences` consumer, gains `creditLine`, `sourceName`, and `copyrightStatus` — the photo credit a news site is legally/reputationally obliged to show, which existed on the registry row (`sql/137`, Issue #615) but never crossed the public read boundary.
+  
+  The three fields are populated ONLY when the source media object's internal `rightsVerificationStatus` is `'verified'`; on anything else (the default `'unverified'`, or an explicit `'rejected'`) all three come back `null` — fail-closed, never a partial/best-effort value, even when the underlying row has them set. `rightsVerifiedBy`/`rightsVerifiedAt` (an internal reviewer identity and review moment — same posture ADR-0109 already took for the opt-in byline) and `rightsNotes` (editorial-internal licensing/contact terms) never cross into this DTO at all, in any case. See `media-library/domain/media-rights-policy.ts#resolvePublicMediaRightsFields` for the gate.
+  
+  No new endpoint and no new permission — this widens data already returned by the existing `media_library.media.read`-gated route.
+- 42f5603: feat(media-library): split rights adjudication out of media.update (Issue #794)
+  
+  `PATCH /api/v1/media/objects/{id}` used to gate its whole rights-metadata form — `creditLine`, `sourceName`, `copyrightStatus`, `rightsNotes`, AND `rightsVerificationStatus` — behind one permission, `media_library.media.update`. Since Issue #782/PR #791, setting `rightsVerificationStatus` to `'verified'` makes `creditLine`/`sourceName`/`copyrightStatus` cross into the public `GET /api/v1/media/objects` response, so whoever could type a credit line could also self-attest it cleared for publication, with no second reviewer.
+  
+  A new, ninth media permission, `media_library.media.adjudicate_rights` (`sql/152`), now gates any transition of `rightsVerificationStatus`. A request that changes only routine fields still needs only `media.update`, unchanged. A request that changes `rightsVerificationStatus` alone needs `adjudicate_rights` alone — a rights reviewer role need not also hold `media.update`. A request that changes both needs both permissions. The new permission is seeded with no default grant beyond the standard new-tenant `owner` catalogue inclusion every permission gets — a tenant must consciously grant it to a designated reviewer role.
+  
+  `/admin/media`'s rights-editor form and OpenAPI/`src/modules/media-library/README(.id).md` are updated to match.
+- 4ac1946: feat(blog-content): add editorial-disclosure classification to ad placements (Issue #783)
+  
+  `awcms_news_portal_ad_placements` gains a `content_class` column (`sql/151`, `NOT NULL DEFAULT 'standard'`, CHECK-constrained to `standard | advertorial | sponsored`) so a derived site can disclose paid/sponsored content — an editorial-ethics and, in many jurisdictions, regulatory requirement for a news outlet. It classifies the placement (the booking), not the referenced media object, since the same creative can run as `standard` in one slot and `sponsored` in another.
+  
+  `GET /api/v1/news-portal/ad-placements/active`'s public projection now includes `contentClass` for every returned placement. `POST`/`PATCH /api/v1/news-portal/ad-placements[/{id}]` accept an optional `contentClass`, validated against the same three-item vocabulary (rejecting anything else with `400 VALIDATION_ERROR`) and defaulting to `standard` on create. No new permission was added — this reuses the existing `blog_content.ad_placements.{read,configure}` permissions.
+
+### Patch Changes
+
+- 8d7e854: fix(blog-content,seo-distribution): `PATCH /api/v1/blog/posts/{id}` never called the ADR-0039 URL-change capture seam, so an editor fixing a headline's slug made the OLD slug permanently unrecoverable — not on the post row (overwritten in place), not in `awcms_blog_revisions` (no `slug` column), and no redirect was ever proposed. Every previously-shared link to that post 404ed silently, with nothing recording it happened (Issue #784).
+  
+  The handler now calls a new `captureBlogPostSlugChangeRedirect` (`src/modules/blog-content/application/slug-change-redirect-capture.ts`) inside the same transaction as the post update, whenever the submitted `slug` differs from the currently-stored one. It drives `seo_distribution`'s existing `captureUrlChangeRedirect` with `changeType: "slug_change"`, honoring the tenant's own `url_change_auto_policy` (a `propose` tenant gets an inactive rule for review; a `create` tenant gets an active one immediately) — the safety gate (`checkRedirectSafety`) that already refuses loops/conflicts/over-long chains before any row is persisted made this wiring purely additive. A rejection or an unexpected `invalid` outcome is logged and reported back in the response's new `redirectCapture` field; it never fails or rolls back the post update, and a tenant that has not enabled `seo_distribution` degrades safely to no capture at all. `GET /api/v1/seo/redirects` is unchanged by design — see its own doc comment.
+- f9cbdcb: chore(deps): bump astro to 7.3.1, with the family manifest and its doc table moved in step
+  
+  `astro@7.3.1` is a minor-then-patch pair (7.3.0 added `astro preview --ignore-lock`,
+  logger plumbing for custom image services and cache providers, i18n fallback-route
+  and content-collection-in-server-islands fixes; 7.3.1 is a follow-up patch fixing a
+  regression that broke `astro:assets` at start/build). Neither release touches SSR
+  `output: "server"`, the `@astrojs/node` adapter, standalone mode, or
+  `build.inlineStylesheets` — the config surface this repo relies on in
+  `astro.config.mjs` is unaffected, and no code change was needed beyond this bump.
+  
+  `awcms-family-compatibility.yaml` pins `stack.astro.declared` as a SOURCE CONSTANT
+  that must equal `package.json` exactly, so `family:conformance:check` goes red on
+  any bump until the manifest moves with it (`[FAIL] stack: astro (declared ^7.2.9
+  vs actual ^7.3.1)`, caught on this PR's CI). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the
+  manifest by `tests/family-compatibility-doc-parity.test.ts`, so they move too.
+- 9a41d49: chore(deps): bump @astrojs/node to 11.1.5, with the family manifest and its doc table moved in step
+  
+  `@astrojs/node@11.1.5` is a patch release (updated dependency
+  `@astrojs/internal-helpers@0.11.0`, no API change). `awcms-family-compatibility.yaml`
+  pins `stack.astroNode.declared` as a SOURCE CONSTANT that must equal
+  `package.json` exactly, so `family:conformance:check` goes red on any bump
+  until the manifest moves with it (`[FAIL] stack: @astrojs/node (declared
+  ^11.1.4 vs actual ^11.1.5)`, caught on this PR's CI). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the
+  manifest by `tests/family-compatibility-doc-parity.test.ts`, so they move too.
+- f6dcf9a: fix(idn-regions): two of `idn-admin-regions-dataset-diff.integration.test.ts`'s query-plan assertions named the one or two indexes their authors watched the planner pick, then flaked in CI on a commit that changed only documentation — proof nothing about the schema moved. The real cause: `awcms_idn_admin_regions` carries five indexes that all lead with `dataset_id` (four from `sql/080`, one from `sql/150`), so a query filtered only on `dataset_id` has several genuinely cost-competitive access paths, and which one wins a close cost comparison can turn on ANALYZE's own sampling — reproduced locally, a rerun of the pre-fix test picked a fourth index (`dataset_parent_idx`) neither assertion expected, on both the tier-count aggregate and the diff join, in 1 run out of 15.
+  
+  The first fix attempt widened the match from a specific index name to a `..._idx`-suffixed name pattern — itself still wrong, and the same class of bug this exists to remove: `dataset_code_key`, a pre-existing `sql/080` unique index and a real contender for both queries, does not end in `_idx`, so a run where the planner legitimately picked it would have failed the assertion anyway. The actual fix matches the EXPLAIN access NODE instead of any index's name — an `Index Scan`/`Index Only Scan` `using`, or a `Bitmap Index Scan` `on`, one of this table's indexes — read off real Postgres 18 output rather than assumed, since a `Bitmap Index Scan` (the node both queries render on this fixture) names its index after `on`, not `using`, and a naive guess at the label set would have missed it. `enable_seqscan = off` was already forcing an index path (a plain "no Seq Scan" check is vacuous there, correctly avoided by the original author); this tracks the property that actually matters — index-backed, not a full scan — rather than the planner's incidental tie-break or any name of the index it happens to pick. A test proves the match is not free: it drops all five `dataset_id`-leading indexes inside a rolled-back transaction and confirms both queries fall back to a `Seq Scan` even with `enable_seqscan` biased against it, and re-flipping that test's assertions by hand confirmed they go red exactly there.
+- ca82aff: fix(blog-content,seo-distribution): `PATCH /api/v1/blog/pages/{id}` never called the ADR-0039 URL-change capture seam, so an editor fixing a page's slug made the OLD slug permanently unrecoverable — not on the page row (overwritten in place), not in `awcms_blog_revisions` (no `slug` column), and no redirect was ever proposed. Every previously-shared link to that page (e.g. `redaksi`, the Pedoman Media Siber, a privacy policy) 404ed silently, with nothing recording it happened (Issue #787, sibling of the identical gap #784/PR #785 already fixed for posts).
+  
+  The handler now calls a new `captureBlogPageSlugChangeRedirect` (`src/modules/blog-content/application/slug-change-redirect-capture.ts`, generalized from the post-only helper #784 added) inside the same transaction as the page update, whenever the submitted `slug` differs from the currently-stored one. It drives `seo_distribution`'s existing `captureUrlChangeRedirect` with `changeType: "slug_change"` against the page's own public path (`/blog/{tenantCode}/pages/{slug}`), honoring the tenant's own `url_change_auto_policy` (a `propose` tenant gets an inactive rule for review; a `create` tenant gets an active one immediately) — the safety gate (`checkRedirectSafety`) that already refuses loops/conflicts/over-long chains before any row is persisted made this wiring purely additive. A rejection or an unexpected `invalid` outcome is logged and reported back in the response's new `redirectCapture` field; it never fails or rolls back the page update, and a tenant that has not enabled `seo_distribution` degrades safely to no capture at all. `GET /api/v1/seo/redirects` is unchanged by design — see its own doc comment.
+- 552e5f0: fix(blog-content): add the `contentClass` selector to `/admin/blog-ads` (Issue #789)
+  
+  Issue #783/PR #788 added editorial-disclosure classification (`contentClass`: `standard | advertorial | sponsored`) to ad placements, but `/admin/blog-ads` — the only operator-facing tool that creates/edits `awcms_news_portal_ad_placements` — never gained a form control for it, so newsroom/compliance staff could not actually mark a placement `advertorial`/`sponsored` without a raw authenticated API call.
+  
+  The create/edit form now has a `contentClass` `<select>` (mirroring the existing `rotationMode`/`targetType` selects), defaulting to `standard` for a new placement and pre-populating with the placement's current value when editing; the placement list now shows each row's content class. UI-only — no new endpoint, permission, or schema change; reuses the existing `blog_content.ad_placements.configure` guard already enforced server-side.
+- 7a8e69a: fix(openapi): stop the bundler from silently truncating a description at " #" (Issue #786)
+  
+  `scripts/openapi-bundle.ts` parses each `openapi/modules/*.openapi.yaml` fragment with the `yaml` library's `parseDocument().toJSON()`. YAML's plain-scalar grammar treats a whitespace-preceded `#` as a comment start anywhere it appears — including mid-prose like `Issue #591 — when the scheduled-publish job archives this post...` — so an unquoted `description`/`summary` mentioning an issue number was silently truncated in the published bundle. Three PRs (#784, #789, #787) had already hit this reactively, each hand-quoting a description that happened to mention its own issue number, but the generator itself never learned the lesson: other pre-existing instances stayed truncated on `main`.
+  
+  `readYaml` now walks the parsed fragment's AST after every parse and throws `TruncatedScalarError` — naming the file and the dotted key path — whenever a PLAIN-style scalar carries a non-empty same-line `.comment` (the `yaml` library's own attribution for exactly this truncation shape; a survey of every fragment in the repo found zero legitimate same-line trailing comments, so this has no known false-positive shape). Because `bun run api:spec:check` already rebuilds the bundle from fragments to check freshness, this check now runs on every `bun run check` with no new script needed, and turns the next occurrence into a build failure at the point of the mistake instead of a silent doc defect found weeks later.
+  
+  Twelve pre-existing truncated occurrences were found and fixed by quoting: `blog-content.openapi.yaml`'s `BlogPost.unpublishAt` description (the Issue #591 case named in #786), and eleven `identity-access.openapi.yaml` ABAC/business-scope/SoD summaries and schema descriptions that mentioned Issue #179/#180/#181. The bundle, the generated API reference doc, and the frozen `awcms-astro` consumer-contract fixture (which had `description: Issue` baked in for `unpublishAt` — direct proof of the bug) were regenerated; the fixture change is a pure `description` text value change with no type/shape difference, so it remains additively satisfied.
+  
+  Auto-quoting the raw fragment text before parsing (the auto-fix option) was considered and set aside: the AST-based detection already gives an unambiguous, zero-false-positive signal naming the exact file and field, and an author fixing a thrown build error is safer than a script silently rewriting prose it cannot fully disambiguate from an intentional same-line comment (this repo's fragments have none today, but nothing guarantees that forever).
+
 ## 10.2.1
 
 ### Patch Changes

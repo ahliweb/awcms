@@ -1,7 +1,0 @@
----
-"awcms": patch
----
-
-fix(blog-content,seo-distribution): `PATCH /api/v1/blog/posts/{id}` never called the ADR-0039 URL-change capture seam, so an editor fixing a headline's slug made the OLD slug permanently unrecoverable — not on the post row (overwritten in place), not in `awcms_blog_revisions` (no `slug` column), and no redirect was ever proposed. Every previously-shared link to that post 404ed silently, with nothing recording it happened (Issue #784).
-
-The handler now calls a new `captureBlogPostSlugChangeRedirect` (`src/modules/blog-content/application/slug-change-redirect-capture.ts`) inside the same transaction as the post update, whenever the submitted `slug` differs from the currently-stored one. It drives `seo_distribution`'s existing `captureUrlChangeRedirect` with `changeType: "slug_change"`, honoring the tenant's own `url_change_auto_policy` (a `propose` tenant gets an inactive rule for review; a `create` tenant gets an active one immediately) — the safety gate (`checkRedirectSafety`) that already refuses loops/conflicts/over-long chains before any row is persisted made this wiring purely additive. A rejection or an unexpected `invalid` outcome is logged and reported back in the response's new `redirectCapture` field; it never fails or rolls back the post update, and a tenant that has not enabled `seo_distribution` degrades safely to no capture at all. `GET /api/v1/seo/redirects` is unchanged by design — see its own doc comment.
