@@ -1,0 +1,13 @@
+---
+"awcms": patch
+---
+
+fix(openapi): stop the bundler from silently truncating a description at " #" (Issue #786)
+
+`scripts/openapi-bundle.ts` parses each `openapi/modules/*.openapi.yaml` fragment with the `yaml` library's `parseDocument().toJSON()`. YAML's plain-scalar grammar treats a whitespace-preceded `#` as a comment start anywhere it appears — including mid-prose like `Issue #591 — when the scheduled-publish job archives this post...` — so an unquoted `description`/`summary` mentioning an issue number was silently truncated in the published bundle. Three PRs (#784, #789, #787) had already hit this reactively, each hand-quoting a description that happened to mention its own issue number, but the generator itself never learned the lesson: other pre-existing instances stayed truncated on `main`.
+
+`readYaml` now walks the parsed fragment's AST after every parse and throws `TruncatedScalarError` — naming the file and the dotted key path — whenever a PLAIN-style scalar carries a non-empty same-line `.comment` (the `yaml` library's own attribution for exactly this truncation shape; a survey of every fragment in the repo found zero legitimate same-line trailing comments, so this has no known false-positive shape). Because `bun run api:spec:check` already rebuilds the bundle from fragments to check freshness, this check now runs on every `bun run check` with no new script needed, and turns the next occurrence into a build failure at the point of the mistake instead of a silent doc defect found weeks later.
+
+Twelve pre-existing truncated occurrences were found and fixed by quoting: `blog-content.openapi.yaml`'s `BlogPost.unpublishAt` description (the Issue #591 case named in #786), and eleven `identity-access.openapi.yaml` ABAC/business-scope/SoD summaries and schema descriptions that mentioned Issue #179/#180/#181. The bundle, the generated API reference doc, and the frozen `awcms-astro` consumer-contract fixture (which had `description: Issue` baked in for `unpublishAt` — direct proof of the bug) were regenerated; the fixture change is a pure `description` text value change with no type/shape difference, so it remains additively satisfied.
+
+Auto-quoting the raw fragment text before parsing (the auto-fix option) was considered and set aside: the AST-based detection already gives an unambiguous, zero-false-positive signal naming the exact file and field, and an author fixing a thrown build error is safer than a script silently rewriting prose it cannot fully disambiguate from an intentional same-line comment (this repo's fragments have none today, but nothing guarantees that forever).

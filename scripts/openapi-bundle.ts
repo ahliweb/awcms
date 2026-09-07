@@ -1,7 +1,8 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import prettier from "prettier";
-import { parseDocument, stringify } from "yaml";
+import { isPair, isScalar, parseDocument, stringify, visit } from "yaml";
+import type { Document, Scalar } from "yaml";
 
 /**
  * Issue #182 (epic #177): the public OpenAPI contract is split into source
@@ -50,6 +51,82 @@ export class BundleConflictError extends Error {
   }
 }
 
+/**
+ * Thrown when a fragment contains an unquoted (plain) YAML scalar that the
+ * parser silently truncated at a whitespace-preceded `#` (Issue #786). YAML's
+ * plain-scalar grammar treats ` #' as a comment start wherever it appears —
+ * including in the middle of prose like "Issue #591 — when the...". This has
+ * already bitten three PRs (#784, #789, #787) whose authors happened to
+ * mention their own issue number in an unquoted `description`/`summary` and
+ * had to hand-quote it reactively; other pre-existing instances went
+ * unnoticed for releases because the bundler emitted the truncated text
+ * without complaint.
+ *
+ * Detection uses the YAML library's OWN attribution rather than a text
+ * heuristic: for a PLAIN-style `Scalar` node, `yaml` parses everything after
+ * a whitespace-preceded `#` as that node's trailing `.comment` (verified
+ * against `yaml@2.9.0`) — so a plain scalar with a non-empty same-line
+ * `.comment` is *exactly* the shape of this bug, and nothing else. A survey
+ * of every fragment in this repo at the time this check was added found
+ * zero legitimate same-line trailing comments (every genuine comment in
+ * these files starts its own line, which `yaml` attributes as
+ * `commentBefore` on the NEXT node, never as `.comment` on the scalar
+ * itself) — so this check has no known false-positive shape to guard
+ * against; if a future fragment legitimately needs a same-line comment next
+ * to a plain scalar, quoting the scalar (as this error demands) is also the
+ * correct fix, since it disambiguates "comment" from "value" for any reader.
+ */
+export class TruncatedScalarError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TruncatedScalarError";
+  }
+}
+
+/**
+ * Walks a parsed fragment's AST for plain scalars silently truncated by a
+ * `#` comment, and throws `TruncatedScalarError` naming the file and the
+ * dotted key path so a contributor can find and quote the offending line.
+ */
+function assertNoTruncatedScalars(
+  document: Document,
+  absolutePath: string
+): void {
+  visit(document, {
+    Scalar(_key, node, ancestors) {
+      const scalar = node as Scalar;
+      if (
+        scalar.type !== "PLAIN" ||
+        typeof scalar.comment !== "string" ||
+        scalar.comment.trim().length === 0
+      ) {
+        return;
+      }
+      const keyPath: string[] = [];
+      for (const ancestor of ancestors) {
+        if (isPair(ancestor) && isScalar(ancestor.key)) {
+          keyPath.push(String((ancestor.key as Scalar).value));
+        }
+      }
+      const location = keyPath.length > 0 ? keyPath.join(".") : "(top level)";
+      throw new TruncatedScalarError(
+        `${absolutePath}: the scalar at "${location}" carries a same-line " #" ` +
+          `after an unquoted plain value -- YAML parsed its value as ` +
+          `${JSON.stringify(scalar.value)} and treated ${JSON.stringify(
+            scalar.comment.trim()
+          )} as a trailing comment, not part of the value. Either (a) that text ` +
+          `WAS meant to be part of the value (e.g. prose mentioning an issue ` +
+          `number like "Issue #591") and got silently dropped -- quote the whole ` +
+          `scalar with double quotes so "#" is no longer a comment marker; or ` +
+          `(b) it genuinely IS an unrelated comment (e.g. "# TODO: ...") -- this ` +
+          `repo's OpenAPI fragments don't allow a same-line trailing comment on a ` +
+          `plain scalar because it's indistinguishable from case (a), so move it ` +
+          `to its own line instead.`
+      );
+    }
+  });
+}
+
 function sortObject<T>(obj: Record<string, T>): Record<string, T> {
   const out: Record<string, T> = {};
   for (const key of Object.keys(obj).sort((a, b) => a.localeCompare(b))) {
@@ -73,6 +150,8 @@ async function readYaml(absolutePath: string): Promise<unknown> {
     const messages = document.errors.map((error) => error.message).join("; ");
     throw new Error(`${absolutePath}: invalid YAML -- ${messages}`);
   }
+
+  assertNoTruncatedScalars(document, absolutePath);
 
   return document.toJSON();
 }

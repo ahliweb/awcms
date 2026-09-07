@@ -801,7 +801,7 @@ ADR-0090. The grant dies, the membership it printed goes inactive, and every ses
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue
+### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue #179).
 
 - **operationId**: `accessEvaluate`
 - **Security**: bearerAuth + tenantHeader
@@ -937,7 +937,7 @@ ADR-0089/ADR-0090. Every live delegated-access grant under the partnership is re
 | 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                 | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue
+### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue #179).
 
 - **operationId**: `accessListAbacPolicies`
 - **Security**: bearerAuth + tenantHeader
@@ -972,7 +972,7 @@ Validates the condition DSL fail-closed before any write, so an invalid policy c
 | 403    | Access denied by RBAC/ABAC.                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | A policy with that policyCode already exists (RESOURCE_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/access/policies/{id}` — Read one dynamic ABAC (DSL) policy (Issue
+### `GET /api/v1/access/policies/{id}` — Read one dynamic ABAC (DSL) policy (Issue #179).
 
 - **operationId**: `accessGetAbacPolicy`
 - **Security**: bearerAuth + tenantHeader
@@ -1043,7 +1043,7 @@ Marks the policy active so the evaluator applies it. Gated on `identity_access.a
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/access/policies/simulate` — Read-only ABAC decision simulation/preview (Issue
+### `POST /api/v1/access/policies/simulate` — Read-only ABAC decision simulation/preview (Issue #179; audited, never mutates).
 
 - **operationId**: `accessSimulateAbacPolicy`
 - **Security**: bearerAuth + tenantHeader
@@ -2011,7 +2011,7 @@ It changes no credential and clears no lockout counter: ending stray sessions pr
 | 404    | Resource not found.                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | No provider account is currently linked (SSO_NOT_LINKED). | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/assignments` — List this tenant's business-scope assignments (Issue
+### `GET /api/v1/identity/business-scope/assignments` — List this tenant's business-scope assignments (Issue #180).
 
 - **operationId**: `listBusinessScopeAssignments`
 - **Security**: bearerAuth + tenantHeader
@@ -2088,7 +2088,7 @@ Revokes an active business-scope assignment (transitions it to `revoked`; append
 | 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | The assignment is not active, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/conflicts` — List the SoD conflict evaluation log (Issue
+### `GET /api/v1/identity/business-scope/conflicts` — List the SoD conflict evaluation log (Issue #181).
 
 - **operationId**: `listSoDConflictEvaluations`
 - **Security**: bearerAuth + tenantHeader
@@ -2113,7 +2113,7 @@ Keyset-paginated, permission-gated segregation-of-duties conflict evaluation his
 | 401    | Missing or invalid session.                                             | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                             | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/identity/business-scope/exceptions` — List this tenant's SoD conflict exceptions (Issue
+### `GET /api/v1/identity/business-scope/exceptions` — List this tenant's SoD conflict exceptions (Issue #181).
 
 - **operationId**: `listSoDConflictExceptions`
 - **Security**: bearerAuth + tenantHeader
