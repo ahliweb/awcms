@@ -131,10 +131,26 @@ describe("rights verification is not the byte check", () => {
     expect(isRightsAdjudication("rejected")).toBe(true);
   });
 
-  test("the route gates on `update`, never on `verify`", async () => {
+  test("the route gates on `update` and `adjudicate_rights` (never on `verify`) — an any-of primary guard plus two independent handler checks", async () => {
     const source = stripComments(await readFile(ROUTE, "utf8"));
 
-    expect(source).toMatch(/action:\s*"update"/);
+    // Issue #794's FIRST cut made the guard a FUNCTION of the request body
+    // (`touchesRoutineRightsField(...) ? "update" : "adjudicate_rights"`) —
+    // that shape matched `tenant-route.ts`'s `heldPrepareRefusal` carve-out by
+    // accident, and an invalid body skipped `authorizeInTransaction` entirely
+    // for every caller, zero-permission ones included. It was reverted; see
+    // ADR-0121. The SHIPPED guard is a static any-of ARRAY as the primary gate
+    // (`authorize: [{ ..., action: "update" }, { ..., action:
+    // "adjudicate_rights" }]`) — reachable once the caller holds at least one
+    // of the two — plus two independent, field-group-specific
+    // `authorizeInTransaction` calls inside the handler that decide what the
+    // ACTUAL body needs. `"update"` and `"adjudicate_rights"` therefore each
+    // appear TWICE as plain literals (once in the array, once in the
+    // handler), never inside a ternary. The bounded lookahead stays generous
+    // rather than pinning an exact literal distance, so it does not have to
+    // change again if the surrounding object literal's field order does.
+    expect(source).toMatch(/action:[\s\S]{0,120}?"update"/);
+    expect(source).toMatch(/action:[\s\S]{0,120}?"adjudicate_rights"/);
     expect(source).not.toMatch(/action:\s*"verify"/);
   });
 });

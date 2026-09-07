@@ -227,6 +227,37 @@ describe("defineTenantRoute — prepare runs before any database work", () => {
     expect(authorizeCalled).toBe(false);
   });
 
+  test("an array-typed authorize does NOT get the function-form's early exit — the held refusal still waits on authorization", async () => {
+    // ADR-0121 / Issue #794 / PR #797's live bug: the function form's
+    // `heldPrepareRefusal` carve-out is keyed on `typeof config.authorize ===
+    // "function"`. An array literal's `typeof` is `"object"`, so it must never
+    // take that branch — proven here by contrast with the FUNCTION-form test
+    // directly above ("a Response from prepare short-circuits..."), which
+    // returns 400 WITHOUT ever calling `withTenant`.
+    openTheBreaker();
+
+    const result = await call(
+      defineTenantRoute<{ parsed: string }>({
+        workClass: "interactive",
+        prepare: () =>
+          new Response(
+            JSON.stringify({ error: { code: "VALIDATION_ERROR" } }),
+            { status: 400 }
+          ),
+        authorize: [GUARD, { ...GUARD, action: "adjudicate_rights" }],
+        handler: async () => new Response("unreachable")
+      }),
+      authHeaders()
+    );
+
+    // 503 DATABASE_BUSY, not the 400 the held refusal carries: the array form
+    // reached `withTenant` and attempted authorization first, and the open
+    // breaker is what stopped it there — proof it got that far, the same
+    // technique the work-class tests below use.
+    expect(result.status).toBe(503);
+    expect(result.body.error?.code).toBe("DATABASE_BUSY");
+  });
+
   test("prepare's value reaches the authorize callback", async () => {
     openTheBreaker();
     let seen: unknown;

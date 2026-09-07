@@ -30,6 +30,11 @@ describe("MEDIA_PERMISSIONS", () => {
         // adds. Its endpoint (`PATCH /api/v1/media/objects/{id}`) landed in the
         // same change, which is the rule this file's own header states.
         "update",
+        // Issue #794 — the ninth, `sql/152`, split OUT of `update`: the ONE
+        // transition (`rightsVerificationStatus`) that makes a credit line
+        // cross into the public DTO (Issue #782/PR #791) now needs its own,
+        // separately-grantable permission.
+        "adjudicate_rights",
         "verify"
       ].sort()
     );
@@ -39,13 +44,13 @@ describe("MEDIA_PERMISSIONS", () => {
     for (const value of Object.values(MEDIA_PERMISSIONS)) {
       expect(value).toMatch(
         new RegExp(
-          `^media_library\\.${MEDIA_PERMISSION_ACTIVITY_CODE}\\.[a-z]+$`
+          `^media_library\\.${MEDIA_PERMISSION_ACTIVITY_CODE}\\.[a-z_]+$`
         )
       );
     }
   });
 
-  test("media_library.module.ts declares exactly these 7 media permissions", () => {
+  test("media_library.module.ts declares exactly these 9 media permissions", () => {
     expect(mediaLibraryModule.permissions).toBeDefined();
     const mediaPermissions = mediaLibraryModule.permissions?.filter(
       (permission) => permission.activityCode === MEDIA_PERMISSION_ACTIVITY_CODE

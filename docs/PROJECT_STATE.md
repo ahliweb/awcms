@@ -119,10 +119,10 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.2.1..HEAD`                                                    |
 | Base modules                      | **24** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **151** (`sql/001`–`151`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0120** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| Migrations                        | **152** (`sql/001`–`152`)                                                              | `ls sql/`                                                                               |
+| ADR                               | **0000**–**0121** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **0 of 24** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **63** (36.365 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **63** (36.419 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **60** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

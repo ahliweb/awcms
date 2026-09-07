@@ -112,7 +112,18 @@ export const mediaLibraryModule = defineModule({
       activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
       action: "update",
       description:
-        "Edit media object metadata — credit line, source, copyright status, and the rights verification decision"
+        "Edit media object metadata — credit line, source, copyright status, and rights notes (NOT the rights verification decision — see adjudicate_rights)"
+    },
+    // Issue #794 — split OUT of `update` above. `sql/152`'s header has the
+    // full reasoning: `rightsVerificationStatus === 'verified'` crosses a
+    // public-disclosure line (Issue #782/PR #791) that the routine metadata
+    // fields never do, so it earns its own, separately-grantable permission
+    // rather than riding on whoever can type a credit line.
+    {
+      activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
+      action: "adjudicate_rights",
+      description:
+        "Decide whether a media object's usage rights are verified/rejected — the transition that makes its credit line public"
     },
     // No `attach`/`detach` — REVOKED by ADR-0056 §A (`sql/087`). They wrote a
     // relation this module stopped owning at ADR-0036: media attachment is the

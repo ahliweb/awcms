@@ -4417,6 +4417,12 @@ msgstr ""
 msgid "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
 msgstr ""
 
+# Issue #794 — shown instead of the hint above when the caller lacks
+# media_library.media.adjudicate_rights, so the control's disabled state is
+# explained rather than left silent.
+msgid "Only a rights reviewer may change this (media_library.media.adjudicate_rights)."
+msgstr ""
+
 # Issue #592 — the editor preview link on /admin/blog.
 
 msgid "Preview"
