@@ -1072,10 +1072,10 @@ const columnCount = canActOnAny ? 9 : 8;
       // `rightsVerificationStatus` is the ONE deliberate exception (Issue
       // #794): the endpoint now requires `media.adjudicate_rights`
       // ADDITIONALLY to `media.update` whenever this field is present in the
-      // body at all \u2014 not only when it differs from the stored value. Sending
+      // body at all — not only when it differs from the stored value. Sending
       // it unconditionally, the way the other four fields are sent, would mean
-      // every save through this form \u2014 including a caller who only fixed a
-      // typo in the credit line and never touched this control \u2014 would 403 for
+      // every save through this form — including a caller who only fixed a
+      // typo in the credit line and never touched this control — would 403 for
       // anyone who holds `media.update` but not `media.adjudicate_rights`.
       // Comparing against `media-rights-status-original` (the value this page
       // rendered, not whatever a disabled `<select>` still reports) is what
