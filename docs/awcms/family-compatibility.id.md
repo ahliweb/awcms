@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](family-compatibility.md)
 
-<!-- i18n-source-hash: sha256:40db4c96fcda493c970b85e3efe9988e9698bb2c762eef9c93df6fd811ec502f -->
+<!-- i18n-source-hash: sha256:75b524f1a68557434cfc2f9153961c8d6c1af070b88724d9b1b4265d50749506 -->
 
 # Manifes kontrak keluarga AWCMS
 
