@@ -164,7 +164,7 @@ stack:
     declared: "^7.2.9"
     source: package.json dependencies.astro
   astroNode:
-    declared: "^11.1.4"
+    declared: "^11.1.5"
     source: package.json dependencies["@astrojs/node"]
   typescript:
     declared: "^7.0.2"
