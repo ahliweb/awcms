@@ -6050,7 +6050,7 @@ Gated by blog_content.pages.read.
 - **operationId**: `blogUpdatePage`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first.
+Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first. Issue #787 (sibling of #784) — when `slug` is present and differs from the stored slug, the SAME transaction also captures an ADR-0039 redirect (proposed or active, per the tenant's url_change_auto_policy); see the response schema's `redirectCapture` field.
 
 **Parameters**
 

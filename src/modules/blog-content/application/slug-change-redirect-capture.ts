@@ -17,6 +17,21 @@ import { resolveTenantAllowedHosts } from "../../seo-distribution/application/te
  * every previously-shared link 404ed with nothing to notice it, let alone fix
  * it.
  *
+ * Issue #787 (sibling of #784, same gap) — `PATCH /api/v1/blog/pages/{id}`
+ * had the identical hole: `awcms_blog_pages` has its own slug uniqueness
+ * (`awcms_blog_pages_slug_dedup`) and its own public path
+ * (`/blog/{tenantCode}/pages/{slug}`, see `blog-page-directory.ts`'s public
+ * route docblock for why pages reserve that segment instead of sharing the
+ * post's bare `/blog/{tenantCode}/{slug}`), but nothing called this seam for
+ * it. This file now serves BOTH: `captureBlogContentSlugChangeRedirect` holds
+ * the logic that is genuinely identical between the two content kinds — the
+ * module-enabled gate, the tenant-code lookup, the sequential allowed-hosts
+ * and settings reads, the call into `captureUrlChangeRedirect`, and the
+ * outcome logging — and `captureBlogPostSlugChangeRedirect` /
+ * `captureBlogPageSlugChangeRedirect` are thin, kind-specific wrappers around
+ * it. The post wrapper's signature and behavior are UNCHANGED from #784 (its
+ * existing call site in `posts/[id].ts` did not need to move a line).
+ *
  * ## Why a direct application-layer import, not a capability port
  *
  * `media_library`/`social_publishing` go through `_shared/ports/*` because
@@ -37,9 +52,9 @@ import { resolveTenantAllowedHosts } from "../../seo-distribution/application/te
  * construction"). Checking `resolveModuleEnabled` at the call site instead —
  * same helper the route already calls for `blog_content` itself — keeps this
  * additive: a tenant that has not enabled `seo_distribution` keeps editing
- * posts exactly as before, just without a redirect being proposed.
+ * posts/pages exactly as before, just without a redirect being proposed.
  *
- * ## Why a rejection/failure never fails the post update
+ * ## Why a rejection/failure never fails the post/page update
  *
  * `checkRedirectSafety` (loop/conflict/chain-length) can refuse to persist a
  * rule; a server-derived path pair can, in principle, fail
@@ -49,7 +64,7 @@ import { resolveTenantAllowedHosts } from "../../seo-distribution/application/te
  * "wiring this in is additive — it cannot itself create an unsafe redirect").
  * A non-`created`/`proposed` outcome is logged as a warning and reported back
  * to the caller in the response's `redirectCapture` field so an operator can
- * follow up, but it never throws and never rolls back the post update.
+ * follow up, but it never throws and never rolls back the post/page update.
  */
 export type SlugChangeRedirectOutcome =
   | { outcome: "module_disabled" }
@@ -72,42 +87,76 @@ export type SlugChangeRedirectInput = {
   newLocale: string;
 };
 
+/** Issue #787 — the page-shaped equivalent of `SlugChangeRedirectInput`. */
+export type PageSlugChangeRedirectInput = {
+  pageId: string;
+  oldSlug: string;
+  newSlug: string;
+  /** The page's locale BEFORE this update — decides the old path's prefix. */
+  oldLocale: string;
+  /** The page's locale AFTER this update — decides the new path's prefix. */
+  newLocale: string;
+};
+
+type BlogContentKind = "post" | "page";
+
+type ContentSlugChangeRedirectInput = {
+  contentId: string;
+  oldSlug: string;
+  newSlug: string;
+  oldLocale: string;
+  newLocale: string;
+};
+
 type TenantCodeRow = { tenant_code: string };
 
 /**
- * `/blog/{tenantCode}/{slug}` (ADR-0009), locale-prefixed when the locale is
- * one this deployment serves (ADR-0098) — the same construction
+ * `/blog/{tenantCode}/{slug}` for a post, `/blog/{tenantCode}/pages/{slug}`
+ * for a page (ADR-0009; the `pages/` segment reservation is
+ * `blog-page-directory.ts`'s public route docblock), locale-prefixed when the
+ * locale is one this deployment serves (ADR-0098) — the same construction
  * `listLegacyRedirectMappings` (`blog-post-directory.ts`) and the
  * internal-links preview route already use, so the source/target this writes
  * are the literal public paths a reader would hit, not a guess at them.
  */
-function buildBlogPostPublicPath(
+function buildBlogContentPublicPath(
+  kind: BlogContentKind,
   tenantCode: string,
   slug: string,
   locale: string
 ): string {
-  const barePath = `/blog/${tenantCode}/${slug}`;
+  const barePath =
+    kind === "post"
+      ? `/blog/${tenantCode}/${slug}`
+      : `/blog/${tenantCode}/pages/${slug}`;
   return isSupportedLocale(locale)
     ? withPublicLocalePrefix(barePath, locale)
     : barePath;
 }
 
 /**
- * Capture a blog post's slug change as a redirect (ADR-0039 `slug_change`
- * origin), gated by the tenant's own `url_change_auto_policy` — never
- * overridden here, so a tenant that wants review keeps getting a proposed
- * (inactive) rule rather than one this hook activates on its behalf. Runs
- * inside the caller's tenant transaction (same one the post update itself
- * runs in), so a proposal/rule and the slug change land together or not at
- * all.
+ * Capture a blog post/page's slug change as a redirect (ADR-0039
+ * `slug_change` origin), gated by the tenant's own `url_change_auto_policy`
+ * — never overridden here, so a tenant that wants review keeps getting a
+ * proposed (inactive) rule rather than one this hook activates on its
+ * behalf. Runs inside the caller's tenant transaction (same one the
+ * post/page update itself runs in), so a proposal/rule and the slug change
+ * land together or not at all.
+ *
+ * Shared by both `captureBlogPostSlugChangeRedirect` (#784) and
+ * `captureBlogPageSlugChangeRedirect` (#787) — see this file's top docblock
+ * for why the logic below is identical between the two kinds and only the
+ * path shape, audit action/resource attribute name and log-event prefix
+ * differ.
  */
-export async function captureBlogPostSlugChangeRedirect(
+async function captureBlogContentSlugChangeRedirect(
   tx: Bun.SQL,
   tenantId: string,
   actorTenantUserId: string,
-  input: SlugChangeRedirectInput,
+  kind: BlogContentKind,
+  input: ContentSlugChangeRedirectInput,
   correlationId: string | undefined,
-  now: Date = new Date()
+  now: Date
 ): Promise<SlugChangeRedirectOutcome> {
   const seoDistributionEnabled = await resolveModuleEnabled(
     tx,
@@ -124,12 +173,14 @@ export async function captureBlogPostSlugChangeRedirect(
   `) as TenantCodeRow[];
   const tenantCode = tenantRows[0]?.tenant_code ?? "";
 
-  const oldPath = buildBlogPostPublicPath(
+  const oldPath = buildBlogContentPublicPath(
+    kind,
     tenantCode,
     input.oldSlug,
     input.oldLocale
   );
-  const newPath = buildBlogPostPublicPath(
+  const newPath = buildBlogContentPublicPath(
+    kind,
     tenantCode,
     input.newSlug,
     input.newLocale
@@ -140,6 +191,8 @@ export async function captureBlogPostSlugChangeRedirect(
   const allowedHosts = await resolveTenantAllowedHosts(tx, tenantId);
   const settings = await fetchRedirectSettings(tx, tenantId);
 
+  const idAttributeKey = kind === "post" ? "postId" : "pageId";
+
   const result = await captureUrlChangeRedirect(
     tx,
     tenantId,
@@ -148,7 +201,7 @@ export async function captureBlogPostSlugChangeRedirect(
       oldPath,
       newPath,
       changeType: "slug_change",
-      reason: "Slug changed on blog post update (Issue #784)."
+      reason: `Slug changed on blog ${kind} update (Issue ${kind === "post" ? "#784" : "#787"}).`
     },
     allowedHosts,
     settings.urlChangeAutoPolicy,
@@ -157,13 +210,13 @@ export async function captureBlogPostSlugChangeRedirect(
         tenantId,
         actorTenantUserId,
         moduleKey: "blog_content",
-        action: "blog.post.slug_changed.redirect_captured",
+        action: `blog.${kind}.slug_changed.redirect_captured`,
         resourceType: "seo_redirect",
         resourceId: detail.redirect.id,
         severity: "info",
         message: `Slug change captured as redirect: ${detail.redirect.normalizedSourcePath} -> ${detail.redirect.target} [${detail.action}].`,
         attributes: {
-          postId: input.postId,
+          [idAttributeKey]: input.contentId,
           action: detail.action,
           state: detail.redirect.state
         },
@@ -178,10 +231,10 @@ export async function captureBlogPostSlugChangeRedirect(
   }
 
   if (result.outcome === "rejected") {
-    log("warning", "blog-content.post.slug-change-redirect.rejected", {
+    log("warning", `blog-content.${kind}.slug-change-redirect.rejected`, {
       correlationId,
       tenantId,
-      postId: input.postId,
+      [idAttributeKey]: input.contentId,
       oldPath,
       newPath,
       code: result.code,
@@ -191,10 +244,10 @@ export async function captureBlogPostSlugChangeRedirect(
   }
 
   if (result.outcome === "invalid") {
-    log("warning", "blog-content.post.slug-change-redirect.invalid", {
+    log("warning", `blog-content.${kind}.slug-change-redirect.invalid`, {
       correlationId,
       tenantId,
-      postId: input.postId,
+      [idAttributeKey]: input.contentId,
       oldPath,
       newPath,
       errors: result.errors
@@ -203,4 +256,56 @@ export async function captureBlogPostSlugChangeRedirect(
   }
 
   return { outcome: "skipped" };
+}
+
+/** Issue #784 — see this file's top docblock. */
+export async function captureBlogPostSlugChangeRedirect(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  input: SlugChangeRedirectInput,
+  correlationId: string | undefined,
+  now: Date = new Date()
+): Promise<SlugChangeRedirectOutcome> {
+  return captureBlogContentSlugChangeRedirect(
+    tx,
+    tenantId,
+    actorTenantUserId,
+    "post",
+    {
+      contentId: input.postId,
+      oldSlug: input.oldSlug,
+      newSlug: input.newSlug,
+      oldLocale: input.oldLocale,
+      newLocale: input.newLocale
+    },
+    correlationId,
+    now
+  );
+}
+
+/** Issue #787 — see this file's top docblock. */
+export async function captureBlogPageSlugChangeRedirect(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  input: PageSlugChangeRedirectInput,
+  correlationId: string | undefined,
+  now: Date = new Date()
+): Promise<SlugChangeRedirectOutcome> {
+  return captureBlogContentSlugChangeRedirect(
+    tx,
+    tenantId,
+    actorTenantUserId,
+    "page",
+    {
+      contentId: input.pageId,
+      oldSlug: input.oldSlug,
+      newSlug: input.newSlug,
+      oldLocale: input.oldLocale,
+      newLocale: input.newLocale
+    },
+    correlationId,
+    now
+  );
 }
