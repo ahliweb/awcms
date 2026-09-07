@@ -3406,7 +3406,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Issue #591 — when the scheduled-publish job archives this post. Null = stays published until archived by hand.
+          description: "Issue #591 — when the scheduled-publish job archives this post. Null = stays published until archived by hand."
         createdAt:
           type: string
           format: date-time

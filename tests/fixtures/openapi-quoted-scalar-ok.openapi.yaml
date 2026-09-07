@@ -1,0 +1,15 @@
+# Companion to openapi-truncated-scalar.openapi.yaml (Issue #786): the SAME
+# kind of issue-number-bearing prose, but correctly double-quoted so "#" is
+# no longer a YAML comment marker. Used only by tests/openapi-bundle.test.ts
+# to prove the truncation detector does not false-positive on a properly
+# quoted scalar.
+paths:
+  /api/v1/fixtures/quoted-scalar-ok:
+    get:
+      tags:
+        - Example CRM
+      summary: "Fixture endpoint mentioning Issue #999 with the scalar correctly quoted."
+      operationId: fixtureQuotedScalarOk
+      responses:
+        "200":
+          description: "Reaches the bundle unchanged -- quoting removed the comment ambiguity."

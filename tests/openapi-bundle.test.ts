@@ -20,7 +20,8 @@ import {
   BundleConflictError,
   buildBundledDocument,
   bundleOpenApi,
-  listModuleFragmentFiles
+  listModuleFragmentFiles,
+  TruncatedScalarError
 } from "../scripts/openapi-bundle";
 import {
   collectFragmentOwnershipProblems,
@@ -169,6 +170,53 @@ describe("openapi bundle — merge conflict detection", () => {
     await expect(
       buildBundledDocument(ROOT, { extraFragmentFiles: [conflicting] })
     ).rejects.toBeInstanceOf(BundleConflictError);
+  });
+});
+
+describe("openapi bundle — truncated scalar detection (Issue #786)", () => {
+  // YAML's plain-scalar grammar treats a whitespace-preceded "#" as a comment
+  // start ANYWHERE, including mid-prose like "Issue #591 — when...". This bit
+  // #784/#789/#787's authors reactively (each had to hand-quote a description
+  // mentioning their own issue number) and left pre-existing instances
+  // silently truncated in the published bundle for releases. The bundler must
+  // now fail loudly instead of emitting the corrupted text.
+  test("an unquoted plain scalar truncated at ' #' throws TruncatedScalarError naming the fragment", async () => {
+    const truncated = path.join(
+      ROOT,
+      "tests/fixtures/openapi-truncated-scalar.openapi.yaml"
+    );
+    await expect(
+      buildBundledDocument(ROOT, { extraFragmentFiles: [truncated] })
+    ).rejects.toBeInstanceOf(TruncatedScalarError);
+
+    await expect(
+      buildBundledDocument(ROOT, { extraFragmentFiles: [truncated] })
+    ).rejects.toThrow(/looks truncated at " #"/);
+  });
+
+  test("the same prose, correctly double-quoted, does not false-positive", async () => {
+    const quoted = path.join(
+      ROOT,
+      "tests/fixtures/openapi-quoted-scalar-ok.openapi.yaml"
+    );
+    const bundle = (await buildBundledDocument(ROOT, {
+      extraFragmentFiles: [quoted]
+    })) as AnyRecord;
+    const paths = bundle.paths as AnyRecord;
+    const operation = (paths["/api/v1/fixtures/quoted-scalar-ok"] as AnyRecord)
+      .get as AnyRecord;
+    expect(operation.summary).toBe(
+      "Fixture endpoint mentioning Issue #999 with the scalar correctly quoted."
+    );
+  });
+
+  test("every real fragment currently in the repo is free of this truncation shape", async () => {
+    // Regression guard for the specific pre-existing instances Issue #786
+    // found and fixed (blog_content's unpublishAt, and eleven identity_access
+    // ABAC/business-scope/SoD summaries/descriptions) — this would have
+    // failed before they were quoted, and fails again if a future fragment
+    // edit reintroduces the shape anywhere in the real fragment set.
+    await expect(buildBundledDocument(ROOT)).resolves.toBeTruthy();
   });
 });
 

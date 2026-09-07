@@ -1,0 +1,16 @@
+# Truncation fixture (Issue #786): an unquoted (plain) YAML scalar whose text
+# mentions an issue number is truncated by YAML's own comment grammar at the
+# whitespace-preceded "#" -- everything from there on is silently dropped
+# unless the bundler's truncation detector catches it first. Used only by
+# tests/openapi-bundle.test.ts to prove `buildBundledDocument` throws
+# `TruncatedScalarError` instead of emitting the corrupted text.
+paths:
+  /api/v1/fixtures/truncated-scalar:
+    get:
+      tags:
+        - Example CRM
+      summary: Fixture endpoint mentioning Issue #999 without quoting the scalar.
+      operationId: fixtureTruncatedScalar
+      responses:
+        "200":
+          description: Should never reach the bundle -- the fragment fails to parse.
