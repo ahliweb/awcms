@@ -110,13 +110,18 @@ function assertNoTruncatedScalars(
       }
       const location = keyPath.length > 0 ? keyPath.join(".") : "(top level)";
       throw new TruncatedScalarError(
-        `${absolutePath}: the scalar at "${location}" looks truncated at " #" -- ` +
-          `YAML parsed its value as ${JSON.stringify(scalar.value)} and silently ` +
-          `dropped ${JSON.stringify(
+        `${absolutePath}: the scalar at "${location}" carries a same-line " #" ` +
+          `after an unquoted plain value -- YAML parsed its value as ` +
+          `${JSON.stringify(scalar.value)} and treated ${JSON.stringify(
             scalar.comment.trim()
-          )} as a comment. If that text was meant to be part of the value ` +
-          `(e.g. prose mentioning an issue number like "Issue #591"), quote the ` +
-          `whole scalar with double quotes so "#" is no longer a comment marker.`
+          )} as a trailing comment, not part of the value. Either (a) that text ` +
+          `WAS meant to be part of the value (e.g. prose mentioning an issue ` +
+          `number like "Issue #591") and got silently dropped -- quote the whole ` +
+          `scalar with double quotes so "#" is no longer a comment marker; or ` +
+          `(b) it genuinely IS an unrelated comment (e.g. "# TODO: ...") -- this ` +
+          `repo's OpenAPI fragments don't allow a same-line trailing comment on a ` +
+          `plain scalar because it's indistinguishable from case (a), so move it ` +
+          `to its own line instead.`
       );
     }
   });

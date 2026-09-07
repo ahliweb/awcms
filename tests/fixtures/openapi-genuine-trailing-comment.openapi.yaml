@@ -1,0 +1,19 @@
+# False-positive-shape fixture (Issue #786 review follow-up): a plain scalar
+# whose VALUE is already correct and complete, followed by a genuine, unrelated
+# same-line comment. YAML's own attribution makes this shape indistinguishable
+# from actual truncation (both are "a plain scalar with a non-empty same-line
+# .comment"), so the detector intentionally treats it the same way: this repo's
+# convention is that a plain scalar in these fragments may never carry a
+# same-line trailing comment -- quote the scalar, or move the comment to its
+# own line. Used only by tests/openapi-bundle.test.ts to prove this documented
+# trade-off is deliberate and tested, not an unconsidered gap.
+paths:
+  /api/v1/fixtures/genuine-trailing-comment:
+    get:
+      tags:
+        - Example CRM
+      summary: Fixture endpoint with a correct value # TODO: not a truncation, just a comment
+      operationId: fixtureGenuineTrailingComment
+      responses:
+        "200":
+          description: Should never reach the bundle -- the fragment fails to parse.

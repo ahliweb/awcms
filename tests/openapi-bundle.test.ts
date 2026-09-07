@@ -191,7 +191,32 @@ describe("openapi bundle — truncated scalar detection (Issue #786)", () => {
 
     await expect(
       buildBundledDocument(ROOT, { extraFragmentFiles: [truncated] })
-    ).rejects.toThrow(/looks truncated at " #"/);
+    ).rejects.toThrow(/carries a same-line " #"/);
+  });
+
+  test("a correct value followed by a genuine, unrelated same-line comment also throws -- this repo disallows the shape entirely because it's indistinguishable from truncation", async () => {
+    // This is the false-positive shape flagged in PR #796's review: a plain
+    // scalar whose parsed VALUE is already correct, immediately followed by a
+    // real "# TODO"-style comment on the same line. YAML attributes both this
+    // shape and actual truncation identically (a non-empty same-line
+    // `.comment` on a PLAIN scalar), so the detector cannot tell them apart --
+    // and this repo's convention (documented in openapi/README.md) is that it
+    // shouldn't try to: same-line trailing comments on a plain scalar are
+    // disallowed outright in these fragments. This test proves that posture is
+    // deliberate and tested, not an unconsidered gap that would surprise a
+    // future contributor who writes a perfectly correct value with an
+    // innocent trailing "# TODO" next to it.
+    const genuineComment = path.join(
+      ROOT,
+      "tests/fixtures/openapi-genuine-trailing-comment.openapi.yaml"
+    );
+    await expect(
+      buildBundledDocument(ROOT, { extraFragmentFiles: [genuineComment] })
+    ).rejects.toBeInstanceOf(TruncatedScalarError);
+
+    await expect(
+      buildBundledDocument(ROOT, { extraFragmentFiles: [genuineComment] })
+    ).rejects.toThrow(/genuinely IS an unrelated comment/);
   });
 
   test("the same prose, correctly double-quoted, does not false-positive", async () => {
