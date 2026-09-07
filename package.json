@@ -191,7 +191,7 @@
     "read-yaml-file": "^2.1.0"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.4",
+    "@astrojs/node": "^11.1.5",
     "astro": "^7.2.9"
   }
 }
