@@ -122,17 +122,25 @@ function guardTriplesFrom(source: string): Set<Triple> {
   // Both spellings: these routes use the shared activity-code constant, and a
   // literal-only regex would see zero guards and pass vacuously.
   //
-  // `action` itself has two shapes since Issue #794: a plain string literal
-  // (every guard except one), or the ternary
-  // `PATCH .../objects/{id}`'s primary guard uses to pick `update` vs
-  // `adjudicate_rights` from the request body's shape
-  // (`touchesRoutineRightsField(prepared.input) ? "update" :
-  // "adjudicate_rights"`). Matching only the first shape would make this
-  // scanner blind to `update` the moment that route stopped spelling it as a
-  // bare literal — exactly the class of defect a source-regex test can
-  // introduce by only ever being extended for the pattern it already knew
-  // about. Both string literals inside the ternary are real, reachable
-  // guards (one branch runs per request), so both count.
+  // `action` itself has two shapes, kept since Issue #794 even though the
+  // route that motivated the second shape no longer needs it: a plain string
+  // literal (every guard today), or the ternary form
+  // `moduleKey/activityCode/action: cond ? "x" : "y"` a body-dependent FUNCTION
+  // guard would use. `PATCH .../objects/{id}` used exactly that ternary in its
+  // first cut (ADR-0121) — `authorize` was a function picking `update` vs
+  // `adjudicate_rights` from the parsed body — which turned out to be a live
+  // authorization-bypass bug (an invalid body skipped `authorizeInTransaction`
+  // entirely) and was reverted. The route's CURRENT guard is a static any-of
+  // ARRAY (`authorize: [{..., action: "update"}, {..., action:
+  // "adjudicate_rights"}]`, two plain literals, no ternary) as the primary
+  // gate, plus two independent `authorizeInTransaction` calls inside the
+  // handler — one per field group the body actually touches, each also a
+  // plain literal. Every one of those four call sites matches this pattern's
+  // FIRST alternative on its own. The ternary alternative is kept regardless:
+  // deleting it would make this scanner blind to `update` the instant some
+  // future body-dependent guard reintroduces that shape, which is exactly the
+  // class of defect a source-regex test can introduce by only ever being
+  // pared down to the pattern it currently sees.
   const pattern =
     /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*(?:MEDIA_PERMISSION_ACTIVITY_CODE|"([a-z_]+)"),\s*action:\s*(?:"([a-z_]+)"|[^{}]*?\?\s*"([a-z_]+)"\s*:\s*"([a-z_]+)")/g;
 

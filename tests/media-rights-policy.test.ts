@@ -131,15 +131,24 @@ describe("rights verification is not the byte check", () => {
     expect(isRightsAdjudication("rejected")).toBe(true);
   });
 
-  test("the route gates on `update` (and, since Issue #794, `adjudicate_rights`), never on `verify`", async () => {
+  test("the route gates on `update` and `adjudicate_rights` (never on `verify`) — an any-of primary guard plus two independent handler checks", async () => {
     const source = stripComments(await readFile(ROUTE, "utf8"));
 
-    // Issue #794 split the PATCH route's guard into a function of the request
-    // body (`touchesRoutineRightsField(...) ? "update" : "adjudicate_rights"`),
-    // so `"update"` no longer sits immediately after `action:` — it is one of
-    // two literals inside the ternary. A bounded lookahead keeps this
-    // permissive about THAT shape while still failing if `update` disappeared
-    // from the guard entirely.
+    // Issue #794's FIRST cut made the guard a FUNCTION of the request body
+    // (`touchesRoutineRightsField(...) ? "update" : "adjudicate_rights"`) —
+    // that shape matched `tenant-route.ts`'s `heldPrepareRefusal` carve-out by
+    // accident, and an invalid body skipped `authorizeInTransaction` entirely
+    // for every caller, zero-permission ones included. It was reverted; see
+    // ADR-0121. The SHIPPED guard is a static any-of ARRAY as the primary gate
+    // (`authorize: [{ ..., action: "update" }, { ..., action:
+    // "adjudicate_rights" }]`) — reachable once the caller holds at least one
+    // of the two — plus two independent, field-group-specific
+    // `authorizeInTransaction` calls inside the handler that decide what the
+    // ACTUAL body needs. `"update"` and `"adjudicate_rights"` therefore each
+    // appear TWICE as plain literals (once in the array, once in the
+    // handler), never inside a ternary. The bounded lookahead stays generous
+    // rather than pinning an exact literal distance, so it does not have to
+    // change again if the surrounding object literal's field order does.
     expect(source).toMatch(/action:[\s\S]{0,120}?"update"/);
     expect(source).toMatch(/action:[\s\S]{0,120}?"adjudicate_rights"/);
     expect(source).not.toMatch(/action:\s*"verify"/);
