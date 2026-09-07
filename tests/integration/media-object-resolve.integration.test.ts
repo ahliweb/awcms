@@ -72,12 +72,27 @@ async function seedTenant(
  * into `blog_content`, but both deliberately kept the physical names — so these
  * literals are what a real row still carries, not leftovers in the fixture.
  */
+/**
+ * Issue #782 — a media object's rights/credit metadata, as it would look on a
+ * row a rights editor has actually filled in. Left undefined, the columns
+ * keep their `sql/137` defaults (`copyright_status = 'unknown'`,
+ * `rights_verification_status = 'unverified'`, everything else `NULL`).
+ */
+type RightsFixture = {
+  creditLine?: string;
+  sourceName?: string;
+  rightsNotes?: string;
+  copyrightStatus?: string;
+  rightsVerificationStatus?: "unverified" | "verified" | "rejected";
+  rightsVerifiedBy?: string;
+};
+
 async function seedMedia(
   tenantId: string,
   userId: string,
   label: string,
   status: string,
-  options: { deleted?: boolean } = {}
+  options: { deleted?: boolean; rights?: RightsFixture } = {}
 ): Promise<string> {
   // `object_key` is CHECK-constrained to `news-media/<tenant_id>/YYYY/MM/<uuid>.<ext>`,
   // verified per-row against the row's OWN tenant_id — so a fixture cannot use a
@@ -90,17 +105,34 @@ async function seedMedia(
   // alone — the database will not hold a half-attached row.
   const attached = status === "attached";
 
+  const rights = options.rights ?? {};
+  const verificationStatus = rights.rightsVerificationStatus ?? "unverified";
+  // `rights_adjudication_check` (sql/137) requires `rights_verified_by`/`_at`
+  // to be set together with any non-`unverified` status, and NULL otherwise —
+  // so a "verified"/"rejected" fixture must supply a verifier or the insert
+  // itself is rejected by the database, not merely by application code.
+  const verifiedBy =
+    verificationStatus === "unverified"
+      ? null
+      : (rights.rightsVerifiedBy ?? userId);
+  const verifiedAt = verificationStatus === "unverified" ? null : new Date();
+
   const rows = (await getAdminSql()`
     INSERT INTO awcms_news_media_objects
       (tenant_id, module_key, storage_driver, bucket_name, object_key,
        public_url, mime_type, alt_text, status, owner_resource_type,
-       owner_resource_id, created_by_tenant_user_id, deleted_at)
+       owner_resource_id, created_by_tenant_user_id, deleted_at,
+       credit_line, source_name, rights_notes, copyright_status,
+       rights_verification_status, rights_verified_by, rights_verified_at)
     VALUES (
       ${tenantId}, 'news_portal', 'cloudflare_r2', 'bucket', ${objectKey},
       ${`https://cdn.example.test/${label}.png`}, 'image/png', ${`alt ${label}`},
       ${status}, ${attached ? "blog_post" : null},
       ${attached ? crypto.randomUUID() : null},
-      ${userId}, ${options.deleted ? new Date() : null}
+      ${userId}, ${options.deleted ? new Date() : null},
+      ${rights.creditLine ?? null}, ${rights.sourceName ?? null},
+      ${rights.rightsNotes ?? null}, ${rights.copyrightStatus ?? "unknown"},
+      ${verificationStatus}, ${verifiedBy}, ${verifiedAt}
     )
     RETURNING id
   `) as { id: string }[];
@@ -205,3 +237,143 @@ suite("media object batch resolution", () => {
     expect(result.items).toEqual([ids.otherTenant!]);
   });
 });
+
+/**
+ * Issue #782 — the credit/rights fields the public DTO gained
+ * (`creditLine`/`sourceName`/`copyrightStatus`), and the verification gate
+ * that decides whether they cross at all. Its own suite because it needs its
+ * own fixture shape (a rights-metadata row, not just a status), separate from
+ * the safe-to-reference tests above.
+ */
+suite(
+  "media object batch resolution — rights/credit fields (Issue #782)",
+  () => {
+    beforeAll(async () => {
+      await setupIntegrationDatabase();
+    });
+
+    afterAll(async () => {
+      await teardownIntegrationDatabase();
+    });
+
+    beforeEach(async () => {
+      await resetDatabase();
+      await seedTenant(TENANT_A, "media-a", AUTHOR_A);
+    });
+
+    /** Every rights/credit field on the underlying row a public DTO must NEVER surface, in ANY case. */
+    const NEVER_PUBLIC_KEYS = [
+      "rightsNotes",
+      "rightsVerificationStatus",
+      "rightsVerifiedBy",
+      "rightsVerifiedAt"
+    ];
+
+    test("a verified media object's credit/rights fields cross to the public DTO", async () => {
+      const id = await seedMedia(
+        TENANT_A,
+        AUTHOR_A,
+        "verified-rights",
+        "verified",
+        {
+          rights: {
+            creditLine: "Foto: Ani Wijaya",
+            sourceName: "Kantor Berita Kalteng",
+            rightsNotes:
+              "Licensed for one-time web use only, contact agency for reuse.",
+            copyrightStatus: "licensed",
+            rightsVerificationStatus: "verified",
+            rightsVerifiedBy: AUTHOR_A
+          }
+        }
+      );
+
+      const result = await resolve(TENANT_A, [id]);
+      expect(result.items).toEqual([id]);
+
+      const resolved = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          mediaLibraryPortAdapter.resolveMediaReferences(tx, TENANT_A, [id])
+      );
+      const dto = resolved.get(id)!;
+
+      expect(dto.creditLine).toBe("Foto: Ani Wijaya");
+      expect(dto.sourceName).toBe("Kantor Berita Kalteng");
+      expect(dto.copyrightStatus).toBe("licensed");
+
+      // Positive proof, not absence-by-omission: the internal reviewer identity,
+      // the review moment, and the editorial-only notes must not be reachable on
+      // the object at all — not merely `undefined` on a widened type.
+      for (const key of NEVER_PUBLIC_KEYS) {
+        expect(Object.keys(dto)).not.toContain(key);
+      }
+    });
+
+    test.each([
+      ["unverified (the default — nobody has adjudicated it)", undefined],
+      ["rejected (a human explicitly refused it)", "rejected" as const]
+    ])(
+      "%s: credit/rights fields are null even though the row has them set",
+      async (_label, verificationStatus) => {
+        const id = await seedMedia(
+          TENANT_A,
+          AUTHOR_A,
+          "unverified-rights",
+          "verified",
+          {
+            rights: {
+              creditLine: "Foto: Budi",
+              sourceName: "Agency X",
+              rightsNotes: "Do not publish without agency sign-off.",
+              copyrightStatus: "owned",
+              rightsVerificationStatus: verificationStatus,
+              rightsVerifiedBy: verificationStatus ? AUTHOR_A : undefined
+            }
+          }
+        );
+
+        const resolved = await withTenantOrThrow(
+          getRuntimeSql(),
+          TENANT_A,
+          (tx) =>
+            mediaLibraryPortAdapter.resolveMediaReferences(tx, TENANT_A, [id])
+        );
+        const dto = resolved.get(id)!;
+
+        // Fail-closed: the object itself still resolves (bytes are fine to
+        // serve), but the credit is suppressed until a human clears it.
+        expect(dto.creditLine).toBeNull();
+        expect(dto.sourceName).toBeNull();
+        expect(dto.copyrightStatus).toBeNull();
+
+        for (const key of NEVER_PUBLIC_KEYS) {
+          expect(Object.keys(dto)).not.toContain(key);
+        }
+      }
+    );
+
+    test("the existing six fields are unaffected by the rights gate (no regression)", async () => {
+      const id = await seedMedia(TENANT_A, AUTHOR_A, "plain", "verified");
+
+      const resolved = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          mediaLibraryPortAdapter.resolveMediaReferences(tx, TENANT_A, [id])
+      );
+      const dto = resolved.get(id)!;
+
+      expect(dto.publicUrl).toBe("https://cdn.example.test/plain.png");
+      expect(dto.altText).toBe("alt plain");
+      expect(dto.mimeType).toBe("image/png");
+      expect(dto.width).toBeNull();
+      expect(dto.height).toBeNull();
+      expect(dto.sizeBytes).toBeNull();
+      expect(dto.creditLine).toBeNull();
+      expect(dto.sourceName).toBeNull();
+      expect(dto.copyrightStatus).toBeNull();
+    });
+  }
+);

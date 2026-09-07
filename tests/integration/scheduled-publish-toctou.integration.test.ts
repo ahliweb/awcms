@@ -67,7 +67,10 @@ const RESOLVED: ResolvedMediaReferenceDTO = {
   mimeType: "image/jpeg",
   width: 1200,
   height: 800,
-  sizeBytes: 240_000
+  sizeBytes: 240_000,
+  creditLine: null,
+  sourceName: null,
+  copyrightStatus: null
 };
 
 /**

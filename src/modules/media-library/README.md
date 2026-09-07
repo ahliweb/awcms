@@ -214,3 +214,37 @@ different facts.
 
 Read-only, so machine credentials ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
 may hold it.
+
+### Credit/rights fields on the public DTO (Issue #782)
+
+`sql/137` (Issue #615) gave every media object seven rights fields:
+`creditLine`, `sourceName`, `rightsNotes`, `copyrightStatus`,
+`rightsVerificationStatus`, `rightsVerifiedBy`, `rightsVerifiedAt`. Until
+Issue #782, none of them crossed the `GET /api/v1/media/objects` boundary — a
+derived news site could render a photo's alt text with no photographer
+credit, even though the credit existed on the row all along.
+
+`ResolvedMediaReferenceDTO` (`_shared/ports/media-library-port.ts`) now also
+carries `creditLine`, `sourceName`, and `copyrightStatus` — but **only three
+of the seven, and only conditionally**:
+
+- **`rightsVerifiedBy`/`rightsVerifiedAt` never cross at all.** They name an
+  internal reviewer and a review moment. Same posture
+  [ADR-0109](../../../docs/adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.md)
+  already took for `awcms_tenant_users.public_byline_name`: an internal
+  identity must never reach a public, credential-gated surface as a side
+  effect of some other field being published.
+- **`rightsNotes` never crosses either.** It can hold licensing terms and
+  contact details — editorial-internal, not a credit.
+- **`creditLine`/`sourceName`/`copyrightStatus` cross ONLY when
+  `rightsVerificationStatus === 'verified'`.** On anything else — the default
+  `'unverified'`, or an explicit `'rejected'` — all three come back `null`,
+  even when the underlying row has them populated. Fail-closed: nobody has
+  confirmed the newsroom may print this credit, so the endpoint does not print
+  it either. See `domain/media-rights-policy.ts#resolvePublicMediaRightsFields`
+  for the pure gate function and its full rationale, and
+  `application/media-library-port-adapter.ts`'s `resolveMediaReferences` for
+  where it is applied.
+
+This is a widening of data already returned by an existing
+`media_library.media.read`-gated route — no new endpoint, no new permission.

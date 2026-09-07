@@ -23321,6 +23321,26 @@ components:
         sizeBytes:
           type: integer
           nullable: true
+        creditLine:
+          type: string
+          nullable: true
+          description: "Issue #782. The photo credit — what gets printed beside the image. `null` unless the source object's rights claim has been HUMAN-verified (internal `rightsVerificationStatus = 'verified'`); an unverified or rejected claim never reaches this field, even if the object has a credit line on file."
+        sourceName:
+          type: string
+          nullable: true
+          description: "Issue #782. Where the file came from (often distinct from who is credited). Same verification gate as `creditLine`: `null` unless the rights claim has been verified."
+        copyrightStatus:
+          type: string
+          nullable: true
+          enum:
+            - unknown
+            - owned
+            - licensed
+            - public_domain
+            - permission_granted
+            - fair_use
+            - null
+          description: 'Issue #782. Same verification gate as `creditLine`/`sourceName`: `null` unless the rights claim has been verified — including when the underlying object''s copyright status is the real, non-null `''unknown''` value (verification and "unknown" are different facts, and only one of them is nullability here).'
     RetentionPurgeResult:
       type: object
       properties:

@@ -247,3 +247,61 @@ export function changesRightsAdjudication(
     input.rightsVerificationStatus !== current
   );
 }
+
+export type PublicMediaRightsFields = {
+  creditLine: string | null;
+  sourceName: string | null;
+  copyrightStatus: CopyrightStatus | null;
+};
+
+/**
+ * Projects a media object's rights metadata onto the shape that may cross a
+ * PUBLIC read boundary (Issue #782 —
+ * `MediaLibraryPort.resolveMediaReferences` / `ResolvedMediaReferenceDTO`).
+ *
+ * Two of the seven rights fields never reach this function's return value at
+ * all, by design, not by oversight:
+ *
+ * - `rightsVerifiedBy` / `rightsVerifiedAt` name a STAFF MEMBER and a moment of
+ *   internal review. Same posture ADR-0109 already took for
+ *   `awcms_tenant_users.public_byline_name`: an internal identity does not
+ *   cross into a public, credential-gated surface as a side effect of some
+ *   other field being published. The failure mode of omitting it must stay
+ *   benign (a byline/credit is simply missing); leaking a reviewer's name and
+ *   timestamp is not something a takedown can undo.
+ * - `rightsNotes` can hold licensing terms and contact details — editorial
+ *   working notes, not a credit line, and not for a reader.
+ *
+ * The remaining three (`creditLine` / `sourceName` / `copyrightStatus`) ARE
+ * the credit a news site is legally/reputationally obliged to show — but only
+ * once a HUMAN has adjudicated the claim. Whenever
+ * `rightsVerificationStatus` is anything other than `'verified'` (the default
+ * `'unverified'`, or an explicit `'rejected'`), nobody has confirmed the
+ * newsroom may print this credit, so this fails CLOSED: every field comes
+ * back `null` — never the underlying value — even though the row itself may
+ * carry a fully-populated `creditLine`/`sourceName`/`copyrightStatus`. Same
+ * shape as `checkRedirectSafety` or `businessScopeFacts.resolved === false`
+ * elsewhere in this codebase: an unresolved/unadjudicated state denies, it
+ * never falls back to "show it anyway."
+ *
+ * A future reader who notices these fields read `null` for every
+ * not-yet-verified object and "fixes" this into always populating them would
+ * silently let an unadjudicated — possibly `rejected` — rights claim reach a
+ * live public site. Don't.
+ */
+export function resolvePublicMediaRightsFields(media: {
+  creditLine: string | null;
+  sourceName: string | null;
+  copyrightStatus: CopyrightStatus;
+  rightsVerificationStatus: RightsVerificationStatus;
+}): PublicMediaRightsFields {
+  if (media.rightsVerificationStatus !== "verified") {
+    return { creditLine: null, sourceName: null, copyrightStatus: null };
+  }
+
+  return {
+    creditLine: media.creditLine,
+    sourceName: media.sourceName,
+    copyrightStatus: media.copyrightStatus
+  };
+}
