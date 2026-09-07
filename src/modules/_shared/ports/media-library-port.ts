@@ -50,6 +50,39 @@ export type ResolvedMediaReferenceDTO = {
   width: number | null;
   height: number | null;
   sizeBytes: number | null;
+  /**
+   * Credit/rights fields (Issue #782) — a news site's legal/reputational
+   * obligation to show who a photo is credited to. Unlike `mimeType`/`width`/
+   * `height`/`sizeBytes` above, these are NOT sourced verbatim: the concrete
+   * adapter populates all three ONLY when the source object's internal
+   * `rightsVerificationStatus` is `'verified'`. On anything else
+   * (`'unverified'`, `'rejected'`) they come back `null` here — fail-closed,
+   * never a partial/best-effort value — even if the underlying row has
+   * non-null `creditLine`/`sourceName`/`copyrightStatus`. This DTO
+   * deliberately carries no `rightsVerificationStatus` field of its own (a
+   * consumer has no business decision to make from it — the gate has already
+   * been applied) and no `rightsVerifiedBy`/`rightsVerifiedAt`/`rightsNotes`
+   * at all: the first pair names an internal reviewer and a review moment
+   * (same posture ADR-0109 took for publishing a byline — an internal
+   * identity must never cross into a public surface as a side effect), and
+   * the second can carry licensing/contact terms that are editorial-internal,
+   * not a credit. See `media-library`'s
+   * `domain/media-rights-policy.ts#resolvePublicMediaRightsFields` for the
+   * full rationale — this shape is intentionally its OWN, not a re-export of
+   * that module's `CopyrightStatus`/`RightsVerificationStatus` types (same
+   * "port depends on neither" rule as every other DTO in this file), so keep
+   * the literal union below in sync with `COPYRIGHT_STATUSES` by hand.
+   */
+  creditLine: string | null;
+  sourceName: string | null;
+  copyrightStatus:
+    | "unknown"
+    | "owned"
+    | "licensed"
+    | "public_domain"
+    | "permission_granted"
+    | "fair_use"
+    | null;
 };
 
 export type MediaLibraryPort = {

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b50923d5687979a0daf8209d26131a380dad63b083bfefd5f43afbe1087d7c3c -->
+<!-- i18n-source-hash: sha256:06e2fdbe6e9ff9c9ca220d31169f945ed001cd9da16226a79c78a92c2b90f749 -->
 
 # media_library
 
@@ -216,3 +216,39 @@ berbeda.
 
 Read-only, jadi kredensial mesin ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
 boleh memegangnya.
+
+### Field kredit/rights pada DTO publik (Issue #782)
+
+`sql/137` (Issue #615) memberi setiap objek media tujuh field rights:
+`creditLine`, `sourceName`, `rightsNotes`, `copyrightStatus`,
+`rightsVerificationStatus`, `rightsVerifiedBy`, `rightsVerifiedAt`. Sampai
+Issue #782, tidak satu pun menyeberangi batas `GET /api/v1/media/objects` —
+sebuah situs berita turunan bisa merender alt text sebuah foto tanpa kredit
+fotografernya, padahal kreditnya sudah ada di baris itu sejak awal.
+
+`ResolvedMediaReferenceDTO` (`_shared/ports/media-library-port.ts`) kini juga
+membawa `creditLine`, `sourceName`, dan `copyrightStatus` — tetapi **hanya
+tiga dari tujuh, dan hanya bersyarat**:
+
+- **`rightsVerifiedBy`/`rightsVerifiedAt` tidak pernah menyeberang sama
+  sekali.** Keduanya menyebut seorang reviewer internal dan momen review.
+  Postur yang sama dengan yang sudah diambil
+  [ADR-0109](../../../docs/adr/0109-a-byline-is-opted-into-and-it-is-not-your-account-name.md)
+  untuk `awcms_tenant_users.public_byline_name`: identitas internal tidak
+  boleh mencapai permukaan publik ber-kredensial sebagai efek samping field
+  lain yang diterbitkan.
+- **`rightsNotes` juga tidak pernah menyeberang.** Ia bisa memuat syarat
+  lisensi dan kontak — editorial-internal, bukan kredit.
+- **`creditLine`/`sourceName`/`copyrightStatus` menyeberang HANYA ketika
+  `rightsVerificationStatus === 'verified'`.** Pada keadaan lain — default
+  `'unverified'`, atau eksplisit `'rejected'` — ketiganya kembali sebagai
+  `null`, bahkan ketika baris di baliknya sudah terisi. Fail-closed: belum
+  ada yang mengonfirmasi ruang redaksi boleh mencetak kredit ini, jadi
+  endpoint pun tidak mencetaknya. Lihat
+  `domain/media-rights-policy.ts#resolvePublicMediaRightsFields` untuk fungsi
+  gerbang murni dan alasan lengkapnya, dan `resolveMediaReferences` di
+  `application/media-library-port-adapter.ts` untuk tempat ia diterapkan.
+
+Ini adalah pelebaran data yang sudah dikembalikan oleh rute yang ada,
+ber-gerbang `media_library.media.read` — tanpa endpoint baru, tanpa
+permission baru.

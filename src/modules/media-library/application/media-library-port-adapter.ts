@@ -50,6 +50,7 @@ import {
 } from "./media-object-directory";
 import { isManagedMediaEnforcedForTenant } from "./media-library-tenant-state";
 import { evaluateManagedMediaReadiness } from "../domain/managed-media-readiness";
+import { resolvePublicMediaRightsFields } from "../domain/media-rights-policy";
 import type {
   MediaLibraryPort,
   ResolvedMediaReferenceDTO
@@ -102,13 +103,24 @@ export const mediaLibraryPortAdapter: MediaLibraryPort = {
 
     for (const media of mediaObjects) {
       if (isNewsMediaObjectSafeForPublicReference(media.status)) {
+        // Issue #782 — the credit/rights fields are gated separately from the
+        // safe-to-reference check above: a `verified`/`attached` OBJECT (the
+        // bytes are fine to serve) is not the same fact as `verified`
+        // RIGHTS (a human cleared the credit for publication). See
+        // `resolvePublicMediaRightsFields` for why an unadjudicated claim
+        // fails closed to `null` rather than being passed through.
+        const rights = resolvePublicMediaRightsFields(media);
+
         resolved.set(media.id, {
           publicUrl: media.publicUrl,
           altText: media.altText,
           mimeType: media.mimeType,
           width: media.width,
           height: media.height,
-          sizeBytes: media.sizeBytes
+          sizeBytes: media.sizeBytes,
+          creditLine: rights.creditLine,
+          sourceName: rights.sourceName,
+          copyrightStatus: rights.copyrightStatus
         });
       }
     }

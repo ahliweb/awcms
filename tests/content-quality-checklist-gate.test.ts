@@ -87,7 +87,10 @@ describe("evaluateContentQualityChecklistForContent (Issue #640)", () => {
             mimeType: "image/jpeg",
             width: 800,
             height: 600,
-            sizeBytes: 1000
+            sizeBytes: 1000,
+            creditLine: null,
+            sourceName: null,
+            copyrightStatus: null
           }
         }
       }),
@@ -182,7 +185,10 @@ describe("evaluateContentQualityChecklistForContent (Issue #640)", () => {
               mimeType: "image/jpeg",
               width: 800,
               height: 600,
-              sizeBytes: 1000
+              sizeBytes: 1000,
+              creditLine: null,
+              sourceName: null,
+              copyrightStatus: null
             },
             [SEO_IMAGE_ID]: {
               publicUrl: "https://media.example.test/seo.jpg",
@@ -190,7 +196,10 @@ describe("evaluateContentQualityChecklistForContent (Issue #640)", () => {
               mimeType: "image/jpeg",
               width: 1200,
               height: 630,
-              sizeBytes: 2000
+              sizeBytes: 2000,
+              creditLine: null,
+              sourceName: null,
+              copyrightStatus: null
             }
           }
         }),
@@ -226,7 +235,10 @@ describe("evaluateContentQualityChecklistForContent (Issue #640)", () => {
               mimeType: "image/jpeg",
               width: 1200,
               height: 630,
-              sizeBytes: 2000
+              sizeBytes: 2000,
+              creditLine: null,
+              sourceName: null,
+              copyrightStatus: null
             }
           }
         }),
