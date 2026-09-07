@@ -50,6 +50,7 @@ import {
   type AdPlacementView
 } from "../../modules/blog-content/application/ad-placement-directory";
 import {
+  AD_CONTENT_CLASSES,
   AD_PLACEMENT_KEYS,
   AD_PLACEMENT_PRESETS,
   AD_ROTATION_MODES,
@@ -189,6 +190,7 @@ function formatWindow(placement: AdPlacementView): string {
                 <th scope="col">{t("Creative")}</th>
                 <th scope="col">{t("Rotation")}</th>
                 <th scope="col">{t("Target")}</th>
+                <th scope="col">{t("Content class")}</th>
                 <th scope="col">{t("Active")}</th>
                 <th scope="col">{t("Schedule")}</th>
                 {canConfigure && <th scope="col">{t("Actions")}</th>}
@@ -205,7 +207,7 @@ function formatWindow(placement: AdPlacementView): string {
                         · {slot.preset.recommendedSize}
                       </span>
                     </td>
-                    <td class="cell-muted" colspan={canConfigure ? 6 : 5}>
+                    <td class="cell-muted" colspan={canConfigure ? 7 : 6}>
                       {slot.renderedHere
                         ? t("Available — nothing booked into this slot.")
                         : t(
@@ -258,6 +260,12 @@ function formatWindow(placement: AdPlacementView): string {
                             />
                           </span>
                         )}
+                      </td>
+                      <td data-label="Content class">
+                        <span
+                          class="cell-code"
+                          set:text={placement.contentClass}
+                        />
                       </td>
                       <td data-label="Active">
                         <span
@@ -440,6 +448,27 @@ function formatWindow(placement: AdPlacementView): string {
             <p class="form-hint">
               {t(
                 "How the slot chooses between the creatives booked into it when there is more than one."
+              )}
+            </p>
+          </div>
+
+          <div class="form-row">
+            <label for="ad-content-class">{t("Content class")}</label>
+            <select id="ad-content-class" name="contentClass">
+              {AD_CONTENT_CLASSES.map((contentClass) => (
+                <option
+                  value={contentClass}
+                  selected={
+                    (editing?.contentClass ?? "standard") === contentClass
+                  }
+                >
+                  {contentClass}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">
+              {t(
+                "Editorial disclosure. Standard needs none; advertorial and sponsored are surfaced to readers as paid content."
               )}
             </p>
           </div>
@@ -668,6 +697,7 @@ function formatWindow(placement: AdPlacementView): string {
       mediaObjectId: inputValue("ad-media-object-id"),
       linkUrl: blankToNull(field(data, "linkUrl")),
       rotationMode: inputValue("ad-rotation-mode") || "latest",
+      contentClass: inputValue("ad-content-class") || "standard",
       priority: integerValue("ad-priority", 0),
       isActive: checkboxChecked("ad-active", true),
       startsAt: localDateTimeToInstant("ad-starts-at"),

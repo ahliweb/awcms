@@ -25,6 +25,7 @@ import { describe, expect, test } from "bun:test";
 import { stripComments } from "../scripts/access-chokepoint-check";
 import { listModules } from "../src/modules";
 import {
+  AD_CONTENT_CLASSES,
   AD_PLACEMENT_KEYS,
   AD_ROTATION_MODES,
   AD_TARGET_TYPES
@@ -151,6 +152,7 @@ describe("the form offers exactly the vocabulary the domain declares", () => {
     expect(page).toContain("AD_PLACEMENT_KEYS.map(");
     expect(page).toContain("AD_ROTATION_MODES.map(");
     expect(page).toContain("AD_TARGET_TYPES.map(");
+    expect(page).toContain("AD_CONTENT_CLASSES.map(");
     expect(page).toContain("AD_PLACEMENT_PRESETS[key]");
 
     // And the constants really are non-empty, so the loops above are not
@@ -158,6 +160,32 @@ describe("the form offers exactly the vocabulary the domain declares", () => {
     expect(AD_PLACEMENT_KEYS.length).toBeGreaterThan(0);
     expect(AD_ROTATION_MODES.length).toBeGreaterThan(0);
     expect(AD_TARGET_TYPES.length).toBeGreaterThan(0);
+    expect(AD_CONTENT_CLASSES.length).toBeGreaterThan(0);
+  });
+
+  test("contentClass (Issue #789) defaults to standard, is sent on create and update, and is shown in the list", async () => {
+    const page = stripComments(await readFile(PAGE, "utf8"));
+
+    // The select exists, is bound to the same select-id-mirrors-field-name
+    // convention `ad-rotation-mode`/`ad-target-type` use, and defaults to
+    // "standard" — the DB/API default (migration 151) — for a NEW placement
+    // rather than an arbitrary first entry in the vocabulary.
+    expect(page).toContain('id="ad-content-class"');
+    expect(page).toContain('name="contentClass"');
+    expect(page).toContain(
+      '(editing?.contentClass ?? "standard") === contentClass'
+    );
+
+    // Sent in BOTH the POST and the PATCH body — `shared` is spread into both
+    // `sendJson` calls, so proving it is a member of `shared` proves both.
+    expect(page).toContain(
+      'contentClass: inputValue("ad-content-class") || "standard"'
+    );
+
+    // Shown in the list, mirroring how `rotationMode`/`targetType` are shown —
+    // a reviewer cannot tell from the form alone whether an existing
+    // placement's classification is visible anywhere after saving.
+    expect(page).toContain("placement.contentClass");
   });
 
   test("a global placement sends a null target id, never an empty string", async () => {

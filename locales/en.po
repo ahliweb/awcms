@@ -4685,3 +4685,9 @@ msgstr ""
 
 msgid "No region name changed."
 msgstr ""
+
+msgid "Content class"
+msgstr ""
+
+msgid "Editorial disclosure. Standard needs none; advertorial and sponsored are surfaced to readers as paid content."
+msgstr ""
