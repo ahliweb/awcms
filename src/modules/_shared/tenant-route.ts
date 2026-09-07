@@ -735,8 +735,12 @@ function sqlClientForRoute(): Bun.SQL {
  * reason `selectEntryOutcome` is: the interesting part is not "does it call
  * the chokepoint" (the caller already did, once per candidate) but what it
  * does with N answers, which is where an off-by-one reads as an access grant.
+ *
+ * Exported (mirroring `selectEntryOutcome`'s own export) so it has a direct,
+ * DB-free unit test — `tests/tenant-route-any-of.test.ts` — instead of being
+ * reachable only through a full `defineTenantRoute` call. ADR-0121.
  */
-function selectAnyAllowed(
+export function selectAnyAllowed(
   results: readonly AuthorizeResult[]
 ): AuthorizeResult {
   // An empty array denies — "no request authorizes this route" must never
