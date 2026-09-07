@@ -174,7 +174,9 @@ paths:
         - News Media
       summary: Batch-resolve media object ids to their public reference.
       description: |
-        Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+        Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes, creditLine, sourceName, copyrightStatus}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+
+        Issue #782 — `creditLine`/`sourceName`/`copyrightStatus` are populated ONLY when the object's rights-verification decision is `verified`; otherwise all three are `null`. This is a distinct verification concept from the upload-integrity `verified`/`attached` status below.
 
         An object resolves ONLY when it is `verified` or `attached`, belongs to the calling tenant, and is not soft-deleted. Everything else — unknown, cross-tenant, unverified, deleted — is returned in `unresolved` rather than dropped, so a caller can tell "this resource has no image" from "this resource's image reference is broken". A malformed (non-uuid) id is a 400 instead: "you sent junk" and "that object is not referenceable" are different facts.
 
