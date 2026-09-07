@@ -4673,3 +4673,9 @@ msgstr "Tidak ada kode yang dihapus."
 
 msgid "No region name changed."
 msgstr "Tidak ada nama wilayah yang berubah."
+
+msgid "Content class"
+msgstr "Kelas konten"
+
+msgid "Editorial disclosure. Standard needs none; advertorial and sponsored are surfaced to readers as paid content."
+msgstr "Pengungkapan editorial. Standard tidak memerlukan pengungkapan; advertorial dan sponsored ditampilkan kepada pembaca sebagai konten berbayar."
