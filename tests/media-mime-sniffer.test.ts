@@ -58,10 +58,27 @@ describe("sniffNewsMediaMimeType (Issue #634)", () => {
     expect(sniffNewsMediaMimeType(bytesOf(0xff))).toBeUndefined();
   });
 
-  test("returns undefined for an SVG payload (never allow-listed, doc §9)", () => {
+  test("recognizes a plain SVG root element (Issue #806 — sniffing recognizes the SHAPE only; content safety is media-svg-safety.ts's separate job, so this is recognized as SVG even though it also contains a <script>)", () => {
     const svg = new TextEncoder().encode(
       "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
     );
-    expect(sniffNewsMediaMimeType(svg)).toBeUndefined();
+    expect(sniffNewsMediaMimeType(svg)).toBe("image/svg+xml");
+  });
+
+  test("recognizes an SVG with an XML prolog, DOCTYPE, and a leading comment before the root element", () => {
+    const svg = new TextEncoder().encode(
+      '﻿<?xml version="1.0" encoding="UTF-8"?>\n' +
+        "<!-- logo -->\n" +
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+    );
+    expect(sniffNewsMediaMimeType(svg)).toBe("image/svg+xml");
+  });
+
+  test("does not recognize an SVG fragment embedded partway through another document", () => {
+    const html = new TextEncoder().encode(
+      "<html><body><svg></svg></body></html>"
+    );
+    expect(sniffNewsMediaMimeType(html)).toBeUndefined();
   });
 });

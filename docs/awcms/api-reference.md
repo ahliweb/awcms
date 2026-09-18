@@ -5340,16 +5340,16 @@ Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifi
 
 **Responses**
 
-| Status | Description                                                                                                                                                                                                                        | Schema                                 |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Object verified — media object status is now `verified` (or an idempotent replay).                                                                                                                                                 | object                                 |
-| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
-| 409    | Upload session is not `pending_upload`, has expired (`UPLOAD_SESSION_EXPIRED`), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).                                                               | [`ApiError`](#standard-error-envelope) |
-| 422    | Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`. | [`ApiError`](#standard-error-envelope) |
-| 502    | Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                              | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Object verified — media object status is now `verified` (or an idempotent replay).                                                                                                                                                                       | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | Upload session is not `pending_upload`, has expired (`UPLOAD_SESSION_EXPIRED`), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 422    | Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `svg_unsafe_content`, `checksum_mismatch`. | [`ApiError`](#standard-error-envelope) |
+| 502    | Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/media/objects` — Batch-resolve media object ids to their public reference.
 
@@ -5696,13 +5696,14 @@ Gated by blog_content.institutions.create. Not idempotent: a retry that duplicat
 
 **Responses**
 
-| Status | Description                                  | Schema                                 |
-| ------ | -------------------------------------------- | -------------------------------------- |
-| 200    | Institution created.                         | object                                 |
-| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
-| 409    | An institution already exists for this slug. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Institution created.                                                    | object                                 |
+| 400    | Validation error.                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | An institution already exists for this slug.                            | [`ApiError`](#standard-error-envelope) |
+| 422    | logoMediaId is not a valid R2 media object in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/blog/institutions/{id}` — Read one institution
 
@@ -5744,14 +5745,15 @@ Gated by blog_content.institutions.update. Only supplied fields change; an expli
 
 **Responses**
 
-| Status | Description                                  | Schema                                 |
-| ------ | -------------------------------------------- | -------------------------------------- |
-| 200    | Institution updated.                         | object                                 |
-| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                          | [`ApiError`](#standard-error-envelope) |
-| 409    | An institution already exists for this slug. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Institution updated.                                                    | object                                 |
+| 400    | Validation error.                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | An institution already exists for this slug.                            | [`ApiError`](#standard-error-envelope) |
+| 422    | logoMediaId is not a valid R2 media object in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
 
 ### `DELETE /api/v1/blog/institutions/{id}` — Soft delete an institution
 
@@ -9651,6 +9653,8 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
 | `description`    | string                           | no       | yes      |                                                              |
 | `seoTitle`       | string                           | no       | yes      |                                                              |
 | `seoDescription` | string                           | no       | yes      |                                                              |
+| `logoMediaId`    | string (uuid)                    | no       | yes      |                                                              |
+| `logoAlt`        | string                           | no       | yes      |                                                              |
 
 **Example**
 
@@ -9662,7 +9666,9 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
   "regionCode": "string",
   "description": "string",
   "seoTitle": "string",
-  "seoDescription": "string"
+  "seoDescription": "string",
+  "logoMediaId": "00000000-0000-0000-0000-000000000000",
+  "logoAlt": "string"
 }
 ```
 
@@ -9677,6 +9683,8 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
 | `description`    | string                           | no       | yes      |             |
 | `seoTitle`       | string                           | no       | yes      |             |
 | `seoDescription` | string                           | no       | yes      |             |
+| `logoMediaId`    | string (uuid)                    | no       | yes      |             |
+| `logoAlt`        | string                           | no       | yes      |             |
 
 **Example**
 
@@ -9688,7 +9696,9 @@ Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, 
   "regionCode": "string",
   "description": "string",
   "seoTitle": "string",
-  "seoDescription": "string"
+  "seoDescription": "string",
+  "logoMediaId": "00000000-0000-0000-0000-000000000000",
+  "logoAlt": "string"
 }
 ```
 

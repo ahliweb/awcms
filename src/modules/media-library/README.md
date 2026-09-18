@@ -64,7 +64,7 @@ media-library/
     media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
-    media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
+    media-mime-sniffer.ts | media-svg-safety.ts | media-object-key.ts | media-finalize-decision.ts
     media-upload-session-validation.ts | media-reconciliation-categorization.ts
   application/
     media-object-directory.ts                # registry data layer (internal symbols kept: fetchNewsMediaObjectById, ...)
@@ -185,8 +185,51 @@ becoming gaps:
 ## Not ported to this base (deferred, additive)
 
 Responsive `srcset` render (micro step 5b) and the PDF media type (step 5c).
-The allowed MIME set stays the four raster types. Step 5d — the lifecycle API
-and `/admin/media` — is now ported in full.
+The allowed MIME set defaults to the four raster types; `image/svg+xml` is an
+operator opt-in (see §SVG upload safety below), not a fifth default. Step
+5d — the lifecycle API and `/admin/media` — is now ported in full.
+
+## SVG upload safety (Issue #806)
+
+`NEWS_MEDIA_R2_ALLOWED_MIME_TYPES` (`domain/media-r2-config.ts`) has, since
+Issue #635, listed `image/svg+xml` among `NEWS_MEDIA_R2_KNOWN_MIME_TYPES` —
+excluded from the _default_ allow-list, but a real opt-in an operator could
+already configure. Before this issue that opt-in was a dead end:
+`media-mime-sniffer.ts`'s `sniffNewsMediaMimeType` never recognized SVG's
+magic bytes at all, so every SVG upload sniffed to `undefined` and was
+hard-rejected as `mime_not_recognized` regardless of the allow-list — safe by
+accident, not by a real content check, and unusable for the actual use case
+(an institution/regency emblem, which is very often an SVG — `blog_content`
+Issue #806).
+
+Two additions close that gap, both pure/no-I/O:
+
+- `sniffNewsMediaMimeType` now recognizes SVG's SHAPE — an optional BOM/`<?xml
+... ?>` prolog/`<!DOCTYPE ...>`/comments, then a `<svg` root element within
+  a bounded byte prefix — returning `"image/svg+xml"`. This is a shape match
+  only; it says nothing about whether the SVG is safe to serve.
+- `domain/media-svg-safety.ts`'s `findSvgSafetyViolations`/`isSvgContentSafe`
+  scans the full decoded bytes for the four vectors an executable-XML image
+  format actually carries: a `<script>` element, an `on*=` event-handler
+  attribute, a `javascript:` URI (in `href`/`xlink:href`/any attribute), or
+  an external entity (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — the XXE
+  vector). A targeted denylist over exactly those four, not a general-purpose
+  sanitizer: a file tripping any of them is rejected outright, never
+  stripped/rewritten.
+
+`application/media-r2-verification.ts` runs the safety scan ONLY when the
+sniff already resolved to `image/svg+xml`, on the same bytes already read by
+the size-capped `GET` — a raster upload never pays for or is affected by this
+check. `domain/media-finalize-decision.ts`'s `decideNewsMediaFinalizeOutcome`
+gained a new `svgUnsafe` input and `svg_unsafe_content` rejection reason,
+checked after the allow-list/claimed-mime-type checks and before the checksum
+claim — an SVG a deployment has not opted into is still rejected
+`mime_not_allowed` first, safety-scan result notwithstanding.
+
+Tests: `tests/media-mime-sniffer.test.ts` (shape recognition),
+`tests/media-svg-safety.test.ts` (the four vectors + a safe-logo control
+case), `tests/media-finalize-decision.test.ts`/`tests/media-r2-verification.test.ts`
+(end-to-end wiring).
 
 ## Media reference resolution (`GET /api/v1/media/objects`)
 

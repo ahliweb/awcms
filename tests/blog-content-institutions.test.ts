@@ -73,6 +73,8 @@ describe("validateCreateInstitutionInput", () => {
     expect(result.value.description).toBeNull();
     expect(result.value.seoTitle).toBeNull();
     expect(result.value.seoDescription).toBeNull();
+    expect(result.value.logoMediaId).toBeNull();
+    expect(result.value.logoAlt).toBeNull();
   });
 
   test("carries the optional fields through when supplied", () => {
@@ -81,7 +83,9 @@ describe("validateCreateInstitutionInput", () => {
       regionCode: "62.61",
       description: "  Regional legislature  ",
       seoTitle: "Berita DPRD Kotawaringin Barat",
-      seoDescription: "Liputan terbaru DPRD Kotawaringin Barat."
+      seoDescription: "Liputan terbaru DPRD Kotawaringin Barat.",
+      logoMediaId: "11111111-1111-1111-1111-111111111111",
+      logoAlt: "  Lambang DPRD Kotawaringin Barat  "
     });
 
     expect(result.valid).toBe(true);
@@ -89,6 +93,50 @@ describe("validateCreateInstitutionInput", () => {
     expect(result.value.regionCode).toBe("62.61");
     expect(result.value.description).toBe("Regional legislature");
     expect(result.value.seoTitle).toBe("Berita DPRD Kotawaringin Barat");
+    expect(result.value.logoMediaId).toBe(
+      "11111111-1111-1111-1111-111111111111"
+    );
+    expect(result.value.logoAlt).toBe("Lambang DPRD Kotawaringin Barat");
+  });
+
+  test("rejects a logoMediaId that is not UUID-shaped", () => {
+    const result = validateCreateInstitutionInput({
+      ...valid,
+      logoMediaId: "not-a-uuid"
+    });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.some((e) => e.field === "logoMediaId")).toBe(true);
+  });
+
+  test("an explicitly null logoMediaId is allowed — most institutions have no logo on file", () => {
+    const result = validateCreateInstitutionInput({
+      ...valid,
+      logoMediaId: null
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value.logoMediaId).toBeNull();
+  });
+
+  test("a whitespace-only logoAlt collapses to null, not to an empty string", () => {
+    const result = validateCreateInstitutionInput({
+      ...valid,
+      logoAlt: "   "
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value.logoAlt).toBeNull();
+  });
+
+  test("rejects a logoAlt longer than 200 characters", () => {
+    const result = validateCreateInstitutionInput({
+      ...valid,
+      logoAlt: "x".repeat(201)
+    });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.some((e) => e.field === "logoAlt")).toBe(true);
   });
 
   test("a whitespace-only optional collapses to null, not to an empty string", () => {
@@ -198,6 +246,37 @@ describe("validateUpdateInstitutionInput", () => {
     expect(result.valid).toBe(true);
     if (!result.valid) return;
     expect(result.value.regionCode).toBeNull();
+  });
+
+  test("accepts a UUID-shaped logoMediaId and copies it through", () => {
+    const result = validateUpdateInstitutionInput({
+      logoMediaId: "22222222-2222-2222-2222-222222222222"
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value.logoMediaId).toBe(
+      "22222222-2222-2222-2222-222222222222"
+    );
+  });
+
+  test("rejects a malformed logoMediaId on update", () => {
+    const result = validateUpdateInstitutionInput({ logoMediaId: "nope" });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.some((e) => e.field === "logoMediaId")).toBe(true);
+  });
+
+  test("clearing logoMediaId/logoAlt (explicit null) is allowed and distinguishable from omission", () => {
+    const result = validateUpdateInstitutionInput({
+      logoMediaId: null,
+      logoAlt: null
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect("logoMediaId" in result.value).toBe(true);
+    expect(result.value.logoMediaId).toBeNull();
+    expect("logoAlt" in result.value).toBe(true);
+    expect(result.value.logoAlt).toBeNull();
   });
 
   test("length limits match the create path exactly", () => {

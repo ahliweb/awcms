@@ -27,6 +27,9 @@ export type InstitutionView = {
   description: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  /** Issue #806 — reusable institution logo/emblem (sql/153). */
+  logoMediaId: string | null;
+  logoAlt: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -44,6 +47,8 @@ type InstitutionRow = {
   description: string | null;
   seo_title: string | null;
   seo_description: string | null;
+  logo_media_id: string | null;
+  logo_alt: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -62,6 +67,8 @@ function toView(row: InstitutionRow): InstitutionView {
     description: row.description,
     seoTitle: row.seo_title,
     seoDescription: row.seo_description,
+    logoMediaId: row.logo_media_id,
+    logoAlt: row.logo_alt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -78,15 +85,15 @@ export async function createInstitution(
   const rows = (await tx`
     INSERT INTO awcms_blog_institutions
       (tenant_id, branch, name, slug, region_code, description, seo_title,
-       seo_description)
+       seo_description, logo_media_id, logo_alt)
     VALUES (
       ${tenantId}, ${input.branch}, ${input.name}, ${input.slug},
       ${input.regionCode}, ${input.description}, ${input.seoTitle},
-      ${input.seoDescription}
+      ${input.seoDescription}, ${input.logoMediaId}, ${input.logoAlt}
     )
     RETURNING id, tenant_id, branch, name, slug, region_code, description,
-      seo_title, seo_description, created_at, updated_at, deleted_at,
-      deleted_by, delete_reason
+      seo_title, seo_description, logo_media_id, logo_alt, created_at,
+      updated_at, deleted_at, deleted_by, delete_reason
   `) as InstitutionRow[];
 
   return toView(rows[0]!);
@@ -99,8 +106,8 @@ export async function fetchInstitutionById(
 ): Promise<InstitutionView | null> {
   const rows = (await tx`
     SELECT id, tenant_id, branch, name, slug, region_code, description,
-      seo_title, seo_description, created_at, updated_at, deleted_at,
-      deleted_by, delete_reason
+      seo_title, seo_description, logo_media_id, logo_alt, created_at,
+      updated_at, deleted_at, deleted_by, delete_reason
     FROM awcms_blog_institutions
     WHERE tenant_id = ${tenantId} AND id = ${institutionId}
       AND deleted_at IS NULL
@@ -123,8 +130,8 @@ export async function fetchInstitutionBySlug(
 ): Promise<InstitutionView | null> {
   const rows = (await tx`
     SELECT id, tenant_id, branch, name, slug, region_code, description,
-      seo_title, seo_description, created_at, updated_at, deleted_at,
-      deleted_by, delete_reason
+      seo_title, seo_description, logo_media_id, logo_alt, created_at,
+      updated_at, deleted_at, deleted_by, delete_reason
     FROM awcms_blog_institutions
     WHERE tenant_id = ${tenantId} AND slug = ${slug} AND deleted_at IS NULL
   `) as InstitutionRow[];
@@ -168,8 +175,8 @@ export async function listInstitutions(
 ): Promise<InstitutionView[]> {
   const rows = (await tx`
     SELECT id, tenant_id, branch, name, slug, region_code, description,
-      seo_title, seo_description, created_at, updated_at, deleted_at,
-      deleted_by, delete_reason
+      seo_title, seo_description, logo_media_id, logo_alt, created_at,
+      updated_at, deleted_at, deleted_by, delete_reason
     FROM awcms_blog_institutions
     WHERE tenant_id = ${tenantId}
       AND (
@@ -213,11 +220,19 @@ export async function updateInstitution(
           WHEN ${input.seoDescription === undefined} THEN seo_description
           ELSE ${input.seoDescription ?? null}
         END,
+        logo_media_id = CASE
+          WHEN ${input.logoMediaId === undefined} THEN logo_media_id
+          ELSE ${input.logoMediaId ?? null}
+        END,
+        logo_alt = CASE
+          WHEN ${input.logoAlt === undefined} THEN logo_alt
+          ELSE ${input.logoAlt ?? null}
+        END,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, branch, name, slug, region_code, description,
-      seo_title, seo_description, created_at, updated_at, deleted_at,
-      deleted_by, delete_reason
+      seo_title, seo_description, logo_media_id, logo_alt, created_at,
+      updated_at, deleted_at, deleted_by, delete_reason
   `) as InstitutionRow[];
 
   return rows[0] ? toView(rows[0]) : null;

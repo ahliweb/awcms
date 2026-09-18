@@ -1,0 +1,9 @@
+---
+"awcms": minor
+---
+
+feat(blog-content,media-library): institution logo — logoMediaId/logoAlt on awcms_blog_institutions, SVG upload safety (Issue #806)
+
+`awcms_blog_institutions` gains `logo_media_id uuid`/`logo_alt text` (`sql/153`) so a derived site can render one reusable institutional logo/emblem (a regency's coat of arms) beside every article filed under that institution, instead of retyping it onto each post. `logoMediaId` is shape-validated exactly like `awcms_blog_posts.featured_media_id` (a UUID or null, no FK) and is checked through `MediaLibraryPort.isMediaReferenceSafe` only when managed-media enforcement is active for the tenant (`institution-logo-reference-gate.ts`, the same posture the post/page paths already take). `POST`/`PATCH /api/v1/blog/institutions[/{id}]` accept both fields; `GET /api/v1/blog/institutions` and `GET .../{id}` expose them — a consumer resolves `logoMediaId` to a public URL via `GET /api/v1/media/objects?ids=`.
+
+`media_library`'s upload-session finalize flow previously could never actually accept an SVG: `image/svg+xml` was listed as a known, operator-opt-in MIME type (`NEWS_MEDIA_R2_ALLOWED_MIME_TYPES`) since Issue #635, but the magic-byte sniffer never recognized SVG's shape, so every SVG upload hard-rejected as `mime_not_recognized` regardless of the allow-list — a dead end for the very use case this issue needs (an institution logo is very often an SVG). `sniffNewsMediaMimeType` now recognizes the SVG shape, and a new content-safety scan (`media-svg-safety.ts`) rejects an allow-listed SVG that carries a `<script>` element, an `on*=` event-handler attribute, a `javascript:` URI, or an external entity (XXE) — a new `svg_unsafe_content` finalize rejection reason, checked after the allow-list/claimed-mime-type checks and before the checksum claim.

@@ -11,6 +11,8 @@ import {
   softDeleteInstitution,
   updateInstitution
 } from "../../../../../modules/blog-content/application/institution-directory";
+import { validateInstitutionLogoReferenceForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/institution-logo-reference-gate";
+import { mediaLibraryPortAdapter } from "../../../../../modules/media-library/application/media-library-port-adapter";
 import {
   validateSoftDeleteInstitutionInput,
   validateUpdateInstitutionInput,
@@ -98,6 +100,25 @@ export const PATCH = defineTenantRoute({
     }
 
     const correlationId = locals.correlationId;
+
+    const logoReferenceValidation =
+      await validateInstitutionLogoReferenceForFullOnlineR2Mode(
+        tx,
+        tenantId,
+        prepared.logoMediaId,
+        mediaLibraryPortAdapter
+      );
+
+    if (!logoReferenceValidation.valid) {
+      return fail(
+        422,
+        "NEWS_MEDIA_REFERENCE_INVALID",
+        "logoMediaId is not a valid R2 media object in full-online R2-only mode.",
+        {},
+        logoReferenceValidation.errors
+      );
+    }
+
     let updated;
 
     try {

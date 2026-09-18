@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:3d62157e2ea5eb8ce278543482d8c9a01f59341560b73214a1b13d553a3a55be -->
+<!-- i18n-source-hash: sha256:883b90fbd4779eb69cfcbc146bdf3e8ded1af98a12f0bc1582b49421d4af56ec -->
 
 # Blog Content
 
@@ -78,6 +78,7 @@ Migration 052 (Issue #641, epic `news_portal`) menambah 3 permission lagi: `inte
 - `widget-policy.ts` (Issue #542) — `validateCreateWidgetInput`/`validateUpdateWidgetInput`, `bodyText` memakai ulang `content-validation.ts`'s `containsUnsafeHtml` (baru diekspor Issue #542, sebelumnya privat).
 - `ad-policy.ts` (Issue #542) — `validateCreateAdInput`/`validateUpdateAdInput` (`imageUrl`/`linkUrl` = `isAbsoluteHttpUrl`, `endsAt > startsAt`), `validateAdPlacementsInput` (`targetId` wajib untuk `widget|post|page`, terlarang untuk `global`).
 - `theme-policy.ts` (Issue #542) — `validateUpdateThemeSettingsInput` (`mode` = `light|dark|system`, set nilai sama seperti `tenant-admin`'s `VALID_THEMES` tapi didefinisikan independen — repo ini tidak punya konvensi shared-domain-constant lintas modul).
+- `institution-validation.ts` (sql/131, PRD LenteraKalteng §12.2) — `validateCreateInstitutionInput`/`validateUpdateInstitutionInput`/`validateSoftDeleteInstitutionInput` untuk `awcms_blog_institutions`: `branch` (`legislative | executive`), `name`/`slug`, `regionCode` (bentuk dotted `idn_admin_regions`, posisi mirroring-CHECK yang sama seperti `awcms_blog_posts.region_code`), `seoTitle`/`seoDescription` landing page. Issue #806 menambah `logoMediaId`/`logoAlt` (sql/153) — logo/lambang institusi yang reusable, divalidasi bentuknya persis seperti `featuredMediaId` di `blog-post-validation.ts` (UUID-atau-null, tanpa cek eksistensi di sini); eksistensi/kepemilikan/status-verified dicek di application layer hanya saat managed-media enforcement aktif untuk tenant (`institution-logo-reference-gate.ts`, lihat §Application di bawah).
 
 ## Application (`application/`)
 
@@ -91,6 +92,8 @@ Migration 052 (Issue #641, epic `news_portal`) menambah 3 permission lagi: `inte
 - `blog-scheduled-publish.ts` (Issue #541) — `publishDueScheduledPosts`, satu `UPDATE` set-based per tenant, dipanggil `scripts/blog-scheduled-publish.ts` — lihat §Scheduled publishing.
 - `domain/revision-policy.ts` (Issue #541) — `isSignificantContentChange` (true kalau `title`/`contentJson`/`contentText` ada di input update; field kosmetik seperti `seoTitle`/`canonicalUrl`/`slug` tidak memicu revisi baru).
 - `template-directory.ts`/`menu-directory.ts`/`widget-directory.ts`/`ads-directory.ts`/`theme-settings-directory.ts` (Issue #542) — CRUD directory per resource, pola identik `blog-taxonomy-directory.ts` (satu file, baca+tulis, soft-delete). `menu-directory.ts`'s `syncMenuItems` dan `ads-directory.ts`'s `syncAdPlacements` full-replace sub-resource (delete-lalu-insert), sama seperti `syncPostTermAssignments`.
+- `institution-directory.ts` (sql/131) — CRUD untuk `awcms_blog_institutions` (`createInstitution`, `fetchInstitutionById`, `fetchInstitutionBySlug`, `listInstitutions`, `updateInstitution`, `softDeleteInstitution`, `restoreInstitution`, `purgeInstitution`) plus relasi post↔institution (`syncPostInstitutionAssignments`, `fetchPostInstitutionIds`, `countExistingInstitutions`) dipakai ulang dari `blog-post-directory.ts`/`blog-page-directory.ts`. `logoMediaId`/`logoAlt` (Issue #806, sql/153) ikut di setiap jalur baca/tulis persis seperti kolom lain — tidak ada accessor terpisah.
+- `institution-logo-reference-gate.ts` (Issue #806) — `validateInstitutionLogoReferenceForFullOnlineR2Mode`, sibling single-field dari `news-media-reference-gate.ts`'s `validateNewsMediaReferencesForFullOnlineR2Mode`/equivalent-nya di `video-news-thumbnail-reference-gate.ts`: saat full-online R2-only mode aktif untuk tenant (`MediaLibraryPort.isManagedMediaEnforcementActiveForTenant`), `logoMediaId` yang ada wajib lolos `isMediaReferenceSafe` (eksis, tenant sama, verified/attached); selain itu (mayoritas deployment) field ini tetap validasi bentuk saja tanpa cek eksistensi. Dipanggil dari `POST`/`PATCH /api/v1/blog/institutions[/{id}]`, setelah validasi murni dan sebelum baris ditulis, mirroring persis tempat route post/page memanggil gate masing-masing.
 - `localized-content-directory.ts` (Issue #542) — `setPostTranslationGroup`/`fetchPostTranslations`, satu kolom `UPDATE`/`SELECT` yang sengaja berdiri sendiri, **tidak** menyentuh `blog-post-directory.ts`'s `createBlogPost`/`updateBlogPost` (lihat §Presentation extensions §Multilingual untuk alasan risk/invasiveness-nya).
 
 ## Admin API — Blog Posts (Issue #538)

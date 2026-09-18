@@ -9,17 +9,19 @@
  * earlier by the caller, from the `HEAD` result, before the full `GET` even
  * happens — see that module's own header comment for why): MIME sniffing
  * result against the allow-list, then against the client's claimed
- * `mimeType`, then (only if the client supplied one) the checksum claim
- * against the server-computed checksum. A checksum mismatch alone never
- * overrides a passing MIME sniff into a MIME acceptance and vice versa —
- * every check must pass (`full-online-r2-architecture.md` §9 point 6,
- * "defense in depth... tidak ada langkah yang dilewati").
+ * `mimeType`, then (Issue #806, SVG only) content-safety, then (only if the
+ * client supplied one) the checksum claim against the server-computed
+ * checksum. A checksum mismatch alone never overrides a passing MIME sniff
+ * into a MIME acceptance and vice versa — every check must pass
+ * (`full-online-r2-architecture.md` §9 point 6, "defense in depth... tidak
+ * ada langkah yang dilewati"); the SVG safety check joins that same chain.
  */
 
 export type NewsMediaFinalizeRejectionReason =
   | "mime_not_recognized"
   | "mime_not_allowed"
   | "mime_mismatch"
+  | "svg_unsafe_content"
   | "checksum_mismatch";
 
 export type NewsMediaFinalizeDecision =
@@ -46,6 +48,17 @@ export type NewsMediaFinalizeDecisionInput = {
   claimedChecksumSha256: string | null;
   /** SHA-256 computed server-side from the bytes actually read from R2. */
   computedChecksumSha256: string;
+  /**
+   * Issue #806 — `true` when `sniffedMimeType === "image/svg+xml"` AND
+   * `findSvgSafetyViolations` (`media-svg-safety.ts`) found at least one
+   * violation in the bytes actually read from R2. Always `false` for a
+   * non-SVG sniff — the caller (`media-r2-verification.ts`) never runs the
+   * SVG scan on a raster image, so this field carries no meaning for one.
+   * Passed in precomputed, same reason `sniffedMimeType` itself is: this
+   * function stays pure/no-I/O, and the scan itself needs the raw bytes this
+   * function never receives.
+   */
+  svgUnsafe: boolean;
 };
 
 export function decideNewsMediaFinalizeOutcome(
@@ -61,6 +74,10 @@ export function decideNewsMediaFinalizeOutcome(
 
   if (input.sniffedMimeType !== input.claimedMimeType.toLowerCase().trim()) {
     return { accepted: false, reason: "mime_mismatch" };
+  }
+
+  if (input.sniffedMimeType === "image/svg+xml" && input.svgUnsafe) {
+    return { accepted: false, reason: "svg_unsafe_content" };
   }
 
   if (

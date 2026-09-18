@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9771ababc64aec622021bcb017aaf527400c5d29761d247323832a87d4db716d -->
+<!-- i18n-source-hash: sha256:2660d1c8798a1a270ab10197b0c7e1717675c7ba09ae3b919f806cf689c4512a -->
 
 # media_library
 
@@ -66,7 +66,7 @@ media-library/
     media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
-    media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
+    media-mime-sniffer.ts | media-svg-safety.ts | media-object-key.ts | media-finalize-decision.ts
     media-upload-session-validation.ts | media-reconciliation-categorization.ts
   application/
     media-object-directory.ts                # registry data layer (internal symbols kept: fetchNewsMediaObjectById, ...)
@@ -187,8 +187,52 @@ becoming gaps:
 ## Not ported to this base (deferred, additive)
 
 Responsive `srcset` render (micro step 5b) and the PDF media type (step 5c).
-The allowed MIME set stays the four raster types. Step 5d — the lifecycle API
-and `/admin/media` — is now ported in full.
+The allowed MIME set defaults to the four raster types; `image/svg+xml`
+adalah opt-in operator (lihat §Keamanan upload SVG di bawah), bukan default
+kelima. Step 5d — the lifecycle API and `/admin/media` — is now ported in
+full.
+
+## Keamanan upload SVG (Issue #806)
+
+`NEWS_MEDIA_R2_ALLOWED_MIME_TYPES` (`domain/media-r2-config.ts`) sejak Issue
+#635 sudah mencantumkan `image/svg+xml` di `NEWS_MEDIA_R2_KNOWN_MIME_TYPES` —
+dikecualikan dari allow-list _default_, tapi opt-in nyata yang sudah bisa
+dikonfigurasi operator. Sebelum issue ini opt-in itu jalan buntu:
+`media-mime-sniffer.ts`'s `sniffNewsMediaMimeType` sama sekali tidak
+mengenali magic bytes SVG, jadi setiap upload SVG ter-sniff ke `undefined`
+dan ditolak keras sebagai `mime_not_recognized` terlepas dari allow-list —
+aman karena kebetulan, bukan karena cek konten sungguhan, dan tidak bisa
+dipakai untuk use case sesungguhnya (logo/lambang institusi/kabupaten, yang
+sangat sering berupa SVG — `blog_content` Issue #806).
+
+Dua penambahan menutup celah itu, keduanya murni/tanpa I/O:
+
+- `sniffNewsMediaMimeType` sekarang mengenali BENTUK SVG — BOM/`<?xml ... ?>`
+  prolog/`<!DOCTYPE ...>`/komentar opsional, lalu elemen root `<svg` dalam
+  prefix byte terbatas — mengembalikan `"image/svg+xml"`. Ini hanya cocok
+  bentuk; tidak bicara soal apakah SVG-nya aman disajikan.
+- `domain/media-svg-safety.ts`'s `findSvgSafetyViolations`/`isSvgContentSafe`
+  memindai seluruh byte yang sudah di-decode untuk empat vektor yang memang
+  dibawa format XML-executable ini: elemen `<script>`, atribut event-handler
+  `on*=`, URI `javascript:` (di `href`/`xlink:href`/atribut mana pun), atau
+  external entity (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — vektor XXE).
+  Denylist terarah persis pada keempat vektor itu, bukan sanitizer
+  general-purpose: file yang kena salah satu ditolak mentah-mentah, tidak
+  pernah di-strip/ditulis-ulang.
+
+`application/media-r2-verification.ts` menjalankan safety scan HANYA saat
+sniff sudah mengenali `image/svg+xml`, atas byte yang sama yang sudah dibaca
+`GET` bertopi-ukuran — upload raster tidak pernah membayar atau terpengaruh
+cek ini. `domain/media-finalize-decision.ts`'s `decideNewsMediaFinalizeOutcome`
+mendapat input baru `svgUnsafe` dan reason penolakan `svg_unsafe_content`,
+dicek setelah cek allow-list/claimed-mime-type dan sebelum klaim checksum —
+SVG yang belum di-opt-in sebuah deployment tetap ditolak `mime_not_allowed`
+lebih dulu, terlepas hasil safety-scan-nya.
+
+Tests: `tests/media-mime-sniffer.test.ts` (pengenalan bentuk),
+`tests/media-svg-safety.test.ts` (keempat vektor + kasus kontrol logo aman),
+`tests/media-finalize-decision.test.ts`/`tests/media-r2-verification.test.ts`
+(pengkabelan end-to-end).
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { decideNewsMediaFinalizeOutcome } from "../src/modules/media-library/domain/media-finalize-decision";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_WITH_SVG = [...ALLOWED, "image/svg+xml"];
 
 describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
   test("accepts when sniffed mime matches allow-list and claimed mime, no checksum claim", () => {
@@ -10,6 +11,7 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/jpeg",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: "image/jpeg",
+      svgUnsafe: false,
       claimedChecksumSha256: null,
       computedChecksumSha256: "a".repeat(64)
     });
@@ -21,6 +23,7 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/png",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: "image/png",
+      svgUnsafe: false,
       claimedChecksumSha256: "ABCD".repeat(16),
       computedChecksumSha256: "abcd".repeat(16)
     });
@@ -32,6 +35,7 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/jpeg",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: undefined,
+      svgUnsafe: false,
       claimedChecksumSha256: null,
       computedChecksumSha256: "a".repeat(64)
     });
@@ -46,6 +50,19 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/gif",
       allowedMimeTypes: ["image/jpeg", "image/png"],
       sniffedMimeType: "image/gif",
+      svgUnsafe: false,
+      claimedChecksumSha256: null,
+      computedChecksumSha256: "a".repeat(64)
+    });
+    expect(decision).toEqual({ accepted: false, reason: "mime_not_allowed" });
+  });
+
+  test("rejects — SVG sniffed but not in the deployment's allow-list (the default posture — SVG is opt-in), even though the content itself is safe", () => {
+    const decision = decideNewsMediaFinalizeOutcome({
+      claimedMimeType: "image/svg+xml",
+      allowedMimeTypes: ALLOWED,
+      sniffedMimeType: "image/svg+xml",
+      svgUnsafe: false,
       claimedChecksumSha256: null,
       computedChecksumSha256: "a".repeat(64)
     });
@@ -57,6 +74,7 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/png",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: "image/jpeg",
+      svgUnsafe: false,
       claimedChecksumSha256: null,
       computedChecksumSha256: "a".repeat(64)
     });
@@ -68,6 +86,7 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/jpeg",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: "image/jpeg",
+      svgUnsafe: false,
       claimedChecksumSha256: "b".repeat(64),
       computedChecksumSha256: "a".repeat(64)
     });
@@ -79,9 +98,66 @@ describe("decideNewsMediaFinalizeOutcome (Issue #634)", () => {
       claimedMimeType: "image/webp",
       allowedMimeTypes: ALLOWED,
       sniffedMimeType: "image/webp",
+      svgUnsafe: false,
       claimedChecksumSha256: "deadbeef".repeat(8),
       computedChecksumSha256: "0".repeat(64)
     });
     expect(decision.accepted).toBe(false);
+  });
+
+  describe("SVG content safety (Issue #806)", () => {
+    test("accepts a safe SVG once the deployment opts in via the allow-list", () => {
+      const decision = decideNewsMediaFinalizeOutcome({
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED_WITH_SVG,
+        sniffedMimeType: "image/svg+xml",
+        svgUnsafe: false,
+        claimedChecksumSha256: null,
+        computedChecksumSha256: "a".repeat(64)
+      });
+      expect(decision).toEqual({ accepted: true });
+    });
+
+    test("rejects an allow-listed SVG whose content tripped the safety scan (<script>/on*=/javascript:/external entity)", () => {
+      const decision = decideNewsMediaFinalizeOutcome({
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED_WITH_SVG,
+        sniffedMimeType: "image/svg+xml",
+        svgUnsafe: true,
+        claimedChecksumSha256: null,
+        computedChecksumSha256: "a".repeat(64)
+      });
+      expect(decision).toEqual({
+        accepted: false,
+        reason: "svg_unsafe_content"
+      });
+    });
+
+    test("svg_unsafe_content is checked before the checksum claim (defense in depth order)", () => {
+      const decision = decideNewsMediaFinalizeOutcome({
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED_WITH_SVG,
+        sniffedMimeType: "image/svg+xml",
+        svgUnsafe: true,
+        claimedChecksumSha256: "a".repeat(64),
+        computedChecksumSha256: "a".repeat(64)
+      });
+      expect(decision).toEqual({
+        accepted: false,
+        reason: "svg_unsafe_content"
+      });
+    });
+
+    test("svgUnsafe is ignored for a non-SVG sniff — a raster image is never affected by this field", () => {
+      const decision = decideNewsMediaFinalizeOutcome({
+        claimedMimeType: "image/jpeg",
+        allowedMimeTypes: ALLOWED,
+        sniffedMimeType: "image/jpeg",
+        svgUnsafe: true,
+        claimedChecksumSha256: null,
+        computedChecksumSha256: "a".repeat(64)
+      });
+      expect(decision).toEqual({ accepted: true });
+    });
   });
 });

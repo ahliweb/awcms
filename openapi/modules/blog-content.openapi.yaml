@@ -1640,6 +1640,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "422":
+          description: logoMediaId is not a valid R2 media object in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/blog/institutions/{id}:
     parameters:
       - name: id
@@ -1717,6 +1723,12 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: An institution already exists for this slug.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: logoMediaId is not a valid R2 media object in full-online R2-only mode.
           content:
             application/json:
               schema:
@@ -3816,6 +3828,19 @@ components:
         seoDescription:
           type: string
           nullable: true
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Issue #806 — the institution's reusable logo/emblem, a
+            media_library object id. Resolve to a public URL/alt text via
+            GET /api/v1/media/objects?ids=. Same shape/no-FK posture as
+            BlogPost.featuredMediaId.
+        logoAlt:
+          type: string
+          nullable: true
+          description: Alt/caption text for logoMediaId, independent of the media object's own registry metadata.
     BlogInstitutionCreateInput:
       type: object
       required: [branch, name, slug]
@@ -3845,6 +3870,14 @@ components:
           type: string
           nullable: true
           maxLength: 320
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        logoAlt:
+          type: string
+          nullable: true
+          maxLength: 200
     BlogInstitutionUpdateInput:
       type: object
       minProperties: 1
@@ -3873,6 +3906,14 @@ components:
           type: string
           nullable: true
           maxLength: 320
+        logoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        logoAlt:
+          type: string
+          nullable: true
+          maxLength: 200
     BlogRevision:
       type: object
       required:
