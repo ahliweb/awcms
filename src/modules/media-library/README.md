@@ -209,13 +209,56 @@ Two additions close that gap, both pure/no-I/O:
   a bounded byte prefix — returning `"image/svg+xml"`. This is a shape match
   only; it says nothing about whether the SVG is safe to serve.
 - `domain/media-svg-safety.ts`'s `findSvgSafetyViolations`/`isSvgContentSafe`
-  scans the full decoded bytes for the four vectors an executable-XML image
-  format actually carries: a `<script>` element, an `on*=` event-handler
-  attribute, a `javascript:` URI (in `href`/`xlink:href`/any attribute), or
-  an external entity (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — the XXE
-  vector). A targeted denylist over exactly those four, not a general-purpose
-  sanitizer: a file tripping any of them is rejected outright, never
-  stripped/rewritten.
+  scans the full decoded bytes for the vectors an executable-XML image format
+  actually carries: a `<script>` element, an `on*=` event-handler attribute, a
+  `javascript:` URI (in `href`/`xlink:href`/any attribute), a `data:` URI (in
+  `href`/`xlink:href`/`src`), an external entity/DOCTYPE
+  (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — the XXE vector), or ANY
+  `<!ENTITY` declaration at all. A targeted denylist, not a general-purpose
+  sanitizer: a file tripping any one of them is rejected outright, never
+  stripped/rewritten — an institution logo/emblem has no legitimate reason to
+  need any of these constructs.
+
+**Three closures added on top of the literal-pattern denylist** (PR #807
+review — a denylist over literal patterns is only as strong as its
+resistance to the same semantics re-expressed in a form the patterns don't
+literally match):
+
+1. **`data:` URI** (`data_uri`) — `<use xlink:href="data:image/svg+xml;
+base64,...">`/`<image href="data:image/svg+xml,...">` can carry an entire
+   NESTED SVG document (its own `<script>`/`on*=`, invisible to every other
+   check here) that a renderer inlining `<use>`/`<image>` references
+   evaluates as its own document. Rather than trying to decode-and-recurse
+   into every possible data-URI encoding (base64, percent-encoded, ...), ANY
+   `data:` scheme in `href`/`xlink:href`/`src` is rejected unconditionally.
+2. **Character-reference / control-character obfuscation** —
+   `&#106;avascript&#58;...` (decimal), `&#x6A;avascript&#x3A;...` (hex), and
+   a bare TAB/LF/CR spliced into the scheme itself (`jav&#x09;ascript:...`,
+   which URL parsers treat identically to `javascript:` because they strip
+   TAB/LF/CR from the whole string before reading the scheme) all decode/
+   normalize to a URI the literal patterns never see in the raw bytes.
+   `normalizeForUriChecks` decodes numeric/hex/the five XML-predefined named
+   character references, then strips TAB/LF/CR, before the
+   `javascript:`/`data:`/`on*=` checks run — `<script>`/entity checks
+   deliberately still run against the RAW text, since character references
+   are only ever expanded inside attribute values/text content by an XML
+   parser, never inside markup syntax itself (decoding first would risk a
+   false trip on inert escaped text like `&lt;script&gt;`).
+3. **Parameter-entity splitting** (`entity_declaration`) —
+   `<!ENTITY % p1 "SYST"><!ENTITY % p2 "EM \"file:///...\"">` never puts the
+   literal keyword `SYSTEM`/`PUBLIC` inside any ONE declaration, so the
+   keyword-anchored XXE pattern alone misses it (tracing parameter-entity
+   expansion is a real XML parser's job, not a regex's). ANY `<!ENTITY`
+   declaration at all — parameter or general, keyword or not — is now
+   rejected unconditionally.
+
+All three closures follow the same "reject the shape outright" philosophy as
+the original four checks, and the same ReDoS-safe linear-scan discipline
+`media-mime-sniffer.ts`'s `looksLikeSvg` established (every added regex is a
+single bounded quantified class or a fixed literal — CodeQL js/redos was a
+real finding on an earlier version of `looksLikeSvg`, so this module was
+written to the same standard from the start and is guarded by the same style
+of large-adversarial-input timing test).
 
 `application/media-r2-verification.ts` runs the safety scan ONLY when the
 sniff already resolved to `image/svg+xml`, on the same bytes already read by
@@ -226,10 +269,12 @@ checked after the allow-list/claimed-mime-type checks and before the checksum
 claim — an SVG a deployment has not opted into is still rejected
 `mime_not_allowed` first, safety-scan result notwithstanding.
 
-Tests: `tests/media-mime-sniffer.test.ts` (shape recognition),
-`tests/media-svg-safety.test.ts` (the four vectors + a safe-logo control
-case), `tests/media-finalize-decision.test.ts`/`tests/media-r2-verification.test.ts`
-(end-to-end wiring).
+Tests: `tests/media-mime-sniffer.test.ts` (shape recognition + ReDoS
+regression guards), `tests/media-svg-safety.test.ts` (every vector above,
+each of the three closures with a reproduced-bypass-shaped adversarial case,
+a linear-time guard on the character-reference decoder, and a safe-logo
+control case), `tests/media-finalize-decision.test.ts`/
+`tests/media-r2-verification.test.ts` (end-to-end wiring).
 
 ## Media reference resolution (`GET /api/v1/media/objects`)
 

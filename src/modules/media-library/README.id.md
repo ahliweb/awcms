@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2660d1c8798a1a270ab10197b0c7e1717675c7ba09ae3b919f806cf689c4512a -->
+<!-- i18n-source-hash: sha256:5739c87f4b0fd1f5ebb92bc653ff9ae23c1d56c9514afb44d17a5e88c1cecc59 -->
 
 # media_library
 
@@ -212,13 +212,58 @@ Dua penambahan menutup celah itu, keduanya murni/tanpa I/O:
   prefix byte terbatas — mengembalikan `"image/svg+xml"`. Ini hanya cocok
   bentuk; tidak bicara soal apakah SVG-nya aman disajikan.
 - `domain/media-svg-safety.ts`'s `findSvgSafetyViolations`/`isSvgContentSafe`
-  memindai seluruh byte yang sudah di-decode untuk empat vektor yang memang
-  dibawa format XML-executable ini: elemen `<script>`, atribut event-handler
-  `on*=`, URI `javascript:` (di `href`/`xlink:href`/atribut mana pun), atau
-  external entity (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — vektor XXE).
-  Denylist terarah persis pada keempat vektor itu, bukan sanitizer
-  general-purpose: file yang kena salah satu ditolak mentah-mentah, tidak
-  pernah di-strip/ditulis-ulang.
+  memindai seluruh byte yang sudah di-decode untuk vektor yang memang dibawa
+  format XML-executable ini: elemen `<script>`, atribut event-handler `on*=`,
+  URI `javascript:` (di `href`/`xlink:href`/atribut mana pun), URI `data:`
+  (di `href`/`xlink:href`/`src`), external entity/DOCTYPE
+  (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — vektor XXE), atau deklarasi
+  `<!ENTITY` APA PUN. Denylist terarah, bukan sanitizer general-purpose: file
+  yang kena salah satu ditolak mentah-mentah, tidak pernah
+  di-strip/ditulis-ulang — logo/lambang institusi tidak punya alasan sah
+  butuh konstruksi mana pun di atas.
+
+**Tiga penutup celah ditambahkan di atas denylist pola-literal** (review PR
+#807 — denylist atas pola literal hanya sekuat resistensinya terhadap
+semantik yang sama diekspresikan ulang dalam bentuk yang tidak cocok literal
+dengan pola-pola itu):
+
+1. **URI `data:`** (`data_uri`) — `<use xlink:href="data:image/svg+xml;
+base64,...">`/`<image href="data:image/svg+xml,...">` bisa membawa
+   SELURUH dokumen SVG bersarang (dengan `<script>`/`on*=` sendiri, tak
+   terlihat oleh cek lain di sini) yang dievaluasi sebagai dokumennya sendiri
+   oleh renderer yang meng-inline referensi `<use>`/`<image>`. Daripada
+   mencoba decode-lalu-rekursi ke setiap kemungkinan encoding data-URI
+   (base64, percent-encoded, ...), SEMUA skema `data:` di
+   `href`/`xlink:href`/`src` ditolak tanpa syarat.
+2. **Obfuskasi character-reference / karakter kontrol** —
+   `&#106;avascript&#58;...` (desimal), `&#x6A;avascript&#x3A;...` (hex), dan
+   TAB/LF/CR polos yang disisipkan ke dalam skema itu sendiri
+   (`jav&#x09;ascript:...`, yang diperlakukan URL parser identik dengan
+   `javascript:` karena mereka strip TAB/LF/CR dari seluruh string sebelum
+   membaca skema) semuanya decode/normalize jadi URI yang tidak pernah
+   terlihat pola literal di byte mentah. `normalizeForUriChecks` men-decode
+   character reference numerik/hex/lima named reference standar XML, lalu
+   strip TAB/LF/CR, sebelum cek `javascript:`/`data:`/`on*=` berjalan — cek
+   `<script>`/entity sengaja tetap berjalan atas teks MENTAH, karena
+   character reference hanya pernah di-expand di dalam nilai
+   atribut/isi-teks oleh parser XML, tidak pernah di dalam sintaks markup itu
+   sendiri (decode duluan berisiko salah-tersandung pada teks ter-escape
+   yang inert seperti `&lt;script&gt;`).
+3. **Parameter-entity splitting** (`entity_declaration`) —
+   `<!ENTITY % p1 "SYST"><!ENTITY % p2 "EM \"file:///...\"">` tidak pernah
+   menaruh kata kunci literal `SYSTEM`/`PUBLIC` di dalam SATU deklarasi mana
+   pun, jadi pola XXE yang berpatokan kata kunci sendirian melewatkannya
+   (menelusuri ekspansi parameter-entity adalah pekerjaan parser XML
+   sungguhan, bukan regex). Deklarasi `<!ENTITY` APA PUN — parameter atau
+   general, ada kata kunci atau tidak — sekarang ditolak tanpa syarat.
+
+Ketiga penutup celah ini mengikuti filosofi "tolak bentuknya langsung" yang
+sama seperti empat cek awal, dan disiplin linear-scan aman-ReDoS yang sama
+seperti yang `media-mime-sniffer.ts`'s `looksLikeSvg` sudah tetapkan (setiap
+regex tambahan adalah satu kelas terkuantifikasi terbatas atau literal tetap
+— CodeQL js/redos adalah temuan nyata pada versi awal `looksLikeSvg`, jadi
+modul ini ditulis dengan standar yang sama sejak awal dan dijaga test timing
+input-adversarial-besar dengan gaya yang sama).
 
 `application/media-r2-verification.ts` menjalankan safety scan HANYA saat
 sniff sudah mengenali `image/svg+xml`, atas byte yang sama yang sudah dibaca
@@ -229,10 +274,12 @@ dicek setelah cek allow-list/claimed-mime-type dan sebelum klaim checksum —
 SVG yang belum di-opt-in sebuah deployment tetap ditolak `mime_not_allowed`
 lebih dulu, terlepas hasil safety-scan-nya.
 
-Tests: `tests/media-mime-sniffer.test.ts` (pengenalan bentuk),
-`tests/media-svg-safety.test.ts` (keempat vektor + kasus kontrol logo aman),
-`tests/media-finalize-decision.test.ts`/`tests/media-r2-verification.test.ts`
-(pengkabelan end-to-end).
+Tests: `tests/media-mime-sniffer.test.ts` (pengenalan bentuk + regression
+guard ReDoS), `tests/media-svg-safety.test.ts` (setiap vektor di atas,
+masing-masing dari tiga penutup celah dengan kasus adversarial berbentuk
+bypass-yang-direproduksi, guard linear-time untuk decoder character-reference,
+dan kasus kontrol logo aman), `tests/media-finalize-decision.test.ts`/
+`tests/media-r2-verification.test.ts` (pengkabelan end-to-end).
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 

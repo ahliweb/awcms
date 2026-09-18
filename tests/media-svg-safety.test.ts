@@ -111,4 +111,137 @@ describe("findSvgSafetyViolations / isSvgContentSafe (Issue #806)", () => {
     );
     expect(findSvgSafetyViolations(bytes)).toEqual([]);
   });
+
+  describe("closure #1 — data: URI in href/xlink:href/src (PR #807 review)", () => {
+    test("rejects a data: URI in xlink:href carrying a base64-encoded nested SVG with its own onload", () => {
+      const nestedSvg = '<svg onload="alert(1)"/>';
+      const base64 = Buffer.from(nestedSvg, "utf-8").toString("base64");
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+          `<use xlink:href="data:image/svg+xml;base64,${base64}" /></svg>`
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("data_uri");
+    });
+
+    test("rejects a data: URI in <image href> carrying a percent-encoded nested SVG with its own onload", () => {
+      const nestedSvg = '<svg onload="alert(1)"/>';
+      const percentEncoded = encodeURIComponent(nestedSvg);
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg">' +
+          `<image href="data:image/svg+xml,${percentEncoded}" /></svg>`
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("data_uri");
+    });
+
+    test("rejects a data: URI in a plain src attribute", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><image src="data:image/svg+xml;base64,AAAA" /></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("data_uri");
+    });
+
+    test("does not false-positive on an ordinary non-data href (baseline)", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="https://example.test/about"><rect width="1" height="1"/></a></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toEqual([]);
+    });
+  });
+
+  describe("closure #2 — character-reference / control-character obfuscation of javascript:/data: (PR #807 review)", () => {
+    test("rejects a decimal-character-reference-obfuscated javascript: URI", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="&#106;avascript&#58;alert(1)"><rect width="1" height="1"/></a></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("javascript_uri");
+    });
+
+    test("rejects a hex-character-reference-obfuscated javascript: URI", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="&#x6a;avascript&#x3a;alert(1)"><rect width="1" height="1"/></a></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("javascript_uri");
+    });
+
+    test("rejects a TAB character-reference spliced into the middle of the javascript scheme itself (URL parsers strip TAB/LF/CR before reading the scheme)", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="jav&#x09;ascript:alert(1)"><rect width="1" height="1"/></a></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("javascript_uri");
+    });
+
+    test("rejects a literal raw TAB byte spliced into the javascript scheme, with no entity involved", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="jav\tascript:alert(1)"><rect width="1" height="1"/></a></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("javascript_uri");
+    });
+
+    test("rejects a decimal-character-reference-obfuscated data: URI", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><image src="&#100;ata:image/svg+xml;base64,AAAA" /></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toContain("data_uri");
+    });
+
+    test("does not decode-and-falsely-trip on inert escaped text like &lt;script&gt; — character references are never expanded into markup structure by a real XML parser", () => {
+      const bytes = encode(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>&lt;script&gt;not a real element&lt;/script&gt;</text></svg>'
+      );
+      expect(findSvgSafetyViolations(bytes)).toEqual([]);
+    });
+
+    test("a large number of numeric character references decodes and scans promptly (linear-time guard, no ReDoS)", () => {
+      const many = "&#106;".repeat(50_000);
+      const bytes = encode(
+        `<svg xmlns="http://www.w3.org/2000/svg"><a href="${many}"><rect width="1" height="1"/></a></svg>`
+      );
+      const start = performance.now();
+      findSvgSafetyViolations(bytes);
+      const elapsedMs = performance.now() - start;
+      expect(elapsedMs).toBeLessThan(500);
+    });
+  });
+
+  describe("closure #3 — parameter-entity splitting of SYSTEM/PUBLIC (PR #807 review)", () => {
+    test("rejects a SYSTEM keyword split across two parameter-entity declarations, via entity_declaration — the keyword-anchored pattern alone misses it", () => {
+      const bytes = encode(
+        '<?xml version="1.0"?>' +
+          "<!DOCTYPE svg [" +
+          '<!ENTITY % p1 "SYST">' +
+          '<!ENTITY % p2 "EM \\"file:///etc/passwd\\"">' +
+          "]>" +
+          '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+      );
+      const violations = findSvgSafetyViolations(bytes);
+      expect(violations).toContain("entity_declaration");
+      // Demonstrates the bypass this closure exists for: no single
+      // declaration contains the literal keyword, so the SYSTEM/PUBLIC-
+      // anchored pattern alone does not fire.
+      expect(violations).not.toContain("external_entity");
+    });
+
+    test("rejects a plain general <!ENTITY declaration with no SYSTEM/PUBLIC keyword at all", () => {
+      const bytes = encode(
+        "<!DOCTYPE svg [" +
+          '<!ENTITY logo "a benign local entity">' +
+          "]>" +
+          '<svg xmlns="http://www.w3.org/2000/svg">&logo;</svg>'
+      );
+      const violations = findSvgSafetyViolations(bytes);
+      expect(violations).toContain("entity_declaration");
+      expect(violations).not.toContain("external_entity");
+    });
+
+    test("still reports external_entity too when SYSTEM/PUBLIC does appear inside one whole declaration (both fire together, not exclusively)", () => {
+      const bytes = encode(
+        '<?xml version="1.0"?>' +
+          '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>' +
+          '<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'
+      );
+      const violations = findSvgSafetyViolations(bytes);
+      expect(violations).toContain("entity_declaration");
+      expect(violations).toContain("external_entity");
+    });
+  });
 });
