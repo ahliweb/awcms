@@ -81,4 +81,30 @@ describe("sniffNewsMediaMimeType (Issue #634)", () => {
     );
     expect(sniffNewsMediaMimeType(html)).toBeUndefined();
   });
+
+  test("a pathological repeated-comment prefix that never resolves to <svg resolves in milliseconds, not catastrophically (CodeQL js/redos regression guard)", () => {
+    // The shape a naive `(?:<!--[\s\S]*?-->)*` regex backtracks catastrophically
+    // on: many repetitions of a comment-close immediately followed by a new
+    // comment-open, with no `<svg` ever arriving. `looksLikeSvg`'s manual scan
+    // is O(n) regardless, so this must return promptly.
+    const adversarial = new TextEncoder().encode(
+      "--><!--".repeat(20_000) + "not svg"
+    );
+    const start = performance.now();
+    const result = sniffNewsMediaMimeType(adversarial);
+    const elapsedMs = performance.now() - start;
+    expect(result).toBeUndefined();
+    expect(elapsedMs).toBeLessThan(200);
+  });
+
+  test("an adversarial prefix of many <!DOCTYPE-shaped opens that never closes resolves promptly and is not recognized as SVG", () => {
+    const adversarial = new TextEncoder().encode(
+      "<!DOCTYPE ".repeat(20_000) + "not svg"
+    );
+    const start = performance.now();
+    const result = sniffNewsMediaMimeType(adversarial);
+    const elapsedMs = performance.now() - start;
+    expect(result).toBeUndefined();
+    expect(elapsedMs).toBeLessThan(200);
+  });
 });

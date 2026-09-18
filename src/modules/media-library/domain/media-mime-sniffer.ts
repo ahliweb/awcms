@@ -72,16 +72,50 @@ function matchesAt(
 const SVG_SNIFF_PREFIX_BYTES = 4096;
 
 /**
- * Optional UTF-8 BOM, optional `<?xml ... ?>` prolog, any number of optional
- * comments/`<!DOCTYPE ...>` declarations in either order, then the `<svg`
- * root element. Deliberately permissive about what comes before `<svg` (this
- * is a SHAPE match, not a full XML parse) and deliberately anchored at the
- * start of the (BOM-stripped) text — an SVG fragment embedded partway
- * through some other document is not what this recognizes.
+ * Ceiling on how many leading comment/`<!DOCTYPE ...>` declarations
+ * `looksLikeSvg` will skip before giving up — a real file has at most one of
+ * each; this only guards against a pathological/adversarial prefix looping
+ * this scan indefinitely on input that never resolves to `<svg`.
  */
-const SVG_ROOT_PATTERN =
-  /^\s*(?:<\?xml\b[^>]*\?>\s*)?(?:(?:<!--[\s\S]*?-->|<!DOCTYPE\b[^>[]*(?:\[[\s\S]*?\])?\s*>)\s*)*<svg[\s>]/i;
+const MAX_SVG_PROLOG_SKIPS = 16;
 
+function isAsciiWhitespace(char: string | undefined): boolean {
+  return (
+    char === " " ||
+    char === "\t" ||
+    char === "\n" ||
+    char === "\r" ||
+    char === "\f"
+  );
+}
+
+function skipWhitespace(text: string, index: number): number {
+  let i = index;
+  while (i < text.length && isAsciiWhitespace(text[i])) {
+    i += 1;
+  }
+  return i;
+}
+
+/**
+ * Shape recognition, written as a bounded manual scan rather than a single
+ * regular expression: a naive `(comment|doctype)*` alternation over
+ * `[\s\S]*?` bodies is exactly the nested-quantifier shape that lets a
+ * crafted prefix (many repetitions of `--><!--`) trigger catastrophic
+ * backtracking (confirmed by CodeQL on an earlier version of this function).
+ * Every step below advances `index` strictly forward using plain
+ * `String#indexOf`/`startsWith` (both linear, no backtracking), and the
+ * comment/DOCTYPE skip loop is additionally capped by
+ * `MAX_SVG_PROLOG_SKIPS` — the whole function is O(prefix length) in the
+ * worst case, on an input already capped to `SVG_SNIFF_PREFIX_BYTES`.
+ *
+ * Optional UTF-8 BOM, optional `<?xml ... ?>` prolog, any number (up to the
+ * cap) of comments/`<!DOCTYPE ...>` declarations in either order, then the
+ * `<svg` root element. Deliberately permissive about what comes before
+ * `<svg` (this is a SHAPE match, not a full XML parse) and deliberately
+ * anchored at the start of the (BOM-stripped) text — an SVG fragment
+ * embedded partway through some other document is not what this recognizes.
+ */
 function looksLikeSvg(bytes: Uint8Array): boolean {
   if (bytes.length === 0) return false;
 
@@ -89,11 +123,57 @@ function looksLikeSvg(bytes: Uint8Array): boolean {
     0,
     Math.min(bytes.length, SVG_SNIFF_PREFIX_BYTES)
   );
-  const text = new TextDecoder("utf-8", { fatal: false })
-    .decode(prefix)
-    .replace(/^﻿/, "");
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(prefix);
 
-  return SVG_ROOT_PATTERN.test(text);
+  let index = text.startsWith("﻿") ? 1 : 0;
+  index = skipWhitespace(text, index);
+
+  if (text.startsWith("<?xml", index)) {
+    const end = text.indexOf("?>", index + 5);
+    if (end === -1) return false;
+    index = skipWhitespace(text, end + 2);
+  }
+
+  for (let skips = 0; skips < MAX_SVG_PROLOG_SKIPS; skips += 1) {
+    if (text.startsWith("<!--", index)) {
+      const end = text.indexOf("-->", index + 4);
+      if (end === -1) return false;
+      index = skipWhitespace(text, end + 3);
+      continue;
+    }
+
+    if (/^<!doctype/i.test(text.slice(index, index + 9))) {
+      // The declaration's OWN closing `>` — unless an internal subset
+      // (`[...]`) opens strictly before it, in which case the real close is
+      // the first `>` AFTER that subset's own `]`.
+      const gt = text.indexOf(">", index);
+      if (gt === -1) return false;
+
+      const bracket = text.indexOf("[", index);
+      if (bracket !== -1 && bracket < gt) {
+        const bracketClose = text.indexOf("]", bracket + 1);
+        if (bracketClose === -1) return false;
+        const gtAfterSubset = text.indexOf(">", bracketClose + 1);
+        if (gtAfterSubset === -1) return false;
+        index = skipWhitespace(text, gtAfterSubset + 1);
+      } else {
+        index = skipWhitespace(text, gt + 1);
+      }
+      continue;
+    }
+
+    break;
+  }
+
+  if (!text.startsWith("<svg", index)) return false;
+
+  const afterRoot = text[index + 4];
+  return (
+    afterRoot === undefined ||
+    afterRoot === ">" ||
+    afterRoot === "/" ||
+    isAsciiWhitespace(afterRoot)
+  );
 }
 
 /**
