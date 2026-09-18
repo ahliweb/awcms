@@ -77,9 +77,47 @@ const MAX_NAME_LENGTH = 150;
 const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_SEO_TITLE_LENGTH = 200;
 const MAX_SEO_DESCRIPTION_LENGTH = 320;
+const MAX_LOGO_ALT_LENGTH = 200;
+
+/** Same pattern `blog-post-validation.ts` uses for `featuredMediaId`/`seoImageMediaId`/`translationGroupId`. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * Shape-only, mirroring `blog-post-validation.ts`'s `validateFeaturedMediaId`
+ * exactly (Issue #806: "verify what the post path does today and mirror
+ * it") — a UUID or null, no existence/ownership/verified-status check here.
+ * That check needs a database round trip and runs at the application layer,
+ * gated the same way (`institution-logo-reference-gate.ts`, only when
+ * managed-media enforcement is active for the tenant).
+ */
+function validateLogoMediaIdField(
+  record: Record<string, unknown>,
+  errors: ValidationError[]
+): string | null | undefined {
+  const raw = record.logoMediaId;
+
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (raw === null) {
+    return null;
+  }
+
+  if (typeof raw !== "string" || !UUID_PATTERN.test(raw)) {
+    errors.push({
+      field: "logoMediaId",
+      message: "logoMediaId must be a UUID when provided, or null."
+    });
+    return undefined;
+  }
+
+  return raw;
 }
 
 /**
@@ -149,6 +187,9 @@ export type CreateInstitutionInput = {
   description: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  /** Issue #806 — reusable institution logo/emblem (sql/153). */
+  logoMediaId: string | null;
+  logoAlt: string | null;
 };
 
 export type CreateInstitutionValidationResult =
@@ -205,6 +246,13 @@ export function validateCreateInstitutionInput(
     MAX_SEO_DESCRIPTION_LENGTH,
     errors
   );
+  const logoMediaId = validateLogoMediaIdField(record, errors);
+  const logoAlt = validateOptionalText(
+    record,
+    "logoAlt",
+    MAX_LOGO_ALT_LENGTH,
+    errors
+  );
 
   if (errors.length > 0) {
     return { valid: false, errors };
@@ -219,7 +267,9 @@ export function validateCreateInstitutionInput(
       regionCode: regionCode ?? null,
       description: description ?? null,
       seoTitle: seoTitle ?? null,
-      seoDescription: seoDescription ?? null
+      seoDescription: seoDescription ?? null,
+      logoMediaId: logoMediaId ?? null,
+      logoAlt: logoAlt ?? null
     }
   };
 }
@@ -232,6 +282,9 @@ export type UpdateInstitutionInput = {
   description?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
+  /** Issue #806 — reusable institution logo/emblem (sql/153). */
+  logoMediaId?: string | null;
+  logoAlt?: string | null;
 };
 
 export type UpdateInstitutionValidationResult =
@@ -303,10 +356,18 @@ export function validateUpdateInstitutionInput(
     }
   }
 
+  if (record.logoMediaId !== undefined) {
+    const logoMediaId = validateLogoMediaIdField(record, errors);
+    if (logoMediaId !== undefined) {
+      value.logoMediaId = logoMediaId;
+    }
+  }
+
   for (const [field, maxLength] of [
     ["description", MAX_DESCRIPTION_LENGTH],
     ["seoTitle", MAX_SEO_TITLE_LENGTH],
-    ["seoDescription", MAX_SEO_DESCRIPTION_LENGTH]
+    ["seoDescription", MAX_SEO_DESCRIPTION_LENGTH],
+    ["logoAlt", MAX_LOGO_ALT_LENGTH]
   ] as const) {
     if (record[field] === undefined) {
       continue;

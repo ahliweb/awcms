@@ -19,11 +19,17 @@
  *   3. MIME sniffing from magic bytes (`sniffNewsMediaMimeType`) against
  *      the bytes from step 2 — NOT `Content-Type`, NOT the file extension,
  *      NOT the checksum.
+ *   3b. Issue #806 — when step 3 sniffs `image/svg+xml`, an SVG
+ *      content-safety scan (`findSvgSafetyViolations`) over the SAME bytes:
+ *      `<script>`, an `on*=` event handler, a `javascript:` URI, or an
+ *      external entity all reject the upload regardless of allow-list/
+ *      checksum outcome. Never run for a non-SVG sniff.
  *   4. Server-side SHA-256 checksum, AND the authoritative `sizeBytes`,
  *      both computed from the SAME bytes actually read in step 2 — never
  *      from `head.sizeBytes`.
  *   5. `decideNewsMediaFinalizeOutcome` — the pure classification of the
- *      above against the allow-list/claimed mime type/claimed checksum.
+ *      above against the allow-list/claimed mime type/SVG safety/claimed
+ *      checksum.
  *
  * Deliberately takes no `Bun.SQL`/transaction — every call here is a
  * network call to R2 and must run strictly OUTSIDE any DB transaction
@@ -37,6 +43,7 @@
  */
 import type { NewsMediaR2Client } from "../infrastructure/media-r2-client";
 import { sniffNewsMediaMimeType } from "../domain/media-mime-sniffer";
+import { findSvgSafetyViolations } from "../domain/media-svg-safety";
 import { decideNewsMediaFinalizeOutcome } from "../domain/media-finalize-decision";
 
 export type VerifyNewsMediaR2ObjectInput = {
@@ -53,6 +60,7 @@ export type NewsMediaR2VerificationRejectionReason =
   | "mime_not_recognized"
   | "mime_not_allowed"
   | "mime_mismatch"
+  | "svg_unsafe_content"
   | "checksum_mismatch";
 
 export type NewsMediaR2VerificationResult =
@@ -98,10 +106,21 @@ export async function verifyNewsMediaR2Object(
   hasher.update(get.bytes);
   const computedChecksumSha256 = hasher.digest("hex");
 
+  // Issue #806 — only ever scanned when the sniff itself already says this
+  // IS an SVG; a raster image never pays for (or is affected by) this regex
+  // scan, and an SVG the deployment does not allow-list is already rejected
+  // by `decideNewsMediaFinalizeOutcome`'s `mime_not_allowed` branch below,
+  // safety scan result notwithstanding.
+  const svgUnsafe =
+    sniffedMimeType === "image/svg+xml"
+      ? findSvgSafetyViolations(get.bytes).length > 0
+      : false;
+
   const decision = decideNewsMediaFinalizeOutcome({
     claimedMimeType: input.claimedMimeType,
     allowedMimeTypes: input.allowedMimeTypes,
     sniffedMimeType,
+    svgUnsafe,
     claimedChecksumSha256: input.claimedChecksumSha256,
     computedChecksumSha256
   });

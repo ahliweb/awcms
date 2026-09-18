@@ -58,10 +58,53 @@ describe("sniffNewsMediaMimeType (Issue #634)", () => {
     expect(sniffNewsMediaMimeType(bytesOf(0xff))).toBeUndefined();
   });
 
-  test("returns undefined for an SVG payload (never allow-listed, doc §9)", () => {
+  test("recognizes a plain SVG root element (Issue #806 — sniffing recognizes the SHAPE only; content safety is media-svg-safety.ts's separate job, so this is recognized as SVG even though it also contains a <script>)", () => {
     const svg = new TextEncoder().encode(
       "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
     );
-    expect(sniffNewsMediaMimeType(svg)).toBeUndefined();
+    expect(sniffNewsMediaMimeType(svg)).toBe("image/svg+xml");
+  });
+
+  test("recognizes an SVG with an XML prolog, DOCTYPE, and a leading comment before the root element", () => {
+    const svg = new TextEncoder().encode(
+      '﻿<?xml version="1.0" encoding="UTF-8"?>\n' +
+        "<!-- logo -->\n" +
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+    );
+    expect(sniffNewsMediaMimeType(svg)).toBe("image/svg+xml");
+  });
+
+  test("does not recognize an SVG fragment embedded partway through another document", () => {
+    const html = new TextEncoder().encode(
+      "<html><body><svg></svg></body></html>"
+    );
+    expect(sniffNewsMediaMimeType(html)).toBeUndefined();
+  });
+
+  test("a pathological repeated-comment prefix that never resolves to <svg resolves in milliseconds, not catastrophically (CodeQL js/redos regression guard)", () => {
+    // The shape a naive `(?:<!--[\s\S]*?-->)*` regex backtracks catastrophically
+    // on: many repetitions of a comment-close immediately followed by a new
+    // comment-open, with no `<svg` ever arriving. `looksLikeSvg`'s manual scan
+    // is O(n) regardless, so this must return promptly.
+    const adversarial = new TextEncoder().encode(
+      "--><!--".repeat(20_000) + "not svg"
+    );
+    const start = performance.now();
+    const result = sniffNewsMediaMimeType(adversarial);
+    const elapsedMs = performance.now() - start;
+    expect(result).toBeUndefined();
+    expect(elapsedMs).toBeLessThan(200);
+  });
+
+  test("an adversarial prefix of many <!DOCTYPE-shaped opens that never closes resolves promptly and is not recognized as SVG", () => {
+    const adversarial = new TextEncoder().encode(
+      "<!DOCTYPE ".repeat(20_000) + "not svg"
+    );
+    const start = performance.now();
+    const result = sniffNewsMediaMimeType(adversarial);
+    const elapsedMs = performance.now() - start;
+    expect(result).toBeUndefined();
+    expect(elapsedMs).toBeLessThan(200);
   });
 });

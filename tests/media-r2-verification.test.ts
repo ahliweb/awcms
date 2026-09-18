@@ -17,6 +17,7 @@ import type {
 } from "../src/modules/media-library/infrastructure/media-r2-client";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_WITH_SVG = [...ALLOWED, "image/svg+xml"];
 const MAX_BYTES = 10_485_760;
 
 const JPEG_BYTES = new Uint8Array([
@@ -205,6 +206,72 @@ describe("verifyNewsMediaR2Object (Issue #634)", () => {
     expect(result).toEqual({
       outcome: "rejected",
       reason: "checksum_mismatch"
+    });
+  });
+
+  describe("SVG content safety (Issue #806)", () => {
+    const SAFE_SVG = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>'
+    );
+    const UNSAFE_SVG = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>'
+    );
+
+    test("SVG sniffed but not allow-listed (the default posture) -> rejected mime_not_allowed, safety scan never matters", async () => {
+      const client = fakeClient({
+        head: { ok: true, exists: true, sizeBytes: SAFE_SVG.byteLength },
+        get: { ok: true, sizeExceeded: false, bytes: SAFE_SVG }
+      });
+
+      const result = await verifyNewsMediaR2Object(client, {
+        objectKey: "k",
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED,
+        maxUploadBytes: MAX_BYTES,
+        claimedChecksumSha256: null
+      });
+
+      expect(result).toEqual({
+        outcome: "rejected",
+        reason: "mime_not_allowed"
+      });
+    });
+
+    test("safe SVG accepted once the deployment opts in via the allow-list", async () => {
+      const client = fakeClient({
+        head: { ok: true, exists: true, sizeBytes: SAFE_SVG.byteLength },
+        get: { ok: true, sizeExceeded: false, bytes: SAFE_SVG }
+      });
+
+      const result = await verifyNewsMediaR2Object(client, {
+        objectKey: "k",
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED_WITH_SVG,
+        maxUploadBytes: MAX_BYTES,
+        claimedChecksumSha256: null
+      });
+
+      expect(result.outcome).toBe("accepted");
+    });
+
+    test("allow-listed SVG carrying an onload= handler -> rejected svg_unsafe_content", async () => {
+      const client = fakeClient({
+        head: { ok: true, exists: true, sizeBytes: UNSAFE_SVG.byteLength },
+        get: { ok: true, sizeExceeded: false, bytes: UNSAFE_SVG }
+      });
+
+      const result = await verifyNewsMediaR2Object(client, {
+        objectKey: "k",
+        claimedMimeType: "image/svg+xml",
+        allowedMimeTypes: ALLOWED_WITH_SVG,
+        maxUploadBytes: MAX_BYTES,
+        claimedChecksumSha256: null
+      });
+
+      expect(result).toEqual({
+        outcome: "rejected",
+        reason: "svg_unsafe_content"
+      });
     });
   });
 });

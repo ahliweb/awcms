@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9771ababc64aec622021bcb017aaf527400c5d29761d247323832a87d4db716d -->
+<!-- i18n-source-hash: sha256:5739c87f4b0fd1f5ebb92bc653ff9ae23c1d56c9514afb44d17a5e88c1cecc59 -->
 
 # media_library
 
@@ -66,7 +66,7 @@ media-library/
     media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
-    media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts
+    media-mime-sniffer.ts | media-svg-safety.ts | media-object-key.ts | media-finalize-decision.ts
     media-upload-session-validation.ts | media-reconciliation-categorization.ts
   application/
     media-object-directory.ts                # registry data layer (internal symbols kept: fetchNewsMediaObjectById, ...)
@@ -187,8 +187,99 @@ becoming gaps:
 ## Not ported to this base (deferred, additive)
 
 Responsive `srcset` render (micro step 5b) and the PDF media type (step 5c).
-The allowed MIME set stays the four raster types. Step 5d — the lifecycle API
-and `/admin/media` — is now ported in full.
+The allowed MIME set defaults to the four raster types; `image/svg+xml`
+adalah opt-in operator (lihat §Keamanan upload SVG di bawah), bukan default
+kelima. Step 5d — the lifecycle API and `/admin/media` — is now ported in
+full.
+
+## Keamanan upload SVG (Issue #806)
+
+`NEWS_MEDIA_R2_ALLOWED_MIME_TYPES` (`domain/media-r2-config.ts`) sejak Issue
+#635 sudah mencantumkan `image/svg+xml` di `NEWS_MEDIA_R2_KNOWN_MIME_TYPES` —
+dikecualikan dari allow-list _default_, tapi opt-in nyata yang sudah bisa
+dikonfigurasi operator. Sebelum issue ini opt-in itu jalan buntu:
+`media-mime-sniffer.ts`'s `sniffNewsMediaMimeType` sama sekali tidak
+mengenali magic bytes SVG, jadi setiap upload SVG ter-sniff ke `undefined`
+dan ditolak keras sebagai `mime_not_recognized` terlepas dari allow-list —
+aman karena kebetulan, bukan karena cek konten sungguhan, dan tidak bisa
+dipakai untuk use case sesungguhnya (logo/lambang institusi/kabupaten, yang
+sangat sering berupa SVG — `blog_content` Issue #806).
+
+Dua penambahan menutup celah itu, keduanya murni/tanpa I/O:
+
+- `sniffNewsMediaMimeType` sekarang mengenali BENTUK SVG — BOM/`<?xml ... ?>`
+  prolog/`<!DOCTYPE ...>`/komentar opsional, lalu elemen root `<svg` dalam
+  prefix byte terbatas — mengembalikan `"image/svg+xml"`. Ini hanya cocok
+  bentuk; tidak bicara soal apakah SVG-nya aman disajikan.
+- `domain/media-svg-safety.ts`'s `findSvgSafetyViolations`/`isSvgContentSafe`
+  memindai seluruh byte yang sudah di-decode untuk vektor yang memang dibawa
+  format XML-executable ini: elemen `<script>`, atribut event-handler `on*=`,
+  URI `javascript:` (di `href`/`xlink:href`/atribut mana pun), URI `data:`
+  (di `href`/`xlink:href`/`src`), external entity/DOCTYPE
+  (`<!DOCTYPE`/`<!ENTITY ... SYSTEM|PUBLIC` — vektor XXE), atau deklarasi
+  `<!ENTITY` APA PUN. Denylist terarah, bukan sanitizer general-purpose: file
+  yang kena salah satu ditolak mentah-mentah, tidak pernah
+  di-strip/ditulis-ulang — logo/lambang institusi tidak punya alasan sah
+  butuh konstruksi mana pun di atas.
+
+**Tiga penutup celah ditambahkan di atas denylist pola-literal** (review PR
+#807 — denylist atas pola literal hanya sekuat resistensinya terhadap
+semantik yang sama diekspresikan ulang dalam bentuk yang tidak cocok literal
+dengan pola-pola itu):
+
+1. **URI `data:`** (`data_uri`) — `<use xlink:href="data:image/svg+xml;
+base64,...">`/`<image href="data:image/svg+xml,...">` bisa membawa
+   SELURUH dokumen SVG bersarang (dengan `<script>`/`on*=` sendiri, tak
+   terlihat oleh cek lain di sini) yang dievaluasi sebagai dokumennya sendiri
+   oleh renderer yang meng-inline referensi `<use>`/`<image>`. Daripada
+   mencoba decode-lalu-rekursi ke setiap kemungkinan encoding data-URI
+   (base64, percent-encoded, ...), SEMUA skema `data:` di
+   `href`/`xlink:href`/`src` ditolak tanpa syarat.
+2. **Obfuskasi character-reference / karakter kontrol** —
+   `&#106;avascript&#58;...` (desimal), `&#x6A;avascript&#x3A;...` (hex), dan
+   TAB/LF/CR polos yang disisipkan ke dalam skema itu sendiri
+   (`jav&#x09;ascript:...`, yang diperlakukan URL parser identik dengan
+   `javascript:` karena mereka strip TAB/LF/CR dari seluruh string sebelum
+   membaca skema) semuanya decode/normalize jadi URI yang tidak pernah
+   terlihat pola literal di byte mentah. `normalizeForUriChecks` men-decode
+   character reference numerik/hex/lima named reference standar XML, lalu
+   strip TAB/LF/CR, sebelum cek `javascript:`/`data:`/`on*=` berjalan — cek
+   `<script>`/entity sengaja tetap berjalan atas teks MENTAH, karena
+   character reference hanya pernah di-expand di dalam nilai
+   atribut/isi-teks oleh parser XML, tidak pernah di dalam sintaks markup itu
+   sendiri (decode duluan berisiko salah-tersandung pada teks ter-escape
+   yang inert seperti `&lt;script&gt;`).
+3. **Parameter-entity splitting** (`entity_declaration`) —
+   `<!ENTITY % p1 "SYST"><!ENTITY % p2 "EM \"file:///...\"">` tidak pernah
+   menaruh kata kunci literal `SYSTEM`/`PUBLIC` di dalam SATU deklarasi mana
+   pun, jadi pola XXE yang berpatokan kata kunci sendirian melewatkannya
+   (menelusuri ekspansi parameter-entity adalah pekerjaan parser XML
+   sungguhan, bukan regex). Deklarasi `<!ENTITY` APA PUN — parameter atau
+   general, ada kata kunci atau tidak — sekarang ditolak tanpa syarat.
+
+Ketiga penutup celah ini mengikuti filosofi "tolak bentuknya langsung" yang
+sama seperti empat cek awal, dan disiplin linear-scan aman-ReDoS yang sama
+seperti yang `media-mime-sniffer.ts`'s `looksLikeSvg` sudah tetapkan (setiap
+regex tambahan adalah satu kelas terkuantifikasi terbatas atau literal tetap
+— CodeQL js/redos adalah temuan nyata pada versi awal `looksLikeSvg`, jadi
+modul ini ditulis dengan standar yang sama sejak awal dan dijaga test timing
+input-adversarial-besar dengan gaya yang sama).
+
+`application/media-r2-verification.ts` menjalankan safety scan HANYA saat
+sniff sudah mengenali `image/svg+xml`, atas byte yang sama yang sudah dibaca
+`GET` bertopi-ukuran — upload raster tidak pernah membayar atau terpengaruh
+cek ini. `domain/media-finalize-decision.ts`'s `decideNewsMediaFinalizeOutcome`
+mendapat input baru `svgUnsafe` dan reason penolakan `svg_unsafe_content`,
+dicek setelah cek allow-list/claimed-mime-type dan sebelum klaim checksum —
+SVG yang belum di-opt-in sebuah deployment tetap ditolak `mime_not_allowed`
+lebih dulu, terlepas hasil safety-scan-nya.
+
+Tests: `tests/media-mime-sniffer.test.ts` (pengenalan bentuk + regression
+guard ReDoS), `tests/media-svg-safety.test.ts` (setiap vektor di atas,
+masing-masing dari tiga penutup celah dengan kasus adversarial berbentuk
+bypass-yang-direproduksi, guard linear-time untuk decoder character-reference,
+dan kasus kontrol logo aman), `tests/media-finalize-decision.test.ts`/
+`tests/media-r2-verification.test.ts` (pengkabelan end-to-end).
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 

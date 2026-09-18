@@ -2365,11 +2365,11 @@ exit 0 + `bun run build` di main setelah admin-merge). GitGuardian false-pos lih
 `````markdown
 ---
 name: awcms-deploy-runbook-coolify
-description: "SATU environment (produksi v8.0.0) sejak 11 Agu — app n3gg3qud… build-dari-repo, db awcms, varnish compose tangan; healthcheck Postgres dipanggang saat container dibuat; nol backup terjadwal"
+description: "SATU environment (produksi v10.2.1 per 6 Sep) — app n3gg3qud… build-dari-repo, db awcms, varnish compose tangan; healthcheck Postgres dipanggang saat container dibuat; backup terjadwal SUDAH ada"
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-27T08:28:42.783Z
+  modified: 2026-09-06T01:46:06.225Z
 ---
 
 > **STATE 11 Agustus 2026 (setelah standup) — SATU environment, produksi saja.**
@@ -2445,6 +2445,34 @@ metadata:
 > (ia menemukan blog 404 total yang lolos 10 check CI). IP `extra_hosts` Varnish
 > tetap wajib dicek tiap redeploy — 27 Agu kebetulan sama (`10.0.1.61`), bukan
 > jaminan.
+
+> **DEPLOY v10.2.0 → v10.2.1, 6 September 2026 — MULUS, ~2 menit, nol kejutan.**
+> Prosedur di blok KOREKSI 27 Agu di atas terbukti BENAR apa adanya. Yang baru:
+>
+> - **Urutan yang dipakai: backup → migrasi → deploy app.** Sah karena `sql/149`
+>   (kolom nullable + CHECK) dan `sql/150` (dua indeks) dua-duanya ADITIF, jadi
+>   app v10.2.0 yang masih jalan tetap sehat di atas skema baru — diverifikasi
+>   (`health 200`) SEBELUM app di-deploy, bukan diasumsikan.
+> - **Pre-flight yang benar-benar berguna untuk `sql/149`:** CHECK-nya menuntut
+>   tiap baris `status='rejected'` punya `rejection_reason`. Kalau produksi sudah
+>   punya baris `rejected`, `ADD CONSTRAINT` GAGAL. Cek dulu
+>   (`select status, count(*) …`) — di sini 1 baris `active`, aman.
+> - **`ops/*` di host COCOK byte-for-byte dengan repo** (5 berkas, sha256) —
+>   pertama kalinya tanpa drift. Tetap cek tiap rilis.
+> - **IP Varnish TETAP `10.0.1.61`** (tiga deploy berturut-turut). Tetap
+>   diverifikasi, bukan diasumsikan — container BARU bisa dapat IP baru.
+> - **Produksi kini Bun 1.4.2** (base image `oven/bun:1.4.2`), diverifikasi
+>   `docker exec <app> bun --version` di container yang JALAN.
+> - `awcms_app` tetap `rolsuper=f`/`rolbypassrls=f`; **FORCE RLS kini 134 tabel**
+>   (115 pada 5 Agu).
+> - Backup terverifikasi + **restore drill mingguan yang benar-benar me-restore**
+>   dan menghitung (152 tabel/148 migrasi/1 tenant). Ambil backup manual tetap
+>   sebelum migrasi: `./backup-awcms.sh`, exit 0.
+> - **Build-dari-repo berarti yang ter-deploy adalah `main` HEAD, BUKAN tag.**
+>   6 Sep men-deploy `34de586d` — dua commit (test-only + docs-only) DI DEPAN tag
+>   `v10.2.1`. Fungsional sama, tapi artefak yang jalan BUKAN image ghcr yang
+>   ditandatangani/ber-SBOM. Kalau butuh ketertelusuran artefak, pindah ke
+>   Pattern 2 (pull `ghcr.io/ahliweb/awcms:<versi>`) sebagai perubahan TERSENDIRI.
 
 Dua fakta yang **tidak tercatat di repo** dan baru terlihat saat deploy nyata 5 Agustus 2026 (v7.0.0 ke staging + produksi):
 
@@ -3469,7 +3497,7 @@ description: "Cari gerbang yang membaca SATU dari sepasang berkas (mis. hanya `.
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-08-25T23:30:15.370Z
+  modified: 2026-09-07T00:24:59.742Z
 ---
 
 ## Pertanyaan audit yang berhasil
@@ -3533,6 +3561,27 @@ membiarkan bentuk tautan sebagai keputusan editorial.
 Terkait: [[awcms-check-the-sibling-endpoint]],
 [[awcms-grep-the-call-not-the-definition]], [[awcms-gate-design-lessons]],
 [[awcms-stale-skill-flips-direction]].
+
+## Cara PRAKTIS menghindarinya saat membuat PR (2026-09-07)
+
+Terulang DUA KALI dalam satu sesi — sekali sesudah `sed` manual pada klaim
+rentang `sql/001-sql/NNN` di `docs/ARCHITECTURE.md` +
+`.claude/skills/README.md`, sekali lagi sesudah `project-state:inventory:generate`
+meregenerasi tabel §2 `docs/PROJECT_STATE.md`. Kedua kali, isi `.id.md` SUDAH
+benar (angka kedua bahasa cocok) — tapi `check:docs:translation` tetap GAGAL
+di CI karena marker `<!-- i18n-source-hash: sha256:... -->` di mirror masih
+menunjuk hash Inggris LAMA. Perbaikannya selalu satu baris:
+`bun run docs:i18n:stamp` lalu commit hash barunya — BUKAN menerjemahkan ulang
+apa pun.
+
+**Aturan praktis:** sesudah PERUBAHAN APA PUN pada dokumen current-state
+berbahasa Inggris yang punya mirror `.id.md` — baik suntingan tangan maupun
+lewat skrip `*:generate`/`*-inventory` — langsung jalankan
+`bun run docs:i18n:stamp` sebelum commit, lalu `bun run check:docs:translation`
+untuk konfirmasi. Lakukan ini SEKALIPUN `.id.md` sudah tampak benar isinya.
+Lebih murah menjalankannya rutin daripada menunggu CI menangkapnya dan
+membakar satu siklus CI penuh (~5-10 menit) per kejadian — lihat
+[[awcms-full-check-before-pr]].
 `````
 
 <!-- memory-file: awcms-gates-that-only-fire-at-release.md -->
