@@ -761,6 +761,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Notifications on this device": ["Notifikasi di perangkat ini"],
   "Numbered": ["Bernomor"],
   "OIDC providers": ["Penyedia OIDC"],
+  "OMES Control Center": ["Pusat Kontrol OMES"],
   "Object": ["Objek"],
   "Object queue": ["Antrean objek"],
   "Object upload queue, newest first, 200 per page.": ["Antrean unggah objek, terbaru dulu, 200 per halaman."],
