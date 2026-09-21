@@ -374,6 +374,8 @@ export type SidebarDefaultEntry = {
   order: number;
   /** Exact permission key required to see the link, if any. */
   requiredPermission?: string;
+  /** See `ModuleNavigationEntry.badgeCount` — carried through unchanged. */
+  badgeCount?: number;
 };
 
 export type SidebarComposeOptions = {
@@ -389,6 +391,8 @@ export type ComposedEntry = {
   label: string;
   icon?: string;
   isCurrent: boolean;
+  /** See `ModuleNavigationEntry.badgeCount` — carried through unchanged. */
+  badgeCount?: number;
 };
 
 export type ComposedModuleGroup = {
@@ -447,7 +451,8 @@ export function buildDefaultSidebarModel(
         // takes effect, and every module that does not still gets an icon.
         icon: nav.icon ?? resolveSidebarIcon(nav.labelKey),
         order: nav.order ?? 0,
-        requiredPermission: nav.requiredPermission
+        requiredPermission: nav.requiredPermission,
+        badgeCount: nav.badgeCount
       });
     }
   }
@@ -535,7 +540,8 @@ export function composeSidebarSections(
             path: entry.path,
             label: resolveSidebarLabel(entry.labelKey),
             icon: entry.icon,
-            isCurrent: entry.path === options.currentPath
+            isCurrent: entry.path === options.currentPath,
+            badgeCount: entry.badgeCount
           }))
         }
       });
