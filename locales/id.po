@@ -284,6 +284,9 @@ msgstr "Pustaka Media"
 msgid "Module Management"
 msgstr "Manajemen Modul"
 
+msgid "OMES Control Center"
+msgstr "Pusat Kontrol OMES"
+
 msgid "Profile Identity"
 msgstr "Identitas Profil"
 

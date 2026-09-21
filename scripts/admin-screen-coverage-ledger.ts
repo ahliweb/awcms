@@ -104,5 +104,22 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "visitor_analytics.events.read",
   "visitor_analytics.retention.purge",
   "visitor_analytics.settings.read",
-  "visitor_analytics.settings.update"
+  "visitor_analytics.settings.update",
+
+  // omes_control (13) — ADR-0122 / Issue ahliweb/omes#196. Schema, RLS, permissions,
+  // and domain descriptors admitted in this foundation PR. The Control Center admin screens
+  // (/admin/omes/*: servers, deployments, worker jobs, backups) land in subsequent issues.
+  "omes_control.audit.read",
+  "omes_control.backups.read",
+  "omes_control.backups.restore",
+  "omes_control.backups.rollback",
+  "omes_control.deployments.operate",
+  "omes_control.deployments.read",
+  "omes_control.enrollments.manage",
+  "omes_control.jobs.approve",
+  "omes_control.jobs.cancel",
+  "omes_control.jobs.read",
+  "omes_control.servers.delete",
+  "omes_control.servers.read",
+  "omes_control.servers.register"
 ];

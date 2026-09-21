@@ -23,6 +23,7 @@ import { siteProfileModule } from "./site-profile/module";
 import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 import { pushDeliveryModule } from "./push-delivery/module";
+import { omesControlModule } from "./omes-control/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -158,7 +159,14 @@ const baseModules: ModuleDescriptor[] = [
   // without a single gate going red. Depends on tenant_admin/logging, both
   // already above, so the DAG stays acyclic; nothing depends on it yet.
   // See src/modules/push-delivery/module.ts's `description`.
-  pushDeliveryModule
+  pushDeliveryModule,
+  // Admitted by ADR-0122 (Issue ahliweb/omes#196): OMES Control Center domain
+  // module for host fleet lifecycle, worker enrollments, desired vs observed
+  // deployments, operation requests, worker job dispatch queue, health snapshots,
+  // backup verification, and host execution audit projections.
+  // Depends only on tenant_admin/identity_access (both above), so the DAG stays acyclic.
+  // See src/modules/omes-control/module.ts's `description`.
+  omesControlModule
 ];
 
 /**

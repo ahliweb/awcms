@@ -283,6 +283,9 @@ msgstr ""
 msgid "Module Management"
 msgstr ""
 
+msgid "OMES Control Center"
+msgstr ""
+
 msgid "Profile Identity"
 msgstr ""
 
