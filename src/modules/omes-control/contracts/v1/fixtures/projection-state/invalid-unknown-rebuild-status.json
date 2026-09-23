@@ -1,0 +1,19 @@
+{
+  "projection_name": "billing-mrr-projection",
+  "cursor": {
+    "last_event_id": "evt-sub-acme-01-0002",
+    "last_event_at": "2026-03-01T00:05:00Z"
+  },
+  "freshness": {
+    "as_of": "2026-03-01T00:06:00Z",
+    "lag_seconds": 60,
+    "stale": false
+  },
+  "rebuild": {
+    "status": "half_rebuilt"
+  },
+  "reconciliation": {
+    "last_reconciled_at": null,
+    "discrepancies_found": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-resource-policy.schema.json",
+  "title": "catalog-resource-policy",
+  "description": "A named suspension/reconciliation policy referenced by `catalog-plan.resource_policy_id` (issue #92). It governs what happens to an existing deployment when its subscription enters `suspended`/`grace_period`/`expired` - separately from whether NEW provisioning or upgrades are blocked. `existing_healthy_deployments_action` defaults to `keep_running` in every fixture in this contract set; AGENTS.md and issue #92 both require that suspension never silently stops a healthy existing deployment unless a policy explicitly says so.",
+  "type": "object",
+  "required": [
+    "resource_policy_id",
+    "new_provisioning_action",
+    "upgrade_action",
+    "optional_workers_action",
+    "existing_healthy_deployments_action"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "resource_policy_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "new_provisioning_action": { "type": "string", "enum": ["allow", "block"] },
+    "upgrade_action": { "type": "string", "enum": ["allow", "block"] },
+    "optional_workers_action": { "type": "string", "enum": ["allow", "pause", "stop"] },
+    "existing_healthy_deployments_action": { "type": "string", "enum": ["keep_running", "degrade", "stop"] },
+    "grace_period_days": { "type": "integer", "minimum": 0 }
+  }
+}

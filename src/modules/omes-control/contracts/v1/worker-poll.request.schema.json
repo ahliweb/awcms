@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-poll.request.schema.json",
+  "title": "worker-poll.request",
+  "description": "Outbound pull-worker job poll envelope (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "server_id",
+    "worker_id",
+    "nonce",
+    "timestamp",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "worker_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{16,128}$"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

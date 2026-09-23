@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-product.schema.json",
+  "title": "catalog-product",
+  "description": "A sellable OMES/Hermes service product (issue #92), e.g. 'Hermes Managed Server'. A product groups plans; it carries no price or limit itself.",
+  "type": "object",
+  "required": ["product_id", "name", "active"],
+  "additionalProperties": false,
+  "properties": {
+    "product_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "active": { "type": "boolean" }
+  }
+}

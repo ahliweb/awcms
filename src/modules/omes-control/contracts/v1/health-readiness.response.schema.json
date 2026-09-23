@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/health-readiness.response.schema.json",
+  "title": "health-readiness.response",
+  "description": "Reuses the layers/signals shape of lib/omes/py/health/model.py (issue #79): layers is a map of layer name (host, runtime, gateway, provider, channel, ...) to a layer result.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "target",
+    "ready",
+    "connected",
+    "layers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "server_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "connected": {
+      "type": "boolean"
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status",
+          "signals",
+          "proves"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "not_applicable"
+            ]
+          },
+          "signals": {
+            "type": "object"
+          },
+          "proves": {
+            "type": "string"
+          },
+          "remediation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "hermes",
+              "omes-host",
+              "external-provider"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "compatibility_fallback": {
+            "type": "boolean"
+          },
+          "removal_trigger": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

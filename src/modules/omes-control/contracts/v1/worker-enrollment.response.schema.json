@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-enrollment.response.schema.json",
+  "title": "worker-enrollment.response",
+  "description": "Enrollment confirmation issued by Control Center to enrolled pull-worker (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "server_id",
+    "worker_id",
+    "status",
+    "control_center_public_key",
+    "poll_interval_seconds",
+    "heartbeat_interval_seconds",
+    "enrolled_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "worker_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["enrolled", "rejected", "token_expired"]
+    },
+    "control_center_public_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 1024
+    },
+    "poll_interval_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "heartbeat_interval_seconds": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 86400
+    },
+    "enrolled_at": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-poll.response.schema.json",
+  "title": "worker-poll.response",
+  "description": "Control Center response to pull-worker job poll (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "status",
+    "server_id",
+    "tenant_id",
+    "poll_interval_seconds"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["idle", "job_available", "re-enroll_required"]
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "job": {
+      "type": "object"
+    },
+    "poll_interval_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    }
+  }
+}

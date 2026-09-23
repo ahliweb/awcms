@@ -1,0 +1,16 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0006",
+  "idempotency_key": "idem-rollback-0001",
+  "actor": {
+    "type": "user",
+    "id": "operator-1"
+  },
+  "operation": "rollback",
+  "target": {
+    "server_id": "srv-0001",
+    "deployment_id": "dep-0001"
+  },
+  "rollback_ref": "backup-0001",
+  "backup_id": "backup-0001"
+}

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](production-preflight-runbook.md)
 
-<!-- i18n-source-hash: sha256:42532a107274932dc7c15f320e5bc8763fe39289bfa6642eb03256903c9300f8 -->
+<!-- i18n-source-hash: sha256:43ef708ddb3c41a285a47582d665f99b0c6453f8e0db82b4bdf55b2c74cb9ca7 -->
 
 # Preflight Produksi — Runbook Gladi, Apply, dan Rollback
 
@@ -18,12 +18,14 @@
 > `db:connectivity` dan `migration:plan`, belum dibangun.
 >
 > `deploy/` tidak lagi sekosong yang dulu diklaim banner ini. Kini berisi
-> `deploy/backup/backup-postgres.sh` dan `deploy/backup/restore-postgres.sh`
-> (nyata, dipakai §Stage 2), `deploy/pgbouncer/pgbouncer.ini.example`,
-> `deploy/redis/docker-compose.yml`, dan `deploy/cron/awcms.crontab`. Tidak
-> ada `deploy/backup/README.md` dan tidak ada `offsite-copy.sh`, dan kedua
-> skrip backup itu **tidak** mengimplementasikan enkripsi maupun manifest
-> HMAC — detailnya di §Stage 2.
+> `deploy/backup/backup-postgres.sh`, `deploy/backup/restore-postgres.sh`,
+> `deploy/backup/manifest.sh`, `deploy/backup/offsite-copy.sh`,
+> `deploy/backup/restore-drill.sh` dan `deploy/backup/README.md` (semuanya
+> nyata, dipakai §Stage 2 — enkripsi-at-rest dan manifest terautentikasi
+> **sudah diimplementasikan**, lihat
+> [ADR-0123](../adr/0123-backup-encryption-manifest-authentication.id.md)),
+> plus `deploy/pgbouncer/pgbouncer.ini.example`, `deploy/redis/docker-compose.yml`,
+> dan `deploy/cron/awcms.crontab`.
 
 Pendamping `docs/awcms/07_sprint_testing_production_readiness.md` —
 dokumen ini membahas prosedur operasional di sekitar `bun run
@@ -133,18 +135,17 @@ Bukti backup adalah atestasi operator, bukan pemeriksaan otomatis — kamu
 menyatakan adanya jejak bukti yang spesifik, bukan sekadar ingat bahwa ada
 backup di suatu tempat.
 
-> **Koreksi (27 Agustus 2026).** Sampai sekarang bagian ini menggambarkan
-> backup terenkripsi dengan manifest bertanda-tangan HMAC dan nama berkas
-> `.dump.enc`. **Tidak satu pun dari itu diimplementasikan.**
-> `backup-postgres.sh` menulis dump `--format=custom` polos plus sidecar
-> `.sha256`, dan ia **menolak jalan** bila `BACKUP_ENCRYPTION_KEY_FILE`
-> atau `BACKUP_HMAC_KEY_FILE` di-set — pesan error skrip itu sendiri
-> menyebut dokumen ini sebagai yang melebih-lebihkannya.
-> `restore-postgres.sh` tidak mendekripsi apa pun, tidak memverifikasi
-> manifest apa pun, dan menolak berkas `.enc` alih-alih menebak.
-> `deploy/backup/README.md` dan `deploy/backup/offsite-copy.sh` juga tidak
-> ada. Yang NYATA adalah sidecar sha256, diverifikasi sebelum mutasi apa
-> pun, dan default database scratch di bawah.
+> **Pembaruan (24 September 2026,
+> [ADR-0123](../adr/0123-backup-encryption-manifest-authentication.id.md)).**
+> Enkripsi-at-rest (`age`), manifest terautentikasi (HMAC-SHA256), adapter
+> salinan luar-lokasi, dan restore drill tanpa-pengawasan kini semuanya
+> terimplementasi — lihat `deploy/backup/README.md` untuk panduan operator
+> lengkap. Mode polos tanpa-enkripsi yang dulu digambarkan bagian ini (dan
+> masih dipakai profil offline/LAN, yang tidak punya cerita
+> secret-management) tidak berubah dan tetap berjalan persis seperti
+> sebelumnya.
+
+Backup **tanpa** enkripsi (tidak berubah — default profil offline/LAN):
 
 ```bash
 DATABASE_URL=<production-url> \
@@ -152,26 +153,57 @@ BACKUP_DIR=/var/backups/awcms \
 ./deploy/backup/backup-postgres.sh
 ```
 
-Lalu **buktikan dump-nya bisa direstore** — dump yang tidak pernah
-diuji-restore bukanlah bukti terverifikasi. `restore-postgres.sh`
-memverifikasi sidecar `.sha256` sebelum menyentuh database target mana pun:
+Backup **dengan** enkripsi-at-rest dan manifest terautentikasi
+(direkomendasikan untuk host mana pun dengan cerita secret-management):
 
 ```bash
 DATABASE_URL=<production-url> \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
+BACKUP_DIR=/var/backups/awcms \
+BACKUP_AGE_RECIPIENTS_FILE=/etc/awcms-backup/age-recipients.txt \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/backup-postgres.sh
+```
+
+`BACKUP_AGE_RECIPIENTS_FILE` dan `BACKUP_HMAC_KEY_FILE` wajib bersama —
+men-set hanya salah satunya gagal tertutup alih-alih diam-diam jatuh ke
+plaintext. Hasilnya `<name>.dump.age` plus pasangan
+`<name>.dump.age.manifest.json`/`.manifest.json.hmac`; dump plaintext
+dihapus setelah artefak terenkripsi diverifikasi ada di disk.
+
+Lalu **buktikan artefaknya bisa direstore** — dump yang tidak pernah
+diuji-restore bukanlah bukti terverifikasi. `restore-postgres.sh`
+memverifikasi manifest (atau sidecar `.sha256`, untuk dump polos) sebelum
+menyentuh database target mana pun:
+
+```bash
+DATABASE_URL=<production-url> \
+RESTORE_AGE_IDENTITY_FILE=/etc/awcms-backup/age-identity.key \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump.age
 ```
 
 (Secara default merestore ke database sekali-buang `awcms_restore_test` —
 tidak pernah ke yang hidup; `RESTORE_SCRATCH_DB` mengganti nama itu.) Catat
-nama berkas dump, digest `sha256`-nya, dan stempel waktu uji-restore di
-tempat yang awet (tiket deploy/log runbook) — inilah "retensi bukti" yang
-diminta runbook ini.
+nama berkas artefak, digest `sha256`-nya, dan stempel waktu uji-restore di
+tempat yang awet (tiket deploy/log runbook) — atau andalkan
+`deploy/backup/restore-drill.sh`, yang menambahkan persis ini sebagai satu
+baris JSON ke `restore-drill-evidence.jsonl` secara otomatis dan kini
+dijalankan drill mingguan terjadwal di `deploy/cron/awcms.crontab`.
 
-Salinan luar-lokasi tetap kewajiban nyata yang tidak punya skrip: salin
-sendiri dump beserta sidecar-nya ke host kedua. Uji-restore-lah yang
-membuktikan backup itu bisa dipakai; salinan luar-lokasi soal bertahan dari
-hilangnya host backup, dan tidak ada apa pun di repo ini yang
-mengotomasinya.
+Salinan luar-lokasi kini punya skrip di baliknya:
+
+```bash
+OFFSITE_SSH_TARGET=backup-user@second-host:/var/backups/awcms \
+OFFSITE_SSH_KEY_FILE=/etc/awcms-backup/offsite-ssh-key \
+./deploy/backup/offsite-copy.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump.age \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.sha256 \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.manifest.json \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.manifest.json.hmac
+```
+
+Ia mencoba ulang dengan backoff, timeout per percobaan, dan tidak pernah
+menghapus salinan lokal apa pun hasil transfernya — itu tetap keputusan
+manusia terpisah dan eksplisit.
 
 ## Tahap 3 — Preflight produksi (read-only)
 

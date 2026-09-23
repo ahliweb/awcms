@@ -17,12 +17,13 @@
 > not built.
 >
 > `deploy/` is no longer as bare as this banner used to claim. It now holds
-> `deploy/backup/backup-postgres.sh` and `deploy/backup/restore-postgres.sh`
-> (real, and used by §Stage 2), `deploy/pgbouncer/pgbouncer.ini.example`,
-> `deploy/redis/docker-compose.yml` and `deploy/cron/awcms.crontab`. There
-> is no `deploy/backup/README.md` and no `offsite-copy.sh`, and the two
-> backup scripts implement **neither encryption nor HMAC manifests** —
-> §Stage 2 carries the details.
+> `deploy/backup/backup-postgres.sh`, `deploy/backup/restore-postgres.sh`,
+> `deploy/backup/manifest.sh`, `deploy/backup/offsite-copy.sh`,
+> `deploy/backup/restore-drill.sh` and `deploy/backup/README.md` (all real,
+> and used by §Stage 2 — encryption-at-rest and an authenticated manifest
+> **are implemented**, see [ADR-0123](../adr/0123-backup-encryption-manifest-authentication.md)),
+> plus `deploy/pgbouncer/pgbouncer.ini.example`, `deploy/redis/docker-compose.yml`
+> and `deploy/cron/awcms.crontab`.
 
 Companion to `docs/awcms/07_sprint_testing_production_readiness.md` — this
 doc covers the operational procedure around `bun run production:preflight`,
@@ -125,17 +126,15 @@ Backup evidence is an operator attestation, not an automated check — you
 are attesting to a specific evidence trail, not just remembering a backup
 exists somewhere.
 
-> **Correction (27 August 2026).** Until now this section described an
-> encrypted, HMAC-manifest-signed backup and a `.dump.enc` filename. **None
-> of that is implemented.** `backup-postgres.sh` writes a plain
-> `--format=custom` dump plus a `.sha256` sidecar, and it **refuses to run**
-> if `BACKUP_ENCRYPTION_KEY_FILE` or `BACKUP_HMAC_KEY_FILE` is set — the
-> script's own error message names this document as the thing overstating it.
-> `restore-postgres.sh` decrypts nothing, verifies no manifest, and refuses a
-> `.enc` file rather than guessing. `deploy/backup/README.md` and
-> `deploy/backup/offsite-copy.sh` do not exist either. What IS real is the
-> sha256 sidecar, verified before any mutation, and the scratch-database
-> default below.
+> **Update (24 September 2026, [ADR-0123](../adr/0123-backup-encryption-manifest-authentication.md)).**
+> Encryption-at-rest (`age`), an authenticated manifest (HMAC-SHA256), an
+> off-site copy adapter, and an unattended restore drill are now all
+> implemented — see `deploy/backup/README.md` for the full operator guide.
+> The plain, unencrypted mode this section previously described (and which
+> the offline/LAN profile still uses, having no secret-management story) is
+> unchanged and still works exactly as before.
+
+To back up **without** encryption (unchanged — offline/LAN profile default):
 
 ```bash
 DATABASE_URL=<production-url> \
@@ -143,25 +142,56 @@ BACKUP_DIR=/var/backups/awcms \
 ./deploy/backup/backup-postgres.sh
 ```
 
-Then **prove the dump restores** — a dump that was never test-restored is
-not verified evidence. `restore-postgres.sh` verifies the `.sha256` sidecar
-before touching any target database:
+To back up **with** encryption-at-rest and an authenticated manifest
+(recommended for any host with a secret-management story):
 
 ```bash
 DATABASE_URL=<production-url> \
-./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
+BACKUP_DIR=/var/backups/awcms \
+BACKUP_AGE_RECIPIENTS_FILE=/etc/awcms-backup/age-recipients.txt \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/backup-postgres.sh
+```
+
+Both `BACKUP_AGE_RECIPIENTS_FILE` and `BACKUP_HMAC_KEY_FILE` are required
+together — setting only one fails closed rather than silently falling back
+to plaintext. The result is `<name>.dump.age` plus a
+`<name>.dump.age.manifest.json`/`.manifest.json.hmac` pair; the plaintext
+dump is deleted once the encrypted artifact is verified on disk.
+
+Then **prove the dump restores** — a dump that was never test-restored is
+not verified evidence. `restore-postgres.sh` verifies the manifest (or the
+`.sha256` sidecar, for a plain dump) before touching any target database:
+
+```bash
+DATABASE_URL=<production-url> \
+RESTORE_AGE_IDENTITY_FILE=/etc/awcms-backup/age-identity.key \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump.age
 ```
 
 (Defaults to restoring into the disposable `awcms_restore_test`
 database — never the live one; `RESTORE_SCRATCH_DB` overrides that name.)
-Record the dump filename, its `sha256` digest, and the restore-test
-timestamp somewhere durable (deploy ticket/runbook log) — this is the
-"evidence retention" this runbook asks for.
+Record the artifact filename, its `sha256` digest, and the restore-test
+timestamp somewhere durable (deploy ticket/runbook log) — or rely on
+`deploy/backup/restore-drill.sh`, which appends exactly this as one JSON
+line to `restore-drill-evidence.jsonl` automatically and is what the
+scheduled weekly drill in `deploy/cron/awcms.crontab` now runs.
 
-Off-site copy is a real obligation with no script behind it: copy the dump
-and its sidecar to a second host yourself. The restore-test is what proves
-the backup is usable; the off-site copy is about surviving loss of the
-backup host, and nothing in this repo automates it.
+Off-site copy now has a script behind it:
+
+```bash
+OFFSITE_SSH_TARGET=backup-user@second-host:/var/backups/awcms \
+OFFSITE_SSH_KEY_FILE=/etc/awcms-backup/offsite-ssh-key \
+./deploy/backup/offsite-copy.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump.age \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.sha256 \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.manifest.json \
+  /var/backups/awcms/awcms_<db>_<timestamp>.dump.age.manifest.json.hmac
+```
+
+It retries with backoff, times out per attempt, and never deletes the local
+copy regardless of transfer outcome — that stays a separate, explicit,
+human decision.
 
 ## Stage 3 — Production preflight (read-only)
 

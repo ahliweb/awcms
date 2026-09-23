@@ -1,0 +1,6 @@
+{
+  "policy_id": "automation-policy-standard",
+  "resource_policy_id": "policy-standard-suspension",
+  "requires_approval_for_destructive_action": true,
+  "approval_policy_id": "approval-policy-standard"
+}

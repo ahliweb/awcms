@@ -1,0 +1,14 @@
+{
+  "delivery_id": "delivery-00000001",
+  "event_id": "evt-payment-succeeded-00000001",
+  "event_type": "payment.succeeded",
+  "occurred_at": "2026-02-01T00:00:00Z",
+  "received_at": "2026-02-01T00:00:02Z",
+  "provider_id": "provider-primary",
+  "signature": {
+    "algorithm": "md5",
+    "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "replay_window_seconds": 300,
+  "data": {}
+}

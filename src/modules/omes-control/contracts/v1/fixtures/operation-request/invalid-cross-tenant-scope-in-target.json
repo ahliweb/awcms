@@ -1,0 +1,18 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-op-0002",
+  "idempotency_key": "idem-op-request-00000002",
+  "actor": {
+    "type": "user",
+    "id": "user-jane"
+  },
+  "operation": "status",
+  "target": {
+    "server_id": "server-acme-01",
+    "tenant_id": "tenant-globex"
+  },
+  "permission": {
+    "granted": true,
+    "policy_id": "policy-operator-status"
+  }
+}

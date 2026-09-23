@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-price.schema.json",
+  "title": "catalog-price",
+  "description": "The price of a plan or add-on for one billing cycle (issue #92). `amount_minor` is an integer number of the currency's smallest unit (e.g. cents) - never a float - per the repository-wide no-floating-point-money rule (see docs/control-center-contracts.md and issue #93). `currency` is an ISO 4217 alphabetic code.",
+  "type": "object",
+  "required": ["price_id", "catalog_entity", "entity_id", "billing_cycle_id", "currency", "amount_minor"],
+  "additionalProperties": false,
+  "properties": {
+    "price_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "catalog_entity": {
+      "type": "string",
+      "enum": ["plan", "addon"]
+    },
+    "entity_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "billing_cycle_id": {
+      "type": "string",
+      "enum": ["monthly", "quarterly", "semi_annual", "annual"]
+    },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount_minor": { "type": "integer", "minimum": 0 }
+  }
+}

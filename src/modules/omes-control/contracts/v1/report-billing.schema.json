@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/report-billing.schema.json",
+  "title": "report-billing",
+  "description": "Subscription/invoice/revenue/entitlement reporting (issue #95): active subscriptions, invoice/payment status, MRR, overdue amount, credits/refunds, entitlement state. `scope` fixes tenant/legal-entity scope; a `scope.tenant_id` of null is only valid for a platform-level aggregate (enforced by the AWCMS-side role check documented in docs/control-center-contracts.md, not by this schema). Every `measurements[]` entry carries a `label` of `estimate` or `provider_confirmed` (issue #95: 'explicitly label estimates versus provider-confirmed amounts') - a report can never present a number without saying which it is.",
+  "type": "object",
+  "required": ["report_id", "report_type", "scope", "projection", "measurements"],
+  "additionalProperties": false,
+  "properties": {
+    "report_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "report_type": {
+      "type": "string",
+      "enum": ["subscriptions", "invoices", "mrr", "overdue", "credits_refunds", "entitlements"]
+    },
+    "scope": {
+      "type": "object",
+      "required": ["tenant_id"],
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "legal_entity_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "required": ["projection_name", "cursor", "freshness", "rebuild", "reconciliation"],
+      "additionalProperties": false,
+      "properties": {
+        "projection_name": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "cursor": {
+          "type": "object",
+          "required": ["last_event_id", "last_event_at"],
+          "additionalProperties": false,
+          "properties": {
+            "last_event_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+            "last_event_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+          }
+        },
+        "freshness": {
+          "type": "object",
+          "required": ["as_of", "lag_seconds", "stale"],
+          "additionalProperties": false,
+          "properties": {
+            "as_of": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "lag_seconds": { "type": "integer", "minimum": 0 },
+            "stale": { "type": "boolean" }
+          }
+        },
+        "rebuild": {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "type": "string", "enum": ["not_rebuilding", "rebuilding", "rebuilt"] },
+            "started_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "completed_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+          }
+        },
+        "reconciliation": {
+          "type": "object",
+          "required": ["last_reconciled_at", "discrepancies_found"],
+          "additionalProperties": false,
+          "properties": {
+            "last_reconciled_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "discrepancies_found": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "value_minor_or_count", "unit", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+          "value_minor_or_count": { "type": "integer" },
+          "unit": { "type": "string", "enum": ["currency_minor_unit", "count"] },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+          "label": { "type": "string", "enum": ["estimate", "provider_confirmed"] }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "event_type": "subagent_start",
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "session_id": "sess-main-12345",
+  "turn_id": "turn-001",
+  "subagent_id": "sub-code-001",
+  "parent_subagent_id": null,
+  "role": "code_refactorer",
+  "goal": "Refactor database query indexes for tenant isolation",
+  "state": "RUNNING",
+  "step_number": 1,
+  "active_tool": "view_file",
+  "timestamp": "2026-09-21T12:00:00Z",
+  "summary": "Started analysis of index definitions",
+  "hermes_version": "v2026.9.14"
+}

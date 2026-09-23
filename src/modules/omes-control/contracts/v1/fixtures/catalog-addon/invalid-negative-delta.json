@@ -1,0 +1,9 @@
+{
+  "addon_id": "addon-extra-isolated-worker",
+  "name": "+1 isolated worker",
+  "compatible_plan_ids": ["plan-starter"],
+  "limits_delta": {
+    "isolated_workers": -1
+  },
+  "active": true
+}
