@@ -30,23 +30,17 @@ import {
   type OmesContractPin
 } from "./loader";
 import { StateMachine } from "./state-machine";
+import { parseJsonTrackingFloats } from "./json-parse";
 import {
   assertValid,
   scanForRawSecrets as scanForRawSecretsImpl,
   validate as validateImpl,
-  ContractValidationError,
-  SchemaError,
   type JsonSchema,
   type JsonValue
 } from "./schema";
 
-export {
-  ContractValidationError,
-  SchemaError,
-  StateMachineError,
-  TransitionError
-} from "./schema";
-export { StateMachine } from "./state-machine";
+export { ContractValidationError, SchemaError } from "./schema";
+export { StateMachine, StateMachineError, TransitionError } from "./state-machine";
 export {
   UnknownOmesContractError,
   UnsupportedContractVersionError
@@ -74,6 +68,17 @@ export { OMES_CONTRACT_VERSION, SUPPORTED_OMES_CONTRACT_VERSIONS };
 export type ValidateOmesContractOptions = {
   /** Defaults to `OMES_CONTRACT_VERSION` ("v1"). Any other value is rejected. */
   version?: string;
+  /**
+   * Paths (in `$.foo.bar[0]` form) of number literals that were written
+   * with a decimal point/exponent in the ORIGINAL JSON text — produced by
+   * `parseOmesContractJson`/`./json-parse.ts`. Supplying this lets
+   * `type: "integer"` reject `19.0` exactly like OMES's Python validator
+   * does. Callers who only have an already-`JSON.parse`d JS object cannot
+   * supply this (the distinction is lost by then); omitting it falls back
+   * to `Number.isInteger()` alone, which is the best available without the
+   * raw text — see `./json-parse.ts`'s module doc for why this gap exists.
+   */
+  floatLiteralPaths?: ReadonlySet<string>;
 };
 
 /**
@@ -99,7 +104,24 @@ export async function validateOmesContract(
     throw new UnsupportedContractVersionError(version);
   }
   const schema: JsonSchema = await loadSchema(schemaName, version);
-  return validateImpl(payload, schema);
+  return validateImpl(payload, schema, "$", options.floatLiteralPaths);
+}
+
+/**
+ * Same as `validateOmesContract()`, but parses `rawJsonText` itself (via
+ * `./json-parse.ts`) instead of taking an already-`JSON.parse`d value, so
+ * `type: "integer"` enforcement is fully OMES-equivalent — this is the
+ * PREFERRED entry point for any caller that still has the original request
+ * body text (e.g. an API route reading `await request.text()` instead of
+ * `await request.json()`).
+ */
+export async function validateOmesContractText(
+  schemaName: string,
+  rawJsonText: string,
+  options: Omit<ValidateOmesContractOptions, "floatLiteralPaths"> = {}
+): Promise<string[]> {
+  const { value, floatLiteralPaths } = parseJsonTrackingFloats<JsonValue>(rawJsonText);
+  return validateOmesContract(schemaName, value, { ...options, floatLiteralPaths });
 }
 
 /**
@@ -118,7 +140,7 @@ export async function assertOmesContract(
     throw new UnsupportedContractVersionError(version);
   }
   const schema: JsonSchema = await loadSchema(schemaName, version);
-  assertValid(payload, schema);
+  assertValid(payload, schema, "$", options.floatLiteralPaths);
 }
 
 /**

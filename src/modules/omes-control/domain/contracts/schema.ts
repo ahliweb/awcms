@@ -241,7 +241,34 @@ export function scanForRawSecrets(instance: JsonValue, path = "$"): string[] {
 // Core validation
 // ---------------------------------------------------------------------------
 
-function typeMatches(instance: JsonValue, typeName: string): boolean {
+/**
+ * Mimics Python's `repr()` for JSON-ish values, so error messages that
+ * quote a schema keyword's value (`expected type 'integer'`, `expected
+ * const 'hmac-sha256'`) match `lib/omes/py/jobs/schema.py`'s `!r`-formatted
+ * output byte-for-byte where the OMES contract fixtures' `.reason.txt`
+ * files assert on that exact substring.
+ */
+function pyRepr(value: unknown): string {
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "string") return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return `[${value.map(pyRepr).join(", ")}]`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).map(
+      ([k, v]) => `${pyRepr(k)}: ${pyRepr(v)}`
+    );
+    return `{${entries.join(", ")}}`;
+  }
+  return String(value);
+}
+
+function typeMatches(
+  instance: JsonValue,
+  typeName: string,
+  path: string,
+  floatLiteralPaths: ReadonlySet<string>
+): boolean {
   switch (typeName) {
     case "object":
       return isPlainObject(instance);
@@ -250,7 +277,20 @@ function typeMatches(instance: JsonValue, typeName: string): boolean {
     case "string":
       return typeof instance === "string";
     case "integer":
-      return typeof instance === "number" && Number.isInteger(instance);
+      // A number literal written with a decimal point or exponent (e.g.
+      // `19.0`) is a JSON *float*, exactly as `lib/omes/py/jobs/schema.py`
+      // treats it (Python's `json.load` gives a `float`, which fails
+      // `isinstance(instance, int)`) — even though `Number.isInteger(19.0)`
+      // is mathematically `true` in JS. `floatLiteralPaths` (populated only
+      // when the caller parsed via `parseJsonTrackingFloats`, i.e. had the
+      // raw JSON text) is what lets this check see that distinction; without
+      // raw text, JS has already lost it and this falls back to
+      // `Number.isInteger` alone.
+      return (
+        typeof instance === "number" &&
+        Number.isInteger(instance) &&
+        !floatLiteralPaths.has(path)
+      );
     case "number":
       return typeof instance === "number";
     case "boolean":
@@ -266,7 +306,8 @@ function validateInner(
   instance: JsonValue,
   schema: JsonSchema,
   path: string,
-  errors: string[]
+  errors: string[],
+  floatLiteralPaths: ReadonlySet<string>
 ): void {
   if (!isPlainObject(schema)) {
     throw new SchemaError(`schema at ${path} is not an object`);
@@ -275,7 +316,7 @@ function validateInner(
   if ("const" in schema) {
     if (JSON.stringify(instance) !== JSON.stringify(schema.const)) {
       errors.push(
-        `${path}: expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(instance)}`
+        `${path}: expected const ${pyRepr(schema.const)}, got ${pyRepr(instance)}`
       );
       return;
     }
@@ -287,7 +328,7 @@ function validateInner(
     );
     if (!matches) {
       errors.push(
-        `${path}: ${JSON.stringify(instance)} is not one of ${JSON.stringify(schema.enum)}`
+        `${path}: ${pyRepr(instance)} is not one of ${pyRepr(schema.enum)}`
       );
       return;
     }
@@ -296,9 +337,9 @@ function validateInner(
   const typeSpec = schema.type;
   if (typeSpec !== undefined) {
     const typeNames = Array.isArray(typeSpec) ? typeSpec : [typeSpec];
-    if (!typeNames.some((t) => typeMatches(instance, t))) {
+    if (!typeNames.some((t) => typeMatches(instance, t, path, floatLiteralPaths))) {
       errors.push(
-        `${path}: expected type ${JSON.stringify(typeSpec)}, got ${instance === null ? "null" : Array.isArray(instance) ? "array" : typeof instance}`
+        `${path}: expected type ${pyRepr(typeSpec)}, got ${instance === null ? "null" : Array.isArray(instance) ? "array" : typeof instance}`
       );
       return;
     }
@@ -307,7 +348,7 @@ function validateInner(
   if (typeof instance === "string") {
     if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(instance)) {
       errors.push(
-        `${path}: ${JSON.stringify(instance)} does not match pattern ${JSON.stringify(schema.pattern)}`
+        `${path}: ${pyRepr(instance)} does not match pattern ${pyRepr(schema.pattern)}`
       );
     }
     if (schema.minLength !== undefined && instance.length < schema.minLength) {
@@ -345,7 +386,7 @@ function validateInner(
     const itemSchema = schema.items;
     if (itemSchema !== undefined && !Array.isArray(itemSchema)) {
       instance.forEach((item, i) =>
-        validateInner(item, itemSchema, `${path}[${i}]`, errors)
+        validateInner(item, itemSchema, `${path}[${i}]`, errors, floatLiteralPaths)
       );
     }
   }
@@ -359,8 +400,15 @@ function validateInner(
 
     const properties = schema.properties ?? {};
     for (const [name, value] of Object.entries(instance)) {
-      if (name in properties) {
-        validateInner(value as JsonValue, properties[name], `${path}.${name}`, errors);
+      const propSchema = properties[name];
+      if (propSchema !== undefined) {
+        validateInner(
+          value as JsonValue,
+          propSchema,
+          `${path}.${name}`,
+          errors,
+          floatLiteralPaths
+        );
       }
     }
 
@@ -374,7 +422,13 @@ function validateInner(
       }
     } else if (isPlainObject(additional)) {
       for (const name of Object.keys(instance).filter((k) => !(k in properties))) {
-        validateInner(instance[name] as JsonValue, additional as JsonSchema, `${path}.${name}`, errors);
+        validateInner(
+          instance[name] as JsonValue,
+          additional as JsonSchema,
+          `${path}.${name}`,
+          errors,
+          floatLiteralPaths
+        );
       }
     }
   }
@@ -385,7 +439,7 @@ function validateInner(
       let matches = 0;
       for (const sub of subSchemas) {
         const subErrors: string[] = [];
-        validateInner(instance, sub, path, subErrors);
+        validateInner(instance, sub, path, subErrors, floatLiteralPaths);
         if (subErrors.length === 0) matches++;
       }
       if (combinator === "oneOf" && matches !== 1) {
@@ -408,14 +462,17 @@ function validateInner(
  * contains unsupported keywords. Always also runs the independent raw-secret
  * scan, regardless of what the schema itself declares.
  */
+const EMPTY_FLOAT_LITERAL_PATHS: ReadonlySet<string> = new Set();
+
 export function validate(
   instance: JsonValue,
   schema: JsonSchema,
-  path = "$"
+  path = "$",
+  floatLiteralPaths: ReadonlySet<string> = EMPTY_FLOAT_LITERAL_PATHS
 ): string[] {
   validateSchema(schema, path);
   const errors: string[] = [];
-  validateInner(instance, schema, path, errors);
+  validateInner(instance, schema, path, errors, floatLiteralPaths);
   errors.push(...scanForRawSecrets(instance, path));
   return errors;
 }
@@ -428,9 +485,10 @@ export function validate(
 export function assertValid(
   instance: JsonValue,
   schema: JsonSchema,
-  path = "$"
+  path = "$",
+  floatLiteralPaths: ReadonlySet<string> = EMPTY_FLOAT_LITERAL_PATHS
 ): void {
-  const errors = validate(instance, schema, path);
+  const errors = validate(instance, schema, path, floatLiteralPaths);
   if (errors.length > 0) {
     throw new ContractValidationError(errors);
   }

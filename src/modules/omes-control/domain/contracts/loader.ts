@@ -15,6 +15,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { parseJsonTrackingFloats, type ParsedJson } from "./json-parse";
 import type { JsonSchema, JsonValue } from "./schema";
 import type { StateTable } from "./state-machine";
 
@@ -145,16 +146,37 @@ function fixturesDirFor(root: string, schemaName: string): string {
   return path.join(root, "fixtures", schemaName);
 }
 
-/** Loads a fixture file (used by tests, never by production request handling). */
+/**
+ * Loads a fixture file (used by tests, never by production request
+ * handling), preserving which number literals were written with a decimal
+ * point/exponent (`ParsedJson.floatLiteralPaths`) so `type: "integer"`
+ * enforcement matches OMES's Python validator exactly — see `./json-parse.ts`.
+ */
 export async function loadFixture(
   schemaName: string,
   fixtureFileName: string,
   version: string = OMES_CONTRACT_VERSION
-): Promise<JsonValue> {
+): Promise<ParsedJson<JsonValue>> {
   const root = contractsRoot(version);
   const fixturePath = path.join(fixturesDirFor(root, schemaName), fixtureFileName);
   const raw = await readFile(fixturePath, "utf8");
-  return JSON.parse(raw) as JsonValue;
+  return parseJsonTrackingFloats<JsonValue>(raw);
+}
+
+/** Loads an `invalid-*.reason.txt` sibling of a fixture, if any (used by tests). */
+export async function loadFixtureReason(
+  schemaName: string,
+  fixtureFileName: string,
+  version: string = OMES_CONTRACT_VERSION
+): Promise<string | undefined> {
+  const root = contractsRoot(version);
+  const reasonFileName = fixtureFileName.replace(/\.json$/, ".reason.txt");
+  const reasonPath = path.join(fixturesDirFor(root, schemaName), reasonFileName);
+  try {
+    return (await readFile(reasonPath, "utf8")).trim();
+  } catch {
+    return undefined;
+  }
 }
 
 /** Lists every `valid-*.json` / `invalid-*.json` fixture file name for a schema (used by tests). */

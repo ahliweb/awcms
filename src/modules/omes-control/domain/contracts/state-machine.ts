@@ -111,7 +111,7 @@ export class StateMachine {
   allowedNextStates(fromState: string): ReadonlySet<string> {
     const next = new Set<string>();
     for (const pair of this.transitionPairs) {
-      const [src, dst] = pair.split("\u0000");
+      const [src, dst] = pair.split("\u0000") as [string, string];
       if (src === fromState) next.add(dst);
     }
     return next;

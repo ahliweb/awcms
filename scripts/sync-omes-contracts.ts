@@ -155,19 +155,23 @@ export function syncContracts(options: {
 }
 
 /** `--check` mode: recompute hashes of what is vendored and diff against the committed PIN manifest. */
-export function checkContractsDrift(rootDir: string): string[] {
-  const targetDir = path.join(rootDir, VENDORED_CONTRACTS_DIR);
+export function checkContractsDrift(
+  rootDir: string,
+  targetDirOverride?: string
+): string[] {
+  const targetDir = targetDirOverride ?? path.join(rootDir, VENDORED_CONTRACTS_DIR);
+  const displayName = targetDirOverride ?? VENDORED_CONTRACTS_DIR;
   const manifestPath = path.join(targetDir, PIN_MANIFEST_FILENAME);
   const failures: string[] = [];
 
   if (!existsSync(targetDir) || !statSync(targetDir).isDirectory()) {
     return [
-      `${VENDORED_CONTRACTS_DIR} is missing — run \`bun run contracts:omes:sync -- --source <omes-checkout> --commit <sha>\`.`
+      `${displayName} is missing — run \`bun run contracts:omes:sync -- --source <omes-checkout> --commit <sha>\`.`
     ];
   }
   if (!existsSync(manifestPath)) {
     return [
-      `${VENDORED_CONTRACTS_DIR}/${PIN_MANIFEST_FILENAME} is missing — the vendored contracts are not pinned. Run \`bun run contracts:omes:sync\`.`
+      `${displayName}/${PIN_MANIFEST_FILENAME} is missing — the vendored contracts are not pinned. Run \`bun run contracts:omes:sync\`.`
     ];
   }
 
@@ -176,7 +180,7 @@ export function checkContractsDrift(rootDir: string): string[] {
     manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PinManifest;
   } catch (err) {
     return [
-      `${VENDORED_CONTRACTS_DIR}/${PIN_MANIFEST_FILENAME} is not valid JSON: ${(err as Error).message}`
+      `${displayName}/${PIN_MANIFEST_FILENAME} is not valid JSON: ${(err as Error).message}`
     ];
   }
 
@@ -207,17 +211,17 @@ export function checkContractsDrift(rootDir: string): string[] {
 
   for (const f of missing) {
     failures.push(
-      `${VENDORED_CONTRACTS_DIR}/${f}: listed in the PIN manifest but missing on disk (drift) — re-run \`bun run contracts:omes:sync\``
+      `${displayName}/${f}: listed in the PIN manifest but missing on disk (drift) — re-run \`bun run contracts:omes:sync\``
     );
   }
   for (const f of unpinned) {
     failures.push(
-      `${VENDORED_CONTRACTS_DIR}/${f}: present on disk but not in the PIN manifest — re-run \`bun run contracts:omes:sync\` from a matching OMES commit, or remove the stray file`
+      `${displayName}/${f}: present on disk but not in the PIN manifest — re-run \`bun run contracts:omes:sync\` from a matching OMES commit, or remove the stray file`
     );
   }
   for (const f of tampered) {
     failures.push(
-      `${VENDORED_CONTRACTS_DIR}/${f}: SHA-256 does not match the PIN manifest (expected ${manifestFiles[f]}, got ${actual[f]}) — the vendored contract diverged from the pinned OMES commit ${manifest.sourceCommit}. Re-run \`bun run contracts:omes:sync\` if this drift is intentional, or restore the file if it was hand-edited.`
+      `${displayName}/${f}: SHA-256 does not match the PIN manifest (expected ${manifestFiles[f]}, got ${actual[f]}) — the vendored contract diverged from the pinned OMES commit ${manifest.sourceCommit}. Re-run \`bun run contracts:omes:sync\` if this drift is intentional, or restore the file if it was hand-edited.`
     );
   }
 
@@ -229,6 +233,7 @@ function parseArgs(argv: string[]) {
   let check = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === undefined) continue;
     if (arg === "--check") {
       check = true;
     } else if (arg.startsWith("--")) {
