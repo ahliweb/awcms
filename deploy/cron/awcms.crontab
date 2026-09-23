@@ -185,13 +185,24 @@ AWCMS_LOG=/var/log/awcms
 # Not a module descriptor job: deploy/backup/backup-postgres.sh, scheduled here
 # because docs/awcms/deploy-coolify.md §Backup says backups run from cron on the
 # VPS. Different image (needs pg_dump, version-matched to the server) and a
-# different env file (privileged owner DSN), hence $AWCMS_PGRUN.
+# different env file (privileged owner DSN), hence $AWCMS_PGRUN. Set
+# BACKUP_AGE_RECIPIENTS_FILE/BACKUP_HMAC_KEY_FILE in that env file to enable
+# encryption-at-rest and the authenticated manifest (ADR-0123); leave both
+# unset to keep writing a plain dump, e.g. on the offline/LAN profile.
 0 2 * * * $AWCMS_PGRUN /scripts/backup-postgres.sh >> $AWCMS_LOG/backup-postgres.log 2>&1
 
-# A backup nobody restores is not a backup. Weekly verify-only drill: restores
-# the newest dump into a scratch database, checks it, drops it. Never touches a
-# live database. Runs on Sunday, an hour after that night's backup.
-0 3 * * 0 $AWCMS_PGRUN -c 'ls -1t /backup/awcms_*.dump | head -n 1 | xargs -r /scripts/restore-postgres.sh' >> $AWCMS_LOG/restore-drill.log 2>&1
+# Off-site copy, right after the backup completes. Requires OFFSITE_SSH_TARGET
+# (and usually OFFSITE_SSH_KEY_FILE) in the env file; never deletes the local
+# copy regardless of transfer outcome (ADR-0123).
+15 2 * * * $AWCMS_PGRUN -c 'f=$(ls -1t /backup/awcms_*.dump /backup/awcms_*.dump.age 2>/dev/null | head -n1); siblings=""; for s in "$f.sha256" "$f.manifest.json" "$f.manifest.json.hmac"; do [ -f "$s" ] && siblings="$siblings $s"; done; [ -n "$f" ] && /scripts/offsite-copy.sh "$f" $siblings' >> $AWCMS_LOG/offsite-copy.log 2>&1
+
+# A backup nobody restores is not a backup. Weekly, unattended, non-destructive
+# restore drill: selects the newest eligible backup (encrypted or plain),
+# verifies + decrypts it, restores into a scratch database, checks it, drops
+# it, and appends evidence to restore-drill-evidence.jsonl. Never touches a
+# live database — there is no --target anywhere in restore-drill.sh. Runs on
+# Sunday, an hour after that night's backup.
+0 3 * * 0 $AWCMS_PGRUN /scripts/restore-drill.sh >> $AWCMS_LOG/restore-drill.log 2>&1
 
 # ---- retention / purge sweeps ---------------------------------------------
 

@@ -37,13 +37,26 @@
 # lesser role fails on `COMMENT ON EXTENSION` for pgcrypto/pg_trgm, which is a
 # privilege problem wearing a restore error's clothes.
 #
-# ## What this script does NOT do
+# ## Decryption and manifest verification (ADR-0123)
 #
-# It does not decrypt anything and it does not verify an HMAC-signed manifest.
-# docs/awcms/production-preflight-runbook.md §Stage 2 describes both, and both
-# are unimplemented; that runbook's `.dump.enc` filename does not exist. This
-# script verifies the `.sha256` sidecar BEFORE any mutation, which is the part
-# that does exist. Handed a `.enc` file it refuses rather than guess.
+# A `<name>.dump.age` artifact (backup-postgres.sh's encrypted output) is
+# handled automatically: its authenticated manifest is verified FIRST — HMAC,
+# filename, and digest all have to match — and only then is it decrypted with
+# `age`, into a private 0700 temp directory, before pg_restore ever sees it.
+# Any mismatch (tampering, corruption, wrong key) aborts BEFORE any restore
+# mutation. A plain `.dump` (unencrypted mode) is restored exactly as before —
+# its `.sha256` sidecar is still verified, no manifest is expected.
+#
+#   RESTORE_AGE_IDENTITY_FILE   required for `.dump.age` input. Path to the
+#                               `age` private identity file
+#                               (`AGE-SECRET-KEY-1...`) that can decrypt.
+#                               Never printed. This is deliberately a
+#                               DIFFERENT variable name from the backup side's
+#                               BACKUP_AGE_RECIPIENTS_FILE (public) — the
+#                               asymmetry is the point (ADR-0123).
+#   BACKUP_HMAC_KEY_FILE        required for `.dump.age` input. Same HMAC key
+#                               file used at backup time, to verify the
+#                               manifest before decrypting.
 #
 # ## Environment
 #
@@ -59,6 +72,10 @@ readonly DEFAULT_SCRATCH_DB="awcms_restore_test"
 # to outlive the function that writes them.
 SCRATCH_CREATED=""
 SOURCE_DATABASE=""
+# Private temp dir a decrypted plaintext dump is written into, cleaned up on
+# every exit path (success, failure, or signal) — a decrypted dump must never
+# outlive the process that decrypted it.
+DECRYPT_TMPDIR=""
 
 die() {
   printf 'restore-postgres: %s\n' "$*" >&2
@@ -73,6 +90,11 @@ usage() {
   cat <<'USAGE'
 Usage: restore-postgres.sh <dump-file> [--target=<dbname>] [--yes] [--keep]
 
+  <dump-file>     A plain --format=custom dump, OR an age-encrypted
+                  <name>.dump.age with its <name>.dump.age.manifest.json next
+                  to it (see RESTORE_AGE_IDENTITY_FILE / BACKUP_HMAC_KEY_FILE
+                  above) — manifest is verified and the file decrypted before
+                  anything below reads it.
   (no --target)   Verify-only drill. Restores into a scratch database, asserts
                   the restored schema looks like AWCMS, then drops it. Never
                   touches a live database.
@@ -202,12 +224,16 @@ drop_scratch() {
   fi
 }
 
-# A drill that dies halfway must not leave a half-restored database behind for
-# the next run to trip over.
+# A drill that dies halfway must not leave a half-restored database, or a
+# decrypted plaintext dump, behind for the next run to trip over.
 on_exit() {
   local status=$?
   if [ "$status" -ne 0 ]; then
     drop_scratch || true
+  fi
+  if [ -n "$DECRYPT_TMPDIR" ]; then
+    rm -rf -- "$DECRYPT_TMPDIR"
+    DECRYPT_TMPDIR=""
   fi
   exit "$status"
 }
@@ -233,6 +259,67 @@ verify_dump_integrity() {
   pg_restore --list "$dump_path" >/dev/null ||
     die "${dump_path} is not a readable custom-format archive."
   info "archive table of contents readable"
+}
+
+# Verifies the authenticated manifest BEFORE decrypting, and decrypts into a
+# private 0700 temp directory. Returns (via echo, captured by the caller) the
+# path to the decrypted plaintext dump. Nothing in this function may mutate
+# any database — that is the caller's job, strictly after this returns.
+decrypt_and_verify() {
+  local enc_path="$1"
+  local manifest_path="${enc_path}.manifest.json"
+
+  case "$enc_path" in
+    *.gpg | *.enc)
+      die "'$enc_path' looks encrypted with something other than age. This script only decrypts age-encrypted (.dump.age) artifacts produced by backup-postgres.sh (ADR-0123)."
+      ;;
+  esac
+
+  [ -n "${RESTORE_AGE_IDENTITY_FILE-}" ] ||
+    die "$enc_path is age-encrypted but RESTORE_AGE_IDENTITY_FILE is not set. Point it at the age private identity file that can decrypt this backup."
+  [ -f "$RESTORE_AGE_IDENTITY_FILE" ] ||
+    die "RESTORE_AGE_IDENTITY_FILE does not exist: $RESTORE_AGE_IDENTITY_FILE"
+  [ -n "${BACKUP_HMAC_KEY_FILE-}" ] ||
+    die "$enc_path has an authenticated manifest but BACKUP_HMAC_KEY_FILE is not set. Point it at the same HMAC key file used when this backup was created."
+  [ -f "$BACKUP_HMAC_KEY_FILE" ] ||
+    die "BACKUP_HMAC_KEY_FILE does not exist: $BACKUP_HMAC_KEY_FILE"
+  [ -f "$manifest_path" ] ||
+    die "$manifest_path not found. An age-encrypted backup with no manifest cannot be trusted (ADR-0123) — refusing to decrypt blind."
+
+  require_command age
+  require_command perl
+
+  local script_dir manifest_script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  manifest_script="${script_dir}/manifest.sh"
+  [ -x "$manifest_script" ] || die "manifest.sh not found next to restore-postgres.sh at ${manifest_script}."
+
+  # Verification happens BEFORE decryption and BEFORE any restore mutation —
+  # tampering is caught here, not after a scratch/target database has already
+  # been touched. The explicit `|| exit 1` is NOT redundant with `set -e`:
+  # this function's output is captured via command substitution
+  # (`dump_path="$(decrypt_and_verify ...)"`), and bash disables errexit for
+  # every command in a function except its last one in exactly that context —
+  # relying on `set -e` alone here would let a failed verification silently
+  # fall through to decryption. `exit 1` (not `die`) because manifest.sh
+  # already printed the specific reason to stderr.
+  "$manifest_script" verify \
+    --manifest="$manifest_path" \
+    --hmac-key-file="$BACKUP_HMAC_KEY_FILE" \
+    --artifact="$enc_path" >/dev/null || exit 1
+
+  DECRYPT_TMPDIR="$(mktemp -d)"
+  chmod 700 "$DECRYPT_TMPDIR"
+  local plain_path="${DECRYPT_TMPDIR}/$(basename "${enc_path%.age}")"
+
+  age --decrypt --identity "$RESTORE_AGE_IDENTITY_FILE" --output "$plain_path" "$enc_path" ||
+    die "age decryption of $enc_path failed. Either RESTORE_AGE_IDENTITY_FILE is the wrong identity, or the ciphertext is corrupt — either way, do not restore it."
+
+  # stderr, not info()/stdout: the caller captures this function's stdout as
+  # the decrypted path via command substitution, so nothing else may print
+  # to stdout here.
+  printf 'restore-postgres: decrypted into a private temp directory (removed on exit)\n' >&2
+  printf '%s' "$plain_path"
 }
 
 # The three questions a restored AWCMS database has to answer. Counting rows is
@@ -295,8 +382,8 @@ main() {
   [ -f "$dump_path" ] || die "dump file not found: $dump_path"
 
   case "$dump_path" in
-    *.enc | *.gpg | *.age)
-      die "'$dump_path' looks encrypted, and this script decrypts nothing. At-rest encryption described in docs/awcms/production-preflight-runbook.md §Stage 2 is NOT implemented — decrypt it yourself first, then restore the plain --format=custom dump."
+    *.enc | *.gpg)
+      die "'$dump_path' looks encrypted with something other than age. This script only decrypts age-encrypted (.dump.age) artifacts produced by backup-postgres.sh (ADR-0123)."
       ;;
   esac
 
@@ -311,11 +398,20 @@ main() {
   export_libpq_env_from_url "$database_url"
   unset database_url
 
+  trap on_exit EXIT
+
+  case "$dump_path" in
+    *.age)
+      # Manifest verification + decryption happen here, strictly before
+      # verify_dump_integrity/pg_restore ever see the plaintext, and strictly
+      # before any database mutation below.
+      dump_path="$(decrypt_and_verify "$dump_path")"
+      ;;
+  esac
+
   # Integrity first. Nothing below this line is allowed to mutate anything
   # until the bytes on disk have been checked.
   verify_dump_integrity "$dump_path"
-
-  trap on_exit EXIT
 
   if [ -z "$target" ]; then
     local scratch="${RESTORE_SCRATCH_DB:-$DEFAULT_SCRATCH_DB}"

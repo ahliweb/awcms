@@ -5,7 +5,7 @@ description: Jalankan preflight & go-live readiness AWCMS sebelum production. Gu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:071278e83987add19e80ec794bc142d591b2ede2374f909541527fecc021ae6c -->
+<!-- i18n-source-hash: sha256:2f25d86fa234808b66c2106f0bc7de3c3b4a1e226e87f4adcf5fcaf82b59d7c7 -->
 
 # AWCMS — Production Preflight & Go-Live
 
@@ -133,19 +133,13 @@ flowchart LR
 
 ## Backup & restore (wajib teruji)
 
-Ada dua skrip dan hanya itu: `deploy/backup/backup-postgres.sh` dan
-`deploy/backup/restore-postgres.sh`.
+Ada lima skrip di bawah `deploy/backup/`, semuanya nyata
+([ADR-0123](../../../docs/adr/0123-backup-encryption-manifest-authentication.id.md)):
+`backup-postgres.sh`, `restore-postgres.sh`, `manifest.sh`,
+`offsite-copy.sh`, `restore-drill.sh` — lihat `deploy/backup/README.md`
+untuk panduan operator lengkap, termasuk pembuatan kunci.
 
-> **JANGAN set `BACKUP_ENCRYPTION_KEY_FILE` atau `BACKUP_HMAC_KEY_FILE`.**
-> Enkripsi at-rest dan penandatanganan manifest **tidak diimplementasikan**.
-> `backup-postgres.sh` menulis dump `--format=custom` polos plus sidecar
-> sha256, dan ia **menolak jalan** — memang disengaja — bila salah satu
-> variabel itu di-set, alih-alih membiarkan Anda mengira dump-nya terenkripsi.
-> Lindungi dump dengan permission filesystem dan salinan off-host. Tidak ada
-> `deploy/backup/README.md`, tidak ada `offsite-copy.sh`, tidak ada
-> `restore-drill.sh`; versi terdahulu skill ini dan
-> `docs/awcms/production-preflight-runbook.md` §Stage 2 menyebut keempatnya
-> seolah-olah sudah ada.
+Mode polos (tidak berubah, default offline/LAN):
 
 ```bash
 DATABASE_URL="$DATABASE_URL" \
@@ -156,17 +150,34 @@ DATABASE_URL="$DATABASE_URL" \
 ./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump
 ```
 
+Mode terenkripsi + terautentikasi (direkomendasikan di mana pun ada cerita
+secret-management — set `BACKUP_AGE_RECIPIENTS_FILE`/`BACKUP_HMAC_KEY_FILE`
+bersama saat backup, `RESTORE_AGE_IDENTITY_FILE`/`BACKUP_HMAC_KEY_FILE`
+bersama saat restore; men-set hanya salah satu dari pasangan gagal tertutup):
+
+```bash
+DATABASE_URL="$DATABASE_URL" \
+BACKUP_DIR=/var/backups/awcms \
+BACKUP_AGE_RECIPIENTS_FILE=/etc/awcms-backup/age-recipients.txt \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/backup-postgres.sh
+```
+
 (Me-restore ke database sekali-pakai `awcms_restore_test` secara bawaan —
 tidak pernah ke database hidup; `RESTORE_SCRATCH_DB` mengganti nama scratch
 itu. Target pemulihan sungguhan wajib dinamai dan diakui secara eksplisit.)
 
-Validasi restore dilakukan manual: baris tenant/user/transaksi terbaca ·
-login test · report smoke test. Tidak ada yang mengotomasi drill atau
-menghasilkan laporan RTO/RPO, jadi jadwalkan sendiri, terpisah dari backup
-harian.
+Validasi restore: baris tenant terbaca, hitungan `FORCE ROW LEVEL SECURITY`
 
-Bukti backup untuk migrasi produksi WAJIB berupa uji-restore nyata dari dua
-skrip ini, bukan sekadar backup yang "ada" — lihat
+> 0, ledger migrasi tidak kosong — ditegakkan otomatis oleh
+> `restore-postgres.sh`; smoke test report/login tetap manual.
+> `deploy/backup/restore-drill.sh` mengotomasi pemilihan backup eligible
+> terbaru dan menjalankan drill tanpa pengawasan, menambahkan bukti RTO/RPO ke
+> `restore-drill-evidence.jsonl` — jadwalkan (atau pakai entri mingguan yang
+> sudah ada di `deploy/cron/awcms.crontab`) terpisah dari backup harian.
+
+Bukti backup untuk migrasi produksi WAJIB berupa uji-restore nyata dari
+skrip-skrip ini, bukan sekadar backup yang "ada" — lihat
 `docs/awcms/production-preflight-runbook.md`'s §Backup evidence untuk
 urutannya (dump → restore-test → catat evidence).
 
