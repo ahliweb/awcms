@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 155   |
+| Migrations                          | 156   |
 | `awcms_*` tables                    | 160   |
 | Tables with `FORCE` RLS             | 142   |
 | RLS-free tables (global, by design) | 18    |
@@ -205,6 +205,7 @@
 | 153 | `sql/153_awcms_blog_institution_logo.sql`                          |
 | 154 | `sql/154_awcms_omes_control_schema.sql`                            |
 | 155 | `sql/155_awcms_omes_control_permissions.sql`                       |
+| 156 | `sql/156_awcms_omes_control_worker_grant_narrow.sql`               |
 
 ### Tables & Row-Level Security
 
