@@ -1,5 +1,5 @@
 {
-  "moduleCount": 24,
+  "moduleCount": 25,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -229,6 +229,22 @@
       "capabilitiesConsumed": [],
       "permissionCount": 2,
       "navigationCount": 1,
+      "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "omes_control",
+      "name": "OMES Control Center",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 13,
+      "navigationCount": 0,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

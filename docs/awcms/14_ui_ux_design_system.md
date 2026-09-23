@@ -69,9 +69,27 @@ Tokens are implemented as CSS custom properties, scoped to `:root` and overridde
 > | `-strong`   | solid fill under `--color-primary-contrast` | `.btn-primary`; the topbar avatar disc |
 > | `-on-soft`  | text on `--color-X-soft`                    | status badges; the active sidebar link |
 >
-> Using the wrong one of the three is the single most-repeated defect in this repo's UI history — Issue #434, PR #720, and twice more during the ADR-0120 redesign. **It is no longer a matter of remembering.** `bun run design:token-contrast:check` (part of `bun run check`) measures a registry of 25 pairs across both themes and fails below WCAG 2.1 AA. Adding a pairing to CSS means adding a line to that registry.
+> Using the wrong one of the three is the single most-repeated defect in this repo's UI history — Issue #434, PR #720, and twice more during the ADR-0120 redesign. **It is no longer a matter of remembering.** `bun run design:token-contrast:check` (part of `bun run check`) measures a registry of 33 pairs across both themes and fails below WCAG 2.1 AA. Adding a pairing to CSS means adding a line to that registry.
 >
 > `--color-border` vs `--color-border-strong` is the same split applied to lines. WCAG 2.1 **1.4.11 Non-text Contrast** requires 3:1 for a boundary that identifies an operable component; `--color-border` measures 1.29:1 and deliberately stays that way, because 1.4.11 governs controls, not decorative separators. Inputs, selects, textareas and the search shell use `--color-border-strong`; card edges and table rules use `--color-border`.
+
+### Sidebar tokens (always dark — awcms-one#170)
+
+The admin sidebar rail is a FOURTH colour family, `--color-sidebar-*`, deliberately independent of `data-theme`: it renders one dark navigation surface whether the rest of the admin is in light or dark theme, so it does not flip between `:root` and `:root[data-theme="dark"]` the way every token above does (both blocks declare the same values — see `tokens.css`'s own comment on why that is stated rather than left to inherit).
+
+| Token                         | Value     | Function                                                                |
+| ----------------------------- | --------- | ----------------------------------------------------------------------- |
+| `--color-sidebar-bg`          | `#101722` | Rail background                                                         |
+| `--color-sidebar-surface`     | `#1a222e` | Raised block on the rail (the status card)                              |
+| `--color-sidebar-border`      | `#1f2733` | Rail's own outer border/rule                                            |
+| `--color-sidebar-card-border` | `#2a323c` | Border of a raised block on the rail                                    |
+| `--color-sidebar-text`        | `#9aa7b2` | Nav item text on `--color-sidebar-bg`                                   |
+| `--color-sidebar-text-strong` | `#f0f4f9` | Brand wordmark, active nav item text                                    |
+| `--color-sidebar-text-faint`  | `#838d99` | Group labels — see below for why this is not the mockup's literal value |
+| `--color-sidebar-active`      | `#1e2836` | Active nav item background                                              |
+| `--color-sidebar-badge`       | `#2b3444` | Count badge background                                                  |
+
+`--color-sidebar-text-faint` is **not** the redesign reference's literal `#6b7581`: measured against both surfaces the token actually sits behind, that value is 3.84:1 on `--color-sidebar-bg` and 3.42:1 on `--color-sidebar-surface`, below the 4.5:1 WCAG 2.1 AA bar this same page already promises — the uppercase group labels it colours carry information, not decoration. `#838d99` keeps the same blue-grey hue and clears both (5.34:1 / 4.75:1), the same correction this design system has already made for the theme-aware families above.
 
 ### Other scales
 

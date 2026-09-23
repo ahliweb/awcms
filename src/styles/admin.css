@@ -700,6 +700,15 @@
     visibility var(--motion-base) var(--ease-standard);
 }
 
+/*
+ * ADR-0120 / awcms-one#170 — the sidebar is a DARK rail in both themes.
+ *
+ * It reads from the `--color-sidebar-*` family (tokens.css), not from
+ * `--color-surface`/`--color-text*` — those two flip with `data-theme`, and
+ * this rail deliberately does not. See tokens.css's own comment on that family
+ * for why: the reference mockup renders one dark navigation surface
+ * regardless of whether the rest of the admin is light or dark.
+ */
 .admin-sidebar {
   /* Base = off-canvas drawer (mobile-first). */
   position: fixed;
@@ -710,8 +719,8 @@
   width: min(82vw, 264px);
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  background: var(--color-sidebar-bg);
+  border-right: 1px solid var(--color-sidebar-border);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   transform: translateX(-100%);
@@ -719,6 +728,65 @@
   transition:
     transform var(--motion-base) var(--ease-out),
     visibility var(--motion-base) var(--ease-out);
+}
+
+/* ---- Sidebar brand + tenant header ---------------------------------- */
+/*
+ * awcms-one#170 — a compact identity block at the top of the dark rail,
+ * beside (not instead of) the topbar's own brand link: the topbar's `.admin-
+ * brand` stays the accessible landmark that navigates `/admin`, this block is
+ * the rail's own header, exactly as `.admin-topbar` and `.admin-sidebar` are
+ * two independent chrome regions everywhere else in this shell.
+ */
+.admin-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 16px 16px 14px;
+}
+
+.admin-sidebar-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.admin-sidebar-brand-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin-sidebar-brand-text {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1.2;
+  color: var(--color-sidebar-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tenant name, in the monospace family — this shell's convention for
+   identifiers/data rather than prose (see `.admin-sidebar-version-value`,
+   `.admin-kbd`). */
+.admin-sidebar-tenant {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--color-sidebar-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The scrolling region. Kept separate from `.admin-sidebar` so the sign-out
@@ -773,7 +841,7 @@
   font-weight: var(--fw-bold);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--color-text-faint);
+  color: var(--color-sidebar-text-faint);
   cursor: pointer;
   list-style: none;
   transition: color var(--motion-fast) var(--ease-standard);
@@ -784,7 +852,7 @@
 }
 
 .admin-sidebar-group-label:hover {
-  color: var(--color-text-muted);
+  color: var(--color-sidebar-text);
 }
 
 .admin-sidebar-group-label-text {
@@ -821,7 +889,7 @@
   padding: 0 10px;
   margin-bottom: 2px;
   font-size: var(--fs-2xs);
-  color: var(--color-text-faint);
+  color: var(--color-sidebar-text-faint);
 }
 
 .admin-sidebar-links {
@@ -834,7 +902,7 @@
 .admin-sidebar-footer {
   flex: none;
   padding: 10px 12px 12px;
-  border-top: 1px solid var(--color-border-soft);
+  border-top: 1px solid var(--color-sidebar-border);
 }
 
 .admin-sidebar-version {
@@ -843,14 +911,65 @@
   gap: var(--sp-1);
   padding: var(--sp-2) 10px 0;
   font-size: var(--fs-2xs);
-  color: var(--color-text-faint);
+  color: var(--color-sidebar-text-faint);
 }
 
 .admin-sidebar-version-value {
   font-family: var(--font-mono);
   font-weight: var(--fw-semibold);
-  color: var(--color-text-muted);
+  color: var(--color-sidebar-text);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- Sidebar status card --------------------------------------------- */
+/*
+ * awcms-one#170 — fed by the SAME `syncActive` boolean `AdminLayout.astro`
+ * already fetches for the topbar's `SyncIndicator` (`fetchSyncIndicatorActive`,
+ * a bounded `EXISTS` over `awcms_sync_nodes`). This is not a second data
+ * source: it is the existing sync signal, shown a second time in a slot the
+ * redesign's mockup dedicates to it, at the foot of the rail. `data-active`
+ * carries the state for the dot; the title/meta text carry it too, in words,
+ * so the state is never colour-only (WCAG 1.4.1).
+ */
+.admin-sidebar-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 10px 12px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-sidebar-surface);
+  border: 1px solid var(--color-sidebar-card-border);
+}
+
+.admin-sidebar-status-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.admin-sidebar-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+}
+
+.admin-sidebar-status-dot[data-active="true"] {
+  background: var(--color-success);
+}
+
+.admin-sidebar-status-title {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-sidebar-text-strong);
+}
+
+.admin-sidebar-status-meta {
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-normal);
+  color: var(--color-sidebar-text-faint);
 }
 
 /*
@@ -871,10 +990,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: var(--sp-2) 10px;
-  min-height: 34px;
+  padding: 0 10px;
+  min-height: 36px;
   border-radius: var(--radius-md);
-  color: var(--color-text-muted);
+  color: var(--color-sidebar-text);
   text-decoration: none;
   font-size: var(--fs-sm);
   transition:
@@ -883,14 +1002,14 @@
 }
 
 .admin-sidebar a:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
+  background: var(--color-sidebar-surface);
+  color: var(--color-sidebar-text-strong);
   text-decoration: none;
 }
 
 .admin-sidebar a[aria-current="page"] {
-  background: var(--color-primary-soft);
-  color: var(--color-primary-on-soft);
+  background: var(--color-sidebar-active);
+  color: var(--color-sidebar-text-strong);
   font-weight: var(--fw-semibold);
 }
 
@@ -909,6 +1028,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * awcms-one#170 — the sidebar count badge slot.
+ *
+ * Renders ONLY when a composed nav entry actually carries a `badgeCount`
+ * (`ComposedEntry.badgeCount`, `AdminLayout.astro`) — see `ModuleNavigationEntry
+ * .badgeCount`'s own docblock: the field exists, and today nothing populates
+ * it. This class is styled and ready for the module that first does.
+ */
+.admin-sidebar-count {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-sidebar-badge);
+  color: var(--color-sidebar-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Drawer open (checkbox checked) — slide in + reveal scrim. */
@@ -2876,4 +3016,355 @@
     min-width: 0;
     text-indent: -100vw;
   }
+}
+
+/* ==================================================================== */
+/* Shared primitives — admin chrome restyle (awcms-one#170)             */
+/* ==================================================================== */
+/*
+ * Every rule below reads ONLY from `tokens.css` custom properties, the same
+ * discipline as the rest of this file — no literal colours, no literal sizes
+ * outside a token where one exists. Nothing here needs a `[data-theme="dark"]`
+ * override of its own: the `--color-*` tokens it reads already carry both
+ * themes' values (tokens.css), which is the same reason nothing ELSE in this
+ * file (besides the sidebar block above, which intentionally opts out via the
+ * separate `--color-sidebar-*` family) declares one either.
+ *
+ * These are primitives, not screens: no page in this repo renders one of
+ * these classes today. They exist so the NEXT screen that needs a stat tile,
+ * a status pill, a segmented filter, a bulk-action bar, a list+detail split,
+ * a real toggle switch, a timeline, or a media grid reaches for a shared
+ * class instead of hand-rolling a sixth variant of one of these — the same
+ * problem `.data-table`/`.admin-table` already solved for tables.
+ */
+
+/* ---- Stat card -------------------------------------------------------- */
+/* Usage: a KPI tile — `.admin-stat-card > .admin-stat-card-label` (what),
+   `.admin-stat-card-value` (the number) and an optional `.admin-stat-card-
+   caption` (e.g. "vs last 7 days"). For the delta pill, nest an
+   `.admin-status-pill[data-tone]` (below) inside the card rather than a
+   separate class — one tinted-pill implementation, not two. */
+.admin-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-stat-card-label {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-muted);
+}
+
+.admin-stat-card-value {
+  font-size: 26px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text);
+  /* Digits must not jitter horizontally as a live count updates. */
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-stat-card .admin-status-pill {
+  align-self: flex-start;
+}
+
+.admin-stat-card-caption {
+  font-size: var(--fs-2xs);
+  color: var(--color-text-faint);
+}
+
+/* ---- Status pill -------------------------------------------------------
+   Usage: an inline state readout with a semantic tone, built strictly from
+   the `-soft`/`-on-soft` token pairs `tokens.css` already measures for AA —
+   never a new literal colour. `data-tone="primary"` and `"neutral"` extend
+   `.status-badge`'s variant set (which this stays alongside rather than
+   replaces — see that block above) to the two tones the restyle's primitives
+   need beyond status semantics (an informational/brand pill, a quiet one). */
+.admin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.admin-status-pill-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: currentcolor;
+}
+
+.admin-status-pill[data-tone="success"] {
+  background: var(--color-success-soft);
+  color: var(--color-success-on-soft);
+}
+.admin-status-pill[data-tone="warning"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
+}
+.admin-status-pill[data-tone="danger"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
+}
+.admin-status-pill[data-tone="info"] {
+  background: var(--color-info-soft);
+  color: var(--color-info-on-soft);
+}
+.admin-status-pill[data-tone="primary"] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+}
+.admin-status-pill[data-tone="neutral"] {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+/* ---- Segmented control ---------------------------------------------- */
+/* Usage: `<div class="admin-segmented" role="tablist">` wrapping
+   `<button class="admin-segmented-option" aria-selected="true|false">`. The
+   track is the tinted recessed surface; the selected option lifts to a plain
+   card with a shadow — the same "recessed track, raised active tile" pattern
+   as a native segmented control, built from tokens already in this file. */
+.admin-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.admin-segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-segmented-option:hover {
+  color: var(--color-text);
+}
+
+.admin-segmented-option[aria-selected="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---- Bulk action bar -------------------------------------------------- */
+/* Usage: appears above a table once one or more rows are selected —
+   `.admin-bulk-bar-count` for "N selected", `.admin-bulk-bar-actions` as a
+   flex row of buttons pushed to the trailing edge. */
+.admin-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+  border-radius: var(--radius-md);
+}
+
+.admin-bulk-bar-count {
+  font-weight: var(--fw-semibold);
+}
+
+.admin-bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+/* ---- Two-pane list + detail layout ------------------------------------ */
+/* Usage: `.admin-two-pane > .admin-two-pane-list + .admin-two-pane-detail`.
+   Stacks to one column under 900px — the breakpoint this primitive commits to
+   regardless of screen, since a fixed-width list column stops being usable
+   well before the shell's existing 768px/1024px chrome breakpoints. */
+.admin-two-pane {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+@media (max-width: 899.98px) {
+  .admin-two-pane {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-two-pane-list,
+.admin-two-pane-detail {
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---- Toggle switch ------------------------------------------------------
+   Usage: `<label class="admin-toggle"><input type="checkbox" /><span
+   class="admin-toggle-track"><span class="admin-toggle-thumb"></span></span>
+   </label>`. A REAL `<input type="checkbox">`, not a `<div>` pretending to be
+   one — it stays keyboard-operable (Tab + Space) and announces its checked
+   state to assistive tech for free; the two spans are purely the paint. */
+.admin-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  flex: none;
+  cursor: pointer;
+}
+
+.admin-toggle input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-strong);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.admin-toggle input:checked ~ .admin-toggle-track {
+  background: var(--color-primary-strong);
+  border-color: var(--color-primary-strong);
+}
+
+.admin-toggle input:checked ~ .admin-toggle-thumb {
+  transform: translateX(18px);
+}
+
+.admin-toggle input:focus-visible ~ .admin-toggle-track {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.admin-toggle input:disabled ~ .admin-toggle-track {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Timeline ----------------------------------------------------------
+   Usage: `.admin-timeline > .admin-timeline-item*`, each holding an
+   `.admin-timeline-label` + `.admin-timeline-meta`. The connecting line is
+   each item's own left border (so it draws between consecutive dots without a
+   separate marker column); the dot is a `::before` pseudo-element, and the
+   last item's border is transparent rather than removed, so its dot keeps the
+   same left offset. */
+.admin-timeline-item {
+  position: relative;
+  padding: 0 0 var(--sp-4) 20px;
+  border-left: 1px solid var(--color-border);
+}
+
+.admin-timeline-item::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-strong);
+}
+
+.admin-timeline-item:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.admin-timeline-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+}
+
+.admin-timeline-meta {
+  font-size: var(--fs-2xs);
+  color: var(--color-text-faint);
+}
+
+/* ---- Media grid --------------------------------------------------------
+   Usage: `.admin-media-grid > .admin-media-grid-tile[data-selected]*`. Tiles
+   auto-fill at a 150px minimum (matching the reference mockup's upload/media
+   picker), never fewer than fit the available width. */
+.admin-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: var(--sp-3);
+}
+
+.admin-media-grid-tile {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.admin-media-grid-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-media-grid-tile[data-selected="true"] {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

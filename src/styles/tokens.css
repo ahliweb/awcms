@@ -394,6 +394,42 @@
   --bp-md: 768px;
   --bp-lg: 1024px;
   --bp-xl: 1280px;
+
+  /*
+   * Sidebar tokens (admin chrome restyle, awcms-one#170) — a FOURTH, always-
+   * dark surface family, independent of `data-theme`.
+   *
+   * Every other token above is theme-aware: it flips between the `:root` and
+   * `:root[data-theme="dark"]` block so the admin body/cards/tables track the
+   * reader's chosen theme. The sidebar deliberately does NOT — the redesign's
+   * reference mockup renders one dark navigation rail regardless of whether the
+   * rest of the admin is light or dark, the same way many editors keep a dark
+   * activity rail beside a light editing surface. So this family gets its own
+   * name rather than reusing `--color-surface`/`--color-text*`, and the
+   * `:root[data-theme="dark"]` block below restates the SAME values rather than
+   * inheriting silently — see that block's own comment for why restating (not
+   * omitting) is the deliberate choice here.
+   *
+   * `--color-sidebar-text-faint` is NOT the mockup's literal `#6b7581`. Measured
+   * against both surfaces it sits on, that value is 3.84:1 on
+   * `--color-sidebar-bg` and 3.42:1 on `--color-sidebar-surface` — below the
+   * 4.5:1 this file's own `-strong`/`-on-soft` docblocks already establish as
+   * the bar for text that carries information (this token colours the sidebar's
+   * uppercase group labels, not a decorative aside). `#838d99` keeps the same
+   * blue-grey hue and clears both: 5.34:1 and 4.75:1. This is the same
+   * correction this file has already made four times for the theme-aware
+   * families above — a design reference's literal value is right for the role
+   * it imagined and wrong for the surface the value actually renders on.
+   */
+  --color-sidebar-bg: #101722;
+  --color-sidebar-surface: #1a222e;
+  --color-sidebar-border: #1f2733;
+  --color-sidebar-card-border: #2a323c;
+  --color-sidebar-text: #9aa7b2;
+  --color-sidebar-text-strong: #f0f4f9;
+  --color-sidebar-text-faint: #838d99;
+  --color-sidebar-active: #1e2836;
+  --color-sidebar-badge: #2b3444;
 }
 
 :root[data-theme="dark"] {
@@ -470,6 +506,27 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
+
+  /*
+   * Sidebar tokens, RESTATED rather than inherited. The dark-theme block is a
+   * cascade OVERRIDE layer — a token it does not mention keeps its `:root`
+   * value already, so this restatement changes nothing today. It is written
+   * anyway, deliberately, for the same reason `design-token-contrast-check.ts`
+   * measures both themes rather than trusting one: a family that is silently
+   * dark-theme-identical by omission is one accidental edit away from being
+   * dark-theme-identical by nobody's decision. Stating the values here makes
+   * "the sidebar stays this dark in both themes" a fact this file asserts, not
+   * an accident of which selector nobody got around to adding.
+   */
+  --color-sidebar-bg: #101722;
+  --color-sidebar-surface: #1a222e;
+  --color-sidebar-border: #1f2733;
+  --color-sidebar-card-border: #2a323c;
+  --color-sidebar-text: #9aa7b2;
+  --color-sidebar-text-strong: #f0f4f9;
+  --color-sidebar-text-faint: #838d99;
+  --color-sidebar-active: #1e2836;
+  --color-sidebar-badge: #2b3444;
 }
 
 /* Reset minimal */

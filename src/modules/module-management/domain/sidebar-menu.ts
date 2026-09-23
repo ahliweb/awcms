@@ -126,6 +126,9 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // first screen from landing silently in `general` — a real section, so the
   // mistake would render as a plausible sidebar rather than as a gap.
   push_delivery: "operations",
+  // ADR-0122 (ahliweb/omes#196). Placed even though the module declares NO navigation yet:
+  // this map must cover every registered module so its first screen lands in operations.
+  omes_control: "operations",
   // Master reference data. This module DOES declare navigation now
   // (`/admin/idn-regions`, landed with ADR-0053/PR #332). The comment that used
   // to sit here said its operator screen lived in awcms-astro per ADR-0047 —
@@ -374,6 +377,8 @@ export type SidebarDefaultEntry = {
   order: number;
   /** Exact permission key required to see the link, if any. */
   requiredPermission?: string;
+  /** See `ModuleNavigationEntry.badgeCount` — carried through unchanged. */
+  badgeCount?: number;
 };
 
 export type SidebarComposeOptions = {
@@ -389,6 +394,8 @@ export type ComposedEntry = {
   label: string;
   icon?: string;
   isCurrent: boolean;
+  /** See `ModuleNavigationEntry.badgeCount` — carried through unchanged. */
+  badgeCount?: number;
 };
 
 export type ComposedModuleGroup = {
@@ -447,7 +454,8 @@ export function buildDefaultSidebarModel(
         // takes effect, and every module that does not still gets an icon.
         icon: nav.icon ?? resolveSidebarIcon(nav.labelKey),
         order: nav.order ?? 0,
-        requiredPermission: nav.requiredPermission
+        requiredPermission: nav.requiredPermission,
+        badgeCount: nav.badgeCount
       });
     }
   }
@@ -535,7 +543,8 @@ export function composeSidebarSections(
             path: entry.path,
             label: resolveSidebarLabel(entry.labelKey),
             icon: entry.icon,
-            isCurrent: entry.path === options.currentPath
+            isCurrent: entry.path === options.currentPath,
+            badgeCount: entry.badgeCount
           }))
         }
       });
