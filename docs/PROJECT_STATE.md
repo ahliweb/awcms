@@ -120,7 +120,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                                              | `git rev-list --count v10.3.0..HEAD`                                                    |
 | Base modules                      | **25** (see the list in ARCHITECTURE.md)                                                                | `src/modules/index.ts`                                                                  |
 | Migrations                        | **156** (`sql/001`–`156`)                                                                               | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0122** (`0000` = template; highest ADR status: **Accepted**)                                 | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0123** (`0000` = template; highest ADR status: **Accepted**)                                 | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **1 of 25** modules without `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **63** (36.473 lines) — on typechecking see §6                                                          | `find src -name '*.astro'`                                                              |
 | Gates                             | **60** in the `bun run check` chain                                                                     | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -367,6 +367,52 @@ pioneered directly here after the ADR-0047 freeze.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / next steps
+
+- **BACKUP ASSURANCE ROUND — 24 September 2026 (Issue #812, ADR-0123): the
+  three documented-but-missing DR controls now exist.** `deploy/backup/`
+  gained `manifest.sh`, `offsite-copy.sh` and `restore-drill.sh`, and
+  `backup-postgres.sh`/`restore-postgres.sh` gained opt-in `age`
+  encryption-at-rest plus an HMAC-SHA256-authenticated recovery manifest —
+  closing the gap every backup doc in this repo had been correctly warning
+  about since the 27 August correction. Decision: `age` (asymmetric,
+  single static binary, no Bun/Node dependency in the backup container) over
+  GnuPG (unattended-operation fragility) or OpenSSL `enc` (not authenticated
+  encryption); HMAC-SHA256 over a canonical manifest (matching this repo's
+  existing sync-HMAC pattern) over a detached signature, with the key read
+  from a file by a Perl one-liner rather than `openssl dgst -hmac <key>` —
+  the latter would put the key on argv, visible via `ps`. Full rationale and
+  rejected alternatives in ADR-0123.
+
+  **Executed, not just written**: a real `age`+HMAC round trip against a
+  disposable local Postgres 18.4 (155 migrations applied) — encrypt →
+  authenticated manifest → off-site-ready artifact → `restore-drill.sh` →
+  scratch-database restore → `FORCE ROW LEVEL SECURITY` count verified
+  non-zero. Two independent tamper tests (a flipped ciphertext byte, an
+  edited manifest field) both correctly aborted BEFORE any restore mutation.
+  Partial-config (only one of the paired encryption env vars set) correctly
+  fails closed on both the backup and restore sides. Captured logs grepped
+  for the HMAC key hex, the `age` identity string, and the DB password —
+  none present. `offsite-copy.sh` was exercised only for its argument-
+  validation/fail-closed paths (no local SSH server available in this
+  environment to prove a real transfer) — flagged, not glossed over.
+
+  Every existing safe default was preserved: no credentials printed, no
+  final-looking artifact left behind on encryption failure (`.partial` +
+  atomic rename, same discipline as the existing dump), restore drill stays
+  the non-destructive default with no code path in `restore-drill.sh` that
+  can pass `--target`, and the plain unencrypted mode (offline/LAN profile)
+  is byte-for-byte unchanged. `deploy/backup/README.md` is new (production-
+  preflight-runbook.md had named it as missing since 27 August); EN/ID
+  mirrors updated across `production-preflight-runbook.md`, doc 07,
+  `deployment-profiles.md`, the `awcms-production-preflight` skill, and
+  `deploy/cron/awcms.crontab`'s scheduled entries.
+
+  **Deferred, deliberately**: `scripts/dr-drill.ts`/`bun run
+resilience:dr-drill` — `resilience-dr-verification.md`'s own banner already
+  says that whole orchestrator does not exist in this repo yet; building it
+  is a separate, much larger effort this issue does not block on.
+  `restore-drill.sh` is written so that orchestrator can call it once it
+  exists.
 
 - **INSPECTION ROUND — 28 August 2026: the tracker was empty, and the repo was
   still one step behind its own consumer.**
