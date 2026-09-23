@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:02f97e787d4eb29ab6ce29716c9e1d3a209c06a62097f66d02f60e7735365c2c -->
+<!-- i18n-source-hash: sha256:5a73dfc46401ccba419db58e1c450d0bf8a07815f31ee33540cc292de12ba86c -->
 
 # AWCMS — Project State & Continuation
 
@@ -121,7 +121,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                     | `git rev-list --count v10.3.0..HEAD`                                                    |
 | Modul base                         | **25** (lihat daftar di ARCHITECTURE.md)                                                               | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **156** (`sql/001`–`156`)                                                                              | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0123** (`0000` = template; status ADR tertinggi: **Accepted**)                              | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0124** (`0000` = template; status ADR tertinggi: **Accepted**)                              | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **1 dari 25** modul tanpa `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **63** (36.473 baris) — soal typecheck lihat §6                                                        | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **60** di rantai `bun run check`                                                                       | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -366,6 +366,31 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   verifikasi dengan `ls sql/`) dan berjalan sebagai role least-privilege terpisah. Rincian,
   termasuk jebakan "user Coolify itu superuser sehingga RLS inert", di
   [`awcms/environments.md`](awcms/environments.md).
+
+- **Alur kerja pengetahuan Obsidian yang aman di atas graf** ([ADR-0124](adr/0124-obsidian-vault-location-dedicated-knowledge-directory.id.md),
+  Issue #805, tanpa migrasi). Obsidian adalah UI pengetahuan developer opsional, tidak
+  pernah sistem catatan: ia membuka **vault `knowledge/` khusus**, tidak pernah root
+  repository (ADR-nya mencatat kenapa, dibanding alternatif vault-root-repo dan path
+  per-developer tak-ter-commit). Ekspor Obsidian Graphify mendarat lebih dulu di
+  `graphify-out/obsidian-staging/` yang digitignore dan terisolasi; hanya
+  `scripts/knowledge-obsidian-sync.ts` (`bun run knowledge:obsidian:export`) yang boleh
+  memindahkan subset ber-allowlist (hanya `.md`/`.canvas`) ke
+  `knowledge/generated/graphify/`, fail-closed — exit bukan-nol, tanpa apa pun tertulis
+  — pada path traversal, tipe berkas tak terduga, collision nama berkas dengan
+  `knowledge/curated/`, atau entri yang path aslinya keluar dari staging root;
+  `knowledge/curated/` (catatan indeks kecil hasil kurasi manusia saja, tidak pernah
+  salinan konten ADR/PRD/kontrak kanonik) tidak pernah menjadi write target.
+  `tests/knowledge-obsidian-sync.test.ts` membuktikan setiap jalur fail-closed terhadap
+  bentuk cacat sungguhan (symlink sungguhan, byproduct `.obsidian/` sungguhan,
+  collision basename sungguhan), bahwa konten kurasi selamat byte-demi-byte setelah
+  ekspor penuh, dan bahwa area hasil-generate disposable/bisa dibangun ulang dari nol.
+  Baseline Graphify dipatok (`graphify 0.9.35`, tanpa `latest` yang mengambang);
+  `graphify install --project` dievaluasi dan ditolak (akan menduplikasi kebijakan
+  `AGENTS.md`/`.claude/skills/` tanpa gerbang yang menjaga keduanya sinkron). `bun run
+knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
+  digerbangi ke dalam rantai utama `bun run check`, murni dan tanpa Obsidian. Lihat
+  [`awcms/knowledge-graph.md`](awcms/knowledge-graph.id.md)
+  §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
 

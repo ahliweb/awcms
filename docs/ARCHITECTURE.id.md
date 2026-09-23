@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ARCHITECTURE.md)
 
-<!-- i18n-source-hash: sha256:ee522e4f90f8225d1087b385b9bc823c05aadcb75704b44272dfb2973240da4c -->
+<!-- i18n-source-hash: sha256:63ec9336fa1edada376ff25ab30ae182ba71888b2f4fc092c1384a806cdadd23 -->
 
 # Arsitektur AWCMS
 
@@ -383,6 +383,25 @@ lock lintas proses), dan menolak start bila checksum file yang sudah ter-apply
 berubah — edit migration yang sudah jalan (bahkan komentar) harus lewat
 migration baru, bukan mengedit file lama; lihat catatan proyek
 `awcms-applied-migration-immutable`.
+
+## Knowledge graph & alur kerja Obsidian (ADR-0124)
+
+`graphify-out/` adalah knowledge graph ter-commit atas seluruh repo,
+digerbangi `bun run graph:artifacts:check`; lihat
+[`docs/awcms/knowledge-graph.md`](awcms/knowledge-graph.id.md) untuk cara
+membacanya dan, yang krusial, apa yang TIDAK boleh disimpulkan darinya
+(temuan adalah hipotesis, diverifikasi terhadap kode/`sql/`/`bun run check`,
+tidak pernah diperlakukan sebagai kebenaran kini dengan sendirinya). Di atas
+graf itu, `knowledge/` adalah vault Obsidian yang menghadap developer dan
+**opsional** — tidak pernah sistem catatan, tidak pernah dependensi CI.
+Ekspor Obsidian Graphify mendarat di path staging terisolasi dan digitignore
+(`graphify-out/obsidian-staging/`); hanya
+`scripts/knowledge-obsidian-sync.ts` (`bun run knowledge:obsidian:export`)
+yang boleh memindahkan subset ber-allowlist ke
+`knowledge/generated/graphify/`, fail-closed pada path traversal, tipe
+berkas tak terduga, collision nama berkas dengan `knowledge/curated/` hasil
+kurasi manusia, atau output yang keluar dari staging root. `bun run
+knowledge:check` digerbangi ke dalam `bun run check`.
 
 ## Status implementasi & gap yang tersisa
 

@@ -120,7 +120,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                                              | `git rev-list --count v10.3.0..HEAD`                                                    |
 | Base modules                      | **25** (see the list in ARCHITECTURE.md)                                                                | `src/modules/index.ts`                                                                  |
 | Migrations                        | **156** (`sql/001`–`156`)                                                                               | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0123** (`0000` = template; highest ADR status: **Accepted**)                                 | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0124** (`0000` = template; highest ADR status: **Accepted**)                                 | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **1 of 25** modules without `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **63** (36.473 lines) — on typechecking see §6                                                          | `find src -name '*.astro'`                                                              |
 | Gates                             | **60** in the `bun run check` chain                                                                     | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -365,6 +365,29 @@ pioneered directly here after the ADR-0047 freeze.)
   verify it with `ls sql/`) and runs as a separate least-privilege role. Details,
   including the "the Coolify user is a superuser so RLS is inert" trap, are in
   [`awcms/environments.md`](awcms/environments.md).
+
+- **Safe Obsidian knowledge workflow on top of the graph** ([ADR-0124](adr/0124-obsidian-vault-location-dedicated-knowledge-directory.md),
+  Issue #805, no migration). Obsidian is an optional developer knowledge UI, never a
+  system of record: it opens a **dedicated `knowledge/` vault**, never the repository
+  root (the ADR records why, against a repo-root-vault alternative and an uncommitted
+  per-developer path). Graphify's Obsidian export lands first in the isolated,
+  git-ignored `graphify-out/obsidian-staging/`; only `scripts/knowledge-obsidian-sync.ts`
+  (`bun run knowledge:obsidian:export`) may move an allow-listed subset
+  (`.md`/`.canvas` only) into `knowledge/generated/graphify/`, failing closed —
+  non-zero exit, nothing written — on path traversal, an unexpected file type, a
+  filename collision with `knowledge/curated/`, or an entry whose real path escapes
+  the staging root; `knowledge/curated/` (small human-authored index notes only,
+  never a copy of canonical ADR/PRD/contract content) is never a write target.
+  `tests/knowledge-obsidian-sync.test.ts` proves each fail-closed path against the
+  actual defect shape (a real symlink, a real `.obsidian/` byproduct, a real basename
+  collision), that curated content survives a full export byte-for-byte, and that the
+  generated area is disposable/rebuildable from scratch. The Graphify baseline is
+  pinned (`graphify 0.9.35`, no floating `latest`); `graphify install --project` was
+  evaluated and rejected (would duplicate `AGENTS.md`/`.claude/skills/` policy with no
+  gate keeping the two in sync). `bun run knowledge:check` (`graph:artifacts:check` +
+  the sync wrapper's `--check` dry run) is wired into the main `bun run check` chain,
+  pure and Obsidian-free. See [`awcms/knowledge-graph.md`](awcms/knowledge-graph.md)
+  §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
 

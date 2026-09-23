@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:06b6ad9fb5e28a271d62989fb4d2a02cbdada027ea617a8e5bd668bc8211ae02 -->
+<!-- i18n-source-hash: sha256:51f46e2f841ed74fa95942b4ccc0e201867bfc7cfa826abee477f67e832c89df -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-124 target menjalankan berkas di `scripts/`; 56 di antaranya
+126 target menjalankan berkas di `scripts/`; 56 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -97,7 +97,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `entitlements:backfill`                   | `identity-access-entitlement-backfill.ts`      | —    |
 | `family:conformance:check`                | `family-conformance-check.ts`                  | ✅   |
 | `form-drafts:purge`                       | `form-draft-purge.ts`                          | —    |
-| `graph:artifacts:check`                   | `graph-artifacts-check.ts`                     | ✅   |
+| `graph:artifacts:check`                   | `graph-artifacts-check.ts`                     | —    |
 | `i18n:catalog:check`                      | `i18n-catalog-check.ts`                        | ✅   |
 | `i18n:compile`                            | `i18n-compile.ts`                              | —    |
 | `i18n:screens:check`                      | `i18n-screen-coverage-check.ts`                | ✅   |
@@ -117,6 +117,8 @@ terjadwal, atau oleh workflow CI tertentu.
 | `jobs:crontab:generate`                   | `jobs-crontab.ts`                              | —    |
 | `jobs:env-allowlist:check`                | `jobs-env-allowlist.ts`                        | ✅   |
 | `jobs:env-allowlist:generate`             | `jobs-env-allowlist.ts`                        | —    |
+| `knowledge:check`                         | `knowledge-obsidian-sync.ts`                   | ✅   |
+| `knowledge:obsidian:export`               | `knowledge-obsidian-sync.ts`                   | —    |
 | `logging:lint:check`                      | `logging-lint-check.ts`                        | ✅   |
 | `logs:audit:purge`                        | `audit-log-purge.ts`                           | —    |
 | `memory:docs:check`                       | `sync-agent-memory.ts`                         | ✅   |

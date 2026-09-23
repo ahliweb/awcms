@@ -382,6 +382,23 @@ changes — editing a migration that has already run (even a comment) must go th
 new migration, not by editing the old file; see the project note
 `awcms-applied-migration-immutable`.
 
+## Knowledge graph & Obsidian workflow (ADR-0124)
+
+`graphify-out/` is a committed knowledge graph over the whole repo, governed by
+`bun run graph:artifacts:check`; see
+[`docs/awcms/knowledge-graph.md`](awcms/knowledge-graph.md) for how to read it
+and, critically, what NOT to conclude from it (findings are hypotheses, verified
+against code/`sql/`/`bun run check`, never treated as current truth on their
+own). On top of that graph, `knowledge/` is an **optional** developer-facing
+Obsidian vault — never a system of record, never a CI dependency. Graphify's
+Obsidian export lands in an isolated, git-ignored staging path
+(`graphify-out/obsidian-staging/`); only `scripts/knowledge-obsidian-sync.ts`
+(`bun run knowledge:obsidian:export`) may move an allow-listed subset into
+`knowledge/generated/graphify/`, failing closed on path traversal, unexpected
+file types, filename collisions with the human-authored
+`knowledge/curated/`, or output escaping the staging root. `bun run
+knowledge:check` is wired into `bun run check`.
+
 ## Implementation status & remaining gaps
 
 Already live and verified against the code (not a plan):
