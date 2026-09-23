@@ -517,7 +517,17 @@ paths:
                   type: string
                 operation:
                   type: string
-                  enum: [status, preflight, start, stop, restart, update, backup, rollback]
+                  enum:
+                    [
+                      status,
+                      preflight,
+                      start,
+                      stop,
+                      restart,
+                      update,
+                      backup,
+                      rollback
+                    ]
                 parameters:
                   type: object
                 backupId:

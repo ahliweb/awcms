@@ -94,7 +94,11 @@ export const POST = defineTenantRoute<RegisterPrepared>({
     if (!idempotencyKey) {
       return {
         valid: false,
-        response: fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.")
+        response: fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        )
       };
     }
 
@@ -104,7 +108,11 @@ export const POST = defineTenantRoute<RegisterPrepared>({
     } catch {
       return {
         valid: false,
-        response: fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.")
+        response: fail(
+          400,
+          "VALIDATION_ERROR",
+          "Request body must be valid JSON."
+        )
       };
     }
 
@@ -119,17 +127,37 @@ export const POST = defineTenantRoute<RegisterPrepared>({
     const validation = validateServerRegistrationInput(prepared.body);
 
     if (!validation.valid) {
-      return fail(400, "VALIDATION_ERROR", "Server registration input is invalid.", {}, validation.errors);
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Server registration input is invalid.",
+        {},
+        validation.errors
+      );
     }
 
-    const requestHash = computeRequestHash({ action: "register_server", input: validation.value });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "register_server",
+      input: validation.value
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const rateLimit = await checkSharedRateLimit(
@@ -163,14 +191,25 @@ export const POST = defineTenantRoute<RegisterPrepared>({
         outcome.outcome === "registered"
           ? `Server "${outcome.server.hostname}" registered.`
           : `Server "${outcome.server.hostname}" was already registered — returned the existing row.`,
-      attributes: { hostname: outcome.server.hostname, alreadyRegistered: outcome.outcome === "already_registered" },
+      attributes: {
+        hostname: outcome.server.hostname,
+        alreadyRegistered: outcome.outcome === "already_registered"
+      },
       correlationId: locals.correlationId
     });
 
     const response = created({ server: outcome.server });
     const responseBody = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey, requestHash, 201, responseBody);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      201,
+      responseBody
+    );
 
     return response;
   }

@@ -1,5 +1,9 @@
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
-import { fail, jsonResponse, ok } from "../../../../../modules/_shared/api-response";
+import {
+  fail,
+  jsonResponse,
+  ok
+} from "../../../../../modules/_shared/api-response";
 import {
   computeRequestHash,
   findIdempotencyRecord,
@@ -55,7 +59,11 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
     const idempotencyKey = request.headers.get("idempotency-key");
 
     if (!idempotencyKey) {
-      return fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.");
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     return { idempotencyKey };
@@ -68,14 +76,28 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
       return fail(400, "VALIDATION_ERROR", "Server id is required.");
     }
 
-    const requestHash = computeRequestHash({ action: "decommission", serverId: id });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "decommission",
+      serverId: id
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const outcome = await decommissionServer(tx, tenantId, id, now);
@@ -99,7 +121,15 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
     const response = ok({ server: outcome.server });
     const responseBody = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey, requestHash, 200, responseBody);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      200,
+      responseBody
+    );
 
     return response;
   }

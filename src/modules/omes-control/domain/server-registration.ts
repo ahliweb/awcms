@@ -39,7 +39,9 @@ export function validateServerRegistrationInput(
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return {
       valid: false,
-      errors: [{ field: "body", message: "Request body must be a JSON object." }]
+      errors: [
+        { field: "body", message: "Request body must be a JSON object." }
+      ]
     };
   }
 
@@ -51,7 +53,8 @@ export function validateServerRegistrationInput(
   ) {
     errors.push({
       field: "hostname",
-      message: "hostname is required and must match ^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$."
+      message:
+        "hostname is required and must match ^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$."
     });
   }
 
@@ -64,7 +67,10 @@ export function validateServerRegistrationInput(
     const version = platformRecord.version;
     const arch = platformRecord.arch;
 
-    if (typeof os !== "string" || !OS_VALUES.includes(os as (typeof OS_VALUES)[number])) {
+    if (
+      typeof os !== "string" ||
+      !OS_VALUES.includes(os as (typeof OS_VALUES)[number])
+    ) {
       errors.push({
         field: "platform.os",
         message: `platform.os must be one of: ${OS_VALUES.join(", ")}.`
@@ -72,7 +78,10 @@ export function validateServerRegistrationInput(
     }
 
     if (typeof version !== "string" || version.length === 0) {
-      errors.push({ field: "platform.version", message: "platform.version is required." });
+      errors.push({
+        field: "platform.version",
+        message: "platform.version is required."
+      });
     }
 
     if (
@@ -93,7 +102,11 @@ export function validateServerRegistrationInput(
       typeof arch === "string" &&
       ARCH_VALUES.includes(arch as (typeof ARCH_VALUES)[number])
     ) {
-      platform = { os: os as ServerPlatform["os"], version, arch: arch as ServerPlatform["arch"] };
+      platform = {
+        os: os as ServerPlatform["os"],
+        version,
+        arch: arch as ServerPlatform["arch"]
+      };
     }
   }
 
@@ -102,7 +115,10 @@ export function validateServerRegistrationInput(
   }
 
   if (record.tags !== undefined && !Array.isArray(record.tags)) {
-    errors.push({ field: "tags", message: "tags must be an array when present." });
+    errors.push({
+      field: "tags",
+      message: "tags must be an array when present."
+    });
   }
 
   if (errors.length > 0 || !platform) {

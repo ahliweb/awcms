@@ -17,5 +17,7 @@ export function isHeartbeatStale(
     return true;
   }
 
-  return now.getTime() - lastHeartbeatAt.getTime() > STALE_HEARTBEAT_THRESHOLD_MS;
+  return (
+    now.getTime() - lastHeartbeatAt.getTime() > STALE_HEARTBEAT_THRESHOLD_MS
+  );
 }

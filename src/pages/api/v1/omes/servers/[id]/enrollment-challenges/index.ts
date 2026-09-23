@@ -32,7 +32,11 @@ export const POST = defineTenantRoute<Prepared>({
     const idempotencyKey = request.headers.get("idempotency-key");
 
     if (!idempotencyKey) {
-      return fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.");
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     return { idempotencyKey };
@@ -45,18 +49,32 @@ export const POST = defineTenantRoute<Prepared>({
       return fail(400, "VALIDATION_ERROR", "Server id is required.");
     }
 
-    const requestHash = computeRequestHash({ action: "issue_enrollment_challenge", serverId });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "issue_enrollment_challenge",
+      serverId
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
       // Deliberately NOT `jsonResponse(existing.responseBody, ...)` — see
       // below: what is stored for THIS scope is a redacted stand-in, never
       // the raw challenge, so a replay cannot resurrect a secret that was
       // shown to the caller exactly once on the original request.
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const rateLimit = await checkSharedRateLimit(
@@ -76,7 +94,12 @@ export const POST = defineTenantRoute<Prepared>({
       );
     }
 
-    const outcome = await issueEnrollmentChallengeForServer(tx, tenantId, serverId, now);
+    const outcome = await issueEnrollmentChallengeForServer(
+      tx,
+      tenantId,
+      serverId,
+      now
+    );
 
     if (outcome.outcome === "server_not_found") {
       return fail(404, "RESOURCE_NOT_FOUND", "Server not found.");
@@ -99,7 +122,11 @@ export const POST = defineTenantRoute<Prepared>({
       resourceId: outcome.workerId,
       severity: "warning",
       message: `Enrollment challenge issued for server ${serverId}.`,
-      attributes: { serverId, workerId: outcome.workerId, expiresAt: outcome.expiresAt },
+      attributes: {
+        serverId,
+        workerId: outcome.workerId,
+        expiresAt: outcome.expiresAt
+      },
       correlationId: locals.correlationId
     });
 

@@ -14,7 +14,11 @@ export const GET = defineTenantRoute<undefined>({
       return fail(400, "VALIDATION_ERROR", "Operation request id is required.");
     }
 
-    const operationRequest = await fetchOperationRequestDetail(tx, tenantId, id);
+    const operationRequest = await fetchOperationRequestDetail(
+      tx,
+      tenantId,
+      id
+    );
 
     if (!operationRequest) {
       return fail(404, "RESOURCE_NOT_FOUND", "Operation request not found.");

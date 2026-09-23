@@ -76,14 +76,46 @@ export const OMES_OPERATION_GUARD: Record<
   OmesOperationCode,
   { moduleKey: "omes_control"; activityCode: string; action: AccessAction }
 > = {
-  status: { moduleKey: "omes_control", activityCode: "deployments", action: "read" },
-  preflight: { moduleKey: "omes_control", activityCode: "deployments", action: "read" },
-  start: { moduleKey: "omes_control", activityCode: "deployments", action: "operate" },
-  stop: { moduleKey: "omes_control", activityCode: "deployments", action: "operate" },
-  restart: { moduleKey: "omes_control", activityCode: "deployments", action: "operate" },
-  update: { moduleKey: "omes_control", activityCode: "deployments", action: "operate" },
-  backup: { moduleKey: "omes_control", activityCode: "deployments", action: "operate" },
-  rollback: { moduleKey: "omes_control", activityCode: "backups", action: "rollback" }
+  status: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "read"
+  },
+  preflight: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "read"
+  },
+  start: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "operate"
+  },
+  stop: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "operate"
+  },
+  restart: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "operate"
+  },
+  update: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "operate"
+  },
+  backup: {
+    moduleKey: "omes_control",
+    activityCode: "deployments",
+    action: "operate"
+  },
+  rollback: {
+    moduleKey: "omes_control",
+    activityCode: "backups",
+    action: "rollback"
+  }
 };
 
 /**
@@ -100,7 +132,8 @@ export const OMES_OPERATION_GUARD: Record<
  * is refused with `APPROVAL_WORKFLOW_NOT_CONFIGURED` rather than silently
  * falling back to auto-approval or direct execution.
  */
-export const OMES_DESTRUCTIVE_WORKFLOW_KEY = "omes_control.destructive_operation";
+export const OMES_DESTRUCTIVE_WORKFLOW_KEY =
+  "omes_control.destructive_operation";
 
 export type OperationSubmissionInput = {
   serverId: string;
@@ -140,7 +173,9 @@ export function validateOperationSubmission(
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return {
       valid: false,
-      errors: [{ field: "body", message: "Request body must be a JSON object." }]
+      errors: [
+        { field: "body", message: "Request body must be a JSON object." }
+      ]
     };
   }
 

@@ -53,8 +53,7 @@ function toSummary(row: BackupRow, now: Date): BackupSnapshotSummary {
     capturedAt: row.captured_at.toISOString(),
     fresh:
       row.status !== "failed" &&
-      now.getTime() - row.captured_at.getTime() <=
-        BACKUP_FRESHNESS_THRESHOLD_MS
+      now.getTime() - row.captured_at.getTime() <= BACKUP_FRESHNESS_THRESHOLD_MS
   };
 }
 

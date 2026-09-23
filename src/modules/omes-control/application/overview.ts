@@ -113,7 +113,10 @@ export async function computeOmesOverview(
   `) as { reconciliation_status: string; last_reconciled_at: Date | null }[];
 
   const staleDeploymentCount = deploymentAgeRows.filter((row) => {
-    if (row.reconciliation_status === "failed" || row.reconciliation_status === "drifted") {
+    if (
+      row.reconciliation_status === "failed" ||
+      row.reconciliation_status === "drifted"
+    ) {
       return true;
     }
     if (!row.last_reconciled_at) {

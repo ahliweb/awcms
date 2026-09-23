@@ -92,7 +92,10 @@ export const POST = defineTenantRoute<Prepared>({
       resourceId: outcome.job.id,
       severity: "warning",
       message: "OMES job cancelled.",
-      attributes: { serverId: outcome.job.serverId, operation: outcome.job.operation },
+      attributes: {
+        serverId: outcome.job.serverId,
+        operation: outcome.job.operation
+      },
       correlationId: locals.correlationId
     });
 

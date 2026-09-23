@@ -52,12 +52,7 @@ export const GET = defineTenantRoute<Prepared>({
     }
 
     return ok(
-      await fetchHealthHistory(
-        tx,
-        tenantId,
-        prepared.serverId,
-        prepared.cursor
-      )
+      await fetchHealthHistory(tx, tenantId, prepared.serverId, prepared.cursor)
     );
   }
 });

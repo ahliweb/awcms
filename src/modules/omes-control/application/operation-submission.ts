@@ -107,7 +107,10 @@ export async function submitOmesOperation(
 ): Promise<SubmitOmesOperationOutcome> {
   const destructive = isDestructiveOmesOperation(input.operation);
 
-  if (destructive && !(await hasActiveDestructiveWorkflowDefinition(tx, tenantId))) {
+  if (
+    destructive &&
+    !(await hasActiveDestructiveWorkflowDefinition(tx, tenantId))
+  ) {
     return { outcome: "approval_workflow_not_configured" };
   }
 
@@ -136,7 +139,10 @@ export async function submitOmesOperation(
       RETURNING ${tx.unsafe(OPERATION_REQUEST_RETURNING)}
     `) as OperationRequestRow[];
 
-    return { outcome: "created", operationRequest: toSummary(approvedRows[0]!) };
+    return {
+      outcome: "created",
+      operationRequest: toSummary(approvedRows[0]!)
+    };
   }
 
   try {

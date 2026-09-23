@@ -29,7 +29,11 @@ export const POST = defineTenantRoute<Prepared>({
     const idempotencyKey = request.headers.get("idempotency-key");
 
     if (!idempotencyKey) {
-      return fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.");
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     return { idempotencyKey };
@@ -43,13 +47,24 @@ export const POST = defineTenantRoute<Prepared>({
     }
 
     const requestHash = computeRequestHash({ action: "approve", jobId: id });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const outcome = await retryFailedJob(tx, tenantId, id);
@@ -75,14 +90,26 @@ export const POST = defineTenantRoute<Prepared>({
       resourceId: outcome.job.id,
       severity: "warning",
       message: "OMES job approved for retry.",
-      attributes: { serverId: outcome.job.serverId, operation: outcome.job.operation, retryCount: outcome.job.retryCount },
+      attributes: {
+        serverId: outcome.job.serverId,
+        operation: outcome.job.operation,
+        retryCount: outcome.job.retryCount
+      },
       correlationId: locals.correlationId
     });
 
     const response = ok({ job: outcome.job });
     const body = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey, requestHash, 200, body);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      200,
+      body
+    );
 
     return response;
   }

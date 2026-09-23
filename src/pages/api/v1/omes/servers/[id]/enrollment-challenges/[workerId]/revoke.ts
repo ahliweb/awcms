@@ -28,7 +28,11 @@ export const POST = defineTenantRoute<Prepared>({
     const idempotencyKey = request.headers.get("idempotency-key");
 
     if (!idempotencyKey) {
-      return fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.");
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     return { idempotencyKey };
@@ -39,20 +43,45 @@ export const POST = defineTenantRoute<Prepared>({
     const workerId = params.workerId;
 
     if (!serverId || !workerId) {
-      return fail(400, "VALIDATION_ERROR", "Server id and worker id are required.");
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        "Server id and worker id are required."
+      );
     }
 
-    const requestHash = computeRequestHash({ action: "revoke_enrollment", serverId, workerId });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "revoke_enrollment",
+      serverId,
+      workerId
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
-    const outcome = await revokeEnrollment(tx, tenantId, serverId, workerId, now);
+    const outcome = await revokeEnrollment(
+      tx,
+      tenantId,
+      serverId,
+      workerId,
+      now
+    );
 
     if (outcome.outcome === "not_found") {
       return fail(404, "RESOURCE_NOT_FOUND", "Enrollment not found.");
@@ -77,7 +106,15 @@ export const POST = defineTenantRoute<Prepared>({
     const response = ok({ workerId, status: "revoked" });
     const responseBody = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey, requestHash, 200, responseBody);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      200,
+      responseBody
+    );
 
     return response;
   }

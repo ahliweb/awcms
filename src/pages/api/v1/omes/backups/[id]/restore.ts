@@ -32,7 +32,11 @@ export const POST = defineTenantRoute<Prepared>({
     const idempotencyKey = request.headers.get("idempotency-key");
 
     if (!idempotencyKey) {
-      return fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.");
+      return fail(
+        400,
+        "IDEMPOTENCY_REQUIRED",
+        "Idempotency-Key header is required."
+      );
     }
 
     return { idempotencyKey };
@@ -45,14 +49,28 @@ export const POST = defineTenantRoute<Prepared>({
       return fail(400, "VALIDATION_ERROR", "Backup id is required.");
     }
 
-    const requestHash = computeRequestHash({ action: "restore_backup", backupId });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "restore_backup",
+      backupId
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const rateLimit = await checkSharedRateLimit(
@@ -89,7 +107,7 @@ export const POST = defineTenantRoute<Prepared>({
       return fail(
         409,
         "APPROVAL_WORKFLOW_NOT_CONFIGURED",
-        "This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key \"omes_control.destructive_operation\" via /admin/approvals before requesting a restore."
+        'This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key "omes_control.destructive_operation" via /admin/approvals before requesting a restore.'
       );
     }
 
@@ -109,7 +127,15 @@ export const POST = defineTenantRoute<Prepared>({
     const response = created({ operationRequest: outcome.operationRequest });
     const responseBody = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, prepared.idempotencyKey, requestHash, 201, responseBody);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      prepared.idempotencyKey,
+      requestHash,
+      201,
+      responseBody
+    );
 
     return response;
   }

@@ -34,7 +34,11 @@ const IDEMPOTENCY_SCOPE = "omes_operation_submit";
  */
 const OPERATION_SUBMIT_RATE_LIMIT = { maxAttempts: 30, windowMs: 60_000 };
 
-type ListPrepared = { serverId: string | null; status: string | null; cursor: KeysetCursor | undefined };
+type ListPrepared = {
+  serverId: string | null;
+  status: string | null;
+  cursor: KeysetCursor | undefined;
+};
 
 const LIST_VALID_STATUSES = new Set([
   "requested",
@@ -93,7 +97,11 @@ export const POST = defineTenantRoute<SubmitPrepared>({
     if (!idempotencyKey) {
       return {
         valid: false,
-        response: fail(400, "IDEMPOTENCY_REQUIRED", "Idempotency-Key header is required.")
+        response: fail(
+          400,
+          "IDEMPOTENCY_REQUIRED",
+          "Idempotency-Key header is required."
+        )
       };
     }
 
@@ -103,7 +111,11 @@ export const POST = defineTenantRoute<SubmitPrepared>({
     } catch {
       return {
         valid: false,
-        response: fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.")
+        response: fail(
+          400,
+          "VALIDATION_ERROR",
+          "Request body must be valid JSON."
+        )
       };
     }
 
@@ -112,7 +124,13 @@ export const POST = defineTenantRoute<SubmitPrepared>({
     if (!validation.valid) {
       return {
         valid: false,
-        response: fail(400, "VALIDATION_ERROR", "Operation submission is invalid.", {}, validation.errors)
+        response: fail(
+          400,
+          "VALIDATION_ERROR",
+          "Operation submission is invalid.",
+          {},
+          validation.errors
+        )
       };
     }
 
@@ -136,14 +154,28 @@ export const POST = defineTenantRoute<SubmitPrepared>({
 
     const { idempotencyKey, input } = prepared;
 
-    const requestHash = computeRequestHash({ action: "submit_operation", input });
-    const existing = await findIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, idempotencyKey);
+    const requestHash = computeRequestHash({
+      action: "submit_operation",
+      input
+    });
+    const existing = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      idempotencyKey
+    );
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
-        return fail(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key was already used with a different request.");
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
       }
-      return jsonResponse(existing.responseBody, { status: existing.responseStatus });
+      return jsonResponse(existing.responseBody, {
+        status: existing.responseStatus
+      });
     }
 
     const rateLimit = await checkSharedRateLimit(
@@ -177,7 +209,7 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       return fail(
         409,
         "APPROVAL_WORKFLOW_NOT_CONFIGURED",
-        "This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key \"omes_control.destructive_operation\" via /admin/approvals before submitting this operation."
+        'This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key "omes_control.destructive_operation" via /admin/approvals before submitting this operation.'
       );
     }
 
@@ -190,14 +222,26 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       resourceId: outcome.operationRequest.id,
       severity: "warning",
       message: `OMES operation "${input.operation}" submitted for server ${input.serverId}.`,
-      attributes: { operation: input.operation, serverId: input.serverId, status: outcome.operationRequest.status },
+      attributes: {
+        operation: input.operation,
+        serverId: input.serverId,
+        status: outcome.operationRequest.status
+      },
       correlationId: locals.correlationId
     });
 
     const response = created({ operationRequest: outcome.operationRequest });
     const responseBody = await response.clone().json();
 
-    await saveIdempotencyRecord(tx, tenantId, IDEMPOTENCY_SCOPE, idempotencyKey, requestHash, 201, responseBody);
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      idempotencyKey,
+      requestHash,
+      201,
+      responseBody
+    );
 
     return response;
   }
