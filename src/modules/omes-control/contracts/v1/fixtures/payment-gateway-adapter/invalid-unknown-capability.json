@@ -1,0 +1,6 @@
+{
+  "adapter_id": "adapter-primary",
+  "provider_id": "provider-primary",
+  "capabilities": ["charge", "teleportation"],
+  "active": true
+}

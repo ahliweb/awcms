@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-plan.schema.json",
+  "title": "catalog-plan",
+  "description": "A purchasable tier of a product (issue #92). `limits` is the entitlement ceiling this plan grants; a `subscription`/`entitlement` record never exceeds its plan's `limits` except via an add-on. `resource_policy_id` and `backend_eligibility` reference the separate resource-policy and backend-eligibility catalog entities by id rather than embedding them, so they can be reused/versioned independently.",
+  "type": "object",
+  "required": ["plan_id", "product_id", "name", "limits", "active"],
+  "additionalProperties": false,
+  "properties": {
+    "plan_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "product_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "name": { "type": "string" },
+    "limits": {
+      "type": "object",
+      "required": [
+        "servers",
+        "logical_agents",
+        "specialist_agents",
+        "isolated_workers",
+        "storage_gb",
+        "backup_retention_days"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "servers": { "type": "integer", "minimum": 0 },
+        "logical_agents": { "type": "integer", "minimum": 0 },
+        "specialist_agents": { "type": "integer", "minimum": 0 },
+        "isolated_workers": { "type": "integer", "minimum": 0 },
+        "storage_gb": { "type": "integer", "minimum": 0 },
+        "backup_retention_days": { "type": "integer", "minimum": 0 },
+        "backends": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+        }
+      }
+    },
+    "resource_policy_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "backend_eligibility_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "active": { "type": "boolean" }
+  }
+}

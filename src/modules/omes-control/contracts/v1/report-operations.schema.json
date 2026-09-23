@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/report-operations.schema.json",
+  "title": "report-operations",
+  "description": "Server/agent/deployment operational reporting (issue #95): counts, health duration, failed jobs, provisioning duration, backup compliance, resource usage. Same `scope`/`projection`/`measurements` shape as report-billing.schema.json (duplicated here - no $ref support in this validator subset), because both report families share the same freshness/reconciliation/estimate-vs-provider_confirmed guarantees. `report_type=resource_usage` is the one most likely to carry `estimate` rather than `provider_confirmed` measurements (issue #95: 'where measured' - resource usage is not always metered with provider-grade precision).",
+  "type": "object",
+  "required": ["report_id", "report_type", "scope", "projection", "measurements"],
+  "additionalProperties": false,
+  "properties": {
+    "report_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "server_counts",
+        "agent_counts",
+        "deployment_counts",
+        "health_duration",
+        "failed_jobs",
+        "provisioning_duration",
+        "backup_compliance",
+        "resource_usage"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "required": ["tenant_id"],
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "legal_entity_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "required": ["projection_name", "cursor", "freshness", "rebuild", "reconciliation"],
+      "additionalProperties": false,
+      "properties": {
+        "projection_name": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "cursor": {
+          "type": "object",
+          "required": ["last_event_id", "last_event_at"],
+          "additionalProperties": false,
+          "properties": {
+            "last_event_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+            "last_event_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+          }
+        },
+        "freshness": {
+          "type": "object",
+          "required": ["as_of", "lag_seconds", "stale"],
+          "additionalProperties": false,
+          "properties": {
+            "as_of": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "lag_seconds": { "type": "integer", "minimum": 0 },
+            "stale": { "type": "boolean" }
+          }
+        },
+        "rebuild": {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "type": "string", "enum": ["not_rebuilding", "rebuilding", "rebuilt"] },
+            "started_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "completed_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+          }
+        },
+        "reconciliation": {
+          "type": "object",
+          "required": ["last_reconciled_at", "discrepancies_found"],
+          "additionalProperties": false,
+          "properties": {
+            "last_reconciled_at": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+            "discrepancies_found": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "unit", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+          "value": { "type": "number" },
+          "unit": { "type": "string", "enum": ["count", "seconds", "bytes", "percent"] },
+          "label": { "type": "string", "enum": ["estimate", "provider_confirmed"] }
+        }
+      }
+    }
+  }
+}

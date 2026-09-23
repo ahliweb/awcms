@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-enrollment.request.schema.json",
+  "title": "worker-enrollment.request",
+  "description": "Challenge-based enrollment request from an OMES host pull-worker to the Control Center (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "server_id",
+    "enrollment_challenge",
+    "public_key",
+    "hostname",
+    "platform",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "enrollment_challenge": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{16,256}$"
+    },
+    "public_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 1024
+    },
+    "hostname": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$"
+    },
+    "platform": {
+      "type": "object",
+      "required": ["os", "version", "arch"],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": ["ubuntu", "linuxmint"]
+        },
+        "version": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string",
+          "enum": ["amd64", "arm64"]
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

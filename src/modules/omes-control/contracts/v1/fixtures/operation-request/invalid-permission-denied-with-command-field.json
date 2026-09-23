@@ -1,0 +1,19 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-op-0004",
+  "idempotency_key": "idem-op-request-00000004",
+  "actor": {
+    "type": "user",
+    "id": "user-mallory"
+  },
+  "operation": "restart",
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "permission": {
+    "granted": false,
+    "policy_id": "policy-customer-readonly",
+    "reason": "customer role does not permit restart"
+  },
+  "command": "rm -rf /"
+}

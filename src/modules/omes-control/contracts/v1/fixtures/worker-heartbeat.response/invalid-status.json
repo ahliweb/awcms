@@ -1,0 +1,6 @@
+{
+  "status": "bad_status",
+  "server_id": "srv-prod-01",
+  "received_at": "2026-09-21T12:10:01Z",
+  "next_heartbeat_seconds": 60
+}

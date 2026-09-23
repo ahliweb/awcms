@@ -1,0 +1,10 @@
+{
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "worker_id": "wrk-srv-prod-01-001",
+  "status": "enrolled",
+  "control_center_public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIControlCenterPublicKeyExample12345",
+  "poll_interval_seconds": 10,
+  "heartbeat_interval_seconds": 60,
+  "enrolled_at": "2026-09-21T12:00:00Z"
+}

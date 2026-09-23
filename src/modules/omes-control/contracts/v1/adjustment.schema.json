@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/adjustment.schema.json",
+  "title": "adjustment",
+  "description": "A manual correction to an invoice's total (issue #93), e.g. a billing-error correction. Unlike `credit`, `amount_minor` may be negative (a reduction) or positive (an addition) - it is a signed integer adjustment applied by `lib/omes/py/jobs/ledger.py`'s `compute_totals()`. Every adjustment is attributable (`actor`) for audit (AGENTS.md: audit every grant/revoke/suspension decision applies equally to money).",
+  "type": "object",
+  "required": ["adjustment_id", "invoice_id", "tenant_id", "currency", "amount_minor", "reason", "actor", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "adjustment_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "invoice_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount_minor": { "type": "integer" },
+    "reason": { "type": "string" },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["user", "service"] },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  }
+}

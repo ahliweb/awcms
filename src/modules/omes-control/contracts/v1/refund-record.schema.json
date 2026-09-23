@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/refund-record.schema.json",
+  "title": "refund-record",
+  "description": "A manually recorded refund against a prior payment (issue #93). Same evidence/idempotency rules as payment-record.schema.json. `amount_minor` may never exceed the originating payment's amount minus any already-refunded amount - enforced by lib/omes/py/jobs/ledger.py, not by this schema (no cross-record arithmetic in the validator subset).",
+  "type": "object",
+  "required": ["refund_id", "payment_id", "invoice_id", "tenant_id", "currency", "amount_minor", "actor", "evidence_ref", "idempotency_key", "reason", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "refund_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "payment_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "invoice_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount_minor": { "type": "integer", "minimum": 1 },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["user", "service"] },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+      }
+    },
+    "evidence_ref": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,256}$" },
+    "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{8,256}$" },
+    "reason": { "type": "string" },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  }
+}

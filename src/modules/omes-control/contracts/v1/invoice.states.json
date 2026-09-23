@@ -1,0 +1,36 @@
+{
+  "$comment": "Data-encoded state machine for invoice.state (issue #93). Loaded by the SAME generic checker as contracts/control-center/v1/subscription.states.json - lib/omes/py/jobs/states.py.",
+  "states": [
+    "draft",
+    "issued",
+    "partially_paid",
+    "paid",
+    "overdue",
+    "void",
+    "refunded",
+    "disputed"
+  ],
+  "initial_states": ["draft"],
+  "terminal_states": ["void", "refunded"],
+  "transitions": [
+    { "from": "draft", "to": "issued" },
+    { "from": "draft", "to": "void" },
+    { "from": "issued", "to": "partially_paid" },
+    { "from": "issued", "to": "paid" },
+    { "from": "issued", "to": "overdue" },
+    { "from": "issued", "to": "void" },
+    { "from": "issued", "to": "disputed" },
+    { "from": "partially_paid", "to": "paid" },
+    { "from": "partially_paid", "to": "overdue" },
+    { "from": "partially_paid", "to": "disputed" },
+    { "from": "overdue", "to": "partially_paid" },
+    { "from": "overdue", "to": "paid" },
+    { "from": "overdue", "to": "void" },
+    { "from": "overdue", "to": "disputed" },
+    { "from": "paid", "to": "refunded" },
+    { "from": "paid", "to": "disputed" },
+    { "from": "disputed", "to": "paid" },
+    { "from": "disputed", "to": "refunded" },
+    { "from": "disputed", "to": "void" }
+  ]
+}

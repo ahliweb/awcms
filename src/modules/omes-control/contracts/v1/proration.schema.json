@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/proration.schema.json",
+  "title": "proration",
+  "description": "The result of a plan upgrade/downgrade proration calculation (issue #94). `rounding_rule` is always the const `half_up_minor_unit`: OMES uses HALF-UP rounding in integer minor units, never banker's rounding (round-half-to-even) and never floating point - see lib/omes/py/jobs/payments.py's round_half_up() and docs/control-center-contracts.md 'Deterministic rounding rule' for the rationale (predictability for a human-reviewed manual credit/charge beats banker's rounding's long-run bias cancellation, which matters more for high-volume automated trading than for a subscription proration a support agent may need to explain to a customer). `net_amount_minor` is `new_amount_minor - unused_amount_minor` and may be negative (a credit) or positive (an additional charge).",
+  "type": "object",
+  "required": [
+    "proration_id",
+    "tenant_id",
+    "subscription_id",
+    "currency",
+    "days_remaining",
+    "days_in_cycle",
+    "unused_amount_minor",
+    "new_amount_minor",
+    "net_amount_minor",
+    "rounding_rule"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "proration_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "subscription_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "from_plan_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "to_plan_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "days_remaining": { "type": "integer", "minimum": 0 },
+    "days_in_cycle": { "type": "integer", "minimum": 1 },
+    "unused_amount_minor": { "type": "integer", "minimum": 0 },
+    "new_amount_minor": { "type": "integer", "minimum": 0 },
+    "net_amount_minor": { "type": "integer" },
+    "rounding_rule": { "type": "string", "const": "half_up_minor_unit" }
+  }
+}

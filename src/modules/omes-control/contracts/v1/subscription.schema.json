@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/subscription.schema.json",
+  "title": "subscription",
+  "description": "A tenant's subscription to a plan (issue #92). `state` is a closed enum whose allowed transitions are data, not code - see `contracts/control-center/v1/subscription.states.json` and `lib/omes/py/jobs/states.py`. `source_event_id` is the id of the last subscription-lifecycle event applied to this record; replaying the same event id must be a no-op (idempotent by event id), enforced by `lib/omes/py/jobs/entitlement.py`, not by this schema.",
+  "type": "object",
+  "required": [
+    "subscription_id",
+    "tenant_id",
+    "plan_id",
+    "state",
+    "effective_from",
+    "source_event_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "subscription_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "plan_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "addon_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "trialing",
+        "active",
+        "past_due",
+        "grace_period",
+        "suspended",
+        "cancelled",
+        "expired"
+      ]
+    },
+    "effective_from": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "effective_until": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "source_event_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+  }
+}

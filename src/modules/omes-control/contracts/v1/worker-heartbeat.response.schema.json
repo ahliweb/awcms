@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-heartbeat.response.schema.json",
+  "title": "worker-heartbeat.response",
+  "description": "Control Center acknowledgement of pull-worker heartbeat (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "status",
+    "server_id",
+    "received_at",
+    "next_heartbeat_seconds"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["acknowledged", "re-enroll_required"]
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "received_at": {
+      "type": "string"
+    },
+    "next_heartbeat_seconds": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 86400
+    }
+  }
+}

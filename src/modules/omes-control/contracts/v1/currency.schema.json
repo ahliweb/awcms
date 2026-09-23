@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/currency.schema.json",
+  "title": "currency",
+  "description": "An ISO 4217 currency lookup entity (issue #93). `minor_unit_exponent` is the number of decimal digits the currency's minor unit represents (2 for USD/EUR cents, 0 for JPY, ...). Every money amount anywhere in this contract set is an integer count of minor units - never a float - so `minor_unit_exponent` is metadata for display only, not for arithmetic.",
+  "type": "object",
+  "required": ["code", "minor_unit_exponent"],
+  "additionalProperties": false,
+  "properties": {
+    "code": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "minor_unit_exponent": { "type": "integer", "minimum": 0, "maximum": 4 }
+  }
+}
