@@ -23,6 +23,8 @@
  * `stop` and `rollback`.
  */
 
+import type { AccessAction } from "../../identity-access/domain/access-control";
+
 export const OMES_OPERATION_CODES = [
   "status",
   "preflight",
@@ -72,7 +74,7 @@ export function isDestructiveOmesOperation(
  */
 export const OMES_OPERATION_GUARD: Record<
   OmesOperationCode,
-  { moduleKey: "omes_control"; activityCode: string; action: string }
+  { moduleKey: "omes_control"; activityCode: string; action: AccessAction }
 > = {
   status: { moduleKey: "omes_control", activityCode: "deployments", action: "read" },
   preflight: { moduleKey: "omes_control", activityCode: "deployments", action: "read" },
