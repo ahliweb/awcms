@@ -35,7 +35,11 @@ export const omesControlModule = defineModule({
   status: "experimental",
   description:
     "OMES Control Center domain module for host fleet lifecycle, worker enrollments, desired vs observed deployments, operation requests, worker job dispatch queue, health snapshots, backup verification, and host execution audit projections (ADR-0122).",
-  dependencies: ["tenant_admin", "identity_access"],
+  // "workflow" (Issue ahliweb/omes#198): destructive operation submission
+  // and backup restore route through the canonical workflow-approval
+  // engine (startWorkflowInstance) instead of a second approval authority —
+  // see application/operation-submission.ts and application/backup-restore.ts.
+  dependencies: ["tenant_admin", "identity_access", "workflow"],
   type: "domain",
   api: {
     openApiPath: "openapi/modules/omes-control.openapi.yaml",
