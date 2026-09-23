@@ -269,8 +269,21 @@ describe("enrollment challenge issuance", () => {
     expect(a.workerId).not.toBe(b.workerId);
   });
 
-  test("the raw challenge never equals its own hash (never accidentally store the raw value)", () => {
+  test("hashEnrollmentChallenge pins a known input to its known sha256 digest", () => {
+    // `printf '%s' 'test-challenge-value' | sha256sum` — pins the actual
+    // hash function, not just "the two strings differ" (which a 43-char
+    // base64url value vs. a 64-char hex value can never fail regardless of
+    // whether the function hashes correctly, incorrectly, or at all).
+    expect(hashEnrollmentChallenge("test-challenge-value")).toBe(
+      "73d5df793535be9d22a1bfca99e885c0da3e7f713c6aa781061e2b2076e6c727"
+    );
+  });
+
+  test("the stored hash is sha256(rawChallenge), never the raw value itself", () => {
     const challenge = issueEnrollmentChallenge(new Date());
+    expect(challenge.challengeHash).toBe(
+      hashEnrollmentChallenge(challenge.rawChallenge)
+    );
     expect(challenge.challengeHash).not.toBe(challenge.rawChallenge);
   });
 });
