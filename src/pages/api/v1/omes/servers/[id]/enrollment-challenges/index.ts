@@ -68,10 +68,22 @@ export const POST = defineTenantRoute<Prepared>({
           "Idempotency-Key was already used with a different request."
         );
       }
-      // Deliberately NOT `jsonResponse(existing.responseBody, ...)` — see
-      // below: what is stored for THIS scope is a redacted stand-in, never
-      // the raw challenge, so a replay cannot resurrect a secret that was
-      // shown to the caller exactly once on the original request.
+      await recordAuditEvent(tx, {
+        tenantId,
+        actorTenantUserId: auth.context.tenantUserId,
+        moduleKey: "omes_control",
+        action: "omes_control.enrollments.manage",
+        resourceType: "omes_enrollment",
+        severity: "warning",
+        message: `Enrollment-challenge issuance request replayed for server ${serverId} (Idempotency-Key reuse, same payload).`,
+        attributes: { serverId, idempotencyReplay: true },
+        correlationId: locals.correlationId
+      });
+
+      // Deliberately NOT the original 201 response — see below: what is
+      // stored for THIS scope is a redacted stand-in, never the raw
+      // challenge, so a replay cannot resurrect a secret that was shown to
+      // the caller exactly once on the original request.
       return jsonResponse(existing.responseBody, {
         status: existing.responseStatus
       });

@@ -62,6 +62,21 @@ export const POST = defineTenantRoute<Prepared>({
           "Idempotency-Key was already used with a different request."
         );
       }
+
+      await recordAuditEvent(tx, {
+        tenantId,
+        actorTenantUserId: auth.context.tenantUserId,
+        moduleKey: "omes_control",
+        action: "omes_control.jobs.approve",
+        resourceType: "omes_job",
+        resourceId: id,
+        severity: "warning",
+        message:
+          "OMES job retry-approval request replayed (Idempotency-Key reuse, same payload).",
+        attributes: { idempotencyReplay: true },
+        correlationId: locals.correlationId
+      });
+
       return jsonResponse(existing.responseBody, {
         status: existing.responseStatus
       });

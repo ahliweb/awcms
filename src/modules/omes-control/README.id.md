@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f11beaad3d095abe90935fc2c2b8fb06159777a6d024bb3482281e9758890c53 -->
+<!-- i18n-source-hash: sha256:093d4fd18f6401d242ff1d75cb75cbe38f48bb2a0ed8bb6ab0c1fd1fa01ba1ea -->
 
 # `omes_control`
 
@@ -52,7 +52,9 @@ Setiap operasi digerbangi permission-nya sendiri (`OMES_OPERATION_GUARD`, guard 
 
 ## Idempotency, rate limiting, redaksi
 
-Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada percobaan ulang dengan key+payload yang sama (penyimpanan bersama `awcms_idempotency_keys`, `modules/_shared/idempotency.ts`) — `409 IDEMPOTENCY_CONFLICT` untuk key yang sama dengan payload berbeda. Registrasi, penerbitan enrollment-challenge, pengajuan operasi, dan restore backup tambahan di-rate-limit per aktor terautentikasi (`checkSharedRateLimit`). Setiap field evidence jsonb (`target`/`payload`/`result`/`parameters`/`desiredState`/`observedState`/`checks`/`manifest`/`evidence`) dilewatkan melalui `redactSensitiveAttributes` sebelum meninggalkan modul ini, sebagai defense-in-depth di atas apa pun yang menulisnya.
+Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada percobaan ulang dengan key+payload yang sama (penyimpanan bersama `awcms_idempotency_keys`, `modules/_shared/idempotency.ts`) — `409 IDEMPOTENCY_CONFLICT` untuk key yang sama dengan payload berbeda. Registrasi, penerbitan enrollment-challenge, pengajuan operasi, dan restore backup tambahan di-rate-limit per aktor terautentikasi (`checkSharedRateLimit`). Setiap field evidence jsonb (`target`/`payload`/`result`/`parameters`/`desiredState`/`observedState`/`checks`/`manifest`/`evidence`) dilewatkan melalui `redactSensitiveAttributes` sebelum meninggalkan modul ini, sebagai defense-in-depth di atas apa pun yang menulisnya. Setiap endpoint mutasi juga mencatat baris `awcms_audit_events` pada REPLAY (tidak hanya pada mutasi yang benar-benar berjalan), ditandai `idempotencyReplay: true` pada attributes-nya, sehingga percobaan replay oleh aktor kedua tidak pernah tak-terlihat.
+
+**Keterbatasan cakupan yang diketahui**: `awcms_idempotency_keys` di-key dengan `(tenant_id, request_scope, idempotency_key)` — tenant-scoped, bukan actor-scoped. Pengguna tenant mana pun yang mengetahui nilai `Idempotency-Key` pengguna lain untuk key yang masih hidup dapat memicu jalur replay (tidak pernah mutasi kedua, hanya respons tersimpan) dan kini akan muncul di jejak audit sebagai aktor yang me-replay, berbeda dari aktor asli. Apakah idempotency key sebaiknya juga di-scope per-aktor adalah keputusan produk untuk issue lanjutan, tidak diputuskan oleh issue ini — modul ini mewarisi kontrak penyimpanan bersama apa adanya.
 
 ## Titik integrasi `omes#197`
 

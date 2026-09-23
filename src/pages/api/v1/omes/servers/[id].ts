@@ -95,6 +95,21 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
           "Idempotency-Key was already used with a different request."
         );
       }
+
+      await recordAuditEvent(tx, {
+        tenantId,
+        actorTenantUserId: auth.context.tenantUserId,
+        moduleKey: "omes_control",
+        action: "omes_control.servers.delete",
+        resourceType: "omes_server",
+        resourceId: id,
+        severity: "warning",
+        message:
+          "Server decommission request replayed (Idempotency-Key reuse, same payload).",
+        attributes: { idempotencyReplay: true },
+        correlationId: locals.correlationId
+      });
+
       return jsonResponse(existing.responseBody, {
         status: existing.responseStatus
       });

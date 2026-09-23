@@ -165,6 +165,27 @@ export const POST = defineTenantRoute<RegisterPrepared>({
           "Idempotency-Key was already used with a different request."
         );
       }
+
+      // A high-risk action's audit trail must show every ATTEMPT, not only
+      // the one that actually mutated — otherwise a second actor replaying
+      // a stolen/shared Idempotency-Key leaves no record they were here.
+      // `awcms_idempotency_keys` is keyed `(tenant_id, request_scope,
+      // idempotency_key)` — tenant-scoped, not actor-scoped — so the
+      // replaying actor CAN differ from the original; see README.md's
+      // "Idempotency, rate limiting, redaction" section.
+      await recordAuditEvent(tx, {
+        tenantId,
+        actorTenantUserId: auth.context.tenantUserId,
+        moduleKey: "omes_control",
+        action: "omes_control.servers.register",
+        resourceType: "omes_server",
+        severity: "info",
+        message:
+          "Server registration request replayed (Idempotency-Key reuse, same payload).",
+        attributes: { idempotencyReplay: true },
+        correlationId: locals.correlationId
+      });
+
       return jsonResponse(existing.responseBody, {
         status: existing.responseStatus
       });
