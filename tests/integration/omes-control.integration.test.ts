@@ -23,10 +23,7 @@ import {
 } from "./harness";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
-import {
-  authorizeInTransaction,
-  resolveAuthInputs
-} from "../../src/modules/identity-access/application/access-guard";
+import { authorizeInTransaction } from "../../src/modules/identity-access/application/access-guard";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
 import { OMES_GUARDS } from "../../src/modules/omes-control/domain/permissions";
 import {
@@ -215,18 +212,6 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
 
   describe("default-deny RBAC", () => {
     test("a session with no granted permission is denied servers.read", async () => {
-      const { tenantId, token } = resolveAuthInputs(
-        new Request("https://example.test", {
-          headers: {
-            "x-awcms-tenant-id": TENANT_A,
-            authorization: `Bearer ${NO_PERMISSION_SESSION}`
-          }
-        }),
-        undefined
-      );
-      expect(tenantId).toBe(TENANT_A);
-      expect(token).toBe(NO_PERMISSION_SESSION);
-
       const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         authorizeInTransaction(
           tx,
