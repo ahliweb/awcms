@@ -9394,6 +9394,514 @@ Proves the parts of the chain nothing else can see — that the VAPID key pair m
 | 403    | Access denied by RBAC/ABAC.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
 | 409    | Push is disabled on this deployment (the dispatcher would claim nothing, leaving the probe queued forever), or the caller has no active device to send to. | [`ApiError`](#standard-error-envelope) |
 
+## OMES Control Center
+
+Owner/operator API for OMES projections and safe operations (omes_control module, ADR-0122, Issue ahliweb/omes#198) — tenant-scoped fleet overview, server registration/decommission, enrollment-challenge issuance/revocation, desired-vs-observed deployment views, allowlisted safe-operation submission (with destructive operations routed through the canonical workflow-approval engine), worker job listing/cancel/retry-approval, health/backup/audit projections. AWCMS only ever records intent against OMES-owned capability evidence stored server-side — it never executes arbitrary shell/SSH, reads host files directly, or reads Hermes private state. Host/deployment execution is exclusively OMES's own pull worker (ahliweb/omes#199, out of scope here).
+
+### `GET /api/v1/omes/audit` — List OMES host execution/reconciliation audit projections
+
+- **operationId**: `omesListAudit`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.audit.read. Keyset-paginated. Distinct from AWCMS's own awcms_audit_events (this API's own authorization/mutation decision log).
+
+**Parameters**
+
+| Name        | In    | Required | Type   | Description |
+| ----------- | ----- | -------- | ------ | ----------- |
+| `serverId`  | query | no       | string |             |
+| `eventType` | query | no       | string |             |
+| `cursor`    | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Audit projections page.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/backups` — List backup snapshots
+
+- **operationId**: `omesListBackups`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.backups.read. Keyset-paginated.
+
+**Parameters**
+
+| Name       | In    | Required | Type                                                   | Description |
+| ---------- | ----- | -------- | ------------------------------------------------------ | ----------- |
+| `serverId` | query | no       | string                                                 |             |
+| `status`   | query | no       | enum(`completed`, `in_progress`, `verified`, `failed`) |             |
+| `cursor`   | query | no       | string                                                 |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Backups page.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/backups/{id}` — Get a backup snapshot's detail
+
+- **operationId**: `omesGetBackup`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.backups.read.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Backup detail.              | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/backups/{id}/restore` — Request a restore from a backup snapshot
+
+- **operationId**: `omesRestoreBackup`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.backups.restore. Always-destructive: routes through the canonical workflow-approval engine like rollback/stop, refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active workflow. Deliberately NOT part of the safe-operation enum on POST /api/v1/omes/operations — restore is excluded from the OMES contract's own Control-Center-facing operation enum. Rate-limited per actor, requires Idempotency-Key, audited critical.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                           | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Restore requested.                                                                                                                                                                    | object                                 |
+| 400    | Validation error.                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | No active destructive-operation approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many restore requests (RATE_LIMITED).                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/deployments` — List deployments — desired vs observed state
+
+- **operationId**: `omesListDeployments`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.deployments.read. Desired and observed state are rendered as SEPARATE fields, never merged. Keyset-paginated.
+
+**Parameters**
+
+| Name                   | In    | Required | Type                                                             | Description |
+| ---------------------- | ----- | -------- | ---------------------------------------------------------------- | ----------- |
+| `serverId`             | query | no       | string                                                           |             |
+| `reconciliationStatus` | query | no       | enum(`pending`, `in_progress`, `converged`, `drifted`, `failed`) |             |
+| `cursor`               | query | no       | string                                                           |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Deployments page.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/deployments/{id}` — Get a deployment's desired/observed detail
+
+- **operationId**: `omesGetDeployment`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.deployments.read.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Deployment detail.          | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/health` — Latest health snapshot per server, or history for one server
+
+- **operationId**: `omesGetHealth`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.read. Default (no serverId) returns the latest snapshot per server. With serverId, returns keyset-paginated history for that server.
+
+**Parameters**
+
+| Name       | In    | Required | Type   | Description |
+| ---------- | ----- | -------- | ------ | ----------- |
+| `serverId` | query | no       | string |             |
+| `cursor`   | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Health snapshots.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/jobs` — List worker jobs
+
+- **operationId**: `omesListJobs`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.jobs.read. target/payload/result are redacted defense-in-depth. Keyset-paginated.
+
+**Parameters**
+
+| Name       | In    | Required | Type                                                                    | Description |
+| ---------- | ----- | -------- | ----------------------------------------------------------------------- | ----------- |
+| `state`    | query | no       | enum(`queued`, `leased`, `running`, `completed`, `failed`, `cancelled`) |             |
+| `serverId` | query | no       | string                                                                  |             |
+| `cursor`   | query | no       | string                                                                  |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Jobs page.                  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/jobs/{id}` — Get a job's detail
+
+- **operationId**: `omesGetJob`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.jobs.read.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Job detail.                 | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/jobs/{id}/approve` — Approve a failed job for retry
+
+- **operationId**: `omesApproveJob`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.jobs.approve. Only a failed job may be requeued — refused with 409 JOB_NOT_RETRYABLE otherwise. Not a second, independent approval authority — the underlying operation request already passed the safe-operation or workflow-approval gate before this job existed. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Job requeued for retry, or replay of a prior identical request.                                                           | object                                 |
+| 400    | Validation error.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | Job is not failed (JOB_NOT_RETRYABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/jobs/{id}/cancel` — Cancel a queued job
+
+- **operationId**: `omesCancelJob`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.jobs.cancel. Only a queued job may be cancelled — a leased/running job is refused with 409 JOB_NOT_CANCELLABLE. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                 | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Job cancelled, or replay of a prior identical request.                                                                      | object                                 |
+| 400    | Validation error.                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 409    | Job is not queued (JOB_NOT_CANCELLABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/operations` — List submitted operation requests
+
+- **operationId**: `omesListOperations`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.deployments.read. Keyset-paginated.
+
+**Parameters**
+
+| Name       | In    | Required | Type                                                                           | Description |
+| ---------- | ----- | -------- | ------------------------------------------------------------------------------ | ----------- |
+| `serverId` | query | no       | string                                                                         |             |
+| `status`   | query | no       | enum(`requested`, `approved`, `rejected`, `dispatched`, `completed`, `failed`) |             |
+| `cursor`   | query | no       | string                                                                         |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Operation requests page.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/operations` — Submit a safe OMES operation
+
+- **operationId**: `omesSubmitOperation`
+- **Security**: bearerAuth + tenantHeader
+
+Guarded per-operation: status/preflight require deployments.read; start/stop/restart/update/backup require deployments.operate; rollback requires backups.rollback. operation is a closed enum copied verbatim from the OMES contract operation-request.schema.json. Destructive operations (stop, rollback) route through the canonical workflow-approval engine — refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active workflow under key "omes_control.destructive_operation". Rate-limited per actor, requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                                                                           | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Operation request created.                                                                                                                                                            | object                                 |
+| 400    | Validation error.                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | No active destructive-operation approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many operation submissions (RATE_LIMITED).                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/operations/{id}` — Get an operation request's detail
+
+- **operationId**: `omesGetOperation`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.deployments.read.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Operation request detail.   | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/overview` — Tenant-wide OMES fleet overview
+
+- **operationId**: `omesGetOverview`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.read. A pure aggregation computed directly from the omes_control tables at request time — never sourced from the reporting module's projection facilities.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Fleet rollup.               | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/servers` — List enrolled servers
+
+- **operationId**: `omesListServers`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.read. Keyset-paginated. Sanitized — no enrollment key material.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                                   | Description |
+| -------- | ----- | -------- | ---------------------------------------------------------------------- | ----------- |
+| `status` | query | no       | enum(`offline`, `online`, `degraded`, `maintenance`, `decommissioned`) |             |
+| `cursor` | query | no       | string                                                                 |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                     |
+| ------ | --------------------------- | ---------------------------------------------------------- |
+| 200    | Servers page.               | [`OmesServerListResponse`](#schema-omesserverlistresponse) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                     |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                     |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                     |
+
+### `POST /api/v1/omes/servers` — Register a new server
+
+- **operationId**: `omesRegisterServer`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.register. Records registration INTENT only (status=offline, no heartbeat) — never talks to a host. Rate-limited per actor. Requires Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Server registered, or replay of a prior identical request.                      | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many registration attempts (RATE_LIMITED).                                  | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/servers/{id}` — Get a server's detail, including enrollment evidence
+
+- **operationId**: `omesGetServer`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.read. A row belonging to another tenant is indistinguishable from a missing one.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Server detail.              | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/omes/servers/{id}` — Decommission a server
+
+- **operationId**: `omesDecommissionServer`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.delete. Soft delete — flips status to decommissioned. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Server decommissioned, or replay of a prior identical request.                  | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/servers/{id}/enrollment-challenges` — Issue an enrollment challenge for a registered server
+
+- **operationId**: `omesIssueEnrollmentChallenge`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.enrollments.manage. The raw challenge is returned exactly ONCE and never persisted — only its sha256 hash is stored. Rate-limited per actor, requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Challenge issued.                                                                                                                                                         | object                                 |
+| 400    | Validation error.                                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | Server is not eligible for a new challenge in its current state (SERVER_NOT_ELIGIBLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many enrollment-challenge requests (RATE_LIMITED).                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/servers/{id}/enrollment-challenges/{workerId}/revoke` — Revoke a pending or enrolled worker credential
+
+- **operationId**: `omesRevokeEnrollment`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `workerId`         | path   | yes      | string        |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Enrollment revoked, or replay of a prior identical request.                     | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -10321,6 +10829,79 @@ There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, a
 ```json
 {
   "token": "string"
+}
+```
+
+### Schema: OmesServer
+
+| Field             | Type                                                                   | Required | Nullable | Description |
+| ----------------- | ---------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `id`              | string (uuid)                                                          | no       | no       |             |
+| `serverId`        | string                                                                 | no       | no       |             |
+| `hostname`        | string                                                                 | no       | no       |             |
+| `ip`              | string                                                                 | no       | yes      |             |
+| `osName`          | string                                                                 | no       | yes      |             |
+| `osVersion`       | string                                                                 | no       | yes      |             |
+| `arch`            | string                                                                 | no       | yes      |             |
+| `status`          | enum(`offline`, `online`, `degraded`, `maintenance`, `decommissioned`) | no       | no       |             |
+| `tags`            | unknown                                                                | no       | no       |             |
+| `lastHeartbeatAt` | string                                                                 | no       | yes      |             |
+| `stale`           | boolean                                                                | no       | no       |             |
+| `createdAt`       | string                                                                 | no       | no       |             |
+| `updatedAt`       | string                                                                 | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "serverId": "string",
+  "hostname": "tenant.example.com",
+  "ip": "string",
+  "osName": "string",
+  "osVersion": "string",
+  "arch": "string",
+  "status": "offline",
+  "tags": null,
+  "lastHeartbeatAt": "string",
+  "stale": false,
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+```
+
+### Schema: OmesServerListResponse
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "servers": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "serverId": "string",
+        "hostname": "tenant.example.com",
+        "ip": "string",
+        "osName": "string",
+        "osVersion": "string",
+        "arch": "string",
+        "status": "offline",
+        "tags": null,
+        "lastHeartbeatAt": "string",
+        "stale": false,
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ],
+    "nextCursor": "string"
+  }
 }
 ```
 

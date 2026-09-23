@@ -169,6 +169,33 @@ const DOCUMENTED_EXCEPTIONS: {
       '"seo_distribution")` before calling, so a tenant without it ' +
       "enabled degrades safely to no capture. Revisit if redirect capture " +
       "ever needs a swappable adapter."
+  },
+  {
+    from: "omes_control",
+    to: "workflow",
+    reason:
+      "Issue ahliweb/omes#198. `application/operation-submission.ts` and " +
+      "`application/backup-restore.ts` call `startWorkflowInstance` " +
+      "directly so a destructive OMES operation (stop/rollback/restore) " +
+      "routes through the canonical workflow-approval engine instead of a " +
+      "second approval authority. It cannot be a `dependencies` edge: that " +
+      "would make `workflow` un-disablable for any tenant that has ever " +
+      "enabled `omes_control` " +
+      "(`tenant-module-lifecycle.ts`'s `MODULE_DEPENDENCY_DISABLED`), " +
+      "silently stranding a tenant that runs omes_control without workflow " +
+      "enabled and breaking `workflow`'s own leaf-module status that " +
+      "`tests/integration/module-tenant-lifecycle.integration.test.ts` " +
+      "relies on (`workflow` is the one module in this repo verified to " +
+      "have zero reverse dependents, so it is the module that test " +
+      "disables). It is not a capability either — `capabilities.consumes` " +
+      "is for a PORT-backed, swappable adapter; this is a plain " +
+      "application function with no alternate implementation, same as " +
+      "blog_content -> seo_distribution above. Both call sites check " +
+      '`resolveModuleEnabled(tx, tenantId, "workflow")` before calling in ' +
+      "and degrade to the SAME `APPROVAL_WORKFLOW_NOT_CONFIGURED` refusal " +
+      "a tenant with no published destructive-operation workflow " +
+      "definition already gets — nothing is persisted either way. Revisit " +
+      "if workflow-approval ever grows a swappable-adapter port."
   }
 ];
 
