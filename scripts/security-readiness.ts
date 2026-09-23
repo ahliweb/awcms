@@ -1508,7 +1508,24 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // Replay rows are WRITTEN on the request path as `awcms_app`; a worker with
   // INSERT here could fabricate a replay that pins a delivery against retention
   // forever.
-  awcms_domain_event_replays: ["SELECT"]
+  awcms_domain_event_replays: ["SELECT"],
+  // omes_control — the generic data_lifecycle purge engine (sql/154's
+  // descriptors, all `mode: "hard_delete"`, `executionMode: "generic"`). No
+  // scheduled job in this module writes any of these eight tables — the
+  // control API's mutations run as `awcms_app`, per-request — so the worker
+  // gets exactly the bounded-cursor-scan shape of `awcms_seo_not_found_
+  // observations`/`awcms_form_drafts`' purge phase: SELECT + DELETE, no
+  // INSERT/UPDATE. `sql/154` originally granted the worker the SAME
+  // SELECT/INSERT/UPDATE/DELETE it gave `awcms_app`; `sql/156` narrows it to
+  // this.
+  awcms_omes_servers: ["SELECT", "DELETE"],
+  awcms_omes_enrollments: ["SELECT", "DELETE"],
+  awcms_omes_deployments: ["SELECT", "DELETE"],
+  awcms_omes_operation_requests: ["SELECT", "DELETE"],
+  awcms_omes_jobs: ["SELECT", "DELETE"],
+  awcms_omes_health_snapshots: ["SELECT", "DELETE"],
+  awcms_omes_backup_snapshots: ["SELECT", "DELETE"],
+  awcms_omes_audit_projections: ["SELECT", "DELETE"]
 };
 
 /**
