@@ -413,8 +413,18 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * 218,000 is measured + ~2.1%, holding the tight margin the raises above
  * established — a wider one would buy silence rather than room.
+ *
+ * **Raised to 226,000 on 21 September 2026 for the admin chrome restyle
+ * (awcms-one#170).** The addition is the dark sidebar rail's own tokens/rules
+ * plus eight new shared primitives (`.admin-stat-card`, `.admin-status-pill`,
+ * `.admin-segmented`, `.admin-bulk-bar`, `.admin-two-pane`, `.admin-toggle`,
+ * `.admin-timeline`, `.admin-media-grid`) in `admin.css` — vocabulary no
+ * screen renders yet, added once so the next screen that needs one of these
+ * does not hand-roll a sixth variant, per the same reasoning the 218,000 raise
+ * above already accepted for this file. Measured clean build: 221,626 B.
+ * 226,000 is measured + ~2%, the same tight margin as the raise above.
  */
-export const APP_BUDGET_BYTES = 218_000;
+export const APP_BUDGET_BYTES = 226_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
@@ -468,8 +478,15 @@ export const PER_FILE_BUDGET_BYTES = 27_000;
  * What this does NOT excuse: a stylesheet growing because 47 screens each
  * carry their own copy of the same rules. That is the Issue #552 shape in CSS,
  * and it shows up in `APP_BUDGET_BYTES`, not here.
+ *
+ * **Raised to 52,000 on 21 September 2026 (awcms-one#170)** for the same
+ * reason `APP_BUDGET_BYTES` was raised alongside it: the dark sidebar tokens
+ * and eight new shared primitives this file gained are vocabulary, not
+ * duplication (see that constant's docblock for the full accounting).
+ * Measured after the restyle: `_astro/AdminLayout.*.css` is 47,240 B. 52,000
+ * is measured + ~10%, the same margin this constant's previous raise used.
  */
-export const PER_FILE_CSS_BUDGET_BYTES = 44_000;
+export const PER_FILE_CSS_BUDGET_BYTES = 52_000;
 
 /**
  * ADR-0120 — the typeface, budgeted separately from everything else.
