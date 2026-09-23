@@ -37,6 +37,11 @@ export const omesControlModule = defineModule({
     "OMES Control Center domain module for host fleet lifecycle, worker enrollments, desired vs observed deployments, operation requests, worker job dispatch queue, health snapshots, backup verification, and host execution audit projections (ADR-0122).",
   dependencies: ["tenant_admin", "identity_access"],
   type: "domain",
+  api: {
+    openApiPath: "openapi/modules/omes-control.openapi.yaml",
+    basePath: "/api/v1/omes",
+    routes: ["/api/v1/omes"]
+  },
   permissions: [
     {
       activityCode: "servers",
