@@ -257,6 +257,59 @@ const PAIRS: readonly Pair[] = [
     bg: "color-bg",
     min: AA_LARGE,
     renderedBy: "tokens.css :focus-visible outline over the page ground"
+  },
+
+  // ---- Sidebar (always-dark, independent of `data-theme`) — awcms-one#170 --
+  // Same three-role split as the theme-aware families above, on the sidebar's
+  // own surfaces rather than `--color-surface*`.
+  {
+    fg: "color-sidebar-text",
+    bg: "color-sidebar-bg",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar a, .admin-sidebar-count"
+  },
+  {
+    fg: "color-sidebar-text",
+    bg: "color-sidebar-surface",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar-status"
+  },
+  {
+    fg: "color-sidebar-text",
+    bg: "color-sidebar-badge",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar-count"
+  },
+  {
+    fg: "color-sidebar-text-strong",
+    bg: "color-sidebar-bg",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar-brand-text, .admin-sidebar-tenant"
+  },
+  {
+    fg: "color-sidebar-text-strong",
+    bg: "color-sidebar-surface",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar-status-title"
+  },
+  {
+    fg: "color-sidebar-text-strong",
+    bg: "color-sidebar-active",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar a[aria-current='page']"
+  },
+  {
+    fg: "color-sidebar-text-faint",
+    bg: "color-sidebar-bg",
+    min: AA_NORMAL,
+    renderedBy:
+      "admin.css .admin-sidebar-group-label, .admin-sidebar-module-label"
+  },
+  {
+    fg: "color-sidebar-text-faint",
+    bg: "color-sidebar-surface",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-sidebar-status-meta"
   }
 ];
 
