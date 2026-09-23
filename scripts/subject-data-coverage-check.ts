@@ -104,6 +104,46 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
     table: "awcms_idempotency_keys",
     reason:
       "The replay guard for high-risk mutations: a scope, a key, a request hash and the response that was returned. It holds no column linking a row to a person — the key is chosen by the CALLER and the tenant is the only identity on it — so no subject request can find its rows. The cached `response_body` can echo personal data from the mutation it replays, which is why this table carries a short retention of its own rather than a subject answer it cannot honour."
+  },
+  {
+    table: "awcms_omes_servers",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). One row per enrolled OMES host server machine. Records hardware specs, OS version, kernel, and machine public key. Holds no personal data about natural persons or visitors."
+  },
+  {
+    table: "awcms_omes_enrollments",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Host enrollment tokens and machine public key verification hashes. Machine cryptographic credentials, not personal data."
+  },
+  {
+    table: "awcms_omes_deployments",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Per-server desired vs observed deployment state specs and drift status. Operational infrastructure configuration, not personal data."
+  },
+  {
+    table: "awcms_omes_operation_requests",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Server operation requests (apply, reconcile, rollback, restart). Holds allowlisted operational parameters and machine IDs, not personal data."
+  },
+  {
+    table: "awcms_omes_jobs",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Worker dispatch queue for OMES pull workers. Contains operation payloads, execution leases, and host status, not personal data."
+  },
+  {
+    table: "awcms_omes_health_snapshots",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Periodic host health metrics (CPU, memory, disk, service status). Pure infrastructure telemetry, not personal data."
+  },
+  {
+    table: "awcms_omes_backup_snapshots",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Server backup manifest metadata and SHA-256 verification checksums for disaster recovery, not personal data."
+  },
+  {
+    table: "awcms_omes_audit_projections",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#196). Projected audit evidence of host-level mutations and system actions performed by OMES pull workers, not visitor or subscriber personal data."
   }
 ];
 

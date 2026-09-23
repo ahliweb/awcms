@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:a31907df6eedceef26ea8073fcc8523a95ced28cc6c4ca92184379b6d72ef551 -->
+<!-- i18n-source-hash: sha256:ce64fc65c15662213b4b72a8a3da1844421c0ced144d7f53915c9142aa54a306 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -71,9 +71,27 @@ Token diimplementasikan sebagai CSS custom properties, di-scope ke `:root` dan o
 > | `-strong`   | fill solid di bawah `--color-primary-contrast` | `.btn-primary`; disk avatar topbar |
 > | `-on-soft`  | teks di atas `--color-X-soft`                  | chip status; tautan sidebar aktif  |
 >
-> Memakai satu dari tiga yang salah adalah cacat UI paling berulang dalam sejarah repo ini — Issue #434, PR #720, dan dua kali lagi selama redesign ADR-0120. **Ia bukan lagi soal mengingat.** `bun run design:token-contrast:check` (bagian dari `bun run check`) mengukur registry berisi 25 pasangan di kedua tema dan gagal di bawah WCAG 2.1 AA. Menambah pasangan di CSS berarti menambah baris di registry itu.
+> Memakai satu dari tiga yang salah adalah cacat UI paling berulang dalam sejarah repo ini — Issue #434, PR #720, dan dua kali lagi selama redesign ADR-0120. **Ia bukan lagi soal mengingat.** `bun run design:token-contrast:check` (bagian dari `bun run check`) mengukur registry berisi 33 pasangan di kedua tema dan gagal di bawah WCAG 2.1 AA. Menambah pasangan di CSS berarti menambah baris di registry itu.
 >
 > `--color-border` vs `--color-border-strong` adalah pembelahan yang sama diterapkan pada garis. WCAG 2.1 **1.4.11 Non-text Contrast** menuntut 3:1 untuk batas yang mengidentifikasi komponen yang bisa dioperasikan; `--color-border` mengukur 1.29:1 dan sengaja tetap begitu, sebab 1.4.11 mengatur kontrol, bukan pemisah dekoratif. Input, select, textarea, dan shell pencarian memakai `--color-border-strong`; tepi kartu dan garis tabel memakai `--color-border`.
+
+### Token sidebar (selalu gelap — awcms-one#170)
+
+Rel sidebar admin adalah keluarga warna KEEMPAT, `--color-sidebar-*`, sengaja independen dari `data-theme`: ia merender satu permukaan navigasi gelap baik admin sedang bertema terang maupun gelap, sehingga tidak berpindah antara `:root` dan `:root[data-theme="dark"]` seperti setiap token di atas (kedua blok mendeklarasikan nilai yang SAMA — lihat komentar `tokens.css` sendiri untuk alasan ini dinyatakan eksplisit, bukan dibiarkan mewarisi).
+
+| Token                         | Nilai     | Fungsi                                                            |
+| ----------------------------- | --------- | ----------------------------------------------------------------- |
+| `--color-sidebar-bg`          | `#101722` | Latar rel                                                         |
+| `--color-sidebar-surface`     | `#1a222e` | Blok terangkat di rel (kartu status)                              |
+| `--color-sidebar-border`      | `#1f2733` | Garis batas luar rel                                              |
+| `--color-sidebar-card-border` | `#2a323c` | Batas blok terangkat di rel                                       |
+| `--color-sidebar-text`        | `#9aa7b2` | Teks item navigasi di atas `--color-sidebar-bg`                   |
+| `--color-sidebar-text-strong` | `#f0f4f9` | Wordmark brand, teks item navigasi aktif                          |
+| `--color-sidebar-text-faint`  | `#838d99` | Label grup — lihat di bawah alasan ini bukan nilai literal mockup |
+| `--color-sidebar-active`      | `#1e2836` | Latar item navigasi aktif                                         |
+| `--color-sidebar-badge`       | `#2b3444` | Latar badge hitungan                                              |
+
+`--color-sidebar-text-faint` **bukan** nilai literal referensi redesign `#6b7581`: diukur terhadap kedua permukaan yang benar-benar memuatnya, nilai itu 3.84:1 di `--color-sidebar-bg` dan 3.42:1 di `--color-sidebar-surface`, di bawah ambang 4.5:1 WCAG 2.1 AA yang sudah dijanjikan halaman ini — label grup uppercase yang diwarnainya membawa informasi, bukan dekorasi. `#838d99` mempertahankan hue biru-abu yang sama dan lolos keduanya (5.34:1 / 4.75:1), koreksi yang sama yang sudah dilakukan sistem desain ini untuk keluarga token yang sadar-tema di atas.
 
 ### Skala lain
 

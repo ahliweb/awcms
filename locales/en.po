@@ -61,6 +61,14 @@ msgstr ""
 msgid "Sync inactive"
 msgstr ""
 
+#. Sidebar status card (awcms-one#170) — same syncActive boolean as the
+#. topbar's SyncIndicator, described a second time in the rail's own slot.
+msgid "An offline sync node is pushing changes."
+msgstr ""
+
+msgid "No offline sync node is registered."
+msgstr ""
+
 #. Topbar — colour theme control
 msgid "Change colour theme"
 msgstr ""
@@ -273,6 +281,9 @@ msgid "Media Library"
 msgstr ""
 
 msgid "Module Management"
+msgstr ""
+
+msgid "OMES Control Center"
 msgstr ""
 
 msgid "Profile Identity"

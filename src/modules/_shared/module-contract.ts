@@ -98,6 +98,18 @@ export type ModuleNavigationEntry = {
   order?: number;
   group?: string;
   requiredPermission?: string;
+  /**
+   * A small count shown as a badge beside the link's label (`.admin-sidebar-
+   * count` in `admin.css`, awcms-one#170) — an unread count, a pending-review
+   * queue depth, that sort of thing.
+   *
+   * Optional and populated by NOTHING today: this field only defines the
+   * shape a future module can use, it does not itself compute a count for any
+   * existing entry. `sidebar-menu.ts`'s `SidebarDefaultEntry`/`ComposedEntry`
+   * carry it through unchanged; `AdminLayout.astro` renders the badge only
+   * when a composed entry actually has one.
+   */
+  badgeCount?: number;
 };
 
 export type ModuleSettingsContract = {
