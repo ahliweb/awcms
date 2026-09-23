@@ -1,0 +1,8 @@
+{
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "worker_id": "wrk-srv-prod-01-001",
+  "nonce": "nonce-1234567890abcdef1234",
+  "timestamp": "2026-09-21T12:05:00Z",
+  "capabilities": ["status", "preflight", "backup"]
+}

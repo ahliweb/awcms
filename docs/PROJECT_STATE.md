@@ -123,7 +123,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | ADR                               | **0000**–**0124** (`0000` = template; highest ADR status: **Accepted**)                                 | `ls docs/adr/`                                                                          |
 | Admin screens                     | **49** `.astro` files in `src/pages/admin/`; **1 of 25** modules without `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **63** (36.473 lines) — on typechecking see §6                                                          | `find src -name '*.astro'`                                                              |
-| Gates                             | **60** in the `bun run check` chain                                                                     | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **61** in the `bun run check` chain                                                                     | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**                              | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->

@@ -1,0 +1,13 @@
+{
+  "refund_id": "refund-acme-01",
+  "payment_id": "payment-acme-01",
+  "invoice_id": "invoice-acme-2026-01",
+  "tenant_id": "tenant-acme",
+  "currency": "USD",
+  "amount_minor": 500,
+  "actor": { "type": "user", "id": "user-jane" },
+  "evidence_ref": "bank-ref-20260110-refund-0001",
+  "idempotency_key": "idem-refund-acme-01-00000001",
+  "reason": "partial service credit",
+  "created_at": "2026-01-10T00:00:00Z"
+}

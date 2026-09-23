@@ -1,0 +1,9 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0005",
+  "target": {
+    "server_id": "srv-0001"
+  },
+  "ready": true,
+  "connected": true
+}

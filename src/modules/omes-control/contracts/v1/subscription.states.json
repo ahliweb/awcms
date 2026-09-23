@@ -1,0 +1,32 @@
+{
+  "$comment": "Data-encoded state machine for subscription/entitlement.state (issue #92). Loaded by lib/omes/py/jobs/states.py's generic transition checker, not by scripts/check-contracts.py (this file is not a *.schema.json and carries no fixtures - it IS the fixture-equivalent for a state machine: its own correctness is proven by tests/py/jobs/test_states.py exercising every listed transition and rejecting every unlisted one).",
+  "states": [
+    "trialing",
+    "active",
+    "past_due",
+    "grace_period",
+    "suspended",
+    "cancelled",
+    "expired"
+  ],
+  "initial_states": ["trialing", "active"],
+  "terminal_states": ["cancelled", "expired"],
+  "transitions": [
+    { "from": "trialing", "to": "active" },
+    { "from": "trialing", "to": "cancelled" },
+    { "from": "trialing", "to": "expired" },
+    { "from": "active", "to": "past_due" },
+    { "from": "active", "to": "suspended" },
+    { "from": "active", "to": "cancelled" },
+    { "from": "past_due", "to": "active" },
+    { "from": "past_due", "to": "grace_period" },
+    { "from": "past_due", "to": "cancelled" },
+    { "from": "grace_period", "to": "active" },
+    { "from": "grace_period", "to": "suspended" },
+    { "from": "grace_period", "to": "cancelled" },
+    { "from": "suspended", "to": "active" },
+    { "from": "suspended", "to": "cancelled" },
+    { "from": "suspended", "to": "expired" },
+    { "from": "cancelled", "to": "expired" }
+  ]
+}

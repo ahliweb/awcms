@@ -1,0 +1,34 @@
+{
+  "invoice_id": "invoice-acme-2026-01",
+  "tenant_id": "tenant-acme",
+  "billing_profile_id": "billing-profile-acme-01",
+  "subscription_id": "sub-acme-01",
+  "invoice_number": "INV-2026-000123",
+  "currency": "USD",
+  "state": "issued",
+  "issued_at": "2026-01-01T00:00:00Z",
+  "due_at": "2026-01-15T00:00:00Z",
+  "lines": [
+    {
+      "line_id": "line-01",
+      "description": "Hermes Managed Server - Starter (monthly)",
+      "quantity": 1,
+      "price_snapshot": {
+        "price_id": "price-plan-starter-monthly-usd",
+        "catalog_version_id": "version-plan-starter-2026-01",
+        "currency": "USD",
+        "unit_amount_minor": 1900
+      },
+      "tax_code": "tax-standard"
+    }
+  ],
+  "totals": {
+    "subtotal_minor": 1900,
+    "tax_minor": 166,
+    "credit_minor": 0,
+    "adjustment_minor": 0,
+    "total_minor": 2066,
+    "paid_minor": 0
+  },
+  "source_event_id": "evt-invoice-acme-2026-01-0001"
+}

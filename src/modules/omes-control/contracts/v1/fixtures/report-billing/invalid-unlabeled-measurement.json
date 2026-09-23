@@ -1,0 +1,15 @@
+{
+  "report_id": "report-mrr-tenant-acme-2026-03",
+  "report_type": "mrr",
+  "scope": { "tenant_id": "tenant-acme" },
+  "projection": {
+    "projection_name": "billing-mrr-projection",
+    "cursor": { "last_event_id": "evt-sub-acme-01-0002", "last_event_at": "2026-03-01T00:05:00Z" },
+    "freshness": { "as_of": "2026-03-01T00:06:00Z", "lag_seconds": 60, "stale": false },
+    "rebuild": { "status": "not_rebuilding", "started_at": null, "completed_at": null },
+    "reconciliation": { "last_reconciled_at": "2026-03-01T00:00:00Z", "discrepancies_found": 0 }
+  },
+  "measurements": [
+    { "name": "mrr_minor", "value_minor_or_count": 4800, "unit": "currency_minor_unit", "currency": "USD" }
+  ]
+}

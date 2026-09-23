@@ -1,0 +1,17 @@
+{
+  "plan_id": "plan-starter",
+  "product_id": "product-hermes-managed-server",
+  "name": "Starter",
+  "limits": {
+    "servers": 1,
+    "logical_agents": 2,
+    "specialist_agents": 0,
+    "isolated_workers": 0,
+    "storage_gb": 20,
+    "backup_retention_days": 7,
+    "backends": ["hermes"]
+  },
+  "resource_policy_id": "policy-standard-suspension",
+  "backend_eligibility_id": "backend-eligibility-standard",
+  "active": true
+}

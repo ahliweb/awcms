@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/hermes-orchestration-event.schema.json",
+  "title": "hermes-orchestration-event",
+  "description": "Read-only lifecycle event emitted by Hermes observer hooks (hermes.observer.v1) for delegated subagents (ADR-0028, issue #183).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_type",
+    "tenant_id",
+    "server_id",
+    "session_id",
+    "subagent_id",
+    "state",
+    "timestamp",
+    "hermes_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "subagent_start",
+        "subagent_stop",
+        "subagent_step",
+        "batch_start",
+        "batch_stop"
+      ]
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "turn_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "subagent_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "parent_subagent_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "goal": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "STARTING",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "INTERRUPTED",
+        "CANCELLED",
+        "UNKNOWN"
+      ]
+    },
+    "step_number": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "active_tool": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "hermes_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+    }
+  }
+}

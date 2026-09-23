@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/suspension-automation-policy.schema.json",
+  "title": "suspension-automation-policy",
+  "description": "Whether an AUTOMATED (webhook-triggered) destructive deployment action is allowed to run unattended, or requires human approval first (issue #94 acceptance criteria: 'Require approval or explicit documented automation policy before destructive deployment actions caused by non-payment'). `resource_policy_id` references the underlying catalog-resource-policy (issue #92) that says WHAT happens (allow/block/stop/keep_running); this contract only adds WHETHER a non-payment webhook event may apply that policy without a human approval step. `requires_approval` defaults conceptually to true everywhere in this contract set's fixtures - an automation policy that skips approval is an explicit, reviewable opt-in, never the default.",
+  "type": "object",
+  "required": ["policy_id", "resource_policy_id", "requires_approval_for_destructive_action"],
+  "additionalProperties": false,
+  "properties": {
+    "policy_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "resource_policy_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "requires_approval_for_destructive_action": { "type": "boolean" },
+    "approval_policy_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/server-registration.request.schema.json",
+  "title": "server-registration.request",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "operation",
+    "server"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "service"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "operation": {
+      "type": "string",
+      "const": "register"
+    },
+    "server": {
+      "type": "object",
+      "required": [
+        "hostname",
+        "platform"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$"
+        },
+        "platform": {
+          "type": "object",
+          "required": [
+            "os",
+            "version",
+            "arch"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "os": {
+              "type": "string",
+              "enum": [
+                "ubuntu",
+                "linuxmint"
+              ]
+            },
+            "version": {
+              "type": "string"
+            },
+            "arch": {
+              "type": "string",
+              "enum": [
+                "amd64",
+                "arm64"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "enrollment_secret_ref": {
+      "type": "object",
+      "required": [
+        "store",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "type": "string",
+          "enum": [
+            "env",
+            "file",
+            "vault",
+            "os-keyring"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_./-]{1,256}$"
+        }
+      }
+    }
+  }
+}

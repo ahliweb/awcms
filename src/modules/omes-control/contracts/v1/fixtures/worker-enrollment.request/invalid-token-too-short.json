@@ -1,0 +1,13 @@
+{
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "enrollment_challenge": "short",
+  "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExamplePublicKeyForOmesWorker123",
+  "hostname": "srv-prod-01.acme.corp",
+  "platform": {
+    "os": "ubuntu",
+    "version": "24.04",
+    "arch": "amd64"
+  },
+  "capabilities": ["status"]
+}

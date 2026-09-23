@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:51f46e2f841ed74fa95942b4ccc0e201867bfc7cfa826abee477f67e832c89df -->
+<!-- i18n-source-hash: sha256:8f618f4f29e4cfcefd12910b2f40ff5f956a503444fd5404868a22fb3e811354 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-126 target menjalankan berkas di `scripts/`; 56 di antaranya
+128 target menjalankan berkas di `scripts/`; 57 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -71,6 +71,8 @@ terjadwal, atau oleh workflow CI tertentu.
 | `comments:retention`                      | `comments-retention.ts`                        | —    |
 | `config:env:coverage:check`               | `env-contract-coverage-check.ts`               | ✅   |
 | `config:validate`                         | `validate-env.ts`                              | —    |
+| `contracts:omes:sync`                     | `sync-omes-contracts.ts`                       | —    |
+| `contracts:omes:sync:check`               | `sync-omes-contracts.ts`                       | ✅   |
 | `data-lifecycle:archive-purge`            | `data-lifecycle-archive-purge.ts`              | —    |
 | `data-lifecycle:registry:check`           | `data-lifecycle-registry-check.ts`             | ✅   |
 | `data-lifecycle:table-coverage:check`     | `data-lifecycle-table-coverage-check.ts`       | ✅   |

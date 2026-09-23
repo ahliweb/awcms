@@ -1,0 +1,9 @@
+{
+  "subscription_id": "sub-acme-01",
+  "tenant_id": "tenant-acme",
+  "plan_id": "plan-starter",
+  "state": "active",
+  "effective_from": "2026-01-01T00:00:00Z",
+  "source_event_id": "evt-sub-acme-01-0002",
+  "owner_tenant_id": "tenant-globex"
+}

@@ -1,0 +1,13 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0002",
+  "idempotency_key": "idem-preflight-0001",
+  "actor": {
+    "type": "user",
+    "id": "operator-1"
+  },
+  "operation": "preflight",
+  "target": {
+    "server_id": "srv-0001"
+  }
+}
