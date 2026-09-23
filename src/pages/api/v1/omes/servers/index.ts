@@ -13,6 +13,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../modules/_shared/idempotency";
 import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 import { OMES_GUARDS } from "../../../../../modules/omes-control/domain/permissions";
 import {
   fetchServers,
@@ -102,10 +106,16 @@ export const POST = defineTenantRoute<RegisterPrepared>({
       };
     }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const bodyRead = await readJsonBody(request);
+
+    if (bodyRead.tooLarge) {
+      return {
+        valid: false,
+        response: bodyTooLargeResponse(bodyRead.limitBytes)
+      };
+    }
+
+    if (bodyRead.malformed) {
       return {
         valid: false,
         response: fail(
@@ -116,7 +126,7 @@ export const POST = defineTenantRoute<RegisterPrepared>({
       };
     }
 
-    return { valid: true, idempotencyKey, body };
+    return { valid: true, idempotencyKey, body: bodyRead.value };
   },
   authorize: OMES_GUARDS.servers.register,
   handler: async ({ tx, tenantId, now, auth, prepared, locals }) => {

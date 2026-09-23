@@ -13,6 +13,10 @@ import {
   saveIdempotencyRecord
 } from "../../../../../modules/_shared/idempotency";
 import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
+import {
+  bodyTooLargeResponse,
+  readJsonBody
+} from "../../../../../lib/security/request-body-limit";
 import { OMES_GUARDS } from "../../../../../modules/omes-control/domain/permissions";
 import {
   OMES_OPERATION_GUARD,
@@ -105,10 +109,16 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       };
     }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const bodyRead = await readJsonBody(request);
+
+    if (bodyRead.tooLarge) {
+      return {
+        valid: false,
+        response: bodyTooLargeResponse(bodyRead.limitBytes)
+      };
+    }
+
+    if (bodyRead.malformed) {
       return {
         valid: false,
         response: fail(
@@ -119,7 +129,7 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       };
     }
 
-    const validation = validateOperationSubmission(body);
+    const validation = validateOperationSubmission(bodyRead.value);
 
     if (!validation.valid) {
       return {
