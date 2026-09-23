@@ -140,7 +140,7 @@ export function validateServerRegistrationInput(
 export const ENROLLMENT_CHALLENGE_TTL_MS = 15 * 60 * 1000;
 
 export type EnrollmentChallenge = {
-  /** Returned to the caller ONCE and never persisted — see sql/157's header. */
+  /** Returned to the caller ONCE and never persisted — see sql/158's header. */
   rawChallenge: string;
   /** What is actually stored, per the same discipline as session/API-key hashing. */
   challengeHash: string;

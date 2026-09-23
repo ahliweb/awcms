@@ -2,7 +2,7 @@
  * Enrollment challenge issuance/revocation, Issue ahliweb/omes#198. Guarded
  * by `omes_control.enrollments.manage`. The RAW challenge is returned to the
  * caller exactly once (the response of `issueEnrollmentChallenge`'s route) —
- * only its sha256 hash is ever persisted (sql/157).
+ * only its sha256 hash is ever persisted (sql/158).
  */
 import {
   issueEnrollmentChallenge as mintChallenge,

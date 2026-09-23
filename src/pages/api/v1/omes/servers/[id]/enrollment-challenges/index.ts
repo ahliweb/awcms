@@ -24,7 +24,7 @@ type Prepared = { idempotencyKey: string };
  * ahliweb/omes#198) — mints a one-time enrollment challenge for a server
  * registered but not yet enrolled. Guarded by
  * `omes_control.enrollments.manage`. The raw challenge is returned in THIS
- * response only — never again (sql/157).
+ * response only — never again (sql/158).
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -146,7 +146,7 @@ export const POST = defineTenantRoute<Prepared>({
     // only time it is ever shown. What gets PERSISTED to the idempotency
     // store (`awcms_idempotency_keys`, an ordinary table with no
     // secret-shaped-value scrubbing of its own) is a deliberately
-    // DIFFERENT, redacted body: sql/157's whole discipline is "the raw
+    // DIFFERENT, redacted body: sql/158's whole discipline is "the raw
     // challenge is never persisted, only its hash" and a naive
     // save-then-replay of the same body as this response would silently
     // break that the moment a second request used this Idempotency-Key.

@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 156   |
+| Migrations                          | 158   |
 | `awcms_*` tables                    | 160   |
 | Tables with `FORCE` RLS             | 142   |
 | RLS-free tables (global, by design) | 18    |
 | Test files                          | 521   |
-| Route files                         | 388   |
+| Route files                         | 406   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -44,7 +44,7 @@
 | `comments`             | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime` |
 | `idn_admin_regions`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`                                                                  |
 | `push_delivery`        | 0.1.0   | active       | —      | no   | `tenant_admin`, `logging`                                                                          |
-| `omes_control`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `workflow`                                                      |
+| `omes_control`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`                                                                  |
 
 ### Migrations
 
@@ -206,6 +206,8 @@
 | 154 | `sql/154_awcms_omes_control_schema.sql`                            |
 | 155 | `sql/155_awcms_omes_control_permissions.sql`                       |
 | 156 | `sql/156_awcms_omes_control_worker_grant_narrow.sql`               |
+| 157 | `sql/157_awcms_omes_control_operation_workflow_link.sql`           |
+| 158 | `sql/158_awcms_omes_control_enrollment_challenges.sql`             |
 
 ### Tables & Row-Level Security
 
@@ -378,14 +380,14 @@
 | ------------- | ---------- |
 | `(root)`      | 422        |
 | `e2e`         | 19         |
-| `integration` | 79         |
+| `integration` | 80         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 308   |
+| `/api/v1/**`    | 326   |
 | `/admin/**`     | 50    |
 | publik / anonim | 30    |
 

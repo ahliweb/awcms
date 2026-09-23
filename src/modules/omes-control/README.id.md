@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:093d4fd18f6401d242ff1d75cb75cbe38f48bb2a0ed8bb6ab0c1fd1fa01ba1ea -->
+<!-- i18n-source-hash: sha256:d029f94f5dfab14504bd05c3dabd7ab5d26e931eb79d13c13081579be6624fce -->
 
 # `omes_control`
 
@@ -19,7 +19,7 @@ Setiap endpoint memakai `defineTenantRoute` (`withTenant` + `authorizeInTransact
 | `POST /api/v1/omes/servers`                            | `servers.register`           | Idempotency-Key wajib, rate-limited per aktor, diaudit.                                                                                                                                                                             |
 | `GET /api/v1/omes/servers/{id}`                        | `servers.read`               | Termasuk evidence enrollment berupa fingerprint saja, tidak pernah materi kunci mentah.                                                                                                                                             |
 | `DELETE /api/v1/omes/servers/{id}`                     | `servers.delete`             | Soft delete (`status = 'decommissioned'`). Idempotency-Key wajib, diaudit.                                                                                                                                                          |
-| `POST /api/v1/omes/servers/{id}/enrollment-challenges` | `enrollments.manage`         | Mencetak challenge sekali pakai; nilai mentahnya dikembalikan tepat sekali dan tidak pernah disimpan (sql/157 hanya menyimpan hash sha256-nya). Idempotency-Key wajib, rate-limited, diaudit.                                       |
+| `POST /api/v1/omes/servers/{id}/enrollment-challenges` | `enrollments.manage`         | Mencetak challenge sekali pakai; nilai mentahnya dikembalikan tepat sekali dan tidak pernah disimpan (sql/158 hanya menyimpan hash sha256-nya). Idempotency-Key wajib, rate-limited, diaudit.                                       |
 | `POST .../enrollment-challenges/{workerId}/revoke`     | `enrollments.manage`         | Idempotency-Key wajib, diaudit.                                                                                                                                                                                                     |
 | `GET /api/v1/omes/deployments`                         | `deployments.read`           | State desired dan observed adalah field TERPISAH, tidak pernah digabung.                                                                                                                                                            |
 | `GET /api/v1/omes/deployments/{id}`                    | `deployments.read`           |                                                                                                                                                                                                                                     |

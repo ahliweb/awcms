@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:72ab17911f52d96697f4303604333bf9c613aa9e0625af23d37ad19fe88d9224 -->
+<!-- i18n-source-hash: sha256:219ee3711b4cd874aa41cf0bd0603d399ab0d4266f493a21367721cf450aeb7f -->
 
 # AWCMS — Project State & Continuation
 
@@ -120,7 +120,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                     | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                     | `git rev-list --count v10.3.0..HEAD`                                                    |
 | Modul base                         | **25** (lihat daftar di ARCHITECTURE.md)                                                               | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **156** (`sql/001`–`156`)                                                                              | `ls sql/`                                                                               |
+| Migrasi                            | **158** (`sql/001`–`158`)                                                                              | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0124** (`0000` = template; status ADR tertinggi: **Accepted**)                              | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **1 dari 25** modul tanpa `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **63** (36.473 baris) — soal typecheck lihat §6                                                        | `find src -name '*.astro'`                                                              |
