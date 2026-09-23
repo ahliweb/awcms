@@ -13,6 +13,7 @@ import {
   startWorkflowInstance,
   WorkflowDefinitionNotActiveError
 } from "../../workflow-approval/application/workflow-instance";
+import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { redactSensitiveAttributes } from "../../_shared/redaction";
 import {
   isDestructiveOmesOperation,
@@ -80,11 +81,25 @@ export type SubmitOmesOperationOutcome =
  * API — never created implicitly here). No such row -> the request is
  * refused outright and NOTHING is persisted; there is no silent fallback to
  * auto-approval or direct execution.
+ *
+ * Also refuses when the tenant has DISABLED the `workflow` module itself.
+ * `omes_control` deliberately does NOT declare `workflow` as a
+ * `dependencies` edge (see `module.ts`'s comment and
+ * `tests/module-boundary.test.ts`'s `DOCUMENTED_EXCEPTIONS` entry for
+ * "omes_control -> workflow") — that would make `workflow` un-disablable
+ * for any tenant that has ever enabled `omes_control`. So this is the call
+ * site's own responsibility, checked explicitly rather than left to
+ * `startWorkflowInstance` to fail unpredictably against a disabled
+ * module's tables.
  */
 export async function hasActiveDestructiveWorkflowDefinition(
   tx: Bun.SQL,
   tenantId: string
 ): Promise<boolean> {
+  if (!(await resolveModuleEnabled(tx, tenantId, "workflow"))) {
+    return false;
+  }
+
   const rows = (await tx`
     SELECT 1 FROM awcms_workflow_definitions
     WHERE tenant_id = ${tenantId}

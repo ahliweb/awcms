@@ -35,11 +35,21 @@ export const omesControlModule = defineModule({
   status: "experimental",
   description:
     "OMES Control Center domain module for host fleet lifecycle, worker enrollments, desired vs observed deployments, operation requests, worker job dispatch queue, health snapshots, backup verification, and host execution audit projections (ADR-0122).",
-  // "workflow" (Issue ahliweb/omes#198): destructive operation submission
-  // and backup restore route through the canonical workflow-approval
-  // engine (startWorkflowInstance) instead of a second approval authority —
-  // see application/operation-submission.ts and application/backup-restore.ts.
-  dependencies: ["tenant_admin", "identity_access", "workflow"],
+  // NOT "workflow", even though destructive operation submission
+  // (application/operation-submission.ts, application/backup-restore.ts)
+  // calls its startWorkflowInstance directly — a hard `dependencies` edge
+  // would make `workflow` un-disablable for any tenant that has ever
+  // enabled omes_control (tenant-module-lifecycle's
+  // MODULE_DEPENDENCY_DISABLED), which is the exact blog_content ->
+  // seo_distribution precedent tests/module-boundary.test.ts's
+  // DOCUMENTED_EXCEPTIONS already records: a plain application function
+  // call, not a swappable port, so it is not `capabilities.consumes`
+  // either. The call sites check `resolveModuleEnabled(tx, tenantId,
+  // "workflow")` themselves before calling in, and degrade to the same
+  // `APPROVAL_WORKFLOW_NOT_CONFIGURED` refusal a tenant with no published
+  // definition already gets — see tests/module-boundary.test.ts's
+  // DOCUMENTED_EXCEPTIONS entry for "omes_control -> workflow".
+  dependencies: ["tenant_admin", "identity_access"],
   type: "domain",
   api: {
     openApiPath: "openapi/modules/omes-control.openapi.yaml",

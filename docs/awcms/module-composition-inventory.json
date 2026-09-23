@@ -240,7 +240,7 @@
       "version": "0.1.0",
       "status": "experimental",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access", "workflow"],
+      "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 13,
