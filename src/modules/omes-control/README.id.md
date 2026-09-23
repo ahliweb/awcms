@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d029f94f5dfab14504bd05c3dabd7ab5d26e931eb79d13c13081579be6624fce -->
+<!-- i18n-source-hash: sha256:b66129e9c5e53f3e8700c438573cd12a6251f5a00cbd4985792ebbe625723bff -->
 
 # `omes_control`
 
@@ -56,6 +56,6 @@ Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada 
 
 **Keterbatasan cakupan yang diketahui**: `awcms_idempotency_keys` di-key dengan `(tenant_id, request_scope, idempotency_key)` — tenant-scoped, bukan actor-scoped. Pengguna tenant mana pun yang mengetahui nilai `Idempotency-Key` pengguna lain untuk key yang masih hidup dapat memicu jalur replay (tidak pernah mutasi kedua, hanya respons tersimpan) dan kini akan muncul di jejak audit sebagai aktor yang me-replay, berbeda dari aktor asli. Apakah idempotency key sebaiknya juga di-scope per-aktor adalah keputusan produk untuk issue lanjutan, tidak diputuskan oleh issue ini — modul ini mewarisi kontrak penyimpanan bersama apa adanya.
 
-## Titik integrasi `omes#197`
+## Titik integrasi `omes#199`
 
-Validasi bentuk kontrak/state-machine terhadap kontrak OMES yang di-vendor (`validateOmesContract`, `scanForRawSecrets`) dimiliki oleh perubahan paralel (ahliweb/omes#197) dan **tidak** diduplikasi di sini. `validateOperationSubmission`/`validateServerRegistrationInput` yang menghadap klien milik modul ini (`domain/operations.ts`, `domain/server-registration.ts`) hanya memvalidasi bentuk request yang menghadap AWCMS (terautentikasi sesi) — sengaja bukan skema wire OMES, yang field `tenant_id`/`correlation_id`/`idempotency_key`/`actor`/`permission`-nya diturunkan di sisi server, tidak pernah diterima dari browser. Membangun amplop yang menghadap OMES itu adalah tugas pull worker (`ahliweb/omes#199`). Begitu #197 mendarat, validator kontraknya adalah satu-satunya tempat untuk dipasang sebelum request modul ini pernah diteruskan ke OMES.
+ahliweb/omes#197 (sudah merge, PR #816) menambahkan `domain/contracts/` ke modul yang sama ini: `validateOmesContract`/`validateOmesContractText`/`validateOmesContractOrThrow`, `scanForRawSecrets`, `getOmesStateMachine`, dan `OMES_CONTRACT_PIN` yang di-pin — validasi bentuk/state-machine fail-closed terhadap kontrak OMES v1 yang di-vendor. Issue ini (#198) **tidak** memasang validator itu ke endpoint atau fungsi aplikasi mana pun di sini, dan tidak menduplikasinya: `validateOperationSubmission`/`validateServerRegistrationInput` yang menghadap klien milik modul ini sendiri (`domain/operations.ts`, `domain/server-registration.ts`) hanya memvalidasi bentuk request yang menghadap AWCMS (terautentikasi sesi) — sengaja bukan skema wire OMES, yang field `tenant_id`/`correlation_id`/`idempotency_key`/`actor`/`permission`-nya diturunkan di sisi server, tidak pernah diterima dari browser. Membangun amplop yang menghadap OMES dan memanggil `validateOmesContract` terhadapnya sebelum diteruskan ke OMES adalah tugas pull worker (`ahliweb/omes#199`, belum diimplementasikan) — `domain/contracts/` adalah satu-satunya tempat pemasangan itu terpasang nanti.
