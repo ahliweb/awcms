@@ -26,7 +26,13 @@ describe("omes_control module descriptor", () => {
     expect(mod?.name).toBe("OMES Control Center");
     expect(mod?.type).toBe("domain");
     expect(mod?.status).toBe("experimental");
-    expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
+    // "workflow" added by Issue ahliweb/omes#198 — destructive operation
+    // submission and backup restore call startWorkflowInstance.
+    expect(mod?.dependencies).toEqual([
+      "tenant_admin",
+      "identity_access",
+      "workflow"
+    ]);
   });
 
   test("omits navigation until physical admin screens land in staged issues", () => {
