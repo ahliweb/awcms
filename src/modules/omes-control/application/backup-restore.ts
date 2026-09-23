@@ -99,7 +99,7 @@ export async function submitBackupRestore(
       (tenant_id, request_id, server_id, operation, parameters, status, requested_by)
     VALUES (
       ${tenantId}, ${requestId}, ${backup.server_id}, 'restore',
-      ${JSON.stringify({ backupId })}::jsonb, 'requested', ${requestedByTenantUserId}
+      ${{ backupId }}::jsonb, 'requested', ${requestedByTenantUserId}
     )
     RETURNING ${tx.unsafe(OPERATION_REQUEST_RETURNING)}
   `) as OperationRequestRow[];

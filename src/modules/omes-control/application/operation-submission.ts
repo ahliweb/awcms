@@ -112,14 +112,13 @@ export async function submitOmesOperation(
   }
 
   const requestId = crypto.randomUUID();
-  const parametersJson = JSON.stringify(input.parameters ?? {});
 
   const insertedRows = (await tx`
     INSERT INTO awcms_omes_operation_requests
       (tenant_id, request_id, server_id, operation, parameters, status, requested_by)
     VALUES (
       ${tenantId}, ${requestId}, ${input.serverId}, ${input.operation},
-      ${parametersJson}::jsonb, 'requested', ${requestedByTenantUserId}
+      ${input.parameters ?? {}}::jsonb, 'requested', ${requestedByTenantUserId}
     )
     RETURNING ${tx.unsafe(OPERATION_REQUEST_RETURNING)}
   `) as OperationRequestRow[];

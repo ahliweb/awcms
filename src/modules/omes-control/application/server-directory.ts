@@ -173,15 +173,13 @@ export async function registerServer(
     };
   }
 
-  const tagsJson = JSON.stringify(input.tags ?? []);
-
   const insertedRows = (await tx`
     INSERT INTO awcms_omes_servers
       (tenant_id, server_id, hostname, ip, os_name, os_version, arch, status, tags)
     VALUES (
       ${tenantId}, ${serverId}, ${input.hostname}, ${input.ip ?? null},
       ${input.platform.os}, ${input.platform.version}, ${input.platform.arch},
-      'offline', ${tagsJson}::jsonb
+      'offline', ${input.tags ?? []}::jsonb
     )
     RETURNING id, server_id, hostname, ip, os_name, os_version, arch, status, tags,
       last_heartbeat_at, created_at, updated_at
