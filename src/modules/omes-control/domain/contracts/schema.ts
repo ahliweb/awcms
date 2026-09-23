@@ -29,6 +29,8 @@
  * issue #172's contract.
  */
 
+import { deepEqualJson } from "./json-parse";
+
 export const SUPPORTED_VALIDATION_KEYWORDS = new Set([
   "type",
   "required",
@@ -313,7 +315,7 @@ function validateInner(
   }
 
   if ("const" in schema) {
-    if (JSON.stringify(instance) !== JSON.stringify(schema.const)) {
+    if (!deepEqualJson(instance, schema.const)) {
       errors.push(
         `${path}: expected const ${pyRepr(schema.const)}, got ${pyRepr(instance)}`
       );
@@ -322,9 +324,7 @@ function validateInner(
   }
 
   if ("enum" in schema && schema.enum) {
-    const matches = schema.enum.some(
-      (v) => JSON.stringify(v) === JSON.stringify(instance)
-    );
+    const matches = schema.enum.some((v) => deepEqualJson(v, instance));
     if (!matches) {
       errors.push(
         `${path}: ${pyRepr(instance)} is not one of ${pyRepr(schema.enum)}`
@@ -406,19 +406,34 @@ function validateInner(
   }
 
   if (isPlainObject(instance)) {
+    // Every membership/lookup below uses `Object.hasOwn` — never the `in`
+    // operator or bracket indexing — on purpose. `in` walks the WHOLE
+    // prototype chain, and `properties`/`instance` are ordinary objects
+    // that inherit `Object.prototype`'s `__proto__` ACCESSOR property: for
+    // key === "__proto__", `"__proto__" in properties` is `true` even when
+    // the schema declares no such property (it's answering "does an
+    // inherited '__proto__' exist", not "did this schema declare one"),
+    // and `properties["__proto__"]` (bracket access) does not return
+    // `undefined` — it returns `Object.getPrototypeOf(properties)`, an
+    // actual object, so a naive `!== undefined` guard would then validate
+    // whatever was smuggled under a `"__proto__"` key against
+    // `Object.prototype` treated as a schema (which has no `required`/
+    // `type`/`properties`/`additionalProperties` own keys, so it validates
+    // as a no-op — an unconditional pass). `Object.hasOwn` only ever
+    // answers "does THIS object have its OWN property with this exact
+    // key", which is what both `required` and `additionalProperties` mean.
     for (const name of schema.required ?? []) {
-      if (!(name in instance)) {
+      if (!Object.hasOwn(instance, name)) {
         errors.push(`${path}: missing required property '${name}'`);
       }
     }
 
     const properties = schema.properties ?? {};
     for (const [name, value] of Object.entries(instance)) {
-      const propSchema = properties[name];
-      if (propSchema !== undefined) {
+      if (Object.hasOwn(properties, name)) {
         validateInner(
           value as JsonValue,
-          propSchema,
+          properties[name] as JsonSchema,
           `${path}.${name}`,
           errors,
           floatLiteralPaths
@@ -429,7 +444,7 @@ function validateInner(
     const additional = schema.additionalProperties;
     if (additional === false) {
       const extra = Object.keys(instance)
-        .filter((k) => !(k in properties))
+        .filter((k) => !Object.hasOwn(properties, k))
         .sort();
       if (extra.length > 0) {
         errors.push(
@@ -438,10 +453,10 @@ function validateInner(
       }
     } else if (isPlainObject(additional)) {
       for (const name of Object.keys(instance).filter(
-        (k) => !(k in properties)
+        (k) => !Object.hasOwn(properties, k)
       )) {
         validateInner(
-          instance[name] as JsonValue,
+          (instance as Record<string, JsonValue>)[name]!,
           additional as JsonSchema,
           `${path}.${name}`,
           errors,
