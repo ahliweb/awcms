@@ -62,6 +62,14 @@ msgstr "Sinkronisasi aktif"
 msgid "Sync inactive"
 msgstr "Sinkronisasi nonaktif"
 
+#. Sidebar status card (awcms-one#170) — same syncActive boolean as the
+#. topbar's SyncIndicator, described a second time in the rail's own slot.
+msgid "An offline sync node is pushing changes."
+msgstr "Sebuah simpul sinkronisasi luring sedang mendorong perubahan."
+
+msgid "No offline sync node is registered."
+msgstr "Tidak ada simpul sinkronisasi luring yang terdaftar."
+
 #. Topbar — colour theme control
 msgid "Change colour theme"
 msgstr "Ubah tema warna"
@@ -275,6 +283,9 @@ msgstr "Pustaka Media"
 
 msgid "Module Management"
 msgstr "Manajemen Modul"
+
+msgid "OMES Control Center"
+msgstr "Pusat Kontrol OMES"
 
 msgid "Profile Identity"
 msgstr "Identitas Profil"

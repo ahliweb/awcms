@@ -524,6 +524,24 @@ const accountInitials =
         ></label>
         <aside class="admin-sidebar" id="admin-sidebar">
           {
+            /* awcms-one#170 — the rail's own compact identity block: a brand
+              tile plus the active tenant's name in the monospace family. This
+              is NOT a replacement for `.admin-brand` in the topbar (still the
+              accessible `/admin` landmark link) or `TenantBadge` (still the
+              topbar's own tenant readout) — it is the sidebar's own header,
+              exactly as the topbar and sidebar are already two independent
+              chrome regions everywhere else in this shell. Decorative/
+              `aria-hidden`, so a screen reader is not told the tenant name
+              twice. */
+          }
+          <div class="admin-sidebar-brand" aria-hidden="true">
+            <span class="admin-sidebar-brand-mark">A</span>
+            <div class="admin-sidebar-brand-text-group">
+              <span class="admin-sidebar-brand-text">AWCMS</span>
+              <span class="admin-sidebar-tenant">{tenantName}</span>
+            </div>
+          </div>
+          {
             /* ADR-0095 — the sidebar is translated by passing the composed
               ENGLISH labels through the catalog, because `msgid` is the English
               source text. `SIDEBAR_LABELS` and `ModuleDescriptor.name` therefore
@@ -614,6 +632,16 @@ const accountInitials =
                                     <span class="admin-sidebar-link-label">
                                       {t(entry.label)}
                                     </span>
+                                    {/* See `ModuleNavigationEntry.badgeCount`
+                                        (module-contract.ts) — an optional
+                                        field nothing populates yet. Rendered
+                                        only when a composed entry actually
+                                        carries one. */}
+                                    {entry.badgeCount !== undefined && (
+                                      <span class="admin-sidebar-count">
+                                        {entry.badgeCount}
+                                      </span>
+                                    )}
                                   </a>
                                 </li>
                               ))}
@@ -627,6 +655,32 @@ const accountInitials =
               }
             </ul>
           </nav>
+          {
+            /* awcms-one#170 — the rail's status card, fed by the SAME
+              `syncActive` boolean the topbar's `SyncIndicator` already uses
+              (`fetchSyncIndicatorActive`, one bounded `EXISTS` over
+              `awcms_sync_nodes` per `/admin/*` render — no second query). Not
+              a new "outbox" concept: this is the existing sync signal, shown a
+              second time in the slot the redesign's mockup reserves for it. */
+          }
+          <div class="admin-sidebar-status" role="status">
+            <div class="admin-sidebar-status-head">
+              <span
+                class="admin-sidebar-status-dot"
+                data-active={syncActive ? "true" : "false"}
+                aria-hidden="true"></span>
+              <span class="admin-sidebar-status-title">
+                {syncActive ? t("Sync active") : t("Sync inactive")}
+              </span>
+            </div>
+            <span class="admin-sidebar-status-meta">
+              {
+                syncActive
+                  ? t("An offline sync node is pushing changes.")
+                  : t("No offline sync node is registered.")
+              }
+            </span>
+          </div>
           <div class="admin-sidebar-footer">
             {
               /* ADR-0120 — sign-out moved here from the topbar. It is the last
