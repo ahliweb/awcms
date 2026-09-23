@@ -44,7 +44,7 @@
 | `comments`             | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime` |
 | `idn_admin_regions`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`                                                                  |
 | `push_delivery`        | 0.1.0   | active       | —      | no   | `tenant_admin`, `logging`                                                                          |
-| `omes_control`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`                                                                  |
+| `omes_control`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `workflow`                                                      |
 
 ### Migrations
 
