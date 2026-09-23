@@ -32,6 +32,7 @@ import {
   registerServer
 } from "../../src/modules/omes-control/application/server-directory";
 import { submitOmesOperation } from "../../src/modules/omes-control/application/operation-submission";
+import { issueEnrollmentChallengeForServer } from "../../src/modules/omes-control/application/enrollment-management";
 import { OMES_DESTRUCTIVE_WORKFLOW_KEY } from "../../src/modules/omes-control/domain/operations";
 import {
   computeRequestHash,
@@ -345,6 +346,47 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
       if (outcome.outcome === "created") {
         expect(outcome.operationRequest.status).toBe("approved");
         expect(outcome.operationRequest.workflowInstanceId).not.toBeNull();
+      }
+    });
+  });
+
+  describe("enrollment challenge issuance", () => {
+    test("re-issuing a challenge for the same server supersedes (expires) the prior pending one", async () => {
+      const serverRowId = await seedServer(
+        TENANT_A,
+        "srv-a-5",
+        "a5.example.test"
+      );
+
+      const first = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(first.outcome).toBe("issued");
+
+      const second = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(second.outcome).toBe("issued");
+
+      const rows = (await getAdminSql()`
+        SELECT worker_id, status FROM awcms_omes_enrollments
+        WHERE tenant_id = ${TENANT_A} AND server_id = 'srv-a-5'
+        ORDER BY created_at
+      `) as { worker_id: string; status: string }[];
+
+      // Exactly one row is still `pending` — the SECOND, most recent
+      // challenge. The first is `expired`, never a second live challenge
+      // outstanding for the same server under a different worker_id.
+      expect(rows).toHaveLength(2);
+      const pending = rows.filter((r) => r.status === "pending");
+      expect(pending).toHaveLength(1);
+      if (second.outcome === "issued") {
+        expect(pending[0]!.worker_id).toBe(second.workerId);
+      }
+      const expired = rows.filter((r) => r.status === "expired");
+      expect(expired).toHaveLength(1);
+      if (first.outcome === "issued") {
+        expect(expired[0]!.worker_id).toBe(first.workerId);
       }
     });
   });

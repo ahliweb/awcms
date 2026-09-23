@@ -48,6 +48,23 @@ export async function issueEnrollmentChallengeForServer(
     return { outcome: "server_not_eligible", status: server.status };
   }
 
+  // Supersede every still-live PENDING challenge for this server before
+  // minting a new one — without this, re-issuing (e.g. because an operator
+  // lost the first raw value, or a worker never showed up) leaves several
+  // valid, unexpired challenges outstanding for the same server under
+  // DIFFERENT worker_ids, any one of which a worker could still present.
+  // `awcms_omes_enrollments` has no uniqueness constraint on
+  // `(tenant_id, server_id)` for `pending` rows (only `(tenant_id,
+  // worker_id)` is unique, and worker_id is freshly minted per issuance),
+  // so this is the only thing that keeps "one live challenge per server"
+  // true. `enrolled`/`revoked` rows are untouched — only `pending` is ever
+  // superseded here.
+  await tx`
+    UPDATE awcms_omes_enrollments
+    SET status = 'expired', updated_at = now()
+    WHERE tenant_id = ${tenantId} AND server_id = ${server.server_id} AND status = 'pending'
+  `;
+
   const challenge: EnrollmentChallenge = mintChallenge(now);
 
   await tx`
