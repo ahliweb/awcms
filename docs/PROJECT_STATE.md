@@ -391,6 +391,66 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **DEPENDENCY & MERGE-QUEUE ROUND — 24 September 2026: a dependency sweep that
+  found a live privilege breach in `main`, and two bumps that were unmergeable
+  by construction.** Ten PRs were open with nothing red about them individually.
+  Four things came out of it that are worth keeping.
+
+  **`main` was red for a real reason, and the gate was right.** Every open PR
+  failed `security:readiness worker/setup grant check` (Issue #163), including
+  PRs that touched nothing but a version string — which is what proved the fault
+  was on `main` rather than in any branch. The cause was `sql/154` (#814)
+  granting `awcms_worker` the same `SELECT, INSERT, UPDATE, DELETE` as
+  `awcms_app` on all eight `omes_control` tables. `omes_control` registers **no
+  scheduled worker entrypoint at all**; the only worker-run code reaching those
+  tables is the generic `data-lifecycle:archive-purge` engine, and all eight
+  descriptors are `mode: "hard_delete"`, `executionMode: "generic"` — a bounded
+  cursor `SELECT` plus an aged-row `DELETE`. `INSERT`/`UPDATE` were never used
+  by any worker statement, so holding them was a live isolation breach from the
+  moment `sql/154` landed. **This was the check's over-grant direction, not a
+  missing matrix entry** — it fails both ways, and the red build was the system
+  working. Fixed in #818/`sql/156` by revoking the two unused verbs, NOT by
+  widening `WORKER_ROLE_GRANTS` to accommodate them: a readiness gate made green
+  by relaxing what it measures is worse than no gate. Verified by re-adding a
+  single `INSERT` on `awcms_omes_jobs` and watching the suite go red again.
+
+  **Two dependabot PRs were individually unmergeable, and looked green anyway.**
+  `.github/workflows/codeql.yml` pins `codeql-action/init` and `/analyze` to the
+  same SHA; dependabot treats them as separate dependencies and opened one PR
+  per line (#811, #809). Either half alone breaks CodeQL on `main` — `init`
+  stamps its config with its own version and `analyze` refuses a config from a
+  version it is not. The trap is that the CodeQL jobs report **`skipping`** on
+  the dependabot PR itself, so both read as mergeable; the breakage only appears
+  after the merge. Superseded by #817, which moves both SHAs in one commit.
+  **Standing rule: any future `codeql-action` bump must move both pinned SHAs
+  together, and "9 checks passed" on such a PR is not evidence Analyze ran.**
+
+  **REJECTED — `prettier-plugin-astro@1.0.0` (#801), staying on 0.14.x.** The
+  major bump crashes `prettier --check` on `src/pages/admin/audit-trail.astro`
+  with prettier's own `Comment "…" was not printed. Please report this error!`
+  invariant — an upstream defect, not something this repo did. Options weighed:
+  (a) merge and reformat, which requires moving or deleting the comment the
+  plugin chokes on — and that comment documents why the value is escaped rather
+  than `set:html`, so mutating a security rationale to satisfy a formatter is
+  the wrong trade; (b) drop `.astro` from the prettier glob, giving up
+  formatting coverage on the largest UI surface in the repo to accommodate one
+  upstream bug; (c) stay on 0.14.x. Took (c). 1.0.0 also reformats ~50 `.astro`
+  files, so there is no urgency to take it before it works. Closing the PR
+  suppresses re-proposal of that version only; dependabot will re-offer once a
+  fixed release ships.
+
+  **The merge queue is serial, and parallelising it backfires.** Branch
+  protection requires up-to-date branches and auto-merge is disabled
+  repo-wide (`gh pr merge --auto` → `Auto merge is not allowed for this
+repository`), so every merge knocks every other PR to `BEHIND` and N PRs cost
+  N sequential CI cycles. Bringing six branches up to date at once to overlap
+  their CI was a mistake: one merge invalidated all six, wasting those runs
+  while crowding the runners that the PR actually being merged then queued
+  behind. Shepherd one PR at a time. Enabling auto-merge would genuinely help,
+  but that is a change to this repository's protection configuration and belongs
+  to the maintainer as its own decision — not something to switch on as a side
+  effect of a slow queue.
+
 - **BACKUP ASSURANCE ROUND — 24 September 2026 (Issue #812, ADR-0123): the
   three documented-but-missing DR controls now exist.** `deploy/backup/`
   gained `manifest.sh`, `offsite-copy.sh` and `restore-drill.sh`, and
