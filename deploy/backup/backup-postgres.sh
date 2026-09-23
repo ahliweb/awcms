@@ -36,29 +36,55 @@
 # `docker exec <app-container> ...` is NOT an option: the app image is runtime
 # only and the app container's name changes on every Coolify deploy.
 #
-# ## What this script does NOT do
+# ## Encryption at rest and authenticated manifest (ADR-0123)
 #
-# docs/awcms/production-preflight-runbook.md §Stage 2 and doc 07 describe a
-# richer model — at-rest encryption (`.dump.enc`), an HMAC-signed manifest,
-# `offsite-copy.sh`, `restore-drill.sh`. None of that is implemented here; this
-# script writes a plain `--format=custom` dump plus a `sha256` sidecar. Rather
-# than let an operator believe otherwise, it FAILS LOUDLY when the encryption /
-# HMAC key variables from that runbook are set (see `refuse_unimplemented`).
+# When `BACKUP_AGE_RECIPIENTS_FILE` and `BACKUP_HMAC_KEY_FILE` are BOTH set,
+# this script produces:
+#
+#   <base>.dump.age             age-encrypted artifact (X25519, authenticated)
+#   <base>.dump.age.sha256      sha256sum sidecar of the CIPHERTEXT
+#   <base>.dump.age.manifest.json        authenticated recovery manifest
+#   <base>.dump.age.manifest.json.hmac   HMAC-SHA256 over the manifest bytes
+#
+# and the plaintext `.dump` is deleted once the encrypted artifact is verified
+# readable — encryption-at-rest that leaves the plaintext next to it protects
+# nothing. See docs/adr/0123-backup-encryption-manifest-authentication.md for
+# why `age` + HMAC-SHA256, and manifest.sh for the manifest format and why the
+# HMAC key is never passed on argv.
+#
+# Setting only ONE of those two variables is refused (fail closed): a
+# manifest without encryption, or encryption without an authenticated
+# manifest, is a half-implemented control that is worse than clearly having
+# neither. When NEITHER is set, behavior is unchanged from before this ADR: a
+# plain `--format=custom` dump plus a `.sha256` sidecar — this is what keeps
+# the offline/LAN deployment profile (no secret-management story) working.
 #
 # ## Environment
 #
-#   DATABASE_URL            required, non-empty. Owner/privileged role (the same
-#                           one that runs `bun run db:migrate`), because the dump
-#                           has to be able to read every table. Never printed.
-#   BACKUP_DATABASE_URL     optional override for DATABASE_URL, so a host that
-#                           already exports the app's DSN can point backups
-#                           somewhere else without unsetting it.
-#   BACKUP_DIR              default /var/backups/awcms
-#   BACKUP_LABEL            default awcms — filename prefix
-#   BACKUP_RETENTION_DAYS   default 14; 0 disables pruning entirely
+#   DATABASE_URL              required, non-empty. Owner/privileged role (the
+#                             same one that runs `bun run db:migrate`), because
+#                             the dump has to be able to read every table.
+#                             Never printed.
+#   BACKUP_DATABASE_URL       optional override for DATABASE_URL, so a host
+#                             that already exports the app's DSN can point
+#                             backups somewhere else without unsetting it.
+#   BACKUP_DIR                default /var/backups/awcms
+#   BACKUP_LABEL               default awcms — filename prefix
+#   BACKUP_RETENTION_DAYS     default 14; 0 disables pruning entirely
+#   BACKUP_AGE_RECIPIENTS_FILE  optional. Path to a file of one-or-more `age`
+#                             public recipient lines (`age1...`). Safe to keep
+#                             on the backup-producing host — it cannot decrypt
+#                             anything. Requires BACKUP_HMAC_KEY_FILE too.
+#   BACKUP_HMAC_KEY_FILE      optional. Path to a raw HMAC-SHA256 key file
+#                             (32+ random bytes recommended, e.g.
+#                             `openssl rand -out key 32`). Requires
+#                             BACKUP_AGE_RECIPIENTS_FILE too. Never printed,
+#                             never passed on argv (see manifest.sh).
 #
-# Output: $BACKUP_DIR/<label>_<db>_<UTC timestamp>.dump plus a `.sha256` sidecar
-# written in `sha256sum -c` format, so verification is one command anywhere.
+# Output (unencrypted mode): $BACKUP_DIR/<label>_<db>_<UTC timestamp>.dump plus
+# a `.sha256` sidecar written in `sha256sum -c` format.
+# Output (encrypted mode): the same base name with `.age`/manifest files as
+# described above instead of a plain `.dump`.
 
 set -euo pipefail
 
@@ -85,16 +111,26 @@ require_command() {
     die "'$1' not found in PATH. Run this inside an image that ships the PostgreSQL client binaries (e.g. postgres:18.4), version-matched to the server."
 }
 
-# The preflight runbook tells operators to pass these. Ignoring them silently
-# would leave someone believing an unencrypted dump is encrypted, which is worse
-# than not supporting encryption at all.
-refuse_unimplemented() {
-  local name
-  for name in BACKUP_ENCRYPTION_KEY_FILE BACKUP_HMAC_KEY_FILE; do
-    if [ -n "${!name-}" ]; then
-      die "$name is set, but at-rest encryption and manifest signing are NOT implemented by this script — it writes a plain --format=custom dump plus a sha256 sidecar. docs/awcms/production-preflight-runbook.md §Stage 2 overstates what exists. Unset $name and protect the dump with filesystem permissions and off-host copies, or implement the encrypted variant first."
-    fi
-  done
+# Fail closed on partial encryption/manifest configuration (ADR-0123): an
+# operator who sets only one of the two variables almost certainly intended
+# both, and silently falling back to plaintext would leave them believing a
+# backup is protected when it is not.
+require_paired_encryption_config() {
+  local recipients="${BACKUP_AGE_RECIPIENTS_FILE-}"
+  local hmac_key="${BACKUP_HMAC_KEY_FILE-}"
+
+  if [ -n "$recipients" ] && [ -z "$hmac_key" ]; then
+    die "BACKUP_AGE_RECIPIENTS_FILE is set but BACKUP_HMAC_KEY_FILE is not. Both are required together (ADR-0123) — an encrypted backup with no authenticated manifest cannot be trusted on restore. Set BACKUP_HMAC_KEY_FILE or unset BACKUP_AGE_RECIPIENTS_FILE."
+  fi
+  if [ -n "$hmac_key" ] && [ -z "$recipients" ]; then
+    die "BACKUP_HMAC_KEY_FILE is set but BACKUP_AGE_RECIPIENTS_FILE is not. Both are required together (ADR-0123) — a manifest with no matching encrypted artifact is pointless. Set BACKUP_AGE_RECIPIENTS_FILE or unset BACKUP_HMAC_KEY_FILE."
+  fi
+  if [ -n "$recipients" ] && [ ! -f "$recipients" ]; then
+    die "BACKUP_AGE_RECIPIENTS_FILE points to a file that does not exist: $recipients"
+  fi
+  if [ -n "$hmac_key" ] && [ ! -f "$hmac_key" ]; then
+    die "BACKUP_HMAC_KEY_FILE points to a file that does not exist: $hmac_key"
+  fi
 }
 
 # Percent-decoding, because libpq wants the decoded value and a URL-encoded
@@ -191,10 +227,16 @@ export_libpq_env_from_url() {
 }
 
 main() {
-  refuse_unimplemented
+  require_paired_encryption_config
   require_command pg_dump
   require_command pg_restore
   require_command sha256sum
+  # Fail fast, before spending time on a dump we would have to discard: if
+  # encryption was asked for, its tools must exist BEFORE any pg_dump runs.
+  if [ -n "${BACKUP_AGE_RECIPIENTS_FILE-}" ]; then
+    require_command age
+    require_command perl
+  fi
 
   local database_url="${BACKUP_DATABASE_URL:-${DATABASE_URL:-}}"
   [ -n "$database_url" ] ||
@@ -270,6 +312,66 @@ main() {
   info "sha256 ${digest}"
   info "verified: sidecar checksum matches, archive table of contents readable"
 
+  local final_path="$dump_path"
+
+  if [ -n "${BACKUP_AGE_RECIPIENTS_FILE-}" ]; then
+    require_command age
+    require_command perl
+
+    local pg_dump_version
+    pg_dump_version="$(pg_dump --version)"
+
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local manifest_script="${script_dir}/manifest.sh"
+    [ -x "$manifest_script" ] || die "manifest.sh not found next to backup-postgres.sh at ${manifest_script} — encryption requires it."
+
+    local enc_path="${dump_path}.age"
+    # Reuse PARTIAL_PATH/trap for the encrypted artifact's own atomic-write
+    # window: a killed `age` process must not leave a final-looking .age file.
+    PARTIAL_PATH="${enc_path}.partial"
+    trap 'rm -f -- "$PARTIAL_PATH"' EXIT
+
+    age --encrypt --recipients-file "$BACKUP_AGE_RECIPIENTS_FILE" --output "$PARTIAL_PATH" "$dump_path" ||
+      die "age encryption failed. The plaintext dump at $dump_path is left in place; NO encrypted artifact was produced."
+
+    mv -- "$PARTIAL_PATH" "$enc_path"
+    trap - EXIT
+
+    # `age` itself already exited non-zero above on any write failure. The
+    # remaining cheap proof available without the decryption identity (which
+    # this host does not and should not hold, per ADR-0123) is that the file
+    # is non-empty and larger than the age header alone; full cryptographic
+    # verification (does it actually decrypt to the original dump) happens at
+    # restore time, where the identity lives — see restore-postgres.sh.
+    [ -s "$enc_path" ] || die "$enc_path is empty after encryption — refusing to count this as a backup."
+
+    (cd "$backup_dir" && sha256sum "$(basename "$enc_path")" >"$(basename "$enc_path").sha256")
+
+    local manifest_path="${enc_path}.manifest.json"
+    "$manifest_script" generate \
+      --artifact="$enc_path" \
+      --hmac-key-file="$BACKUP_HMAC_KEY_FILE" \
+      --out="$manifest_path" \
+      --source-db="$SOURCE_DATABASE" \
+      --pg-dump-version="$pg_dump_version" \
+      --recipients-file="$BACKUP_AGE_RECIPIENTS_FILE"
+
+    # Plaintext next to its own encrypted twin defeats encryption-at-rest.
+    # Only removed once the encrypted artifact + manifest are verified on
+    # disk above.
+    rm -f -- "$dump_path" "${dump_path}.sha256"
+
+    local enc_size enc_digest
+    enc_size="$(wc -c <"$enc_path" | tr -d ' ')"
+    enc_digest="$(cut -d' ' -f1 <"${enc_path}.sha256")"
+    info "encrypted: wrote ${enc_path} (${enc_size} bytes), sha256 ${enc_digest}"
+    info "manifest: wrote ${manifest_path} (HMAC-authenticated, see ${manifest_path}.hmac)"
+    info "plaintext dump removed — only the encrypted artifact remains on disk"
+
+    final_path="$enc_path"
+  fi
+
   if [ "$retention_days" -gt 0 ]; then
     local pruned=0
     while IFS= read -r -d '' stale; do
@@ -277,14 +379,22 @@ main() {
       pruned=$((pruned + 1))
       info "pruned ${stale}"
     done < <(find "$backup_dir" -maxdepth 1 -type f -name "${label}_*.dump" -mtime "+${retention_days}" -print0)
-    info "retention: ${retention_days} day(s), ${pruned} dump(s) pruned"
+
+    while IFS= read -r -d '' stale; do
+      rm -f -- "$stale" "${stale}.sha256" "${stale}.manifest.json" "${stale}.manifest.json.hmac"
+      pruned=$((pruned + 1))
+      info "pruned ${stale} (and manifest/sidecars)"
+    done < <(find "$backup_dir" -maxdepth 1 -type f -name "${label}_*.dump.age" -mtime "+${retention_days}" -print0)
+
+    info "retention: ${retention_days} day(s), ${pruned} backup(s) pruned"
   else
     info "retention: BACKUP_RETENTION_DAYS=0, pruning disabled"
   fi
 
   # A dump that was never test-restored is not verified evidence. This script
   # proves the file is readable; restore-postgres.sh proves it RESTORES.
-  info "next: ./deploy/backup/restore-postgres.sh ${dump_path}"
+  info "next: ./deploy/backup/restore-postgres.sh ${final_path}"
+  info "next (off-site): ./deploy/backup/offsite-copy.sh ${final_path}"
 }
 
 main "$@"
