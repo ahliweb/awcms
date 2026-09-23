@@ -1,0 +1,1182 @@
+# Source fragment for the "omes_control" module (Issue ahliweb/omes#198,
+# ADR-0122).
+#
+# Owns every path whose operations carry this module's OpenAPI tag. NOT
+# independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses/schemas) only resolve after
+# `bun run openapi:bundle` merges this file with the root fragment
+# (openapi/awcms-public-api.src.yaml) and every sibling module fragment.
+# Edit this file (or the root fragment for shared components), never the
+# generated bundle.
+paths:
+  /api/v1/omes/overview:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Tenant-wide OMES fleet overview
+      description: Gated by omes_control.servers.read. A pure aggregation computed directly from the omes_control tables at request time — never sourced from the reporting module's projection facilities.
+      operationId: omesGetOverview
+      responses:
+        "200":
+          description: Fleet rollup.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      overview:
+                        type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/servers:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List enrolled servers
+      description: Gated by omes_control.servers.read. Keyset-paginated. Sanitized — no enrollment key material.
+      operationId: omesListServers
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [offline, online, degraded, maintenance, decommissioned]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Servers page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OmesServerListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - OMES Control Center
+      summary: Register a new server
+      description: Gated by omes_control.servers.register. Records registration INTENT only (status=offline, no heartbeat) — never talks to a host. Rate-limited per actor. Requires Idempotency-Key.
+      operationId: omesRegisterServer
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname, platform]
+              properties:
+                hostname:
+                  type: string
+                platform:
+                  type: object
+                  required: [os, version, arch]
+                  properties:
+                    os:
+                      type: string
+                      enum: [ubuntu, linuxmint]
+                    version:
+                      type: string
+                    arch:
+                      type: string
+                      enum: [amd64, arm64]
+                ip:
+                  type: string
+                tags:
+                  type: array
+                  items: {}
+      responses:
+        "201":
+          description: Server registered, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      server:
+                        $ref: "#/components/schemas/OmesServer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many registration attempts (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/servers/{id}:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Get a server's detail, including enrollment evidence
+      description: Gated by omes_control.servers.read. A row belonging to another tenant is indistinguishable from a missing one.
+      operationId: omesGetServer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Server detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      server:
+                        $ref: "#/components/schemas/OmesServer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - OMES Control Center
+      summary: Decommission a server
+      description: Gated by omes_control.servers.delete. Soft delete — flips status to decommissioned. Requires Idempotency-Key, audited.
+      operationId: omesDecommissionServer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Server decommissioned, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      server:
+                        $ref: "#/components/schemas/OmesServer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/servers/{id}/enrollment-challenges:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Issue an enrollment challenge for a registered server
+      description: Gated by omes_control.enrollments.manage. The raw challenge is returned exactly ONCE and never persisted — only its sha256 hash is stored. Rate-limited per actor, requires Idempotency-Key, audited.
+      operationId: omesIssueEnrollmentChallenge
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "201":
+          description: Challenge issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      workerId:
+                        type: string
+                      enrollmentChallenge:
+                        type: string
+                        description: The raw one-time challenge value. Shown only in the live response to the original request — a replay of the same Idempotency-Key returns a redacted stand-in.
+                      expiresAt:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Server is not eligible for a new challenge in its current state (SERVER_NOT_ELIGIBLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many enrollment-challenge requests (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/servers/{id}/enrollment-challenges/{workerId}/revoke:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Revoke a pending or enrolled worker credential
+      description: Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
+      operationId: omesRevokeEnrollment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: workerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Enrollment revoked, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      workerId:
+                        type: string
+                      status:
+                        type: string
+                        enum: [revoked]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/deployments:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List deployments — desired vs observed state
+      description: Gated by omes_control.deployments.read. Desired and observed state are rendered as SEPARATE fields, never merged. Keyset-paginated.
+      operationId: omesListDeployments
+      parameters:
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: reconciliationStatus
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, in_progress, converged, drifted, failed]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deployments page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      deployments:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OmesDeployment"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/deployments/{id}:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Get a deployment's desired/observed detail
+      description: Gated by omes_control.deployments.read.
+      operationId: omesGetDeployment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deployment detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      deployment:
+                        $ref: "#/components/schemas/OmesDeployment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omes/operations:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List submitted operation requests
+      description: Gated by omes_control.deployments.read. Keyset-paginated.
+      operationId: omesListOperations
+      parameters:
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [requested, approved, rejected, dispatched, completed, failed]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Operation requests page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      operationRequests:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OmesOperationRequest"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - OMES Control Center
+      summary: Submit a safe OMES operation
+      description: >-
+        Guarded per-operation: status/preflight require deployments.read; start/stop/restart/update/backup
+        require deployments.operate; rollback requires backups.rollback. operation is a closed enum copied
+        verbatim from the OMES contract operation-request.schema.json. Destructive operations (stop, rollback)
+        route through the canonical workflow-approval engine — refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED
+        if the tenant has not published an active workflow under key "omes_control.destructive_operation".
+        Rate-limited per actor, requires Idempotency-Key, audited.
+      operationId: omesSubmitOperation
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId, operation]
+              properties:
+                serverId:
+                  type: string
+                deploymentId:
+                  type: string
+                operation:
+                  type: string
+                  enum: [status, preflight, start, stop, restart, update, backup, rollback]
+                parameters:
+                  type: object
+                backupId:
+                  type: string
+                rollbackRef:
+                  type: string
+      responses:
+        "201":
+          description: Operation request created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      operationRequest:
+                        $ref: "#/components/schemas/OmesOperationRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: No active destructive-operation approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many operation submissions (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/operations/{id}:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Get an operation request's detail
+      description: Gated by omes_control.deployments.read.
+      operationId: omesGetOperation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Operation request detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      operationRequest:
+                        $ref: "#/components/schemas/OmesOperationRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omes/jobs:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List worker jobs
+      description: Gated by omes_control.jobs.read. target/payload/result are redacted defense-in-depth. Keyset-paginated.
+      operationId: omesListJobs
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [queued, leased, running, completed, failed, cancelled]
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Jobs page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      jobs:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OmesJob"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/jobs/{id}:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Get a job's detail
+      description: Gated by omes_control.jobs.read.
+      operationId: omesGetJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Job detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      job:
+                        $ref: "#/components/schemas/OmesJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omes/jobs/{id}/cancel:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Cancel a queued job
+      description: Gated by omes_control.jobs.cancel. Only a queued job may be cancelled — a leased/running job is refused with 409 JOB_NOT_CANCELLABLE. Requires Idempotency-Key, audited.
+      operationId: omesCancelJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Job cancelled, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      job:
+                        $ref: "#/components/schemas/OmesJob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Job is not queued (JOB_NOT_CANCELLABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/jobs/{id}/approve:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Approve a failed job for retry
+      description: Gated by omes_control.jobs.approve. Only a failed job may be requeued — refused with 409 JOB_NOT_RETRYABLE otherwise. Not a second, independent approval authority — the underlying operation request already passed the safe-operation or workflow-approval gate before this job existed. Requires Idempotency-Key, audited.
+      operationId: omesApproveJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Job requeued for retry, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      job:
+                        $ref: "#/components/schemas/OmesJob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Job is not failed (JOB_NOT_RETRYABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/health:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Latest health snapshot per server, or history for one server
+      description: Gated by omes_control.servers.read. Default (no serverId) returns the latest snapshot per server. With serverId, returns keyset-paginated history for that server.
+      operationId: omesGetHealth
+      parameters:
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Health snapshots.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/backups:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List backup snapshots
+      description: Gated by omes_control.backups.read. Keyset-paginated.
+      operationId: omesListBackups
+      parameters:
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [completed, in_progress, verified, failed]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Backups page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      backups:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OmesBackup"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/backups/{id}:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Get a backup snapshot's detail
+      description: Gated by omes_control.backups.read.
+      operationId: omesGetBackup
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Backup detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      backup:
+                        $ref: "#/components/schemas/OmesBackup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/omes/backups/{id}/restore:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Request a restore from a backup snapshot
+      description: >-
+        Gated by omes_control.backups.restore. Always-destructive: routes through the canonical
+        workflow-approval engine like rollback/stop, refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED
+        if the tenant has not published an active workflow. Deliberately NOT part of the safe-operation
+        enum on POST /api/v1/omes/operations — restore is excluded from the OMES contract's own
+        Control-Center-facing operation enum. Rate-limited per actor, requires Idempotency-Key, audited critical.
+      operationId: omesRestoreBackup
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "201":
+          description: Restore requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      operationRequest:
+                        $ref: "#/components/schemas/OmesOperationRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: No active destructive-operation approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many restore requests (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/audit:
+    get:
+      tags:
+        - OMES Control Center
+      summary: List OMES host execution/reconciliation audit projections
+      description: Gated by omes_control.audit.read. Keyset-paginated. Distinct from AWCMS's own awcms_audit_events (this API's own authorization/mutation decision log).
+      operationId: omesListAudit
+      parameters:
+        - name: serverId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: eventType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit projections page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      projections:
+                        type: array
+                        items:
+                          type: object
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    OmesServer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+        hostname:
+          type: string
+        ip:
+          type: string
+          nullable: true
+        osName:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        arch:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [offline, online, degraded, maintenance, decommissioned]
+        tags: {}
+        lastHeartbeatAt:
+          type: string
+          nullable: true
+        stale:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    OmesServerListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: object
+          properties:
+            servers:
+              type: array
+              items:
+                $ref: "#/components/schemas/OmesServer"
+            nextCursor:
+              type: string
+              nullable: true
+    OmesDeployment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deploymentId:
+          type: string
+        serverId:
+          type: string
+        desiredState: {}
+        observedState: {}
+        reconciliationStatus:
+          type: string
+          enum: [pending, in_progress, converged, drifted, failed]
+        errorEvidence: {}
+        lastReconciledAt:
+          type: string
+          nullable: true
+        stale:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    OmesOperationRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        requestId:
+          type: string
+        serverId:
+          type: string
+        operation:
+          type: string
+        parameters: {}
+        status:
+          type: string
+          enum: [requested, approved, rejected, dispatched, completed, failed]
+        requestedBy:
+          type: string
+          nullable: true
+        approvedBy:
+          type: string
+          nullable: true
+        workflowInstanceId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    OmesJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+        operationRequestId:
+          type: string
+          nullable: true
+        serverId:
+          type: string
+        operation:
+          type: string
+        state:
+          type: string
+          enum: [queued, leased, running, completed, failed, cancelled]
+        target: {}
+        payload: {}
+        result: {}
+        leasedBy:
+          type: string
+          nullable: true
+        leasedUntil:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    OmesBackup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        backupId:
+          type: string
+        serverId:
+          type: string
+        status:
+          type: string
+          enum: [completed, in_progress, verified, failed]
+        manifest: {}
+        sizeBytes:
+          type: integer
+          nullable: true
+        checksumSha256:
+          type: string
+          nullable: true
+        capturedAt:
+          type: string
+        fresh:
+          type: boolean
