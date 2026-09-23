@@ -81,12 +81,7 @@ export class ContractValidationError extends Error {
 // A JSON value. `unknown` at the leaves so callers must narrow, same as any
 // hand-rolled JSON Schema validator without a codegen step.
 export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export type JsonSchema = {
   $schema?: string;
@@ -132,7 +127,9 @@ export function validateSchema(schema: unknown, path = "$"): void {
 
   for (const [key, value] of Object.entries(schema)) {
     if (!ALLOWED_SCHEMA_KEYWORDS.has(key)) {
-      throw new SchemaError(`${path}: unsupported JSON Schema keyword '${key}'`);
+      throw new SchemaError(
+        `${path}: unsupported JSON Schema keyword '${key}'`
+      );
     }
 
     if (key === "properties" && isPlainObject(value)) {
@@ -163,7 +160,8 @@ export function validateSchema(schema: unknown, path = "$"): void {
 // only thing standing between a payload and a leaked secret.
 // ---------------------------------------------------------------------------
 
-const SECRET_NAME_RE = /(token|password|secret|credential|api[_-]?key|passphrase|cookie|authorization)/i;
+const SECRET_NAME_RE =
+  /(token|password|secret|credential|api[_-]?key|passphrase|cookie|authorization)/i;
 
 /** Identifier shape allowed as an element of a list under a secret-like key (a NAME, never a value). */
 const SECRET_NAME_ITEM_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
@@ -251,7 +249,8 @@ export function scanForRawSecrets(instance: JsonValue, path = "$"): string[] {
 function pyRepr(value: unknown): string {
   if (value === null || value === undefined) return "None";
   if (typeof value === "boolean") return value ? "True" : "False";
-  if (typeof value === "string") return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  if (typeof value === "string")
+    return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
   if (typeof value === "number") return String(value);
   if (Array.isArray(value)) return `[${value.map(pyRepr).join(", ")}]`;
   if (typeof value === "object") {
@@ -337,7 +336,9 @@ function validateInner(
   const typeSpec = schema.type;
   if (typeSpec !== undefined) {
     const typeNames = Array.isArray(typeSpec) ? typeSpec : [typeSpec];
-    if (!typeNames.some((t) => typeMatches(instance, t, path, floatLiteralPaths))) {
+    if (
+      !typeNames.some((t) => typeMatches(instance, t, path, floatLiteralPaths))
+    ) {
       errors.push(
         `${path}: expected type ${pyRepr(typeSpec)}, got ${instance === null ? "null" : Array.isArray(instance) ? "array" : typeof instance}`
       );
@@ -346,7 +347,10 @@ function validateInner(
   }
 
   if (typeof instance === "string") {
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(instance)) {
+    if (
+      schema.pattern !== undefined &&
+      !new RegExp(schema.pattern).test(instance)
+    ) {
       errors.push(
         `${path}: ${pyRepr(instance)} does not match pattern ${pyRepr(schema.pattern)}`
       );
@@ -365,10 +369,14 @@ function validateInner(
 
   if (typeof instance === "number") {
     if (schema.minimum !== undefined && instance < schema.minimum) {
-      errors.push(`${path}: ${instance} is less than minimum ${schema.minimum}`);
+      errors.push(
+        `${path}: ${instance} is less than minimum ${schema.minimum}`
+      );
     }
     if (schema.maximum !== undefined && instance > schema.maximum) {
-      errors.push(`${path}: ${instance} is greater than maximum ${schema.maximum}`);
+      errors.push(
+        `${path}: ${instance} is greater than maximum ${schema.maximum}`
+      );
     }
   }
 
@@ -386,7 +394,13 @@ function validateInner(
     const itemSchema = schema.items;
     if (itemSchema !== undefined && !Array.isArray(itemSchema)) {
       instance.forEach((item, i) =>
-        validateInner(item, itemSchema, `${path}[${i}]`, errors, floatLiteralPaths)
+        validateInner(
+          item,
+          itemSchema,
+          `${path}[${i}]`,
+          errors,
+          floatLiteralPaths
+        )
       );
     }
   }
@@ -418,10 +432,14 @@ function validateInner(
         .filter((k) => !(k in properties))
         .sort();
       if (extra.length > 0) {
-        errors.push(`${path}: additional properties not allowed: [${extra.join(", ")}]`);
+        errors.push(
+          `${path}: additional properties not allowed: [${extra.join(", ")}]`
+        );
       }
     } else if (isPlainObject(additional)) {
-      for (const name of Object.keys(instance).filter((k) => !(k in properties))) {
+      for (const name of Object.keys(instance).filter(
+        (k) => !(k in properties)
+      )) {
         validateInner(
           instance[name] as JsonValue,
           additional as JsonSchema,

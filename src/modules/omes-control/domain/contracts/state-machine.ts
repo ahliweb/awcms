@@ -44,7 +44,9 @@ export class StateMachine {
 
   constructor(table: StateTable) {
     if (!Array.isArray(table?.states) || table.states.length === 0) {
-      throw new StateMachineError("state table must have a non-empty 'states' list");
+      throw new StateMachineError(
+        "state table must have a non-empty 'states' list"
+      );
     }
     if (!Array.isArray(table?.transitions)) {
       throw new StateMachineError("state table must have a 'transitions' list");
@@ -68,15 +70,26 @@ export class StateMachine {
 
     const pairs = new Set<string>();
     for (const edge of table.transitions) {
-      if (!edge || typeof edge !== "object" || !("from" in edge) || !("to" in edge)) {
-        throw new StateMachineError(`malformed transition entry: ${JSON.stringify(edge)}`);
+      if (
+        !edge ||
+        typeof edge !== "object" ||
+        !("from" in edge) ||
+        !("to" in edge)
+      ) {
+        throw new StateMachineError(
+          `malformed transition entry: ${JSON.stringify(edge)}`
+        );
       }
       const { from, to } = edge;
       if (!this.states.has(from)) {
-        throw new StateMachineError(`transition references unknown 'from' state: '${from}'`);
+        throw new StateMachineError(
+          `transition references unknown 'from' state: '${from}'`
+        );
       }
       if (!this.states.has(to)) {
-        throw new StateMachineError(`transition references unknown 'to' state: '${to}'`);
+        throw new StateMachineError(
+          `transition references unknown 'to' state: '${to}'`
+        );
       }
       pairs.add(`${from}\u0000${to}`);
     }
@@ -100,7 +113,9 @@ export class StateMachine {
       throw new TransitionError(`unknown state: '${toState}'`);
     }
     if (!this.isValidTransition(fromState, toState)) {
-      throw new TransitionError(`transition not allowed: '${fromState}' -> '${toState}'`);
+      throw new TransitionError(
+        `transition not allowed: '${fromState}' -> '${toState}'`
+      );
     }
   }
 

@@ -38,7 +38,9 @@ export type ParsedJson<T = unknown> = {
   floatLiteralPaths: ReadonlySet<string>;
 };
 
-export function parseJsonTrackingFloats<T = unknown>(text: string): ParsedJson<T> {
+export function parseJsonTrackingFloats<T = unknown>(
+  text: string
+): ParsedJson<T> {
   const floatLiteralPaths = new Set<string>();
   let i = 0;
   const n = text.length;

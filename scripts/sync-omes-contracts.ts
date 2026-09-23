@@ -99,9 +99,7 @@ function listFilesRelative(dir: string): string[] {
   return out.sort();
 }
 
-export function hashVendoredFiles(
-  vendoredDir: string
-): Record<string, string> {
+export function hashVendoredFiles(vendoredDir: string): Record<string, string> {
   const files = listFilesRelative(vendoredDir);
   const hashes: Record<string, string> = {};
   for (const rel of files) {
@@ -159,7 +157,8 @@ export function checkContractsDrift(
   rootDir: string,
   targetDirOverride?: string
 ): string[] {
-  const targetDir = targetDirOverride ?? path.join(rootDir, VENDORED_CONTRACTS_DIR);
+  const targetDir =
+    targetDirOverride ?? path.join(rootDir, VENDORED_CONTRACTS_DIR);
   const displayName = targetDirOverride ?? VENDORED_CONTRACTS_DIR;
   const manifestPath = path.join(targetDir, PIN_MANIFEST_FILENAME);
   const failures: string[] = [];

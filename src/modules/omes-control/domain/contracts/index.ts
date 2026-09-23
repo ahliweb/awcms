@@ -40,7 +40,11 @@ import {
 } from "./schema";
 
 export { ContractValidationError, SchemaError } from "./schema";
-export { StateMachine, StateMachineError, TransitionError } from "./state-machine";
+export {
+  StateMachine,
+  StateMachineError,
+  TransitionError
+} from "./state-machine";
 export {
   UnknownOmesContractError,
   UnsupportedContractVersionError
@@ -120,8 +124,12 @@ export async function validateOmesContractText(
   rawJsonText: string,
   options: Omit<ValidateOmesContractOptions, "floatLiteralPaths"> = {}
 ): Promise<string[]> {
-  const { value, floatLiteralPaths } = parseJsonTrackingFloats<JsonValue>(rawJsonText);
-  return validateOmesContract(schemaName, value, { ...options, floatLiteralPaths });
+  const { value, floatLiteralPaths } =
+    parseJsonTrackingFloats<JsonValue>(rawJsonText);
+  return validateOmesContract(schemaName, value, {
+    ...options,
+    floatLiteralPaths
+  });
 }
 
 /**

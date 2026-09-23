@@ -11,7 +11,13 @@
  * snapshot committed at `src/modules/omes-control/contracts/v1/**`.
  */
 import { describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -24,8 +30,15 @@ import {
   validateOmesContract,
   validateOmesContractText
 } from "../src/modules/omes-control/domain/contracts";
-import { UnknownOmesContractError, UnsupportedContractVersionError } from "../src/modules/omes-control/domain/contracts/loader";
-import { ContractValidationError, SchemaError, validateSchema } from "../src/modules/omes-control/domain/contracts/schema";
+import {
+  UnknownOmesContractError,
+  UnsupportedContractVersionError
+} from "../src/modules/omes-control/domain/contracts/loader";
+import {
+  ContractValidationError,
+  SchemaError,
+  validateSchema
+} from "../src/modules/omes-control/domain/contracts/schema";
 import { TransitionError } from "../src/modules/omes-control/domain/contracts/state-machine";
 import {
   listEventSchemaNames,
@@ -51,8 +64,14 @@ describe("vendored OMES v1 contract fixtures (fail-closed)", () => {
       const files = await listFixtureFiles(schemaName);
       const valid = files.filter((f) => f.startsWith("valid"));
       const invalid = files.filter((f) => f.startsWith("invalid"));
-      expect(valid.length, `${schemaName} has no valid-*.json fixture`).toBeGreaterThan(0);
-      expect(invalid.length, `${schemaName} has no invalid-*.json fixture`).toBeGreaterThan(0);
+      expect(
+        valid.length,
+        `${schemaName} has no valid-*.json fixture`
+      ).toBeGreaterThan(0);
+      expect(
+        invalid.length,
+        `${schemaName} has no invalid-*.json fixture`
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -60,11 +79,21 @@ describe("vendored OMES v1 contract fixtures (fail-closed)", () => {
     const topLevel = await listTopLevelSchemaNames();
     const events = await listEventSchemaNames();
     for (const schemaName of [...topLevel, ...events]) {
-      const files = (await listFixtureFiles(schemaName)).filter((f) => f.startsWith("valid"));
+      const files = (await listFixtureFiles(schemaName)).filter((f) =>
+        f.startsWith("valid")
+      );
       for (const file of files) {
-        const { value, floatLiteralPaths } = await loadFixture(schemaName, file);
-        const errors = await validateOmesContract(schemaName, value, { floatLiteralPaths });
-        expect(errors, `${schemaName}/${file} expected VALID, got: ${errors.join("; ")}`).toEqual([]);
+        const { value, floatLiteralPaths } = await loadFixture(
+          schemaName,
+          file
+        );
+        const errors = await validateOmesContract(schemaName, value, {
+          floatLiteralPaths
+        });
+        expect(
+          errors,
+          `${schemaName}/${file} expected VALID, got: ${errors.join("; ")}`
+        ).toEqual([]);
       }
     }
   });
@@ -75,14 +104,27 @@ describe("vendored OMES v1 contract fixtures (fail-closed)", () => {
     let invalidFixtureCount = 0;
 
     for (const schemaName of [...topLevel, ...events]) {
-      const files = (await listFixtureFiles(schemaName)).filter((f) => f.startsWith("invalid"));
+      const files = (await listFixtureFiles(schemaName)).filter((f) =>
+        f.startsWith("invalid")
+      );
       for (const file of files) {
         invalidFixtureCount++;
-        const { value, floatLiteralPaths } = await loadFixture(schemaName, file);
-        const errors = await validateOmesContract(schemaName, value, { floatLiteralPaths });
-        expect(errors.length, `${schemaName}/${file} expected INVALID, but it validated`).toBeGreaterThan(0);
+        const { value, floatLiteralPaths } = await loadFixture(
+          schemaName,
+          file
+        );
+        const errors = await validateOmesContract(schemaName, value, {
+          floatLiteralPaths
+        });
+        expect(
+          errors.length,
+          `${schemaName}/${file} expected INVALID, but it validated`
+        ).toBeGreaterThan(0);
 
-        const expectedReasonSubstring = await loadFixtureReason(schemaName, file);
+        const expectedReasonSubstring = await loadFixtureReason(
+          schemaName,
+          file
+        );
         if (expectedReasonSubstring) {
           const joined = errors.join("; ");
           expect(
@@ -111,8 +153,17 @@ describe("fail-closed keyword policy", () => {
   });
 
   test("format, allOf, not, uniqueItems, if/then are all rejected, not silently ignored", () => {
-    for (const keyword of ["format", "allOf", "not", "uniqueItems", "if", "patternProperties"]) {
-      expect(() => validateSchema({ type: "string", [keyword]: true })).toThrow(SchemaError);
+    for (const keyword of [
+      "format",
+      "allOf",
+      "not",
+      "uniqueItems",
+      "if",
+      "patternProperties"
+    ]) {
+      expect(() => validateSchema({ type: "string", [keyword]: true })).toThrow(
+        SchemaError
+      );
     }
   });
 
@@ -139,13 +190,21 @@ describe("fail-closed keyword policy", () => {
       }
     });
     const errors = await validateOmesContractText("invoice-line", rawText);
-    expect(errors.some((e) => e.includes("expected type 'integer'"))).toBe(true);
+    expect(errors.some((e) => e.includes("expected type 'integer'"))).toBe(
+      true
+    );
 
     // The float-vs-integer-looking case (19.0) is only distinguishable with
     // raw text, since 19.0 and 19 parse to the identical JS number 19.
-    const rawTextWholeFloat = '{"line_id":"line-02","description":"t","quantity":1,"price_snapshot":{"price_id":"p","catalog_version_id":"v","currency":"USD","unit_amount_minor":19.0}}';
-    const wholeFloatErrors = await validateOmesContractText("invoice-line", rawTextWholeFloat);
-    expect(wholeFloatErrors.some((e) => e.includes("expected type 'integer'"))).toBe(true);
+    const rawTextWholeFloat =
+      '{"line_id":"line-02","description":"t","quantity":1,"price_snapshot":{"price_id":"p","catalog_version_id":"v","currency":"USD","unit_amount_minor":19.0}}';
+    const wholeFloatErrors = await validateOmesContractText(
+      "invoice-line",
+      rawTextWholeFloat
+    );
+    expect(
+      wholeFloatErrors.some((e) => e.includes("expected type 'integer'"))
+    ).toBe(true);
   });
 });
 
@@ -179,7 +238,9 @@ describe("independent raw-secret scanner", () => {
     // Built at runtime, never as a literal, so gitleaks never sees a
     // secret-shaped token in source: this is a well-known PUBLIC prefix
     // format (Stripe test-mode), not a real credential.
-    const fakeStripeKey = ["sk", "test", "4242424242424242424242424242"].join("_");
+    const fakeStripeKey = ["sk", "test", "4242424242424242424242424242"].join(
+      "_"
+    );
     const errors = scanForRawSecrets({
       billing: { api_key: fakeStripeKey }
     });
@@ -202,7 +263,9 @@ describe("independent raw-secret scanner", () => {
   });
 
   test("allows a list of secret NAMES under a secret-like key (reference, not value)", () => {
-    const errors = scanForRawSecrets({ secrets: ["provider-primary", "provider-backup"] });
+    const errors = scanForRawSecrets({
+      secrets: ["provider-primary", "provider-backup"]
+    });
     expect(errors).toEqual([]);
   });
 
@@ -214,7 +277,9 @@ describe("independent raw-secret scanner", () => {
     // scanner is the second, INDEPENDENT gate: prove it also fires on its
     // own by calling it directly on a payload shaped for a permissive
     // (additionalProperties: true, implicit) schema.
-    const fakeBearer = ["Bearer", "abcdefghijklmnopqrstuvwxyz0123456789"].join(" ");
+    const fakeBearer = ["Bearer", "abcdefghijklmnopqrstuvwxyz0123456789"].join(
+      " "
+    );
     const payload = { notes: `see ${fakeBearer} in the logs` };
     const scannerErrors = scanForRawSecrets(payload);
     expect(scannerErrors.length).toBeGreaterThan(0);
@@ -229,7 +294,9 @@ describe("state machines loaded as data from the pinned contract", () => {
     expect(machine.isValidTransition("cancelled", "active")).toBe(false);
     expect(machine.isValidTransition("active", "active")).toBe(true); // no-op replay is always allowed
     expect(machine.isTerminal("expired")).toBe(true);
-    expect(() => machine.assertTransition("expired", "active")).toThrow(TransitionError);
+    expect(() => machine.assertTransition("expired", "active")).toThrow(
+      TransitionError
+    );
   });
 
   test("invoice state machine loads from the vendored invoice.states.json", async () => {
@@ -238,9 +305,9 @@ describe("state machines loaded as data from the pinned contract", () => {
   });
 
   test("an unknown state machine name is rejected", async () => {
-    await expect(getOmesStateMachine("not-a-real-state-machine")).rejects.toThrow(
-      UnknownOmesContractError
-    );
+    await expect(
+      getOmesStateMachine("not-a-real-state-machine")
+    ).rejects.toThrow(UnknownOmesContractError);
   });
 });
 
@@ -268,7 +335,9 @@ describe("contracts:omes:sync drift/pin gate", () => {
       const dirty = checkContractsDrift(tmpDir, tmpTargetDir);
       expect(dirty.length).toBeGreaterThan(0);
       expect(
-        dirty.some((f) => f.includes("currency.schema.json") && f.includes("SHA-256"))
+        dirty.some(
+          (f) => f.includes("currency.schema.json") && f.includes("SHA-256")
+        )
       ).toBe(true);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
@@ -276,7 +345,9 @@ describe("contracts:omes:sync drift/pin gate", () => {
   });
 
   test("detects a pin/version mismatch", () => {
-    const tmpDir = mkdtempSync(path.join(tmpdir(), "omes-contracts-pin-mismatch-"));
+    const tmpDir = mkdtempSync(
+      path.join(tmpdir(), "omes-contracts-pin-mismatch-")
+    );
     try {
       const realVendoredDir = path.join(process.cwd(), VENDORED_CONTRACTS_DIR);
       const tmpTargetDir = path.join(tmpDir, "contracts-copy");

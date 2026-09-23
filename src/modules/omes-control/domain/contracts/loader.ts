@@ -56,7 +56,9 @@ export class UnsupportedContractVersionError extends Error {
 /** Raised when a caller asks for a schema/state-machine name that is not vendored. */
 export class UnknownOmesContractError extends Error {
   constructor(kind: "schema" | "state machine", name: string) {
-    super(`unknown OMES contract ${kind}: '${name}' is not part of the vendored ${OMES_CONTRACT_VERSION} snapshot`);
+    super(
+      `unknown OMES contract ${kind}: '${name}' is not part of the vendored ${OMES_CONTRACT_VERSION} snapshot`
+    );
     this.name = "UnknownOmesContractError";
   }
 }
@@ -141,7 +143,12 @@ export async function loadStateTable(
  */
 function fixturesDirFor(root: string, schemaName: string): string {
   if (schemaName.startsWith("events/")) {
-    return path.join(root, "events", "fixtures", schemaName.slice("events/".length));
+    return path.join(
+      root,
+      "events",
+      "fixtures",
+      schemaName.slice("events/".length)
+    );
   }
   return path.join(root, "fixtures", schemaName);
 }
@@ -158,7 +165,10 @@ export async function loadFixture(
   version: string = OMES_CONTRACT_VERSION
 ): Promise<ParsedJson<JsonValue>> {
   const root = contractsRoot(version);
-  const fixturePath = path.join(fixturesDirFor(root, schemaName), fixtureFileName);
+  const fixturePath = path.join(
+    fixturesDirFor(root, schemaName),
+    fixtureFileName
+  );
   const raw = await readFile(fixturePath, "utf8");
   return parseJsonTrackingFloats<JsonValue>(raw);
 }
@@ -171,7 +181,10 @@ export async function loadFixtureReason(
 ): Promise<string | undefined> {
   const root = contractsRoot(version);
   const reasonFileName = fixtureFileName.replace(/\.json$/, ".reason.txt");
-  const reasonPath = path.join(fixturesDirFor(root, schemaName), reasonFileName);
+  const reasonPath = path.join(
+    fixturesDirFor(root, schemaName),
+    reasonFileName
+  );
   try {
     return (await readFile(reasonPath, "utf8")).trim();
   } catch {
