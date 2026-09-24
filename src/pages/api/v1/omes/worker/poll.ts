@@ -27,7 +27,10 @@ import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
 } from "../../../../../lib/security/request-body-limit";
-import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../lib/security/rate-limit";
 import { validateOmesContractText } from "../../../../../modules/omes-control/domain/contracts";
 import { verifyWorkerEnvelope } from "../../../../../modules/omes-control/application/worker-envelope-guard";
 import {
@@ -36,6 +39,13 @@ import {
 } from "../../../../../modules/omes-control/application/worker-job-queue";
 
 const RATE_LIMIT = { maxAttempts: 120, windowMs: 60_000 };
+/**
+ * CONFIRMED LOW (independent review of PR #823): see `enroll.ts`'s matching
+ * comment — the limit above is keyed on the ATTACKER-CLAIMED, unverified
+ * (tenant, worker) pair, so rotating `worker_id` per request resets that
+ * bucket. This per-source-IP limit is the actual aggregate-volume bound.
+ */
+const IP_RATE_LIMIT = { maxAttempts: 600, windowMs: 60_000 };
 const POLL_INTERVAL_SECONDS = 10;
 const PATH = "/api/v1/omes/worker/poll";
 
@@ -59,11 +69,26 @@ function reEnrollRequired(tenantId: string, serverId: string): Response {
   );
 }
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, clientAddress }) => {
   const bodyRead = await readCappedText(request, BODY_SIZE_TIER_BYTES.default);
 
   if (bodyRead.tooLarge) {
     return jsonResponse({ status: "re-enroll_required" }, { status: 413 });
+  }
+
+  const ipRateLimit = await checkSharedRateLimit(
+    `omes-worker-poll-ip:${resolveClientIp(request, clientAddress)}`,
+    IP_RATE_LIMIT
+  );
+
+  if (!ipRateLimit.allowed) {
+    return jsonResponse(
+      { status: "re-enroll_required" },
+      {
+        status: 429,
+        headers: { "retry-after": String(ipRateLimit.retryAfterSec) }
+      }
+    );
   }
 
   let parsed: PollBody;

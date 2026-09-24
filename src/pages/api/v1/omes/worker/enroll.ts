@@ -24,12 +24,28 @@ import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
 } from "../../../../../lib/security/request-body-limit";
-import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../lib/security/rate-limit";
 import { validateOmesContractText } from "../../../../../modules/omes-control/domain/contracts";
 import { redeemEnrollmentChallenge } from "../../../../../modules/omes-control/application/worker-enrollment-exchange";
 import { validateEd25519PublicKeyPem } from "../../../../../modules/omes-control/domain/worker-identity";
 
 const RATE_LIMIT = { maxAttempts: 20, windowMs: 60_000 };
+/**
+ * CONFIRMED LOW (independent review of PR #823): the per-(tenant, server)
+ * limit above is keyed on ATTACKER-CLAIMED body fields, unverified at this
+ * point in the request — an attacker who varies the claimed tenant/server
+ * per request resets that bucket every time and is not bounded by it at
+ * all. It still legitimately protects one REAL (tenant, server) pair from
+ * being hammered under its own name. This second, per-source-IP limit is
+ * the honest aggregate-volume backstop the PR's "bounded/rate-limited"
+ * claim actually needs: coarser (a NAT/shared host can legitimately run
+ * several worker processes) but keyed on something the caller does not
+ * choose.
+ */
+const IP_RATE_LIMIT = { maxAttempts: 300, windowMs: 60_000 };
 const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 60;
 /**
@@ -72,7 +88,7 @@ function neutralResponse(
   );
 }
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, clientAddress }) => {
   const bodyRead = await readCappedText(request, BODY_SIZE_TIER_BYTES.default);
 
   if (bodyRead.tooLarge) {
@@ -80,6 +96,21 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const now = new Date();
+
+  const ipRateLimit = await checkSharedRateLimit(
+    `omes-worker-enroll-ip:${resolveClientIp(request, clientAddress)}`,
+    IP_RATE_LIMIT
+  );
+
+  if (!ipRateLimit.allowed) {
+    return jsonResponse(
+      { status: "rejected" },
+      {
+        status: 429,
+        headers: { "retry-after": String(ipRateLimit.retryAfterSec) }
+      }
+    );
+  }
 
   let parsed: EnrollBody;
 
@@ -95,7 +126,9 @@ export const POST: APIRoute = async ({ request }) => {
   // Rate-limited per (tenant, server) BEFORE contract validation — an
   // unauthenticated endpoint that mints a real DB round trip per attempt
   // needs a source-scoped backstop regardless of whether the body even
-  // parses as a valid envelope.
+  // parses as a valid envelope. Keyed on CLAIMED (unverified) identity —
+  // see IP_RATE_LIMIT's comment above for why the IP check just above is
+  // the actual aggregate-volume bound.
   const rateLimitKey = `omes-worker-enroll:${tenantId || "unknown"}:${serverId || "unknown"}`;
   const rateLimit = await checkSharedRateLimit(rateLimitKey, RATE_LIMIT);
 

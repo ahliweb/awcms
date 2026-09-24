@@ -23,12 +23,22 @@ import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
 } from "../../../../../lib/security/request-body-limit";
-import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../lib/security/rate-limit";
 import { validateOmesContractText } from "../../../../../modules/omes-control/domain/contracts";
 import { verifyWorkerEnvelope } from "../../../../../modules/omes-control/application/worker-envelope-guard";
 import { ingestWorkerResult } from "../../../../../modules/omes-control/application/worker-result-ingestion";
 
 const RATE_LIMIT = { maxAttempts: 60, windowMs: 60_000 };
+/**
+ * CONFIRMED LOW (independent review of PR #823): see `enroll.ts`'s matching
+ * comment — the limit above is keyed on the ATTACKER-CLAIMED, unverified
+ * (tenant, worker) pair. This per-source-IP limit is the actual
+ * aggregate-volume bound.
+ */
+const IP_RATE_LIMIT = { maxAttempts: 300, windowMs: 60_000 };
 const PATH = "/api/v1/omes/worker/result";
 
 type ResultBody = {
@@ -58,12 +68,32 @@ function rejected(jobId: unknown, now: Date): Response {
   );
 }
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, clientAddress }) => {
   const bodyRead = await readCappedText(request, BODY_SIZE_TIER_BYTES.default);
   const now = new Date();
 
   if (bodyRead.tooLarge) {
     return rejected(undefined, now);
+  }
+
+  const ipRateLimit = await checkSharedRateLimit(
+    `omes-worker-result-ip:${resolveClientIp(request, clientAddress)}`,
+    IP_RATE_LIMIT
+  );
+
+  if (!ipRateLimit.allowed) {
+    return jsonResponse(
+      {
+        job_id: "unknown",
+        status: "rejected",
+        reconciled: false,
+        recorded_at: now.toISOString()
+      },
+      {
+        status: 429,
+        headers: { "retry-after": String(ipRateLimit.retryAfterSec) }
+      }
+    );
   }
 
   let parsed: ResultBody;

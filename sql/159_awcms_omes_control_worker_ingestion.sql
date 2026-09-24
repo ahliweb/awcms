@@ -139,9 +139,19 @@ CREATE TABLE IF NOT EXISTS awcms_omes_worker_results (
 CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_worker_results_idem_idx
   ON awcms_omes_worker_results (tenant_id, server_id, idempotency_key);
 
--- Composite FK into awcms_omes_jobs' own (tenant_id, idempotency_key) unique
--- index (added below) — same cross-tenant-reference reasoning as the nonces
--- FK above.
+-- Composite FK into awcms_omes_jobs' own (tenant_id, server_id,
+-- idempotency_key) unique constraint (added below) — same cross-tenant-
+-- reference reasoning as the nonces FK above, tightened one step further
+-- (CONFIRMED LOW, independent review of PR #823): the FK originally matched
+-- only (tenant_id, idempotency_key), which is weaker than the INTENT this
+-- table's own unique index (`awcms_omes_worker_results_idem_idx`, just
+-- above) already declares — `(tenant_id, server_id, idempotency_key)`. A
+-- narrower FK does not by itself let a result reference a job under the
+-- wrong server (idempotency_key is randomly generated and effectively
+-- unique per tenant regardless), but it left the FK's declared guarantee
+-- weaker than the table's own uniqueness promise, which is confusing to
+-- read and one duplicated-value collision away from meaning something
+-- different than intended. Both now agree.
 ALTER TABLE awcms_omes_jobs
   ADD COLUMN IF NOT EXISTS idempotency_key text;
 
@@ -155,12 +165,13 @@ ALTER TABLE awcms_omes_jobs
 -- idempotency_key, but the column stays nullable for forward compatibility
 -- with any future job-creation path that legitimately has none.
 ALTER TABLE awcms_omes_jobs
-  ADD CONSTRAINT awcms_omes_jobs_tenant_idem_unique UNIQUE (tenant_id, idempotency_key);
+  ADD CONSTRAINT awcms_omes_jobs_tenant_server_idem_unique
+    UNIQUE (tenant_id, server_id, idempotency_key);
 
 ALTER TABLE awcms_omes_worker_results
   ADD CONSTRAINT awcms_omes_worker_results_job_fk
-    FOREIGN KEY (tenant_id, idempotency_key)
-    REFERENCES awcms_omes_jobs (tenant_id, idempotency_key)
+    FOREIGN KEY (tenant_id, server_id, idempotency_key)
+    REFERENCES awcms_omes_jobs (tenant_id, server_id, idempotency_key)
     ON DELETE CASCADE;
 
 ALTER TABLE awcms_omes_worker_results ENABLE ROW LEVEL SECURITY;
