@@ -56,6 +56,61 @@ export const omesControlModule = defineModule({
     basePath: "/api/v1/omes",
     routes: ["/api/v1/omes"]
   },
+  // Issue ahliweb/omes#200. `omes_control` was the "1 of 25 modules without
+  // navigation" PROJECT_STATE §2 recorded — 17 `/api/v1/omes/*` routes
+  // (#198) reachable only by `curl`. Five entries land here in the SAME
+  // change as the five pages under `src/pages/admin/omes/*` they name, per
+  // `tests/admin-navigation-registry.test.ts`'s two-directional check.
+  //
+  // Every `requiredPermission` below is one of the 13 `omes_control`
+  // permissions `sql/155_awcms_omes_control_permissions.sql` already seeds —
+  // no new permission migration for this issue. Overview gates on
+  // `servers.read` (the narrowest of the reads its own panels use; the page
+  // itself uses an any-of `loadAdminScreen` entry across servers/jobs/backups/
+  // deployments so an operator missing only this one still sees the link and
+  // whichever panels their other reads allow).
+  //
+  // None of these five screens' actions cross a tenant boundary — every
+  // `omes_control` table carries `tenant_id` with FORCE ROW LEVEL SECURITY
+  // (sql/154) and every application-layer query in this module scopes on the
+  // caller's own `tenantId` (`server-directory.ts`, `deployment-directory.ts`,
+  // `job-directory.ts`, `operation-directory.ts`). Per ADR-0051 §Keputusan
+  // butir 1–3, a platform-scoped gate is required only for an action whose
+  // EFFECT reaches another tenant's data — none of these do, so the ordinary
+  // tenant-seeded `omes_control` permissions are sufficient and no
+  // platform-only permission was added.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_omes_overview",
+      path: "/admin/omes",
+      order: 90,
+      requiredPermission: "omes_control.servers.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_servers",
+      path: "/admin/omes/servers",
+      order: 91,
+      requiredPermission: "omes_control.servers.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_deployments",
+      path: "/admin/omes/deployments",
+      order: 92,
+      requiredPermission: "omes_control.deployments.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_operations",
+      path: "/admin/omes/operations",
+      order: 93,
+      requiredPermission: "omes_control.deployments.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_jobs",
+      path: "/admin/omes/jobs",
+      order: 94,
+      requiredPermission: "omes_control.jobs.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "servers",

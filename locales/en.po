@@ -207,6 +207,21 @@ msgstr ""
 msgid "Sync & storage"
 msgstr ""
 
+msgid "OMES overview"
+msgstr ""
+
+msgid "OMES servers"
+msgstr ""
+
+msgid "OMES deployments"
+msgstr ""
+
+msgid "OMES operations"
+msgstr ""
+
+msgid "OMES jobs"
+msgstr ""
+
 msgid "Profiles"
 msgstr ""
 

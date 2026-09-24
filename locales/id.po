@@ -208,6 +208,21 @@ msgstr "Notifikasi push"
 msgid "Sync & storage"
 msgstr "Sinkronisasi & penyimpanan"
 
+msgid "OMES overview"
+msgstr "Ikhtisar OMES"
+
+msgid "OMES servers"
+msgstr "Server OMES"
+
+msgid "OMES deployments"
+msgstr "Deployment OMES"
+
+msgid "OMES operations"
+msgstr "Operasi OMES"
+
+msgid "OMES jobs"
+msgstr "Job OMES"
+
 msgid "Profiles"
 msgstr "Profil"
 
