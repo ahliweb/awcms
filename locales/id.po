@@ -5211,3 +5211,9 @@ msgstr "Backup & pemulihan"
 
 msgid "Audit"
 msgstr "Audit"
+
+msgid "OMES health"
+msgstr "Kesehatan OMES"
+
+msgid "OMES backups"
+msgstr "Backup OMES"
