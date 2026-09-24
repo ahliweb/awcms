@@ -63,6 +63,9 @@ const ROUTES = [
   "src/pages/api/v1/omes/jobs/[id]/cancel.ts",
   // Overview's `backups.read` panel is enforced by the backups list route.
   "src/pages/api/v1/omes/backups/index.ts",
+  // Overview's `audit.read` panel (ahliweb/omes#201's quick-link gate) is
+  // enforced by the audit list route.
+  "src/pages/api/v1/omes/audit/index.ts",
   // `POST /operations`'s per-operation guard (`OMES_OPERATION_GUARD`) is
   // built from literal triples in the domain layer, not `OMES_GUARDS.x.y`
   // text — read separately below and merged in.
@@ -153,12 +156,13 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
   });
 
   test("all 13 seeded permissions are reachable from these five screens or their navigation entries", async () => {
-    // Not every permission needs a screen affordance (e.g. `enrollments.manage`
-    // and `audit.read` are #201's), but every one referenced anywhere in the
-    // five pages must round-trip through the declared set — already asserted
-    // above — and the five nav entries' requiredPermission strings (asserted
-    // separately in admin-navigation-registry.test.ts for path/label shape)
-    // must each be one of the 13 too.
+    // Not every permission needs a screen affordance (`enrollments.manage`
+    // remains deliberately without one — see module.ts's own comment), but
+    // every one referenced anywhere in the five pages must round-trip
+    // through the declared set — already asserted above — and every nav
+    // entry's requiredPermission string (asserted separately in
+    // admin-navigation-registry.test.ts for path/label shape) must each be
+    // one of the 13 too.
     const sql155 = await readFile(
       "sql/155_awcms_omes_control_permissions.sql",
       "utf8"
@@ -171,10 +175,13 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(seeded.size).toBe(13);
     expect(seeded).toEqual(declaredTriples());
 
+    // 8 as of Issue ahliweb/omes#201: the original five (#200) plus health,
+    // backups, and audit — see tests/admin-omes-control-health-backup-audit-page-contract.test.ts
+    // for that trio's own screen contract.
     const nav = listModules().find(
       (module) => module.key === "omes_control"
     )?.navigation;
-    expect(nav?.length).toBe(5);
+    expect(nav?.length).toBe(8);
 
     for (const entry of nav ?? []) {
       expect(entry.requiredPermission).toBeDefined();

@@ -25,7 +25,10 @@ describe("omes_control module descriptor", () => {
     expect(mod?.key).toBe("omes_control");
     expect(mod?.name).toBe("OMES Control Center");
     expect(mod?.type).toBe("domain");
-    expect(mod?.status).toBe("experimental");
+    // "active" as of Issue ahliweb/omes#201 — all eight planned
+    // /admin/omes/* screens now exist (see module.ts's own comment for the
+    // ADR-0021/push_delivery reasoning).
+    expect(mod?.status).toBe("active");
     // Deliberately NOT "workflow" — see module.ts's own comment and
     // tests/module-boundary.test.ts's DOCUMENTED_EXCEPTIONS entry for
     // "omes_control -> workflow" (Issue ahliweb/omes#198): a hard
@@ -34,13 +37,13 @@ describe("omes_control module descriptor", () => {
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
-  test("declares navigation for the five screens ahliweb/omes#200 landed", () => {
+  test("declares navigation for all eight screens ahliweb/omes#200 and #201 landed", () => {
     // Was `toBeUndefined()` while the physical pages were staged work
     // (ahliweb/omes#196/#197/#198) — matching the push_delivery (ADR-0074)
     // precedent that a descriptor must not declare a path with no page
     // behind it (`tests/admin-navigation-registry.test.ts` enforces this in
-    // both directions). ahliweb/omes#200 is exactly the issue that lands
-    // those five pages, so this now asserts the populated shape instead.
+    // both directions). ahliweb/omes#200 landed the first five; #201 adds
+    // health, backups, and audit in this same shape.
     const nav = omesControlModule.navigation ?? [];
     expect(nav.map((entry) => entry.path).sort()).toEqual(
       [
@@ -48,7 +51,10 @@ describe("omes_control module descriptor", () => {
         "/admin/omes/servers",
         "/admin/omes/deployments",
         "/admin/omes/operations",
-        "/admin/omes/jobs"
+        "/admin/omes/jobs",
+        "/admin/omes/health",
+        "/admin/omes/backups",
+        "/admin/omes/audit"
       ].sort()
     );
 
