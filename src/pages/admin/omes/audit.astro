@@ -1,0 +1,420 @@
+---
+/**
+ * OMES Control Center — audit, Issue ahliweb/omes#201 (parent #195).
+ *
+ * TWO separate, source-labelled projections, rendered as two sections —
+ * never merged into one feed, per this issue's own requirement:
+ *
+ *   1. **Control-plane actor/action events** — the canonical
+ *      `awcms_audit_events` table (`listAuditEvents`, `logging` module),
+ *      narrowed to `moduleKey: "omes_control"`. This is "what an operator
+ *      (or this API, on their behalf) did in AWCMS" — every mutating
+ *      `omes_control` route already calls `recordAuditEvent` for exactly
+ *      this reason (see `backups/[id]/restore.ts`, `operations/index.ts`,
+ *      `jobs/[id]/approve.ts`, etc.).
+ *   2. **Remote OMES execution/reconciliation evidence** — the PROJECTION
+ *      table `awcms_omes_audit_projections` (`fetchAuditProjections`,
+ *      Issue ahliweb/omes#198), populated by the pull worker bridge
+ *      (ahliweb/omes#199). This is "what the host itself reported doing".
+ *
+ * Guarded by `omes_control.audit.read` for BOTH sections — a single read
+ * permission for the whole screen, matching the seeded catalog (`sql/155`
+ * has no separate permission for the canonical-events half). `logging`'s own
+ * `/admin/audit-trail` (a different permission, `logging.audit_trail.read`)
+ * remains the place to see every module's control-plane events together;
+ * this screen's first section is a narrower, OMES-scoped view of the exact
+ * same table, not a second writer or a competing authority.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  listAuditEvents,
+  type AuditEventRecord
+} from "../../../modules/logging/application/audit-log";
+import {
+  fetchAuditProjections,
+  type AuditProjectionSummary
+} from "../../../modules/omes-control/application/audit-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+/** Mirrors `MAX_LIST_LIMIT` in `logging/application/audit-log.ts`. */
+const CONTROL_PLANE_MAX_LIMIT = 100;
+const CONTROL_PLANE_DEFAULT_LIMIT = 50;
+
+const serverIdFilter = readParam("serverId") || undefined;
+const eventTypeFilter = readParam("eventType") || undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const requestedLimit = Number(readParam("limit"));
+const controlPlaneLimit =
+  Number.isFinite(requestedLimit) && requestedLimit >= 1
+    ? Math.min(Math.trunc(requestedLimit), CONTROL_PLANE_MAX_LIMIT)
+    : CONTROL_PLANE_DEFAULT_LIMIT;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.audit.read,
+  load: async ({ tx }) => {
+    const [controlPlaneEvents, projectionPage] = await Promise.all([
+      listAuditEvents(tx, ssr.tenantId, {
+        moduleKey: "omes_control",
+        limit: controlPlaneLimit
+      }),
+      fetchAuditProjections(tx, ssr.tenantId, {
+        serverId: serverIdFilter,
+        eventType: eventTypeFilter,
+        cursor: cursor ?? undefined
+      })
+    ]);
+
+    return {
+      controlPlaneEvents,
+      projections: projectionPage.projections,
+      nextCursor: projectionPage.nextCursor
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/audit.astro: failed to load OMES audit evidence",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const controlPlaneEvents: AuditEventRecord[] =
+  screen.state === "allowed" ? screen.data.controlPlaneEvents : [];
+const projections: AuditProjectionSummary[] =
+  screen.state === "allowed" ? screen.data.projections : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const controlPlanePossiblyTruncated =
+  controlPlaneEvents.length >= controlPlaneLimit;
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/audit?${query}` : "/admin/omes/audit";
+}
+
+/** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18:38` (UTC). */
+function formatTimestamp(value: Date): string {
+  return value.toISOString().replace("T", " ").slice(0, 19);
+}
+
+function severityVariant(severity: string): string {
+  if (severity === "critical") return "danger";
+  if (severity === "warning") return "warning";
+  return "neutral";
+}
+---
+
+<AdminLayout
+  title={t("OMES audit")}
+  description={t(
+    "Two separate, source-labelled feeds: what an operator did in AWCMS (control-plane actor/action events), and what the host itself reported doing (remote OMES execution and reconciliation evidence). They are never merged into one undifferentiated list."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-audit-denied">
+        {t("You do not have permission to view OMES audit evidence.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-audit-error">
+        {t(
+          "OMES audit evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="control-plane-title"
+        id="omes-audit-control-plane"
+        data-source="awcms-control-plane"
+      >
+        <h2 class="admin-section-title" id="control-plane-title">
+          {t("Control-plane actor/action events")}
+          <span class="count-pill">{controlPlaneEvents.length}</span>
+        </h2>
+        <p class="page-description">
+          {t(
+            "Source: awcms_audit_events, the same canonical control-plane log rendered on the Audit trail screen, narrowed to the omes_control module."
+          )}{" "}
+          <a class="quick-link" href="/admin/audit-trail">
+            {t("View the full cross-module audit trail")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-audit-control-plane-table">
+            <caption class="sr-only">
+              {t(
+                "OMES control-plane actor/action audit events, newest first."
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When (UTC)")}</th>
+                <th scope="col">{t("Severity")}</th>
+                <th scope="col">{t("Actor")}</th>
+                <th scope="col">{t("Action")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Message")}</th>
+                <th scope="col">{t("Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {controlPlaneEvents.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={7}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        🗒
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No control-plane events")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "No omes_control actor/action event has been recorded yet."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                controlPlaneEvents.map((event) => (
+                  <tr>
+                    <td data-label="When (UTC)">
+                      <span class="cell-code">
+                        {formatTimestamp(event.createdAt)}
+                      </span>
+                    </td>
+                    <td data-label="Severity">
+                      <span
+                        class="status-badge"
+                        data-variant={severityVariant(event.severity)}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {event.severity}
+                      </span>
+                    </td>
+                    <td data-label="Actor">
+                      <span class="cell-muted">
+                        {event.actorTenantUserId ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Action">
+                      <span class="cell-code">{event.action}</span>
+                    </td>
+                    <td data-label="Resource">
+                      <span class="cell-code">{event.resourceType}</span>
+                      {event.resourceId !== null && (
+                        <>
+                          {" "}
+                          <span class="cell-muted">{event.resourceId}</span>
+                        </>
+                      )}
+                    </td>
+                    <td data-label="Message">{event.message}</td>
+                    <td data-label="Detail" class="stacked-block">
+                      {event.attributes === null &&
+                      event.correlationId === null ? (
+                        <span class="cell-muted">—</span>
+                      ) : (
+                        <details>
+                          <summary>{t("View")}</summary>
+                          {event.correlationId !== null && (
+                            <p class="cell-muted">
+                              {t("Correlation:")}{" "}
+                              <span class="cell-code">
+                                {event.correlationId}
+                              </span>
+                            </p>
+                          )}
+                          {event.attributes !== null && (
+                            <pre
+                              class="cell-code"
+                              set:text={JSON.stringify(
+                                event.attributes,
+                                null,
+                                2
+                              )}
+                            />
+                          )}
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {controlPlanePossiblyTruncated && (
+          <p class="page-description" id="omes-audit-control-plane-truncated">
+            {t(
+              "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy.",
+              { shown: controlPlaneEvents.length, max: CONTROL_PLANE_MAX_LIMIT }
+            )}
+          </p>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="reconciliation-title"
+        id="omes-audit-reconciliation"
+        data-source="omes-host"
+      >
+        <h2 class="admin-section-title" id="reconciliation-title">
+          {t("Remote OMES execution & reconciliation evidence")}
+          <span class="count-pill">{projections.length}</span>
+        </h2>
+        <p class="page-description">
+          {t(
+            "Source: awcms_omes_audit_projections — omes-host evidence reported through the pull worker bridge, a SEPARATE feed from the control-plane events above. Never merged into one list."
+          )}
+        </p>
+
+        <form method="get" class="admin-toolbar" id="omes-audit-projection-filter-form">
+          <label for="filter-server">{t("Server ID")}</label>
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
+          <label for="filter-event-type">{t("Event type")}</label>
+          <input
+            id="filter-event-type"
+            name="eventType"
+            type="text"
+            value={eventTypeFilter ?? ""}
+          />
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-audit-reconciliation-table">
+            <caption class="sr-only">
+              {t(
+                "Remote OMES host execution and reconciliation audit evidence, newest first."
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Recorded")}</th>
+                <th scope="col">{t("Server")}</th>
+                <th scope="col">{t("Event type")}</th>
+                <th scope="col">{t("Source event")}</th>
+                <th scope="col">{t("Evidence")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projections.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={5}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌂
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No reconciliation evidence")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Nothing matches this filter, or no host has reported yet."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                projections.map((projection) => (
+                  <tr data-projection-row={projection.id}>
+                    <td data-label="Recorded">
+                      <span class="cell-muted">{projection.recordedAt}</span>
+                    </td>
+                    <td data-label="Server">
+                      <span class="cell-code">{projection.serverId}</span>
+                    </td>
+                    <td data-label="Event type">
+                      <span class="cell-code">{projection.eventType}</span>
+                    </td>
+                    <td data-label="Source event">
+                      <span class="cell-muted">
+                        {projection.sourceEventId}
+                      </span>
+                    </td>
+                    <td data-label="Evidence">
+                      <details>
+                        <summary>{t("View evidence")}</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(
+                            projection.evidence,
+                            null,
+                            2
+                          )}
+                        />
+                      </details>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>

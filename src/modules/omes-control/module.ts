@@ -30,11 +30,17 @@ export const omesControlModule = defineModule({
   name: "OMES Control Center",
   version: "0.1.0",
   /**
-   * Status is `experimental` during schema, RLS, permission, and pull worker landing (Issue #196, ADR-0122).
-   * Promoted to `active` once physical operator screens land under `src/pages/admin/omes/*` (ADR-0021 criterion 1),
-   * following the exact precedent established by `push_delivery`.
+   * Status is `active` as of Issue ahliweb/omes#201 (parent #195): all eight
+   * planned `/admin/omes/*` screens now exist (overview, servers,
+   * deployments, operations, jobs — #200 — plus health, backups, audit —
+   * #201). ADR-0021 criterion 1 for promotion is "an active module needs a
+   * navigation entry with `navigation.length > 0`"; the `push_delivery`
+   * precedent was promoted with a SINGLE screen, so nothing in the enforced
+   * gate required waiting for all eight rather than #200's five — this
+   * promotion happens now because the module's planned screen surface is
+   * actually complete, not because the gate demanded it sooner.
    */
-  status: "experimental",
+  status: "active",
   description:
     "OMES Control Center domain module for host fleet lifecycle, worker enrollments, desired vs observed deployments, operation requests, worker job dispatch queue, health snapshots, backup verification, and host execution audit projections (ADR-0122).",
   // NOT "workflow", even though destructive operation submission
@@ -58,29 +64,43 @@ export const omesControlModule = defineModule({
     basePath: "/api/v1/omes",
     routes: ["/api/v1/omes"]
   },
-  // Issue ahliweb/omes#200. `omes_control` was the "1 of 25 modules without
-  // navigation" PROJECT_STATE §2 recorded — 17 `/api/v1/omes/*` routes
-  // (#198) reachable only by `curl`. Five entries land here in the SAME
-  // change as the five pages under `src/pages/admin/omes/*` they name, per
+  // Issue ahliweb/omes#200 landed the first five entries (overview, servers,
+  // deployments, operations, jobs). Issue ahliweb/omes#201 (parent #195)
+  // adds the remaining three — health, backups, audit — in the SAME change
+  // as the three pages under `src/pages/admin/omes/*` they name, per
   // `tests/admin-navigation-registry.test.ts`'s two-directional check.
   //
   // Every `requiredPermission` below is one of the 13 `omes_control`
   // permissions `sql/155_awcms_omes_control_permissions.sql` already seeds —
-  // no new permission migration for this issue. Overview gates on
-  // `servers.read` (the narrowest of the reads its own panels use; the page
-  // itself uses an any-of `loadAdminScreen` entry across servers/jobs/backups/
-  // deployments so an operator missing only this one still sees the link and
-  // whichever panels their other reads allow).
+  // no new permission migration for this issue either. Health reuses
+  // `servers.read` (its own endpoint, `GET /api/v1/omes/health`, is guarded
+  // by exactly that permission — see that route's own comment for why there
+  // is no separate `health.read`).
   //
-  // None of these five screens' actions cross a tenant boundary — every
+  // `enrollments.manage` is DELIBERATELY not given a navigation entry by
+  // this issue. It is in scope for a future enrollment-token-management
+  // screen, not for #201 (health/backup-recovery/audit) — servers.astro
+  // (#200) already renders each server's enrollment/trust EVIDENCE
+  // (read-only), and issuing/revoking enrollment tokens is a distinct
+  // write-capability this issue does not add a screen for. It remains
+  // reachable only via the API today; that gap is not this issue's to close.
+  //
+  // None of these eight screens' actions cross a tenant boundary — every
   // `omes_control` table carries `tenant_id` with FORCE ROW LEVEL SECURITY
   // (sql/154) and every application-layer query in this module scopes on the
   // caller's own `tenantId` (`server-directory.ts`, `deployment-directory.ts`,
-  // `job-directory.ts`, `operation-directory.ts`). Per ADR-0051 §Keputusan
-  // butir 1–3, a platform-scoped gate is required only for an action whose
-  // EFFECT reaches another tenant's data — none of these do, so the ordinary
-  // tenant-seeded `omes_control` permissions are sufficient and no
-  // platform-only permission was added.
+  // `job-directory.ts`, `operation-directory.ts`, `health-directory.ts`,
+  // `backup-directory.ts`, `audit-directory.ts`, `backup-restore.ts`). Per
+  // ADR-0051 §Keputusan butir 1–3, a platform-scoped gate is required only
+  // for an action whose EFFECT reaches another tenant's data — this
+  // extends to `backups.restore`/`backups.rollback`
+  // (`application/backup-restore.ts`'s `submitBackupRestore` resolves the
+  // target `serverId` from a `SELECT ... WHERE tenant_id = ${tenantId} AND
+  // id = ${backupId}` lookup, so a foreign `backupId` resolves to
+  // `RESOURCE_NOT_FOUND` rather than a foreign server) — none of these
+  // reach another tenant's data, so the ordinary tenant-seeded
+  // `omes_control` permissions remain sufficient and no platform-only
+  // permission is added.
   navigation: [
     {
       labelKey: "admin.layout.nav_omes_overview",
@@ -111,6 +131,24 @@ export const omesControlModule = defineModule({
       path: "/admin/omes/jobs",
       order: 94,
       requiredPermission: "omes_control.jobs.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_health",
+      path: "/admin/omes/health",
+      order: 95,
+      requiredPermission: "omes_control.servers.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_backups",
+      path: "/admin/omes/backups",
+      order: 96,
+      requiredPermission: "omes_control.backups.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_audit",
+      path: "/admin/omes/audit",
+      order: 97,
+      requiredPermission: "omes_control.audit.read"
     }
   ],
   permissions: [

@@ -51,12 +51,26 @@ export type OperationRequestListPage = {
 export async function fetchOperationRequests(
   tx: Bun.SQL,
   tenantId: string,
-  options: { serverId?: string; status?: string; cursor?: KeysetCursor } = {}
+  options: {
+    serverId?: string;
+    status?: string;
+    /**
+     * Issue ahliweb/omes#201 — the backups/recovery screen reuses this same
+     * function (rather than a second query) to list its own `restore`
+     * requests, which live in this same `awcms_omes_operation_requests`
+     * table (see `application/backup-restore.ts`'s header). Optional and
+     * additive: every existing caller (the Operations screen, `GET
+     * /api/v1/omes/operations`) omits it and sees every operation as before.
+     */
+    operation?: string;
+    cursor?: KeysetCursor;
+  } = {}
 ): Promise<OperationRequestListPage> {
   const cursorCreatedAt = options.cursor?.createdAt ?? null;
   const cursorId = options.cursor?.id ?? null;
   const serverIdFilter = options.serverId ?? null;
   const statusFilter = options.status ?? null;
+  const operationFilter = options.operation ?? null;
 
   const rows = (await tx`
     SELECT id, request_id, server_id, operation, parameters, status,
@@ -66,6 +80,7 @@ export async function fetchOperationRequests(
     WHERE tenant_id = ${tenantId}
       AND (${serverIdFilter}::text IS NULL OR server_id = ${serverIdFilter})
       AND (${statusFilter}::text IS NULL OR status = ${statusFilter})
+      AND (${operationFilter}::text IS NULL OR operation = ${operationFilter})
       AND (
         ${cursorCreatedAt}::timestamptz IS NULL
         OR (created_at, id) < (${cursorCreatedAt}, ${cursorId})
