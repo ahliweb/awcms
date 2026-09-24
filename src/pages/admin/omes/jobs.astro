@@ -141,7 +141,12 @@ const columns = 7 + (showActions ? 1 : 0);
 
   {
     canSeeAnything && !loadError && (
-      <p id="omes-jobs-action-error" class="admin-create-error" role="alert" hidden />
+      <p
+        id="omes-jobs-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
     )
   }
 
@@ -164,7 +169,11 @@ const columns = 7 + (showActions ? 1 : 0);
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="jobs-title" id="omes-jobs-list">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="jobs-title"
+        id="omes-jobs-list"
+      >
         <h2 class="admin-section-title" id="jobs-title">
           {t("Jobs")}
           <span class="count-pill">{jobs.length}</span>
@@ -172,7 +181,12 @@ const columns = 7 + (showActions ? 1 : 0);
 
         <form method="get" class="admin-toolbar" id="job-filter-form">
           <label for="filter-server">{t("Server ID")}</label>
-          <input id="filter-server" name="serverId" type="text" value={serverIdFilter ?? ""} />
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
           <label for="filter-state">{t("State")}</label>
           <select id="filter-state" name="state">
             <option value="" selected={stateFilter === undefined}>
@@ -189,7 +203,9 @@ const columns = 7 + (showActions ? 1 : 0);
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="omes-jobs-table">
-            <caption class="sr-only">{t("OMES worker jobs, newest first.")}</caption>
+            <caption class="sr-only">
+              {t("OMES worker jobs, newest first.")}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Job")}</th>
@@ -207,10 +223,14 @@ const columns = 7 + (showActions ? 1 : 0);
                 <tr>
                   <td class="data-table-empty" colspan={columns}>
                     <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">⏱</span>
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⏱
+                      </span>
                       <span class="empty-state-title">{t("No jobs")}</span>
                       <span class="empty-state-text">
-                        {t("Nothing matches this filter, or none has been dispatched yet.")}
+                        {t(
+                          "Nothing matches this filter, or none has been dispatched yet."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -220,7 +240,10 @@ const columns = 7 + (showActions ? 1 : 0);
                   <tr data-job-row={job.id}>
                     <td data-label="Job">
                       <span class="cell-code">{job.jobId}</span>
-                      <span class="cell-muted"> · {t("Server")}: {job.serverId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {job.serverId}
+                      </span>
                     </td>
                     <td data-label="Operation">
                       <span class="cell-code">{job.operation}</span>
@@ -241,7 +264,9 @@ const columns = 7 + (showActions ? 1 : 0);
                     </td>
                     <td data-label="Lease">
                       <span class="cell-muted">
-                        {job.leasedBy ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}` : "—"}
+                        {job.leasedBy
+                          ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}`
+                          : "—"}
                       </span>
                     </td>
                     <td data-label="Retries">{job.retryCount}</td>
@@ -251,7 +276,11 @@ const columns = 7 + (showActions ? 1 : 0);
                         <pre
                           class="cell-code"
                           set:text={JSON.stringify(
-                            { target: job.target, payload: job.payload, result: job.result },
+                            {
+                              target: job.target,
+                              payload: job.payload,
+                              result: job.result
+                            },
                             null,
                             2
                           )}
@@ -297,7 +326,9 @@ const columns = 7 + (showActions ? 1 : 0);
           <div class="admin-toolbar">
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
               {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           </div>
         )}

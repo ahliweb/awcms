@@ -127,14 +127,19 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES deployment summary">
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES deployment summary"
+      >
         <div class="stat-grid stagger-children">
           <div class="stat-card">
             <span class="stat-label">{t("Deployments (this page)")}</span>
             <span class="stat-value">{deployments.length}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">{t("Stale or unreconciled (this page)")}</span>
+            <span class="stat-label">
+              {t("Stale or unreconciled (this page)")}
+            </span>
             <span class="stat-value">{staleCount}</span>
           </div>
         </div>
@@ -145,7 +150,9 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
             )}{" "}
             <a class="quick-link" href="/admin/omes/operations">
               {t("Go to Operations")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           </p>
         )}
@@ -155,7 +162,11 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="deployments-title" id="omes-deployments-list">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="deployments-title"
+        id="omes-deployments-list"
+      >
         <h2 class="admin-section-title" id="deployments-title">
           {t("Deployments")}
           <span class="count-pill">{deployments.length}</span>
@@ -163,7 +174,12 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
 
         <form method="get" class="admin-toolbar" id="deployment-filter-form">
           <label for="filter-server">{t("Server ID")}</label>
-          <input id="filter-server" name="serverId" type="text" value={serverIdFilter ?? ""} />
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
           <label for="filter-status">{t("Reconciliation status")}</label>
           <select id="filter-status" name="reconciliationStatus">
             <option value="" selected={statusFilter === undefined}>
@@ -179,9 +195,14 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
         </form>
 
         <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-deployments-table">
+          <table
+            class="data-table data-table--stack"
+            id="omes-deployments-table"
+          >
             <caption class="sr-only">
-              {t("OMES deployments, desired and observed state shown separately.")}
+              {t(
+                "OMES deployments, desired and observed state shown separately."
+              )}
             </caption>
             <thead>
               <tr>
@@ -198,8 +219,12 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                 <tr>
                   <td class="data-table-empty" colspan={6}>
                     <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">▤</span>
-                      <span class="empty-state-title">{t("No deployments")}</span>
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▤
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No deployments")}
+                      </span>
                       <span class="empty-state-text">
                         {t(
                           "Nothing matches this filter, or no deployment has been created yet."
@@ -213,13 +238,17 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                   <tr data-deployment-row={deployment.id}>
                     <td data-label="Deployment">
                       <span class="cell-code">{deployment.deploymentId}</span>
-                      <span class="cell-muted"> · {t("Server")}: {deployment.serverId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {deployment.serverId}
+                      </span>
                     </td>
                     <td data-label="Reconciliation">
                       <span
                         class="status-badge"
                         data-variant={
-                          STATUS_VARIANT[deployment.reconciliationStatus] ?? "neutral"
+                          STATUS_VARIANT[deployment.reconciliationStatus] ??
+                          "neutral"
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
@@ -242,7 +271,11 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                         <summary>{t("View desired state")}</summary>
                         <pre
                           class="cell-code"
-                          set:text={JSON.stringify(deployment.desiredState ?? {}, null, 2)}
+                          set:text={JSON.stringify(
+                            deployment.desiredState ?? {},
+                            null,
+                            2
+                          )}
                         />
                       </details>
                     </td>
@@ -251,7 +284,11 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                         <summary>{t("View observed state")}</summary>
                         <pre
                           class="cell-code"
-                          set:text={JSON.stringify(deployment.observedState ?? {}, null, 2)}
+                          set:text={JSON.stringify(
+                            deployment.observedState ?? {},
+                            null,
+                            2
+                          )}
                         />
                       </details>
                     </td>
@@ -261,7 +298,11 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                           <summary>{t("View error evidence")}</summary>
                           <pre
                             class="cell-code"
-                            set:text={JSON.stringify(deployment.errorEvidence, null, 2)}
+                            set:text={JSON.stringify(
+                              deployment.errorEvidence,
+                              null,
+                              2
+                            )}
                           />
                         </details>
                       ) : (
@@ -279,7 +320,9 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
           <div class="admin-toolbar">
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
               {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           </div>
         )}

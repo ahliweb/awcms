@@ -163,7 +163,12 @@ function approvalsLink(request: OperationRequestSummary): string {
 
   {
     canSeeAnything && !loadError && (
-      <p id="omes-operations-action-error" class="admin-create-error" role="alert" hidden />
+      <p
+        id="omes-operations-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
     )
   }
 
@@ -180,15 +185,35 @@ function approvalsLink(request: OperationRequestSummary): string {
         </p>
         <form class="admin-toolbar" id="operation-submit-form">
           <label for="op-server-id">{t("Server ID")}</label>
-          <input id="op-server-id" name="serverId" type="text" required maxlength="128" />
+          <input
+            id="op-server-id"
+            name="serverId"
+            type="text"
+            required
+            maxlength="128"
+          />
           <label for="op-deployment-id">{t("Deployment ID (optional)")}</label>
-          <input id="op-deployment-id" name="deploymentId" type="text" maxlength="128" />
+          <input
+            id="op-deployment-id"
+            name="deploymentId"
+            type="text"
+            maxlength="128"
+          />
           <label for="op-operation">{t("Operation")}</label>
           <select id="op-operation" name="operation" required>
             {OMES_OPERATION_CODES.map((code: OmesOperationCode) => (
-              <option value={code} disabled={isDestructiveOmesOperation(code) && !canRollback && !canOperate}>
+              <option
+                value={code}
+                disabled={
+                  isDestructiveOmesOperation(code) &&
+                  !canRollback &&
+                  !canOperate
+                }
+              >
                 {code}
-                {isDestructiveOmesOperation(code) ? ` (${t("destructive — requires approval")})` : ""}
+                {isDestructiveOmesOperation(code)
+                  ? ` (${t("destructive — requires approval")})`
+                  : ""}
               </option>
             ))}
           </select>
@@ -200,7 +225,11 @@ function approvalsLink(request: OperationRequestSummary): string {
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="operations-title" id="omes-operations-list">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="operations-title"
+        id="omes-operations-list"
+      >
         <h2 class="admin-section-title" id="operations-title">
           {t("Operation requests")}
           <span class="count-pill">{operationRequests.length}</span>
@@ -208,7 +237,12 @@ function approvalsLink(request: OperationRequestSummary): string {
 
         <form method="get" class="admin-toolbar" id="operation-filter-form">
           <label for="filter-server">{t("Server ID")}</label>
-          <input id="filter-server" name="serverId" type="text" value={serverIdFilter ?? ""} />
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
           <label for="filter-status">{t("Status")}</label>
           <select id="filter-status" name="status">
             <option value="" selected={statusFilter === undefined}>
@@ -224,8 +258,13 @@ function approvalsLink(request: OperationRequestSummary): string {
         </form>
 
         <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-operations-table">
-            <caption class="sr-only">{t("OMES operation requests, newest first.")}</caption>
+          <table
+            class="data-table data-table--stack"
+            id="omes-operations-table"
+          >
+            <caption class="sr-only">
+              {t("OMES operation requests, newest first.")}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Request")}</th>
@@ -240,10 +279,16 @@ function approvalsLink(request: OperationRequestSummary): string {
                 <tr>
                   <td class="data-table-empty" colspan={5}>
                     <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">⚙</span>
-                      <span class="empty-state-title">{t("No operation requests")}</span>
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⚙
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No operation requests")}
+                      </span>
                       <span class="empty-state-text">
-                        {t("Nothing matches this filter, or none has been submitted yet.")}
+                        {t(
+                          "Nothing matches this filter, or none has been submitted yet."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -253,7 +298,10 @@ function approvalsLink(request: OperationRequestSummary): string {
                   <tr data-operation-row={request.id}>
                     <td data-label="Request">
                       <span class="cell-code">{request.requestId}</span>
-                      <span class="cell-muted"> · {t("Server")}: {request.serverId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {request.serverId}
+                      </span>
                     </td>
                     <td data-label="Operation">
                       <span class="cell-code">{request.operation}</span>
@@ -261,7 +309,9 @@ function approvalsLink(request: OperationRequestSummary): string {
                     <td data-label="Status">
                       <span
                         class="status-badge"
-                        data-variant={STATUS_VARIANT[request.status] ?? "neutral"}
+                        data-variant={
+                          STATUS_VARIANT[request.status] ?? "neutral"
+                        }
                       >
                         <span class="status-dot" aria-hidden="true" />
                         {request.status}
@@ -292,7 +342,9 @@ function approvalsLink(request: OperationRequestSummary): string {
           <div class="admin-toolbar">
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
               {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           </div>
         )}

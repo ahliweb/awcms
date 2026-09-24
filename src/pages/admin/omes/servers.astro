@@ -102,7 +102,8 @@ const screen = await loadAdminScreen({
 
 const canSeeAnything = screen.state !== "denied";
 const loadError = screen.state === "error";
-const servers: ServerSummary[] = screen.state === "allowed" ? screen.data.servers : [];
+const servers: ServerSummary[] =
+  screen.state === "allowed" ? screen.data.servers : [];
 const nextCursor: string | null =
   screen.state === "allowed" ? screen.data.nextCursor : null;
 const selected: ServerDetail | null =
@@ -154,13 +155,21 @@ const columns = 6 + (canDelete ? 1 : 0);
 
   {
     canSeeAnything && !loadError && (
-      <p id="omes-servers-action-error" class="admin-create-error" role="alert" hidden />
+      <p
+        id="omes-servers-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
     )
   }
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES server summary">
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES server summary"
+      >
         <div class="stat-grid stagger-children">
           <div class="stat-card">
             <span class="stat-label">{t("Servers (this page)")}</span>
@@ -182,7 +191,10 @@ const columns = 6 + (canDelete ? 1 : 0);
 
   {
     canRegister && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="register-title">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="register-title"
+      >
         <h2 class="admin-section-title" id="register-title">
           {t("Register a server")}
         </h2>
@@ -193,13 +205,31 @@ const columns = 6 + (canDelete ? 1 : 0);
         </p>
         <form class="admin-toolbar" id="server-register-form">
           <label for="reg-hostname">{t("Hostname")}</label>
-          <input id="reg-hostname" name="hostname" type="text" required maxlength="255" />
+          <input
+            id="reg-hostname"
+            name="hostname"
+            type="text"
+            required
+            maxlength="255"
+          />
           <label for="reg-os">{t("OS")}</label>
           <input id="reg-os" name="os" type="text" required maxlength="64" />
           <label for="reg-version">{t("OS version")}</label>
-          <input id="reg-version" name="version" type="text" required maxlength="64" />
+          <input
+            id="reg-version"
+            name="version"
+            type="text"
+            required
+            maxlength="64"
+          />
           <label for="reg-arch">{t("Architecture")}</label>
-          <input id="reg-arch" name="arch" type="text" required maxlength="32" />
+          <input
+            id="reg-arch"
+            name="arch"
+            type="text"
+            required
+            maxlength="32"
+          />
           <label for="reg-ip">{t("IP (optional)")}</label>
           <input id="reg-ip" name="ip" type="text" maxlength="64" />
           <button type="submit">{t("Register")}</button>
@@ -210,7 +240,11 @@ const columns = 6 + (canDelete ? 1 : 0);
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="servers-title" id="omes-servers-list">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="servers-title"
+        id="omes-servers-list"
+      >
         <h2 class="admin-section-title" id="servers-title">
           {t("Servers")}
           <span class="count-pill">{servers.length}</span>
@@ -267,7 +301,9 @@ const columns = 6 + (canDelete ? 1 : 0);
                   <tr data-server-row={server.id}>
                     <td data-label="Hostname">
                       <span class="cell-code">{server.hostname}</span>
-                      {server.ip && <span class="cell-muted"> · {server.ip}</span>}
+                      {server.ip && (
+                        <span class="cell-muted"> · {server.ip}</span>
+                      )}
                     </td>
                     <td data-label="Platform">
                       <span class="cell-muted">
@@ -278,7 +314,9 @@ const columns = 6 + (canDelete ? 1 : 0);
                     <td data-label="Status">
                       <span
                         class="status-badge"
-                        data-variant={STATUS_VARIANT[server.status] ?? "neutral"}
+                        data-variant={
+                          STATUS_VARIANT[server.status] ?? "neutral"
+                        }
                       >
                         <span class="status-dot" aria-hidden="true" />
                         {server.status}
@@ -299,7 +337,10 @@ const columns = 6 + (canDelete ? 1 : 0);
                       <span class="cell-muted">{server.createdAt}</span>
                     </td>
                     <td data-label="Evidence">
-                      <a class="quick-link" href={linkWith({ selected: server.id })}>
+                      <a
+                        class="quick-link"
+                        href={linkWith({ selected: server.id })}
+                      >
                         {t("View evidence")}
                       </a>
                     </td>
@@ -330,7 +371,9 @@ const columns = 6 + (canDelete ? 1 : 0);
           <div class="admin-toolbar">
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
               {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           </div>
         )}
@@ -340,7 +383,11 @@ const columns = 6 + (canDelete ? 1 : 0);
 
   {
     canSeeAnything && !loadError && selectedId && (
-      <section class="admin-section fade-in-up" aria-labelledby="evidence-title" id="omes-server-evidence">
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="evidence-title"
+        id="omes-server-evidence"
+      >
         <h2 class="admin-section-title" id="evidence-title">
           {t("Enrollment & trust evidence")}
         </h2>
@@ -373,7 +420,9 @@ const columns = 6 + (canDelete ? 1 : 0);
                             {t("No enrollments")}
                           </span>
                           <span class="empty-state-text">
-                            {t("This server has not completed worker enrollment yet.")}
+                            {t(
+                              "This server has not completed worker enrollment yet."
+                            )}
                           </span>
                         </div>
                       </td>
@@ -388,7 +437,9 @@ const columns = 6 + (canDelete ? 1 : 0);
                           <span
                             class="status-badge"
                             data-variant={
-                              enrollment.status === "active" ? "success" : "neutral"
+                              enrollment.status === "active"
+                                ? "success"
+                                : "neutral"
                             }
                           >
                             <span class="status-dot" aria-hidden="true" />

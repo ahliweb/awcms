@@ -153,9 +153,9 @@ function formatCounts(counts: Record<string, number>): string {
             <div class="stat-card">
               <span class="stat-label">{t("Backup freshness")}</span>
               <span class="stat-value">
-                {t("Fresh")}: {overview.backupFreshness.fresh} ·{" "}
-                {t("Stale")}: {overview.backupFreshness.stale} ·{" "}
-                {t("Failed")}: {overview.backupFreshness.failed}
+                {t("Fresh")}: {overview.backupFreshness.fresh} · {t("Stale")}:{" "}
+                {overview.backupFreshness.stale} · {t("Failed")}:{" "}
+                {overview.backupFreshness.failed}
               </span>
             </div>
           )}
@@ -167,9 +167,7 @@ function formatCounts(counts: Record<string, number>): string {
               </span>
               {overview.driftSummary.staleDeploymentCount > 0 && (
                 <span class="stat-hint">
-                  {t(
-                    "{count} deployment(s) stale or unreconciled"
-                  ).replace(
+                  {t("{count} deployment(s) stale or unreconciled").replace(
                     "{count}",
                     String(overview.driftSummary.staleDeploymentCount)
                   )}
@@ -195,25 +193,33 @@ function formatCounts(counts: Record<string, number>): string {
           {readServers && (
             <a class="quick-link" href="/admin/omes/servers">
               {t("Servers")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           )}
           {readDeployments && (
             <a class="quick-link" href="/admin/omes/deployments">
               {t("Deployments")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           )}
           {readDeployments && (
             <a class="quick-link" href="/admin/omes/operations">
               {t("Operations")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           )}
           {readJobs && (
             <a class="quick-link" href="/admin/omes/jobs">
               {t("Jobs")}
-              <span class="quick-link-arrow" aria-hidden="true">→</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
             </a>
           )}
         </div>

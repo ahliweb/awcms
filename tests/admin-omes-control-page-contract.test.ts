@@ -109,13 +109,16 @@ function declaredTriples(): Set<Triple> {
     (listModules()
       .find((module) => module.key === "omes_control")
       ?.permissions?.map(
-        (permission) => `omes_control.${permission.activityCode}.${permission.action}`
+        (permission) =>
+          `omes_control.${permission.activityCode}.${permission.action}`
       ) ?? []) as Triple[]
   );
 }
 
 async function readAll(paths: string[]): Promise<string> {
-  const contents = await Promise.all(paths.map((path) => readFile(path, "utf8")));
+  const contents = await Promise.all(
+    paths.map((path) => readFile(path, "utf8"))
+  );
   return contents.join("\n");
 }
 
@@ -131,7 +134,9 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     const enforced = guardReferenceTriples(routeSource);
     expect(enforced.size).toBeGreaterThan(0);
 
-    const unenforced = [...pageTriples].filter((triple) => !enforced.has(triple));
+    const unenforced = [...pageTriples].filter(
+      (triple) => !enforced.has(triple)
+    );
     expect(unenforced).toEqual([]);
   });
 
@@ -166,8 +171,9 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(seeded.size).toBe(13);
     expect(seeded).toEqual(declaredTriples());
 
-    const nav = listModules().find((module) => module.key === "omes_control")
-      ?.navigation;
+    const nav = listModules().find(
+      (module) => module.key === "omes_control"
+    )?.navigation;
     expect(nav?.length).toBe(5);
 
     for (const entry of nav ?? []) {
@@ -216,20 +222,24 @@ describe("OMES admin screens never mutate directly", () => {
 
   test("deployments is read-only — no fetch mutation, matching the endpoint's own GET-only shape", async () => {
     const deploymentsPage = await readFile(PAGES.deployments, "utf8");
-    expect(deploymentsPage).not.toMatch(/sendJson\(\s*"(POST|PATCH|PUT|DELETE)"/);
+    expect(deploymentsPage).not.toMatch(
+      /sendJson\(\s*"(POST|PATCH|PUT|DELETE)"/
+    );
 
     const deploymentsRoute = await readFile(
       "src/pages/api/v1/omes/deployments/index.ts",
       "utf8"
     );
-    expect(deploymentsRoute).not.toMatch(/export const (POST|PATCH|PUT|DELETE)/);
+    expect(deploymentsRoute).not.toMatch(
+      /export const (POST|PATCH|PUT|DELETE)/
+    );
   });
 });
 
 describe("stale/offline evidence renders explicitly, never as healthy", () => {
   test("the servers screen has its own stale badge and staleness copy, distinct from the base status badge", async () => {
     const page = await readFile(PAGES.servers, "utf8");
-    expect(page).toContain('server.stale &&');
+    expect(page).toContain("server.stale &&");
     expect(page).toContain('data-variant="warning"');
     expect(page).toContain('{t("stale")}');
     expect(page).toContain("No heartbeat within the staleness window");
@@ -237,7 +247,7 @@ describe("stale/offline evidence renders explicitly, never as healthy", () => {
 
   test("the deployments screen has its own stale badge, independent of reconciliation status", async () => {
     const page = await readFile(PAGES.deployments, "utf8");
-    expect(page).toContain('deployment.stale &&');
+    expect(page).toContain("deployment.stale &&");
     expect(page).toContain('data-variant="warning"');
     expect(page).toContain('{t("stale")}');
   });
@@ -280,9 +290,11 @@ describe("Operations offers only OMES-evidence-backed capabilities", () => {
     // destructive set is split across (`deployments.operate` for the
     // lifecycle half, `backups.rollback` for rollback specifically) — never
     // a single coarse flag that would let an operator holding only one
-    // submit an operation gated on the other.
-    expect(page).toContain(
-      "disabled={isDestructiveOmesOperation(code) && !canRollback && !canOperate}"
+    // submit an operation gated on the other. Whitespace-tolerant: prettier
+    // is free to wrap this expression across lines.
+    const normalized = page.replace(/\s+/g, " ");
+    expect(normalized).toContain(
+      "disabled={ isDestructiveOmesOperation(code) && !canRollback && !canOperate }"
     );
   });
 
@@ -292,11 +304,16 @@ describe("Operations offers only OMES-evidence-backed capabilities", () => {
     expect(page).toContain("workflowKey");
     expect(page).toContain("workflowInstanceId");
     // No local approve/reject affordance — the page only ever links out.
-    expect(page).not.toMatch(/sendJson\(\s*"(POST|PATCH)"\s*,\s*`?\/api\/v1\/workflows/);
+    expect(page).not.toMatch(
+      /sendJson\(\s*"(POST|PATCH)"\s*,\s*`?\/api\/v1\/workflows/
+    );
   });
 
   test("the endpoint refuses a destructive submission with no published workflow, and the page surfaces that refusal rather than retrying silently", async () => {
-    const route = await readFile("src/pages/api/v1/omes/operations/index.ts", "utf8");
+    const route = await readFile(
+      "src/pages/api/v1/omes/operations/index.ts",
+      "utf8"
+    );
     expect(route).toContain("APPROVAL_WORKFLOW_NOT_CONFIGURED");
 
     const page = await readFile(PAGES.operations, "utf8");

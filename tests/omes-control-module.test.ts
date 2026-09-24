@@ -57,7 +57,8 @@ describe("omes_control module descriptor", () => {
     // seeds denies even `owner` (this repo's own recorded failure mode).
     const declared = new Set(
       (omesControlModule.permissions ?? []).map(
-        (permission) => `omes_control.${permission.activityCode}.${permission.action}`
+        (permission) =>
+          `omes_control.${permission.activityCode}.${permission.action}`
       )
     );
     for (const entry of nav) {
