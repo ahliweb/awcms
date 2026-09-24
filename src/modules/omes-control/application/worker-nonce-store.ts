@@ -4,8 +4,9 @@
  * `saveIdempotencyRecord` pattern exactly: a single
  * `INSERT ... ON CONFLICT DO NOTHING RETURNING id`, decided purely by
  * `rows.length`, never by catching a unique-violation error. That distinction
- * matters here specifically because `error.code === "23505"` never fires on
- * this driver (Bun.SQL surfaces the Postgres SQLSTATE on `error.errno`), so a
+ * matters here specifically because comparing `error.code` directly to a
+ * unique-violation SQLSTATE never fires on this driver (Bun.SQL surfaces the
+ * Postgres SQLSTATE on `error.errno`, not `error.code`), so a
  * "catch the conflict" implementation would silently never catch it and let
  * every replay through the "already used" branch as dead code.
  */

@@ -144,6 +144,16 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
     table: "awcms_omes_audit_projections",
     reason:
       "ADR-0122 (Issue ahliweb/omes#196). Projected audit evidence of host-level mutations and system actions performed by OMES pull workers, not visitor or subscriber personal data."
+  },
+  {
+    table: "awcms_omes_worker_nonces",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#199). Replay-protection nonces consumed by the OMES host pull worker's poll/result/heartbeat requests — a machine identity, tenant, server, and a random nonce string. Holds no personal data about a natural person."
+  },
+  {
+    table: "awcms_omes_worker_results",
+    reason:
+      "ADR-0122 (Issue ahliweb/omes#199). Worker-reported job execution results (operation, state, evidence) from the OMES pull worker. Operational infrastructure evidence about a host/job, not personal data — evidence is additionally passed through redactSensitiveAttributes before persistence."
   }
 ];
 
