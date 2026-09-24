@@ -9,11 +9,9 @@
  * requirement: "never substitute reporting projections for authoritative
  * OMES/Hermes observed state").
  *
- * This is the shell entry point `ahliweb/omes#201` (health, backup/recovery
- * and audit screens) hooks into: it links out to `/admin/omes/servers`,
- * `/admin/omes/deployments`, `/admin/omes/jobs` today, and #201 adds its own
- * cards/links here for health, backup/recovery detail, and audit — this page
- * does not need restructuring to receive them, only new `<section>`s.
+ * `ahliweb/omes#201` (health, backup/recovery and audit screens) hooks in
+ * here exactly as this page anticipated: three more quick-links below,
+ * gated on the same any-of pattern, no restructuring needed.
  *
  * Gated any-of across every panel's own read permission (mirrors
  * `/admin/sync`'s established pattern) — an operator who holds only
@@ -52,18 +50,27 @@ const screen = await loadAdminScreen({
     OMES_GUARDS.servers.read,
     OMES_GUARDS.deployments.read,
     OMES_GUARDS.jobs.read,
-    OMES_GUARDS.backups.read
+    OMES_GUARDS.backups.read,
+    OMES_GUARDS.audit.read
   ],
   load: async ({ tx, entry }) => {
-    const [readServers, readDeployments, readJobs, readBackups] = entry;
+    const [readServers, readDeployments, readJobs, readBackups, readAudit] =
+      entry;
     const canReadAnyPanel =
-      readServers || readDeployments || readJobs || readBackups;
+      readServers || readDeployments || readJobs || readBackups || readAudit;
 
     const overview = canReadAnyPanel
       ? await computeOmesOverview(tx, ssr.tenantId, new Date())
       : EMPTY_OVERVIEW;
 
-    return { readServers, readDeployments, readJobs, readBackups, overview };
+    return {
+      readServers,
+      readDeployments,
+      readJobs,
+      readBackups,
+      readAudit,
+      overview
+    };
   },
   onError: (error) => {
     logAdminPageError(
@@ -81,6 +88,7 @@ const readDeployments =
   screen.state === "allowed" && screen.data.readDeployments;
 const readJobs = screen.state === "allowed" && screen.data.readJobs;
 const readBackups = screen.state === "allowed" && screen.data.readBackups;
+const readAudit = screen.state === "allowed" && screen.data.readAudit;
 const overview: OmesOverview =
   screen.state === "allowed" ? screen.data.overview : EMPTY_OVERVIEW;
 
@@ -217,6 +225,30 @@ function formatCounts(counts: Record<string, number>): string {
           {readJobs && (
             <a class="quick-link" href="/admin/omes/jobs">
               {t("Jobs")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readServers && (
+            <a class="quick-link" href="/admin/omes/health">
+              {t("Health")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readBackups && (
+            <a class="quick-link" href="/admin/omes/backups">
+              {t("Backups & recovery")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readAudit && (
+            <a class="quick-link" href="/admin/omes/audit">
+              {t("Audit")}
               <span class="quick-link-arrow" aria-hidden="true">
                 →
               </span>
