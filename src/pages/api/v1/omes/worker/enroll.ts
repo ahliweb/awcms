@@ -108,7 +108,8 @@ export const POST: APIRoute = async ({ request }) => {
 
   const contractErrors = await validateOmesContractText(
     "worker-enrollment.request",
-    bodyRead.text
+    bodyRead.text,
+    { version: request.headers.get("x-omes-contract-version") ?? undefined }
   ).catch(() => ["unsupported_contract_version"]);
 
   if (contractErrors.length > 0) {
