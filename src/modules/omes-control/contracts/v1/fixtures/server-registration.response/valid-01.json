@@ -1,0 +1,7 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0001",
+  "server_id": "srv-0001",
+  "status": "registered",
+  "registered_at": "2026-09-19T10:00:00Z"
+}

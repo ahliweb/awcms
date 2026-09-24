@@ -51,6 +51,29 @@
 # Deliberately NOT excluded — recorded so the question is not reopened blind.
 # ---------------------------------------------------------------------------
 #
+# ---------------------------------------------------------------------------
+# Graphify's own Obsidian export (ADR-0124) — never re-index the graph's own
+# generated output.
+# ---------------------------------------------------------------------------
+#
+# `graphify-out/obsidian-staging/` and `graphify-out/obsidian/` hold Markdown
+# notes graphify ITSELF generated from `graph.json` — one file per node,
+# restating a node's neighbors and community as prose. Indexing them back into
+# the next rebuild would feed the graph's own output into itself: every node
+# gains a near-duplicate describing it, communities cluster with their own
+# restatement, and `graph:artifacts:check`'s "no two communities share a name"
+# rule (the same failure class as the `*.id.md` case above) is exactly the kind
+# of thing this shape trips. Neither directory is tracked in Git either (see
+# `.gitignore`), so this exclusion also keeps a local, never-committed export
+# from silently changing what the next COMMITTED graph.json contains.
+graphify-out/obsidian-staging/
+graphify-out/obsidian/
+
+# `knowledge/generated/graphify/` is the synced copy of the same export
+# (`scripts/knowledge-obsidian-sync.ts`) — same reasoning, same exclusion.
+knowledge/generated/
+
+# ---------------------------------------------------------------------------
 # `.changeset/` — the sibling repo `awcms-astro` excludes it, and that decision
 # does NOT transfer here. There it was 171 of 971 nodes (18% of the graph) with
 # 139 of 178 edges pointing at other changesets: many nodes, almost no bridges,

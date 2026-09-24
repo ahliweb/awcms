@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/credit.schema.json",
+  "title": "credit",
+  "description": "A tenant-level or invoice-level credit (issue #93), e.g. a goodwill credit or an overpayment carried forward. `invoice_id` is null for an unapplied account-level credit. `amount_minor` is always non-negative; a credit only ever reduces what is owed, applied through `lib/omes/py/jobs/ledger.py`'s `compute_totals()`, never by mutating a line directly.",
+  "type": "object",
+  "required": ["credit_id", "tenant_id", "invoice_id", "currency", "amount_minor", "reason", "applied"],
+  "additionalProperties": false,
+  "properties": {
+    "credit_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "invoice_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount_minor": { "type": "integer", "minimum": 0 },
+    "reason": { "type": "string" },
+    "applied": { "type": "boolean" }
+  }
+}

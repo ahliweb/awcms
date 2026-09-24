@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/payment-record.schema.json",
+  "title": "payment-record",
+  "description": "A manually confirmed payment against an invoice (issue #93) - no live payment gateway call happens here (that is issue #94). `evidence_ref` is an opaque reference to out-of-band proof (a bank reference, a support ticket id) - never a card number, account number, or other raw payment credential. `idempotency_key` makes a replayed confirmation a no-op rather than double-counting; `lib/omes/py/jobs/ledger.py`'s `record_payment()` enforces this and currency-match against the invoice.",
+  "type": "object",
+  "required": ["payment_id", "invoice_id", "tenant_id", "currency", "amount_minor", "actor", "evidence_ref", "idempotency_key", "confirmed_at"],
+  "additionalProperties": false,
+  "properties": {
+    "payment_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "invoice_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount_minor": { "type": "integer", "minimum": 1 },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["user", "service"] },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+      }
+    },
+    "evidence_ref": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,256}$" },
+    "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{8,256}$" },
+    "confirmed_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  }
+}

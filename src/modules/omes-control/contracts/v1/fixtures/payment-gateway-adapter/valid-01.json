@@ -1,0 +1,7 @@
+{
+  "adapter_id": "adapter-primary",
+  "provider_id": "provider-primary",
+  "capabilities": ["charge", "refund", "recurring", "webhook", "proration"],
+  "supported_currencies": ["USD", "EUR"],
+  "active": true
+}

@@ -1,0 +1,18 @@
+{
+  "tenant_id": "tenant-acme",
+  "target": {
+    "server_id": "server-acme-01",
+    "deployment_id": "deployment-acme-hermes-01"
+  },
+  "desired_state": {
+    "status": "running",
+    "version": "1.4.0"
+  },
+  "observed_state": {
+    "status": "running",
+    "observed_at": "2026-09-19T08:00:00Z",
+    "version": "1.4.0"
+  },
+  "last_reconciled_at": "2026-09-19T08:00:05Z",
+  "error_evidence": null
+}

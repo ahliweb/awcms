@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-result.response.schema.json",
+  "title": "worker-result.response",
+  "description": "Control Center acknowledgement of worker execution result (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "job_id",
+    "status",
+    "reconciled",
+    "recorded_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["recorded", "duplicate_ignored", "rejected"]
+    },
+    "reconciled": {
+      "type": "boolean"
+    },
+    "recorded_at": {
+      "type": "string"
+    }
+  }
+}

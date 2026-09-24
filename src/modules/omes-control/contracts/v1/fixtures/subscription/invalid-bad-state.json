@@ -1,0 +1,8 @@
+{
+  "subscription_id": "sub-acme-01",
+  "tenant_id": "tenant-acme",
+  "plan_id": "plan-starter",
+  "state": "overdue",
+  "effective_from": "2026-01-01T00:00:00Z",
+  "source_event_id": "evt-sub-acme-01-0002"
+}

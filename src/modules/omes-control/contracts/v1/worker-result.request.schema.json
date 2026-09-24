@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-result.request.schema.json",
+  "title": "worker-result.request",
+  "description": "Execution result and evidence posted by pull-worker to Control Center (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "server_id",
+    "worker_id",
+    "job_id",
+    "correlation_id",
+    "idempotency_key",
+    "operation",
+    "state",
+    "started_at",
+    "completed_at",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "worker_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "status",
+        "preflight",
+        "start",
+        "stop",
+        "restart",
+        "update",
+        "backup",
+        "restore",
+        "rollback"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "rejected"]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["returncode"],
+      "additionalProperties": false,
+      "properties": {
+        "returncode": {
+          "type": "integer"
+        },
+        "output_summary": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "readback_status": {
+          "type": "object"
+        },
+        "evidence_id": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    }
+  }
+}

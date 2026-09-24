@@ -452,8 +452,12 @@ Validation:
 - Report smoke test.
 
 `deploy/backup/restore-drill.sh` automates the scheduled restore drill:
-backup → restore into a disposable database → verify schema migration,
-tenant isolation (RLS), and sample records → RTO/RPO report.
+select the newest eligible backup (encrypted or plain) → verify its manifest
+
+- decrypt if needed → restore into a disposable database → verify schema
+  migration, tenant rows, and `FORCE ROW LEVEL SECURITY` → append RTO/RPO
+  evidence to `restore-drill-evidence.jsonl`. It never passes `--target`
+  anywhere, so it cannot target a live database even by operator error.
 
 `bun run resilience:dr-drill` (see
 [`resilience-dr-verification.md`](resilience-dr-verification.md)) — **there is no

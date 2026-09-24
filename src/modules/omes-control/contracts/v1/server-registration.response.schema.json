@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/server-registration.response.schema.json",
+  "title": "server-registration.response",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "server_id",
+    "status",
+    "registered_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "registered",
+        "pending",
+        "rejected"
+      ]
+    },
+    "registered_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}

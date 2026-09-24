@@ -1,0 +1,10 @@
+{
+  "adjustment_id": "adjustment-acme-01",
+  "invoice_id": "invoice-acme-2026-01",
+  "tenant_id": "tenant-acme",
+  "currency": "USD",
+  "amount_minor": -200,
+  "reason": "billing error correction",
+  "actor": { "type": "user", "id": "user-jane" },
+  "created_at": "2026-01-02T00:00:00Z"
+}
