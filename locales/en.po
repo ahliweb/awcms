@@ -5031,3 +5031,195 @@ msgstr ""
 msgid "destructive — requires approval"
 msgstr ""
 
+
+msgid "Back to fleet-wide health"
+msgstr ""
+
+msgid "Backup"
+msgstr ""
+
+msgid "Backup artifact metadata — recovery class, integrity checksum, age, and status. Never the raw backup contents. Restore is always destructive and always routes through the canonical approval workflow before it can dispatch."
+msgstr ""
+
+msgid "Backup catalog"
+msgstr ""
+
+msgid "Backups (this page)"
+msgstr ""
+
+msgid "Captured"
+msgstr ""
+
+msgid "Checks (source-attributed)"
+msgstr ""
+
+msgid "Checksum (SHA-256)"
+msgstr ""
+
+msgid "Control-plane actor/action events"
+msgstr ""
+
+msgid "{count} check(s)"
+msgstr ""
+
+msgid "Every restore is always destructive and requires an approved workflow decision before the OMES pull worker will ever act on it."
+msgstr ""
+
+msgid "Every snapshot below is omes-host evidence, reported by the OMES pull worker running on that host. Stale or missing evidence is shown explicitly, in its own badge, and never presented as healthy."
+msgstr ""
+
+msgid "Health history"
+msgstr ""
+
+msgid "Latest health per server"
+msgstr ""
+
+msgid "Manifest"
+msgstr ""
+
+msgid "No backups"
+msgstr ""
+
+msgid "No control-plane events"
+msgstr ""
+
+msgid "No fresh health evidence within the staleness window"
+msgstr ""
+
+msgid "No health evidence"
+msgstr ""
+
+msgid "No omes_control actor/action event has been recorded yet."
+msgstr ""
+
+msgid "No reconciliation evidence"
+msgstr ""
+
+msgid "No restore requests"
+msgstr ""
+
+msgid "No server has reported a health snapshot yet, or none matches this filter."
+msgstr ""
+
+msgid "None has been submitted yet."
+msgstr ""
+
+msgid "Not fresh (this page)"
+msgstr ""
+
+msgid "Nothing matches this filter, or no backup has been captured yet."
+msgstr ""
+
+msgid "Nothing matches this filter, or no host has reported yet."
+msgstr ""
+
+msgid "OMES audit"
+msgstr ""
+
+msgid "OMES audit evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "OMES backup restore requests, newest first."
+msgstr ""
+
+msgid "OMES backup snapshots, newest first."
+msgstr ""
+
+msgid "OMES backups & recovery"
+msgstr ""
+
+msgid "OMES control-plane actor/action audit events, newest first."
+msgstr ""
+
+msgid "OMES health & readiness"
+msgstr ""
+
+msgid "OMES health evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
+msgstr ""
+
+msgid "Older than the 24h freshness window, or its capture failed"
+msgstr ""
+
+msgid "Overall status"
+msgstr ""
+
+msgid "Recorded"
+msgstr ""
+
+msgid "Recovery class"
+msgstr ""
+
+msgid "Remote OMES execution & reconciliation evidence"
+msgstr ""
+
+msgid "Remote OMES host execution and reconciliation audit evidence, newest first."
+msgstr ""
+
+msgid "Restore requests"
+msgstr ""
+
+msgid "Servers with a snapshot"
+msgstr ""
+
+msgid "Snapshot history for server {serverId}."
+msgstr ""
+
+msgid "Source event"
+msgstr ""
+
+msgid "Source: awcms_audit_events, the same canonical control-plane log rendered on the Audit trail screen, narrowed to the omes_control module."
+msgstr ""
+
+msgid "Source: awcms_omes_audit_projections — omes-host evidence reported through the pull worker bridge, a SEPARATE feed from the control-plane events above. Never merged into one list."
+msgstr ""
+
+msgid "Stale snapshots"
+msgstr ""
+
+msgid "The OMES backup catalog could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "Two separate, source-labelled feeds: what an operator did in AWCMS (control-plane actor/action events), and what the host itself reported doing (remote OMES execution and reconciliation evidence). They are never merged into one undifferentiated list."
+msgstr ""
+
+msgid "View history"
+msgstr ""
+
+msgid "View history for server ID"
+msgstr ""
+
+msgid "View manifest"
+msgstr ""
+
+msgid "View server enrollment & trust evidence"
+msgstr ""
+
+msgid "View the full cross-module audit trail"
+msgstr ""
+
+msgid "You do not have permission to view OMES audit evidence."
+msgstr ""
+
+msgid "You do not have permission to view OMES backups."
+msgstr ""
+
+msgid "You do not have permission to view OMES health evidence."
+msgstr ""
+
+msgid "not fresh"
+msgstr ""
+
+msgid "source: {source}"
+msgstr ""
+
+msgid "Health"
+msgstr ""
+
+msgid "Backups & recovery"
+msgstr ""
+
+msgid "Audit"
+msgstr ""
