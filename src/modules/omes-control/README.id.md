@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f0ea3f9fa684fb029194e9052da998b865b7888fd021f4ef77cf5920fadbb94f -->
+<!-- i18n-source-hash: sha256:19bd3408ff1859b610f39c500ba9a873f6d05138225c541220b55885e21cba87 -->
 
 # `omes_control`
 
