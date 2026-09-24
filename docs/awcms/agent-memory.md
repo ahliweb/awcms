@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 127.**
+**Jumlah memory saat snapshot terakhir: 129.**
 
 ## Sengaja TIDAK disertakan
 
@@ -121,7 +121,9 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [False-positive scanner keamanan](awcms-security-scanner-falsepos.md) — GitGuardian scan SEMUA commit PR; ia GitHub App, tak bisa ditutup dari env ini
 - [CodeQL `js/bad-tag-filter` menandai SATU bentuk per putaran](codeql-bad-tag-filter-iterates.md) — tambal sekaligus `</script(?:[\s/][^>]*)?>`
 - [Merge PR dependabot](awcms-dependabot-merge-notes.md) — `package.json` & workflow TAK exempt gate changeset; astro bump memerahkan `family:conformance`
+- [Antrean merge WAJIB serial](awcms-serial-merge-queue-tax.md) — auto-merge MATI + up-to-date wajib; update-branch paralel MEMBAKAR CI; resolusi rebase = KEDUA sisi per baris lalu regenerasi
 - [Hazard branch subagent](awcms-subagent-branch-hazard.md) — verifikasi `git branch --show-current` SEBELUM commit
+- [Subagent MENDELEGASI ULANG → agen yatim](subagent-redelegation-orphans.md) — 2 dari 4 lapor "selesai" tanpa kerja; anak tak bisa di-`TaskStop`; larang spawn di prompt, cek commit count
 - [Hazard cwd Bash lintas-repo](bash-cwd-persists-cross-repo-audit-hazard.md) — `cd` persisten antar panggilan; pakai path absolut
 - [Gerbang lockfile npm itu buta](npm-lockfile-gates-are-blind.md) — `npm ci` menerima lockfile BERLEBIH dengan exit 0
 - [Sync HMAC versioning](awcms-sync-hmac-versioning-notes.md) — v2 ikat tenant+node; tak cukup tanpa `SYNC_HMAC_ALLOW_LEGACY=false`
@@ -2284,7 +2286,7 @@ description: "Cara membuat PR dependabot awcms lolos gate (changeset wajib, code
 metadata: 
   node_type: memory
   type: reference
-  modified: 2026-08-24T07:58:14.904Z
+  modified: 2026-09-23T21:35:48.756Z
 ---
 
 Membuat PR dependabot awcms mergeable (audit 2026-07-21, PR #199/#200/#201/#202):
@@ -2321,6 +2323,18 @@ version"` / `"Loaded a configuration file for version 'X', but running 'Y'"` —
 mensyaratkan SEMUA step codeql-action versi identik. FIX: gabung — bump init+analyze ke
 SHA 4.37.x yang SAMA (satu commit SHA untuk semua sub-action mono-repo) di SATU PR,
 tutup yang lain (`gh pr close <n> --delete-branch --comment ...`).
+
+TERULANG LAGI 23 Sep 2026 (#811 init + #809 analyze → 4.38.1, digabung jadi #817).
+Yang membuatnya MENIPU: job CodeQL berstatus **`skipping`** di PR dependabot-nya
+sendiri, jadi kedua PR tampak hijau-dan-mergeable; kegagalan baru muncul SETELAH
+mendarat di `main`. Jangan percaya "9 pass" di `gh pr checks` untuk bump
+codeql-action — baca apakah Analyze benar-benar JALAN.
+
+**Auto-merge DIMATIKAN repo-wide**: `gh pr merge --auto` → `GraphQL: Auto merge is
+not allowed for this repository (enablePullRequestAutoMerge)`. Digabung dengan
+branch protection "up-to-date", tiap PR harus di-`update-branch` → tunggu CI penuh
+(~5 menit, integration test yang paling lama) → merge, SATU per satu. Untuk bump
+trivial CI-hijau, `--admin` (lihat §Merge saat "BEHIND" di bawah) memotong antrean itu.
 
 **astro bump ↔ family-manifest**: bump `astro` di package.json memerahkan
 `family:conformance:check` — `stack.astro.declared` di `awcms-family-compatibility.yaml`
@@ -5908,6 +5922,55 @@ protection lama).
 Jangan matikan query CodeQL repo-wide untuk satu false-positive; dismiss per-alert saja. Lihat [[awcms-mfa-port-notes]], [[awcms-subagent-branch-hazard]].
 `````
 
+<!-- memory-file: awcms-serial-merge-queue-tax.md -->
+
+`````markdown
+---
+name: awcms-serial-merge-queue-tax
+description: "Merge awcms HARUS serial satu-per-satu; update-branch paralel justru MEMBAKAR CI dan tak mempercepat apa pun"
+metadata:
+  node_type: memory
+  type: project
+  modified: 2026-09-23T22:27:01.996Z
+---
+
+Branch protection awcms menuntut branch **up-to-date**, dan auto-merge **dimati kan
+repo-wide** (`gh pr merge --auto` → `Auto merge is not allowed for this
+repository`). Konsekuensinya bukan sepele: **setiap merge melempar SEMUA PR lain
+ke `BEHIND`**, jadi N PR = N siklus CI berurutan (~6–9 menit masing-masing,
+`Integration tests` yang paling lama).
+
+**Why:** pernah (23 Sep 2026, 10 PR sekaligus) meng-`update-branch` enam PR
+sekaligus supaya CI-nya tumpang-tindih. Itu keliru: begitu satu PR merge, lima
+lainnya `BEHIND` lagi dan kelima run tadi **terbuang** — sambil menyesaki runner
+(8 run in_progress) sehingga PR yang BENAR-BENAR mau di-merge ikut antre di
+belakang run yang sudah tak berguna.
+
+**How to apply:** gembalakan **SATU** PR sampai merge, baru sentuh berikutnya:
+`gh pr update-branch <n>` → tunggu hijau → merge → ulang. JANGAN update PR lain
+selagi menunggu. Untuk menunggu, pakai Bash `run_in_background` dengan
+`until [ -z "$(gh pr checks <n> | awk -F'\t' '$2=="pending"{print}')" ]; do sleep 25; done`
+— polling manual tiap beberapa detik membakar token tanpa waktu berlalu (terbukti:
+~20 panggilan tool = 90 detik nyata).
+
+`--admin` memang memotong antrean dan [[awcms-dependabot-merge-notes]] merestuinya
+untuk bump trivial CI-hijau, tapi itu **mem-bypass proteksi** — jangan dipakai saat
+instruksi bilang "merge hanya setelah semua check lulus", dan JANGAN menyalakan
+auto-merge di setelan repo sebagai efek samping antrean lambat; itu keputusan
+maintainer, bukan keputusan pelaksana merge.
+
+**Rebase di antrean ini SELALU bentrok di tempat yang sama** — lihat
+[[awcms-generated-artifact-merge-drift]]: `docs/PROJECT_STATE.md`/`.id.md` §2
+(jumlah migrasi + rentang ADR), `docs/awcms/repo-inventory.md`,
+`docs/adr/README.md`/`.id.md`, dan penanda `<!-- i18n-source-hash -->`.
+**Jawaban gabungannya biasanya KEDUA sisi, per baris** (mis. jumlah migrasi dari
+`main` DAN nomor ADR dari branch; dua baris indeks ADR dari dua PR berbeda
+dua-duanya dipertahankan berurutan — resolusi "pilih satu sisi" diam-diam
+MENGHAPUS ADR orang lain). Jangan merge tangan: selesaikan per baris lalu
+regenerasi — `project-state:inventory:generate` → `repo:inventory:generate` →
+`format` → `docs:i18n:stamp`, dalam urutan itu (format DULU, baru stamp).
+`````
+
 <!-- memory-file: awcms-session-self-service-and-ip-hash.md -->
 
 `````markdown
@@ -7915,6 +7978,56 @@ hyphen.
 
 Ditulis ke PROJECT_STATE §4 sebagai PUTARAN BENTUK (PR #704) + komentar #599;
 dikoreksi oleh PUTARAN ORIGIN (26 Agu 2026).
+`````
+
+<!-- memory-file: subagent-redelegation-orphans.md -->
+
+`````markdown
+---
+name: subagent-redelegation-orphans
+description: "Subagent yang MENDELEGASIKAN ULANG melahirkan agen tak-terlacak yang menulis worktree yang sama; verifikasi worktree tersentuh sebelum percaya laporan"
+metadata:
+  node_type: memory
+  type: feedback
+  modified: 2026-09-23T22:40:37.497Z
+---
+
+Subagent implementasi bisa **mendelegasikan ulang** tugasnya lewat Agent tool lalu
+**kembali seolah selesai** — laporannya berbunyi "sudah saya luncurkan agen di
+latar belakang, akan saya kabari" padahal NOL pekerjaan dilakukan. Terjadi pada
+2 dari 4 agen sekaligus (23 Sep 2026, issue #812 & #805).
+
+**Why:** anak yang dilahirkannya **tidak muncul di daftar subagent milikmu** dan
+**tidak bisa kamu hentikan** — `TaskStop` menolak: `Task X is owned by X; agent Y
+cannot stop it`. Hasilnya DUA penulis di satu worktree tanpa lock. Di #805 itu
+benar-benar menghasilkan dua desain bersaing tercampur di satu pohon kerja
+(`knowledge:obsidian:sync` vs `:export`/`:pull`, `package.json` merujuk skrip yang
+mungkin tak ada); di #812 dan #198 ada agen yang menemukan suntingannya sendiri
+ter-revert.
+
+**How to apply:**
+1. **Tulis larangan eksplisit di prompt**: "Kerjakan SENDIRI — jangan memanggil
+   Agent tool, jangan men-spawn subagent." Tanpa kalimat itu, delegasi ulang
+   terjadi pada tugas besar.
+2. **Jangan percaya laporan "sudah selesai/sudah saya luncurkan"** — cek
+   `git -C <worktree> log --oneline origin/main..HEAD | wc -l` dan
+   `git status --short | wc -l`. Worktree bersih di commit dasar = nol pekerjaan.
+3. **Satu worktree = satu pemilik.** Bila tabrakan sudah terjadi: tunjuk SATU
+   pemilik, dan perintahkan yang lain **berhenti menulis TANPA membereskan
+   apa pun** — revert/cleanup dari pihak yang mundur hanyalah tulisan balapan
+   tambahan. Minta INVENTARIS apa yang ia tulis; itu yang membuat pemilik bisa
+   merekonsiliasi dengan sadar.
+4. Agen bisa **macet dalam loop retry**: `timeout 590 bun run check` pada mesin
+   ber-load 14 tak pernah selesai dalam timeout-nya sendiri, lalu diulang terus.
+   Gejalanya: berkas ter-stage tapi 0 commit selama puluhan menit, dan proses
+   `bun run check` yang umurnya selalu < 2 menit. Obatnya: suruh commit+push dan
+   biarkan **CI** yang memverifikasi (runner terdedikasi, itu memang otoritasnya),
+   atau ambil alih sendiri — lihat [[awcms-serial-merge-queue-tax]].
+
+Verifikasi ulang tetap wajib meski laporannya rapi: pada #816 seorang reviewer
+menemukan ADR yang **mengklaim pengerasan yang belum ada di kode** (deep-equality,
+`Object.defineProperty`, cek grammar/kedalaman) — dokumen yang meyakinkan,
+kode yang belum menyusul.
 `````
 
 <!-- END GENERATED MEMORY -->

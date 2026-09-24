@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:255977d6d619de0b8e32d1bae51f7fb642442a9746651569cdbf05f02a42a262 -->
+<!-- i18n-source-hash: sha256:ee9a1314c8453368939d16a07f681520c1f90b64c3618d96b87fb771c76f6a97 -->
 
 # AWCMS — Project State & Continuation
 
@@ -393,6 +393,70 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN DEPENDENSI & ANTREAN MERGE — 24 September 2026: sapuan dependensi
+  yang menemukan pelanggaran privilese HIDUP di `main`, dan dua bump yang
+  memang TAK BISA di-merge sendiri-sendiri.** Sepuluh PR terbuka tanpa satu pun
+  yang tampak bermasalah secara individual. Empat hal layak disimpan.
+
+  **`main` merah karena alasan NYATA, dan gerbangnya benar.** Semua PR terbuka
+  gagal di `security:readiness worker/setup grant check` (Issue #163), termasuk
+  PR yang tak menyentuh apa pun selain satu string versi — dan justru itulah
+  yang membuktikan cacatnya ada di `main`, bukan di branch mana pun. Sebabnya
+  `sql/154` (#814) memberi `awcms_worker` `SELECT, INSERT, UPDATE, DELETE` yang
+  SAMA dengan `awcms_app` pada kedelapan tabel `omes_control`. Padahal
+  `omes_control` **tidak mendaftarkan entrypoint worker terjadwal sama sekali**;
+  satu-satunya kode worker yang menyentuh tabel-tabel itu adalah mesin generik
+  `data-lifecycle:archive-purge`, dan kedelapan deskriptornya `mode:
+"hard_delete"`, `executionMode: "generic"` — SELECT bercursor terbatas plus
+  DELETE baris tua. `INSERT`/`UPDATE` tak pernah dipakai statement worker mana
+  pun, jadi memegangnya adalah pelanggaran isolasi hidup sejak `sql/154`
+  mendarat. **Ini arah OVER-GRANT dari cek itu, bukan entri matriks yang
+  hilang** — ia gagal DUA arah, dan build merah itu adalah sistem yang bekerja.
+  Diperbaiki di #818/`sql/156` dengan MENCABUT dua verb tak-terpakai itu, BUKAN
+  dengan melebarkan `WORKER_ROLE_GRANTS` agar memuatnya: gerbang kesiapan yang
+  dihijaukan dengan melonggarkan apa yang diukurnya lebih buruk daripada tanpa
+  gerbang. Diverifikasi dengan menambahkan kembali SATU `INSERT` pada
+  `awcms_omes_jobs` dan menyaksikan suite-nya memerah lagi.
+
+  **Dua PR dependabot TAK BISA di-merge sendiri, dan tetap tampak hijau.**
+  `.github/workflows/codeql.yml` mem-pin `codeql-action/init` dan `/analyze` ke
+  SHA yang sama; dependabot memperlakukannya sebagai dua dependensi terpisah dan
+  membuka satu PR per baris (#811, #809). Salah satu paruh saja merusak CodeQL
+  di `main` — `init` menstempel config dengan versinya sendiri dan `analyze`
+  menolak config dari versi yang bukan dirinya. Jebakannya: job CodeQL berstatus
+  **`skipping`** di PR dependabot-nya sendiri, jadi keduanya terbaca mergeable;
+  kerusakannya baru muncul SETELAH merge. Digantikan #817 yang memindahkan kedua
+  SHA dalam satu commit. **Aturan tetap: setiap bump `codeql-action` wajib
+  memindahkan KEDUA SHA bersamaan, dan "9 check passed" pada PR semacam itu
+  BUKAN bukti Analyze benar-benar jalan.**
+
+  **DITOLAK — `prettier-plugin-astro@1.0.0` (#801), bertahan di 0.14.x.** Bump
+  mayor itu membuat `prettier --check` crash pada
+  `src/pages/admin/audit-trail.astro` dengan invarian prettier sendiri
+  (`Comment "…" was not printed. Please report this error!`) — cacat upstream,
+  bukan kesalahan repo ini. Opsi yang ditimbang: (a) merge dan reformat, yang
+  menuntut memindahkan/menghapus komentar yang membuat plugin tersedak —
+  padahal komentar itu mendokumentasikan MENGAPA nilainya di-escape alih-alih
+  `set:html`, jadi memutasi rasional keamanan demi formatter adalah pertukaran
+  yang salah; (b) mengeluarkan `.astro` dari glob prettier, melepas cakupan
+  format pada permukaan UI terbesar repo ini demi satu bug upstream; (c)
+  bertahan di 0.14.x. Diambil (c). 1.0.0 juga mereformat ~50 berkas `.astro`,
+  jadi tak ada urgensi mengambilnya sebelum ia bekerja. Menutup PR-nya menekan
+  penawaran ulang untuk versi ITU saja; dependabot akan menawarkan lagi begitu
+  rilis perbaikannya keluar.
+
+  **Antrean merge itu SERIAL, dan memparalelkannya justru merugikan.** Branch
+  protection menuntut branch up-to-date dan auto-merge dimatikan repo-wide
+  (`gh pr merge --auto` → `Auto merge is not allowed for this repository`),
+  jadi setiap merge melempar semua PR lain ke `BEHIND` dan N PR = N siklus CI
+  berurutan. Meng-update enam branch sekaligus agar CI-nya tumpang-tindih adalah
+  kekeliruan: satu merge membatalkan keenamnya, membuang run itu sambil
+  menyesaki runner sehingga PR yang benar-benar hendak di-merge ikut mengantre
+  di belakangnya. Gembalakan SATU PR pada satu waktu. Menyalakan auto-merge
+  memang akan membantu, tetapi itu perubahan konfigurasi proteksi repo ini dan
+  merupakan keputusan maintainer tersendiri — bukan sesuatu yang dinyalakan
+  sebagai efek samping antrean yang lambat.
 
 - **PUTARAN ASURANS BACKUP — 24 September 2026 (Issue #812, ADR-0123): tiga
   kontrol DR yang terdokumentasi-tapi-hilang kini ada.** `deploy/backup/`
