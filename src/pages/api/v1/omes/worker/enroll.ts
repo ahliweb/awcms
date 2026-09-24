@@ -16,7 +16,10 @@
 import type { APIRoute } from "astro";
 
 import { jsonResponse } from "../../../../../modules/_shared/api-response";
-import { runWorkerTenantWork } from "../../../../../modules/omes-control/application/worker-route-runner";
+import {
+  InvalidWorkerTenantIdError,
+  runWorkerTenantWork
+} from "../../../../../modules/omes-control/application/worker-route-runner";
 import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
@@ -149,19 +152,39 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  const outcome = await runWorkerTenantWork(tenantId, (tx) =>
-    redeemEnrollmentChallenge(
-      tx,
-      {
+  let outcome;
+
+  try {
+    outcome = await runWorkerTenantWork(tenantId, (tx) =>
+      redeemEnrollmentChallenge(
+        tx,
+        {
+          tenantId,
+          serverId,
+          rawChallenge,
+          publicKeyPem,
+          enrollmentSignatureBase64: signatureHeader
+        },
+        now
+      )
+    );
+  } catch (error) {
+    // A schema-legal but non-UUID tenant_id (the wire contract's pattern
+    // does not require UUID shape) must answer the SAME neutral rejection
+    // as any other pre-authentication failure — see
+    // worker-route-runner.ts's module doc for why this is caught here
+    // rather than upstream.
+    if (error instanceof InvalidWorkerTenantIdError) {
+      return neutralResponse(
+        "rejected",
         tenantId,
         serverId,
-        rawChallenge,
-        publicKeyPem,
-        enrollmentSignatureBase64: signatureHeader
-      },
-      now
-    )
-  );
+        "worker_unknown",
+        now
+      );
+    }
+    throw error;
+  }
 
   if (outcome instanceof Response) {
     // withTenant refused before running fn (DB busy / idempotency — neither

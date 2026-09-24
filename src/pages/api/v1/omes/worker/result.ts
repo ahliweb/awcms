@@ -15,7 +15,10 @@
 import type { APIRoute } from "astro";
 
 import { jsonResponse } from "../../../../../modules/_shared/api-response";
-import { runWorkerTenantWork } from "../../../../../modules/omes-control/application/worker-route-runner";
+import {
+  InvalidWorkerTenantIdError,
+  runWorkerTenantWork
+} from "../../../../../modules/omes-control/application/worker-route-runner";
 import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
@@ -104,49 +107,58 @@ export const POST: APIRoute = async ({ request }) => {
     return rejected(parsed.job_id, now);
   }
 
-  const result = await runWorkerTenantWork(tenantId, async (tx) => {
-    const verification = await verifyWorkerEnvelope(
-      tx,
-      {
-        route: "result",
-        method: "POST",
-        path: PATH,
-        tenantId: parsed.tenant_id,
-        serverId: parsed.server_id,
-        workerId: parsed.worker_id,
-        timestamp: request.headers.get("x-omes-timestamp"),
-        nonce: request.headers.get("x-omes-nonce"),
-        rawBody: bodyRead.text,
-        signatureHeader: request.headers.get("x-omes-worker-signature")
-      },
-      now
-    );
+  let result;
 
-    if (!verification.ok) {
-      return { kind: "denied" as const };
+  try {
+    result = await runWorkerTenantWork(tenantId, async (tx) => {
+      const verification = await verifyWorkerEnvelope(
+        tx,
+        {
+          route: "result",
+          method: "POST",
+          path: PATH,
+          tenantId: parsed.tenant_id,
+          serverId: parsed.server_id,
+          workerId: parsed.worker_id,
+          timestamp: request.headers.get("x-omes-timestamp"),
+          nonce: request.headers.get("x-omes-nonce"),
+          rawBody: bodyRead.text,
+          signatureHeader: request.headers.get("x-omes-worker-signature")
+        },
+        now
+      );
+
+      if (!verification.ok) {
+        return { kind: "denied" as const };
+      }
+
+      const outcome = await ingestWorkerResult(
+        tx,
+        {
+          tenantId: verification.tenantId,
+          serverId: verification.serverId,
+          workerId: verification.workerId,
+          workerJobId: String(parsed.job_id),
+          correlationId: String(parsed.correlation_id),
+          idempotencyKey: String(parsed.idempotency_key),
+          operation: String(parsed.operation),
+          state: parsed.state as "succeeded" | "failed" | "rejected",
+          startedAt: String(parsed.started_at),
+          completedAt: String(parsed.completed_at),
+          evidence: (parsed.evidence ?? {}) as Record<string, unknown>,
+          error: parsed.error as { code: string; message: string } | undefined
+        },
+        now
+      );
+
+      return { kind: "ingested" as const, outcome };
+    });
+  } catch (error) {
+    if (error instanceof InvalidWorkerTenantIdError) {
+      return rejected(parsed.job_id, now);
     }
-
-    const outcome = await ingestWorkerResult(
-      tx,
-      {
-        tenantId: verification.tenantId,
-        serverId: verification.serverId,
-        workerId: verification.workerId,
-        workerJobId: String(parsed.job_id),
-        correlationId: String(parsed.correlation_id),
-        idempotencyKey: String(parsed.idempotency_key),
-        operation: String(parsed.operation),
-        state: parsed.state as "succeeded" | "failed" | "rejected",
-        startedAt: String(parsed.started_at),
-        completedAt: String(parsed.completed_at),
-        evidence: (parsed.evidence ?? {}) as Record<string, unknown>,
-        error: parsed.error as { code: string; message: string } | undefined
-      },
-      now
-    );
-
-    return { kind: "ingested" as const, outcome };
-  });
+    throw error;
+  }
 
   if (result instanceof Response) {
     return result;

@@ -809,3 +809,179 @@ suite(
     });
   }
 );
+
+/**
+ * CONFIRMED HIGH (independent review of PR #823): `tenant_id` in every
+ * pinned OMES wire schema is `^[A-Za-z0-9_.:-]{1,128}$` — deliberately NOT
+ * constrained to a UUID. All four routes used to pass that attacker-
+ * supplied, contract-VALID string straight to `runWorkerTenantWork`, whose
+ * `withTenant` call's first line is `assertUuid(tenantId)`
+ * (`lib/database/tenant-context.ts`) — a synchronous throw, before the
+ * transaction opens and therefore before `verifyWorkerEnvelope` (or
+ * `redeemEnrollmentChallenge`) ever runs. A schema-legal-but-non-UUID
+ * `tenant_id` produced an UNHANDLED REJECTION instead of the documented
+ * neutral response every other rejection path returns.
+ *
+ * Fixed by `InvalidWorkerTenantIdError` (`worker-route-runner.ts`) — every
+ * route now validates UUID shape before opening a transaction and answers
+ * the SAME neutral rejection as an unknown-worker/wrong-tenant/bad-signature
+ * failure. These tests assert exactly that: same status field, same HTTP
+ * 200, and (critically) that the handler does not throw at all.
+ */
+suite(
+  "omes_control worker routes: non-UUID tenant_id fails closed, not uncaught (real PostgreSQL)",
+  () => {
+    let ready = false;
+
+    beforeAll(async () => {
+      ready = await ensureHandlerDatabaseReady();
+    }, 120000);
+
+    afterAll(async () => {
+      await teardownHandlerDatabase();
+    }, 60000);
+
+    beforeEach(async () => {
+      if (!ready) return;
+      await resetHandlerDatabase();
+    }, 30000);
+
+    const NON_UUID_TENANT_ID = "not-a-uuid-but-matches-worker-schema";
+
+    test("enroll: non-UUID tenant_id answers the same neutral rejection as an unknown one, never throws", async () => {
+      if (!ready) return;
+
+      const { publicKeyPem, privateKeyPem } = keypair();
+      const rawChallenge = `chal_${randomUUID().replace(/-/g, "")}`;
+
+      const body = {
+        tenant_id: NON_UUID_TENANT_ID,
+        server_id: SERVER_ID,
+        enrollment_challenge: rawChallenge,
+        public_key: publicKeyPem,
+        hostname: "srv-worker-1.example.test",
+        platform: { os: "ubuntu", version: "24.04", arch: "amd64" },
+        capabilities: ["status"]
+      };
+
+      const result = await invoke(enrollPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/enroll",
+        body,
+        headers: {
+          "content-type": "application/json",
+          "x-omes-enrollment-signature": sign(privateKeyPem, rawChallenge)
+        }
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe("rejected");
+    });
+
+    test("poll: non-UUID tenant_id answers re-enroll_required, never throws", async () => {
+      if (!ready) return;
+
+      const { privateKeyPem } = keypair();
+      const envelope = buildEnvelope(privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        tenantId: NON_UUID_TENANT_ID,
+        serverId: SERVER_ID,
+        workerId: "worker_nonuuid",
+        body: {
+          tenant_id: NON_UUID_TENANT_ID,
+          server_id: SERVER_ID,
+          worker_id: "worker_nonuuid",
+          capabilities: ["status"]
+        },
+        nonceInBody: true,
+        timestampInBody: true
+      });
+
+      const result = await invoke(pollPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe(
+        "re-enroll_required"
+      );
+    });
+
+    test("result: non-UUID tenant_id answers rejected, never throws", async () => {
+      if (!ready) return;
+
+      const { privateKeyPem } = keypair();
+      const envelope = buildEnvelope(privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        tenantId: NON_UUID_TENANT_ID,
+        serverId: SERVER_ID,
+        workerId: "worker_nonuuid",
+        body: {
+          tenant_id: NON_UUID_TENANT_ID,
+          server_id: SERVER_ID,
+          worker_id: "worker_nonuuid",
+          job_id: `worker-local-${randomUUID()}`,
+          correlation_id: `corr_${randomUUID()}`,
+          idempotency_key: `idem_${randomUUID()}`,
+          operation: "status",
+          state: "succeeded",
+          started_at: new Date(Date.now() - 1000).toISOString(),
+          completed_at: new Date().toISOString(),
+          evidence: { returncode: 0 }
+        }
+      });
+
+      const result = await invoke(resultPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe("rejected");
+    });
+
+    test("heartbeat: non-UUID tenant_id answers re-enroll_required, never throws", async () => {
+      if (!ready) return;
+
+      const { privateKeyPem } = keypair();
+      const envelope = buildEnvelope(privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/heartbeat",
+        tenantId: NON_UUID_TENANT_ID,
+        serverId: SERVER_ID,
+        workerId: "worker_nonuuid",
+        body: {
+          tenant_id: NON_UUID_TENANT_ID,
+          server_id: SERVER_ID,
+          worker_id: "worker_nonuuid",
+          status: "healthy",
+          omes_version: "0.2.0",
+          contract_version: "1.0.0",
+          capability_registry_digest: "sha256:abcdef1234567890",
+          platform: { os: "ubuntu", version: "24.04", arch: "amd64" },
+          uptime_seconds: 1
+        },
+        timestampInBody: true
+      });
+
+      const result = await invoke(heartbeatPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/heartbeat",
+        body: envelope.body,
+        headers: envelope.headers
+      });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { status: string }).status).toBe(
+        "re-enroll_required"
+      );
+    });
+  }
+);

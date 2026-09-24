@@ -19,7 +19,10 @@
 import type { APIRoute } from "astro";
 
 import { jsonResponse } from "../../../../../modules/_shared/api-response";
-import { runWorkerTenantWork } from "../../../../../modules/omes-control/application/worker-route-runner";
+import {
+  InvalidWorkerTenantIdError,
+  runWorkerTenantWork
+} from "../../../../../modules/omes-control/application/worker-route-runner";
 import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
@@ -101,49 +104,61 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const now = new Date();
-  const result = await runWorkerTenantWork(tenantId, async (tx) => {
-    const verification = await verifyWorkerEnvelope(
-      tx,
-      {
-        route: "poll",
-        method: "POST",
-        path: PATH,
-        tenantId: parsed.tenant_id,
-        serverId: parsed.server_id,
-        workerId: parsed.worker_id,
-        timestamp: parsed.timestamp,
-        nonce: parsed.nonce,
-        rawBody: bodyRead.text,
-        signatureHeader: request.headers.get("x-omes-worker-signature")
-      },
-      now
-    );
+  let result;
 
-    if (!verification.ok) {
-      return { kind: "denied" as const };
+  try {
+    result = await runWorkerTenantWork(tenantId, async (tx) => {
+      const verification = await verifyWorkerEnvelope(
+        tx,
+        {
+          route: "poll",
+          method: "POST",
+          path: PATH,
+          tenantId: parsed.tenant_id,
+          serverId: parsed.server_id,
+          workerId: parsed.worker_id,
+          timestamp: parsed.timestamp,
+          nonce: parsed.nonce,
+          rawBody: bodyRead.text,
+          signatureHeader: request.headers.get("x-omes-worker-signature")
+        },
+        now
+      );
+
+      if (!verification.ok) {
+        return { kind: "denied" as const };
+      }
+
+      // Best-effort: promote at most one approved-but-not-yet-jobbed operation
+      // request into the queue before attempting to lease. A promotion
+      // failure here is not this poll's identity/security concern — swallow
+      // and fall through to "nothing to lease" rather than turning a queue
+      // bookkeeping hiccup into a re-enroll signal.
+      await promoteNextApprovedOperation(
+        tx,
+        verification.tenantId,
+        verification.serverId
+      ).catch(() => null);
+
+      const leased = await leaseNextQueuedJob(
+        tx,
+        verification.tenantId,
+        verification.serverId,
+        verification.workerId,
+        now
+      );
+
+      return { kind: "ok" as const, leased };
+    });
+  } catch (error) {
+    // A schema-legal but non-UUID tenant_id must answer the same neutral
+    // re-enroll_required as any other pre-authentication failure — see
+    // worker-route-runner.ts's module doc.
+    if (error instanceof InvalidWorkerTenantIdError) {
+      return reEnrollRequired(tenantId, serverId);
     }
-
-    // Best-effort: promote at most one approved-but-not-yet-jobbed operation
-    // request into the queue before attempting to lease. A promotion
-    // failure here is not this poll's identity/security concern — swallow
-    // and fall through to "nothing to lease" rather than turning a queue
-    // bookkeeping hiccup into a re-enroll signal.
-    await promoteNextApprovedOperation(
-      tx,
-      verification.tenantId,
-      verification.serverId
-    ).catch(() => null);
-
-    const leased = await leaseNextQueuedJob(
-      tx,
-      verification.tenantId,
-      verification.serverId,
-      verification.workerId,
-      now
-    );
-
-    return { kind: "ok" as const, leased };
-  });
+    throw error;
+  }
 
   if (result instanceof Response) {
     return result;
