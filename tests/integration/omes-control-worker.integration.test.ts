@@ -719,6 +719,142 @@ suite(
       expect(jobRowsAfter[0]!.state).toBe("completed");
     });
 
+    /**
+     * CONFIRMED MEDIUM (independent review of PR #823): result correlation
+     * used to bind only `(tenant_id, server_id, idempotency_key)` — all
+     * envelope-verified, so cross-TENANT substitution was never possible,
+     * but `sql/154` makes `worker_id` unique only per `(tenant_id,
+     * worker_id)`, with `server_id` NOT part of that uniqueness. Two
+     * enrolled workers CAN legitimately share a `server_id` (key-rotation
+     * window, or two worker processes per host); the non-leasing one could
+     * previously submit a correctly-signed result for a job it never
+     * leased, as long as it knew the `idempotency_key`. Fixed by binding
+     * every read and write to `leased_by = ` the verified worker identity
+     * (`application/worker-result-ingestion.ts`).
+     */
+    test("result: a co-enrolled but NON-leasing worker cannot submit a result for a job it never leased", async () => {
+      if (!ready) return;
+      await seedServer(TENANT_A, SERVER_ID, "online");
+      const leasingWorker = keypair();
+      const otherWorker = keypair();
+      await seedEnrolledWorker(
+        TENANT_A,
+        SERVER_ID,
+        "worker_leasing",
+        leasingWorker.publicKeyPem
+      );
+      await seedEnrolledWorker(
+        TENANT_A,
+        SERVER_ID,
+        "worker_other",
+        otherWorker.publicKeyPem
+      );
+      await seedApprovedOperation(TENANT_A, SERVER_ID, "status");
+
+      const pollEnvelope = buildEnvelope(leasingWorker.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        tenantId: TENANT_A,
+        serverId: SERVER_ID,
+        workerId: "worker_leasing",
+        body: {
+          tenant_id: TENANT_A,
+          server_id: SERVER_ID,
+          worker_id: "worker_leasing",
+          capabilities: ["status"]
+        },
+        nonceInBody: true,
+        timestampInBody: true
+      });
+
+      const pollResult = await invoke(pollPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/poll",
+        body: pollEnvelope.body,
+        headers: pollEnvelope.headers
+      });
+
+      expect((pollResult.body as { status: string }).status).toBe(
+        "job_available"
+      );
+      const job = (
+        pollResult.body as {
+          job: { idempotency_key: string; correlation_id: string };
+        }
+      ).job;
+
+      // The job is leased to "worker_leasing". "worker_other" — co-enrolled,
+      // genuinely a different Ed25519 identity, correctly signing its OWN
+      // envelope — submits a result for the SAME idempotency_key.
+      const resultBody = {
+        tenant_id: TENANT_A,
+        server_id: SERVER_ID,
+        worker_id: "worker_other",
+        job_id: `worker-local-${randomUUID()}`,
+        correlation_id: job.correlation_id,
+        idempotency_key: job.idempotency_key,
+        operation: "status",
+        state: "succeeded",
+        started_at: new Date(Date.now() - 1000).toISOString(),
+        completed_at: new Date().toISOString(),
+        evidence: { returncode: 0 }
+      };
+      const resultEnvelope = buildEnvelope(otherWorker.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        tenantId: TENANT_A,
+        serverId: SERVER_ID,
+        workerId: "worker_other",
+        body: resultBody
+      });
+
+      const result = await invoke(resultPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        body: resultEnvelope.body,
+        headers: resultEnvelope.headers
+      });
+
+      // Same answer as a nonexistent job — no oracle distinguishing
+      // "wrong worker" from "unknown job".
+      expect((result.body as { status: string }).status).toBe("rejected");
+
+      const resultRows = (await getHandlerAdminSql()`
+        SELECT id FROM awcms_omes_worker_results
+        WHERE tenant_id = ${TENANT_A} AND idempotency_key = ${job.idempotency_key}
+      `) as unknown[];
+      expect(resultRows).toHaveLength(0);
+
+      const jobRows = (await getHandlerAdminSql()`
+        SELECT state, leased_by FROM awcms_omes_jobs
+        WHERE tenant_id = ${TENANT_A} AND idempotency_key = ${job.idempotency_key}
+      `) as { state: string; leased_by: string }[];
+      expect(jobRows[0]!.state).toBe("leased");
+      expect(jobRows[0]!.leased_by).toBe("worker_leasing");
+
+      // The LEASING worker's own submission for the same job still works.
+      const legitimateBody = { ...resultBody, worker_id: "worker_leasing" };
+      const legitimateEnvelope = buildEnvelope(leasingWorker.privateKeyPem, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        tenantId: TENANT_A,
+        serverId: SERVER_ID,
+        workerId: "worker_leasing",
+        body: legitimateBody
+      });
+
+      const legitimateResult = await invoke(resultPOST, {
+        method: "POST",
+        path: "/api/v1/omes/worker/result",
+        body: legitimateEnvelope.body,
+        headers: legitimateEnvelope.headers
+      });
+
+      expect((legitimateResult.body as { status: string }).status).toBe(
+        "recorded"
+      );
+    });
+
     test("heartbeat: updates status/timestamp on success and never resurrects a decommissioned server", async () => {
       if (!ready) return;
       await seedServer(TENANT_A, SERVER_ID, "decommissioned");

@@ -15,6 +15,22 @@
  * idempotency store, for the same reason (this driver's SQLSTATE is on
  * `error.errno`, not `error.code`, so catching "23505" is dead code).
  *
+ * ## Bound to the LEASING worker, not just tenant+server+key (CONFIRMED
+ * MEDIUM, independent review of PR #823)
+ *
+ * `sql/154` makes `worker_id` unique only per `(tenant_id, worker_id)` —
+ * `server_id` is NOT part of that uniqueness, so two enrolled workers can
+ * legitimately point at the same `server_id` (a key-rotation window, or two
+ * worker processes on one host). Correlating a result by
+ * `(tenant_id, server_id, idempotency_key)` alone — the envelope-verified
+ * scope, which does correctly stop cross-TENANT substitution — would still
+ * let any co-enrolled worker for that `(tenant, server)` submit a
+ * correctly-signed result for a job it never leased, as long as it knows
+ * (or guesses) the `idempotency_key`. Every read and write here additionally
+ * requires `leased_by = ` the verified worker identity: a non-leasing
+ * worker gets the same `unknown_job` outcome as a nonexistent job — never
+ * distinguished, so this is not a new oracle.
+ *
  * A 2xx from this endpoint is NEVER "the job succeeded". Every row this
  * writes is stamped `source = 'worker_reported'` / `reconciled = false` at
  * the schema level (sql/159's CHECK + DEFAULT) — this file never sets
@@ -63,7 +79,7 @@ export async function ingestWorkerResult(
   const jobRows = (await tx`
     SELECT id FROM awcms_omes_jobs
     WHERE tenant_id = ${input.tenantId} AND server_id = ${input.serverId}
-      AND idempotency_key = ${input.idempotencyKey}
+      AND idempotency_key = ${input.idempotencyKey} AND leased_by = ${input.workerId}
   `) as { id: string }[];
 
   if (!jobRows[0]) {
@@ -118,7 +134,8 @@ export async function ingestWorkerResult(
         result = ${redactedEvidence}::jsonb,
         updated_at = now()
     WHERE tenant_id = ${input.tenantId} AND server_id = ${input.serverId}
-      AND idempotency_key = ${input.idempotencyKey} AND state IN ('leased', 'running')
+      AND idempotency_key = ${input.idempotencyKey} AND leased_by = ${input.workerId}
+      AND state IN ('leased', 'running')
   `;
 
   await tx`
