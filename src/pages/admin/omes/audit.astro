@@ -178,11 +178,12 @@ function severityVariant(severity: string): string {
         </p>
 
         <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-audit-control-plane-table">
+          <table
+            class="data-table data-table--stack"
+            id="omes-audit-control-plane-table"
+          >
             <caption class="sr-only">
-              {t(
-                "OMES control-plane actor/action audit events, newest first."
-              )}
+              {t("OMES control-plane actor/action audit events, newest first.")}
             </caption>
             <thead>
               <tr>
@@ -314,7 +315,11 @@ function severityVariant(severity: string): string {
           )}
         </p>
 
-        <form method="get" class="admin-toolbar" id="omes-audit-projection-filter-form">
+        <form
+          method="get"
+          class="admin-toolbar"
+          id="omes-audit-projection-filter-form"
+        >
           <label for="filter-server">{t("Server ID")}</label>
           <input
             id="filter-server"
@@ -333,7 +338,10 @@ function severityVariant(severity: string): string {
         </form>
 
         <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-audit-reconciliation-table">
+          <table
+            class="data-table data-table--stack"
+            id="omes-audit-reconciliation-table"
+          >
             <caption class="sr-only">
               {t(
                 "Remote OMES host execution and reconciliation audit evidence, newest first."
@@ -380,9 +388,7 @@ function severityVariant(severity: string): string {
                       <span class="cell-code">{projection.eventType}</span>
                     </td>
                     <td data-label="Source event">
-                      <span class="cell-muted">
-                        {projection.sourceEventId}
-                      </span>
+                      <span class="cell-muted">{projection.sourceEventId}</span>
                     </td>
                     <td data-label="Evidence">
                       <details>

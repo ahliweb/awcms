@@ -165,7 +165,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
 
   {
     canSeeAnything && !loadError && mode === "latest" && (
-      <section class="admin-section fade-in-up" aria-label="OMES health summary">
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health summary"
+      >
         <div class="stat-grid stagger-children">
           <div class="stat-card">
             <span class="stat-label">{t("Servers with a snapshot")}</span>
@@ -195,7 +198,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
 
   {
     canSeeAnything && !loadError && mode === "history" && (
-      <section class="admin-section fade-in-up" aria-label="OMES health history">
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health history"
+      >
         <p class="page-description">
           {t("Snapshot history for server {serverId}.", {
             serverId: serverIdFilter ?? ""
@@ -219,7 +225,9 @@ function checkEntries(checks: unknown): [string, unknown][] {
         id="omes-health-list"
       >
         <h2 class="admin-section-title" id="health-title">
-          {mode === "latest" ? t("Latest health per server") : t("Health history")}
+          {mode === "latest"
+            ? t("Latest health per server")
+            : t("Health history")}
           <span class="count-pill">{snapshots.length}</span>
         </h2>
 
@@ -250,7 +258,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
             <tbody>
               {snapshots.length === 0 ? (
                 <tr>
-                  <td class="data-table-empty" colspan={mode === "latest" ? 5 : 4}>
+                  <td
+                    class="data-table-empty"
+                    colspan={mode === "latest" ? 5 : 4}
+                  >
                     <div class="empty-state">
                       <span class="empty-state-icon" aria-hidden="true">
                         ♡
@@ -312,8 +323,14 @@ function checkEntries(checks: unknown): [string, unknown][] {
                                     {checkStatus(value)}
                                   </span>
                                   {" · "}
-                                  <span class="status-badge" data-variant="neutral">
-                                    <span class="status-dot" aria-hidden="true" />
+                                  <span
+                                    class="status-badge"
+                                    data-variant="neutral"
+                                  >
+                                    <span
+                                      class="status-dot"
+                                      aria-hidden="true"
+                                    />
                                     {t("source: {source}", {
                                       source: checkSource(value)
                                     })}
@@ -322,7 +339,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
                               )
                             )}
                           </ul>
-                          <pre class="cell-code" set:text={JSON.stringify(snapshot.checks, null, 2)} />
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(snapshot.checks, null, 2)}
+                          />
                         </details>
                       )}
                     </td>
@@ -330,7 +350,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
                       <td data-label="History">
                         <a
                           class="quick-link"
-                          href={linkWith({ serverId: snapshot.serverId, cursor: null })}
+                          href={linkWith({
+                            serverId: snapshot.serverId,
+                            cursor: null
+                          })}
                         >
                           {t("View history")}
                         </a>

@@ -59,7 +59,12 @@ function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
 }
 
-const STATUS_OPTIONS = ["completed", "in_progress", "verified", "failed"] as const;
+const STATUS_OPTIONS = [
+  "completed",
+  "in_progress",
+  "verified",
+  "failed"
+] as const;
 const STATUS_VARIANT: Record<string, string> = {
   completed: "success",
   in_progress: "info",
@@ -201,7 +206,10 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
 
   {
     canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES backup summary">
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES backup summary"
+      >
         <div class="stat-grid stagger-children">
           <div class="stat-card">
             <span class="stat-label">{t("Backups (this page)")}</span>
@@ -304,7 +312,9 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                     <td data-label="Status">
                       <span
                         class="status-badge"
-                        data-variant={STATUS_VARIANT[backup.status] ?? "neutral"}
+                        data-variant={
+                          STATUS_VARIANT[backup.status] ?? "neutral"
+                        }
                       >
                         <span class="status-dot" aria-hidden="true" />
                         {backup.status}
@@ -396,7 +406,10 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
         </p>
 
         <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-restore-requests-table">
+          <table
+            class="data-table data-table--stack"
+            id="omes-restore-requests-table"
+          >
             <caption class="sr-only">
               {t("OMES backup restore requests, newest first.")}
             </caption>
