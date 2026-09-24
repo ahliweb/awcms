@@ -148,6 +148,16 @@ export async function recordAuditEvents(
 
 export type ListAuditEventsOptions = {
   resourceType?: string;
+  /**
+   * Issue ahliweb/omes#201 — the OMES audit screen needs the canonical
+   * control-plane actor/action log narrowed to ONE module (`omes_control`)
+   * rather than every module's events, so it can render that projection
+   * separately from the remote OMES execution/reconciliation evidence in
+   * `awcms_omes_audit_projections`. Optional and additive: every existing
+   * caller (`/admin/audit-trail`, `GET /api/v1/logs/audit`) omits it and is
+   * unaffected.
+   */
+  moduleKey?: string;
   limit?: number;
 };
 
@@ -164,6 +174,7 @@ export async function listAuditEvents(
     MAX_LIST_LIMIT
   );
   const resourceType = options.resourceType ?? null;
+  const moduleKey = options.moduleKey ?? null;
 
   const rows = (await tx`
     SELECT id, actor_tenant_user_id, module_key, action, resource_type, resource_id,
@@ -171,6 +182,7 @@ export async function listAuditEvents(
     FROM awcms_audit_events
     WHERE tenant_id = ${tenantId}
       AND (${resourceType}::text IS NULL OR resource_type = ${resourceType})
+      AND (${moduleKey}::text IS NULL OR module_key = ${moduleKey})
     ORDER BY created_at DESC, id DESC
     LIMIT ${limit}
   `) as Array<{
