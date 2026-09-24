@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 158   |
-| `awcms_*` tables                    | 160   |
-| Tables with `FORCE` RLS             | 142   |
+| Migrations                          | 159   |
+| `awcms_*` tables                    | 162   |
+| Tables with `FORCE` RLS             | 144   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 526   |
-| Route files                         | 414   |
+| Test files                          | 529   |
+| Route files                         | 418   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -208,6 +208,7 @@
 | 156 | `sql/156_awcms_omes_control_worker_grant_narrow.sql`               |
 | 157 | `sql/157_awcms_omes_control_operation_workflow_link.sql`           |
 | 158 | `sql/158_awcms_omes_control_enrollment_challenges.sql`             |
+| 159 | `sql/159_awcms_omes_control_worker_ingestion.sql`                  |
 
 ### Tables & Row-Level Security
 
@@ -298,6 +299,8 @@
 | `awcms_omes_jobs`                        | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_operation_requests`          | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_servers`                     | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_worker_nonces`               | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
+| `awcms_omes_worker_results`              | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
 | `awcms_partner_managed_tenants`          | `sql/116_awcms_partners.sql`                               | yes | yes   |
 | `awcms_partners`                         | `sql/116_awcms_partners.sql`                               | yes | yes   |
 | `awcms_password_reset_tokens`            | `sql/073_awcms_identity_password_reset_schema.sql`         | yes | yes   |
@@ -378,16 +381,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 426        |
+| `(root)`      | 428        |
 | `e2e`         | 19         |
-| `integration` | 80         |
+| `integration` | 81         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 326   |
+| `/api/v1/**`    | 330   |
 | `/admin/**`     | 58    |
 | publik / anonim | 30    |
 
