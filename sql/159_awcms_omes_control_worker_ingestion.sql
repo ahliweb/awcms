@@ -69,7 +69,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_worker_nonces_replay_idx
   ON awcms_omes_worker_nonces (tenant_id, worker_id, nonce);
 
 CREATE INDEX IF NOT EXISTS awcms_omes_worker_nonces_expiry_idx
-  ON awcms_omes_worker_nonces (expires_at);
+  ON awcms_omes_worker_nonces (tenant_id, expires_at);
 
 ALTER TABLE awcms_omes_worker_nonces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE awcms_omes_worker_nonces FORCE ROW LEVEL SECURITY;
@@ -80,18 +80,42 @@ CREATE POLICY awcms_omes_worker_nonces_tenant_isolation ON awcms_omes_worker_non
 -- SELECT is required in addition to INSERT: `INSERT ... RETURNING id` needs
 -- SELECT privilege on the returned column, not only INSERT privilege on the
 -- table (the same over-narrow-grant trap PR #818's readiness gate now checks
--- for in both directions). DELETE is granted for a future retention sweep
--- (module.ts's dataLifecycle entry below); rows are never UPDATEd.
-GRANT SELECT, INSERT, DELETE ON awcms_omes_worker_nonces TO awcms_app, awcms_worker;
+-- for in both directions).
+--
+-- `awcms_app` (the live request-handling role) gets SELECT+INSERT — it is
+-- the only role that ever writes a nonce row, from the worker HTTP routes.
+-- `awcms_worker` (the CLUSTER-scoped BACKGROUND-JOB role — an unrelated
+-- name collision with the "OMES pull-worker" this whole issue is about, see
+-- module.ts's dataLifecycle entry below) gets SELECT+DELETE ONLY, the exact
+-- same generic-purge shape `sql/156` already narrowed every other
+-- omes_control table to: a future retention sweep needs to scan and delete
+-- expired nonce rows, never insert one. `scripts/security-readiness.ts`'s
+-- `WORKER_ROLE_GRANTS` matrix is updated in the same PR to expect exactly
+-- this pair per table, in both directions (a missing grant fails the same
+-- as an extra one).
+GRANT SELECT, INSERT ON awcms_omes_worker_nonces TO awcms_app;
+GRANT SELECT, DELETE ON awcms_omes_worker_nonces TO awcms_worker;
 
 
 -- 2. Worker-reported job results ledger --------------------------------------
+--
+-- Keyed by `idempotency_key`, NOT the wire `job_id` — reading the actual
+-- OMES-side reference worker (`lib/omes/py/jobs/worker.py`) shows `job_id`
+-- in `worker-result.request` is the WORKER's own local job-store id
+-- (`store.submit()`'s return value), never something AWCMS assigned or can
+-- predict: `operation-request.schema.json` (what a poll response's `job`
+-- object must conform to) has no `job_id` property at all — only
+-- `correlation_id` and `idempotency_key` are AWCMS-assigned and therefore
+-- the only stable cross-system correlation handles. `job_id` is still
+-- required by the pinned `worker-result.request` schema and is stored here
+-- (`worker_job_id`) for observability, but it is opaque, worker-chosen
+-- metadata, never a join key.
 CREATE TABLE IF NOT EXISTS awcms_omes_worker_results (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES awcms_tenants(id) ON DELETE CASCADE,
   server_id text NOT NULL,
   worker_id text NOT NULL,
-  job_id text NOT NULL,
+  worker_job_id text NOT NULL,
   correlation_id text NOT NULL,
   idempotency_key text NOT NULL,
   operation text NOT NULL,
@@ -110,20 +134,25 @@ CREATE TABLE IF NOT EXISTS awcms_omes_worker_results (
 );
 
 -- The idempotent-ingestion unique index: a retrying worker (or a duplicate
--- delivery) posting the identical (job_id, idempotency_key) twice must be
+-- delivery) posting the identical (server, idempotency_key) twice must be
 -- recorded exactly once.
 CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_worker_results_idem_idx
-  ON awcms_omes_worker_results (tenant_id, server_id, job_id, idempotency_key);
+  ON awcms_omes_worker_results (tenant_id, server_id, idempotency_key);
 
-CREATE INDEX IF NOT EXISTS awcms_omes_worker_results_tenant_job_idx
-  ON awcms_omes_worker_results (tenant_id, job_id);
+-- Composite FK into awcms_omes_jobs' own (tenant_id, idempotency_key) unique
+-- index (added below) — same cross-tenant-reference reasoning as the nonces
+-- FK above.
+ALTER TABLE awcms_omes_jobs
+  ADD COLUMN IF NOT EXISTS idempotency_key text;
 
--- Composite FK into awcms_omes_jobs' own (tenant_id, job_id) unique index
--- (sql/154) — same cross-tenant-reference reasoning as the nonces FK above.
+CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_jobs_tenant_idem_idx
+  ON awcms_omes_jobs (tenant_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
 ALTER TABLE awcms_omes_worker_results
   ADD CONSTRAINT awcms_omes_worker_results_job_fk
-    FOREIGN KEY (tenant_id, job_id)
-    REFERENCES awcms_omes_jobs (tenant_id, job_id)
+    FOREIGN KEY (tenant_id, idempotency_key)
+    REFERENCES awcms_omes_jobs (tenant_id, idempotency_key)
     ON DELETE CASCADE;
 
 ALTER TABLE awcms_omes_worker_results ENABLE ROW LEVEL SECURITY;
@@ -132,7 +161,11 @@ ALTER TABLE awcms_omes_worker_results FORCE ROW LEVEL SECURITY;
 CREATE POLICY awcms_omes_worker_results_tenant_isolation ON awcms_omes_worker_results
   FOR ALL USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
-GRANT SELECT, INSERT ON awcms_omes_worker_results TO awcms_app, awcms_worker;
+-- Same split as awcms_omes_worker_nonces above: `awcms_app` writes results
+-- from the live request path; `awcms_worker` gets SELECT+DELETE for a
+-- future retention sweep only, never INSERT.
+GRANT SELECT, INSERT ON awcms_omes_worker_results TO awcms_app;
+GRANT SELECT, DELETE ON awcms_omes_worker_results TO awcms_worker;
 
 
 -- 3. Job-queue promotion backstop --------------------------------------------

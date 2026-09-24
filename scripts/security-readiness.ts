@@ -1525,7 +1525,14 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_omes_jobs: ["SELECT", "DELETE"],
   awcms_omes_health_snapshots: ["SELECT", "DELETE"],
   awcms_omes_backup_snapshots: ["SELECT", "DELETE"],
-  awcms_omes_audit_projections: ["SELECT", "DELETE"]
+  awcms_omes_audit_projections: ["SELECT", "DELETE"],
+  // ahliweb/omes#199 (sql/159) — same generic-purge shape, added alongside
+  // the worker-enrollment/poll/result/heartbeat ingestion endpoints. Those
+  // endpoints themselves run as `awcms_app` (the live request path), never
+  // as this background-job role; `awcms_worker` here gets SELECT+DELETE
+  // only, for a future retention sweep that has not been written yet.
+  awcms_omes_worker_nonces: ["SELECT", "DELETE"],
+  awcms_omes_worker_results: ["SELECT", "DELETE"]
 };
 
 /**

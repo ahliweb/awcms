@@ -54,10 +54,11 @@ export async function promoteNextApprovedOperation(
       FOR UPDATE SKIP LOCKED
     )
     INSERT INTO awcms_omes_jobs
-      (tenant_id, job_id, operation_request_id, server_id, operation, state, target, payload)
+      (tenant_id, job_id, operation_request_id, server_id, operation, state, target, payload, idempotency_key)
     SELECT
       ${tenantId}, 'job_' || replace(gen_random_uuid()::text, '-', ''), id, server_id,
-      operation, 'queued', jsonb_build_object('server_id', server_id), COALESCE(parameters, '{}'::jsonb)
+      operation, 'queued', jsonb_build_object('server_id', server_id), COALESCE(parameters, '{}'::jsonb),
+      'idem_' || replace(gen_random_uuid()::text, '-', '')
     FROM candidate
     RETURNING job_id
   `) as { job_id: string }[];
@@ -96,13 +97,14 @@ export async function leaseNextQueuedJob(
     SET state = 'leased', leased_by = ${workerId}, leased_until = ${leasedUntil}, updated_at = now()
     FROM candidate
     WHERE j.id = candidate.id
-    RETURNING j.id, j.job_id, j.operation, j.payload,
+    RETURNING j.id, j.job_id, j.operation, j.payload, j.idempotency_key,
       COALESCE(j.operation_request_id::text, j.job_id) AS correlation_id
   `) as {
     id: string;
     job_id: string;
     operation: string;
     payload: Record<string, unknown>;
+    idempotency_key: string;
     correlation_id: string;
   }[];
   const row = rows[0];
@@ -116,7 +118,7 @@ export async function leaseNextQueuedJob(
     jobId: row.job_id,
     operation: row.operation,
     correlationId: row.correlation_id,
-    idempotencyKey: `idem_${row.job_id}`,
+    idempotencyKey: row.idempotency_key,
     parameters: row.payload ?? {}
   };
 }

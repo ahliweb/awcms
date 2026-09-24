@@ -12,6 +12,8 @@ export const OMES_OPERATION_REQUESTS_LIFECYCLE_KEY =
   "omes_control.operation_requests";
 export const OMES_BACKUP_SNAPSHOTS_LIFECYCLE_KEY =
   "omes_control.backup_snapshots";
+export const OMES_WORKER_NONCES_LIFECYCLE_KEY = "omes_control.worker_nonces";
+export const OMES_WORKER_RESULTS_LIFECYCLE_KEY = "omes_control.worker_results";
 
 /**
  * `omes_control` — OMES Control Center domain module (ADR-0122, Issue ahliweb/omes#196).
@@ -492,6 +494,84 @@ export const omesControlModule = defineModule({
       batchLimit: 500,
       backupRestoreNotes:
         "Backup catalog is vital metadata for DR verification.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_WORKER_NONCES_LIFECYCLE_KEY,
+      tableName: "awcms_omes_worker_nonces",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "expires_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 1,
+      retentionMaxDays: 30,
+      defaultRetentionDays: 1,
+      partition: {
+        eligible: false,
+        rationale:
+          "Nonce rows are consumed once and expire within the replay window (15 minutes); volume is bounded by worker poll/result/heartbeat frequency."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A consumed or expired nonce carries no ongoing evidential value beyond the replay window."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale: "Expired nonce rows are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "expires_at"],
+          purpose: "Cursor scan index for retention purging of expired nonces."
+        }
+      ],
+      batchLimit: 1000,
+      backupRestoreNotes:
+        "Ephemeral replay-protection state; excluded from disaster-recovery significance.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_WORKER_RESULTS_LIFECYCLE_KEY,
+      tableName: "awcms_omes_worker_results",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "audit_security",
+      retentionMinDays: 90,
+      retentionMaxDays: 1825,
+      defaultRetentionDays: 730,
+      partition: {
+        eligible: false,
+        rationale:
+          "Worker-reported result rows are indexed by (tenant_id, server_id, idempotency_key); volume is bounded by job throughput."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "This is itself the durable, source-labeled record of worker-reported evidence — see application/worker-result-ingestion.ts's header on why reconciled defaults false."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale: "Result rows older than the retention window are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose: "Cursor scan index for retention purging."
+        }
+      ],
+      batchLimit: 500,
+      backupRestoreNotes:
+        "Worker-reported job evidence preserved during backups for audit continuity.",
       executionMode: "generic"
     }
   ]
