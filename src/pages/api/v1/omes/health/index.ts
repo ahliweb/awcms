@@ -46,13 +46,21 @@ export const GET = defineTenantRoute<Prepared>({
     return { mode: "history", serverId, cursor };
   },
   authorize: OMES_GUARDS.servers.read,
-  handler: async ({ tx, tenantId, prepared }) => {
+  handler: async ({ tx, tenantId, now, prepared }) => {
     if (prepared.mode === "latest") {
-      return ok({ snapshots: await fetchLatestHealthPerServer(tx, tenantId) });
+      return ok({
+        snapshots: await fetchLatestHealthPerServer(tx, tenantId, now)
+      });
     }
 
     return ok(
-      await fetchHealthHistory(tx, tenantId, prepared.serverId, prepared.cursor)
+      await fetchHealthHistory(
+        tx,
+        tenantId,
+        prepared.serverId,
+        now,
+        prepared.cursor
+      )
     );
   }
 });

@@ -2,6 +2,14 @@
  * Read-side queries for `GET /api/v1/omes/health`, Issue ahliweb/omes#198.
  * Two modes: `latest` (one row per server, the default) and `history`
  * (keyset-paginated series for one `serverId`).
+ *
+ * `stale` (Issue ahliweb/omes#201) is computed the same way server heartbeat
+ * staleness is (`STALE_HEARTBEAT_THRESHOLD_MS`, `domain/staleness.ts`) but
+ * against THIS row's own `captured_at` — a server can be reachable
+ * (heartbeat fresh) while its most recent health snapshot is old, and the
+ * two must never be conflated. Never used to infer "healthy": a stale
+ * snapshot's `overallStatus` is rendered exactly as captured, with the
+ * staleness badge shown ALONGSIDE it, never replacing it.
  */
 import {
   keysetCursorCreatedAtSql,
@@ -9,6 +17,7 @@ import {
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
 import { redactSensitiveAttributes } from "../../_shared/redaction";
+import { isHeartbeatStale } from "../domain/staleness";
 
 export type HealthSnapshotSummary = {
   id: string;
@@ -16,6 +25,7 @@ export type HealthSnapshotSummary = {
   overallStatus: string;
   checks: unknown;
   capturedAt: string;
+  stale: boolean;
 };
 
 type HealthRow = {
@@ -28,13 +38,14 @@ type HealthRow = {
   created_at_cursor: string;
 };
 
-function toSummary(row: HealthRow): HealthSnapshotSummary {
+function toSummary(row: HealthRow, now: Date): HealthSnapshotSummary {
   return {
     id: row.id,
     serverId: row.server_id,
     overallStatus: row.overall_status,
     checks: redactSensitiveAttributes(row.checks) ?? {},
-    capturedAt: row.captured_at.toISOString()
+    capturedAt: row.captured_at.toISOString(),
+    stale: isHeartbeatStale(row.captured_at, now)
   };
 }
 
@@ -48,7 +59,8 @@ export const HEALTH_HISTORY_LIMIT = 100;
  */
 export async function fetchLatestHealthPerServer(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  now: Date
 ): Promise<HealthSnapshotSummary[]> {
   const rows = (await tx`
     SELECT DISTINCT ON (server_id)
@@ -60,7 +72,7 @@ export async function fetchLatestHealthPerServer(
     LIMIT ${HEALTH_LATEST_LIMIT}
   `) as HealthRow[];
 
-  return rows.map(toSummary);
+  return rows.map((row) => toSummary(row, now));
 }
 
 export type HealthHistoryPage = {
@@ -72,6 +84,7 @@ export async function fetchHealthHistory(
   tx: Bun.SQL,
   tenantId: string,
   serverId: string,
+  now: Date,
   cursor?: KeysetCursor
 ): Promise<HealthHistoryPage> {
   const cursorCreatedAt = cursor?.createdAt ?? null;
@@ -96,5 +109,8 @@ export async function fetchHealthHistory(
       ? encodeKeysetCursor(last.created_at_cursor, last.id)
       : null;
 
-  return { snapshots: rows.map(toSummary), nextCursor };
+  return {
+    snapshots: rows.map((row) => toSummary(row, now)),
+    nextCursor
+  };
 }
