@@ -54,6 +54,21 @@ Every mutation requires `Idempotency-Key` and replays the stored response on a r
 
 **Known scope limitation**: `awcms_idempotency_keys` is keyed `(tenant_id, request_scope, idempotency_key)` — tenant-scoped, not actor-scoped. Any tenant user who learns another user's `Idempotency-Key` value for a still-live key can trigger the replay path (never a second mutation, only the stored response) and will now show up in the audit trail as the replaying actor, distinct from the original. Whether idempotency keys should additionally be scoped per-actor is a product decision for a follow-up issue, not settled by this one — this module inherits the shared store's existing contract unchanged.
 
+## Admin screens (`/admin/omes/*`)
+
+Issue ahliweb/omes#200 shipped the first five screens (Overview, Servers, Deployments, Operations, Jobs); issue ahliweb/omes#201 (parent #195) adds the remaining three (Health, Backups, Audit). All eight now exist, so this module's `status` is `active` (was `experimental` — ADR-0021 criterion 1, the same `push_delivery` precedent). Every screen is a thin read/submit layer over the endpoints above — no screen executes SQL directly, and hiding a button is UX only: each screen's own permission is exactly the permission its endpoint independently enforces.
+
+- **Overview** (`servers.read`/`deployments.read`/`jobs.read`/`backups.read`/`audit.read`, any-of) — fleet rollup plus quick-links to every other screen an actor can read.
+- **Servers** (`servers.read`, `servers.register`, `servers.delete`) — fleet inventory and per-server enrollment/trust evidence (public-key fingerprint only).
+- **Deployments** (`deployments.read`) — desired vs observed state, always in separate columns.
+- **Operations** (per-operation guard) — submits the safe-operation allowlist; destructive operations link into `/admin/approvals`.
+- **Jobs** (`jobs.read`, `jobs.approve`, `jobs.cancel`) — worker dispatch queue with retry/cancel.
+- **Health** (`servers.read`) — latest health snapshot per server, plus per-server history. Every snapshot is `omes-host`-attributed (the pull worker's own report); an individual `checks` entry may declare its own `source` (e.g. `hermes`, an external provider), rendered as its own badge. A `stale` flag (computed from each snapshot's own `captured_at`, `STALE_HEARTBEAT_THRESHOLD_MS`) renders ALONGSIDE `overallStatus`, never replacing it with a success variant.
+- **Backups** (`backups.read`, `backups.restore`) — artifact metadata (recovery class from the manifest, sha256 checksum, size, a computed `fresh` flag) and the manifest itself, escaped, never raw backup contents. Restore is the one mutation: always destructive, excluded from the safe-operation allowlist, and routed through the SAME `workflow-approval` engine as `stop`/`rollback` — this screen never runs a second approval decision, only submits and links the resulting `workflowInstanceId` into `/admin/approvals`.
+- **Audit** (`audit.read`) — TWO separate, source-labelled sections, never merged: canonical control-plane actor/action events (`awcms_audit_events` via `listAuditEvents`, narrowed to `moduleKey: "omes_control"`) and the remote OMES execution/reconciliation projection (`awcms_omes_audit_projections` via `fetchAuditProjections`). `logging.audit_trail.read`'s own `/admin/audit-trail` remains the cross-module view of the first table; this screen is a narrower, OMES-scoped read of the same data, not a second writer.
+
+`enrollments.manage` has no navigation entry as of #201 — enrollment token issuance/revocation stays API-only; Servers renders read-only enrollment/trust evidence, and a dedicated management screen is out of this issue's scope.
+
 ## Worker enrollment, poll, result, and heartbeat (`ahliweb/omes#199`)
 
 Four routes complete the round trip #198's own header describes: `POST /api/v1/omes/worker/{enroll,poll,result,heartbeat}`. All four are **session-UNauthenticated** — the caller is an OMES host pull worker (ADR-0027's outbound-pull architecture), not an AWCMS user, so there is no session cookie/token to check. This is the highest-risk surface this module ships, and it is authenticated by asymmetric Ed25519 identity instead:

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e9eb71e9d80ec55fa38146aec012ccd521a921f06bc4c71bf19cb1eae0f4950e -->
+<!-- i18n-source-hash: sha256:f0ea3f9fa684fb029194e9052da998b865b7888fd021f4ef77cf5920fadbb94f -->
 
 # `omes_control`
 
@@ -55,6 +55,21 @@ Setiap operasi digerbangi permission-nya sendiri (`OMES_OPERATION_GUARD`, guard 
 Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada percobaan ulang dengan key+payload yang sama (penyimpanan bersama `awcms_idempotency_keys`, `modules/_shared/idempotency.ts`) — `409 IDEMPOTENCY_CONFLICT` untuk key yang sama dengan payload berbeda. Registrasi, penerbitan enrollment-challenge, pengajuan operasi, dan restore backup tambahan di-rate-limit per aktor terautentikasi (`checkSharedRateLimit`). Setiap field evidence jsonb (`target`/`payload`/`result`/`parameters`/`desiredState`/`observedState`/`checks`/`manifest`/`evidence`) dilewatkan melalui `redactSensitiveAttributes` sebelum meninggalkan modul ini, sebagai defense-in-depth di atas apa pun yang menulisnya. Setiap endpoint mutasi juga mencatat baris `awcms_audit_events` pada REPLAY (tidak hanya pada mutasi yang benar-benar berjalan), ditandai `idempotencyReplay: true` pada attributes-nya, sehingga percobaan replay oleh aktor kedua tidak pernah tak-terlihat.
 
 **Keterbatasan cakupan yang diketahui**: `awcms_idempotency_keys` di-key dengan `(tenant_id, request_scope, idempotency_key)` — tenant-scoped, bukan actor-scoped. Pengguna tenant mana pun yang mengetahui nilai `Idempotency-Key` pengguna lain untuk key yang masih hidup dapat memicu jalur replay (tidak pernah mutasi kedua, hanya respons tersimpan) dan kini akan muncul di jejak audit sebagai aktor yang me-replay, berbeda dari aktor asli. Apakah idempotency key sebaiknya juga di-scope per-aktor adalah keputusan produk untuk issue lanjutan, tidak diputuskan oleh issue ini — modul ini mewarisi kontrak penyimpanan bersama apa adanya.
+
+## Layar admin (`/admin/omes/*`)
+
+Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deployments, Operations, Jobs); issue ahliweb/omes#201 (induk #195) menambahkan tiga sisanya (Health, Backups, Audit). Kedelapannya kini ada, sehingga `status` modul ini adalah `active` (sebelumnya `experimental` — kriteria 1 ADR-0021, preseden `push_delivery` yang sama). Setiap layar adalah lapisan baca/ajukan tipis di atas endpoint-endpoint di atas — tidak ada layar yang mengeksekusi SQL langsung, dan menyembunyikan tombol hanyalah UX: permission setiap layar persis sama dengan permission yang ditegakkan secara independen oleh endpoint-nya.
+
+- **Overview** (`servers.read`/`deployments.read`/`jobs.read`/`backups.read`/`audit.read`, any-of) — rollup armada plus quick-link ke setiap layar lain yang bisa dibaca aktor.
+- **Servers** (`servers.read`, `servers.register`, `servers.delete`) — inventori armada dan evidence enrollment/trust per server (hanya fingerprint kunci publik).
+- **Deployments** (`deployments.read`) — state desired vs observed, selalu di kolom terpisah.
+- **Operations** (per-operation guard) — mengajukan allowlist operasi aman; operasi destruktif tertaut ke `/admin/approvals`.
+- **Jobs** (`jobs.read`, `jobs.approve`, `jobs.cancel`) — antrean dispatch worker dengan retry/cancel.
+- **Health** (`servers.read`) — snapshot kesehatan terbaru per server, plus riwayat per server. Setiap snapshot beratribusi `omes-host` (laporan pull worker itu sendiri); entri `checks` individual boleh mendeklarasikan `source`-nya sendiri (mis. `hermes`, provider eksternal), ditampilkan sebagai lencananya sendiri. Flag `stale` (dihitung dari `captured_at` milik snapshot itu sendiri, `STALE_HEARTBEAT_THRESHOLD_MS`) ditampilkan BERSAMA `overallStatus`, tidak pernah menggantikannya dengan varian sukses.
+- **Backups** (`backups.read`, `backups.restore`) — metadata artefak (kelas pemulihan dari manifest, checksum sha256, ukuran, flag `fresh` terhitung) dan manifest itu sendiri, di-escape, tidak pernah konten backup mentah. Restore adalah satu-satunya mutasi: selalu destruktif, dikecualikan dari allowlist operasi aman, dan melalui mesin `workflow-approval` yang SAMA seperti `stop`/`rollback` — layar ini tidak pernah menjalankan keputusan persetujuan kedua, hanya mengajukan dan menautkan `workflowInstanceId` hasilnya ke `/admin/approvals`.
+- **Audit** (`audit.read`) — DUA bagian terpisah berlabel sumber, tidak pernah digabung: peristiwa aktor/aksi control-plane kanonis (`awcms_audit_events` via `listAuditEvents`, dipersempit ke `moduleKey: "omes_control"`) dan proyeksi eksekusi/rekonsiliasi OMES jarak jauh (`awcms_omes_audit_projections` via `fetchAuditProjections`). `/admin/audit-trail` milik `logging.audit_trail.read` tetap menjadi tampilan lintas-modul dari tabel pertama; layar ini adalah pembacaan yang lebih sempit dan bercakupan OMES dari data yang sama, bukan penulis kedua.
+
+`enrollments.manage` tidak memiliki entri navigasi per #201 — penerbitan/pencabutan token enrollment tetap API-only; Servers menampilkan evidence enrollment/trust hanya-baca, dan layar manajemen khusus berada di luar cakupan issue ini.
 
 ## Enrollment, poll, result, dan heartbeat worker (`ahliweb/omes#199`)
 
