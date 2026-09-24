@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a134d5057dad7f44e7a80130b4a2155657e81ff742ee6f51c0645e5d1588bc1e -->
+<!-- i18n-source-hash: sha256:08ded229e2443cbc213537e86b319d9c3ba89015de7de09992bc42078aa2a89a -->
 
 # AWCMS — Project State & Continuation
 
@@ -122,8 +122,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **25** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **159** (`sql/001`–`159`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0124** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
-| Layar admin                        | **54** berkas `.astro` di `src/pages/admin/`; **0 dari 25** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **68** (38.360 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **57** berkas `.astro` di `src/pages/admin/`; **0 dari 25** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **71** (39.738 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **61** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

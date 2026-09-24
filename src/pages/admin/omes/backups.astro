@@ -1,0 +1,531 @@
+---
+/**
+ * OMES Control Center — backups & recovery, Issue ahliweb/omes#201 (parent #195).
+ *
+ * Read side is `fetchBackups`/`GET /api/v1/omes/backups` (Issue ahliweb/omes#198):
+ * artifact metadata (backup id, server, size, sha256 checksum), a computed
+ * `fresh`/age badge, and `status`. `recoveryClass` (when the OMES-owned
+ * manifest declares one) is read from `manifest.recoveryClass` and rendered
+ * as its own field — this screen never invents a value the manifest does not
+ * carry. The manifest body itself is rendered as escaped `set:text`, exactly
+ * like `deployments.astro`'s desired/observed state — the raw backup
+ * CONTENTS are never fetched or rendered here, only the catalog manifest
+ * (verification/sizing metadata), matching this issue's "never expose raw
+ * backup contents or secrets" requirement.
+ *
+ * Restore is the ONE mutation this screen offers
+ * (`POST /api/v1/omes/backups/{id}/restore`, `backups.restore`). It is
+ * ALWAYS destructive and is deliberately excluded from the Operations
+ * screen's safe-operation allowlist (`application/backup-restore.ts`'s own
+ * header) — the endpoint records an `awcms_omes_operation_requests` row and
+ * routes it through the SAME canonical `workflow-approval` engine every
+ * other destructive OMES action uses; this screen never runs a second
+ * approval decision, only submits the request and then links the resulting
+ * `workflowInstanceId` into `/admin/approvals`, exactly like
+ * `operations.astro`. Restore requests already submitted are listed below
+ * (reusing `fetchOperationRequests` filtered to `operation: "restore"` — the
+ * same table `operations.astro` reads, not a second store).
+ *
+ * ## Cross-tenant determination (this issue's own call, not inherited)
+ *
+ * `submitBackupRestore` looks the backup up by `tenant_id = ${tenantId} AND
+ * id = ${backupId}` — a `backupId` belonging to another tenant resolves to
+ * `RESOURCE_NOT_FOUND`, never a foreign server. Every table touched
+ * (`awcms_omes_backup_snapshots`, `awcms_omes_operation_requests`) carries
+ * `FORCE ROW LEVEL SECURITY` (sql/154) and the derived `serverId` is the
+ * SAME tenant's own server row. The action's effect therefore never reaches
+ * another tenant's data, so — per ADR-0051 §Keputusan butir 1–3 — the
+ * ordinary tenant-seeded `backups.restore`/`backups.rollback` permissions
+ * are sufficient; no platform-scoped gate is added.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  fetchBackups,
+  type BackupSnapshotSummary
+} from "../../../modules/omes-control/application/backup-directory";
+import { fetchOperationRequests } from "../../../modules/omes-control/application/operation-directory";
+import type { OperationRequestSummary } from "../../../modules/omes-control/application/operation-submission";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS = [
+  "completed",
+  "in_progress",
+  "verified",
+  "failed"
+] as const;
+const STATUS_VARIANT: Record<string, string> = {
+  completed: "success",
+  in_progress: "info",
+  verified: "success",
+  failed: "danger"
+};
+
+const statusRaw = readParam("status");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as (typeof STATUS_OPTIONS)[number])
+  : undefined;
+const serverIdFilter = readParam("serverId") || undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.backups.read,
+  load: async ({ tx, can }) => {
+    const page = await fetchBackups(tx, ssr.tenantId, new Date(), {
+      serverId: serverIdFilter,
+      status: statusFilter,
+      cursor: cursor ?? undefined
+    });
+
+    const canRestore = await can(OMES_GUARDS.backups.restore);
+    const restoreRequests = canRestore
+      ? (
+          await fetchOperationRequests(tx, ssr.tenantId, {
+            operation: "restore"
+          })
+        ).operationRequests
+      : [];
+
+    return {
+      backups: page.backups,
+      nextCursor: page.nextCursor,
+      canRestore,
+      restoreRequests
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/backups.astro: failed to load the OMES backup catalog",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const backups: BackupSnapshotSummary[] =
+  screen.state === "allowed" ? screen.data.backups : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
+const restoreRequests: OperationRequestSummary[] =
+  screen.state === "allowed" ? screen.data.restoreRequests : [];
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/backups?${query}` : "/admin/omes/backups";
+}
+
+function approvalsLink(request: OperationRequestSummary): string {
+  const params = new URLSearchParams();
+  params.set("workflowKey", "omes_control.destructive_operation");
+  if (request.workflowInstanceId) {
+    params.set("instance", request.workflowInstanceId);
+  }
+  return `/admin/approvals?${params.toString()}`;
+}
+
+function recoveryClass(manifest: unknown): string {
+  if (manifest && typeof manifest === "object" && !Array.isArray(manifest)) {
+    const value = (manifest as Record<string, unknown>).recoveryClass;
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return "—";
+}
+
+function formatSize(bytes: number | null): string {
+  if (bytes === null) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+const staleCount = backups.filter((backup) => !backup.fresh).length;
+---
+
+<AdminLayout
+  title={t("OMES backups & recovery")}
+  description={t(
+    "Backup artifact metadata — recovery class, integrity checksum, age, and status. Never the raw backup contents. Restore is always destructive and always routes through the canonical approval workflow before it can dispatch."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-backups-denied">
+        {t("You do not have permission to view OMES backups.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-backups-error">
+        {t(
+          "The OMES backup catalog could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="omes-backups-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES backup summary"
+      >
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Backups (this page)")}</span>
+            <span class="stat-value">{backups.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Not fresh (this page)")}</span>
+            <span class="stat-value">{staleCount}</span>
+            {staleCount > 0 && (
+              <span class="stat-hint">
+                {t(
+                  "Older than the 24h freshness window, or its capture failed"
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="backups-title"
+        id="omes-backups-list"
+      >
+        <h2 class="admin-section-title" id="backups-title">
+          {t("Backup catalog")}
+          <span class="count-pill">{backups.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="backup-filter-form">
+          <label for="filter-server">{t("Server ID")}</label>
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
+          <label for="filter-status">{t("Status")}</label>
+          <select id="filter-status" name="status">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-backups-table">
+            <caption class="sr-only">
+              {t("OMES backup snapshots, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Backup")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Recovery class")}</th>
+                <th scope="col">{t("Size")}</th>
+                <th scope="col">{t("Checksum (SHA-256)")}</th>
+                <th scope="col">{t("Captured")}</th>
+                <th scope="col">{t("Manifest")}</th>
+                {canRestore && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {backups.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={canRestore ? 8 : 7}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⧉
+                      </span>
+                      <span class="empty-state-title">{t("No backups")}</span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Nothing matches this filter, or no backup has been captured yet."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                backups.map((backup) => (
+                  <tr data-backup-row={backup.id}>
+                    <td data-label="Backup">
+                      <span class="cell-code">{backup.backupId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {backup.serverId}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[backup.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {backup.status}
+                      </span>
+                      {!backup.fresh && (
+                        <span class="status-badge" data-variant="warning">
+                          <span class="status-dot" aria-hidden="true" />
+                          {t("not fresh")}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Recovery class">
+                      <span class="cell-muted">
+                        {recoveryClass(backup.manifest)}
+                      </span>
+                    </td>
+                    <td data-label="Size">
+                      <span class="cell-muted">
+                        {formatSize(backup.sizeBytes)}
+                      </span>
+                    </td>
+                    <td data-label="Checksum">
+                      {backup.checksumSha256 ? (
+                        <span class="cell-code">{backup.checksumSha256}</span>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Captured">
+                      <span class="cell-muted">{backup.capturedAt}</span>
+                    </td>
+                    <td data-label="Manifest">
+                      <details>
+                        <summary>{t("View manifest")}</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(backup.manifest, null, 2)}
+                        />
+                      </details>
+                    </td>
+                    {canRestore && (
+                      <td data-label="Actions">
+                        <button
+                          type="button"
+                          class="btn-inline btn-inline--danger backup-restore-btn"
+                          data-backup-id={backup.id}
+                          data-backup-code={backup.backupId}
+                        >
+                          {t("Restore")}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canRestore && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="restore-requests-title"
+        id="omes-restore-requests-list"
+      >
+        <h2 class="admin-section-title" id="restore-requests-title">
+          {t("Restore requests")}
+          <span class="count-pill">{restoreRequests.length}</span>
+        </h2>
+        <p class="page-description">
+          {t(
+            "Every restore is always destructive and requires an approved workflow decision before the OMES pull worker will ever act on it."
+          )}
+        </p>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="omes-restore-requests-table"
+          >
+            <caption class="sr-only">
+              {t("OMES backup restore requests, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Request")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Requested")}</th>
+                <th scope="col">{t("Approval")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {restoreRequests.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={4}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ↺
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No restore requests")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t("None has been submitted yet.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                restoreRequests.map((request) => (
+                  <tr data-restore-request-row={request.id}>
+                    <td data-label="Request">
+                      <span class="cell-code">{request.requestId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {request.serverId}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          request.status === "approved" ||
+                          request.status === "completed"
+                            ? "success"
+                            : request.status === "rejected" ||
+                                request.status === "failed"
+                              ? "danger"
+                              : "info"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {request.status}
+                      </span>
+                    </td>
+                    <td data-label="Requested">
+                      <span class="cell-muted">{request.createdAt}</span>
+                    </td>
+                    <td data-label="Approval">
+                      {request.workflowInstanceId ? (
+                        <a class="quick-link" href={approvalsLink(request)}>
+                          {t("View in Approvals")}
+                        </a>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-backups-action-error");
+
+  onAction(".backup-restore-btn", async (button) => {
+    const backupId = button.dataset.backupId;
+    const backupCode = button.dataset.backupCode ?? backupId;
+    if (!backupId) return;
+
+    if (
+      !window.confirm(
+        `Restore server state from backup ${backupCode}? This is always destructive and requires an approved workflow decision before it can dispatch.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/omes/backups/${backupId}/restore`,
+          undefined,
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      (errorCode) =>
+        errorCode === "APPROVAL_WORKFLOW_NOT_CONFIGURED"
+          ? "This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key “omes_control.destructive_operation” on the Approvals screen before requesting a restore."
+          : "Could not submit the restore request. Please try again.",
+      "Submitting…"
+    );
+  });
+</script>

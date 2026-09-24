@@ -1,0 +1,389 @@
+---
+/**
+ * OMES Control Center — health & readiness, Issue ahliweb/omes#201 (parent #195).
+ *
+ * Read-only (`GET /api/v1/omes/health`, Issue ahliweb/omes#198). Two views,
+ * matching the endpoint's own two modes:
+ *   - Default: the latest health snapshot per enrolled server, tenant-wide
+ *     (`fetchLatestHealthPerServer`).
+ *   - `?serverId=...`: keyset-paginated snapshot HISTORY for that one server
+ *     (`fetchHealthHistory`), reached via each row's "View history" link.
+ *
+ * ## Source attribution (issue's own requirement)
+ *
+ * Every snapshot row in `awcms_omes_health_snapshots` is written by the OMES
+ * pull worker (`ahliweb/omes#199`) reporting on the HOST it runs on — so the
+ * row itself is `omes-host`-sourced evidence, stated as such in the page
+ * description rather than left implicit. Within a snapshot's `checks` object,
+ * an individual check MAY declare its own `source` (e.g. a check that reads
+ * as "hermes" because it observed the local Hermes Agent, or "external" for
+ * a third-party provider probe); when present it is rendered as its own
+ * badge instead of the default. This is a rendering decision, not a
+ * fabrication: an unlabelled check is shown as `omes-host` (the row's own
+ * origin) rather than silently omitted, and nothing here infers "healthy"
+ * from an absent or stale check — `overallStatus` is always rendered exactly
+ * as captured, with staleness shown ALONGSIDE it in its own badge, never
+ * replacing it with a success variant.
+ *
+ * This screen renders no Hermes-baseline SECTION of its own — servers.astro
+ * (#200) already explained why the #198 servers API carries none; whatever
+ * Hermes-observed evidence exists arrives only via a `checks` entry's own
+ * `source: "hermes"`, exactly as captured, never invented here.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  fetchHealthHistory,
+  fetchLatestHealthPerServer,
+  type HealthSnapshotSummary
+} from "../../../modules/omes-control/application/health-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_VARIANT: Record<string, string> = {
+  healthy: "success",
+  degraded: "warning",
+  unhealthy: "danger"
+};
+
+const serverIdFilter = readParam("serverId") || undefined;
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+const now = new Date();
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.servers.read,
+  load: async ({ tx }) => {
+    if (serverIdFilter) {
+      const page = await fetchHealthHistory(
+        tx,
+        ssr.tenantId,
+        serverIdFilter,
+        now,
+        cursor ?? undefined
+      );
+      return {
+        mode: "history" as const,
+        snapshots: page.snapshots,
+        nextCursor: page.nextCursor
+      };
+    }
+
+    const snapshots = await fetchLatestHealthPerServer(tx, ssr.tenantId, now);
+    return { mode: "latest" as const, snapshots, nextCursor: null };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/health.astro: failed to load OMES health evidence",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const mode: "latest" | "history" =
+  screen.state === "allowed" ? screen.data.mode : "latest";
+const snapshots: HealthSnapshotSummary[] =
+  screen.state === "allowed" ? screen.data.snapshots : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const staleCount = snapshots.filter((snapshot) => snapshot.stale).length;
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/health?${query}` : "/admin/omes/health";
+}
+
+/** `checks` value shape is not fixed by the schema — each entry is rendered
+ *  defensively rather than assuming a `{status, source}` object. */
+function checkSource(value: unknown): string {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const source = (value as Record<string, unknown>).source;
+    if (typeof source === "string" && source.length > 0) return source;
+  }
+  return "omes-host";
+}
+
+function checkStatus(value: unknown): string {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const status = (value as Record<string, unknown>).status;
+    if (typeof status === "string" && status.length > 0) return status;
+  }
+  return "—";
+}
+
+function checkEntries(checks: unknown): [string, unknown][] {
+  if (checks && typeof checks === "object" && !Array.isArray(checks)) {
+    return Object.entries(checks as Record<string, unknown>);
+  }
+  return [];
+}
+---
+
+<AdminLayout
+  title={t("OMES health & readiness")}
+  description={t(
+    "Every snapshot below is omes-host evidence, reported by the OMES pull worker running on that host. Stale or missing evidence is shown explicitly, in its own badge, and never presented as healthy."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-health-denied">
+        {t("You do not have permission to view OMES health evidence.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-health-error">
+        {t(
+          "OMES health evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && mode === "latest" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health summary"
+      >
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Servers with a snapshot")}</span>
+            <span class="stat-value">{snapshots.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Stale snapshots")}</span>
+            <span class="stat-value">{staleCount}</span>
+            {staleCount > 0 && (
+              <span class="stat-hint">
+                {t("No fresh health evidence within the staleness window")}
+              </span>
+            )}
+          </div>
+        </div>
+        <p class="page-description">
+          <a class="quick-link" href="/admin/omes/servers">
+            {t("View server enrollment & trust evidence")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </p>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && mode === "history" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health history"
+      >
+        <p class="page-description">
+          {t("Snapshot history for server {serverId}.", {
+            serverId: serverIdFilter ?? ""
+          })}{" "}
+          <a class="quick-link" href="/admin/omes/health">
+            {t("Back to fleet-wide health")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </p>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="health-title"
+        id="omes-health-list"
+      >
+        <h2 class="admin-section-title" id="health-title">
+          {mode === "latest"
+            ? t("Latest health per server")
+            : t("Health history")}
+          <span class="count-pill">{snapshots.length}</span>
+        </h2>
+
+        {mode === "latest" && (
+          <form method="get" class="admin-toolbar" id="health-filter-form">
+            <label for="filter-server">{t("View history for server ID")}</label>
+            <input id="filter-server" name="serverId" type="text" />
+            <button type="submit">{t("View history")}</button>
+          </form>
+        )}
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-health-table">
+            <caption class="sr-only">
+              {t(
+                "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Server")}</th>
+                <th scope="col">{t("Overall status")}</th>
+                <th scope="col">{t("Captured")}</th>
+                <th scope="col">{t("Checks (source-attributed)")}</th>
+                {mode === "latest" && <th scope="col">{t("History")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={mode === "latest" ? 5 : 4}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ♡
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No health evidence")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "No server has reported a health snapshot yet, or none matches this filter."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                snapshots.map((snapshot) => (
+                  <tr data-health-row={snapshot.id}>
+                    <td data-label="Server">
+                      <span class="cell-code">{snapshot.serverId}</span>
+                    </td>
+                    <td data-label="Overall status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[snapshot.overallStatus] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {snapshot.overallStatus}
+                      </span>
+                      {snapshot.stale && (
+                        <span class="status-badge" data-variant="warning">
+                          <span class="status-dot" aria-hidden="true" />
+                          {t("stale")}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Captured">
+                      <span class="cell-muted">{snapshot.capturedAt}</span>
+                    </td>
+                    <td data-label="Checks">
+                      {checkEntries(snapshot.checks).length === 0 ? (
+                        <span class="cell-muted">—</span>
+                      ) : (
+                        <details>
+                          <summary>
+                            {t("{count} check(s)", {
+                              count: checkEntries(snapshot.checks).length
+                            })}
+                          </summary>
+                          <ul class="evidence-list">
+                            {checkEntries(snapshot.checks).map(
+                              ([name, value]) => (
+                                <li>
+                                  <span class="cell-code">{name}</span>
+                                  {": "}
+                                  <span class="cell-muted">
+                                    {checkStatus(value)}
+                                  </span>
+                                  {" · "}
+                                  <span
+                                    class="status-badge"
+                                    data-variant="neutral"
+                                  >
+                                    <span
+                                      class="status-dot"
+                                      aria-hidden="true"
+                                    />
+                                    {t("source: {source}", {
+                                      source: checkSource(value)
+                                    })}
+                                  </span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(snapshot.checks, null, 2)}
+                          />
+                        </details>
+                      )}
+                    </td>
+                    {mode === "latest" && (
+                      <td data-label="History">
+                        <a
+                          class="quick-link"
+                          href={linkWith({
+                            serverId: snapshot.serverId,
+                            cursor: null
+                          })}
+                        >
+                          {t("View history")}
+                        </a>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<style>
+  .evidence-list {
+    margin: var(--sp-2) 0;
+    padding-left: var(--sp-4);
+  }
+</style>

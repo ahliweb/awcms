@@ -5019,3 +5019,201 @@ msgstr "Anda tidak memiliki izin untuk melihat operasi OMES."
 msgid "destructive — requires approval"
 msgstr "destruktif — memerlukan persetujuan"
 
+
+msgid "Back to fleet-wide health"
+msgstr "Kembali ke kesehatan armada"
+
+msgid "Backup"
+msgstr "Backup"
+
+msgid "Backup artifact metadata — recovery class, integrity checksum, age, and status. Never the raw backup contents. Restore is always destructive and always routes through the canonical approval workflow before it can dispatch."
+msgstr "Metadata artefak backup — kelas pemulihan, checksum integritas, usia, dan status. Tidak pernah konten backup mentah. Restore selalu destruktif dan selalu melalui alur kerja persetujuan kanonis sebelum dapat dikirim."
+
+msgid "Backup catalog"
+msgstr "Katalog backup"
+
+msgid "Backups (this page)"
+msgstr "Backup (halaman ini)"
+
+msgid "Captured"
+msgstr "Direkam"
+
+msgid "Checks (source-attributed)"
+msgstr "Pemeriksaan (beratribusi sumber)"
+
+msgid "Checksum (SHA-256)"
+msgstr "Checksum (SHA-256)"
+
+msgid "Control-plane actor/action events"
+msgstr "Peristiwa aktor/aksi control-plane"
+
+msgid "{count} check(s)"
+msgstr "{count} pemeriksaan"
+
+msgid "Every restore is always destructive and requires an approved workflow decision before the OMES pull worker will ever act on it."
+msgstr "Setiap restore selalu destruktif dan memerlukan keputusan alur kerja yang disetujui sebelum worker pull OMES akan pernah menindaklanjutinya."
+
+msgid "Every snapshot below is omes-host evidence, reported by the OMES pull worker running on that host. Stale or missing evidence is shown explicitly, in its own badge, and never presented as healthy."
+msgstr "Setiap snapshot di bawah ini adalah bukti omes-host, dilaporkan oleh worker pull OMES yang berjalan di host tersebut. Bukti yang basi atau hilang ditampilkan secara eksplisit, dalam lencananya sendiri, dan tidak pernah disajikan sebagai sehat."
+
+msgid "Health history"
+msgstr "Riwayat kesehatan"
+
+msgid "Latest health per server"
+msgstr "Kesehatan terbaru per server"
+
+msgid "Manifest"
+msgstr "Manifest"
+
+msgid "No backups"
+msgstr "Tidak ada backup"
+
+msgid "No control-plane events"
+msgstr "Tidak ada peristiwa control-plane"
+
+msgid "No fresh health evidence within the staleness window"
+msgstr "Tidak ada bukti kesehatan segar dalam jendela kebasian"
+
+msgid "No health evidence"
+msgstr "Tidak ada bukti kesehatan"
+
+msgid "No omes_control actor/action event has been recorded yet."
+msgstr "Belum ada peristiwa aktor/aksi omes_control yang tercatat."
+
+msgid "No reconciliation evidence"
+msgstr "Tidak ada bukti rekonsiliasi"
+
+msgid "No restore requests"
+msgstr "Tidak ada permintaan restore"
+
+msgid "No server has reported a health snapshot yet, or none matches this filter."
+msgstr "Belum ada server yang melaporkan snapshot kesehatan, atau tidak ada yang cocok dengan filter ini."
+
+msgid "None has been submitted yet."
+msgstr "Belum ada yang diajukan."
+
+msgid "Not fresh (this page)"
+msgstr "Tidak segar (halaman ini)"
+
+msgid "Nothing matches this filter, or no backup has been captured yet."
+msgstr "Tidak ada yang cocok dengan filter ini, atau belum ada backup yang direkam."
+
+msgid "Nothing matches this filter, or no host has reported yet."
+msgstr "Tidak ada yang cocok dengan filter ini, atau belum ada host yang melapor."
+
+msgid "OMES audit"
+msgstr "Audit OMES"
+
+msgid "OMES audit evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Bukti audit OMES tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "OMES backup restore requests, newest first."
+msgstr "Permintaan restore backup OMES, terbaru dahulu."
+
+msgid "OMES backup snapshots, newest first."
+msgstr "Snapshot backup OMES, terbaru dahulu."
+
+msgid "OMES backups & recovery"
+msgstr "Backup & pemulihan OMES"
+
+msgid "OMES control-plane actor/action audit events, newest first."
+msgstr "Peristiwa audit aktor/aksi control-plane OMES, terbaru dahulu."
+
+msgid "OMES health & readiness"
+msgstr "Kesehatan & kesiapan OMES"
+
+msgid "OMES health evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Bukti kesehatan OMES tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
+msgstr "Snapshot kesehatan OMES. Sumber diatribusikan per baris dan per pemeriksaan; bukti basi ditampilkan secara eksplisit."
+
+msgid "Older than the 24h freshness window, or its capture failed"
+msgstr "Lebih tua dari jendela kesegaran 24 jam, atau perekamannya gagal"
+
+msgid "Overall status"
+msgstr "Status keseluruhan"
+
+msgid "Recorded"
+msgstr "Direkam"
+
+msgid "Recovery class"
+msgstr "Kelas pemulihan"
+
+msgid "Remote OMES execution & reconciliation evidence"
+msgstr "Bukti eksekusi & rekonsiliasi OMES jarak jauh"
+
+msgid "Remote OMES host execution and reconciliation audit evidence, newest first."
+msgstr "Bukti audit eksekusi dan rekonsiliasi host OMES jarak jauh, terbaru dahulu."
+
+msgid "Restore requests"
+msgstr "Permintaan restore"
+
+msgid "Servers with a snapshot"
+msgstr "Server dengan snapshot"
+
+msgid "Snapshot history for server {serverId}."
+msgstr "Riwayat snapshot untuk server {serverId}."
+
+msgid "Source event"
+msgstr "Peristiwa sumber"
+
+msgid "Source: awcms_audit_events, the same canonical control-plane log rendered on the Audit trail screen, narrowed to the omes_control module."
+msgstr "Sumber: awcms_audit_events, log control-plane kanonis yang sama yang ditampilkan pada layar Jejak audit, dipersempit ke modul omes_control."
+
+msgid "Source: awcms_omes_audit_projections — omes-host evidence reported through the pull worker bridge, a SEPARATE feed from the control-plane events above. Never merged into one list."
+msgstr "Sumber: awcms_omes_audit_projections — bukti omes-host yang dilaporkan melalui jembatan worker pull, umpan TERPISAH dari peristiwa control-plane di atas. Tidak pernah digabung menjadi satu daftar."
+
+msgid "Stale snapshots"
+msgstr "Snapshot basi"
+
+msgid "The OMES backup catalog could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Katalog backup OMES tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Two separate, source-labelled feeds: what an operator did in AWCMS (control-plane actor/action events), and what the host itself reported doing (remote OMES execution and reconciliation evidence). They are never merged into one undifferentiated list."
+msgstr "Dua umpan terpisah berlabel sumber: apa yang dilakukan operator di AWCMS (peristiwa aktor/aksi control-plane), dan apa yang dilaporkan host itu sendiri (bukti eksekusi dan rekonsiliasi OMES jarak jauh). Keduanya tidak pernah digabung menjadi satu daftar yang tidak terbedakan."
+
+msgid "View history"
+msgstr "Lihat riwayat"
+
+msgid "View history for server ID"
+msgstr "Lihat riwayat untuk ID server"
+
+msgid "View manifest"
+msgstr "Lihat manifest"
+
+msgid "View server enrollment & trust evidence"
+msgstr "Lihat bukti pendaftaran & kepercayaan server"
+
+msgid "View the full cross-module audit trail"
+msgstr "Lihat jejak audit lintas modul lengkap"
+
+msgid "You do not have permission to view OMES audit evidence."
+msgstr "Anda tidak memiliki izin untuk melihat bukti audit OMES."
+
+msgid "You do not have permission to view OMES backups."
+msgstr "Anda tidak memiliki izin untuk melihat backup OMES."
+
+msgid "You do not have permission to view OMES health evidence."
+msgstr "Anda tidak memiliki izin untuk melihat bukti kesehatan OMES."
+
+msgid "not fresh"
+msgstr "tidak segar"
+
+msgid "source: {source}"
+msgstr "sumber: {source}"
+
+msgid "Health"
+msgstr "Kesehatan"
+
+msgid "Backups & recovery"
+msgstr "Backup & pemulihan"
+
+msgid "Audit"
+msgstr "Audit"
+
+msgid "OMES health"
+msgstr "Kesehatan OMES"
+
+msgid "OMES backups"
+msgstr "Backup OMES"

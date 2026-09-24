@@ -3,6 +3,20 @@
  * real PostgreSQL: tenant isolation under RLS, default-deny RBAC, safe vs
  * destructive operation submission (workflow-approval gating), and
  * idempotent replay of a mutation. Gated on `DATABASE_URL` (harness §Gating).
+ *
+ * The "cross-tenant access (runtime, real RLS)" describe block below (Issue
+ * ahliweb/omes#201) is the RUNTIME half of cross-tenant scoping for the
+ * health/backups/audit read-side and for `submitBackupRestore`.
+ * `tests/admin-omes-control-health-backup-audit-page-contract.test.ts`'s own
+ * "cross-tenant scoping (static half...)" describe block only asserts that
+ * the SQL source text contains `tenant_id = ${tenantId}` — it proves the
+ * query was written with a filter, never that a foreign-tenant id is
+ * actually refused against a real database with `FORCE ROW LEVEL SECURITY`
+ * enabled. Deferring that proof to "#198's own tests" does not hold: #198's
+ * suite exercises servers/rollback, never `submitBackupRestore` or the
+ * health/audit read-side, and #201 lists cross-tenant access tests as its
+ * own acceptance criterion for a screen module that ships a genuinely
+ * destructive restore mutation.
  */
 import {
   afterAll,
@@ -34,6 +48,9 @@ import {
 import { submitOmesOperation } from "../../src/modules/omes-control/application/operation-submission";
 import { issueEnrollmentChallengeForServer } from "../../src/modules/omes-control/application/enrollment-management";
 import { OMES_DESTRUCTIVE_WORKFLOW_KEY } from "../../src/modules/omes-control/domain/operations";
+import { submitBackupRestore } from "../../src/modules/omes-control/application/backup-restore";
+import { fetchAuditProjections } from "../../src/modules/omes-control/application/audit-directory";
+import { fetchLatestHealthPerServer } from "../../src/modules/omes-control/application/health-directory";
 import {
   computeRequestHash,
   findIdempotencyRecord,
@@ -458,6 +475,159 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
         WHERE tenant_id = ${TENANT_A} AND hostname = 'replay.example.test'
       `) as { count: number }[];
       expect(rows[0]!.count).toBe(1);
+    });
+  });
+
+  describe("cross-tenant access (runtime, real RLS — Issue ahliweb/omes#201)", () => {
+    test("submitBackupRestore against tenant B's backupId, called as tenant A, fails closed as backup_not_found — never resolves tenant B's server", async () => {
+      const serverBRowId = await seedServer(
+        TENANT_B,
+        "srv-b-restore",
+        "b-restore.example.test"
+      );
+      void serverBRowId;
+
+      const backupBRows = (await getAdminSql()`
+        INSERT INTO awcms_omes_backup_snapshots
+          (tenant_id, backup_id, server_id, status, manifest, size_bytes, checksum)
+        VALUES (
+          ${TENANT_B}, 'backup-b-1', 'srv-b-restore', 'completed',
+          ${{ recoveryClass: "full" }}::jsonb, 1024, 'deadbeef'
+        )
+        RETURNING id
+      `) as { id: string }[];
+      const backupBRowId = backupBRows[0]!.id;
+
+      // A published destructive-workflow definition for tenant A only, so a
+      // false "approval_workflow_not_configured" could never masquerade as
+      // the fail-closed outcome this test actually asserts.
+      const graph = {
+        startNodeId: "end_approved",
+        nodes: [{ id: "end_approved", type: "end", outcome: "approved" }]
+      };
+      await getAdminSql()`
+        INSERT INTO awcms_workflow_definitions
+          (tenant_id, workflow_key, name, version, lifecycle_status, graph, facts_schema)
+        VALUES (
+          ${TENANT_A}, ${OMES_DESTRUCTIVE_WORKFLOW_KEY}, 'OMES destructive op', 1,
+          'active', ${graph}::jsonb,
+          ${[
+            { key: "operation", type: "string" },
+            { key: "serverId", type: "string" },
+            { key: "backupId", type: "string" }
+          ]}::jsonb
+        )
+      `;
+
+      const outcome = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        submitBackupRestore(
+          tx,
+          TENANT_A,
+          OWNER_USER_A,
+          backupBRowId,
+          new Date()
+        )
+      );
+
+      // Fail-closed: a foreign-tenant backupId resolves to nothing, never a
+      // leaked "this exists but you can't touch it" signal and never a
+      // restore recorded against tenant B's server.
+      expect(outcome.outcome).toBe("backup_not_found");
+
+      const requestRows = (await getAdminSql()`
+        SELECT count(*)::int AS count FROM awcms_omes_operation_requests
+        WHERE operation = 'restore' AND server_id = 'srv-b-restore'
+      `) as { count: number }[];
+      expect(requestRows[0]!.count).toBe(0);
+    });
+
+    test("submitBackupRestore against tenant A's OWN backupId still succeeds — the fail-closed result above is tenant scoping, not a broken happy path", async () => {
+      await seedServer(TENANT_A, "srv-a-restore", "a-restore.example.test");
+
+      const backupARows = (await getAdminSql()`
+        INSERT INTO awcms_omes_backup_snapshots
+          (tenant_id, backup_id, server_id, status, manifest, size_bytes, checksum)
+        VALUES (
+          ${TENANT_A}, 'backup-a-1', 'srv-a-restore', 'completed',
+          ${{ recoveryClass: "full" }}::jsonb, 2048, 'cafef00d'
+        )
+        RETURNING id
+      `) as { id: string }[];
+      const backupARowId = backupARows[0]!.id;
+
+      const graph = {
+        startNodeId: "end_approved",
+        nodes: [{ id: "end_approved", type: "end", outcome: "approved" }]
+      };
+      await getAdminSql()`
+        INSERT INTO awcms_workflow_definitions
+          (tenant_id, workflow_key, name, version, lifecycle_status, graph, facts_schema)
+        VALUES (
+          ${TENANT_A}, ${OMES_DESTRUCTIVE_WORKFLOW_KEY}, 'OMES destructive op', 1,
+          'active', ${graph}::jsonb,
+          ${[
+            { key: "operation", type: "string" },
+            { key: "serverId", type: "string" },
+            { key: "backupId", type: "string" }
+          ]}::jsonb
+        )
+      `;
+
+      const outcome = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        submitBackupRestore(
+          tx,
+          TENANT_A,
+          OWNER_USER_A,
+          backupARowId,
+          new Date()
+        )
+      );
+
+      expect(outcome.outcome).toBe("created");
+      if (outcome.outcome === "created") {
+        expect(outcome.operationRequest.serverId).toBe("srv-a-restore");
+      }
+    });
+
+    test("fetchAuditProjections under tenant A never returns tenant B's rows, even by exact serverId", async () => {
+      await getAdminSql()`
+        INSERT INTO awcms_omes_audit_projections
+          (tenant_id, server_id, source_event_id, event_type, evidence)
+        VALUES (
+          ${TENANT_B}, 'shared-server-id', 'evt-b-1', 'reconciliation',
+          ${{ note: "tenant B evidence" }}::jsonb
+        )
+      `;
+
+      const pageForA = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          fetchAuditProjections(tx, TENANT_A, { serverId: "shared-server-id" })
+      );
+
+      expect(pageForA.projections).toHaveLength(0);
+    });
+
+    test("fetchLatestHealthPerServer under tenant A never returns tenant B's snapshot, even for the same server_id string", async () => {
+      await getAdminSql()`
+        INSERT INTO awcms_omes_health_snapshots
+          (tenant_id, server_id, overall_status, checks)
+        VALUES (
+          ${TENANT_B}, 'shared-server-id', 'healthy',
+          ${{}}::jsonb
+        )
+      `;
+
+      const snapshotsForA = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) => fetchLatestHealthPerServer(tx, TENANT_A, new Date())
+      );
+
+      expect(
+        snapshotsForA.find((s) => s.serverId === "shared-server-id")
+      ).toBeUndefined();
     });
   });
 });
