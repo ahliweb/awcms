@@ -80,8 +80,8 @@ const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
   authorize: OMES_GUARDS.backups.read,
-  load: async ({ tx, can, now }) => {
-    const page = await fetchBackups(tx, ssr.tenantId, now, {
+  load: async ({ tx, can }) => {
+    const page = await fetchBackups(tx, ssr.tenantId, new Date(), {
       serverId: serverIdFilter,
       status: statusFilter,
       cursor: cursor ?? undefined
