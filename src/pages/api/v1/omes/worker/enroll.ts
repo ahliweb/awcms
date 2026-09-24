@@ -24,9 +24,7 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
 import { validateOmesContractText } from "../../../../../modules/omes-control/domain/contracts";
-import {
-  redeemEnrollmentChallenge
-} from "../../../../../modules/omes-control/application/worker-enrollment-exchange";
+import { redeemEnrollmentChallenge } from "../../../../../modules/omes-control/application/worker-enrollment-exchange";
 import { validateEd25519PublicKeyPem } from "../../../../../modules/omes-control/domain/worker-identity";
 
 const RATE_LIMIT = { maxAttempts: 20, windowMs: 60_000 };
@@ -102,7 +100,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (!rateLimit.allowed) {
     return jsonResponse(
       { status: "rejected" },
-      { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSec) } }
+      {
+        status: 429,
+        headers: { "retry-after": String(rateLimit.retryAfterSec) }
+      }
     );
   }
 
@@ -113,7 +114,13 @@ export const POST: APIRoute = async ({ request }) => {
   ).catch(() => ["unsupported_contract_version"]);
 
   if (contractErrors.length > 0) {
-    return neutralResponse("rejected", tenantId, serverId, "worker_unknown", now);
+    return neutralResponse(
+      "rejected",
+      tenantId,
+      serverId,
+      "worker_unknown",
+      now
+    );
   }
 
   const rawChallenge = parsed.enrollment_challenge as string;
@@ -122,13 +129,25 @@ export const POST: APIRoute = async ({ request }) => {
   const keyCheck = validateEd25519PublicKeyPem(publicKeyPem);
 
   if (!keyCheck.valid) {
-    return neutralResponse("rejected", tenantId, serverId, "worker_unknown", now);
+    return neutralResponse(
+      "rejected",
+      tenantId,
+      serverId,
+      "worker_unknown",
+      now
+    );
   }
 
   const signatureHeader = request.headers.get("x-omes-enrollment-signature");
 
   if (!signatureHeader) {
-    return neutralResponse("rejected", tenantId, serverId, "worker_unknown", now);
+    return neutralResponse(
+      "rejected",
+      tenantId,
+      serverId,
+      "worker_unknown",
+      now
+    );
   }
 
   const sql = getDatabaseClient();
@@ -166,7 +185,13 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   if (outcome.outcome === "token_expired") {
-    return neutralResponse("token_expired", tenantId, serverId, "worker_unknown", now);
+    return neutralResponse(
+      "token_expired",
+      tenantId,
+      serverId,
+      "worker_unknown",
+      now
+    );
   }
 
   return neutralResponse("rejected", tenantId, serverId, "worker_unknown", now);

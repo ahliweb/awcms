@@ -145,9 +145,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_worker_results_idem_idx
 ALTER TABLE awcms_omes_jobs
   ADD COLUMN IF NOT EXISTS idempotency_key text;
 
-CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_jobs_tenant_idem_idx
-  ON awcms_omes_jobs (tenant_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
+-- A real UNIQUE CONSTRAINT, not a partial index: Postgres refuses to let a
+-- foreign key reference a partial unique index (`WHERE idempotency_key IS
+-- NOT NULL`, the first form this migration tried) — "there is no unique
+-- constraint matching given keys for referenced table". A plain UNIQUE
+-- constraint on a nullable column still allows any number of NULL rows (NULL
+-- is never considered equal to NULL), which is exactly what is needed here:
+-- every job this issue's promotion path creates always sets
+-- idempotency_key, but the column stays nullable for forward compatibility
+-- with any future job-creation path that legitimately has none.
+ALTER TABLE awcms_omes_jobs
+  ADD CONSTRAINT awcms_omes_jobs_tenant_idem_unique UNIQUE (tenant_id, idempotency_key);
 
 ALTER TABLE awcms_omes_worker_results
   ADD CONSTRAINT awcms_omes_worker_results_job_fk

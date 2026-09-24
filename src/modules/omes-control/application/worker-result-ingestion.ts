@@ -72,7 +72,10 @@ export async function ingestWorkerResult(
 
   const redactedEvidence = redactSensitiveAttributes(input.evidence) ?? {};
   const redactedError = input.error
-    ? (redactSensitiveAttributes(input.error) as { code: string; message: string })
+    ? (redactSensitiveAttributes(input.error) as {
+        code: string;
+        message: string;
+      })
     : null;
 
   const insertedRows = (await tx`

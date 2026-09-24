@@ -48,12 +48,27 @@ describe("worker-identity", () => {
     // Changing ANY single field changes the canonical string — this is what
     // makes cross-tenant/cross-server/cross-worker signature substitution
     // detectable rather than merely "probably fine".
-    expect(buildCanonicalEnvelope({ ...base, tenantId: "22222222-2222-4222-8222-222222222222" })).not.toBe(canonical);
-    expect(buildCanonicalEnvelope({ ...base, serverId: "srv-2" })).not.toBe(canonical);
-    expect(buildCanonicalEnvelope({ ...base, workerId: "worker_xyz" })).not.toBe(canonical);
-    expect(buildCanonicalEnvelope({ ...base, nonce: "nonce_zzzzzzzzzzzzzzzz" })).not.toBe(canonical);
-    expect(buildCanonicalEnvelope({ ...base, rawBody: '{"a":2}' })).not.toBe(canonical);
-    expect(buildCanonicalEnvelope({ ...base, path: "/api/v1/omes/worker/result" })).not.toBe(canonical);
+    expect(
+      buildCanonicalEnvelope({
+        ...base,
+        tenantId: "22222222-2222-4222-8222-222222222222"
+      })
+    ).not.toBe(canonical);
+    expect(buildCanonicalEnvelope({ ...base, serverId: "srv-2" })).not.toBe(
+      canonical
+    );
+    expect(
+      buildCanonicalEnvelope({ ...base, workerId: "worker_xyz" })
+    ).not.toBe(canonical);
+    expect(
+      buildCanonicalEnvelope({ ...base, nonce: "nonce_zzzzzzzzzzzzzzzz" })
+    ).not.toBe(canonical);
+    expect(buildCanonicalEnvelope({ ...base, rawBody: '{"a":2}' })).not.toBe(
+      canonical
+    );
+    expect(
+      buildCanonicalEnvelope({ ...base, path: "/api/v1/omes/worker/result" })
+    ).not.toBe(canonical);
   });
 
   test("validateEd25519PublicKeyPem accepts a real SPKI Ed25519 PEM and rejects everything else", () => {
@@ -68,8 +83,9 @@ describe("worker-identity", () => {
     // verification to match that placeholder (see worker-identity.ts's
     // module doc).
     expect(
-      validateEd25519PublicKeyPem("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIdeadbeef")
-        .valid
+      validateEd25519PublicKeyPem(
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIdeadbeef"
+      ).valid
     ).toBe(false);
   });
 
@@ -79,15 +95,17 @@ describe("worker-identity", () => {
     const signature = signWith(privateKeyPem, data);
 
     expect(verifyEd25519Signature(publicKeyPem, data, signature)).toBe(true);
-    expect(verifyEd25519Signature(publicKeyPem, "tampered-data", signature)).toBe(
-      false
-    );
+    expect(
+      verifyEd25519Signature(publicKeyPem, "tampered-data", signature)
+    ).toBe(false);
 
     const other = generateWorkerKeypair();
     // Signed by a DIFFERENT worker's key — must not verify against this
     // public key (the cross-worker substitution case).
     const otherSignature = signWith(other.privateKeyPem, data);
-    expect(verifyEd25519Signature(publicKeyPem, data, otherSignature)).toBe(false);
+    expect(verifyEd25519Signature(publicKeyPem, data, otherSignature)).toBe(
+      false
+    );
   });
 
   test("verifyEd25519Signature fails closed on malformed input rather than throwing", () => {
@@ -105,16 +123,26 @@ describe("worker-identity", () => {
 
     expect(checkEnvelopeFreshness("not-a-date", now).fresh).toBe(false);
 
-    const withinPast = new Date(now.getTime() - ENVELOPE_TIMESTAMP_WINDOW_MS / 2);
-    expect(checkEnvelopeFreshness(withinPast.toISOString(), now).fresh).toBe(true);
+    const withinPast = new Date(
+      now.getTime() - ENVELOPE_TIMESTAMP_WINDOW_MS / 2
+    );
+    expect(checkEnvelopeFreshness(withinPast.toISOString(), now).fresh).toBe(
+      true
+    );
 
-    const tooOld = new Date(now.getTime() - ENVELOPE_TIMESTAMP_WINDOW_MS - 1000);
+    const tooOld = new Date(
+      now.getTime() - ENVELOPE_TIMESTAMP_WINDOW_MS - 1000
+    );
     expect(checkEnvelopeFreshness(tooOld.toISOString(), now).fresh).toBe(false);
 
     // A FUTURE timestamp is rejected too — a captured envelope must not be
     // replayable "until it expires" by presenting a future-dated timestamp.
-    const tooFuture = new Date(now.getTime() + ENVELOPE_TIMESTAMP_WINDOW_MS + 1000);
-    expect(checkEnvelopeFreshness(tooFuture.toISOString(), now).fresh).toBe(false);
+    const tooFuture = new Date(
+      now.getTime() + ENVELOPE_TIMESTAMP_WINDOW_MS + 1000
+    );
+    expect(checkEnvelopeFreshness(tooFuture.toISOString(), now).fresh).toBe(
+      false
+    );
   });
 
   test("isWellFormedNonce enforces the shared nonce pattern", () => {

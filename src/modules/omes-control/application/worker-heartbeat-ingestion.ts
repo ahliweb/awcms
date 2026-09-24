@@ -29,7 +29,10 @@ export type WorkerHeartbeatInput = {
   lastReconciliationAt?: string;
 };
 
-const STATUS_FOR_REPORTED: Record<WorkerHeartbeatInput["reportedStatus"], string> = {
+const STATUS_FOR_REPORTED: Record<
+  WorkerHeartbeatInput["reportedStatus"],
+  string
+> = {
   healthy: "online",
   degraded: "degraded",
   maintenance: "maintenance"
@@ -55,15 +58,16 @@ export async function ingestWorkerHeartbeat(
     return { outcome: "unknown_server" };
   }
 
-  const evidence = redactSensitiveAttributes({
-    omesVersion: input.omesVersion,
-    contractVersion: input.contractVersion,
-    capabilityRegistryDigest: input.capabilityRegistryDigest,
-    platform: input.platform,
-    uptimeSeconds: input.uptimeSeconds,
-    lastReconciliationAt: input.lastReconciliationAt ?? null,
-    attributedTo: "omes-host"
-  }) ?? {};
+  const evidence =
+    redactSensitiveAttributes({
+      omesVersion: input.omesVersion,
+      contractVersion: input.contractVersion,
+      capabilityRegistryDigest: input.capabilityRegistryDigest,
+      platform: input.platform,
+      uptimeSeconds: input.uptimeSeconds,
+      lastReconciliationAt: input.lastReconciliationAt ?? null,
+      attributedTo: "omes-host"
+    }) ?? {};
 
   if (server.status === "decommissioned") {
     await tx`
@@ -85,5 +89,8 @@ export async function ingestWorkerHeartbeat(
     RETURNING status
   `) as { status: string }[];
 
-  return { outcome: "acknowledged", serverStatus: updatedRows[0]?.status ?? nextStatus };
+  return {
+    outcome: "acknowledged",
+    serverStatus: updatedRows[0]?.status ?? nextStatus
+  };
 }

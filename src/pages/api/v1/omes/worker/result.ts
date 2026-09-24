@@ -88,7 +88,10 @@ export const POST: APIRoute = async ({ request }) => {
         reconciled: false,
         recorded_at: now.toISOString()
       },
-      { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSec) } }
+      {
+        status: 429,
+        headers: { "retry-after": String(rateLimit.retryAfterSec) }
+      }
     );
   }
 

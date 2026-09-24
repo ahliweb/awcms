@@ -86,7 +86,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (!rateLimit.allowed) {
     return jsonResponse(
       { status: "re-enroll_required" },
-      { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSec) } }
+      {
+        status: 429,
+        headers: { "retry-after": String(rateLimit.retryAfterSec) }
+      }
     );
   }
 
@@ -139,7 +142,9 @@ export const POST: APIRoute = async ({ request }) => {
         reportedStatus: parsed.status as "healthy" | "degraded" | "maintenance",
         omesVersion: String(parsed.omes_version ?? ""),
         contractVersion: String(parsed.contract_version ?? ""),
-        capabilityRegistryDigest: String(parsed.capability_registry_digest ?? ""),
+        capabilityRegistryDigest: String(
+          parsed.capability_registry_digest ?? ""
+        ),
         platform: {
           os: String(platform.os ?? ""),
           version: String(platform.version ?? ""),

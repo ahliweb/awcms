@@ -33,9 +33,7 @@
  * also need the private key it claims to hold, which by construction it does
  * not have if this is the legitimate worker's freshly generated keypair.
  */
-import {
-  hashEnrollmentChallenge
-} from "../domain/server-registration";
+import { hashEnrollmentChallenge } from "../domain/server-registration";
 import { verifyEd25519Signature } from "../domain/worker-identity";
 
 export type RedeemChallengeInput = {
@@ -106,7 +104,8 @@ export async function redeemEnrollmentChallenge(
   }
 
   const expired =
-    !row.challenge_expires_at || row.challenge_expires_at.getTime() <= now.getTime();
+    !row.challenge_expires_at ||
+    row.challenge_expires_at.getTime() <= now.getTime();
 
   if (expired) {
     await tx`
@@ -152,7 +151,10 @@ export async function checkWorkerEnrollmentStatus(
   tenantId: string,
   serverId: string,
   workerId: string
-): Promise<{ status: RevokedIdentityCheckResult; publicKeyPem: string | null }> {
+): Promise<{
+  status: RevokedIdentityCheckResult;
+  publicKeyPem: string | null;
+}> {
   const rows = (await tx`
     SELECT status, public_key FROM awcms_omes_enrollments
     WHERE tenant_id = ${tenantId} AND server_id = ${serverId} AND worker_id = ${workerId}

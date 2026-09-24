@@ -74,7 +74,9 @@ export type CanonicalEnvelopeInput = {
  * cross-tenant or cross-server substitution changes the signed string.
  */
 export function buildCanonicalEnvelope(input: CanonicalEnvelopeInput): string {
-  const bodyHash = createHash("sha256").update(input.rawBody, "utf8").digest("hex");
+  const bodyHash = createHash("sha256")
+    .update(input.rawBody, "utf8")
+    .digest("hex");
 
   return [
     input.method.toUpperCase(),
@@ -89,8 +91,7 @@ export function buildCanonicalEnvelope(input: CanonicalEnvelopeInput): string {
 }
 
 export type PublicKeyValidation =
-  | { valid: true; keyObject: KeyObject }
-  | { valid: false; reason: string };
+  { valid: true; keyObject: KeyObject } | { valid: false; reason: string };
 
 /**
  * The ONLY accepted public-key shape: PEM-encoded SPKI Ed25519
@@ -105,7 +106,10 @@ export function validateEd25519PublicKeyPem(pem: string): PublicKeyValidation {
     !pem.includes("BEGIN PUBLIC KEY") ||
     pem.length > 1024
   ) {
-    return { valid: false, reason: "public_key must be a PEM-encoded SPKI key" };
+    return {
+      valid: false,
+      reason: "public_key must be a PEM-encoded SPKI key"
+    };
   }
 
   let keyObject: KeyObject;
@@ -165,7 +169,12 @@ export function verifyEd25519Signature(
   }
 
   try {
-    return cryptoVerify(null, Buffer.from(data, "utf8"), keyCheck.keyObject, signature);
+    return cryptoVerify(
+      null,
+      Buffer.from(data, "utf8"),
+      keyCheck.keyObject,
+      signature
+    );
   } catch {
     return false;
   }

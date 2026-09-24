@@ -518,7 +518,8 @@ export const omesControlModule = defineModule({
       },
       deletion: {
         mode: "hard_delete",
-        rationale: "Expired nonce rows are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
+        rationale:
+          "Expired nonce rows are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
       },
       legalHold: {
         applicable: false,
@@ -557,7 +558,8 @@ export const omesControlModule = defineModule({
       },
       deletion: {
         mode: "hard_delete",
-        rationale: "Result rows older than the retention window are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
+        rationale:
+          "Result rows older than the retention window are purged; awcms_worker holds SELECT+DELETE only (sql/159)."
       },
       legalHold: {
         applicable: true,

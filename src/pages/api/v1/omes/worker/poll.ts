@@ -84,7 +84,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (!rateLimit.allowed) {
     return jsonResponse(
       { status: "re-enroll_required" },
-      { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSec) } }
+      {
+        status: 429,
+        headers: { "retry-after": String(rateLimit.retryAfterSec) }
+      }
     );
   }
 
@@ -128,9 +131,11 @@ export const POST: APIRoute = async ({ request }) => {
     // failure here is not this poll's identity/security concern — swallow
     // and fall through to "nothing to lease" rather than turning a queue
     // bookkeeping hiccup into a re-enroll signal.
-    await promoteNextApprovedOperation(tx, verification.tenantId, verification.serverId).catch(
-      () => null
-    );
+    await promoteNextApprovedOperation(
+      tx,
+      verification.tenantId,
+      verification.serverId
+    ).catch(() => null);
 
     const leased = await leaseNextQueuedJob(
       tx,
