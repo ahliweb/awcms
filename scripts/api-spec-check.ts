@@ -148,7 +148,23 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // policy, its SSO-only policy and the login rate limit all still stand
   // between the new account and a signed-in browser.
   "getAuthInvitationPreview",
-  "postAuthInvitationAccept"
+  "postAuthInvitationAccept",
+  // omes_control worker enrollment/poll/result/heartbeat (ahliweb/omes#199,
+  // ADR-0122) — the OMES host pull worker has no AWCMS session at all by
+  // design (ADR-0027's outbound-pull architecture: no public privileged
+  // listener on the host, no browser-to-host trust). Each is authenticated
+  // instead by asymmetric Ed25519 identity: enroll by proof of possession
+  // (a signature over a single-use, short-lived, hash-only-stored
+  // challenge); poll/result/heartbeat by a signature over a canonical
+  // envelope binding tenant/server/worker/path/timestamp/nonce/body-hash,
+  // verified against the enrolled worker's stored public key, with
+  // persisted nonce/timestamp replay protection
+  // (awcms_omes_worker_nonces). See
+  // src/modules/omes-control/application/worker-envelope-guard.ts.
+  "omesWorkerEnroll",
+  "omesWorkerPoll",
+  "omesWorkerResult",
+  "omesWorkerHeartbeat"
 ]);
 
 /**
