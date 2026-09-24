@@ -1,0 +1,289 @@
+---
+/**
+ * OMES Control Center — deployments, Issue ahliweb/omes#200.
+ *
+ * Read-only (`fetchDeployments`, Issue ahliweb/omes#198 — there is no
+ * `PATCH`/`PUT` on `/api/v1/omes/deployments`; changing a deployment's
+ * state goes through `POST /api/v1/omes/operations`, rendered on
+ * `/admin/omes/operations`). Desired and observed state are rendered in
+ * SEPARATE, clearly labelled columns — never merged into one blob — with
+ * last reconciliation time and a computed `stale` flag shown explicitly.
+ * `errorEvidence` is redacted defense-in-depth by the application layer
+ * before this screen ever sees it.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  fetchDeployments,
+  type DeploymentSummary
+} from "../../../modules/omes-control/application/deployment-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS = [
+  "pending",
+  "in_progress",
+  "converged",
+  "drifted",
+  "failed"
+] as const;
+const STATUS_VARIANT: Record<string, string> = {
+  pending: "neutral",
+  in_progress: "info",
+  converged: "success",
+  drifted: "warning",
+  failed: "danger"
+};
+
+const statusRaw = readParam("reconciliationStatus");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as (typeof STATUS_OPTIONS)[number])
+  : undefined;
+const serverIdFilter = readParam("serverId") || undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.deployments.read,
+  load: async ({ tx, can }) => {
+    const page = await fetchDeployments(tx, ssr.tenantId, new Date(), {
+      serverId: serverIdFilter,
+      reconciliationStatus: statusFilter,
+      cursor: cursor ?? undefined
+    });
+
+    return {
+      deployments: page.deployments,
+      nextCursor: page.nextCursor,
+      canOperate: await can(OMES_GUARDS.deployments.operate)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/deployments.astro: failed to load the OMES deployments console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const deployments: DeploymentSummary[] =
+  screen.state === "allowed" ? screen.data.deployments : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const canOperate = screen.state === "allowed" && screen.data.canOperate;
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/deployments?${query}` : "/admin/omes/deployments";
+}
+
+const staleCount = deployments.filter((deployment) => deployment.stale).length;
+---
+
+<AdminLayout
+  title={t("OMES deployments")}
+  description={t(
+    "Desired vs observed deployment state, shown as two separate columns — the observed value is never presented as the desired one — with last reconciliation time, staleness, and error evidence."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-deployments-denied">
+        {t("You do not have permission to view OMES deployments.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-deployments-error">
+        {t(
+          "The OMES deployments console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="OMES deployment summary">
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Deployments (this page)")}</span>
+            <span class="stat-value">{deployments.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Stale or unreconciled (this page)")}</span>
+            <span class="stat-value">{staleCount}</span>
+          </div>
+        </div>
+        {canOperate && (
+          <p class="page-description">
+            {t(
+              "To change a deployment's state (apply, update, reconcile, roll back), submit an operation on the Operations screen — this screen is read-only."
+            )}{" "}
+            <a class="quick-link" href="/admin/omes/operations">
+              {t("Go to Operations")}
+              <span class="quick-link-arrow" aria-hidden="true">→</span>
+            </a>
+          </p>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-labelledby="deployments-title" id="omes-deployments-list">
+        <h2 class="admin-section-title" id="deployments-title">
+          {t("Deployments")}
+          <span class="count-pill">{deployments.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="deployment-filter-form">
+          <label for="filter-server">{t("Server ID")}</label>
+          <input id="filter-server" name="serverId" type="text" value={serverIdFilter ?? ""} />
+          <label for="filter-status">{t("Reconciliation status")}</label>
+          <select id="filter-status" name="reconciliationStatus">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-deployments-table">
+            <caption class="sr-only">
+              {t("OMES deployments, desired and observed state shown separately.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Deployment")}</th>
+                <th scope="col">{t("Reconciliation")}</th>
+                <th scope="col">{t("Last reconciled")}</th>
+                <th scope="col">{t("Desired state")}</th>
+                <th scope="col">{t("Observed state")}</th>
+                <th scope="col">{t("Error evidence")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deployments.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">▤</span>
+                      <span class="empty-state-title">{t("No deployments")}</span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Nothing matches this filter, or no deployment has been created yet."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                deployments.map((deployment) => (
+                  <tr data-deployment-row={deployment.id}>
+                    <td data-label="Deployment">
+                      <span class="cell-code">{deployment.deploymentId}</span>
+                      <span class="cell-muted"> · {t("Server")}: {deployment.serverId}</span>
+                    </td>
+                    <td data-label="Reconciliation">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[deployment.reconciliationStatus] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {deployment.reconciliationStatus}
+                      </span>
+                      {deployment.stale && (
+                        <span class="status-badge" data-variant="warning">
+                          <span class="status-dot" aria-hidden="true" />
+                          {t("stale")}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Last reconciled">
+                      <span class="cell-muted">
+                        {deployment.lastReconciledAt ?? t("never")}
+                      </span>
+                    </td>
+                    <td data-label="Desired state">
+                      <details>
+                        <summary>{t("View desired state")}</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(deployment.desiredState ?? {}, null, 2)}
+                        />
+                      </details>
+                    </td>
+                    <td data-label="Observed state">
+                      <details>
+                        <summary>{t("View observed state")}</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(deployment.observedState ?? {}, null, 2)}
+                        />
+                      </details>
+                    </td>
+                    <td data-label="Error evidence">
+                      {deployment.errorEvidence ? (
+                        <details open>
+                          <summary>{t("View error evidence")}</summary>
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(deployment.errorEvidence, null, 2)}
+                          />
+                        </details>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">→</span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>

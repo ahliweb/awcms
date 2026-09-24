@@ -1,0 +1,362 @@
+---
+/**
+ * OMES Control Center — jobs, Issue ahliweb/omes#200.
+ *
+ * The worker dispatch queue (`fetchJobs`, Issue ahliweb/omes#198): state,
+ * correlation via `operationRequestId`, lease ownership, retry count, and
+ * sanitized `target`/`payload`/`result` evidence (redacted defense-in-depth
+ * by the application layer). Mirrors `/admin/sync`'s object-queue
+ * retry/dead-letter presentation, adapted to this queue's own state names.
+ *
+ * Two actions, both scoped to a single terminal/pending state so the button
+ * can never race a worker lease:
+ *   - **Approve for retry** (`jobs.approve`) — only a `failed` job, via
+ *     `POST /jobs/{id}/approve`. This is NOT a second approval authority; the
+ *     underlying operation request already passed the safe-operation or
+ *     destructive-workflow gate (`application/job-directory.ts`'s own
+ *     comment) before this job row existed.
+ *   - **Cancel** (`jobs.cancel`) — only a `queued` job, via
+ *     `POST /jobs/{id}/cancel`. A `leased`/`running` job is already in
+ *     flight on a worker this endpoint has no channel to reach, so it is
+ *     refused (`409 JOB_NOT_CANCELLABLE`), never silently no-op'd.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  fetchJobs,
+  type JobSummary
+} from "../../../modules/omes-control/application/job-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATE_OPTIONS = [
+  "queued",
+  "leased",
+  "running",
+  "completed",
+  "failed",
+  "cancelled"
+] as const;
+const STATE_VARIANT: Record<string, string> = {
+  queued: "info",
+  leased: "info",
+  running: "info",
+  completed: "success",
+  failed: "danger",
+  cancelled: "neutral"
+};
+
+const stateRaw = readParam("state");
+const stateFilter = (STATE_OPTIONS as readonly string[]).includes(stateRaw)
+  ? (stateRaw as (typeof STATE_OPTIONS)[number])
+  : undefined;
+const serverIdFilter = readParam("serverId") || undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.jobs.read,
+  load: async ({ tx, can }) => {
+    const page = await fetchJobs(tx, ssr.tenantId, {
+      state: stateFilter,
+      serverId: serverIdFilter,
+      cursor: cursor ?? undefined
+    });
+
+    return {
+      jobs: page.jobs,
+      nextCursor: page.nextCursor,
+      canApprove: await can(OMES_GUARDS.jobs.approve),
+      canCancel: await can(OMES_GUARDS.jobs.cancel)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/jobs.astro: failed to load the OMES jobs console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const jobs: JobSummary[] = screen.state === "allowed" ? screen.data.jobs : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const canApprove = screen.state === "allowed" && screen.data.canApprove;
+const canCancel = screen.state === "allowed" && screen.data.canCancel;
+const showActions = canApprove || canCancel;
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/jobs?${query}` : "/admin/omes/jobs";
+}
+
+const failedCount = jobs.filter((job) => job.state === "failed").length;
+const columns = 7 + (showActions ? 1 : 0);
+---
+
+<AdminLayout
+  title={t("OMES jobs")}
+  description={t(
+    "The OMES worker dispatch queue: state, correlation and idempotency identifiers, lease ownership, retry count, and sanitized evidence."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-jobs-denied">
+        {t("You do not have permission to view OMES jobs.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-jobs-error">
+        {t(
+          "The OMES jobs console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p id="omes-jobs-action-error" class="admin-create-error" role="alert" hidden />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="OMES job summary">
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Jobs (this page)")}</span>
+            <span class="stat-value">{jobs.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Failed (this page)")}</span>
+            <span class="stat-value">{failedCount}</span>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-labelledby="jobs-title" id="omes-jobs-list">
+        <h2 class="admin-section-title" id="jobs-title">
+          {t("Jobs")}
+          <span class="count-pill">{jobs.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="job-filter-form">
+          <label for="filter-server">{t("Server ID")}</label>
+          <input id="filter-server" name="serverId" type="text" value={serverIdFilter ?? ""} />
+          <label for="filter-state">{t("State")}</label>
+          <select id="filter-state" name="state">
+            <option value="" selected={stateFilter === undefined}>
+              {t("Any state")}
+            </option>
+            {STATE_OPTIONS.map((value) => (
+              <option value={value} selected={stateFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-jobs-table">
+            <caption class="sr-only">{t("OMES worker jobs, newest first.")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Job")}</th>
+                <th scope="col">{t("Operation")}</th>
+                <th scope="col">{t("State")}</th>
+                <th scope="col">{t("Correlation")}</th>
+                <th scope="col">{t("Lease")}</th>
+                <th scope="col">{t("Retries")}</th>
+                <th scope="col">{t("Evidence")}</th>
+                {showActions && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={columns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">⏱</span>
+                      <span class="empty-state-title">{t("No jobs")}</span>
+                      <span class="empty-state-text">
+                        {t("Nothing matches this filter, or none has been dispatched yet.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                jobs.map((job) => (
+                  <tr data-job-row={job.id}>
+                    <td data-label="Job">
+                      <span class="cell-code">{job.jobId}</span>
+                      <span class="cell-muted"> · {t("Server")}: {job.serverId}</span>
+                    </td>
+                    <td data-label="Operation">
+                      <span class="cell-code">{job.operation}</span>
+                    </td>
+                    <td data-label="State">
+                      <span
+                        class="status-badge"
+                        data-variant={STATE_VARIANT[job.state] ?? "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {job.state}
+                      </span>
+                    </td>
+                    <td data-label="Correlation">
+                      <span class="cell-code">
+                        {job.operationRequestId ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Lease">
+                      <span class="cell-muted">
+                        {job.leasedBy ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}` : "—"}
+                      </span>
+                    </td>
+                    <td data-label="Retries">{job.retryCount}</td>
+                    <td data-label="Evidence">
+                      <details>
+                        <summary>{t("View evidence")}</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(
+                            { target: job.target, payload: job.payload, result: job.result },
+                            null,
+                            2
+                          )}
+                        />
+                      </details>
+                    </td>
+                    {showActions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {canApprove && job.state === "failed" && (
+                            <button
+                              type="button"
+                              class="btn-inline job-approve-btn"
+                              data-job-id={job.id}
+                            >
+                              {t("Approve retry")}
+                            </button>
+                          )}
+                          {canCancel && job.state === "queued" && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger job-cancel-btn"
+                              data-job-id={job.id}
+                            >
+                              {t("Cancel")}
+                            </button>
+                          )}
+                          {!(
+                            (canApprove && job.state === "failed") ||
+                            (canCancel && job.state === "queued")
+                          ) && <span class="cell-muted">—</span>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">→</span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-jobs-action-error");
+
+  onAction(".job-approve-btn", async (button) => {
+    const jobId = button.dataset.jobId;
+    if (!jobId) return;
+
+    if (
+      !window.confirm(
+        "Approve this failed job for retry? It will be requeued for the OMES worker."
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `/api/v1/omes/jobs/${jobId}/approve`, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      "Could not approve the job for retry. Please try again.",
+      "Approving…"
+    );
+  });
+
+  onAction(".job-cancel-btn", async (button) => {
+    const jobId = button.dataset.jobId;
+    if (!jobId) return;
+
+    if (!window.confirm("Cancel this queued job? This cannot be undone.")) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `/api/v1/omes/jobs/${jobId}/cancel`, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      "Could not cancel the job. Please try again.",
+      "Cancelling…"
+    );
+  });
+</script>

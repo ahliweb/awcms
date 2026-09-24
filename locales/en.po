@@ -4723,3 +4723,311 @@ msgstr ""
 
 msgid "Editorial disclosure. Standard needs none; advertorial and sponsored are surfaced to readers as paid content."
 msgstr ""
+
+msgid "Architecture"
+msgstr ""
+
+msgid "Backup freshness"
+msgstr ""
+
+msgid "Close evidence panel"
+msgstr ""
+
+msgid "Decommission"
+msgstr ""
+
+msgid "Deployment drift"
+msgstr ""
+
+msgid "Deployments"
+msgstr ""
+
+msgid "Desired and observed state are always shown separately on these screens — an observed value is never presented as the desired one, and stale or missing evidence is shown explicitly rather than as healthy."
+msgstr ""
+
+msgid "Enrolled"
+msgstr ""
+
+msgid "Enrolled OMES host servers: platform and OMES fleet evidence, enrollment/trust status, and heartbeat staleness. No raw enrollment key material is ever rendered — only a fingerprint."
+msgstr ""
+
+msgid "Enrolled OMES servers."
+msgstr ""
+
+msgid "Enrolled servers"
+msgstr ""
+
+msgid "Enrollment & trust evidence"
+msgstr ""
+
+msgid "Evidence"
+msgstr ""
+
+msgid "Fleet health distribution, job state summary, backup freshness, and drift, aggregated directly from OMES control state — never from a reporting projection."
+msgstr ""
+
+msgid "Fresh"
+msgstr ""
+
+msgid "Heartbeat"
+msgstr ""
+
+msgid "IP (optional)"
+msgstr ""
+
+msgid "Job state summary"
+msgstr ""
+
+msgid "Jobs"
+msgstr ""
+
+msgid "No enrollments"
+msgstr ""
+
+msgid "No heartbeat within the staleness window"
+msgstr ""
+
+msgid "No servers"
+msgstr ""
+
+msgid "OS"
+msgstr ""
+
+msgid "OS version"
+msgstr ""
+
+msgid "Platform"
+msgstr ""
+
+msgid "Public key fingerprint (SHA-256)"
+msgstr ""
+
+msgid "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
+msgstr ""
+
+msgid "Register"
+msgstr ""
+
+msgid "Register a server"
+msgstr ""
+
+msgid "Register a server above, or wait for one to self-register."
+msgstr ""
+
+msgid "Revoked"
+msgstr ""
+
+msgid "Screens"
+msgstr ""
+
+msgid "Server health distribution"
+msgstr ""
+
+msgid "Servers"
+msgstr ""
+
+msgid "Servers (this page)"
+msgstr ""
+
+msgid "Stale"
+msgstr ""
+
+msgid "Stale (this page)"
+msgstr ""
+
+msgid "That server could not be found."
+msgstr ""
+
+msgid "The OMES overview could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "The OMES servers console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "This server has not completed worker enrollment yet."
+msgstr ""
+
+msgid "View evidence"
+msgstr ""
+
+msgid "Worker"
+msgstr ""
+
+msgid "Worker enrollments for this server, newest first."
+msgstr ""
+
+msgid "You do not have permission to view OMES servers."
+msgstr ""
+
+msgid "You do not have permission to view the OMES overview."
+msgstr ""
+
+msgid "decommissioned"
+msgstr ""
+
+msgid "stale"
+msgstr ""
+
+msgid "{count} deployment(s) stale or unreconciled"
+msgstr ""
+
+msgid "{count} stale (no recent heartbeat)"
+msgstr ""
+
+
+msgid "Operations"
+msgstr ""
+
+msgid "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
+msgstr ""
+
+msgid "Any state"
+msgstr ""
+
+msgid "Approval"
+msgstr ""
+
+msgid "Approve retry"
+msgstr ""
+
+msgid "Correlation"
+msgstr ""
+
+msgid "Deployment ID (optional)"
+msgstr ""
+
+msgid "Deployments (this page)"
+msgstr ""
+
+msgid "Desired state"
+msgstr ""
+
+msgid "Desired vs observed deployment state, shown as two separate columns — the observed value is never presented as the desired one — with last reconciliation time, staleness, and error evidence."
+msgstr ""
+
+msgid "Error evidence"
+msgstr ""
+
+msgid "Failed (this page)"
+msgstr ""
+
+msgid "Go to Operations"
+msgstr ""
+
+msgid "Job"
+msgstr ""
+
+msgid "Jobs (this page)"
+msgstr ""
+
+msgid "Last reconciled"
+msgstr ""
+
+msgid "Lease"
+msgstr ""
+
+msgid "No deployments"
+msgstr ""
+
+msgid "No jobs"
+msgstr ""
+
+msgid "No operation requests"
+msgstr ""
+
+msgid "Not destructive — no approval required"
+msgstr ""
+
+msgid "Nothing matches this filter, or no deployment has been created yet."
+msgstr ""
+
+msgid "Nothing matches this filter, or none has been dispatched yet."
+msgstr ""
+
+msgid "Nothing matches this filter, or none has been submitted yet."
+msgstr ""
+
+msgid "OMES deployments, desired and observed state shown separately."
+msgstr ""
+
+msgid "OMES operation requests, newest first."
+msgstr ""
+
+msgid "OMES worker jobs, newest first."
+msgstr ""
+
+msgid "Observed state"
+msgstr ""
+
+msgid "Operation"
+msgstr ""
+
+msgid "Operation requests"
+msgstr ""
+
+msgid "Reconciliation"
+msgstr ""
+
+msgid "Reconciliation status"
+msgstr ""
+
+msgid "Request"
+msgstr ""
+
+msgid "Server"
+msgstr ""
+
+msgid "Server ID"
+msgstr ""
+
+msgid "Stale or unreconciled (this page)"
+msgstr ""
+
+msgid "Submit"
+msgstr ""
+
+msgid "Submit an operation"
+msgstr ""
+
+msgid "Submit and review OMES operation requests, limited to the OMES-owned safe-operation allowlist. Destructive operations (stop, rollback) require an approved workflow decision on the Approvals screen before dispatch."
+msgstr ""
+
+msgid "The OMES deployments console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "The OMES jobs console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "The OMES operations console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "The OMES worker dispatch queue: state, correlation and idempotency identifiers, lease ownership, retry count, and sanitized evidence."
+msgstr ""
+
+msgid "To change a deployment's state (apply, update, reconcile, roll back), submit an operation on the Operations screen — this screen is read-only."
+msgstr ""
+
+msgid "View desired state"
+msgstr ""
+
+msgid "View error evidence"
+msgstr ""
+
+msgid "View in Approvals"
+msgstr ""
+
+msgid "View observed state"
+msgstr ""
+
+msgid "You do not have permission to view OMES deployments."
+msgstr ""
+
+msgid "You do not have permission to view OMES jobs."
+msgstr ""
+
+msgid "You do not have permission to view OMES operations."
+msgstr ""
+
+msgid "destructive — requires approval"
+msgstr ""
+
