@@ -211,6 +211,42 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     reason: "Same HMAC credential as `/sync/push`."
   },
 
+  // ---- OMES pull worker: signed, not sessioned (ahliweb/omes#199) ----
+  // The caller is an OMES host pull worker (ADR-0027's outbound-pull
+  // architecture), never an AWCMS session — there is no `X-Tenant-Id`
+  // header or session cookie to present. Without these four entries this
+  // middleware answered every real worker request `400 TENANT_REQUIRED` /
+  // `401 AUTH_REQUIRED` before the route was ever reached, which would have
+  // made the whole feature unusable end to end (found via the
+  // `api-authorization-first.e2e.ts` failure, not by inspection). Identity
+  // is instead an Ed25519 signature over a canonical envelope, verified
+  // inside the route's own transaction by `verifyWorkerEnvelope`
+  // (`application/worker-envelope-guard.ts`) — the same authenticate-then-
+  // authorize split this boundary enforces for every other route, just
+  // with a different credential kind than session/machine-credential.
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/enroll",
+    reason:
+      "Authenticated by proof of possession of an Ed25519 private key over a single-use enrollment challenge, not a session — see application/worker-enrollment-exchange.ts."
+  },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/poll",
+    reason:
+      "Authenticated by an Ed25519 signature over a canonical envelope (verifyWorkerEnvelope), not a session."
+  },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/result",
+    reason: "Same Ed25519 envelope credential as /worker/poll."
+  },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/heartbeat",
+    reason: "Same Ed25519 envelope credential as /worker/poll."
+  },
+
   // ---- Retired: answers 410 without reading anything ----
   {
     method: "POST",

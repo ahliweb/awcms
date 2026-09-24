@@ -45,7 +45,14 @@ function parseDeclaredLength(request: Request): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-async function readCappedText(
+/**
+ * Exported (Issue ahliweb/omes#199) for callers that need the RAW body text
+ * itself under the same streaming size cap `readJsonBody` already enforces
+ * — e.g. the worker envelope routes, which hash/sign the exact raw bytes and
+ * therefore cannot go through `readJsonBody`'s parse-and-discard-the-text
+ * shape.
+ */
+export async function readCappedText(
   request: Request,
   limitBytes: number
 ): Promise<{ tooLarge: false; text: string } | { tooLarge: true }> {

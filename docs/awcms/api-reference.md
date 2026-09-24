@@ -9902,6 +9902,73 @@ Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
 | 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/omes/worker/enroll` — Worker enrollment challenge redemption (ahliweb/omes#199)
+
+- **operationId**: `omesWorkerEnroll`
+- **Security**: none (public endpoint)
+
+`security: []` — deliberately session-UNauthenticated, like POST /api/v1/analytics/collect. The caller is an OMES host pull worker, not an AWCMS session; identity is established by redeeming a single-use enrollment challenge and proving possession of the presented Ed25519 public key's matching private key (X-Omes-Enrollment-Signature, a signature over the raw challenge value). Every response, including a rejection, conforms to the pinned worker-enrollment.response contract vendored under src/modules/omes-control/contracts/v1/ — this endpoint never leaks whether a tenant/server/worker exists via its shape or status code (always 200, `status` distinguishes enrolled/rejected/ token_expired).
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                                                  | Schema                                 |
+| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Enrollment outcome (enrolled, rejected, or token_expired — see description). | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling.                              | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, server).                                           | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/heartbeat` — Ingest worker/host heartbeat telemetry (ahliweb/omes#199)
+
+- **operationId**: `omesWorkerHeartbeat`
+- **Security**: none (public endpoint)
+
+`security: []`. Same envelope authentication as result. Updates last_heartbeat_at and redacted evidence (omes_version/ contract_version/capability digest/platform/uptime, attributed to omes-host). Staleness is derived on READ from heartbeat age (domain/staleness.ts) — missing evidence never implies healthy. Never resurrects a decommissioned server's status.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | acknowledged or re-enroll_required.             | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling. | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, worker).              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/poll` — Poll for a pending allowlisted job (ahliweb/omes#199)
+
+- **operationId**: `omesWorkerPoll`
+- **Security**: none (public endpoint)
+
+`security: []`. Authenticated by Ed25519 signature over a canonical envelope (X-Omes-Worker-Signature) binding tenant/server/worker/path/ timestamp/nonce/body-hash, verified against the enrolled worker's stored public key. Nonce/timestamp replay protection is bounded and persisted (awcms_omes_worker_nonces). Any identity/replay/scope failure answers the pinned worker-poll.response contract's own `re-enroll_required` status rather than an HTTP error — never distinguishing the reason. A returned `job` conforms exactly to the pinned operation-request contract.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                            | Schema                                 |
+| ------ | ------------------------------------------------------ | -------------------------------------- |
+| 200    | idle, job_available (with job), or re-enroll_required. | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling.        | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, worker).                     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/result` — Ingest a worker-reported job execution result (ahliweb/omes#199)
+
+- **operationId**: `omesWorkerResult`
+- **Security**: none (public endpoint)
+
+`security: []`. Same envelope authentication as poll, with X-Omes-Nonce/X-Omes-Timestamp headers (worker-result.request has no nonce/timestamp body fields). Idempotent by (tenant, server, idempotency_key) — NOT the wire `job_id`, which is the worker's own local job-store id; see application/worker-result-ingestion.ts. A 2xx response is an acknowledgement of receipt only: every recorded row is stamped `source: "worker_reported"` / `reconciled: false` and is never presented elsewhere as independently confirmed success.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 200    | recorded, duplicate_ignored, or rejected. | unknown                                |
+| 429    | Rate-limited per (tenant, worker).        | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).

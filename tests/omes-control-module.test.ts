@@ -89,9 +89,11 @@ describe("omes_control module descriptor", () => {
     expect(permKeys).toContain("omes_control.enrollments.manage");
   });
 
-  test("defines dataLifecycle descriptors for all 8 domain tables", () => {
+  test("defines dataLifecycle descriptors for all 10 domain tables", () => {
+    // 8 original (#196) + awcms_omes_worker_nonces + awcms_omes_worker_results
+    // (ahliweb/omes#199, sql/159).
     const lifecycles = omesControlModule.dataLifecycle ?? [];
-    expect(lifecycles.length).toBe(8);
+    expect(lifecycles.length).toBe(10);
 
     const keys = lifecycles.map((l) => l.key);
     expect(keys).toContain(OMES_HEALTH_SNAPSHOTS_LIFECYCLE_KEY);
