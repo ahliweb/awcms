@@ -259,7 +259,8 @@ describe("Operations offers only OMES-evidence-backed capabilities", () => {
   });
 
   test("every code in the allowlist is exactly the OMES-owned safe-operation enum (no wider, no narrower)", () => {
-    expect([...OMES_OPERATION_CODES].sort()).toEqual(
+    const actual: string[] = [...OMES_OPERATION_CODES].sort();
+    expect(actual).toEqual(
       [
         "backup",
         "preflight",

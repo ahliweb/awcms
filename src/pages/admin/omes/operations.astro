@@ -32,10 +32,13 @@ import {
   isDestructiveOmesOperation,
   type OmesOperationCode
 } from "../../../modules/omes-control/domain/operations";
-import {
-  fetchOperationRequests,
-  type OperationRequestSummary
-} from "../../../modules/omes-control/application/operation-directory";
+import { fetchOperationRequests } from "../../../modules/omes-control/application/operation-directory";
+// `OperationRequestSummary` is DEFINED in `operation-submission.ts` (the
+// write path) and merely re-used by `operation-directory.ts` (the read
+// path) via a type-only import that file never re-exports — so the type
+// itself is imported from its true origin here rather than through the
+// directory module.
+import type { OperationRequestSummary } from "../../../modules/omes-control/application/operation-submission";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
