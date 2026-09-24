@@ -1,0 +1,229 @@
+---
+/**
+ * OMES Control Center — overview, Issue ahliweb/omes#200 (parent #195).
+ *
+ * Server health distribution, job state summary, backup freshness, and
+ * drift summary, sourced from `computeOmesOverview` (Issue ahliweb/omes#198)
+ * — a direct read of the `omes_control` tables at request time, NOT the
+ * `reporting` module's projections (issue #200's validated reuse
+ * requirement: "never substitute reporting projections for authoritative
+ * OMES/Hermes observed state").
+ *
+ * This is the shell entry point `ahliweb/omes#201` (health, backup/recovery
+ * and audit screens) hooks into: it links out to `/admin/omes/servers`,
+ * `/admin/omes/deployments`, `/admin/omes/jobs` today, and #201 adds its own
+ * cards/links here for health, backup/recovery detail, and audit — this page
+ * does not need restructuring to receive them, only new `<section>`s.
+ *
+ * Gated any-of across every panel's own read permission (mirrors
+ * `/admin/sync`'s established pattern) — an operator who holds only
+ * `servers.read` still sees the servers card, even without `jobs.read` or
+ * `deployments.read`.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  computeOmesOverview,
+  type OmesOverview
+} from "../../../modules/omes-control/application/overview";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const EMPTY_OVERVIEW: OmesOverview = {
+  generatedAt: new Date(0).toISOString(),
+  serverCount: 0,
+  serverStatusCounts: {},
+  serverHealthDistribution: {},
+  staleServerCount: 0,
+  jobStateCounts: {},
+  backupFreshness: { fresh: 0, stale: 0, failed: 0 },
+  driftSummary: { reconciliationStatusCounts: {}, staleDeploymentCount: 0 }
+};
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    OMES_GUARDS.servers.read,
+    OMES_GUARDS.deployments.read,
+    OMES_GUARDS.jobs.read,
+    OMES_GUARDS.backups.read
+  ],
+  load: async ({ tx, entry }) => {
+    const [readServers, readDeployments, readJobs, readBackups] = entry;
+    const canReadAnyPanel =
+      readServers || readDeployments || readJobs || readBackups;
+
+    const overview = canReadAnyPanel
+      ? await computeOmesOverview(tx, ssr.tenantId, new Date())
+      : EMPTY_OVERVIEW;
+
+    return { readServers, readDeployments, readJobs, readBackups, overview };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/index.astro: failed to load the OMES overview",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const readServers = screen.state === "allowed" && screen.data.readServers;
+const readDeployments =
+  screen.state === "allowed" && screen.data.readDeployments;
+const readJobs = screen.state === "allowed" && screen.data.readJobs;
+const readBackups = screen.state === "allowed" && screen.data.readBackups;
+const overview: OmesOverview =
+  screen.state === "allowed" ? screen.data.overview : EMPTY_OVERVIEW;
+
+function formatCounts(counts: Record<string, number>): string {
+  const entries = Object.entries(counts);
+  if (entries.length === 0) return "—";
+  return entries.map(([key, value]) => `${key}: ${value}`).join(" · ");
+}
+---
+
+<AdminLayout
+  title={t("OMES overview")}
+  description={t(
+    "Fleet health distribution, job state summary, backup freshness, and drift, aggregated directly from OMES control state — never from a reporting projection."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-overview-denied">
+        {t("You do not have permission to view the OMES overview.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-overview-error">
+        {t(
+          "The OMES overview could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="OMES fleet summary">
+        <div class="stat-grid stagger-children">
+          {readServers && (
+            <div class="stat-card">
+              <span class="stat-label">{t("Enrolled servers")}</span>
+              <span class="stat-value">{overview.serverCount}</span>
+              {overview.staleServerCount > 0 && (
+                <span class="stat-hint">
+                  {t("{count} stale (no recent heartbeat)").replace(
+                    "{count}",
+                    String(overview.staleServerCount)
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+          {readServers && (
+            <div class="stat-card">
+              <span class="stat-label">{t("Server health distribution")}</span>
+              <span class="stat-value">
+                {formatCounts(overview.serverHealthDistribution)}
+              </span>
+            </div>
+          )}
+          {readJobs && (
+            <div class="stat-card">
+              <span class="stat-label">{t("Job state summary")}</span>
+              <span class="stat-value">
+                {formatCounts(overview.jobStateCounts)}
+              </span>
+            </div>
+          )}
+          {readBackups && (
+            <div class="stat-card">
+              <span class="stat-label">{t("Backup freshness")}</span>
+              <span class="stat-value">
+                {t("Fresh")}: {overview.backupFreshness.fresh} · {t("Stale")}:{" "}
+                {overview.backupFreshness.stale} · {t("Failed")}:{" "}
+                {overview.backupFreshness.failed}
+              </span>
+            </div>
+          )}
+          {readDeployments && (
+            <div class="stat-card">
+              <span class="stat-label">{t("Deployment drift")}</span>
+              <span class="stat-value">
+                {formatCounts(overview.driftSummary.reconciliationStatusCounts)}
+              </span>
+              {overview.driftSummary.staleDeploymentCount > 0 && (
+                <span class="stat-hint">
+                  {t("{count} deployment(s) stale or unreconciled").replace(
+                    "{count}",
+                    String(overview.driftSummary.staleDeploymentCount)
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="OMES screens">
+        <h2 class="admin-section-title">{t("Screens")}</h2>
+        <p class="page-description">
+          {t(
+            "Desired and observed state are always shown separately on these screens — an observed value is never presented as the desired one, and stale or missing evidence is shown explicitly rather than as healthy."
+          )}
+        </p>
+        <div class="quick-links">
+          {readServers && (
+            <a class="quick-link" href="/admin/omes/servers">
+              {t("Servers")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readDeployments && (
+            <a class="quick-link" href="/admin/omes/deployments">
+              {t("Deployments")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readDeployments && (
+            <a class="quick-link" href="/admin/omes/operations">
+              {t("Operations")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {readJobs && (
+            <a class="quick-link" href="/admin/omes/jobs">
+              {t("Jobs")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>

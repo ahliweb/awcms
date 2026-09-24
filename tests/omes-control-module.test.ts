@@ -34,10 +34,37 @@ describe("omes_control module descriptor", () => {
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
-  test("omits navigation until physical admin screens land in staged issues", () => {
-    // Matches the pattern established by push_delivery (ADR-0074) — admin-navigation-registry
-    // enforces that every declared navigation path resolves to a physical page file.
-    expect(omesControlModule.navigation).toBeUndefined();
+  test("declares navigation for the five screens ahliweb/omes#200 landed", () => {
+    // Was `toBeUndefined()` while the physical pages were staged work
+    // (ahliweb/omes#196/#197/#198) — matching the push_delivery (ADR-0074)
+    // precedent that a descriptor must not declare a path with no page
+    // behind it (`tests/admin-navigation-registry.test.ts` enforces this in
+    // both directions). ahliweb/omes#200 is exactly the issue that lands
+    // those five pages, so this now asserts the populated shape instead.
+    const nav = omesControlModule.navigation ?? [];
+    expect(nav.map((entry) => entry.path).sort()).toEqual(
+      [
+        "/admin/omes",
+        "/admin/omes/servers",
+        "/admin/omes/deployments",
+        "/admin/omes/operations",
+        "/admin/omes/jobs"
+      ].sort()
+    );
+
+    // Every requiredPermission must be one of the 13 permissions this same
+    // descriptor declares below — a nav entry gated on a permission nothing
+    // seeds denies even `owner` (this repo's own recorded failure mode).
+    const declared = new Set(
+      (omesControlModule.permissions ?? []).map(
+        (permission) =>
+          `omes_control.${permission.activityCode}.${permission.action}`
+      )
+    );
+    for (const entry of nav) {
+      expect(entry.requiredPermission).toBeDefined();
+      expect(declared.has(entry.requiredPermission as string)).toBe(true);
+    }
   });
 
   test("defines 13 granular least-privilege permissions", () => {

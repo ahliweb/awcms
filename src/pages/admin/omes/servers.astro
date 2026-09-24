@@ -1,0 +1,544 @@
+---
+/**
+ * OMES Control Center — servers, Issue ahliweb/omes#200.
+ *
+ * Fleet inventory list (`fetchServers`, Issue ahliweb/omes#198) plus, for one
+ * selected server at a time, its enrollment/trust evidence (`fetchServerDetail`)
+ * — enrollment status and a SHA-256 fingerprint of the worker's public key,
+ * never the raw key material. Platform/OMES evidence shown is exactly what
+ * `awcms_omes_servers` carries (hostname, IP, OS name/version, architecture,
+ * status, heartbeat staleness); this screen renders no Hermes-baseline
+ * section, because the #198 servers API carries none yet — that evidence is
+ * exposed by `/api/v1/omes/health` and is `ahliweb/omes#201`'s to render, not
+ * fabricated here.
+ *
+ * Stale (no heartbeat within `STALE_HEARTBEAT_THRESHOLD_MS`, 5 minutes) and
+ * offline/decommissioned states render explicitly as their own status badge
+ * variant — never folded into a generic "active" look.
+ *
+ * Registration only records INTENT (`POST /api/v1/omes/servers`, `servers.register`)
+ * — it never reaches a host. Decommission is a soft delete (`servers.delete`)
+ * and is NOT in the destructive-operation workflow (that gate covers
+ * `omes_operation_requests`, a different table); it is reversible in the
+ * sense that history/audit rows are preserved, so no extra confirmation step
+ * beyond the standard `window.confirm` is required here.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  fetchServers,
+  fetchServerDetail,
+  type ServerDetail,
+  type ServerSummary
+} from "../../../modules/omes-control/application/server-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS = [
+  "offline",
+  "online",
+  "degraded",
+  "maintenance",
+  "decommissioned"
+] as const;
+const STATUS_VARIANT: Record<string, string> = {
+  online: "success",
+  offline: "neutral",
+  degraded: "warning",
+  maintenance: "info",
+  decommissioned: "danger"
+};
+
+const statusRaw = readParam("status");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as (typeof STATUS_OPTIONS)[number])
+  : undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const selectedId = readParam("selected") || null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.servers.read,
+  load: async ({ tx, can }) => {
+    const now = new Date();
+    const page = await fetchServers(tx, ssr.tenantId, now, {
+      status: statusFilter,
+      cursor: cursor ?? undefined
+    });
+    const selected = selectedId
+      ? await fetchServerDetail(tx, ssr.tenantId, selectedId, now)
+      : null;
+
+    return {
+      servers: page.servers,
+      nextCursor: page.nextCursor,
+      selected,
+      canRegister: await can(OMES_GUARDS.servers.register),
+      canDelete: await can(OMES_GUARDS.servers.delete)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/servers.astro: failed to load the OMES servers console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const servers: ServerSummary[] =
+  screen.state === "allowed" ? screen.data.servers : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const selected: ServerDetail | null =
+  screen.state === "allowed" ? screen.data.selected : null;
+const canRegister = screen.state === "allowed" && screen.data.canRegister;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+
+function formatTimestamp(value: string | null): string {
+  return value ?? "—";
+}
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/servers?${query}` : "/admin/omes/servers";
+}
+
+const staleCount = servers.filter((server) => server.stale).length;
+const columns = 6 + (canDelete ? 1 : 0);
+---
+
+<AdminLayout
+  title={t("OMES servers")}
+  description={t(
+    "Enrolled OMES host servers: platform and OMES fleet evidence, enrollment/trust status, and heartbeat staleness. No raw enrollment key material is ever rendered — only a fingerprint."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-servers-denied">
+        {t("You do not have permission to view OMES servers.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-servers-error">
+        {t(
+          "The OMES servers console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="omes-servers-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES server summary"
+      >
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Servers (this page)")}</span>
+            <span class="stat-value">{servers.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Stale (this page)")}</span>
+            <span class="stat-value">{staleCount}</span>
+            {staleCount > 0 && (
+              <span class="stat-hint">
+                {t("No heartbeat within the staleness window")}
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRegister && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="register-title"
+      >
+        <h2 class="admin-section-title" id="register-title">
+          {t("Register a server")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
+          )}
+        </p>
+        <form class="admin-toolbar" id="server-register-form">
+          <label for="reg-hostname">{t("Hostname")}</label>
+          <input
+            id="reg-hostname"
+            name="hostname"
+            type="text"
+            required
+            maxlength="255"
+          />
+          <label for="reg-os">{t("OS")}</label>
+          <input id="reg-os" name="os" type="text" required maxlength="64" />
+          <label for="reg-version">{t("OS version")}</label>
+          <input
+            id="reg-version"
+            name="version"
+            type="text"
+            required
+            maxlength="64"
+          />
+          <label for="reg-arch">{t("Architecture")}</label>
+          <input
+            id="reg-arch"
+            name="arch"
+            type="text"
+            required
+            maxlength="32"
+          />
+          <label for="reg-ip">{t("IP (optional)")}</label>
+          <input id="reg-ip" name="ip" type="text" maxlength="64" />
+          <button type="submit">{t("Register")}</button>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="servers-title"
+        id="omes-servers-list"
+      >
+        <h2 class="admin-section-title" id="servers-title">
+          {t("Servers")}
+          <span class="count-pill">{servers.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="server-filter-form">
+          <label for="filter-status">{t("Status")}</label>
+          <select id="filter-status" name="status">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-servers-table">
+            <caption class="sr-only">{t("Enrolled OMES servers.")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Hostname")}</th>
+                <th scope="col">{t("Platform")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Heartbeat")}</th>
+                <th scope="col">{t("Registered")}</th>
+                <th scope="col">{t("Evidence")}</th>
+                {canDelete && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {servers.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={columns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▭
+                      </span>
+                      <span class="empty-state-title">{t("No servers")}</span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Register a server above, or wait for one to self-register."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                servers.map((server) => (
+                  <tr data-server-row={server.id}>
+                    <td data-label="Hostname">
+                      <span class="cell-code">{server.hostname}</span>
+                      {server.ip && (
+                        <span class="cell-muted"> · {server.ip}</span>
+                      )}
+                    </td>
+                    <td data-label="Platform">
+                      <span class="cell-muted">
+                        {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
+                        {server.arch ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[server.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {server.status}
+                      </span>
+                      {server.stale && (
+                        <span class="status-badge" data-variant="warning">
+                          <span class="status-dot" aria-hidden="true" />
+                          {t("stale")}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Heartbeat">
+                      <span class="cell-muted">
+                        {formatTimestamp(server.lastHeartbeatAt)}
+                      </span>
+                    </td>
+                    <td data-label="Registered">
+                      <span class="cell-muted">{server.createdAt}</span>
+                    </td>
+                    <td data-label="Evidence">
+                      <a
+                        class="quick-link"
+                        href={linkWith({ selected: server.id })}
+                      >
+                        {t("View evidence")}
+                      </a>
+                    </td>
+                    {canDelete && (
+                      <td data-label="Actions">
+                        {server.status === "decommissioned" ? (
+                          <span class="cell-muted">{t("decommissioned")}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger server-decommission-btn"
+                            data-server-id={server.id}
+                            data-hostname={server.hostname}
+                          >
+                            {t("Decommission")}
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && selectedId && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="evidence-title"
+        id="omes-server-evidence"
+      >
+        <h2 class="admin-section-title" id="evidence-title">
+          {t("Enrollment & trust evidence")}
+        </h2>
+        {selected ? (
+          <>
+            <p class="page-description">
+              <span class="cell-code">{selected.hostname}</span> ·{" "}
+              {selected.serverId}
+            </p>
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <caption class="sr-only">
+                  {t("Worker enrollments for this server, newest first.")}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Worker")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Public key fingerprint (SHA-256)")}</th>
+                    <th scope="col">{t("Enrolled")}</th>
+                    <th scope="col">{t("Revoked")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.enrollments.length === 0 ? (
+                    <tr>
+                      <td class="data-table-empty" colspan={5}>
+                        <div class="empty-state">
+                          <span class="empty-state-title">
+                            {t("No enrollments")}
+                          </span>
+                          <span class="empty-state-text">
+                            {t(
+                              "This server has not completed worker enrollment yet."
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    selected.enrollments.map((enrollment) => (
+                      <tr>
+                        <td data-label="Worker">
+                          <span class="cell-code">{enrollment.workerId}</span>
+                        </td>
+                        <td data-label="Status">
+                          <span
+                            class="status-badge"
+                            data-variant={
+                              enrollment.status === "active"
+                                ? "success"
+                                : "neutral"
+                            }
+                          >
+                            <span class="status-dot" aria-hidden="true" />
+                            {enrollment.status}
+                          </span>
+                        </td>
+                        <td data-label="Fingerprint">
+                          <span class="cell-code">
+                            {enrollment.publicKeyFingerprint}
+                          </span>
+                        </td>
+                        <td data-label="Enrolled">
+                          <span class="cell-muted">
+                            {formatTimestamp(enrollment.enrolledAt)}
+                          </span>
+                        </td>
+                        <td data-label="Revoked">
+                          <span class="cell-muted">
+                            {formatTimestamp(enrollment.revokedAt)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p class="state-notice">{t("That server could not be found.")}</p>
+        )}
+        <div class="admin-toolbar">
+          <a class="quick-link" href={linkWith({ selected: null })}>
+            {t("Close evidence panel")}
+          </a>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-servers-action-error");
+
+  onSubmit("server-register-form", async ({ data, submit }) => {
+    const ip = field(data, "ip");
+    const body: Record<string, unknown> = {
+      hostname: field(data, "hostname"),
+      platform: {
+        os: field(data, "os"),
+        version: field(data, "version"),
+        arch: field(data, "arch")
+      }
+    };
+    if (ip !== "") body.ip = ip;
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/omes/servers", body, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      "Could not register the server. Please check the fields and try again.",
+      "Registering…"
+    );
+  });
+
+  onAction(".server-decommission-btn", async (button) => {
+    const serverId = button.dataset.serverId;
+    if (!serverId) return;
+    const hostname = button.dataset.hostname ?? "this server";
+
+    if (
+      !window.confirm(
+        `Decommission ${hostname}? It stops appearing as an active fleet member. Enrollment and audit history are kept.`
+      )
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("DELETE", `/api/v1/omes/servers/${serverId}`, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      "Could not decommission the server. Please try again.",
+      "Decommissioning…"
+    );
+  });
+</script>

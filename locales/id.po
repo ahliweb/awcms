@@ -208,6 +208,21 @@ msgstr "Notifikasi push"
 msgid "Sync & storage"
 msgstr "Sinkronisasi & penyimpanan"
 
+msgid "OMES overview"
+msgstr "Ikhtisar OMES"
+
+msgid "OMES servers"
+msgstr "Server OMES"
+
+msgid "OMES deployments"
+msgstr "Deployment OMES"
+
+msgid "OMES operations"
+msgstr "Operasi OMES"
+
+msgid "OMES jobs"
+msgstr "Job OMES"
+
 msgid "Profiles"
 msgstr "Profil"
 
@@ -4696,3 +4711,311 @@ msgstr "Kelas konten"
 
 msgid "Editorial disclosure. Standard needs none; advertorial and sponsored are surfaced to readers as paid content."
 msgstr "Pengungkapan editorial. Standard tidak memerlukan pengungkapan; advertorial dan sponsored ditampilkan kepada pembaca sebagai konten berbayar."
+
+msgid "Architecture"
+msgstr "Arsitektur"
+
+msgid "Backup freshness"
+msgstr "Kesegaran backup"
+
+msgid "Close evidence panel"
+msgstr "Tutup panel bukti"
+
+msgid "Decommission"
+msgstr "Nonaktifkan permanen"
+
+msgid "Deployment drift"
+msgstr "Drift deployment"
+
+msgid "Deployments"
+msgstr "Deployment"
+
+msgid "Desired and observed state are always shown separately on these screens — an observed value is never presented as the desired one, and stale or missing evidence is shown explicitly rather than as healthy."
+msgstr "Status yang diinginkan dan status teramati selalu ditampilkan terpisah di layar ini — nilai teramati tidak pernah disajikan sebagai nilai yang diinginkan, dan bukti yang basi atau hilang ditampilkan secara eksplisit, bukan seolah sehat."
+
+msgid "Enrolled"
+msgstr "Terdaftar"
+
+msgid "Enrolled OMES host servers: platform and OMES fleet evidence, enrollment/trust status, and heartbeat staleness. No raw enrollment key material is ever rendered — only a fingerprint."
+msgstr "Server host OMES yang terdaftar: bukti platform dan armada OMES, status pendaftaran/kepercayaan, dan kebasian heartbeat. Materi kunci pendaftaran mentah tidak pernah ditampilkan — hanya sidik jarinya."
+
+msgid "Enrolled OMES servers."
+msgstr "Server OMES yang terdaftar."
+
+msgid "Enrolled servers"
+msgstr "Server terdaftar"
+
+msgid "Enrollment & trust evidence"
+msgstr "Bukti pendaftaran & kepercayaan"
+
+msgid "Evidence"
+msgstr "Bukti"
+
+msgid "Fleet health distribution, job state summary, backup freshness, and drift, aggregated directly from OMES control state — never from a reporting projection."
+msgstr "Distribusi kesehatan armada, ringkasan status job, kesegaran backup, dan drift, diagregasi langsung dari status kendali OMES — tidak pernah dari proyeksi pelaporan."
+
+msgid "Fresh"
+msgstr "Segar"
+
+msgid "Heartbeat"
+msgstr "Heartbeat"
+
+msgid "IP (optional)"
+msgstr "IP (opsional)"
+
+msgid "Job state summary"
+msgstr "Ringkasan status job"
+
+msgid "Jobs"
+msgstr "Job"
+
+msgid "No enrollments"
+msgstr "Belum ada pendaftaran"
+
+msgid "No heartbeat within the staleness window"
+msgstr "Tidak ada heartbeat dalam jendela kebasian"
+
+msgid "No servers"
+msgstr "Belum ada server"
+
+msgid "OS"
+msgstr "OS"
+
+msgid "OS version"
+msgstr "Versi OS"
+
+msgid "Platform"
+msgstr "Platform"
+
+msgid "Public key fingerprint (SHA-256)"
+msgstr "Sidik jari kunci publik (SHA-256)"
+
+msgid "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
+msgstr "Hanya mencatat niat pendaftaran. Server baru dapat dijangkau setelah pull worker OMES-nya menyelesaikan pendaftaran."
+
+msgid "Register"
+msgstr "Daftarkan"
+
+msgid "Register a server"
+msgstr "Daftarkan server"
+
+msgid "Register a server above, or wait for one to self-register."
+msgstr "Daftarkan server di atas, atau tunggu server mendaftar sendiri."
+
+msgid "Revoked"
+msgstr "Dicabut"
+
+msgid "Screens"
+msgstr "Layar"
+
+msgid "Server health distribution"
+msgstr "Distribusi kesehatan server"
+
+msgid "Servers"
+msgstr "Server"
+
+msgid "Servers (this page)"
+msgstr "Server (halaman ini)"
+
+msgid "Stale"
+msgstr "Basi"
+
+msgid "Stale (this page)"
+msgstr "Basi (halaman ini)"
+
+msgid "That server could not be found."
+msgstr "Server tersebut tidak ditemukan."
+
+msgid "The OMES overview could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Ikhtisar OMES tidak dapat dimuat saat ini. Ini masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "The OMES servers console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol server OMES tidak dapat dimuat saat ini. Ini masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "This server has not completed worker enrollment yet."
+msgstr "Server ini belum menyelesaikan pendaftaran worker."
+
+msgid "View evidence"
+msgstr "Lihat bukti"
+
+msgid "Worker"
+msgstr "Worker"
+
+msgid "Worker enrollments for this server, newest first."
+msgstr "Pendaftaran worker untuk server ini, terbaru lebih dulu."
+
+msgid "You do not have permission to view OMES servers."
+msgstr "Anda tidak memiliki izin untuk melihat server OMES."
+
+msgid "You do not have permission to view the OMES overview."
+msgstr "Anda tidak memiliki izin untuk melihat ikhtisar OMES."
+
+msgid "decommissioned"
+msgstr "dinonaktifkan permanen"
+
+msgid "stale"
+msgstr "basi"
+
+msgid "{count} deployment(s) stale or unreconciled"
+msgstr "{count} deployment basi atau belum direkonsiliasi"
+
+msgid "{count} stale (no recent heartbeat)"
+msgstr "{count} basi (tanpa heartbeat terbaru)"
+
+
+msgid "Operations"
+msgstr "Operasi"
+
+msgid "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
+msgstr "AWCMS tidak pernah mengirimkan ini langsung ke host — pull worker OMES adalah satu-satunya pembaca yang mengubah permintaan yang disetujui menjadi eksekusi host."
+
+msgid "Any state"
+msgstr "Status apa saja"
+
+msgid "Approval"
+msgstr "Persetujuan"
+
+msgid "Approve retry"
+msgstr "Setujui percobaan ulang"
+
+msgid "Correlation"
+msgstr "Korelasi"
+
+msgid "Deployment ID (optional)"
+msgstr "ID deployment (opsional)"
+
+msgid "Deployments (this page)"
+msgstr "Deployment (halaman ini)"
+
+msgid "Desired state"
+msgstr "Status yang diinginkan"
+
+msgid "Desired vs observed deployment state, shown as two separate columns — the observed value is never presented as the desired one — with last reconciliation time, staleness, and error evidence."
+msgstr "Status deployment yang diinginkan vs teramati, ditampilkan sebagai dua kolom terpisah — nilai teramati tidak pernah disajikan sebagai nilai yang diinginkan — beserta waktu rekonsiliasi terakhir, kebasian, dan bukti kesalahan."
+
+msgid "Error evidence"
+msgstr "Bukti kesalahan"
+
+msgid "Failed (this page)"
+msgstr "Gagal (halaman ini)"
+
+msgid "Go to Operations"
+msgstr "Buka Operasi"
+
+msgid "Job"
+msgstr "Job"
+
+msgid "Jobs (this page)"
+msgstr "Job (halaman ini)"
+
+msgid "Last reconciled"
+msgstr "Terakhir direkonsiliasi"
+
+msgid "Lease"
+msgstr "Sewa (lease)"
+
+msgid "No deployments"
+msgstr "Belum ada deployment"
+
+msgid "No jobs"
+msgstr "Belum ada job"
+
+msgid "No operation requests"
+msgstr "Belum ada permintaan operasi"
+
+msgid "Not destructive — no approval required"
+msgstr "Tidak destruktif — tidak perlu persetujuan"
+
+msgid "Nothing matches this filter, or no deployment has been created yet."
+msgstr "Tidak ada yang cocok dengan filter ini, atau belum ada deployment yang dibuat."
+
+msgid "Nothing matches this filter, or none has been dispatched yet."
+msgstr "Tidak ada yang cocok dengan filter ini, atau belum ada yang dikirim."
+
+msgid "Nothing matches this filter, or none has been submitted yet."
+msgstr "Tidak ada yang cocok dengan filter ini, atau belum ada yang diajukan."
+
+msgid "OMES deployments, desired and observed state shown separately."
+msgstr "Deployment OMES, status yang diinginkan dan teramati ditampilkan terpisah."
+
+msgid "OMES operation requests, newest first."
+msgstr "Permintaan operasi OMES, terbaru lebih dulu."
+
+msgid "OMES worker jobs, newest first."
+msgstr "Job worker OMES, terbaru lebih dulu."
+
+msgid "Observed state"
+msgstr "Status teramati"
+
+msgid "Operation"
+msgstr "Operasi"
+
+msgid "Operation requests"
+msgstr "Permintaan operasi"
+
+msgid "Reconciliation"
+msgstr "Rekonsiliasi"
+
+msgid "Reconciliation status"
+msgstr "Status rekonsiliasi"
+
+msgid "Request"
+msgstr "Permintaan"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server ID"
+msgstr "ID server"
+
+msgid "Stale or unreconciled (this page)"
+msgstr "Basi atau belum direkonsiliasi (halaman ini)"
+
+msgid "Submit"
+msgstr "Kirim"
+
+msgid "Submit an operation"
+msgstr "Kirim operasi"
+
+msgid "Submit and review OMES operation requests, limited to the OMES-owned safe-operation allowlist. Destructive operations (stop, rollback) require an approved workflow decision on the Approvals screen before dispatch."
+msgstr "Ajukan dan tinjau permintaan operasi OMES, dibatasi pada daftar izin operasi aman milik OMES. Operasi destruktif (stop, rollback) memerlukan keputusan alur kerja yang disetujui di layar Persetujuan sebelum dikirim."
+
+msgid "The OMES deployments console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol deployment OMES tidak dapat dimuat saat ini. Ini masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "The OMES jobs console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol job OMES tidak dapat dimuat saat ini. Ini masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "The OMES operations console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol operasi OMES tidak dapat dimuat saat ini. Ini masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "The OMES worker dispatch queue: state, correlation and idempotency identifiers, lease ownership, retry count, and sanitized evidence."
+msgstr "Antrean dispatch worker OMES: status, identifier korelasi dan idempotensi, kepemilikan sewa (lease), jumlah percobaan ulang, dan bukti yang disanitasi."
+
+msgid "To change a deployment's state (apply, update, reconcile, roll back), submit an operation on the Operations screen — this screen is read-only."
+msgstr "Untuk mengubah status deployment (apply, update, reconcile, roll back), ajukan operasi di layar Operasi — layar ini hanya untuk membaca."
+
+msgid "View desired state"
+msgstr "Lihat status yang diinginkan"
+
+msgid "View error evidence"
+msgstr "Lihat bukti kesalahan"
+
+msgid "View in Approvals"
+msgstr "Lihat di Persetujuan"
+
+msgid "View observed state"
+msgstr "Lihat status teramati"
+
+msgid "You do not have permission to view OMES deployments."
+msgstr "Anda tidak memiliki izin untuk melihat deployment OMES."
+
+msgid "You do not have permission to view OMES jobs."
+msgstr "Anda tidak memiliki izin untuk melihat job OMES."
+
+msgid "You do not have permission to view OMES operations."
+msgstr "Anda tidak memiliki izin untuk melihat operasi OMES."
+
+msgid "destructive — requires approval"
+msgstr "destruktif — memerlukan persetujuan"
+

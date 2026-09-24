@@ -1,0 +1,389 @@
+---
+/**
+ * OMES Control Center — operations, Issue ahliweb/omes#200.
+ *
+ * Lists submitted operation requests (`fetchOperationRequests`) and lets an
+ * operator submit a new one against the fixed, OMES-owned safe-operation
+ * allowlist (`OMES_OPERATION_CODES` — `status`, `preflight`, `start`,
+ * `stop`, `restart`, `update`, `backup`, `rollback`; nothing else is
+ * offered, matching issue #200's "only capabilities backed by OMES
+ * evidence"). `stop` and `rollback` are destructive
+ * (`isDestructiveOmesOperation`) and are routed through the canonical
+ * `workflow-approval` engine by `POST /api/v1/omes/operations` itself —
+ * this screen never runs a second approval decision. A destructive request
+ * whose tenant has not published an active
+ * `omes_control.destructive_operation` workflow definition is refused
+ * outright by the endpoint (`APPROVAL_WORKFLOW_NOT_CONFIGURED`); this
+ * screen surfaces that refusal rather than retrying or falling back.
+ *
+ * A request with a `workflowInstanceId` links into `/admin/approvals`
+ * (the canonical decision surface, ADR-0051/#183/#200's validated reuse
+ * requirement) — there is no second, OMES-specific approval inbox here.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import {
+  OMES_OPERATION_CODES,
+  isDestructiveOmesOperation,
+  type OmesOperationCode
+} from "../../../modules/omes-control/domain/operations";
+import { fetchOperationRequests } from "../../../modules/omes-control/application/operation-directory";
+// `OperationRequestSummary` is DEFINED in `operation-submission.ts` (the
+// write path) and merely re-used by `operation-directory.ts` (the read
+// path) via a type-only import that file never re-exports — so the type
+// itself is imported from its true origin here rather than through the
+// directory module.
+import type { OperationRequestSummary } from "../../../modules/omes-control/application/operation-submission";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS = [
+  "requested",
+  "approved",
+  "rejected",
+  "dispatched",
+  "completed",
+  "failed"
+] as const;
+const STATUS_VARIANT: Record<string, string> = {
+  requested: "info",
+  approved: "success",
+  rejected: "danger",
+  dispatched: "info",
+  completed: "success",
+  failed: "danger"
+};
+
+const statusRaw = readParam("status");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as (typeof STATUS_OPTIONS)[number])
+  : undefined;
+const serverIdFilter = readParam("serverId") || undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  // Reuses `deployments.read`/`deployments.operate` — this API correlates
+  // 1:1 with deployment intent and the seeded catalog (sql/155) has no
+  // dedicated `operations.*` activity (see `operations/index.ts`'s own
+  // comment on the GET route).
+  authorize: OMES_GUARDS.deployments.read,
+  load: async ({ tx, can }) => {
+    const page = await fetchOperationRequests(tx, ssr.tenantId, {
+      serverId: serverIdFilter,
+      status: statusFilter,
+      cursor: cursor ?? undefined
+    });
+
+    return {
+      operationRequests: page.operationRequests,
+      nextCursor: page.nextCursor,
+      canOperate: await can(OMES_GUARDS.deployments.operate),
+      canRollback: await can(OMES_GUARDS.backups.rollback)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/operations.astro: failed to load the OMES operations console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const operationRequests: OperationRequestSummary[] =
+  screen.state === "allowed" ? screen.data.operationRequests : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const canOperate = screen.state === "allowed" && screen.data.canOperate;
+const canRollback = screen.state === "allowed" && screen.data.canRollback;
+// A destructive op (`stop`, `rollback`) needs the SAME permission its
+// endpoint checks it against — never a coarser "canOperate" — so the form
+// never offers a choice the API would refuse.
+const canSubmitAnyOperation = canOperate || canRollback;
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/operations?${query}` : "/admin/omes/operations";
+}
+
+function approvalsLink(request: OperationRequestSummary): string {
+  const params = new URLSearchParams();
+  params.set("workflowKey", "omes_control.destructive_operation");
+  if (request.workflowInstanceId) {
+    params.set("instance", request.workflowInstanceId);
+  }
+  return `/admin/approvals?${params.toString()}`;
+}
+---
+
+<AdminLayout
+  title={t("OMES operations")}
+  description={t(
+    "Submit and review OMES operation requests, limited to the OMES-owned safe-operation allowlist. Destructive operations (stop, rollback) require an approved workflow decision on the Approvals screen before dispatch."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-operations-denied">
+        {t("You do not have permission to view OMES operations.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-operations-error">
+        {t(
+          "The OMES operations console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="omes-operations-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canSubmitAnyOperation && !loadError && (
+      <section class="admin-section fade-in-up" aria-labelledby="submit-title">
+        <h2 class="admin-section-title" id="submit-title">
+          {t("Submit an operation")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
+          )}
+        </p>
+        <form class="admin-toolbar" id="operation-submit-form">
+          <label for="op-server-id">{t("Server ID")}</label>
+          <input
+            id="op-server-id"
+            name="serverId"
+            type="text"
+            required
+            maxlength="128"
+          />
+          <label for="op-deployment-id">{t("Deployment ID (optional)")}</label>
+          <input
+            id="op-deployment-id"
+            name="deploymentId"
+            type="text"
+            maxlength="128"
+          />
+          <label for="op-operation">{t("Operation")}</label>
+          <select id="op-operation" name="operation" required>
+            {OMES_OPERATION_CODES.map((code: OmesOperationCode) => (
+              <option
+                value={code}
+                disabled={
+                  isDestructiveOmesOperation(code) &&
+                  !canRollback &&
+                  !canOperate
+                }
+              >
+                {code}
+                {isDestructiveOmesOperation(code)
+                  ? ` (${t("destructive — requires approval")})`
+                  : ""}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Submit")}</button>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="operations-title"
+        id="omes-operations-list"
+      >
+        <h2 class="admin-section-title" id="operations-title">
+          {t("Operation requests")}
+          <span class="count-pill">{operationRequests.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="operation-filter-form">
+          <label for="filter-server">{t("Server ID")}</label>
+          <input
+            id="filter-server"
+            name="serverId"
+            type="text"
+            value={serverIdFilter ?? ""}
+          />
+          <label for="filter-status">{t("Status")}</label>
+          <select id="filter-status" name="status">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="omes-operations-table"
+          >
+            <caption class="sr-only">
+              {t("OMES operation requests, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Request")}</th>
+                <th scope="col">{t("Operation")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Requested")}</th>
+                <th scope="col">{t("Approval")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {operationRequests.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={5}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⚙
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No operation requests")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Nothing matches this filter, or none has been submitted yet."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                operationRequests.map((request) => (
+                  <tr data-operation-row={request.id}>
+                    <td data-label="Request">
+                      <span class="cell-code">{request.requestId}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {t("Server")}: {request.serverId}
+                      </span>
+                    </td>
+                    <td data-label="Operation">
+                      <span class="cell-code">{request.operation}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[request.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {request.status}
+                      </span>
+                    </td>
+                    <td data-label="Requested">
+                      <span class="cell-muted">{request.createdAt}</span>
+                    </td>
+                    <td data-label="Approval">
+                      {request.workflowInstanceId ? (
+                        <a class="quick-link" href={approvalsLink(request)}>
+                          {t("View in Approvals")}
+                        </a>
+                      ) : (
+                        <span class="cell-muted">
+                          {t("Not destructive — no approval required")}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-operations-action-error");
+
+  onSubmit("operation-submit-form", async ({ data, submit }) => {
+    const deploymentId = field(data, "deploymentId");
+    const body: Record<string, unknown> = {
+      serverId: field(data, "serverId"),
+      operation: field(data, "operation")
+    };
+    if (deploymentId !== "") body.deploymentId = deploymentId;
+
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/omes/operations", body, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      (errorCode) =>
+        errorCode === "APPROVAL_WORKFLOW_NOT_CONFIGURED"
+          ? "This tenant has not published an active approval workflow for destructive OMES operations. Publish one under workflow key “omes_control.destructive_operation” on the Approvals screen before submitting this operation."
+          : "Could not submit the operation. Please check the fields and try again.",
+      "Submitting…"
+    );
+  });
+</script>

@@ -255,7 +255,12 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_machine_credentials": "Machine credentials",
   "admin.layout.nav_invitations": "Invitations",
   "admin.layout.nav_business_scope": "Business scope",
-  "admin.layout.nav_seo": "SEO & distribution"
+  "admin.layout.nav_seo": "SEO & distribution",
+  "admin.layout.nav_omes_overview": "OMES overview",
+  "admin.layout.nav_omes_servers": "OMES servers",
+  "admin.layout.nav_omes_deployments": "OMES deployments",
+  "admin.layout.nav_omes_operations": "OMES operations",
+  "admin.layout.nav_omes_jobs": "OMES jobs"
 };
 
 /**
@@ -341,7 +346,12 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_partner_registry": "handshake",
   "admin.layout.nav_machine_credentials": "key",
   "admin.layout.nav_invitations": "send",
-  "admin.layout.nav_business_scope": "layers"
+  "admin.layout.nav_business_scope": "layers",
+  "admin.layout.nav_omes_overview": "dashboard",
+  "admin.layout.nav_omes_servers": "monitor",
+  "admin.layout.nav_omes_deployments": "layers",
+  "admin.layout.nav_omes_operations": "bolt",
+  "admin.layout.nav_omes_jobs": "clock"
 };
 
 /** Display name for the synthetic core group. Rendered as a module sub-label. */
