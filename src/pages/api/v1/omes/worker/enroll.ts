@@ -16,8 +16,7 @@
 import type { APIRoute } from "astro";
 
 import { jsonResponse } from "../../../../../modules/_shared/api-response";
-import { getDatabaseClient } from "../../../../../lib/database/client";
-import { withTenant } from "../../../../../lib/database/tenant-context";
+import { runWorkerTenantWork } from "../../../../../modules/omes-control/application/worker-route-runner";
 import {
   readCappedText,
   BODY_SIZE_TIER_BYTES
@@ -150,9 +149,7 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  const sql = getDatabaseClient();
-
-  const outcome = await withTenant(sql, tenantId, (tx) =>
+  const outcome = await runWorkerTenantWork(tenantId, (tx) =>
     redeemEnrollmentChallenge(
       tx,
       {

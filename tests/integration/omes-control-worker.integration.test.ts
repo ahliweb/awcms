@@ -153,25 +153,6 @@ async function seedApprovedOperation(
   return rows[0]!.id;
 }
 
-async function seedLeasedJobDirect(
-  tenantId: string,
-  serverId: string,
-  operation: string,
-  workerId: string
-): Promise<string> {
-  const idempotencyKey = `idem_${randomUUID()}`;
-  await getHandlerAdminSql()`
-    INSERT INTO awcms_omes_jobs
-      (tenant_id, job_id, server_id, operation, state, target, payload, leased_by, leased_until, idempotency_key)
-    VALUES (
-      ${tenantId}, ${`job_${randomUUID()}`}, ${serverId}, ${operation}, 'leased',
-      '{}'::jsonb, '{}'::jsonb, ${workerId}, ${new Date(Date.now() + 60_000)}, ${idempotencyKey}
-    )
-  `;
-
-  return idempotencyKey;
-}
-
 type EnvelopeHeaders = { headers: Record<string, string>; body: unknown };
 
 function buildEnvelope(
