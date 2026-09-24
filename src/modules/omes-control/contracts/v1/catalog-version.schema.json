@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-version.schema.json",
+  "title": "catalog-version",
+  "description": "An immutable, dated revision of a product's or plan's terms (issue #92). Catalog changes are never edited in place from a subscriber's point of view: a new `catalog-version` record is created and `effective_from` governs which version applies to a given subscription's billing period. This is what lets an existing subscriber keep grandfathered limits/price after a plan changes.",
+  "type": "object",
+  "required": ["version_id", "catalog_entity", "entity_id", "effective_from"],
+  "additionalProperties": false,
+  "properties": {
+    "version_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "catalog_entity": {
+      "type": "string",
+      "enum": ["product", "plan", "addon", "price", "resource_policy", "backend_eligibility"]
+    },
+    "entity_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "effective_from": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "effective_until": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "changelog_ref": { "type": "string" }
+  }
+}

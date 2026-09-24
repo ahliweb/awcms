@@ -1,0 +1,7 @@
+{
+  "resource_policy_id": "policy-standard-suspension",
+  "new_provisioning_action": "sometimes",
+  "upgrade_action": "block",
+  "optional_workers_action": "stop",
+  "existing_healthy_deployments_action": "keep_running"
+}

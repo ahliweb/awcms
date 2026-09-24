@@ -1,0 +1,6 @@
+{
+  "product_id": "product-hermes-managed-server",
+  "name": "Hermes Managed Server",
+  "description": "A fully managed Hermes Agent deployment on an OMES-compatible host.",
+  "active": true
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/billing-profile.schema.json",
+  "title": "billing-profile",
+  "description": "A tenant's billing identity (issue #93): legal name, billing contact reference, tax id, and default currency. This is metadata storage only - OMES never sends email itself; `billing_contact_ref` is an opaque reference (e.g. an AWCMS user/contact id) awcms-one resolves through its own provider-neutral email boundary, not an inline address OMES emails directly.",
+  "type": "object",
+  "required": ["billing_profile_id", "tenant_id", "legal_name", "default_currency"],
+  "additionalProperties": false,
+  "properties": {
+    "billing_profile_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "legal_name": { "type": "string" },
+    "tax_id": { "type": "string" },
+    "billing_contact_ref": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "default_currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+  }
+}

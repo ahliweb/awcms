@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/deployment-view.schema.json",
+  "title": "deployment-view",
+  "description": "The desired-vs-observed deployment view OMES exposes to a Control Center screen (issue #91). `desired_state` is the intent OMES was last asked to converge on; `observed_state` is what OMES actually observed on the host at `last_reconciled_at`. A Control Center screen must render these separately rather than assuming they match. `error_evidence` is non-null only while the most recent reconciliation attempt failed.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "target",
+    "desired_state",
+    "observed_state",
+    "last_reconciled_at",
+    "error_evidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "target": {
+      "type": "object",
+      "required": ["server_id"],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "desired_state": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["running", "stopped", "absent", "updating"]
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "observed_state": {
+      "type": "object",
+      "required": ["status", "observed_at"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["running", "stopped", "absent", "updating", "degraded", "unknown"]
+        },
+        "observed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "last_reconciled_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "error_evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      },
+      "required": ["message", "occurred_at"]
+    }
+  }
+}

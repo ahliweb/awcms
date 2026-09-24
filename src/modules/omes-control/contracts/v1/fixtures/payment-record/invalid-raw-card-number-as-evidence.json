@@ -1,0 +1,11 @@
+{
+  "payment_id": "payment-acme-01",
+  "invoice_id": "invoice-acme-2026-01",
+  "tenant_id": "tenant-acme",
+  "currency": "USD",
+  "amount_minor": 2066,
+  "actor": { "type": "user", "id": "user-jane" },
+  "evidence_ref": "4111 1111 1111 1111",
+  "idempotency_key": "idem-payment-acme-01-00000001",
+  "confirmed_at": "2026-01-05T00:00:00Z"
+}

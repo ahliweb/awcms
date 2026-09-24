@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/tax-metadata.schema.json",
+  "title": "tax-metadata",
+  "description": "A named tax rate referenced by an invoice line (issue #93). `rate_bps` is the rate in basis points (1/100 of a percent) as an integer - e.g. 2000 = 20.00% - never a floating-point percentage, so tax computation stays exact integer arithmetic (see lib/omes/py/jobs/ledger.py).",
+  "type": "object",
+  "required": ["tax_code", "jurisdiction", "rate_bps", "inclusive"],
+  "additionalProperties": false,
+  "properties": {
+    "tax_code": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "jurisdiction": { "type": "string" },
+    "rate_bps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+    "inclusive": { "type": "boolean" }
+  }
+}

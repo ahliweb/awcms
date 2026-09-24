@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/webhook-envelope.schema.json",
+  "title": "webhook-envelope",
+  "description": "The provider-neutral shape a payment gateway webhook is normalized into before anything trusts it (issue #94). `signature` is never trusted by shape alone - lib/omes/py/jobs/payments.py's verify_signature() must return true against the raw payload BEFORE any event_type/data field is read. `delivery_id` (the provider's own delivery attempt id) and `event_id` (the underlying business event id, stable across delivery retries) are both required and used together for replay/idempotency checking - a provider may redeliver the same event_id under a new delivery_id, which is expected and must still be recognized as a replay by event_id.",
+  "type": "object",
+  "required": [
+    "delivery_id",
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "received_at",
+    "provider_id",
+    "signature",
+    "replay_window_seconds",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "delivery_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "event_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "payment.succeeded",
+        "payment.failed",
+        "invoice.recurring",
+        "dunning.retry",
+        "refund.completed",
+        "dispute.opened",
+        "cancellation.requested"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "received_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "provider_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "signature": {
+      "type": "object",
+      "required": ["algorithm", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "type": "string", "const": "hmac-sha256" },
+        "value": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "replay_window_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "data": { "type": "object" }
+  }
+}

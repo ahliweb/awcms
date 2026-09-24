@@ -1,0 +1,9 @@
+{
+  "credit_id": "credit-acme-01",
+  "tenant_id": "tenant-acme",
+  "invoice_id": "invoice-acme-2026-01",
+  "currency": "USD",
+  "amount_minor": 500,
+  "reason": "goodwill credit for delayed provisioning",
+  "applied": true
+}

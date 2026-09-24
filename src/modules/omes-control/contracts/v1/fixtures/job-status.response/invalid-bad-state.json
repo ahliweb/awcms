@@ -1,0 +1,17 @@
+{
+  "job_id": "job-0001",
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0003",
+  "idempotency_key": "idem-deploy-0001",
+  "operation": "backup",
+  "state": "done",
+  "actor": {
+    "type": "service",
+    "id": "control-center"
+  },
+  "target": {
+    "server_id": "srv-0001"
+  },
+  "created_at": "2026-09-19T10:00:00Z",
+  "updated_at": "2026-09-19T10:05:00Z"
+}

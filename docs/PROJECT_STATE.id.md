@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:01c7029af5b984ddde883b60a66d244fc7408ddd33e6b027a3df93937ad27380 -->
+<!-- i18n-source-hash: sha256:255977d6d619de0b8e32d1bae51f7fb642442a9746651569cdbf05f02a42a262 -->
 
 # AWCMS — Project State & Continuation
 
@@ -120,11 +120,11 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                     | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                     | `git rev-list --count v10.3.0..HEAD`                                                    |
 | Modul base                         | **25** (lihat daftar di ARCHITECTURE.md)                                                               | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **156** (`sql/001`–`156`)                                                                              | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0122** (`0000` = template; status ADR tertinggi: **Accepted**)                              | `ls docs/adr/`                                                                          |
+| Migrasi                            | **158** (`sql/001`–`158`)                                                                              | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0124** (`0000` = template; status ADR tertinggi: **Accepted**)                              | `ls docs/adr/`                                                                          |
 | Layar admin                        | **49** berkas `.astro` di `src/pages/admin/`; **1 dari 25** modul tanpa `navigation:` (`omes-control`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **63** (36.473 baris) — soal typecheck lihat §6                                                        | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **60** di rantai `bun run check`                                                                       | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Gerbang                            | **61** di rantai `bun run check`                                                                       | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**                              | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -367,7 +367,80 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   termasuk jebakan "user Coolify itu superuser sehingga RLS inert", di
   [`awcms/environments.md`](awcms/environments.md).
 
+- **Alur kerja pengetahuan Obsidian yang aman di atas graf** ([ADR-0124](adr/0124-obsidian-vault-location-dedicated-knowledge-directory.id.md),
+  Issue #805, tanpa migrasi). Obsidian adalah UI pengetahuan developer opsional, tidak
+  pernah sistem catatan: ia membuka **vault `knowledge/` khusus**, tidak pernah root
+  repository (ADR-nya mencatat kenapa, dibanding alternatif vault-root-repo dan path
+  per-developer tak-ter-commit). Ekspor Obsidian Graphify mendarat lebih dulu di
+  `graphify-out/obsidian-staging/` yang digitignore dan terisolasi; hanya
+  `scripts/knowledge-obsidian-sync.ts` (`bun run knowledge:obsidian:export`) yang boleh
+  memindahkan subset ber-allowlist (hanya `.md`/`.canvas`) ke
+  `knowledge/generated/graphify/`, fail-closed — exit bukan-nol, tanpa apa pun tertulis
+  — pada path traversal, tipe berkas tak terduga, collision nama berkas dengan
+  `knowledge/curated/`, atau entri yang path aslinya keluar dari staging root;
+  `knowledge/curated/` (catatan indeks kecil hasil kurasi manusia saja, tidak pernah
+  salinan konten ADR/PRD/kontrak kanonik) tidak pernah menjadi write target.
+  `tests/knowledge-obsidian-sync.test.ts` membuktikan setiap jalur fail-closed terhadap
+  bentuk cacat sungguhan (symlink sungguhan, byproduct `.obsidian/` sungguhan,
+  collision basename sungguhan), bahwa konten kurasi selamat byte-demi-byte setelah
+  ekspor penuh, dan bahwa area hasil-generate disposable/bisa dibangun ulang dari nol.
+  Baseline Graphify dipatok (`graphify 0.9.35`, tanpa `latest` yang mengambang);
+  `graphify install --project` dievaluasi dan ditolak (akan menduplikasi kebijakan
+  `AGENTS.md`/`.claude/skills/` tanpa gerbang yang menjaga keduanya sinkron). `bun run
+knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
+  digerbangi ke dalam rantai utama `bun run check`, murni dan tanpa Obsidian. Lihat
+  [`awcms/knowledge-graph.md`](awcms/knowledge-graph.id.md)
+  §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
+
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN ASURANS BACKUP — 24 September 2026 (Issue #812, ADR-0123): tiga
+  kontrol DR yang terdokumentasi-tapi-hilang kini ada.** `deploy/backup/`
+  mendapat `manifest.sh`, `offsite-copy.sh` dan `restore-drill.sh`, dan
+  `backup-postgres.sh`/`restore-postgres.sh` mendapat enkripsi-at-rest `age`
+  opt-in plus manifest pemulihan terautentikasi HMAC-SHA256 — menutup celah
+  yang telah diperingatkan dengan benar oleh setiap dokumen backup di repo
+  ini sejak koreksi 27 Agustus. Keputusan: `age` (asimetris, biner statis
+  tunggal, tanpa dependensi Bun/Node di container backup) dibanding GnuPG
+  (kerapuhan operasi tanpa-pengawasan) atau OpenSSL `enc` (bukan authenticated
+  encryption); HMAC-SHA256 atas manifest kanonik (mencocokkan pola sync-HMAC
+  yang sudah ada di repo ini) dibanding tanda tangan terpisah, dengan kunci
+  dibaca dari file oleh satu baris Perl alih-alih `openssl dgst -hmac <key>`
+  — yang terakhir akan menaruh kunci di argv, terlihat lewat `ps`. Rasional
+  lengkap dan alternatif yang ditolak ada di ADR-0123.
+
+  **Dijalankan, bukan cuma ditulis**: round trip `age`+HMAC nyata terhadap
+  Postgres 18.4 lokal sekali-pakai (155 migrasi diterapkan) — enkripsi →
+  manifest terautentikasi → artefak siap off-site → `restore-drill.sh` →
+  restore database scratch → hitungan `FORCE ROW LEVEL SECURITY` terverifikasi
+  tidak nol. Dua uji tamper independen (satu byte ciphertext dibalik, satu
+  field manifest diubah) keduanya benar-benar berhenti SEBELUM mutasi restore
+  apa pun. Konfigurasi sebagian (hanya salah satu dari pasangan env var
+  enkripsi di-set) benar-benar gagal tertutup di sisi backup maupun restore.
+  Log yang ditangkap di-grep untuk hex kunci HMAC, string identitas `age`, dan
+  password DB — tidak satu pun ditemukan. `offsite-copy.sh` hanya diuji untuk
+  jalur validasi-argumen/gagal-tertutupnya (tidak ada server SSH lokal di
+  lingkungan ini untuk membuktikan transfer nyata) — ditandai, bukan
+  disembunyikan.
+
+  Setiap default aman yang sudah ada dipertahankan: tidak ada kredensial
+  tercetak, tidak ada artefak final-looking tertinggal saat enkripsi gagal
+  (`.partial` + rename atomik, disiplin yang sama dengan dump yang sudah
+  ada), restore drill tetap default non-destruktif tanpa jalur kode di
+  `restore-drill.sh` yang bisa meneruskan `--target`, dan mode polos
+  tanpa-enkripsi (profil offline/LAN) tidak berubah byte demi byte.
+  `deploy/backup/README.md` baru (production-preflight-runbook.md sudah
+  menyebutnya hilang sejak 27 Agustus); mirror EN/ID diperbarui di seluruh
+  `production-preflight-runbook.md`, doc 07, `deployment-profiles.md`, skill
+  `awcms-production-preflight`, dan entri terjadwal
+  `deploy/cron/awcms.crontab`.
+
+  **Ditunda, dengan sengaja**: `scripts/dr-drill.ts`/`bun run
+resilience:dr-drill` — banner `resilience-dr-verification.md` sendiri
+  sudah menyatakan seluruh orkestrator itu belum ada di repo ini; membangunnya
+  adalah upaya terpisah yang jauh lebih besar dan tidak ditunggu issue ini.
+  `restore-drill.sh` ditulis agar orkestrator itu bisa memanggilnya begitu ia
+  ada.
 
 - **PUTARAN INSPEKSI — 28 Agustus 2026: tracker kosong, dan repo ini masih
   tertinggal satu langkah dari konsumennya sendiri.**

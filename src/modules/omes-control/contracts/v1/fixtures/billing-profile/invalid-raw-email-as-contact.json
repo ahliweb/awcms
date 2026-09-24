@@ -1,0 +1,7 @@
+{
+  "billing_profile_id": "billing-profile-acme-01",
+  "tenant_id": "tenant-acme",
+  "legal_name": "Acme Corp",
+  "default_currency": "USD",
+  "billing_email": "billing@acme.example"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "event_type": "invalid_hook_type",
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "session_id": "sess-main-12345",
+  "subagent_id": "sub-code-001",
+  "state": "RUNNING",
+  "timestamp": "2026-09-21T12:00:00Z",
+  "hermes_version": "v2026.9.14"
+}

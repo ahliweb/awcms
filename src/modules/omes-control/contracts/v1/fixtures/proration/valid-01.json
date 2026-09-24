@@ -1,0 +1,14 @@
+{
+  "proration_id": "proration-acme-01",
+  "tenant_id": "tenant-acme",
+  "subscription_id": "sub-acme-01",
+  "from_plan_id": "plan-starter",
+  "to_plan_id": "plan-growth",
+  "currency": "USD",
+  "days_remaining": 15,
+  "days_in_cycle": 30,
+  "unused_amount_minor": 950,
+  "new_amount_minor": 2000,
+  "net_amount_minor": 1050,
+  "rounding_rule": "half_up_minor_unit"
+}

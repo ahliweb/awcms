@@ -1,0 +1,8 @@
+{
+  "billing_profile_id": "billing-profile-acme-01",
+  "tenant_id": "tenant-acme",
+  "legal_name": "Acme Corp",
+  "tax_id": "US-EIN-00-0000000",
+  "billing_contact_ref": "contact-acme-billing-01",
+  "default_currency": "USD"
+}

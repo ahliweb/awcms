@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/worker-heartbeat.request.schema.json",
+  "title": "worker-heartbeat.request",
+  "description": "Periodic heartbeat transmitted by OMES host pull-worker (ADR-0027, issue #192).",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "server_id",
+    "worker_id",
+    "timestamp",
+    "status",
+    "omes_version",
+    "contract_version",
+    "capability_registry_digest",
+    "platform",
+    "uptime_seconds"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "worker_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "maintenance"]
+    },
+    "omes_version": {
+      "type": "string"
+    },
+    "contract_version": {
+      "type": "string"
+    },
+    "capability_registry_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,128}$"
+    },
+    "platform": {
+      "type": "object",
+      "required": ["os", "version", "arch"],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "string",
+          "enum": ["ubuntu", "linuxmint"]
+        },
+        "version": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string",
+          "enum": ["amd64", "arm64"]
+        }
+      }
+    },
+    "uptime_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_reconciliation_at": {
+      "type": "string"
+    }
+  }
+}

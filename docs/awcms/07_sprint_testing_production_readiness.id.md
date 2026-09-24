@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:1d4813969118b6d5733267ac4e558b6c0437ab16880145a1f98f9a8ddad7531d -->
+<!-- i18n-source-hash: sha256:fec508eb11b30c088c1368e5513e291938625b3f977f9e19207767d8820a7d57 -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -453,9 +453,13 @@ Validasi:
 - Smoke test modul aktif.
 - Report smoke test.
 
-`deploy/backup/restore-drill.sh` mengotomasi restore drill terjadwal:
-backup → restore ke database disposable → verifikasi migrasi schema,
-tenant isolation (RLS), dan sample record → laporan RTO/RPO.
+`deploy/backup/restore-drill.sh` mengotomasi restore drill terjadwal: pilih
+backup eligible terbaru (terenkripsi atau polos) → verifikasi manifest +
+dekripsi bila perlu → restore ke database disposable → verifikasi migrasi
+schema, baris tenant, dan `FORCE ROW LEVEL SECURITY` → tambahkan bukti
+RTO/RPO ke `restore-drill-evidence.jsonl`. Tidak pernah meneruskan
+`--target` di mana pun, sehingga tidak bisa menyasar database hidup
+sekalipun karena kesalahan operator.
 
 `bun run resilience:dr-drill` (lihat
 [`resilience-dr-verification.md`](resilience-dr-verification.md)) — **belum

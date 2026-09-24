@@ -1,0 +1,8 @@
+{
+  "price_id": "price-plan-starter-monthly-usd",
+  "catalog_entity": "plan",
+  "entity_id": "plan-starter",
+  "billing_cycle_id": "monthly",
+  "currency": "USD",
+  "amount_minor": 1900
+}

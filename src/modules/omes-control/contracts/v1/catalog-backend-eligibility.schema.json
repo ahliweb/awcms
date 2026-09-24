@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-backend-eligibility.schema.json",
+  "title": "catalog-backend-eligibility",
+  "description": "Which agent-runtime backends (issue #85's abstraction boundary, e.g. Hermes, a future second backend) a plan may provision (issue #92). Referenced by `catalog-plan.backend_eligibility_id`.",
+  "type": "object",
+  "required": ["backend_eligibility_id", "eligible_backends"],
+  "additionalProperties": false,
+  "properties": {
+    "backend_eligibility_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "eligible_backends": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+    }
+  }
+}

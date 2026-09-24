@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/invoice.schema.json",
+  "title": "invoice",
+  "description": "A manually generated invoice snapshot (issue #93). `lines` are immutable price snapshots (see invoice-line.schema.json - the same object shape, duplicated here because this validator has no $ref support). `totals` is a computed cache, not authoritative; `lib/omes/py/jobs/ledger.py`'s `compute_totals()` is the one function that must produce it from `lines`/`credits`/`adjustments`, and a consumer that only trusts the cached `totals` without ever having been able to recompute it from `lines` is a documented risk (see docs/control-center-contracts.md). `state` is a closed enum; see `contracts/control-center/v1/invoice.states.json` for the allowed transitions.",
+  "type": "object",
+  "required": [
+    "invoice_id",
+    "tenant_id",
+    "billing_profile_id",
+    "invoice_number",
+    "currency",
+    "state",
+    "issued_at",
+    "due_at",
+    "lines",
+    "totals",
+    "source_event_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "invoice_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "billing_profile_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "subscription_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "invoice_number": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "state": {
+      "type": "string",
+      "enum": ["draft", "issued", "partially_paid", "paid", "overdue", "void", "refunded", "disputed"]
+    },
+    "issued_at": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "due_at": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["line_id", "description", "quantity", "price_snapshot"],
+        "additionalProperties": false,
+        "properties": {
+          "line_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+          "description": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "price_snapshot": {
+            "type": "object",
+            "required": ["price_id", "catalog_version_id", "currency", "unit_amount_minor"],
+            "additionalProperties": false,
+            "properties": {
+              "price_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+              "catalog_version_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+              "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+              "unit_amount_minor": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "tax_code": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["subtotal_minor", "tax_minor", "credit_minor", "adjustment_minor", "total_minor", "paid_minor"],
+      "additionalProperties": false,
+      "properties": {
+        "subtotal_minor": { "type": "integer", "minimum": 0 },
+        "tax_minor": { "type": "integer", "minimum": 0 },
+        "credit_minor": { "type": "integer", "minimum": 0 },
+        "adjustment_minor": { "type": "integer" },
+        "total_minor": { "type": "integer", "minimum": 0 },
+        "paid_minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "source_event_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+  }
+}
