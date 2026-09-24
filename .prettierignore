@@ -16,3 +16,10 @@ docs/awcms/agent-memory.md
 # is a change the compiler would not make and would therefore read as staleness
 # on every run — a permanently red gate that no edit could fix.
 src/lib/i18n/catalogs/*.generated.ts
+# vendored, pinned OMES v1 Control Center contract snapshot (Issue
+# ahliweb/omes#197, ADR-0122) — scripts/sync-omes-contracts.ts copies these
+# files byte-for-byte from a pinned OMES commit and records a SHA-256 of
+# each one in PIN.json. Reformatting them would diverge from the upstream
+# bytes for no reason and make `contracts:omes:sync:check` report drift
+# against its own pin on every run.
+src/modules/omes-control/contracts/v1/

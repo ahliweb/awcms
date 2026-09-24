@@ -401,6 +401,13 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // ALLOWED_PUBLIC_OPERATIONS. Sorts AFTER the "News Portal" pair because
       // a space sorts before a letter.
       "Newsletter",
+      // "OMES Control Center" (omes_control, ADR-0122, Issue ahliweb/omes#198)
+      // — the owner/operator API for OMES projections and safe operations:
+      // fleet overview, server registration/decommission, enrollment-challenge
+      // issuance/revocation, desired-vs-observed deployments, allowlisted
+      // safe-operation submission, worker jobs, health/backup/audit
+      // projections. Genuinely new surface.
+      "OMES Control Center",
       // "Push Delivery" (push_delivery, ADR-0074, Issue #466) — the device
       // registration/revocation self-service plus the operator's queue
       // diagnostics, cancel and delivery probe. Genuinely new surface, unlike

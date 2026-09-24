@@ -1,0 +1,19 @@
+{
+  "entitlement_id": "ent-acme-01",
+  "tenant_id": "tenant-acme",
+  "subscription_id": "sub-acme-01",
+  "state": "active",
+  "limits": {
+    "servers": 1,
+    "logical_agents": 2,
+    "specialist_agents": 0,
+    "isolated_workers": 1,
+    "storage_gb": 20,
+    "backup_retention_days": 7,
+    "backends": ["hermes"]
+  },
+  "resource_policy_id": "policy-standard-suspension",
+  "effective_from": "2026-01-01T00:00:00Z",
+  "effective_until": null,
+  "source_event_id": "evt-sub-acme-01-0002"
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/hermes-orchestration-tree.schema.json",
+  "title": "hermes-orchestration-tree",
+  "description": "Sanitized hierarchical subagent process tree projection for Control Center Screen 6 (ADR-0028, issue #183).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "server_id",
+    "session_id",
+    "root_subagent_id",
+    "generated_at",
+    "freshness",
+    "active_count",
+    "completed_count",
+    "failed_count",
+    "nodes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "server_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "root_subagent_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "freshness": {
+      "type": "string",
+      "enum": [
+        "live",
+        "stale",
+        "unknown"
+      ]
+    },
+    "active_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "completed_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "subagent_id",
+          "state",
+          "started_at",
+          "children"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "subagent_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "parent_subagent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "STARTING",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "INTERRUPTED",
+              "CANCELLED",
+              "UNKNOWN"
+            ]
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "active_tool": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "step_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

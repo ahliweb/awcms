@@ -1,0 +1,19 @@
+{
+  "event_id": "evt-0001",
+  "event_version": "v1",
+  "event_type": "entitlement.changed",
+  "occurred_at": "2026-09-19T10:00:00Z",
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0003",
+  "idempotency_key": "idem-deploy-0001",
+  "actor": {
+    "type": "service",
+    "id": "control-center"
+  },
+  "source": "control-center",
+  "data": {
+    "entitlement": "managed-deployment",
+    "previous_state": "trial",
+    "new_state": "active"
+  }
+}

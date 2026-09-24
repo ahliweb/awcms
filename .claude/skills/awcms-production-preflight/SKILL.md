@@ -130,18 +130,13 @@ flowchart LR
 
 ## Backup & restore (must be tested)
 
-Two scripts exist and they are the whole of it: `deploy/backup/backup-postgres.sh`
-and `deploy/backup/restore-postgres.sh`.
+Five scripts exist under `deploy/backup/`, all real
+([ADR-0123](../../../docs/adr/0123-backup-encryption-manifest-authentication.md)):
+`backup-postgres.sh`, `restore-postgres.sh`, `manifest.sh`,
+`offsite-copy.sh`, `restore-drill.sh` — see `deploy/backup/README.md` for the
+full operator guide, including key generation.
 
-> **Do NOT set `BACKUP_ENCRYPTION_KEY_FILE` or `BACKUP_HMAC_KEY_FILE`.** At-rest
-> encryption and manifest signing are **not implemented**. `backup-postgres.sh`
-> writes a plain `--format=custom` dump plus a sha256 sidecar, and it **refuses
-> to run** — by design — if either variable is set, rather than letting you
-> believe the dump is encrypted. Protect the dump with filesystem permissions
-> and off-host copies instead. There is no `deploy/backup/README.md`, no
-> `offsite-copy.sh` and no `restore-drill.sh`; earlier versions of this skill
-> and of `docs/awcms/production-preflight-runbook.md` §Stage 2 named all four
-> as if they shipped.
+Plain mode (unchanged, offline/LAN default):
 
 ```bash
 DATABASE_URL="$DATABASE_URL" \
@@ -152,17 +147,36 @@ DATABASE_URL="$DATABASE_URL" \
 ./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_YYYYMMDD_HHMMSS.dump
 ```
 
+Encrypted + authenticated mode (recommended wherever a secret-management
+story exists — set `BACKUP_AGE_RECIPIENTS_FILE`/`BACKUP_HMAC_KEY_FILE`
+together at backup time, `RESTORE_AGE_IDENTITY_FILE`/`BACKUP_HMAC_KEY_FILE`
+together at restore time; setting only one of a pair fails closed):
+
+```bash
+DATABASE_URL="$DATABASE_URL" \
+BACKUP_DIR=/var/backups/awcms \
+BACKUP_AGE_RECIPIENTS_FILE=/etc/awcms-backup/age-recipients.txt \
+BACKUP_HMAC_KEY_FILE=/etc/awcms-backup/hmac.key \
+./deploy/backup/backup-postgres.sh
+```
+
 (Restores into the disposable `awcms_restore_test` database by default —
 never the live one; `RESTORE_SCRATCH_DB` overrides the scratch name. A real
 recovery target has to be named and acknowledged explicitly.)
 
-Restore validation is manual: tenant/user/transaction rows readable · login
-test · report smoke test. Nothing automates the drill or produces an RTO/RPO
-report, so put it on a schedule yourself, separately from the daily backup.
+Restore validation: tenant rows readable, `FORCE ROW LEVEL SECURITY` count
+
+> 0, migration ledger non-empty — asserted automatically by
+> `restore-postgres.sh`; report/login smoke tests are still manual.
+> `deploy/backup/restore-drill.sh` automates picking the newest eligible
+> backup and running the drill unattended, appending RTO/RPO evidence to
+> `restore-drill-evidence.jsonl` — schedule it (or use
+> `deploy/cron/awcms.crontab`'s existing weekly entry) separately from the
+> daily backup.
 
 Backup evidence for a production migration MUST be a real restore test from
-these two scripts, not merely a backup that "exists" — see
-`docs/awcms/production-preflight-runbook.md`'s §Backup evidence for the
+these scripts, not merely a backup that "exists" — see
+`docs/awcms/production-preflight-runbook.md`'s §Stage 2 for the
 sequence (dump → restore-test → record evidence).
 
 ## Output

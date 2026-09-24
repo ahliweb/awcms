@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/operation-request.schema.json",
+  "title": "operation-request",
+  "description": "The Control Center-facing shape of a safe operation request (issue #91), carrying the RBAC/ABAC permission decision that AWCMS made BEFORE the request reaches OMES. `operation` is a closed enum limited to the read/lifecycle operations issue #91 exposes to tenant-scoped screens (status, preflight, start, stop, restart, update, backup, rollback) - a subset of `deployment.request`'s broader operation enum (which also allows `install`/`configure`/`restore` for direct job-runner use). additionalProperties=false everywhere means neither a free-form command nor a smuggled second tenant scope can ride along with this request.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "operation",
+    "target",
+    "permission"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "service"]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "status",
+        "preflight",
+        "start",
+        "stop",
+        "restart",
+        "update",
+        "backup",
+        "rollback"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "required": ["server_id"],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "description": "The RBAC/ABAC decision AWCMS made for this actor/operation/target BEFORE submitting the request. OMES does not trust `granted: true` on its own - the job runner (issue #90) re-derives its own allowlist/approval decision; this field exists so the request is self-describing and auditable end to end.",
+      "required": ["granted", "policy_id"],
+      "additionalProperties": false,
+      "properties": {
+        "granted": {
+          "type": "boolean"
+        },
+        "policy_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "requires_approval": {
+          "type": "boolean"
+        }
+      }
+    },
+    "backup_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "rollback_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "parameters": {
+      "type": "object"
+    }
+  }
+}

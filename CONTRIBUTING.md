@@ -63,6 +63,7 @@ bun test              # unit + integration test (bun:test) di tests/
 bun run api:spec:check   # bila mengubah OpenAPI/AsyncAPI
 bun run db:migrate       # bila menambah migration
 bun run build            # Astro build
+bun run knowledge:check  # bila mengubah graphify-out/, .graphifyignore, knowledge/, atau scripts/knowledge-obsidian-sync.ts (lihat docs/awcms/knowledge-graph.md)
 ```
 
 Sebuah changeset juga ditegakkan sebagai CI check **terpisah dan wajib**

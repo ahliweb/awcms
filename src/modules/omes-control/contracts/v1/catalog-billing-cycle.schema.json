@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-billing-cycle.schema.json",
+  "title": "catalog-billing-cycle",
+  "description": "A named billing cadence (issue #92) referenced by `catalog-price.billing_cycle_id`. `months` is the cadence length used for proration/renewal date math; it is a plain integer, never a floating-point fraction of a month.",
+  "type": "object",
+  "required": ["billing_cycle_id", "months"],
+  "additionalProperties": false,
+  "properties": {
+    "billing_cycle_id": {
+      "type": "string",
+      "enum": ["monthly", "quarterly", "semi_annual", "annual"]
+    },
+    "months": { "type": "integer", "minimum": 1, "maximum": 12 }
+  }
+}

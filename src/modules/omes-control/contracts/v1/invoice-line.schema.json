@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/invoice-line.schema.json",
+  "title": "invoice-line",
+  "description": "One line of an invoice (issue #93). `price_snapshot` is an IMMUTABLE copy of the catalog price at the moment the invoice was generated (`unit_amount_minor`, `currency`, `price_id`, `catalog_version_id`) - a later catalog price/plan change never rewrites an already-issued invoice's lines. This is the same object shape embedded in `invoice.lines`.",
+  "type": "object",
+  "required": ["line_id", "description", "quantity", "price_snapshot"],
+  "additionalProperties": false,
+  "properties": {
+    "line_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "description": { "type": "string" },
+    "quantity": { "type": "integer", "minimum": 1 },
+    "price_snapshot": {
+      "type": "object",
+      "required": ["price_id", "catalog_version_id", "currency", "unit_amount_minor"],
+      "additionalProperties": false,
+      "properties": {
+        "price_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "catalog_version_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "unit_amount_minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "tax_code": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+  }
+}

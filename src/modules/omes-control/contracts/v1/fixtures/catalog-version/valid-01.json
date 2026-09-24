@@ -1,0 +1,7 @@
+{
+  "version_id": "version-plan-starter-2026-01",
+  "catalog_entity": "plan",
+  "entity_id": "plan-starter",
+  "effective_from": "2026-01-01T00:00:00Z",
+  "changelog_ref": "changes/92-catalog-entitlements.md"
+}

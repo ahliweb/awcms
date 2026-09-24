@@ -1,0 +1,14 @@
+{
+  "tenant_id": "tenant-acme",
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "desired_state": {
+    "status": "running"
+  },
+  "observed_state": {
+    "status": "running",
+    "observed_at": "2026-09-19T08:00:00Z"
+  },
+  "error_evidence": null
+}
