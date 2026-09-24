@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "session_id": "sess-main-12345",
+  "root_subagent_id": "sub-lead-001",
+  "generated_at": "2026-09-21T12:05:00Z",
+  "freshness": "live",
+  "active_count": 1,
+  "completed_count": 2,
+  "failed_count": 0,
+  "nodes": [
+    {
+      "subagent_id": "sub-lead-001",
+      "parent_subagent_id": null,
+      "role": "lead_planner",
+      "goal": "Orchestrate release verification across nodes",
+      "state": "RUNNING",
+      "started_at": "2026-09-21T12:00:00Z",
+      "completed_at": null,
+      "duration_seconds": 300,
+      "active_tool": "delegate_task",
+      "step_count": 3,
+      "summary": "Delegated sub-tasks to child agents",
+      "children": [
+        "sub-child-001",
+        "sub-child-002"
+      ]
+    },
+    {
+      "subagent_id": "sub-child-001",
+      "parent_subagent_id": "sub-lead-001",
+      "role": "lint_checker",
+      "goal": "Run repository lint checks",
+      "state": "SUCCEEDED",
+      "started_at": "2026-09-21T12:01:00Z",
+      "completed_at": "2026-09-21T12:02:30Z",
+      "duration_seconds": 90,
+      "active_tool": "run_command",
+      "step_count": 4,
+      "summary": "ShellCheck and lint passed cleanly",
+      "children": []
+    },
+    {
+      "subagent_id": "sub-child-002",
+      "parent_subagent_id": "sub-lead-001",
+      "role": "contract_tester",
+      "goal": "Verify Control Center contract fixtures",
+      "state": "SUCCEEDED",
+      "started_at": "2026-09-21T12:01:10Z",
+      "completed_at": "2026-09-21T12:02:40Z",
+      "duration_seconds": 90,
+      "active_tool": "run_command",
+      "step_count": 2,
+      "summary": "All 100 schemas validated",
+      "children": []
+    }
+  ]
+}

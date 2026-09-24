@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/payment-gateway-adapter.schema.json",
+  "title": "payment-gateway-adapter",
+  "description": "A provider-neutral description of what a payment gateway integration supports (issue #94). `provider_id` is an opaque, operator-assigned identifier (e.g. 'primary', 'backup-eu') - this contract never names a specific commercial provider, so the same shape works for any adapter awcms-one selects, and no provider-specific secret or endpoint URL is carried here (credentials are resolved locally by the adapter implementation, never stored in this record).",
+  "type": "object",
+  "required": ["adapter_id", "provider_id", "capabilities", "active"],
+  "additionalProperties": false,
+  "properties": {
+    "adapter_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "provider_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "charge",
+          "refund",
+          "recurring",
+          "webhook",
+          "dispute_handling",
+          "proration"
+        ]
+      }
+    },
+    "supported_currencies": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z]{3}$" }
+    },
+    "active": { "type": "boolean" }
+  }
+}

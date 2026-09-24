@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/events/deployment.failed.schema.json",
+  "title": "deployment.failed",
+  "description": "Emitted when a job fails (non-retryable, or a retryable failure exhausted its retries).",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_version",
+    "event_type",
+    "occurred_at",
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "source",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "event_type": {
+      "type": "string",
+      "const": "deployment.failed"
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "service"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "omes",
+        "hermes",
+        "control-center"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "job_id",
+        "operation",
+        "target",
+        "error"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "preflight",
+            "install",
+            "configure",
+            "start",
+            "stop",
+            "restart",
+            "update",
+            "status",
+            "backup",
+            "restore",
+            "rollback"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "required": [
+            "server_id"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "deployment_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            }
+          }
+        },
+        "error": {
+          "type": "object",
+          "required": [
+            "code",
+            "message"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

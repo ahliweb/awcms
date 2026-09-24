@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/deployment.request.schema.json",
+  "title": "deployment.request",
+  "description": "The only mutating shape a Control Center may send OMES for a host/deployment operation. `operation` is a closed enum (preflight, install, configure, start, stop, restart, update, status, backup, restore, rollback). additionalProperties=false at the top level means a free-form `command` field (or any other field) is rejected by the schema itself, not just by policy.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "operation",
+    "target"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "service"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "preflight",
+        "install",
+        "configure",
+        "start",
+        "stop",
+        "restart",
+        "update",
+        "status",
+        "backup",
+        "restore",
+        "rollback"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "server_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "backup_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "rollback_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "parameters": {
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0005",
+  "target": {
+    "server_id": "srv-0001",
+    "deployment_id": "dep-0001"
+  },
+  "ready": true,
+  "connected": true,
+  "layers": {
+    "host": {
+      "status": "pass",
+      "signals": {
+        "reachable": true
+      },
+      "proves": "host is reachable over SSH"
+    },
+    "runtime": {
+      "status": "pass",
+      "signals": {
+        "active": true
+      },
+      "proves": "systemd unit is active"
+    },
+    "gateway": {
+      "status": "pass",
+      "signals": {
+        "ready": true
+      },
+      "proves": "gateway responds to health check"
+    },
+    "channel": {
+      "status": "pass",
+      "signals": {
+        "connected": true
+      },
+      "proves": "Telegram long-poll connected"
+    }
+  }
+}

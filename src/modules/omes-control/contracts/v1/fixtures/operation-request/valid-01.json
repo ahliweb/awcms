@@ -1,0 +1,19 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-op-0001",
+  "idempotency_key": "idem-op-request-00000001",
+  "actor": {
+    "type": "user",
+    "id": "user-jane"
+  },
+  "operation": "restart",
+  "target": {
+    "server_id": "server-acme-01",
+    "deployment_id": "deployment-acme-hermes-01"
+  },
+  "permission": {
+    "granted": true,
+    "policy_id": "policy-operator-restart",
+    "requires_approval": false
+  }
+}

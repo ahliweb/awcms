@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "session_id": "sess-main-12345",
+  "root_subagent_id": "sub-lead-001",
+  "generated_at": "2026-09-21T12:05:00Z",
+  "freshness": "unsupported_freshness_value",
+  "active_count": 0,
+  "completed_count": 0,
+  "failed_count": 0,
+  "nodes": []
+}

@@ -1,0 +1,12 @@
+{
+  "line_id": "line-01",
+  "description": "Hermes Managed Server - Starter (monthly)",
+  "quantity": 1,
+  "price_snapshot": {
+    "price_id": "price-plan-starter-monthly-usd",
+    "catalog_version_id": "version-plan-starter-2026-01",
+    "currency": "USD",
+    "unit_amount_minor": 1900
+  },
+  "tax_code": "tax-standard"
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/catalog-addon.schema.json",
+  "title": "catalog-addon",
+  "description": "An optional purchasable increment to a plan's limits (issue #92), e.g. '+1 isolated worker'. `limits_delta` is added on top of the base plan's `limits` when the add-on is active on a subscription; it is never negative (an add-on only grants, it never revokes - revoking is a plan change).",
+  "type": "object",
+  "required": ["addon_id", "name", "compatible_plan_ids", "limits_delta", "active"],
+  "additionalProperties": false,
+  "properties": {
+    "addon_id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "name": { "type": "string" },
+    "compatible_plan_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" }
+    },
+    "limits_delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": { "type": "integer", "minimum": 0 },
+        "logical_agents": { "type": "integer", "minimum": 0 },
+        "specialist_agents": { "type": "integer", "minimum": 0 },
+        "isolated_workers": { "type": "integer", "minimum": 0 },
+        "storage_gb": { "type": "integer", "minimum": 0 },
+        "backup_retention_days": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "active": { "type": "boolean" }
+  }
+}

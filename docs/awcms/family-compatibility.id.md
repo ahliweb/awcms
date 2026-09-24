@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](family-compatibility.md)
 
-<!-- i18n-source-hash: sha256:ea71a030f71ce2ee8a5d6f67c766edca3c063cfcf96332c70081a97b6e95e19d -->
+<!-- i18n-source-hash: sha256:2188b491b0f73f1459ed514b8bff5546ed92c51280cd00af40c985f383702fa1 -->
 
 # Manifes kontrak keluarga AWCMS
 
@@ -53,7 +53,7 @@ Nilai `declared` di manifest WAJIB sama dengan nilai nyata di sumber yang ditunj
 | Bun (pin)        | `1.4.2`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
 | Bun (CI current) | `1.4.2`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
 | Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
-| Astro            | `^7.3.1`  | `^7.3.1`          | `package.json` `dependencies.astro`                            |
+| Astro            | `^7.3.2`  | `^7.3.2`          | `package.json` `dependencies.astro`                            |
 | `@astrojs/node`  | `^11.1.5` | `^11.1.5`         | `package.json` `dependencies`                                  |
 | TypeScript       | `^7.0.2`  | `^7.0.2`          | `package.json` `devDependencies`                               |
 | PostgreSQL       | `18.4`    | `18.4`            | `.github/workflows/ci.yml` `services.postgres`                 |

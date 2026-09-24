@@ -1,0 +1,15 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-0004",
+  "idempotency_key": "idem-deploy-0005",
+  "actor": {
+    "type": "user",
+    "id": "operator-1"
+  },
+  "operation": "restore",
+  "target": {
+    "server_id": "srv-0001",
+    "deployment_id": "dep-0001"
+  },
+  "backup_id": "--yes"
+}

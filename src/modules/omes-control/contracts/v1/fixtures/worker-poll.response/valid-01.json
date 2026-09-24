@@ -1,0 +1,6 @@
+{
+  "status": "idle",
+  "server_id": "srv-prod-01",
+  "tenant_id": "tenant-acme",
+  "poll_interval_seconds": 10
+}

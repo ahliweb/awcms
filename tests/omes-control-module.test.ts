@@ -26,6 +26,11 @@ describe("omes_control module descriptor", () => {
     expect(mod?.name).toBe("OMES Control Center");
     expect(mod?.type).toBe("domain");
     expect(mod?.status).toBe("experimental");
+    // Deliberately NOT "workflow" — see module.ts's own comment and
+    // tests/module-boundary.test.ts's DOCUMENTED_EXCEPTIONS entry for
+    // "omes_control -> workflow" (Issue ahliweb/omes#198): a hard
+    // `dependencies` edge would make `workflow` un-disablable for any
+    // tenant that has ever enabled omes_control.
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
