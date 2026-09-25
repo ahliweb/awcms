@@ -60,7 +60,13 @@ export type ServerListPage = {
 
 export const SERVER_LIST_LIMIT = 100;
 
-function fingerprintPublicKey(publicKey: string): string {
+/**
+ * Exported so `enrollment-directory.ts` (Issue ahliweb/omes#233) fingerprints
+ * an enrolled worker's public key the SAME way this file already does for
+ * `fetchServerDetail`'s enrollment evidence — one hashing routine, not two
+ * that could quietly drift.
+ */
+export function fingerprintPublicKey(publicKey: string): string {
   return createHash("sha256").update(publicKey).digest("hex");
 }
 

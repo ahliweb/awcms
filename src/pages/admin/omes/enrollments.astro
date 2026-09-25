@@ -1,0 +1,536 @@
+---
+/**
+ * OMES Control Center — enrollment-token management, Issue ahliweb/omes#233
+ * (parent #195, opened during the #202 close-out per AGENTS.md §4.5's
+ * "Not implemented yet (tracked in #N)" discipline).
+ *
+ * `ahliweb/omes#201` shipped `servers.astro`'s READ-ONLY enrollment/trust
+ * evidence panel and deliberately left `omes_control.enrollments.manage`
+ * without a navigation entry — issuing and revoking a worker's one-time
+ * enrollment token was reachable only via
+ * `POST /api/v1/omes/servers/{id}/enrollment-challenges` and its `/revoke`
+ * sibling (both `ahliweb/omes#198`), never from `/admin/*`. This screen
+ * closes that gap. It adds NO new write path: both buttons below call the
+ * SAME two already-guarded, already-audited, already-idempotent endpoints —
+ * `issueEnrollmentChallengeForServer`/`revokeEnrollment`
+ * (`application/enrollment-management.ts`) are reused exactly as they are,
+ * unmodified by this issue. This screen only adds a READ query
+ * (`fetchEnrollments`, `application/enrollment-directory.ts`) to list
+ * enrollments across the whole fleet, something neither #198 nor #201 needed
+ * (`fetchServerDetail` only ever looked at one server at a time).
+ *
+ * ## The token is shown exactly once, here, and can never be fetched again
+ *
+ * `POST .../enrollment-challenges`'s response body is the ONLY place the raw
+ * challenge value ever exists outside whatever the operator pastes it into —
+ * sql/158's whole discipline is that only `enrollment_challenge_hash` (its
+ * SHA-256) is ever persisted, and this repo's own established pattern for
+ * that shape is `machine-credentials.astro`'s "read the response, render it
+ * once, do not reload" reveal, reused here rather than invented fresh: a
+ * single `role="status"` notice, filled with `textContent` only (never
+ * `innerHTML`/`set:html` — no server- or worker-supplied string is ever
+ * interpreted as markup), never written to `localStorage`/`sessionStorage`,
+ * never sent in a later request, and never logged (this page issues no
+ * `console.*` call with it). It stops existing the moment the operator
+ * navigates away or reloads — recovery from a missed copy is to revoke that
+ * entry and issue a fresh one, exactly `machine-credentials`'s own tradeoff
+ * for the same reason: reloading immediately would otherwise mint a
+ * credential nobody had the chance to use, and somebody has to revoke it
+ * anyway.
+ *
+ * ## Why a modal (or a copy-to-clipboard button) was not used
+ *
+ * A modal dialog, a copy-to-clipboard button, and a download-as-file link
+ * were the three alternatives weighed (full analysis in this issue's PR
+ * description). Download-as-file was rejected outright: it leaves a
+ * plaintext token sitting in the operator's Downloads folder indefinitely,
+ * the one outcome every other secret-reveal surface in this repo
+ * (`machine-credentials`, `partners`) is careful to avoid. A modal dialog was
+ * rejected because `admin-form-client.ts` has no modal/focus-trap primitive
+ * today, so a modal-worthy screen would be new client infrastructure
+ * introduced by a feature narrower than the primitive itself. A
+ * copy-to-clipboard button was drafted and then removed: the client asset
+ * budget (`bun run build:asset-budget:check`, `scripts/client-asset-budget.ts`)
+ * is a hard, already-tight gate over this exact admin/auth/landing JS
+ * surface, and the button's `navigator.clipboard` branch pushed this single
+ * screen's compiled chunk large enough to blow it — for a control the
+ * operator's browser already provides via ordinary text selection. The
+ * plain `machine-credentials.astro` reveal meets the same accessibility bar
+ * (a `role="status"` region a screen reader announces, `textContent`-only
+ * rendering, no focus trap to get wrong, no pointing device required to
+ * select and copy the text a browser already renders as selectable) at a
+ * small fraction of the client bytes, and keeps this module to ONE
+ * secret-reveal pattern rather than two competing ones.
+ *
+ * ## Server-side enforcement, not UI hiding
+ *
+ * `loadAdminScreen`'s `authorize: OMES_GUARDS.enrollments.manage` is what
+ * decides whether this screen renders anything at all — but the ACTUAL
+ * authority is `OMES_GUARDS.enrollments.manage` re-checked, tenant-scoped
+ * under `FORCE ROW LEVEL SECURITY` (sql/154), inside both endpoints this
+ * page calls (see their own headers). A caller who forges a request to
+ * either endpoint without holding the permission is refused there,
+ * regardless of what this page would have shown them — this screen hiding a
+ * button is a convenience, never the enforcement boundary.
+ *
+ * ## Cross-tenant determination (this issue's own call)
+ *
+ * `fetchEnrollments` joins `awcms_omes_enrollments`/`awcms_omes_servers` on
+ * `(tenant_id, server_id)` and filters both sides by the caller's own
+ * `tenantId` — a foreign tenant's rows are invisible, not merely
+ * undisplayed. `issueEnrollmentChallengeForServer`/`revokeEnrollment`
+ * resolve their target server by `tenant_id = ${tenantId} AND id =
+ * ${serverRowId}` (see `enrollment-management.ts`) — a `serverRowId`
+ * belonging to another tenant resolves to `server_not_found`/`not_found`,
+ * never a foreign server, exactly the `RESOURCE_NOT_FOUND`-shaped fail-closed
+ * result `submitBackupRestore` established for the same class of action in
+ * `ahliweb/omes#201`. The action's effect therefore never reaches another
+ * tenant's data, so per ADR-0051 §Keputusan the ordinary tenant-seeded
+ * `enrollments.manage` permission remains sufficient; no platform-scoped
+ * gate is added.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
+import { fetchServers } from "../../../modules/omes-control/application/server-directory";
+import {
+  fetchEnrollments,
+  type EnrollmentSummary
+} from "../../../modules/omes-control/application/enrollment-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS = ["pending", "enrolled", "revoked", "expired"] as const;
+const STATUS_VARIANT: Record<string, string> = {
+  pending: "info",
+  enrolled: "success",
+  revoked: "danger",
+  expired: "neutral"
+};
+const REVOCABLE_STATUSES = new Set(["pending", "enrolled"]);
+/** Mirrors enrollment-management.ts's own ELIGIBLE_STATUSES for issuance. */
+const ELIGIBLE_FOR_ISSUANCE_STATUS = "offline";
+const ELIGIBLE_SERVERS_LIMIT = 100;
+
+const statusRaw = readParam("status");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as (typeof STATUS_OPTIONS)[number])
+  : undefined;
+
+const cursorParam = readParam("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: OMES_GUARDS.enrollments.manage,
+  load: async ({ tx }) => {
+    const now = new Date();
+    const [enrollmentPage, eligiblePage] = [
+      await fetchEnrollments(tx, ssr.tenantId, {
+        status: statusFilter,
+        cursor: cursor ?? undefined
+      }),
+      await fetchServers(tx, ssr.tenantId, now, {
+        status: ELIGIBLE_FOR_ISSUANCE_STATUS
+      })
+    ];
+
+    return {
+      enrollments: enrollmentPage.enrollments,
+      nextCursor: enrollmentPage.nextCursor,
+      // Only the first page of offline servers — an operator with hundreds
+      // of never-enrolled hosts is exactly the case #200's `servers.astro`
+      // (with its own keyset pagination) is the tool for; this panel is
+      // "issue a token for one host right now", not a second fleet browser.
+      eligibleServers: eligiblePage.servers.slice(0, ELIGIBLE_SERVERS_LIMIT)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/enrollments.astro: failed to load the OMES enrollment-token console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const enrollments: EnrollmentSummary[] =
+  screen.state === "allowed" ? screen.data.enrollments : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const eligibleServers =
+  screen.state === "allowed" ? screen.data.eligibleServers : [];
+
+function formatTimestamp(value: string | null): string {
+  return value ?? "—";
+}
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/omes/enrollments?${query}` : "/admin/omes/enrollments";
+}
+---
+
+<AdminLayout
+  title={t("OMES enrollment tokens")}
+  description={t(
+    "Issue and revoke one-time OMES worker enrollment tokens. A token is shown exactly once at issuance and never again — only its SHA-256 hash is ever stored, never logged, and never re-displayable."
+  )}
+>
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-enrollments-denied">
+        {t("You do not have permission to manage OMES enrollment tokens.")}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-enrollments-error">
+        {t(
+          "The OMES enrollment-token console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p id="omes-enroll-err" class="admin-create-error" role="alert" hidden />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p id="enroll-token-msg" class="state-notice" role="status" hidden />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="issue-title"
+        id="omes-enrollments-issue"
+      >
+        <h2 class="admin-section-title" id="issue-title">
+          {t("Issue a token")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "Only servers registered but not yet enrolled (status “offline”) are eligible — a server with a live worker already has valid credentials, and re-issuing one would let two worker identities exist for the same host."
+          )}
+        </p>
+
+        {eligibleServers.length === 0 ? (
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ▭
+            </span>
+            <span class="empty-state-title">
+              {t("No server is eligible for a new token")}
+            </span>
+            <span class="empty-state-text">
+              {t(
+                "Register a server on the Servers screen first, or wait for an existing one to become eligible."
+              )}
+            </span>
+          </div>
+        ) : (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <caption class="sr-only">
+                {t("Servers eligible for a new enrollment token.")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Hostname")}</th>
+                  <th scope="col">{t("Platform")}</th>
+                  <th scope="col">{t("Registered")}</th>
+                  <th scope="col">{t("Actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eligibleServers.map((server) => (
+                  <tr>
+                    <td data-label="Hostname">
+                      <span class="cell-code">{server.hostname}</span>
+                    </td>
+                    <td data-label="Platform">
+                      <span class="cell-muted">
+                        {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
+                        {server.arch ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Registered">
+                      <span class="cell-muted">{server.createdAt}</span>
+                    </td>
+                    <td data-label="Actions">
+                      <button
+                        type="button"
+                        class="btn-inline js-issue-tok"
+                        data-server-id={server.id}
+                      >
+                        {t("Issue token")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="enrollments-title"
+        id="omes-enrollments-list"
+      >
+        <h2 class="admin-section-title" id="enrollments-title">
+          {t("Enrollment tokens")}
+          <span class="count-pill">{enrollments.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="enrollment-filter-form">
+          <label for="filter-status">{t("Status")}</label>
+          <select id="filter-status" name="status">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="omes-enrollments-table"
+          >
+            <caption class="sr-only">
+              {t("OMES worker enrollment tokens, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Server")}</th>
+                <th scope="col">{t("Worker")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Public key fingerprint (SHA-256)")}</th>
+                <th scope="col">{t("Challenge expires")}</th>
+                <th scope="col">{t("Enrolled")}</th>
+                <th scope="col">{t("Revoked")}</th>
+                <th scope="col">{t("Actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrollments.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={8}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▭
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No enrollment tokens")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Issue one above, or wait for a worker to complete enrollment."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                enrollments.map((enrollment) => (
+                  <tr data-enrollment-row={enrollment.id}>
+                    <td data-label="Server">
+                      <span class="cell-code">{enrollment.hostname}</span>
+                    </td>
+                    <td data-label="Worker">
+                      <span class="cell-code">{enrollment.workerId}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[enrollment.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {enrollment.status}
+                      </span>
+                    </td>
+                    <td data-label="Fingerprint">
+                      {enrollment.publicKeyFingerprint ? (
+                        <span class="cell-code">
+                          {enrollment.publicKeyFingerprint}
+                        </span>
+                      ) : (
+                        <span class="cell-muted">{t("not yet presented")}</span>
+                      )}
+                    </td>
+                    <td data-label="Challenge expires">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.challengeExpiresAt)}
+                      </span>
+                    </td>
+                    <td data-label="Enrolled">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.enrolledAt)}
+                      </span>
+                    </td>
+                    <td data-label="Revoked">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.revokedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Actions">
+                      {REVOCABLE_STATUSES.has(enrollment.status) ? (
+                        <button
+                          type="button"
+                          class="btn-inline btn-inline--danger js-revoke-tok"
+                          data-server-id={enrollment.serverRowId}
+                          data-worker-id={enrollment.workerId}
+                        >
+                          {t("Revoke")}
+                        </button>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time), so
+  // this import forces it external where the app's `default-src 'self'` CSP
+  // (no `'unsafe-inline'`) allows it to run — see admin-form-client.ts's own
+  // header for why the import itself is load-bearing, not just DRY.
+  import {
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJsonForData
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-enroll-err");
+  const tokenBox = messageBox("enroll-token-msg");
+
+  // NOT mutateAndReload, deliberately — same reasoning as
+  // machine-credentials.astro's issuance handler: the response carries a
+  // value readable exactly once, and reloading immediately would spend a
+  // token nobody had the chance to copy. Rendered via tokenBox.show(), which
+  // is a `textContent` assignment (never innerHTML/set:html), so a hostname
+  // or worker id containing markup-shaped characters is rendered as inert
+  // text. Nothing here writes it to localStorage/sessionStorage or logs it;
+  // it stops existing in the DOM the instant this page is left or reloaded.
+  // The enrollment list below is refreshed by the operator's own next
+  // navigation/reload, once they have copied the token.
+  onAction(".js-issue-tok", async (button) => {
+    const serverRowId = button.dataset.serverId;
+    if (!serverRowId) return;
+
+    actionError.clear();
+    tokenBox.clear();
+    const unlock = lockElement(button, "Issuing…");
+
+    const result = await sendJsonForData<{
+      workerId: string;
+      enrollmentChallenge: string;
+      expiresAt: string;
+    }>(
+      "POST",
+      `/api/v1/omes/servers/${serverRowId}/enrollment-challenges`,
+      undefined,
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok && result.data?.enrollmentChallenge) {
+      tokenBox.show(
+        `Token (worker ${result.data.workerId}, expires ${result.data.expiresAt}) — copy now, reload after: ${result.data.enrollmentChallenge}`
+      );
+      unlock();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "SERVER_NOT_ELIGIBLE"
+        ? "That server already has a worker, or is decommissioned."
+        : result.errorCode === "RESOURCE_NOT_FOUND"
+          ? "That server no longer exists."
+          : "Could not issue a token."
+    );
+    unlock();
+  });
+
+  onAction(".js-revoke-tok", async (button) => {
+    const serverRowId = button.dataset.serverId;
+    const workerId = button.dataset.workerId;
+    if (!serverRowId || !workerId) return;
+    if (!window.confirm(`Revoke ${workerId}? Cannot be undone.`)) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJsonForData(
+          "POST",
+          `/api/v1/omes/servers/${serverRowId}/enrollment-challenges/${workerId}/revoke`,
+          undefined,
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      (errorCode) =>
+        errorCode === "RESOURCE_NOT_FOUND"
+          ? "That enrollment no longer exists."
+          : "Could not revoke that token."
+    );
+  });
+</script>

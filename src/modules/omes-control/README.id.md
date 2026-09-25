@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:19bd3408ff1859b610f39c500ba9a873f6d05138225c541220b55885e21cba87 -->
+<!-- i18n-source-hash: sha256:cfee180c887a7e5e39e4c3269515bbb6c5a41a8be249d6b26da9b0e5557ae3a8 -->
 
 # `omes_control`
 
@@ -58,7 +58,7 @@ Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada 
 
 ## Layar admin (`/admin/omes/*`)
 
-Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deployments, Operations, Jobs); issue ahliweb/omes#201 (induk #195) menambahkan tiga sisanya (Health, Backups, Audit). Kedelapannya kini ada, sehingga `status` modul ini adalah `active` (sebelumnya `experimental` — kriteria 1 ADR-0021, preseden `push_delivery` yang sama). Setiap layar adalah lapisan baca/ajukan tipis di atas endpoint-endpoint di atas — tidak ada layar yang mengeksekusi SQL langsung, dan menyembunyikan tombol hanyalah UX: permission setiap layar persis sama dengan permission yang ditegakkan secara independen oleh endpoint-nya.
+Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deployments, Operations, Jobs); issue ahliweb/omes#201 (induk #195) menambahkan Health, Backups, dan Audit; issue ahliweb/omes#233 menambahkan yang kesembilan, Enrollments. `status` modul ini adalah `active` (kriteria 1 ADR-0021, preseden `push_delivery` yang sama). Setiap layar adalah lapisan baca/ajukan tipis di atas endpoint-endpoint di atas — tidak ada layar yang mengeksekusi SQL langsung, dan menyembunyikan tombol hanyalah UX: permission setiap layar persis sama dengan permission yang ditegakkan secara independen oleh endpoint-nya.
 
 - **Overview** (`servers.read`/`deployments.read`/`jobs.read`/`backups.read`/`audit.read`, any-of) — rollup armada plus quick-link ke setiap layar lain yang bisa dibaca aktor.
 - **Servers** (`servers.read`, `servers.register`, `servers.delete`) — inventori armada dan evidence enrollment/trust per server (hanya fingerprint kunci publik).
@@ -68,8 +68,7 @@ Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deploy
 - **Health** (`servers.read`) — snapshot kesehatan terbaru per server, plus riwayat per server. Setiap snapshot beratribusi `omes-host` (laporan pull worker itu sendiri); entri `checks` individual boleh mendeklarasikan `source`-nya sendiri (mis. `hermes`, provider eksternal), ditampilkan sebagai lencananya sendiri. Flag `stale` (dihitung dari `captured_at` milik snapshot itu sendiri, `STALE_HEARTBEAT_THRESHOLD_MS`) ditampilkan BERSAMA `overallStatus`, tidak pernah menggantikannya dengan varian sukses.
 - **Backups** (`backups.read`, `backups.restore`) — metadata artefak (kelas pemulihan dari manifest, checksum sha256, ukuran, flag `fresh` terhitung) dan manifest itu sendiri, di-escape, tidak pernah konten backup mentah. Restore adalah satu-satunya mutasi: selalu destruktif, dikecualikan dari allowlist operasi aman, dan melalui mesin `workflow-approval` yang SAMA seperti `stop`/`rollback` — layar ini tidak pernah menjalankan keputusan persetujuan kedua, hanya mengajukan dan menautkan `workflowInstanceId` hasilnya ke `/admin/approvals`.
 - **Audit** (`audit.read`) — DUA bagian terpisah berlabel sumber, tidak pernah digabung: peristiwa aktor/aksi control-plane kanonis (`awcms_audit_events` via `listAuditEvents`, dipersempit ke `moduleKey: "omes_control"`) dan proyeksi eksekusi/rekonsiliasi OMES jarak jauh (`awcms_omes_audit_projections` via `fetchAuditProjections`). `/admin/audit-trail` milik `logging.audit_trail.read` tetap menjadi tampilan lintas-modul dari tabel pertama; layar ini adalah pembacaan yang lebih sempit dan bercakupan OMES dari data yang sama, bukan penulis kedua.
-
-`enrollments.manage` tidak memiliki entri navigasi per #201 — penerbitan/pencabutan token enrollment tetap API-only; Servers menampilkan evidence enrollment/trust hanya-baca, dan layar manajemen khusus berada di luar cakupan issue ini.
+- **Enrollments** (`enrollments.manage`) — menerbitkan dan mencabut token enrollment worker, menutup celah yang sengaja dibiarkan terbuka oleh #201. Tidak menambah jalur tulis baru — kedua aksi memanggil endpoint `POST /api/v1/omes/servers/{id}/enrollment-challenges` dan `.../revoke` yang SAMA yang sudah dikirim oleh #198, tidak diubah oleh issue ini. Sisi baca adalah kueri baru lintas-armada, `application/enrollment-directory.ts`'s `fetchEnrollments` — `fetchServerDetail` (Servers) hanya pernah melihat enrollment satu server pada satu waktu. Token yang diterbitkan ditampilkan tepat satu kali, dirender via `show()` milik helper `messageBox` bersama yang hanya memakai `textContent` (tidak pernah `innerHTML`), tidak pernah ditulis ke `localStorage`/`sessionStorage`, tidak pernah dicatat log, dan hilang begitu halaman ditinggalkan atau dimuat ulang. Lihat komentar header layar itu sendiri untuk analisis trade-off lengkap modal-sekali-tampil vs tombol-clipboard vs unduh, termasuk mengapa tombol salin-ke-clipboard sempat dibuat lalu dihapus (mendorong layar tunggal ini melampaui anggaran aset klien repo) demi reveal dalam-halaman biasa yang sudah mapan di `machine-credentials.astro`.
 
 ## Enrollment, poll, result, dan heartbeat worker (`ahliweb/omes#199`)
 
