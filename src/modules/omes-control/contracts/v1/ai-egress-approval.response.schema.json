@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/ai-egress-approval.response.schema.json",
+  "title": "ai-egress-approval.response",
+  "description": "Response to ai-egress-approval.request.schema.json, produced by lib/omes/py/privacy/posture_projection.py's authorize_approval() (issue #217). `decision` reflects the actual, re-derived outcome - it never merely echoes the requester's `approve` flag. `reason` is a bounded operator-facing string (not a place for prompt/transcript/credential content); it always explains the outcome, including a denial reason for audit.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "approval_id",
+    "target",
+    "decision",
+    "reason",
+    "recorded_at",
+    "actor"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "approval_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "target": {
+      "type": "object",
+      "required": ["server_id"],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "decision": {
+      "type": "string",
+      "description": "'approved' only when the requester's tenant matched the decision's tenant, decision_ref.reason_code was one of the three approval_required codes, and approve=true. 'denied' otherwise, including for a cross-tenant attempt or a reason_code outside the approvable set.",
+      "enum": ["approved", "denied"]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "recorded_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "service"]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    }
+  }
+}

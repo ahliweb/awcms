@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/events/ai-privacy-posture.changed.schema.json",
+  "title": "ai-privacy-posture.changed",
+  "description": "Emitted when an ai-privacy-posture-view projection's status or evidence_freshness changes for a target (issue #217) - in particular, drift from a restricted-local-only posture toward cloud (see AI_PRIVACY_POSTURE_FAIL_DRIFT_LOCAL_ONLY_TO_CLOUD), or evidence going stale/unknown. Delivered over the existing pull-worker/outbox transport (ADR-0027, issue #192) - this event never rides a new privileged inbound listener.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_version",
+    "event_type",
+    "occurred_at",
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "source",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "event_type": {
+      "type": "string",
+      "const": "ai-privacy-posture.changed"
+    },
+    "occurred_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "service"]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "source": {
+      "type": "string",
+      "enum": ["omes", "hermes", "control-center"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["target", "authority", "status", "evidence_freshness", "reason_codes"],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "object",
+          "required": ["server_id"],
+          "additionalProperties": false,
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "deployment_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            }
+          }
+        },
+        "authority": {
+          "type": "string",
+          "enum": ["hermes", "omes-host", "awcms"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "WARN", "BLOCKED"]
+        },
+        "evidence_freshness": {
+          "type": "string",
+          "enum": ["fresh", "stale", "unknown"]
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^AI_PRIVACY_POSTURE_[A-Z0-9_]{1,80}$"
+          }
+        }
+      }
+    }
+  }
+}

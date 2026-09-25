@@ -1,0 +1,15 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-approval-0003",
+  "approval_id": "approval-0000000003",
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "decision": "denied",
+  "reason": "restricted_cloud_denied: RESTRICTED classification may never egress to cloud_sanitized; no approval path exists",
+  "recorded_at": "2026-09-24T12:00:10Z",
+  "actor": {
+    "type": "service",
+    "id": "service-awcms-approval-gate"
+  }
+}

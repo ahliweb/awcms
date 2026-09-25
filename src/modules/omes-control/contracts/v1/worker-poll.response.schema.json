@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/control-center/v1/worker-poll.response.schema.json",
   "title": "worker-poll.response",
-  "description": "Control Center response to pull-worker job poll (ADR-0027, issue #192).",
+  "description": "Control Center response to pull-worker job poll (ADR-0027, issue #192). When `status` is `job_available`, `job` carries the same shape as operation-request.schema.json (duplicated here, not $ref'd, because lib/omes/py/jobs/schema.py has no $ref support - see contracts/README.md) and IS validated against that schema by the worker (lib/omes/py/jobs/worker.py `poll_and_dispatch_once`) before any local dispatch. `job` was previously an untyped `{\"type\": \"object\"}` with no properties/required/additionalProperties, which specified nothing the worker could rely on and let a required-but-unimplementable `job_id` leak into worker-result.request; issue #221 gives it a real, closed shape instead. `job.idempotency_key` and `job.correlation_id` are the correlation handles the worker echoes back in worker-result.request - there is no `job_id`.",
   "type": "object",
   "required": [
     "status",
@@ -25,7 +25,106 @@
       "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
     },
     "job": {
-      "type": "object"
+      "type": "object",
+      "description": "Present when status=job_available. Same shape as operation-request.schema.json (duplicated here - see this schema's top-level description).",
+      "required": [
+        "tenant_id",
+        "correlation_id",
+        "idempotency_key",
+        "actor",
+        "operation",
+        "target",
+        "permission"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "correlation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+        },
+        "actor": {
+          "type": "object",
+          "required": ["type", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["user", "service"]
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            }
+          }
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "status",
+            "preflight",
+            "start",
+            "stop",
+            "restart",
+            "update",
+            "backup",
+            "rollback"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "required": ["server_id"],
+          "additionalProperties": false,
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "deployment_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            }
+          }
+        },
+        "permission": {
+          "type": "object",
+          "required": ["granted", "policy_id"],
+          "additionalProperties": false,
+          "properties": {
+            "granted": {
+              "type": "boolean"
+            },
+            "policy_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "requires_approval": {
+              "type": "boolean"
+            }
+          }
+        },
+        "backup_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "rollback_ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "parameters": {
+          "type": "object"
+        }
+      }
     },
     "poll_interval_seconds": {
       "type": "integer",
