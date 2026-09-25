@@ -150,7 +150,7 @@ describe("the enrollments screen never mutates directly and reuses the existing 
  */
 async function readScriptBlock(): Promise<string> {
   const page = await readFile(PAGE, "utf8");
-  const match = page.match(/<script>([\s\S]*)<\/script>/);
+  const match = page.match(/<script\b[^>]*>([\s\S]*)<\/script\s*>/i);
   if (!match) {
     throw new Error(`${PAGE} has no <script> block to inspect.`);
   }
