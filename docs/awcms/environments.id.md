@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](environments.md)
 
-<!-- i18n-source-hash: sha256:84ab708ba947f2117d92f118e68a9ca9c6d4cf9fae793c14097a1d9b06b0a6c7 -->
+<!-- i18n-source-hash: sha256:6925da02c6a3032bf41b54bcf15d7ab71436a6c7bda23a16ee8fc95c3815a342 -->
 
 # Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
 
@@ -21,38 +21,6 @@
 | Environment    | Domain                 | `APP_ENV`    | Catatan                                                                         |
 | -------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- |
 | **Production** | `awcms.ahlikoding.com` | `production` | Satu-satunya deployment hidup repo ini. Data nyata, integrasi keluar **AKTIF**. |
-
-**Hostname kedua, bukan environment kedua (26 September 2026).**
-`https://omes.ahlikoding.com` ditambahkan sebagai **hostname kedua dari
-aplikasi Coolify yang sama** (`awcms`, uuid `n3gg3qudm91kqdy62znmyxuq`) — ia
-bukan baris kedua untuk tabel itu, bukan app kedua, bukan database kedua.
-Tujuannya adalah pintu masuk khusus untuk OMES Control Center (modul
-`omes_control`, `/admin/omes/*`): `/` di hostname itu 302-redirect ke
-`/admin/omes`, dan selebihnya adalah aplikasi yang sama (permintaan tanpa
-autentikasi tetap jatuh ke `/login`). Routing-nya adalah rule Traefik
-file-provider yang mengarahkan host itu ke tier `awcms-varnish` yang sama
-dengan `awcms.ahlikoding.com` — lihat runbook di repo ops
-`ahliweb/serv-dinkesdocker`, `docs/23-omes-control-center-domain.md`. VCL
-Varnish meng-hash berdasarkan `req.http.host`, jadi kedua hostname tidak
-pernah berbagi entri cache, dan `/__edge-cache-purge` beserta method `BAN`
-tetap tidak bisa diakses publik di host baru itu, sama seperti host utama.
-DNS-nya A record Cloudflare, proxied, pada origin yang sama dengan
-`awcms.ahlikoding.com`; TLS di origin tetap Let's Encrypt lewat Traefik
-DNS-01.
-
-`APP_URL` **tetap** `https://awcms.ahlikoding.com` — tidak diubah, dan itu
-punya konsekuensi yang lebih baik dinyatakan daripada ditemukan sendiri:
-tautan yang dibangun dari `APP_URL` (reset password, undangan, persetujuan
-registrasi, path callback SSO) selalu menunjuk ke `awcms.ahlikoding.com`,
-tidak pernah ke host omes. Cookie sesi bersifat host-only, jadi login di satu
-hostname tidak membuat Anda login di hostname lain. `security.checkOrigin`
-dievaluasi per host permintaan, bukan dari `APP_URL`
-(`src/lib/http/site-origin.ts` sengaja membaca host milik permintaan itu
-sendiri) — diverifikasi: `POST` form lintas-origin yang menyasar host omes
-mengembalikan `403`. Turnstile saat ini nonaktif pada deployment ini
-(`TURNSTILE_ENABLED=false`); bila suatu saat dinyalakan,
-`omes.ahlikoding.com` wajib ditambahkan ke daftar hostname yang diizinkan
-widget itu, atau login di host tersebut akan gagal.
 
 Development bukan baris kedua yang hilang dari tabel itu. Ia
 `http://localhost:4321` dengan `APP_ENV=development`, hidup di workstation, dan
