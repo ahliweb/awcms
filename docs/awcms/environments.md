@@ -20,6 +20,35 @@
 | -------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- |
 | **Production** | `awcms.ahlikoding.com` | `production` | The only live deployment of this repo. Real data, outbound integrations **ON**. |
 
+**A second hostname, not a second environment (26 September 2026).**
+`https://omes.ahlikoding.com` was added as a **second hostname of this same
+Coolify application** (`awcms`, uuid `n3gg3qudm91kqdy62znmyxuq`) — it is not a
+second row for that table, no second app, no second database. Its purpose is a
+dedicated entry point for the OMES Control Center (`omes_control` module,
+`/admin/omes/*`): `/` on that hostname 302-redirects to `/admin/omes`, and
+everything else is the same application (an unauthenticated request still lands
+on `/login`). Routing is a Traefik file-provider route that sends the host to
+the same `awcms-varnish` tier as `awcms.ahlikoding.com` — see the runbook in
+the `ahliweb/serv-dinkesdocker` ops repo, `docs/23-omes-control-center-domain.md`.
+The Varnish VCL hashes on `req.http.host`, so the two hostnames never share
+cache entries, and `/__edge-cache-purge` plus method `BAN` stay unreachable
+publicly on the new host, same as the primary one. DNS is a Cloudflare A
+record, proxied, at the same origin as `awcms.ahlikoding.com`; TLS at origin is
+still Let's Encrypt via Traefik DNS-01.
+
+`APP_URL` **stays** `https://awcms.ahlikoding.com` — it was not changed, and
+that has consequences worth stating rather than discovering: links built from
+`APP_URL` (password reset, invitations, registration approval, the SSO
+callback path) always point at `awcms.ahlikoding.com`, never at the omes host.
+Session cookies are host-only, so signing in on one hostname does not sign you
+in on the other. `security.checkOrigin` is evaluated per request host, not
+from `APP_URL` (`src/lib/http/site-origin.ts` reads the request's own host
+deliberately) — verified: a cross-origin form `POST` targeting the omes host
+returns `403`. Turnstile is currently disabled in this deployment
+(`TURNSTILE_ENABLED=false`); if it is ever turned on, `omes.ahlikoding.com`
+must be added to the widget's allowed-hostname list or sign-in on that host
+will fail.
+
 Development is not a second row missing from that table. It is
 `http://localhost:4321` with `APP_ENV=development`, lives on a workstation, and
 is never deployed to any host (§Local development). What this document lost is a
