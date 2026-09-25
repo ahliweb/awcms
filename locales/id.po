@@ -5217,3 +5217,59 @@ msgstr "Kesehatan OMES"
 
 msgid "OMES backups"
 msgstr "Backup OMES"
+
+msgid "OMES enrollment tokens"
+msgstr "Token pendaftaran OMES"
+
+msgid "Issue and revoke one-time OMES worker enrollment tokens. A token is shown exactly once at issuance and never again — only its SHA-256 hash is ever stored, never logged, and never re-displayable."
+msgstr "Terbitkan dan cabut token pendaftaran worker OMES sekali pakai. Token ditampilkan tepat satu kali saat diterbitkan dan tidak pernah lagi — hanya hash SHA-256-nya yang pernah disimpan, tidak pernah dicatat log, dan tidak pernah bisa ditampilkan ulang."
+
+msgid "You do not have permission to manage OMES enrollment tokens."
+msgstr "Anda tidak memiliki izin untuk mengelola token pendaftaran OMES."
+
+msgid "The OMES enrollment-token console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol token pendaftaran OMES tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+
+
+
+
+msgid "Issue a token"
+msgstr "Terbitkan token"
+
+msgid "Only servers registered but not yet enrolled (status “offline”) are eligible — a server with a live worker already has valid credentials, and re-issuing one would let two worker identities exist for the same host."
+msgstr "Hanya server yang sudah terdaftar tetapi belum terdaftar penuh (status “offline”) yang memenuhi syarat — server dengan worker yang sudah aktif sudah memiliki kredensial yang valid, dan menerbitkan ulang token akan membuat dua identitas worker ada untuk host yang sama."
+
+msgid "No server is eligible for a new token"
+msgstr "Tidak ada server yang memenuhi syarat untuk token baru"
+
+msgid "Register a server on the Servers screen first, or wait for an existing one to become eligible."
+msgstr "Daftarkan server di layar Server terlebih dahulu, atau tunggu hingga salah satu yang ada menjadi memenuhi syarat."
+
+msgid "Servers eligible for a new enrollment token."
+msgstr "Server yang memenuhi syarat untuk token pendaftaran baru."
+
+msgid "Issue token"
+msgstr "Terbitkan token"
+
+msgid "Enrollment tokens"
+msgstr "Token pendaftaran"
+
+msgid "OMES worker enrollment tokens, newest first."
+msgstr "Token pendaftaran worker OMES, terbaru lebih dulu."
+
+msgid "Challenge expires"
+msgstr "Tantangan kedaluwarsa"
+
+msgid "No enrollment tokens"
+msgstr "Tidak ada token pendaftaran"
+
+msgid "Issue one above, or wait for a worker to complete enrollment."
+msgstr "Terbitkan satu di atas, atau tunggu worker menyelesaikan pendaftaran."
+
+msgid "not yet presented"
+msgstr "belum disajikan"
+
+
+msgid "Enrollments"
+msgstr "Pendaftaran"

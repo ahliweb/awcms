@@ -5229,3 +5229,59 @@ msgstr ""
 
 msgid "OMES backups"
 msgstr ""
+
+msgid "OMES enrollment tokens"
+msgstr ""
+
+msgid "Issue and revoke one-time OMES worker enrollment tokens. A token is shown exactly once at issuance and never again — only its SHA-256 hash is ever stored, never logged, and never re-displayable."
+msgstr ""
+
+msgid "You do not have permission to manage OMES enrollment tokens."
+msgstr ""
+
+msgid "The OMES enrollment-token console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+
+
+
+
+msgid "Issue a token"
+msgstr ""
+
+msgid "Only servers registered but not yet enrolled (status “offline”) are eligible — a server with a live worker already has valid credentials, and re-issuing one would let two worker identities exist for the same host."
+msgstr ""
+
+msgid "No server is eligible for a new token"
+msgstr ""
+
+msgid "Register a server on the Servers screen first, or wait for an existing one to become eligible."
+msgstr ""
+
+msgid "Servers eligible for a new enrollment token."
+msgstr ""
+
+msgid "Issue token"
+msgstr ""
+
+msgid "Enrollment tokens"
+msgstr ""
+
+msgid "OMES worker enrollment tokens, newest first."
+msgstr ""
+
+msgid "Challenge expires"
+msgstr ""
+
+msgid "No enrollment tokens"
+msgstr ""
+
+msgid "Issue one above, or wait for a worker to complete enrollment."
+msgstr ""
+
+msgid "not yet presented"
+msgstr ""
+
+
+msgid "Enrollments"
+msgstr ""

@@ -66,6 +66,10 @@ const ROUTES = [
   // Overview's `audit.read` panel (ahliweb/omes#201's quick-link gate) is
   // enforced by the audit list route.
   "src/pages/api/v1/omes/audit/index.ts",
+  // Overview's `enrollments.manage` quick-link gate (ahliweb/omes#233) is
+  // enforced by both enrollment-challenge routes.
+  "src/pages/api/v1/omes/servers/[id]/enrollment-challenges/index.ts",
+  "src/pages/api/v1/omes/servers/[id]/enrollment-challenges/[workerId]/revoke.ts",
   // `POST /operations`'s per-operation guard (`OMES_OPERATION_GUARD`) is
   // built from literal triples in the domain layer, not `OMES_GUARDS.x.y`
   // text — read separately below and merged in.
@@ -175,13 +179,15 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(seeded.size).toBe(13);
     expect(seeded).toEqual(declaredTriples());
 
-    // 8 as of Issue ahliweb/omes#201: the original five (#200) plus health,
-    // backups, and audit — see tests/admin-omes-control-health-backup-audit-page-contract.test.ts
-    // for that trio's own screen contract.
+    // 9 as of Issue ahliweb/omes#233: the original five (#200) plus health,
+    // backups, and audit (#201) — see
+    // tests/admin-omes-control-health-backup-audit-page-contract.test.ts for
+    // that trio's own screen contract — plus enrollments (#233), see
+    // tests/admin-omes-control-enrollments-page-contract.test.ts.
     const nav = listModules().find(
       (module) => module.key === "omes_control"
     )?.navigation;
-    expect(nav?.length).toBe(8);
+    expect(nav?.length).toBe(9);
 
     for (const entry of nav ?? []) {
       expect(entry.requiredPermission).toBeDefined();

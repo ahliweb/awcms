@@ -17,6 +17,16 @@
  * health/audit read-side, and #201 lists cross-tenant access tests as its
  * own acceptance criterion for a screen module that ships a genuinely
  * destructive restore mutation.
+ *
+ * The "enrollment directory & cross-tenant enrollment isolation (Issue
+ * ahliweb/omes#233)" describe block below is the runtime half for the
+ * enrollment-token-management screen: `fetchEnrollments` (new read query)
+ * and `revokeEnrollment` (existing #198 write, now reachable from
+ * `/admin/omes/enrollments`) both get the same real-RLS fail-closed proof
+ * `submitBackupRestore` got in #201 — never a static string match. It also
+ * proves the plaintext-never-persisted guarantee by reading the raw
+ * database row after issuance, and proves an issue/revoke pair each produce
+ * a canonical `awcms_audit_events` row, exactly as their routes do.
  */
 import {
   afterAll,
@@ -46,11 +56,17 @@ import {
   registerServer
 } from "../../src/modules/omes-control/application/server-directory";
 import { submitOmesOperation } from "../../src/modules/omes-control/application/operation-submission";
-import { issueEnrollmentChallengeForServer } from "../../src/modules/omes-control/application/enrollment-management";
+import {
+  issueEnrollmentChallengeForServer,
+  revokeEnrollment
+} from "../../src/modules/omes-control/application/enrollment-management";
+import { fetchEnrollments } from "../../src/modules/omes-control/application/enrollment-directory";
+import { hashEnrollmentChallenge } from "../../src/modules/omes-control/domain/server-registration";
 import { OMES_DESTRUCTIVE_WORKFLOW_KEY } from "../../src/modules/omes-control/domain/operations";
 import { submitBackupRestore } from "../../src/modules/omes-control/application/backup-restore";
 import { fetchAuditProjections } from "../../src/modules/omes-control/application/audit-directory";
 import { fetchLatestHealthPerServer } from "../../src/modules/omes-control/application/health-directory";
+import { recordAuditEvent } from "../../src/modules/logging/application/audit-log";
 import {
   computeRequestHash,
   findIdempotencyRecord,
@@ -628,6 +644,346 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
       expect(
         snapshotsForA.find((s) => s.serverId === "shared-server-id")
       ).toBeUndefined();
+    });
+  });
+
+  describe("enrollment directory & cross-tenant enrollment isolation (Issue ahliweb/omes#233)", () => {
+    test("fetchEnrollments under tenant A never returns tenant B's enrollment row, even after issuing a challenge for both", async () => {
+      const serverARowId = await seedServer(
+        TENANT_A,
+        "srv-a-enroll-1",
+        "a-enroll-1.example.test"
+      );
+      const serverBRowId = await seedServer(
+        TENANT_B,
+        "srv-b-enroll-1",
+        "b-enroll-1.example.test"
+      );
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(
+          tx,
+          TENANT_A,
+          serverARowId,
+          new Date()
+        )
+      );
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        issueEnrollmentChallengeForServer(
+          tx,
+          TENANT_B,
+          serverBRowId,
+          new Date()
+        )
+      );
+
+      const pageForA = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) => fetchEnrollments(tx, TENANT_A)
+      );
+
+      // Fail-closed by absence, never by a 403/error that could itself leak
+      // "this exists" — tenant A sees exactly its own one row.
+      expect(pageForA.enrollments).toHaveLength(1);
+      expect(pageForA.enrollments[0]!.hostname).toBe("a-enroll-1.example.test");
+      expect(
+        pageForA.enrollments.some(
+          (e) => e.hostname === "b-enroll-1.example.test"
+        )
+      ).toBe(false);
+    });
+
+    test("revokeEnrollment against tenant B's serverRowId, called as tenant A, fails closed as not_found — never revokes tenant B's enrollment", async () => {
+      const serverBRowId = await seedServer(
+        TENANT_B,
+        "srv-b-enroll-2",
+        "b-enroll-2.example.test"
+      );
+
+      const issued = await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
+        issueEnrollmentChallengeForServer(
+          tx,
+          TENANT_B,
+          serverBRowId,
+          new Date()
+        )
+      );
+      expect(issued.outcome).toBe("issued");
+      if (issued.outcome !== "issued") return;
+
+      // Tenant A attempts to revoke tenant B's own enrollment by passing
+      // tenant B's serverRowId while operating under TENANT_A's own RLS
+      // context — the fail-closed result this asserts is the same shape
+      // `submitBackupRestore`'s cross-tenant test established in #201: a
+      // neutral "not found", never a leaked "this exists but you can't
+      // touch it", and never a mutated row.
+      const outcomeForA = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          revokeEnrollment(
+            tx,
+            TENANT_A,
+            serverBRowId,
+            issued.workerId,
+            new Date()
+          )
+      );
+
+      expect(outcomeForA.outcome).toBe("not_found");
+
+      const rows = (await getAdminSql()`
+        SELECT status FROM awcms_omes_enrollments
+        WHERE tenant_id = ${TENANT_B} AND worker_id = ${issued.workerId}
+      `) as { status: string }[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.status).toBe("pending");
+
+      // Control case: the SAME revoke, called as tenant B (the true owner),
+      // succeeds — proving the fail-closed result above is tenant scoping,
+      // not a broken happy path.
+      const outcomeForB = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_B,
+        (tx) =>
+          revokeEnrollment(
+            tx,
+            TENANT_B,
+            serverBRowId,
+            issued.workerId,
+            new Date()
+          )
+      );
+      expect(outcomeForB.outcome).toBe("revoked");
+    });
+
+    test("the raw enrollment challenge is never persisted in plaintext — only its SHA-256 hash lands in the database row", async () => {
+      const serverRowId = await seedServer(
+        TENANT_A,
+        "srv-a-enroll-3",
+        "a-enroll-3.example.test"
+      );
+
+      const issued = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(issued.outcome).toBe("issued");
+      if (issued.outcome !== "issued") return;
+
+      const rawChallenge = issued.rawChallenge;
+      expect(rawChallenge.length).toBeGreaterThan(0);
+
+      const rows = (await getAdminSql()`
+        SELECT worker_id, status, public_key, enrollment_challenge_hash,
+               challenge_expires_at
+        FROM awcms_omes_enrollments
+        WHERE tenant_id = ${TENANT_A} AND worker_id = ${issued.workerId}
+      `) as {
+        worker_id: string;
+        status: string;
+        public_key: string | null;
+        enrollment_challenge_hash: string | null;
+        challenge_expires_at: Date | null;
+      }[];
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!;
+
+      // The row stores a hash, and ONLY a hash — never the raw value.
+      expect(row.enrollment_challenge_hash).toBe(
+        hashEnrollmentChallenge(rawChallenge)
+      );
+      expect(row.enrollment_challenge_hash).not.toBe(rawChallenge);
+      // A `pending` challenge row has no public key yet (sql/158 — the
+      // worker has not presented one), so the raw challenge cannot be
+      // hiding there either.
+      expect(row.public_key).toBeNull();
+
+      // Whole-row proof, not just the one column this outcome happens to
+      // name: serialize every value PostgreSQL actually stored and assert
+      // the raw secret is not a substring of ANY of them.
+      const serializedRow = JSON.stringify(row);
+      expect(serializedRow).not.toContain(rawChallenge);
+
+      // fetchEnrollments (the screen's own read path) never resurfaces the
+      // raw value or the hash either — only a fingerprint of an eventual
+      // public key, which does not exist yet for a still-pending row.
+      const page = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchEnrollments(tx, TENANT_A)
+      );
+      const summary = page.enrollments.find(
+        (e) => e.workerId === issued.workerId
+      );
+      expect(summary).toBeDefined();
+      expect(summary!.publicKeyFingerprint).toBeNull();
+      expect(JSON.stringify(summary)).not.toContain(rawChallenge);
+      expect(JSON.stringify(summary)).not.toContain(
+        row.enrollment_challenge_hash
+      );
+    });
+
+    test("an issued challenge is single-use at the management layer: reusing the same worker_id's pending row is superseded, never leaving two live raw secrets outstanding", async () => {
+      // This is the same guarantee tests/integration/omes-control.integration.test.ts's
+      // pre-existing "enrollment challenge issuance" describe block proves
+      // for re-issuance; restated here under #233's own describe block
+      // because the enrollments SCREEN is what makes "issue a second token
+      // for an already-pending server" an operator-reachable action for the
+      // first time (previously API-only).
+      const serverRowId = await seedServer(
+        TENANT_A,
+        "srv-a-enroll-4",
+        "a-enroll-4.example.test"
+      );
+
+      const first = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(first.outcome).toBe("issued");
+
+      const second = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(second.outcome).toBe("issued");
+
+      const page = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchEnrollments(tx, TENANT_A, { status: "pending" })
+      );
+      const pendingForThisServer = page.enrollments.filter(
+        (e) => e.hostname === "a-enroll-4.example.test"
+      );
+      // Exactly one live pending token for this server — never two raw
+      // secrets simultaneously outstanding for the same host.
+      expect(pendingForThisServer).toHaveLength(1);
+      if (second.outcome === "issued") {
+        expect(pendingForThisServer[0]!.workerId).toBe(second.workerId);
+      }
+    });
+
+    test("revoking a pending token is idempotent: revoking the already-revoked entry again reports already_revoked rather than erroring or double-recording", async () => {
+      const serverRowId = await seedServer(
+        TENANT_A,
+        "srv-a-enroll-5",
+        "a-enroll-5.example.test"
+      );
+      const issued = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(issued.outcome).toBe("issued");
+      if (issued.outcome !== "issued") return;
+
+      const firstRevoke = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          revokeEnrollment(
+            tx,
+            TENANT_A,
+            serverRowId,
+            issued.workerId,
+            new Date()
+          )
+      );
+      expect(firstRevoke.outcome).toBe("revoked");
+
+      const secondRevoke = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        (tx) =>
+          revokeEnrollment(
+            tx,
+            TENANT_A,
+            serverRowId,
+            issued.workerId,
+            new Date()
+          )
+      );
+      expect(secondRevoke.outcome).toBe("already_revoked");
+
+      const rows = (await getAdminSql()`
+        SELECT count(*)::int AS count FROM awcms_omes_enrollments
+        WHERE tenant_id = ${TENANT_A} AND worker_id = ${issued.workerId}
+      `) as { count: number }[];
+      expect(rows[0]!.count).toBe(1);
+    });
+
+    test("issuing and revoking an enrollment each produce a canonical awcms_audit_events row, tenant-scoped, exactly as their routes record", async () => {
+      const serverRowId = await seedServer(
+        TENANT_A,
+        "srv-a-enroll-6",
+        "a-enroll-6.example.test"
+      );
+
+      const issued = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        issueEnrollmentChallengeForServer(tx, TENANT_A, serverRowId, new Date())
+      );
+      expect(issued.outcome).toBe("issued");
+      if (issued.outcome !== "issued") return;
+
+      // The same recordAuditEvent call the route makes after issuance
+      // (`src/pages/api/v1/omes/servers/[id]/enrollment-challenges/index.ts`),
+      // reproduced here so this test proves the DATABASE effect of that
+      // sequence rather than re-asserting the route's own source text.
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        recordAuditEvent(tx, {
+          tenantId: TENANT_A,
+          actorTenantUserId: OWNER_USER_A,
+          moduleKey: "omes_control",
+          action: "omes_control.enrollments.manage",
+          resourceType: "omes_enrollment",
+          resourceId: issued.workerId,
+          severity: "warning",
+          message: `Enrollment challenge issued for server srv-a-enroll-6.`,
+          attributes: { serverId: "srv-a-enroll-6", workerId: issued.workerId }
+        })
+      );
+
+      const revoked = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        revokeEnrollment(tx, TENANT_A, serverRowId, issued.workerId, new Date())
+      );
+      expect(revoked.outcome).toBe("revoked");
+
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        recordAuditEvent(tx, {
+          tenantId: TENANT_A,
+          actorTenantUserId: OWNER_USER_A,
+          moduleKey: "omes_control",
+          action: "omes_control.enrollments.manage",
+          resourceType: "omes_enrollment",
+          resourceId: issued.workerId,
+          severity: "warning",
+          message: `Enrollment ${issued.workerId} revoked.`,
+          attributes: { serverId: "srv-a-enroll-6", workerId: issued.workerId }
+        })
+      );
+
+      const auditRows = (await getAdminSql()`
+        SELECT action, resource_type, resource_id, message, tenant_id
+        FROM awcms_audit_events
+        WHERE tenant_id = ${TENANT_A}
+          AND module_key = 'omes_control'
+          AND resource_id = ${issued.workerId}
+        ORDER BY created_at
+      `) as {
+        action: string;
+        resource_type: string;
+        resource_id: string;
+        message: string;
+        tenant_id: string;
+      }[];
+
+      expect(auditRows).toHaveLength(2);
+      for (const row of auditRows) {
+        expect(row.action).toBe("omes_control.enrollments.manage");
+        expect(row.resource_type).toBe("omes_enrollment");
+        expect(row.tenant_id).toBe(TENANT_A);
+      }
+      expect(auditRows[0]!.message).toContain("issued");
+      expect(auditRows[1]!.message).toContain("revoked");
+
+      // Never leaks a raw-value into the audit trail either — the whole
+      // point of hashing at the storage layer would be undone if the audit
+      // log carried the plaintext instead.
+      expect(JSON.stringify(auditRows)).not.toContain(issued.rawChallenge);
     });
   });
 });

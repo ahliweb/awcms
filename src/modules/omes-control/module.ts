@@ -66,9 +66,10 @@ export const omesControlModule = defineModule({
   },
   // Issue ahliweb/omes#200 landed the first five entries (overview, servers,
   // deployments, operations, jobs). Issue ahliweb/omes#201 (parent #195)
-  // adds the remaining three — health, backups, audit — in the SAME change
-  // as the three pages under `src/pages/admin/omes/*` they name, per
+  // added health, backups, audit in the SAME change as the three pages under
+  // `src/pages/admin/omes/*` they name, per
   // `tests/admin-navigation-registry.test.ts`'s two-directional check.
+  // Issue ahliweb/omes#233 adds the ninth and final entry, `enrollments`.
   //
   // Every `requiredPermission` below is one of the 13 `omes_control`
   // permissions `sql/155_awcms_omes_control_permissions.sql` already seeds —
@@ -77,30 +78,36 @@ export const omesControlModule = defineModule({
   // by exactly that permission — see that route's own comment for why there
   // is no separate `health.read`).
   //
-  // `enrollments.manage` is DELIBERATELY not given a navigation entry by
-  // this issue. It is in scope for a future enrollment-token-management
-  // screen, not for #201 (health/backup-recovery/audit) — servers.astro
-  // (#200) already renders each server's enrollment/trust EVIDENCE
-  // (read-only), and issuing/revoking enrollment tokens is a distinct
-  // write-capability this issue does not add a screen for. It remains
-  // reachable only via the API today; that gap is not this issue's to close.
+  // `enrollments.manage` was DELIBERATELY left without a navigation entry by
+  // #201 — servers.astro (#200) already rendered each server's
+  // enrollment/trust EVIDENCE (read-only), and issuing/revoking enrollment
+  // tokens was a distinct write-capability reachable only via
+  // `POST /api/v1/omes/servers/{id}/enrollment-challenges` and its
+  // `/revoke` sibling (both `ahliweb/omes#198`). Issue ahliweb/omes#233
+  // closes that gap with `enrollments.astro`, which calls those SAME two
+  // endpoints — unmodified by this issue — and adds no new write path.
   //
-  // None of these eight screens' actions cross a tenant boundary — every
+  // None of these nine screens' actions cross a tenant boundary — every
   // `omes_control` table carries `tenant_id` with FORCE ROW LEVEL SECURITY
   // (sql/154) and every application-layer query in this module scopes on the
   // caller's own `tenantId` (`server-directory.ts`, `deployment-directory.ts`,
   // `job-directory.ts`, `operation-directory.ts`, `health-directory.ts`,
-  // `backup-directory.ts`, `audit-directory.ts`, `backup-restore.ts`). Per
-  // ADR-0051 §Keputusan butir 1–3, a platform-scoped gate is required only
-  // for an action whose EFFECT reaches another tenant's data — this
-  // extends to `backups.restore`/`backups.rollback`
+  // `backup-directory.ts`, `audit-directory.ts`, `backup-restore.ts`,
+  // `enrollment-directory.ts`, `enrollment-management.ts`). Per ADR-0051
+  // §Keputusan butir 1–3, a platform-scoped gate is required only for an
+  // action whose EFFECT reaches another tenant's data — this extends to
+  // `backups.restore`/`backups.rollback`
   // (`application/backup-restore.ts`'s `submitBackupRestore` resolves the
   // target `serverId` from a `SELECT ... WHERE tenant_id = ${tenantId} AND
   // id = ${backupId}` lookup, so a foreign `backupId` resolves to
-  // `RESOURCE_NOT_FOUND` rather than a foreign server) — none of these
-  // reach another tenant's data, so the ordinary tenant-seeded
-  // `omes_control` permissions remain sufficient and no platform-only
-  // permission is added.
+  // `RESOURCE_NOT_FOUND` rather than a foreign server) and to
+  // `enrollments.manage` (`issueEnrollmentChallengeForServer`/
+  // `revokeEnrollment` resolve their target server the same way, by
+  // `tenant_id = ${tenantId} AND id = ${serverRowId}`, so a foreign
+  // `serverRowId` resolves to `server_not_found`/`not_found`, never a
+  // foreign server) — none of these reach another tenant's data, so the
+  // ordinary tenant-seeded `omes_control` permissions remain sufficient and
+  // no platform-only permission is added.
   navigation: [
     {
       labelKey: "admin.layout.nav_omes_overview",
@@ -149,6 +156,12 @@ export const omesControlModule = defineModule({
       path: "/admin/omes/audit",
       order: 97,
       requiredPermission: "omes_control.audit.read"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_enrollments",
+      path: "/admin/omes/enrollments",
+      order: 98,
+      requiredPermission: "omes_control.enrollments.manage"
     }
   ],
   permissions: [

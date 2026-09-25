@@ -263,7 +263,8 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_omes_jobs": "OMES jobs",
   "admin.layout.nav_omes_health": "OMES health",
   "admin.layout.nav_omes_backups": "OMES backups",
-  "admin.layout.nav_omes_audit": "OMES audit"
+  "admin.layout.nav_omes_audit": "OMES audit",
+  "admin.layout.nav_omes_enrollments": "OMES enrollment tokens"
 };
 
 /**
@@ -357,7 +358,8 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_omes_jobs": "clock",
   "admin.layout.nav_omes_health": "shield",
   "admin.layout.nav_omes_backups": "database",
-  "admin.layout.nav_omes_audit": "clock"
+  "admin.layout.nav_omes_audit": "clock",
+  "admin.layout.nav_omes_enrollments": "key"
 };
 
 /** Display name for the synthetic core group. Rendered as a module sub-label. */

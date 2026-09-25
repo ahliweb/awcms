@@ -37,13 +37,13 @@ describe("omes_control module descriptor", () => {
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
-  test("declares navigation for all eight screens ahliweb/omes#200 and #201 landed", () => {
+  test("declares navigation for all nine screens ahliweb/omes#200, #201, and #233 landed", () => {
     // Was `toBeUndefined()` while the physical pages were staged work
     // (ahliweb/omes#196/#197/#198) — matching the push_delivery (ADR-0074)
     // precedent that a descriptor must not declare a path with no page
     // behind it (`tests/admin-navigation-registry.test.ts` enforces this in
-    // both directions). ahliweb/omes#200 landed the first five; #201 adds
-    // health, backups, and audit in this same shape.
+    // both directions). ahliweb/omes#200 landed the first five; #201 added
+    // health, backups, and audit; #233 adds the ninth, enrollments.
     const nav = omesControlModule.navigation ?? [];
     expect(nav.map((entry) => entry.path).sort()).toEqual(
       [
@@ -54,7 +54,8 @@ describe("omes_control module descriptor", () => {
         "/admin/omes/jobs",
         "/admin/omes/health",
         "/admin/omes/backups",
-        "/admin/omes/audit"
+        "/admin/omes/audit",
+        "/admin/omes/enrollments"
       ].sort()
     );
 

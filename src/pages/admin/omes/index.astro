@@ -51,11 +51,18 @@ const screen = await loadAdminScreen({
     OMES_GUARDS.deployments.read,
     OMES_GUARDS.jobs.read,
     OMES_GUARDS.backups.read,
-    OMES_GUARDS.audit.read
+    OMES_GUARDS.audit.read,
+    OMES_GUARDS.enrollments.manage
   ],
   load: async ({ tx, entry }) => {
-    const [readServers, readDeployments, readJobs, readBackups, readAudit] =
-      entry;
+    const [
+      readServers,
+      readDeployments,
+      readJobs,
+      readBackups,
+      readAudit,
+      manageEnrollments
+    ] = entry;
     const canReadAnyPanel =
       readServers || readDeployments || readJobs || readBackups || readAudit;
 
@@ -69,6 +76,7 @@ const screen = await loadAdminScreen({
       readJobs,
       readBackups,
       readAudit,
+      manageEnrollments,
       overview
     };
   },
@@ -89,6 +97,8 @@ const readDeployments =
 const readJobs = screen.state === "allowed" && screen.data.readJobs;
 const readBackups = screen.state === "allowed" && screen.data.readBackups;
 const readAudit = screen.state === "allowed" && screen.data.readAudit;
+const manageEnrollments =
+  screen.state === "allowed" && screen.data.manageEnrollments;
 const overview: OmesOverview =
   screen.state === "allowed" ? screen.data.overview : EMPTY_OVERVIEW;
 
@@ -249,6 +259,14 @@ function formatCounts(counts: Record<string, number>): string {
           {readAudit && (
             <a class="quick-link" href="/admin/omes/audit">
               {t("Audit")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {manageEnrollments && (
+            <a class="quick-link" href="/admin/omes/enrollments">
+              {t("Enrollments")}
               <span class="quick-link-arrow" aria-hidden="true">
                 →
               </span>
