@@ -150,11 +150,17 @@ describe("the enrollments screen never mutates directly and reuses the existing 
  */
 async function readScriptBlock(): Promise<string> {
   const page = await readFile(PAGE, "utf8");
-  const match = page.match(/<script\b[^>]*>([\s\S]*)<\/script\s*>/i);
-  if (!match) {
+  // Plain index slicing rather than a tag-matching regex: this only needs
+  // the text between the first opening `<script` tag and the last closing
+  // `</script`, case-insensitively, and is not an HTML sanitizer.
+  const lower = page.toLowerCase();
+  const open = lower.indexOf("<script");
+  const bodyStart = open === -1 ? -1 : lower.indexOf(">", open) + 1;
+  const bodyEnd = lower.lastIndexOf("</script");
+  if (open === -1 || bodyStart <= 0 || bodyEnd < bodyStart) {
     throw new Error(`${PAGE} has no <script> block to inspect.`);
   }
-  return match[1]!;
+  return page.slice(bodyStart, bodyEnd);
 }
 
 describe("the one-time token is never re-displayable and never persisted in plaintext", () => {
