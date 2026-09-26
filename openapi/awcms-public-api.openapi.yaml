@@ -12139,6 +12139,138 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/ai-privacy/egress-approvals:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Submit an AI egress owner-approval decision (ahliweb/omes#232)
+      description: Gated by omes_control.ai_privacy.approve. A RESTRICTED classification resolving to a cloud_sanitized destination is structurally refused — unconditionally, independent of the submitted reason_code — before the canonical workflow-approval engine is ever touched, and is also blocked by a database CHECK constraint. Refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active approval workflow. Requires Idempotency-Key, audited critical.
+      operationId: omesSubmitAiEgressApproval
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serverId
+                - policyVersion
+                - classification
+                - destination
+                - reasonCode
+                - approve
+              properties:
+                serverId:
+                  type: string
+                deploymentId:
+                  type: string
+                policyVersion:
+                  type: string
+                classification:
+                  type: string
+                  enum:
+                    - CONFIDENTIAL
+                    - RESTRICTED
+                destination:
+                  type: string
+                  enum:
+                    - private_endpoint
+                    - cloud_sanitized
+                reasonCode:
+                  type: string
+                  enum:
+                    - AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT
+                    - AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED
+                    - AI_EGRESS_APPROVAL_REQUIRED_RESTRICTED_PRIVATE_ENDPOINT
+                justification:
+                  type: string
+                  maxLength: 500
+                approve:
+                  type: boolean
+      responses:
+        "201":
+          description: Approval decision recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      approval:
+                        type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: No active AI-egress approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Structurally refused (AI_EGRESS_APPROVAL_DENIED) — e.g. RESTRICTED classification resolving to cloud_sanitized, or a not-approvable reason_code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many approval requests (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/ai-privacy/posture:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read AI privacy posture and egress-approval history (ahliweb/omes#232)
+      description: Gated by omes_control.ai_privacy.read. Freshness/effective status are recomputed at read time (never trusted off the stored evidence) — stale or unrecognized evidence is never reported as healthy.
+      operationId: omesReadAiPrivacyPosture
+      responses:
+        "200":
+          description: Posture fleet view plus egress-approval request history.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      posture:
+                        type: array
+                        items:
+                          type: object
+                      fleetHealthy:
+                        type: boolean
+                      approvals:
+                        type: array
+                        items:
+                          type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/omes/audit:
     get:
       tags:
@@ -13197,6 +13329,37 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/worker/ai-privacy-posture:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Ingest an AI privacy posture projection (ahliweb/omes#232)
+      description: "`security: []`. Same Ed25519 worker-envelope authentication as poll/result/heartbeat. The request body wraps a `posture` object that MUST independently validate against the vendored ai-privacy-posture-view schema (OMES issue #217, ADR-0029) — bounded metadata only, no prompt/transcript/credential field can pass validation. Upserts one current row per (tenant, server, deployment) target."
+      operationId: omesWorkerIngestAiPrivacyPosture
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: acknowledged or rejected.
+          content:
+            application/json:
+              schema: {}
+        "413":
+          description: Request body exceeded the bounded size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate-limited per (tenant, worker).
           content:
             application/json:
               schema:

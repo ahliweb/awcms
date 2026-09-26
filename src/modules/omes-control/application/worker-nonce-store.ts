@@ -10,6 +10,8 @@
  * "catch the conflict" implementation would silently never catch it and let
  * every replay through the "already used" branch as dead code.
  */
+import type { WorkerRoute } from "../domain/worker-identity";
+
 export type ConsumeNonceOutcome = "consumed" | "replayed";
 
 export async function consumeWorkerNonce(
@@ -18,7 +20,7 @@ export async function consumeWorkerNonce(
   serverId: string,
   workerId: string,
   nonce: string,
-  route: "poll" | "result" | "heartbeat",
+  route: WorkerRoute,
   now: Date,
   retentionMs: number
 ): Promise<ConsumeNonceOutcome> {

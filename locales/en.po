@@ -5312,3 +5312,63 @@ msgstr ""
 
 msgid "Rollback"
 msgstr ""
+
+msgid "OMES AI privacy"
+msgstr ""
+
+msgid "Read-only AI privacy posture evidence and AI egress owner-approval requests, projected from OMES. Never displays a prompt, transcript, or raw provider response — bounded metadata only."
+msgstr ""
+
+msgid "You do not have permission to view AI privacy posture."
+msgstr ""
+
+msgid "The AI privacy posture console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "AI privacy posture"
+msgstr ""
+
+msgid "Fleet healthy"
+msgstr ""
+
+msgid "Attention needed"
+msgstr ""
+
+msgid "Evidence older than its freshness window, or with unrecognized fields, is always shown as stale/unknown and never as healthy."
+msgstr ""
+
+msgid "AI privacy posture evidence per server, newest first."
+msgstr ""
+
+msgid "Destination class"
+msgstr ""
+
+msgid "Last verified"
+msgstr ""
+
+msgid "No AI privacy posture evidence yet"
+msgstr ""
+
+msgid "Evidence appears here once an enrolled OMES host reports its AI privacy posture."
+msgstr ""
+
+msgid "AI egress approval requests"
+msgstr ""
+
+msgid "A RESTRICTED classification resolving to a cloud destination has no approval path and is never offered a control here."
+msgstr ""
+
+msgid "AI egress owner-approval requests, newest first."
+msgstr ""
+
+msgid "Classification"
+msgstr ""
+
+msgid "Destination"
+msgstr ""
+
+msgid "Decided"
+msgstr ""
+
+msgid "No AI egress approval requests"
+msgstr ""

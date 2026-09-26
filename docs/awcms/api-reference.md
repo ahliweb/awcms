@@ -9398,6 +9398,49 @@ Proves the parts of the chain nothing else can see — that the VAPID key pair m
 
 Owner/operator API for OMES projections and safe operations (omes_control module, ADR-0122, Issue ahliweb/omes#198) — tenant-scoped fleet overview, server registration/decommission, enrollment-challenge issuance/revocation, desired-vs-observed deployment views, allowlisted safe-operation submission (with destructive operations routed through the canonical workflow-approval engine), worker job listing/cancel/retry-approval, health/backup/audit projections. AWCMS only ever records intent against OMES-owned capability evidence stored server-side — it never executes arbitrary shell/SSH, reads host files directly, or reads Hermes private state. Host/deployment execution is exclusively OMES's own pull worker (ahliweb/omes#199, out of scope here).
 
+### `POST /api/v1/omes/ai-privacy/egress-approvals` — Submit an AI egress owner-approval decision (ahliweb/omes#232)
+
+- **operationId**: `omesSubmitAiEgressApproval`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.ai_privacy.approve. A RESTRICTED classification resolving to a cloud_sanitized destination is structurally refused — unconditionally, independent of the submitted reason_code — before the canonical workflow-approval engine is ever touched, and is also blocked by a database CHECK constraint. Refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active approval workflow. Requires Idempotency-Key, audited critical.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Approval decision recorded.                                                                                                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | No active AI-egress approval workflow is published (APPROVAL_WORKFLOW_NOT_CONFIGURED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 422    | Structurally refused (AI_EGRESS_APPROVAL_DENIED) — e.g. RESTRICTED classification resolving to cloud_sanitized, or a not-approvable reason_code.                          | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many approval requests (RATE_LIMITED).                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/ai-privacy/posture` — Read AI privacy posture and egress-approval history (ahliweb/omes#232)
+
+- **operationId**: `omesReadAiPrivacyPosture`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.ai_privacy.read. Freshness/effective status are recomputed at read time (never trusted off the stored evidence) — stale or unrecognized evidence is never reported as healthy.
+
+**Responses**
+
+| Status | Description                                              | Schema                                 |
+| ------ | -------------------------------------------------------- | -------------------------------------- |
+| 200    | Posture fleet view plus egress-approval request history. | object                                 |
+| 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/omes/audit` — List OMES host execution/reconciliation audit projections
 
 - **operationId**: `omesListAudit`
@@ -9901,6 +9944,23 @@ Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
 | 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/ai-privacy-posture` — Ingest an AI privacy posture projection (ahliweb/omes#232)
+
+- **operationId**: `omesWorkerIngestAiPrivacyPosture`
+- **Security**: none (public endpoint)
+
+`security: []`. Same Ed25519 worker-envelope authentication as poll/result/heartbeat. The request body wraps a `posture` object that MUST independently validate against the vendored ai-privacy-posture-view schema (OMES issue #217, ADR-0029) — bounded metadata only, no prompt/transcript/credential field can pass validation. Upserts one current row per (tenant, server, deployment) target.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | acknowledged or rejected.                       | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling. | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, worker).              | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/omes/worker/enroll` — Worker enrollment challenge redemption (ahliweb/omes#199)
 

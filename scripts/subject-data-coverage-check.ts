@@ -154,6 +154,16 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
     table: "awcms_omes_worker_results",
     reason:
       "ADR-0122 (Issue ahliweb/omes#199). Worker-reported job execution results (operation, state, evidence) from the OMES pull worker. Operational infrastructure evidence about a host/job, not personal data — evidence is additionally passed through redactSensitiveAttributes before persistence."
+  },
+  {
+    table: "awcms_omes_ai_privacy_posture",
+    reason:
+      "ADR-0122, OMES ADR-0029 (Issue ahliweb/omes#232). One row per (tenant, server, deployment) AI privacy posture projection — classification mode, destination class, status, and reason codes describing a HOST's AI egress posture. Bounded infrastructure/governance metadata only; structurally excludes prompt/transcript/credential content (additionalProperties:false in the vendored schema). Holds no personal data about a natural person."
+  },
+  {
+    table: "awcms_omes_ai_egress_approvals",
+    reason:
+      "ADR-0122, OMES ADR-0029 (Issue ahliweb/omes#232). AI egress owner-approval requests — classification/destination/reason_code and a short operator justification note, keyed by server. `requested_by_tenant_user_id` is the same shape `awcms_omes_operation_requests.requested_by`/`approved_by` already carries (operator attribution, not a subject of the data), covered by the same reasoning above."
   }
 ];
 

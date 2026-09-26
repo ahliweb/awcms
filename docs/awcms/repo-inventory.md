@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 159   |
-| `awcms_*` tables                    | 162   |
-| Tables with `FORCE` RLS             | 144   |
+| Migrations                          | 161   |
+| `awcms_*` tables                    | 164   |
+| Tables with `FORCE` RLS             | 146   |
 | RLS-free tables (global, by design) | 18    |
 | Test files                          | 530   |
-| Route files                         | 419   |
+| Route files                         | 423   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -209,6 +209,8 @@
 | 157 | `sql/157_awcms_omes_control_operation_workflow_link.sql`           |
 | 158 | `sql/158_awcms_omes_control_enrollment_challenges.sql`             |
 | 159 | `sql/159_awcms_omes_control_worker_ingestion.sql`                  |
+| 160 | `sql/160_awcms_omes_ai_privacy_schema.sql`                         |
+| 161 | `sql/161_awcms_omes_ai_privacy_permissions.sql`                    |
 
 ### Tables & Row-Level Security
 
@@ -291,6 +293,8 @@
 | `awcms_object_sync_queue`                | `sql/012_awcms_object_sync_queue_schema.sql`               | yes | yes   |
 | `awcms_offices`                          | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
 | `awcms_oidc_auth_requests`               | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
+| `awcms_omes_ai_egress_approvals`         | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
+| `awcms_omes_ai_privacy_posture`          | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
 | `awcms_omes_audit_projections`           | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_backup_snapshots`            | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_deployments`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
@@ -390,8 +394,8 @@
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 330   |
-| `/admin/**`     | 59    |
+| `/api/v1/**`    | 333   |
+| `/admin/**`     | 60    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->
