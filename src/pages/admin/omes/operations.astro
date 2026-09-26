@@ -22,6 +22,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -143,6 +144,7 @@ function approvalsLink(request: OperationRequestSummary): string {
     "Submit and review OMES operation requests, limited to the OMES-owned safe-operation allowlist. Destructive operations (stop, rollback) require an approved workflow decision on the Approvals screen before dispatch."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-operations-denied">
@@ -351,6 +353,7 @@ function approvalsLink(request: OperationRequestSummary): string {
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <script>

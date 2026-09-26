@@ -32,6 +32,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -145,6 +146,7 @@ function checkEntries(checks: unknown): [string, unknown][] {
     "Every snapshot below is omes-host evidence, reported by the OMES pull worker running on that host. Stale or missing evidence is shown explicitly, in its own badge, and never presented as healthy."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-health-denied">
@@ -379,6 +381,7 @@ function checkEntries(checks: unknown): [string, unknown][] {
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <style>

@@ -40,6 +40,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -175,6 +176,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
     "Backup artifact metadata — recovery class, integrity checksum, age, and status. Never the raw backup contents. Restore is always destructive and always routes through the canonical approval workflow before it can dispatch."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-backups-denied">
@@ -486,6 +488,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <script>

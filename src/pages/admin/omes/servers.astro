@@ -25,6 +25,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -135,6 +136,7 @@ const columns = 6 + (canDelete ? 1 : 0);
     "Enrolled OMES host servers: platform and OMES fleet evidence, enrollment/trust status, and heartbeat staleness. No raw enrollment key material is ever rendered — only a fingerprint."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-servers-denied">
@@ -479,6 +481,7 @@ const columns = 6 + (canDelete ? 1 : 0);
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <script>

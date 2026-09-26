@@ -91,6 +91,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -194,6 +195,7 @@ function linkWith(overrides: Record<string, string | null>): string {
     "Issue and revoke one-time OMES worker enrollment tokens. A token is shown exactly once at issuance and never again — only its SHA-256 hash is ever stored, never logged, and never re-displayable."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-enrollments-denied">
@@ -446,6 +448,7 @@ function linkWith(overrides: Record<string, string | null>): string {
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <script>

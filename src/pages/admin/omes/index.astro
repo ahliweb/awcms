@@ -20,6 +20,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
@@ -115,6 +116,7 @@ function formatCounts(counts: Record<string, number>): string {
     "Fleet health distribution, job state summary, backup freshness, and drift, aggregated directly from OMES control state — never from a reporting projection."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-overview-denied">
@@ -200,6 +202,32 @@ function formatCounts(counts: Record<string, number>): string {
 
   {
     canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label={t("OMES operation lifecycle")}
+      >
+        <h2 class="admin-section-title">{t("Lifecycle")}</h2>
+        <p class="page-description">
+          {t(
+            "Every OMES change moves through the same sequence of allowlisted, auditable steps — never a shortcut around one of them."
+          )}
+        </p>
+        <ol class="omes-lifecycle">
+          <li class="omes-lifecycle-step">{t("Bootstrap")}</li>
+          <li class="omes-lifecycle-step">{t("Check")}</li>
+          <li class="omes-lifecycle-step">{t("Diff")}</li>
+          <li class="omes-lifecycle-step">{t("Apply")}</li>
+          <li class="omes-lifecycle-step">{t("Verify")}</li>
+          <li class="omes-lifecycle-step" data-tone="danger">
+            {t("Rollback")}
+          </li>
+        </ol>
+      </section>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
       <section class="admin-section fade-in-up" aria-label="OMES screens">
         <h2 class="admin-section-title">{t("Screens")}</h2>
         <p class="page-description">
@@ -276,4 +304,5 @@ function formatCounts(counts: Record<string, number>): string {
       </section>
     )
   }
+  </div>
 </AdminLayout>

@@ -13,6 +13,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -107,6 +108,7 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
     "Desired vs observed deployment state, shown as two separate columns — the observed value is never presented as the desired one — with last reconciliation time, staleness, and error evidence."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-deployments-denied">
@@ -329,4 +331,5 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
       </section>
     )
   }
+  </div>
 </AdminLayout>

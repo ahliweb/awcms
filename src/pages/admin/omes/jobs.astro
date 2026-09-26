@@ -22,6 +22,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -121,6 +122,7 @@ const columns = 7 + (showActions ? 1 : 0);
     "The OMES worker dispatch queue: state, correlation and idempotency identifiers, lease ownership, retry count, and sanitized evidence."
   )}
 >
+  <div class="omes-cc">
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="omes-jobs-denied">
@@ -335,6 +337,7 @@ const columns = 7 + (showActions ? 1 : 0);
       </section>
     )
   }
+  </div>
 </AdminLayout>
 
 <script>
