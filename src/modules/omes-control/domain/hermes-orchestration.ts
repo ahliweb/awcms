@@ -104,6 +104,17 @@ export type ProjectedOrchestrationNode = StoredOrchestrationNode & {
   effectiveState: OrchestrationState;
   /** BFS depth from the tree's root node (root = 0). -1 when unreachable from the declared root (orphaned/cyclic — rendered, never hidden, but flagged). */
   depth: number;
+  /**
+   * True whenever the node's OWN tree snapshot is not `"live"` (i.e. its
+   * `freshness` is `"stale"` or `"unknown"`). A renderer must treat this the
+   * same way it treats `freshness` itself: never paint `effectiveState` with
+   * a live status color when this is true, and prefer a "last reported: X"
+   * label over the bare state — the last-reported state is real evidence,
+   * but it is NOT a claim that the node is currently in that state (issue
+   * #183: a stalled connection or missing terminal event must never render
+   * as healthy/live).
+   */
+  isHistorical: boolean;
 };
 
 export type StoredOrchestrationTree = {
@@ -222,7 +233,8 @@ export function projectOrchestrationTree(
     return {
       ...node,
       effectiveState,
-      depth: depths.get(node.subagentId) ?? -1
+      depth: depths.get(node.subagentId) ?? -1,
+      isHistorical: freshness !== "live"
     };
   });
 
@@ -266,11 +278,31 @@ export type StoredOrchestrationEvent = {
 export type ProjectedOrchestrationEvent = StoredOrchestrationEvent & {
   effectiveState: OrchestrationState;
   effectiveEventType: OrchestrationEventType | "UNKNOWN";
+  /**
+   * The freshness, at READ time, of the tree snapshot for this event's own
+   * `sessionId` — never the event's own (always-present) `eventTimestamp`,
+   * which only says the event itself is real history, not whether the
+   * session it belongs to is still live. Defaults to `"unknown"` (the safe,
+   * never-live default) when the caller has no snapshot freshness to pass —
+   * an activity row must never be painted as live by omission.
+   */
+  sessionFreshness: OrchestrationFreshness;
+  /** `true` whenever `sessionFreshness !== "live"` — every event row for a
+   * stale/unknown session renders as historical, never with live-state
+   * coloring, even though the row's own timestamp never changes. */
+  isHistorical: boolean;
 };
 
-/** Recomputes the effective (recognized) state/event-type for one activity-stream row. */
+/**
+ * Recomputes the effective (recognized) state/event-type for one
+ * activity-stream row, and stamps it with `sessionFreshness` — the freshness
+ * of its OWN session's current tree snapshot, recomputed by the caller (see
+ * `application/hermes-orchestration-directory.ts`) — so a renderer can tell
+ * a live event apart from a historical one without joining anything itself.
+ */
 export function projectOrchestrationEvent(
-  stored: StoredOrchestrationEvent
+  stored: StoredOrchestrationEvent,
+  sessionFreshness: OrchestrationFreshness = "unknown"
 ): ProjectedOrchestrationEvent {
   return {
     ...stored,
@@ -279,6 +311,8 @@ export function projectOrchestrationEvent(
       ORCHESTRATION_EVENT_TYPES as readonly string[]
     ).includes(stored.eventType)
       ? (stored.eventType as OrchestrationEventType)
-      : "UNKNOWN"
+      : "UNKNOWN",
+    sessionFreshness,
+    isHistorical: sessionFreshness !== "live"
   };
 }

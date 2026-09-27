@@ -477,6 +477,25 @@
   padding-left: calc(var(--sp-3) + 120px);
 }
 
+/*
+ * Historical/stale-session row muting (ADR-0028, issue #183: "never show a
+ * child as successfully completed solely because a connection closed,
+ * timeout occurred, or the UI stopped receiving events"). Applied via a
+ * `data-historical="true"` attribute the orchestration domain layer sets
+ * per node/event (`isHistorical`), NEVER as a dynamic inline style — same
+ * CSP constraint as the indent levels above. Lower opacity is a SECOND
+ * signal on top of the neutral badge variant the page already switches to,
+ * not the only one — colour/opacity alone would fail WCAG 1.4.1.
+ */
+.omes-cc .omes-orchestration-tree-node[data-historical="true"],
+.omes-cc .omes-orchestration-activity-list li[data-historical="true"] {
+  opacity: 0.72;
+}
+
+.omes-cc dd[data-historical="true"] {
+  opacity: 0.72;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .omes-cc * {
     animation-duration: 0.001ms !important;

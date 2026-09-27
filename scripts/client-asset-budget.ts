@@ -557,8 +557,24 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 236,936 is the measured value with no added margin.
+ *
+ * **Raised again to 237,433 for issue ahliweb/omes#246 part 2 follow-up**
+ * (stale-session node/event historical rendering). The added
+ * `isHistorical`/"last reported: X" muted treatment on
+ * `orkestrasi-langsung.astro` and `hermes.astro` (a new `t()` msgid, a
+ * `data-historical` attribute, and the muted-row CSS rule in
+ * `omes-control-center.css`, all shared through the `AdminLayout` CSS
+ * bundle these two screens already pull in) grew the measured total by 497
+ * bytes over the prior ceiling:
+ *
+ * ```
+ * before (236,936 ceiling)   236,936 B
+ * + stale-session muting        237,433 B (measured actual total)
+ * ```
+ *
+ * 237,433 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 236_936;
+export const APP_BUDGET_BYTES = 237_433;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
