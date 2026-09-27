@@ -164,6 +164,16 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
     table: "awcms_omes_ai_egress_approvals",
     reason:
       "ADR-0122, OMES ADR-0029 (Issue ahliweb/omes#232). AI egress owner-approval requests — classification/destination/reason_code and a short operator justification note, keyed by server. `requested_by_tenant_user_id` is the same shape `awcms_omes_operation_requests.requested_by`/`approved_by` already carries (operator attribution, not a subject of the data), covered by the same reasoning above."
+  },
+  {
+    table: "awcms_omes_hermes_orchestration_trees",
+    reason:
+      "ADR-0028, ADR-0017 (Issue ahliweb/omes#246, OMES issue #183). One current row per (tenant, server, session) live Hermes delegated-task/subagent tree snapshot — subagent ids, roles, bounded goal/summary strings, states, and timings describing a HOST's Hermes orchestration run. Every identifier is opaque machine correlation state, not a natural person; `nodes` is validated against the vendored `hermes-orchestration-tree` schema (`additionalProperties:false`), which structurally excludes prompt/transcript/tool-argument content. Holds no personal data about a natural person."
+  },
+  {
+    table: "awcms_omes_hermes_orchestration_events",
+    reason:
+      "ADR-0028, ADR-0017 (Issue ahliweb/omes#246, OMES issue #183). Append-only Hermes subagent lifecycle activity log — same bounded metadata shape (and same schema-enforced exclusion of prompt/transcript/tool-argument content) as the tree snapshot above, one row per reported lifecycle event. Holds no personal data about a natural person."
   }
 ];
 

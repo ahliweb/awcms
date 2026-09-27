@@ -9607,6 +9607,42 @@ Gated by omes_control.servers.read. Default (no serverId) returns the latest sna
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/omes/hermes-orchestration/events` — Read the Hermes orchestration activity stream (ahliweb/omes#246)
+
+- **operationId**: `omesReadHermesOrchestrationEvents`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.hermes_orchestration.read. Optional `session_id` query parameter narrows to one session's activity.
+
+**Parameters**
+
+| Name         | In    | Required | Type   | Description |
+| ------------ | ----- | -------- | ------ | ----------- |
+| `session_id` | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                                               | Schema                                 |
+| ------ | --------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's recent orchestration activity-stream events. | object                                 |
+| 401    | Missing or invalid session.                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                               | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/hermes-orchestration/tree` — Read live Hermes orchestration tree snapshots (ahliweb/omes#246)
+
+- **operationId**: `omesReadHermesOrchestrationTree`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.hermes_orchestration.read. Freshness and node state rollups are recomputed at read time (never trusted off the stored snapshot) — a snapshot older than its liveness window is never reported as live.
+
+**Responses**
+
+| Status | Description                                        | Schema                                 |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's current orchestration tree snapshots. | object                                 |
+| 401    | Missing or invalid session.                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                        | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/omes/jobs` — List worker jobs
 
 - **operationId**: `omesListJobs`
@@ -9993,6 +10029,40 @@ Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
 | Status | Description                                     | Schema                                 |
 | ------ | ----------------------------------------------- | -------------------------------------- |
 | 200    | acknowledged or re-enroll_required.             | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling. | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, worker).              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/hermes-orchestration-event` — Ingest a Hermes orchestration lifecycle event (ahliweb/omes#246)
+
+- **operationId**: `omesWorkerIngestHermesOrchestrationEvent`
+- **Security**: none (public endpoint)
+
+`security: []`. Same Ed25519 worker-envelope authentication as poll/result/heartbeat. The request body wraps an `event` object that MUST independently validate against the vendored hermes-orchestration-event schema (OMES issue #183, ADR-0028). Appended to the tenant's activity log, deduplicated by a natural idempotency key so a redelivered event is a no-op.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | acknowledged or rejected.                       | unknown                                |
+| 413    | Request body exceeded the bounded size ceiling. | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate-limited per (tenant, worker).              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omes/worker/hermes-orchestration-tree` — Ingest a Hermes orchestration tree snapshot (ahliweb/omes#246)
+
+- **operationId**: `omesWorkerIngestHermesOrchestrationTree`
+- **Security**: none (public endpoint)
+
+`security: []`. Same Ed25519 worker-envelope authentication as poll/result/heartbeat. The request body wraps a `tree` object that MUST independently validate against the vendored hermes-orchestration-tree schema (OMES issue #183, ADR-0028) — bounded metadata only, no prompt/transcript/tool-argument field can pass validation. Upserts one current row per (tenant, server, session) target; ADR-0017: read-only Hermes observability, no control action.
+
+**Request body** (required): unknown
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | acknowledged or rejected.                       | unknown                                |
 | 413    | Request body exceeded the bounded size ceiling. | [`ApiError`](#standard-error-envelope) |
 | 429    | Rate-limited per (tenant, worker).              | [`ApiError`](#standard-error-envelope) |
 

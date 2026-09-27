@@ -872,6 +872,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/omes/hermes-orchestration/events.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omes/hermes-orchestration/tree.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/omes/jobs/[id].ts",
       "workClass": "interactive",
       "source": "factory"

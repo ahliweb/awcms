@@ -1,0 +1,247 @@
+---
+/**
+ * OMES Control Center — "Hermes" screen (the current delegated-task summary
+ * for the tenant's most recently active Hermes session), Issue
+ * ahliweb/omes#246 part 2 (OMES issue #183, ADR-0028; parent #195).
+ *
+ * ADR-0017 boundary: read-only observability projection, same as
+ * `orkestrasi-langsung.astro` — no control action reaches a Hermes agent
+ * from here.
+ *
+ * ## Deliberately unreported fields (coordinator decision, ahliweb/omes#246)
+ *
+ * The redesign reference (`OMES Control Center.dc.html`'s `hermesTask`
+ * binding) shows a `planner` (assigned model/planner identity) and a step
+ * `budget` (a ceiling, not just the step count so far) alongside the root
+ * task's goal/state/started/step-count. Neither `hermes-orchestration-tree`
+ * nor `hermes-orchestration-event` (the only vendored v1 contracts this
+ * screen may consume — ADR-0017 forbids inventing an unvendored shape) has
+ * a field for either. Per the coordinator's explicit instruction on
+ * ahliweb/omes#246, this screen ships using ONLY fields the contracts
+ * already carry (`goal`, `state`/`effectiveState`, `startedAt`,
+ * `stepCount`, the event log) and renders `planner`/`budget` as an
+ * explicit "tidak dilaporkan" / "not reported" state — it does NOT invent
+ * either field. A future OMES contract addition (tracked separately) would
+ * be needed before this screen could show them for real.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  fetchOrchestrationEvents,
+  fetchOrchestrationTrees,
+  type OrchestrationTreeSummary
+} from "../../../modules/omes-control/application/hermes-orchestration-directory";
+import type { ProjectedOrchestrationEvent } from "../../../modules/omes-control/domain/hermes-orchestration";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const HERMES_ORCHESTRATION_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "hermes_orchestration",
+  action: "read"
+} as const;
+
+const NOT_REPORTED = "—";
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: HERMES_ORCHESTRATION_READ_GUARD,
+  load: async ({ tx }) => {
+    const now = new Date();
+    const trees = await fetchOrchestrationTrees(tx, ssr.tenantId, now);
+    // The "current" task is the most recently generated live tree, falling
+    // back to the most recently generated tree at all when nothing is
+    // currently live — never invented, just the newest real evidence.
+    const current =
+      trees.find((tree) => tree.freshness === "live") ?? trees[0] ?? null;
+    const events = current
+      ? await fetchOrchestrationEvents(tx, ssr.tenantId, current.sessionId)
+      : [];
+    return { current, events };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/hermes.astro: failed to load the Hermes task summary",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const current: OrchestrationTreeSummary | null =
+  screen.state === "allowed" ? screen.data.current : null;
+const events: ProjectedOrchestrationEvent[] =
+  screen.state === "allowed" ? screen.data.events : [];
+const rootNode = current?.nodes.find(
+  (node) => node.subagentId === current.rootSubagentId
+);
+---
+
+<AdminLayout
+  title={t("Hermes")}
+  description={t(
+    "Summary of the currently active Hermes delegated task — a read-only projection from OMES; it never sends a command to a Hermes agent."
+  )}
+>
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-hermes-denied">
+          {t("You do not have permission to view Hermes orchestration.")}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-hermes-error">
+          {t(
+            "The Hermes task summary could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="hermes-task-title"
+          id="omes-hermes-task"
+        >
+          <h2 class="admin-section-title" id="hermes-task-title">
+            {t("Current Hermes task")}
+          </h2>
+
+          {!current || !rootNode ? (
+            <div class="empty-state">
+              <span class="empty-state-icon" aria-hidden="true">
+                ▭
+              </span>
+              <span class="empty-state-title">
+                {t("No Hermes task reported yet")}
+              </span>
+              <span class="empty-state-text">
+                {t(
+                  "Appears here once an enrolled OMES host reports a Hermes delegation session."
+                )}
+              </span>
+            </div>
+          ) : (
+            <dl class="omes-hermes-task-summary">
+              <div>
+                <dt>{t("Session")}</dt>
+                <dd class="cell-code">{current.sessionId}</dd>
+              </div>
+              <div>
+                <dt>{t("Goal")}</dt>
+                <dd>{rootNode.goal ?? NOT_REPORTED}</dd>
+              </div>
+              <div>
+                <dt>{t("Status")}</dt>
+                <dd>
+                  <span
+                    class="status-badge"
+                    data-variant={current.isActive ? "success" : "info"}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {rootNode.effectiveState}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>{t("Started")}</dt>
+                <dd>{rootNode.startedAt ?? NOT_REPORTED}</dd>
+              </div>
+              <div>
+                <dt>{t("Step count")}</dt>
+                <dd>{rootNode.stepCount ?? NOT_REPORTED}</dd>
+              </div>
+              <div>
+                <dt>
+                  {t("Planner")}
+                  <span class="cell-muted">
+                    {" "}
+                    · {t("not available in the v1 contract")}
+                  </span>
+                </dt>
+                <dd class="cell-muted">{t("not reported")}</dd>
+              </div>
+              <div>
+                <dt>
+                  {t("Step budget")}
+                  <span class="cell-muted">
+                    {" "}
+                    · {t("not available in the v1 contract")}
+                  </span>
+                </dt>
+                <dd class="cell-muted">{t("not reported")}</dd>
+              </div>
+            </dl>
+          )}
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && current && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="hermes-log-title"
+          id="omes-hermes-log"
+        >
+          <h2 class="admin-section-title" id="hermes-log-title">
+            {t("Hermes log")}
+            <span class="count-pill">{events.length}</span>
+          </h2>
+
+          <ul class="omes-orchestration-activity-list">
+            {events.length === 0 ? (
+              <li class="empty-state">
+                <span class="empty-state-title">{t("No log yet")}</span>
+              </li>
+            ) : (
+              events.slice(0, 20).map((event) => (
+                <li data-event-id={event.id}>
+                  <span class="cell-muted">{event.eventTimestamp}</span>
+                  <span class="cell-code">{event.subagentId}</span>
+                  <span class="cell-muted">{event.effectiveEventType}</span>
+                  {event.summary && (
+                    <span class="cell-muted">{event.summary}</span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+      )
+    }
+  </div>
+</AdminLayout>
+
+<style>
+  .omes-hermes-task-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--sp-4);
+    margin: 0;
+  }
+  .omes-hermes-task-summary dt {
+    color: var(--color-text-muted);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+  }
+  .omes-hermes-task-summary dd {
+    margin: var(--sp-1) 0 0;
+    color: var(--color-text);
+  }
+</style>

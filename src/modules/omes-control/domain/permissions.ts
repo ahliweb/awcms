@@ -93,5 +93,12 @@ export const OMES_GUARDS = {
       activityCode: "ai_privacy",
       action: "approve" as const
     }
+  },
+  hermesOrchestration: {
+    read: {
+      moduleKey: "omes_control",
+      activityCode: "hermes_orchestration",
+      action: "read" as const
+    }
   }
 } as const;

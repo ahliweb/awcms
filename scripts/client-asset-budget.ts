@@ -498,8 +498,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * 231,200 is measured + ~140 B, the same tight margin the immediately
  * preceding raise used, for the same reason: a new screen's own weight
  * should not buy headroom for unrelated future growth elsewhere.
+ *
+ * ## ahliweb/omes#246 part 2 — three more genuinely new screens
+ *
+ * `/admin/omes/orkestrasi-langsung` (live tree + depth filter + polling
+ * activity stream), `/admin/omes/hermes` (task summary), and
+ * `/admin/omes/progres-hermes` (empty state) each add their own compiled
+ * markup/script chunk, the same "real new screen weight" shape as the
+ * ai-privacy raise immediately above.
+ *
+ * ```
+ * before (231,200 ceiling)        231,200 B (per the ai-privacy measurement above)
+ * + orkestrasi-langsung/hermes/
+ *   progres-hermes                234,303 B   (measured after fixing the
+ *                                              orkestrasi-langsung script's
+ *                                              CSP-inlining defect below)
+ * ```
+ *
+ * 234,443 is measured + ~140 B, the same tight margin every preceding raise
+ * in this constant's history has used.
  */
-export const APP_BUDGET_BYTES = 231_200;
+export const APP_BUDGET_BYTES = 234_443;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

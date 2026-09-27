@@ -252,6 +252,18 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     reason:
       "Same Ed25519 envelope credential as /worker/poll (ahliweb/omes#232)."
   },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/hermes-orchestration-tree",
+    reason:
+      "Same Ed25519 envelope credential as /worker/poll (ahliweb/omes#246, OMES issue #183)."
+  },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/hermes-orchestration-event",
+    reason:
+      "Same Ed25519 envelope credential as /worker/poll (ahliweb/omes#246, OMES issue #183)."
+  },
 
   // ---- Retired: answers 410 without reading anything ----
   {

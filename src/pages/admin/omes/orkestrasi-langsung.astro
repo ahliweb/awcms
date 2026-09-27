@@ -1,0 +1,396 @@
+---
+/**
+ * OMES Control Center — "Orkestrasi langsung" (live Hermes delegated-task /
+ * subagent tree), Issue ahliweb/omes#246 part 2 (OMES issue #183, ADR-0028;
+ * parent #195). Read-only observability projection only — ADR-0017: Hermes
+ * owns orchestration, this screen never sends a control action to a Hermes
+ * agent and never implements a second orchestration engine.
+ *
+ * Consumes the OMES-owned `hermes-orchestration-tree`/
+ * `hermes-orchestration-event` v1 contracts (vendored under
+ * `src/modules/omes-control/contracts/v1/`, already pinned at
+ * f200c2012273de4a0e0598c5bf144a5b0ce33eaa by ahliweb/omes#232's re-vendor —
+ * no re-vendor needed for this issue). Every field rendered below is
+ * bounded metadata from the projection schema — never a prompt, transcript,
+ * chain-of-thought, or raw tool argument/result.
+ *
+ * ## Server-side enforcement, not UI hiding
+ *
+ * `loadAdminScreen`'s `authorize: OMES_GUARDS.hermesOrchestration.read`
+ * decides whether this screen renders anything; the actual authority is
+ * that same permission, re-checked server-side by
+ * `GET /api/v1/omes/hermes-orchestration/{tree,events}` regardless of what
+ * this screen renders.
+ *
+ * ## Staleness/unknown is never shown as live
+ *
+ * `freshness`/node `effectiveState` (recomputed at READ time by
+ * `application/hermes-orchestration-directory.ts`, never read off a stored
+ * flag) are what this page renders — a snapshot older than its liveness
+ * window is shown as "stale"/"unknown", never as live, matching issue
+ * #183's explicit requirement that a stalled connection or missing
+ * terminal event must never render as successful completion.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  fetchOrchestrationEvents,
+  fetchOrchestrationTrees,
+  type OrchestrationTreeSummary
+} from "../../../modules/omes-control/application/hermes-orchestration-directory";
+import type { ProjectedOrchestrationEvent } from "../../../modules/omes-control/domain/hermes-orchestration";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+// Inlined as a literal `AccessRequest` object shape (matching
+// `OMES_GUARDS.hermesOrchestration.read` byte-for-byte) rather than the
+// `OMES_GUARDS` reference itself — see `ai-privacy.astro`'s comment on why
+// `scripts/admin-screen-coverage-check.ts` requires this literal pattern.
+const HERMES_ORCHESTRATION_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "hermes_orchestration",
+  action: "read"
+} as const;
+
+const FRESHNESS_VARIANT: Record<string, string> = {
+  live: "success",
+  stale: "info",
+  unknown: "danger"
+};
+
+const STATE_VARIANT: Record<string, string> = {
+  RUNNING: "success",
+  STARTING: "success",
+  PENDING: "info",
+  SUCCEEDED: "success",
+  FAILED: "danger",
+  INTERRUPTED: "danger",
+  CANCELLED: "danger",
+  UNKNOWN: "danger"
+};
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: HERMES_ORCHESTRATION_READ_GUARD,
+  load: async ({ tx }) => {
+    const now = new Date();
+    const trees = await fetchOrchestrationTrees(tx, ssr.tenantId, now);
+    const events = await fetchOrchestrationEvents(tx, ssr.tenantId);
+    return { trees, events };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/orkestrasi-langsung.astro: failed to load the live orchestration console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const trees: OrchestrationTreeSummary[] =
+  screen.state === "allowed" ? screen.data.trees : [];
+const events: ProjectedOrchestrationEvent[] =
+  screen.state === "allowed" ? screen.data.events : [];
+
+function formatTimestamp(value: string | null): string {
+  return value ?? "—";
+}
+---
+
+<AdminLayout
+  title={t("Live orchestration")}
+  description={t(
+    "The live Hermes manager → agent → subagent tree, filtered by depth, plus the activity stream. Read-only projection — OMES never sends a command to a Hermes agent."
+  )}
+>
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-orkestrasi-denied">
+          {t("You do not have permission to view Hermes orchestration.")}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-orkestrasi-error">
+          {t(
+            "The live orchestration console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="orkestrasi-tree-title"
+          id="omes-orkestrasi-tree"
+        >
+          <h2 class="admin-section-title" id="orkestrasi-tree-title">
+            {t("Orchestration tree")}
+            <span class="count-pill">{trees.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "A snapshot older than its liveness window is shown as stale/unknown, never as live."
+            )}
+          </p>
+
+          <div class="admin-filter-bar">
+            <label for="omes-depth-filter">{t("Depth filter")}</label>
+            <select id="omes-depth-filter">
+              <option value="-1">{t("All depths")}</option>
+              <option value="0">{t("Root only")}</option>
+              <option value="1">{t("Up to depth 1")}</option>
+              <option value="2">{t("Up to depth 2")}</option>
+              <option value="3">{t("Up to depth 3")}</option>
+            </select>
+          </div>
+
+          {trees.length === 0 ? (
+            <div class="empty-state">
+              <span class="empty-state-icon" aria-hidden="true">
+                ▭
+              </span>
+              <span class="empty-state-title">
+                {t("No orchestration snapshot yet")}
+              </span>
+              <span class="empty-state-text">
+                {t(
+                  "Appears here once an enrolled OMES host reports a Hermes delegation tree."
+                )}
+              </span>
+            </div>
+          ) : (
+            trees.map((tree) => (
+              <div
+                class="omes-orchestration-tree-card"
+                data-session-id={tree.sessionId}
+              >
+                <div class="omes-orchestration-tree-card-header">
+                  <span class="cell-code">{tree.sessionId}</span>
+                  <span class="cell-muted">{tree.serverId}</span>
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      FRESHNESS_VARIANT[tree.freshness] ?? "neutral"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {tree.freshness}
+                  </span>
+                  <span class="cell-muted">
+                    {t("Active")}: {tree.activeCount} · {t("Completed")}:{" "}
+                    {tree.completedCount} · {t("Failed")}: {tree.failedCount}
+                  </span>
+                </div>
+                <ul class="omes-orchestration-tree-list" data-tree-list>
+                  {tree.nodes.map((node) => (
+                    <li
+                      class="omes-orchestration-tree-node"
+                      data-depth={node.depth}
+                      style={`padding-left: ${Math.max(node.depth, 0) * 20}px`}
+                    >
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATE_VARIANT[node.effectiveState] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {node.effectiveState}
+                      </span>
+                      <span class="cell-code">{node.subagentId}</span>
+                      {node.role && <span class="cell-muted">{node.role}</span>}
+                      {node.goal && <span class="cell-muted">{node.goal}</span>}
+                      {node.activeTool && (
+                        <span class="cell-muted">
+                          {t("Tool")}: {node.activeTool}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="orkestrasi-activity-title"
+          id="omes-orkestrasi-activity"
+        >
+          <h2 class="admin-section-title" id="orkestrasi-activity-title">
+            {t("Activity stream")}
+            <span class="count-pill">{events.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Subagent lifecycle events, newest first. Refreshes periodically without reloading the page."
+            )}
+          </p>
+          <p
+            id="omes-orkestrasi-activity-connectivity"
+            class="admin-create-error"
+            role="status"
+            hidden
+          />
+
+          <ul
+            id="omes-orkestrasi-activity-list"
+            class="omes-orchestration-activity-list"
+            data-empty-label={t("No orchestration activity yet")}
+          >
+            {events.length === 0 ? (
+              <li class="empty-state">
+                <span class="empty-state-title">
+                  {t("No orchestration activity yet")}
+                </span>
+              </li>
+            ) : (
+              events.map((event) => (
+                <li data-event-id={event.id}>
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      STATE_VARIANT[event.effectiveState] ?? "neutral"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {event.effectiveState}
+                  </span>
+                  <span class="cell-code">{event.subagentId}</span>
+                  <span class="cell-muted">{event.effectiveEventType}</span>
+                  <span class="cell-muted">
+                    {formatTimestamp(event.eventTimestamp)}
+                  </span>
+                  {event.summary && (
+                    <span class="cell-muted">{event.summary}</span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+      )
+    }
+  </div>
+</AdminLayout>
+
+<script>
+  // Depth filter (pure client-side toggle of already-rendered rows — no
+  // extra request) and a lightweight periodic refresh of the activity
+  // stream (issue #183: "no page reload required for normal updates",
+  // "reconnect safely after transport interruption" — a plain interval
+  // poll tolerates a missed tick and duplicate/out-of-order delivery
+  // trivially, since it always re-renders from the server's current,
+  // authoritative list rather than patching in place).
+  import { escapeHtml } from "../../../lib/html/escape";
+  import { messageBox } from "../../../lib/ui/admin-form-client";
+
+  const connectivity = messageBox("omes-orkestrasi-activity-connectivity");
+
+  const depthFilter = document.getElementById(
+    "omes-depth-filter"
+  ) as HTMLSelectElement | null;
+
+  function applyDepthFilter(): void {
+    if (!depthFilter) return;
+    const maxDepth = Number(depthFilter.value);
+    document
+      .querySelectorAll<HTMLElement>(".omes-orchestration-tree-node")
+      .forEach((node) => {
+        const depth = Number(node.dataset.depth ?? "-1");
+        node.hidden = maxDepth >= 0 && depth > maxDepth;
+      });
+  }
+
+  depthFilter?.addEventListener("change", applyDepthFilter);
+  applyDepthFilter();
+
+  const activityList = document.getElementById("omes-orkestrasi-activity-list");
+  const POLL_INTERVAL_MS = 8000;
+
+  type ActivityEvent = {
+    id: string;
+    subagentId: string;
+    effectiveState: string;
+    effectiveEventType: string;
+    eventTimestamp: string;
+    summary: string | null;
+  };
+
+  function renderActivity(items: ActivityEvent[]): void {
+    if (!activityList) return;
+    if (items.length === 0) {
+      const emptyLabel = activityList.dataset.emptyLabel ?? "";
+      activityList.innerHTML =
+        '<li class="empty-state"><span class="empty-state-title">' +
+        escapeHtml(emptyLabel) +
+        "</span></li>";
+      return;
+    }
+    activityList.innerHTML = items
+      .map(
+        (event) => `<li data-event-id="${escapeHtml(event.id)}">
+          <span class="status-badge"><span class="status-dot" aria-hidden="true"></span>${escapeHtml(event.effectiveState)}</span>
+          <span class="cell-code">${escapeHtml(event.subagentId)}</span>
+          <span class="cell-muted">${escapeHtml(event.effectiveEventType)}</span>
+          <span class="cell-muted">${escapeHtml(event.eventTimestamp)}</span>
+          ${event.summary ? `<span class="cell-muted">${escapeHtml(event.summary)}</span>` : ""}
+        </li>`
+      )
+      .join("");
+  }
+
+  async function pollActivity(): Promise<void> {
+    if (!activityList || document.hidden) return;
+    try {
+      const response = await fetch("/api/v1/omes/hermes-orchestration/events", {
+        headers: { accept: "application/json" }
+      });
+      if (!response.ok) {
+        connectivity.show(
+          "Could not refresh the activity stream — showing the last known state."
+        );
+        return;
+      }
+      const body = (await response.json()) as {
+        data?: { events?: ActivityEvent[] };
+      };
+      if (body.data?.events) {
+        renderActivity(body.data.events);
+        connectivity.clear();
+      }
+    } catch {
+      // Transport interruption: leave the last-known list rendered rather
+      // than clearing it — a fetch failure is never shown as an empty/
+      // healthy state; the connectivity notice makes that explicit rather
+      // than a silent stall an operator could mistake for "nothing new
+      // happened".
+      connectivity.show(
+        "Could not refresh the activity stream — showing the last known state."
+      );
+    }
+  }
+
+  if (activityList) {
+    window.setInterval(pollActivity, POLL_INTERVAL_MS);
+  }
+</script>

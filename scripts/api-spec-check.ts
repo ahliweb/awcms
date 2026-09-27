@@ -168,7 +168,12 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // Issue ahliweb/omes#232 — same worker Ed25519-envelope authentication as
   // poll/result/heartbeat above, delivering an OMES-produced AI privacy
   // posture projection (OMES issue #217, ADR-0029).
-  "omesWorkerIngestAiPrivacyPosture"
+  "omesWorkerIngestAiPrivacyPosture",
+  // Issue ahliweb/omes#246 (OMES issue #183, ADR-0028) — same worker
+  // Ed25519-envelope authentication, delivering OMES-produced Hermes
+  // orchestration tree/event projections.
+  "omesWorkerIngestHermesOrchestrationTree",
+  "omesWorkerIngestHermesOrchestrationEvent"
 ]);
 
 /**

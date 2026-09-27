@@ -1219,6 +1219,152 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/worker/hermes-orchestration-tree:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Ingest a Hermes orchestration tree snapshot (ahliweb/omes#246)
+      description: >-
+        `security: []`. Same Ed25519 worker-envelope authentication as
+        poll/result/heartbeat. The request body wraps a `tree` object that
+        MUST independently validate against the vendored
+        hermes-orchestration-tree schema (OMES issue #183, ADR-0028) —
+        bounded metadata only, no prompt/transcript/tool-argument field can
+        pass validation. Upserts one current row per (tenant, server,
+        session) target; ADR-0017: read-only Hermes observability, no
+        control action.
+      operationId: omesWorkerIngestHermesOrchestrationTree
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: acknowledged or rejected.
+          content:
+            application/json:
+              schema: {}
+        "413":
+          description: Request body exceeded the bounded size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate-limited per (tenant, worker).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/worker/hermes-orchestration-event:
+    post:
+      tags:
+        - OMES Control Center
+      summary: Ingest a Hermes orchestration lifecycle event (ahliweb/omes#246)
+      description: >-
+        `security: []`. Same Ed25519 worker-envelope authentication as
+        poll/result/heartbeat. The request body wraps an `event` object that
+        MUST independently validate against the vendored
+        hermes-orchestration-event schema (OMES issue #183, ADR-0028).
+        Appended to the tenant's activity log, deduplicated by a natural
+        idempotency key so a redelivered event is a no-op.
+      operationId: omesWorkerIngestHermesOrchestrationEvent
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: acknowledged or rejected.
+          content:
+            application/json:
+              schema: {}
+        "413":
+          description: Request body exceeded the bounded size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate-limited per (tenant, worker).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/hermes-orchestration/tree:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read live Hermes orchestration tree snapshots (ahliweb/omes#246)
+      description: >-
+        Gated by omes_control.hermes_orchestration.read. Freshness and node
+        state rollups are recomputed at read time (never trusted off the
+        stored snapshot) — a snapshot older than its liveness window is
+        never reported as live.
+      operationId: omesReadHermesOrchestrationTree
+      responses:
+        "200":
+          description: The tenant's current orchestration tree snapshots.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      trees:
+                        type: array
+                        items:
+                          type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/hermes-orchestration/events:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the Hermes orchestration activity stream (ahliweb/omes#246)
+      description: >-
+        Gated by omes_control.hermes_orchestration.read. Optional
+        `session_id` query parameter narrows to one session's activity.
+      operationId: omesReadHermesOrchestrationEvents
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tenant's recent orchestration activity-stream events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      events:
+                        type: array
+                        items:
+                          type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/omes/ai-privacy/posture:
     get:
       tags:
