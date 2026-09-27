@@ -245,7 +245,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
             <span class="count-pill">{backups.length}</span>
           </h2>
 
-          <form method="get" class="admin-toolbar" id="backup-filter-form">
+          <form method="get" class="admin-create-form" id="backup-filter-form">
             <label for="filter-server">{t("Server ID")}</label>
             <input
               id="filter-server"

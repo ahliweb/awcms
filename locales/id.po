@@ -4862,6 +4862,15 @@ msgstr "{count} deployment basi atau belum direkonsiliasi"
 msgid "{count} stale (no recent heartbeat)"
 msgstr "{count} basi (tanpa heartbeat terbaru)"
 
+msgid "No servers enrolled"
+msgstr "Tidak ada server terdaftar"
+
+msgid "No jobs recorded"
+msgstr "Tidak ada job tercatat"
+
+msgid "No deployments recorded"
+msgstr "Tidak ada deployment tercatat"
+
 
 msgid "Operations"
 msgstr "Operasi"

@@ -234,7 +234,11 @@ function checkEntries(checks: unknown): [string, unknown][] {
           </h2>
 
           {mode === "latest" && (
-            <form method="get" class="admin-toolbar" id="health-filter-form">
+            <form
+              method="get"
+              class="admin-create-form"
+              id="health-filter-form"
+            >
               <label for="filter-server">
                 {t("View history for server ID")}
               </label>

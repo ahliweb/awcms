@@ -142,10 +142,38 @@
    * stays whatever the reader's admin theme is — see `AdminLayout.astro`,
    * untouched by this PR). `.admin-page-body` is the slot's immediate parent
    * and owns the inline/vertical padding this negates; see
-   * `src/styles/admin.css` `.admin-page-body`.
+   * `src/styles/admin.css` `.admin-page-body` (`padding: 22px clamp(--sp-4,
+   * 3vw, 34px) 44px`).
+   *
+   * BUGFIX (defect #4, ahliweb/omes#246 part 1b): the horizontal margin here
+   * used to read `clamp(calc(var(--sp-4) * -1), -3vw, -34px)`. Negating a
+   * `clamp(MIN, VAL, MAX)` requires swapping which bound is the min and which
+   * is the max — the negated form is `clamp(-MAX, -VAL, -MIN)`, not
+   * `clamp(-MIN, -VAL, -MAX)`. With `--sp-4` = 16px the old rule was
+   * `clamp(-16px, -3vw, -34px)`, i.e. MIN (-16px) > MAX (-34px); per the CSS
+   * clamp() algorithm (`max(MIN, min(VAL, MAX))`) that always resolves to
+   * -16px, never reaching -34px no matter the viewport. At 1440px wide,
+   * `.admin-page-body`'s own padding correctly clamps to +34px while this
+   * bled only -16px back — an 18px light-canvas strip on the right edge every
+   * width above the ~1133px point where 3vw first exceeds 34px. Corrected
+   * below to `clamp(-34px, -3vw, calc(var(--sp-4) * -1))`, the properly
+   * negated mirror of `.admin-page-body`'s own clamp.
+   */
+  /*
+   * `min-height: calc(100% + 22px + 44px)`, not a plain `100%`: a percentage
+   * height/min-height on a child always resolves against the PARENT's
+   * content box, excluding its padding — but this box's negative top margin
+   * already pulled it up to start at the parent's border-box top (eating the
+   * 22px top padding), so reaching the parent's true bottom edge means also
+   * covering the 44px bottom padding the box's own height does not otherwise
+   * span. Without the `+ 22px + 44px`, a short screen (e.g. a filter form
+   * with an empty table) left a 66px light-canvas strip below the panel —
+   * the vertical half of defect #4, verified at 1440px with `.admin-page-body`
+   * taller than the panel's own content (see the ds2 tall-viewport screenshot).
    */
   display: block;
-  margin: -22px clamp(calc(var(--sp-4) * -1), -3vw, -34px) -44px;
+  min-height: calc(100% + 22px + 44px);
+  margin: -22px clamp(-34px, -3vw, calc(var(--sp-4) * -1)) -44px;
   padding: var(--sp-5) clamp(var(--sp-4), 3vw, 34px) var(--sp-7);
   background: var(--color-bg);
   color: var(--color-text);
@@ -204,6 +232,50 @@
 }
 
 /* ==================================================================== */
+/* Multi-value tiles — a `.stat-card` whose "value" is actually several   */
+/* labelled parts (defect #1, ahliweb/omes#246 part 1b)                   */
+/* ==================================================================== */
+/* Defect #1: the 4 overview breakdown tiles (server health distribution, job
+   state summary, backup freshness, deployment drift) used to concatenate
+   every part into one string rendered through `.stat-value`'s 32px mono
+   style, wrapping onto 2-3 lines at 1440 and worse below it. This is the
+   compact alternative: small value+label chips, used ONLY where a tile's
+   value is genuinely composite. Every other `.stat-value` on all 9 screens
+   is one number and is unaffected. */
+.omes-cc .omes-stat-breakdown {
+  order: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.omes-cc .omes-stat-breakdown-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px var(--sp-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+}
+
+.omes-cc .omes-stat-breakdown-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.omes-cc .omes-stat-breakdown-label {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* ==================================================================== */
 /* Lifecycle strip — Bootstrap -> Check -> Diff -> Apply -> Verify ->    */
 /* Rollback (overview screen only)                                       */
 /* ==================================================================== */
@@ -211,16 +283,29 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0;
+  gap: var(--sp-2) 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Defect #3: the arrow used to be an absolutely-positioned `::before` on the
+   FOLLOWING step, so wrapping moved the step but left the arrow orphaned at
+   the start of the new line. Fixed by making each step + its trailing arrow
+   one atomic flex item (`.omes-lifecycle-item`) with the arrow as a plain
+   `::after` inside it, after the pill — the pair always wraps together.
+   Verified at 360/390/1440px. */
+.omes-cc .omes-lifecycle-item,
 .omes-cc .omes-lifecycle-step {
-  position: relative;
   display: inline-flex;
   align-items: center;
+}
+
+.omes-cc .omes-lifecycle-item {
+  gap: var(--sp-3);
+}
+
+.omes-cc .omes-lifecycle-step {
   padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
@@ -239,19 +324,57 @@
   color: var(--color-danger);
 }
 
-/* Arrow connector between steps — a pseudo-element on every step but the
-   first, so the markup stays a plain flat list (keyboard/AT order is
-   unaffected: this is decorative, `aria-hidden`-equivalent content). */
-.omes-cc .omes-lifecycle-step + .omes-lifecycle-step {
-  margin-left: var(--sp-5);
-}
-
-.omes-cc .omes-lifecycle-step + .omes-lifecycle-step::before {
+.omes-cc .omes-lifecycle-item:not(:last-child)::after {
   content: "\2192";
-  position: absolute;
-  left: calc(-1 * var(--sp-5));
   color: var(--color-text-faint);
   font-weight: var(--fw-normal);
+}
+
+/* ==================================================================== */
+/* Form controls — inputs/selects/textareas/buttons inside `.omes-cc`     */
+/* (defect #2, ahliweb/omes#246 part 1b)                                  */
+/* ==================================================================== */
+/* Defect #2: the 8 filter/create forms now use the SAME `.admin-create-form`
+   vocabulary the other ~18 admin list screens use (`admin.css`) instead of a
+   bare `.admin-toolbar` with sibling label/input markup — that markup swap
+   (page templates) is the actual fix. `.admin-create-form`'s own rules
+   already consume `--color-surface`/`--color-border-strong`/`--color-text`/
+   `--color-focus`/`--color-primary-strong`/`--color-primary-contrast`, all
+   already overridden by `.omes-cc` above, so no NEW color pairing is
+   introduced — same tokens already in the contrast table. `color-scheme:
+   dark` (top of file) also makes the native `<select>` popup and placeholder
+   render with dark UA styles. Below: the few states `.admin-create-form`
+   doesn't itself define (stronger focus ring per WCAG 1.4.11, placeholder,
+   disabled, invalid) — all reusing existing measured tokens. */
+.omes-cc .admin-create-form :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.omes-cc .admin-create-form :is(input, textarea)::placeholder {
+  color: var(--color-text-faint);
+  opacity: 1;
+}
+
+.omes-cc .admin-create-form :is(input, select, textarea):disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-faint);
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+/*
+ * Deliberately NOT `:invalid` — an empty `required` field with no
+ * `placeholder` attribute (every field in these forms) matches `:invalid`
+ * before the reader has typed anything, since `:not(:placeholder-shown)` is
+ * true when there is no placeholder to show. That painted every pristine,
+ * untouched field on the "Register a server" form red on first render.
+ * `[aria-invalid="true"]` is set by this app's own client-side/server
+ * validation after a real failed attempt, so it only fires when there
+ * actually is one.
+ */
+.omes-cc .admin-create-form :is(input, select)[aria-invalid="true"] {
+  border-color: var(--color-danger);
 }
 
 @media (prefers-reduced-motion: reduce) {
