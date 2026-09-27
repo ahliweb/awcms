@@ -85,18 +85,26 @@ Compose also realises the two-role model below without a manual step: the `migra
 
 ### production (online) — image registry (`Dockerfile.production` + `docker-compose.prod.yml`, optional)
 
-The `docker-compose.yml` above remains the recommended path for the single-server LAN-first topology (bind-mount + `bun install && bun run build` at container start — practical for an operator who `git pull`s/rebuilds in place). `Dockerfile.production` (used via `docker-compose.prod.yml` or a manual `docker build`/`docker run`) is **another optional** path, for image-registry-based deployment (build once in CI, push the image, pull+run identically in every environment) — used when build-at-startup is undesirable (slower cold start, you want an immutable image) or when the orchestrator (Coolify, k8s, ECS, etc.) expects a ready-made image.
+The `docker-compose.yml` above remains the recommended path for the single-server LAN-first topology (bind-mount + `bun install && bun run build` at container start — practical for an operator who `git pull`s/rebuilds in place). `Dockerfile.production` (used via `docker-compose.prod.yml` or a manual `docker build`/`docker run`) is **another optional** path: a **registry-based release artifact + server-side deployment** — used when build-at-startup is undesirable (slower cold start, you want an immutable image) or when the orchestrator (Coolify, k8s, ECS, etc.) expects a ready-made image.
+
+This path is three separate concerns, not one "CI-push" step (this repo used to conflate them under that label; see `ahliweb/awcms-one` issue #224/ADR-0022, which had to draw the line explicitly after a derived repository's CI workflow held production deploy credentials and called a production deploy API directly):
+
+1. **CI checks** — `.github/workflows/ci.yml` (jobs `quality`, `e2e-smoke`, `integration-tests`, `minimum-supported`, `hygiene`) builds, tests, and scans the repo on every push/PR. It runs with `permissions: contents: read` and holds no production credential.
+2. **Artifact publication** — `.github/workflows/release.yml`'s `build` job builds `Dockerfile.production` and pushes the image (plus a jobs image) to `ghcr.io/ahliweb/awcms`/`ghcr.io/ahliweb/awcms-jobs`, authenticated only with the ephemeral, repo-scoped `GITHUB_TOKEN` (`packages: write`). `sign-attest-publish` — gated behind a maintainer-approved `release` GitHub Environment (see [`release-process.md`](release-process.md)) — then signs the digest, attests provenance/SBOM, publishes the GitHub Release, and moves `:latest`. None of this reaches a production host.
+3. **Production activation** — a separate, host-controlled step that pulls the already-published image and activates it: Coolify's own pull, or an operator running `docker compose -f docker-compose.prod.yml up`/`docker run` by hand (see below). **Neither `ci.yml` nor `release.yml` performs this step or holds credentials for a production deploy API** — GitHub Actions in this repo builds and publishes an artifact; it never activates one in production.
+
+[`deploy-coolify.md`](deploy-coolify.md) maps its two deploy patterns onto this same split.
 
 Key differences vs `docker-compose.yml`'s `app` service:
 
-| Aspect      | `docker-compose.yml` (`app`)                                  | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`          |
-| ----------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Code source | Bind-mounts the repo directly (`volumes: - .:/app`)           | `COPY` into the image at build — immutable once created              |
-| Build       | At container start (`bun install && bun run build`)           | At `docker build` (multi-stage) — container start is instant         |
-| User        | Host user (`APP_UID`/`APP_GID`) — needs a writable bind-mount | The `oven/bun:1.3.14` image default user, `bun` (non-root, uid 1000) |
-| Filesystem  | Writable (bind mount + install/build inside it)               | `read_only: true` + `tmpfs: [/tmp]`                                  |
-| Migration   | A separate `migrate` service in the same compose              | Not included — run `bun run db:migrate` separately                   |
-| Suited for  | LAN-first single server, operator `git pull` in place         | Registry/CI-push, container orchestrators (Coolify/k8s/ECS)          |
+| Aspect      | `docker-compose.yml` (`app`)                                  | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`                                         |
+| ----------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Code source | Bind-mounts the repo directly (`volumes: - .:/app`)           | `COPY` into the image at build — immutable once created                                             |
+| Build       | At container start (`bun install && bun run build`)           | At `docker build` (multi-stage) — container start is instant                                        |
+| User        | Host user (`APP_UID`/`APP_GID`) — needs a writable bind-mount | The `oven/bun:1.3.14` image default user, `bun` (non-root, uid 1000)                                |
+| Filesystem  | Writable (bind mount + install/build inside it)               | `read_only: true` + `tmpfs: [/tmp]`                                                                 |
+| Migration   | A separate `migrate` service in the same compose              | Not included — run `bun run db:migrate` separately                                                  |
+| Suited for  | LAN-first single server, operator `git pull` in place         | Registry-based release artifact + server-side deployment, container orchestrators (Coolify/k8s/ECS) |
 
 Two ways to run this image (planned) — pick one:
 

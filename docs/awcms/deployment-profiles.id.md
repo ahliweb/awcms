@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deployment-profiles.md)
 
-<!-- i18n-source-hash: sha256:c2e43dc03a5a67fee634e27ef73fa6c95a9b278ec2062996b638d803a447af27 -->
+<!-- i18n-source-hash: sha256:a7c6a103c4af87d0b8161c9d184d382206478536d9d2ea49caba0dc6cf21ebe5 -->
 
 # Deployment Profiles
 
@@ -87,18 +87,26 @@ Compose juga mewujudkan model dua-peran di bawah tanpa langkah manual: service `
 
 ### production (online) — image registry (`Dockerfile.production` + `docker-compose.prod.yml`, opsional)
 
-`docker-compose.yml` di atas tetap jadi jalur yang direkomendasikan untuk topologi LAN-first satu-server (bind-mount + `bun install && bun run build` saat container start — praktis untuk operator yang `git pull`/rebuild in-place). `Dockerfile.production` (dipakai lewat `docker-compose.prod.yml` atau `docker build`/`docker run` manual) adalah jalur **opsional lain**, untuk deployment berbasis image registry (build sekali di CI, push image, pull+run identik di tiap environment) — dipakai saat build-saat-startup tidak diinginkan (cold start lebih lambat, image ingin immutable) atau saat orkestrator (Coolify, k8s, ECS, dsb.) mengharapkan image siap-pakai.
+`docker-compose.yml` di atas tetap jadi jalur yang direkomendasikan untuk topologi LAN-first satu-server (bind-mount + `bun install && bun run build` saat container start — praktis untuk operator yang `git pull`/rebuild in-place). `Dockerfile.production` (dipakai lewat `docker-compose.prod.yml` atau `docker build`/`docker run` manual) adalah jalur **opsional lain**: **artefak rilis berbasis registry + deployment sisi-server** — dipakai saat build-saat-startup tidak diinginkan (cold start lebih lambat, image ingin immutable) atau saat orkestrator (Coolify, k8s, ECS, dsb.) mengharapkan image siap-pakai.
+
+Jalur ini adalah tiga concern terpisah, bukan satu langkah "CI-push" (repo ini dulu mengonflasikannya di bawah label itu; lihat issue #224/ADR-0022 `ahliweb/awcms-one`, yang harus menegaskan batas ini secara eksplisit setelah workflow CI sebuah repo turunan menyimpan kredensial deploy produksi dan memanggil API deploy produksi langsung):
+
+1. **CI checks** — `.github/workflows/ci.yml` (job `quality`, `e2e-smoke`, `integration-tests`, `minimum-supported`, `hygiene`) membangun, menguji, dan men-scan repo di setiap push/PR. Berjalan dengan `permissions: contents: read` dan tidak menyimpan kredensial produksi apa pun.
+2. **Artifact publication** — job `build` di `.github/workflows/release.yml` membangun `Dockerfile.production` dan push image (plus image jobs) ke `ghcr.io/ahliweb/awcms`/`ghcr.io/ahliweb/awcms-jobs`, terautentikasi hanya dengan `GITHUB_TOKEN` yang efemeral dan ter-scope ke repo (`packages: write`). `sign-attest-publish` — digerbangi di belakang GitHub Environment `release` yang disetujui maintainer (lihat [`release-process.md`](release-process.md)) — lalu menandatangani digest, meng-attest provenance/SBOM, mempublikasikan GitHub Release, dan memindahkan `:latest`. Tidak satu pun dari ini menjangkau host produksi.
+3. **Production activation** — langkah terpisah yang dikendalikan host, yang menarik image yang sudah dipublikasikan lalu mengaktifkannya: pull milik Coolify sendiri, atau operator yang menjalankan `docker compose -f docker-compose.prod.yml up`/`docker run` secara manual (lihat di bawah). **Baik `ci.yml` maupun `release.yml` tidak melakukan langkah ini maupun menyimpan kredensial untuk API deploy produksi** — GitHub Actions di repo ini membangun dan mempublikasikan artefak; ia tidak pernah mengaktifkannya di produksi.
+
+[`deploy-coolify.md`](deploy-coolify.md) memetakan kedua pola deploy-nya ke pembagian yang sama ini.
 
 Perbedaan kunci vs `docker-compose.yml`'s `app` service:
 
-| Aspek       | `docker-compose.yml` (`app`)                                | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`     |
-| ----------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
-| Sumber kode | Bind-mount repo langsung (`volumes: - .:/app`)              | `COPY` ke dalam image saat build — immutable setelah dibuat     |
-| Build       | Saat container start (`bun install && bun run build`)       | Saat `docker build` (multi-stage) — start container jadi instan |
-| User        | Host user (`APP_UID`/`APP_GID`) — perlu bind-mount writable | User bawaan image `oven/bun:1.3.14`, `bun` (non-root, uid 1000) |
-| Filesystem  | Writable (bind mount + install/build di dalamnya)           | `read_only: true` + `tmpfs: [/tmp]`                             |
-| Migration   | Service `migrate` terpisah dalam compose yang sama          | Tidak disertakan — jalankan `bun run db:migrate` terpisah       |
-| Cocok untuk | LAN-first satu server, operator `git pull` in-place         | Registry/CI-push, orkestrator container (Coolify/k8s/ECS)       |
+| Aspek       | `docker-compose.yml` (`app`)                                | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`                                       |
+| ----------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Sumber kode | Bind-mount repo langsung (`volumes: - .:/app`)              | `COPY` ke dalam image saat build — immutable setelah dibuat                                       |
+| Build       | Saat container start (`bun install && bun run build`)       | Saat `docker build` (multi-stage) — start container jadi instan                                   |
+| User        | Host user (`APP_UID`/`APP_GID`) — perlu bind-mount writable | User bawaan image `oven/bun:1.3.14`, `bun` (non-root, uid 1000)                                   |
+| Filesystem  | Writable (bind mount + install/build di dalamnya)           | `read_only: true` + `tmpfs: [/tmp]`                                                               |
+| Migration   | Service `migrate` terpisah dalam compose yang sama          | Tidak disertakan — jalankan `bun run db:migrate` terpisah                                         |
+| Cocok untuk | LAN-first satu server, operator `git pull` in-place         | Artefak rilis berbasis registry + deployment sisi-server, orkestrator container (Coolify/k8s/ECS) |
 
 Dua cara menjalankan image ini (rencana) — pilih salah satu:
 

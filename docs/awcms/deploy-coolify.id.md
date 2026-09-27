@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:0bfdfcc4d98b7c33658a97b718d005eabfab94aa4248156ce556b26e9a8bff6c -->
+<!-- i18n-source-hash: sha256:0e962e7877ee1d8ffbd5fa10217f041e27ecdf64391640321e8735a332fee56a -->
 
 # Deploy Coolify
 
@@ -45,7 +45,15 @@
 
 > **Status dokumen:** panduan target sebagian. Repo `awcms` belum punya `docker-compose.yml` yang nyata, tapi `Dockerfile.production` SUDAH ada — nyata di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis (lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat). Karena itu, **Pola 1 dan Pola 2 di bawah (build dari `Dockerfile.production`) sudah bisa dipakai hari ini** — dokumen ini mengadaptasi panduan operasional Coolify yang sudah terbukti di basis `awcms-mini` untuk detail khusus Coolify (topologi VPS, opsi PostgreSQL, checklist keamanan) yang masih standar target sampai dipraktikkan sungguhan terhadap deployment nyata.
 
-Panduan operasional untuk deploy AWCMS ke [Coolify](https://coolify.io) memakai `Dockerfile.production` sebagai jalur registry/CI-push, berdampingan dengan `docker-compose.yml` yang tetap menjadi jalur LAN-first/offline yang direkomendasikan (lihat [`deployment-profiles.md`](deployment-profiles.md) §production (online) — image registry). Dokumen ini **tidak menggantikan** dokumen itu — dokumen ini menambahkan detail khusus Coolify: topologi satu VPS, topologi multi aplikasi dalam satu VPS, opsi PostgreSQL, kapasitas praktis, dan checklist keamanan.
+Panduan operasional untuk deploy AWCMS ke [Coolify](https://coolify.io) memakai `Dockerfile.production` sebagai jalur artefak rilis berbasis registry + deployment sisi-server, berdampingan dengan `docker-compose.yml` yang tetap menjadi jalur LAN-first/offline yang direkomendasikan (lihat [`deployment-profiles.md`](deployment-profiles.md) §production (online) — image registry). Dokumen ini **tidak menggantikan** dokumen itu — dokumen ini menambahkan detail khusus Coolify: topologi satu VPS, topologi multi aplikasi dalam satu VPS, opsi PostgreSQL, kapasitas praktis, dan checklist keamanan.
+
+**Tiga concern terpisah, bukan satu langkah "CI-push".** Repo ini dulu mendeskripsikan jalur ini dengan label yang mengonflasi itu; issue #224/ADR-0022 `ahliweb/awcms-one` harus menegaskan batas ini secara eksplisit setelah workflow CI sebuah repo turunan menyimpan kredensial deploy produksi dan memanggil API deploy produksi langsung dari `workflow_dispatch`:
+
+1. **CI checks** — `.github/workflows/ci.yml` (job `quality`, `e2e-smoke`, `integration-tests`, `minimum-supported`, `hygiene`) membangun, menguji, dan men-scan repo di setiap push/PR. Berjalan dengan `permissions: contents: read` dan tidak menyimpan kredensial produksi apa pun.
+2. **Artifact publication** — job `build` di `.github/workflows/release.yml` membangun `Dockerfile.production` dan push image (plus image jobs) ke `ghcr.io/ahliweb/awcms`/`ghcr.io/ahliweb/awcms-jobs`, terautentikasi hanya dengan `GITHUB_TOKEN` yang efemeral dan ter-scope ke repo (`packages: write`). `sign-attest-publish` — digerbangi di belakang GitHub Environment `release` yang disetujui maintainer (lihat [`release-process.md`](release-process.md)) — lalu menandatangani digest dengan cosign, meng-attest provenance/SBOM, mempublikasikan GitHub Release, dan memindahkan tag `:latest`. Tidak satu pun dari ini menjangkau host produksi — ia hanya mempublikasikan dan meng-attest artefak di registry.
+3. **Production activation** — langkah terpisah yang dikendalikan host, yang menarik image yang sudah dipublikasikan lalu mengaktifkannya: pull milik Coolify sendiri (Pola 2 di bawah), atau operator yang menjalankan `docker compose -f docker-compose.prod.yml up`/`docker run` secara manual. **Baik `ci.yml` maupun `release.yml` tidak melakukan langkah ini maupun menyimpan kredensial untuk API deploy produksi** — GitHub Actions di repo ini membangun dan mempublikasikan artefak; ia tidak pernah mengaktifkannya di produksi.
+
+Pola 1 Coolify di bawah melipat (1)+(2)+(3) ke dalam pipeline build-and-run milik Coolify sendiri pada satu VPS; Pola 2 menjaga CI tetap pada (1)+(2) dan menyerahkan (3) ke Coolify yang menarik image yang sudah dipublikasikan.
 
 ## Dua pola deploy di Coolify
 

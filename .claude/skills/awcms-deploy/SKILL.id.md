@@ -5,7 +5,7 @@ description: Pilih dan jalankan profil deployment AWCMS (development/production/
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:bab2d2f8266eb555b7187cbd7f4637993f8670626cf0c20335675361b6629ff4 -->
+<!-- i18n-source-hash: sha256:1601fd0c8a0307b325e3303180f6a6de565f222bedd2637fc2bf5dc480cdd1e2 -->
 
 # AWCMS — Deployment Profile & Execution
 
@@ -28,7 +28,7 @@ Ikuti `docs/awcms/deployment-profiles.md` (peta profil ke berkas
 ```mermaid
 flowchart TD
   A{Topologi target?} -->|LAN-first satu server,\noperator git pull in-place| B[docker-compose.yml]
-  A -->|Registry/CI-push,\norkestrator container| C[Dockerfile.production]
+  A -->|Artefak registry +\ndeploy sisi-server,\norkestrator container| C[Dockerfile.production]
   C --> D{Orkestrator?}
   D -->|Docker Compose langsung| G[docker-compose.prod.yml]
   D -->|Coolify| E[deploy-coolify.md]
