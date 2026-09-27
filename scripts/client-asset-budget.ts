@@ -607,8 +607,28 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 237,491 is the measured value with no added margin.
+ *
+ * **Raised again to 237,558 for ahliweb/awcms#843** (the topbar account-link
+ * overflow at 1024px, plus the `/admin/data-lifecycle` legal-hold `<select>`
+ * overflow at 360px). Three small `admin.css` rule changes: widening the
+ * `@media (max-width: 1023.98px)` breakpoint that hides `.admin-palette-open`/
+ * `.admin-tenant-switch` to `1024px` (so they also step aside at the exact
+ * width where the topbar ran out of room), `.admin-user-menu { flex: none; }`
+ * (was `min-width: 0`, which let the account cluster be squeezed narrower
+ * than `.admin-account-link`'s real content and then overflow its own shrunk
+ * parent), and `.admin-create-form label { min-width: 0; }` (a nested
+ * column-flex label was inheriting its child `<select>`'s full intrinsic
+ * width as its own automatic minimum, the same class of bug the `/admin/seo`
+ * select fix above addressed one level down). Measured actual total:
+ *
+ * ```
+ * before (237,491 ceiling)   237,491 B
+ * + admin.css topbar/create-form overflow fixes   237,558 B (measured actual total)
+ * ```
+ *
+ * 237,558 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 237_491;
+export const APP_BUDGET_BYTES = 237_558;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

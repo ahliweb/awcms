@@ -93,12 +93,16 @@ test.describe("admin sidebar keeps its width when main content is unbreakable", 
       ).not.toBeNull();
 
       // NOT asserted here: that `/admin` has zero horizontal overflow before
-      // injection. At 1024px specifically it already does not (a pre-existing,
-      // unrelated topbar `.admin-account-link` overflow — nothing to do with
-      // `.cell-muted` or `.admin-sidebar`). Asserting a clean baseline would
-      // make this test fail on that unrelated defect instead of the one it
-      // exists to catch, so the assertions below compare the repro element's
-      // effect (the delta), not the page's absolute cleanliness.
+      // injection. At 1024px specifically it USED TO not — a pre-existing,
+      // unrelated topbar `.admin-account-link` overflow, nothing to do with
+      // `.cell-muted` or `.admin-sidebar`, fixed by ahliweb/awcms#843 (see
+      // `responsive-360.e2e.ts`, which now sweeps 1024px too, and the
+      // `.admin-user-menu`/`.admin-palette-open` rules in admin.css). Left as
+      // a delta assertion (the repro element's effect, not the page's
+      // absolute cleanliness) rather than switched to an absolute one: this
+      // file's job is `.cell-muted` containment, and coupling it to the
+      // topbar's OWN cleanliness would make it fail on a future, unrelated
+      // topbar regression that `responsive-360.e2e.ts` already owns.
 
       // Reproduce the defect shape from ahliweb/awcms#831: a `.cell-muted`
       // span holding a long, space-free value, placed directly in

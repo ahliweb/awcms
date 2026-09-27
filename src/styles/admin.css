@@ -336,7 +336,7 @@
  * line is genuinely wanted and is already bounded by `max-width: 150px` plus an
  * ellipsis — a long role list cannot widen the row.
  */
-@media (max-width: 1023.98px) {
+@media (max-width: 1024px) {
   .admin-palette-open,
   .admin-tenant-switch {
     display: none;
@@ -365,7 +365,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  min-width: 0;
+  flex: none;
 }
 
 /* Vertical hairline separating the account cluster from the toggles. */
@@ -1421,6 +1421,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
+  min-width: 0;
   font-size: var(--fs-sm);
   color: var(--color-text-muted);
   /* Mobile-first: fields stack full-width; they sit inline once there's room. */
