@@ -83,6 +83,27 @@ COPY --from=prod-deps --chown=bun:bun /home/bun/app/node_modules ./node_modules
 COPY --from=build --chown=bun:bun /home/bun/app/dist ./dist
 COPY --chown=bun:bun package.json ./
 
+# Runtime code resolves these directories against `process.cwd()` at request
+# time (never bundled into `dist/`), so the `runtime` stage must carry them
+# even though it otherwise ships only compiled output:
+#   - `src/modules/omes-control/contracts/v1` — the vendored OMES contract
+#     snapshot (PIN.json, schemas, state tables, fixtures) that
+#     `src/modules/omes-control/domain/contracts/loader.ts`
+#     (`VENDORED_CONTRACTS_DIR`) reads on every worker enroll/poll/result/
+#     heartbeat/ai-privacy-posture/hermes-orchestration request and every
+#     `/admin/omes/*` page load. Without it, every one of those loads
+#     ENOENTs.
+#   - `sql`, `openapi`, `asyncapi` — read by
+#     `src/modules/module-management/application/health-registry.ts` for the
+#     `migrations_applied`, `openapi_documented`, and `asyncapi_documented`
+#     module health signals (`/api/v1/modules/[moduleKey]/health`). Missing
+#     directories don't throw there (each read is try/caught), but every
+#     module's health check always reports `fail` in production.
+COPY --chown=bun:bun src/modules/omes-control/contracts ./src/modules/omes-control/contracts
+COPY --chown=bun:bun sql ./sql
+COPY --chown=bun:bun openapi ./openapi
+COPY --chown=bun:bun asyncapi ./asyncapi
+
 USER bun
 EXPOSE 4321
 
