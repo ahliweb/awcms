@@ -510,15 +510,35 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  * before (231,200 ceiling)        231,200 B (per the ai-privacy measurement above)
  * + orkestrasi-langsung/hermes/
- *   progres-hermes                234,303 B   (measured after fixing the
- *                                              orkestrasi-langsung script's
- *                                              CSP-inlining defect below)
+ *   progres-hermes                234,303 B
  * ```
  *
  * 234,443 is measured + ~140 B, the same tight margin every preceding raise
  * in this constant's history has used.
+ *
+ * **Raised again to 234,992 for a post-merge visual-verification fix to
+ * `orkestrasi-langsung.astro` (ahliweb/omes#246 part 2 render check).** The
+ * 234,303 B measurement above was the SHIPPED, BUGGY build, not a
+ * post-fix number as an earlier draft of this comment claimed: the tree's
+ * depth indentation used a per-node inline `style="padding-left: ...px"`,
+ * which this repo's CSP (`default-src 'self'`, no `style-src`/
+ * `'unsafe-inline'`, `lib/security/security-headers.ts`) silently drops in
+ * every real browser — logging in and looking at the rendered screen (never
+ * done for this screen before merge) showed a flat, non-indented tree. The
+ * fix replaces the inline style with a bounded `data-indent-level` attribute
+ * (clamped to 6) plus seven fixed attribute-selector rules in
+ * `omes-control-center.css` — CSP-safe, but seven small rules cost more than
+ * one dynamic inline expression did.
+ *
+ * ```
+ * before (234,443 ceiling)   234,303 B (the buggy build, see above)
+ * + indent-level CSS rules   234,992 B   (+689; the fix itself, not new UI)
+ * ```
+ *
+ * 234,992 is the measured value with no added margin — the delta is the
+ * fix's own cost, not room for unrelated future growth.
  */
-export const APP_BUDGET_BYTES = 234_443;
+export const APP_BUDGET_BYTES = 234_992;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
