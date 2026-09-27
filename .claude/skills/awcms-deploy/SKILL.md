@@ -26,7 +26,7 @@ files) and `docs/awcms/deploy-coolify.md` (Coolify-specific).
 ```mermaid
 flowchart TD
   A{Target topology?} -->|LAN-first single server,\noperator git pull in-place| B[docker-compose.yml]
-  A -->|Registry/CI-push,\ncontainer orchestrator| C[Dockerfile.production]
+  A -->|Registry artifact +\nserver-side deploy,\ncontainer orchestrator| C[Dockerfile.production]
   C --> D{Orchestrator?}
   D -->|Docker Compose directly| G[docker-compose.prod.yml]
   D -->|Coolify| E[deploy-coolify.md]
