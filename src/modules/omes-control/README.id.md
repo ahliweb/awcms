@@ -58,7 +58,7 @@ Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada 
 
 ## Postur privasi AI dan owner-approval egress (`ahliweb/omes#232`, OMES issue #217)
 
-Mengonsumsi kontrak `ai-privacy-posture-view`/`ai-egress-approval.request`/`.response` milik OMES (`docs/control-center-contracts.md` §2.10 di `ahliweb/omes`, ADR-0029) sehingga sebuah tenant dapat melihat evidence postur privasi AI dan mengatur owner-approval untuk keputusan egress AI `approval_required` — tidak pernah menjadi runtime Hermes/OMES kedua, dan tidak pernah menjadi tempat prompt, transkrip, atau kredensial provider mentah dapat mendarat.
+Mengonsumsi kontrak `ai-privacy-posture-view`/`ai-egress-approval.request`/`.response` milik OMES (`omes:docs/control-center-contracts.md` §2.10, ADR-0029) sehingga sebuah tenant dapat melihat evidence postur privasi AI dan mengatur owner-approval untuk keputusan egress AI `approval_required` — tidak pernah menjadi runtime Hermes/OMES kedua, dan tidak pernah menjadi tempat prompt, transkrip, atau kredensial provider mentah dapat mendarat.
 
 | Endpoint                                        | Permission                   | Catatan                                                                                                             |
 | ----------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |

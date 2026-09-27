@@ -56,7 +56,7 @@ Every mutation requires `Idempotency-Key` and replays the stored response on a r
 
 ## AI privacy posture and egress owner-approval (`ahliweb/omes#232`, OMES issue #217)
 
-Consumes the OMES-owned `ai-privacy-posture-view`/`ai-egress-approval.request`/`.response` contracts (`docs/control-center-contracts.md` §2.10 in `ahliweb/omes`, ADR-0029) so a tenant can see AI privacy posture evidence and govern owner-approval of `approval_required` AI egress decisions — never a second Hermes/OMES runtime, and never a place raw prompts, transcripts, or provider credentials can land.
+Consumes the OMES-owned `ai-privacy-posture-view`/`ai-egress-approval.request`/`.response` contracts (`omes:docs/control-center-contracts.md` §2.10, ADR-0029) so a tenant can see AI privacy posture evidence and govern owner-approval of `approval_required` AI egress decisions — never a second Hermes/OMES runtime, and never a place raw prompts, transcripts, or provider credentials can land.
 
 | Endpoint                                        | Permission             | Notes                                                                                                           |
 | ----------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
