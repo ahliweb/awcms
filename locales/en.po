@@ -4874,6 +4874,15 @@ msgstr ""
 msgid "{count} stale (no recent heartbeat)"
 msgstr ""
 
+msgid "No servers enrolled"
+msgstr ""
+
+msgid "No jobs recorded"
+msgstr ""
+
+msgid "No deployments recorded"
+msgstr ""
+
 
 msgid "Operations"
 msgstr ""

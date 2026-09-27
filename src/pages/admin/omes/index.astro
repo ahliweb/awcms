@@ -103,10 +103,17 @@ const manageEnrollments =
 const overview: OmesOverview =
   screen.state === "allowed" ? screen.data.overview : EMPTY_OVERVIEW;
 
-function formatCounts(counts: Record<string, number>): string {
-  const entries = Object.entries(counts);
-  if (entries.length === 0) return "—";
-  return entries.map(([key, value]) => `${key}: ${value}`).join(" · ");
+type BreakdownEntry = { label: string; value: number };
+
+/**
+ * `Object.entries(counts)` shaped as label/value pairs for
+ * `.omes-stat-breakdown` — the compact chip list a multi-part tile (defect
+ * #1, ahliweb/omes#246 part 1b) renders instead of stuffing every part into
+ * one giant `.stat-value` string that wraps onto 3 lines at 1440 and worse
+ * below it.
+ */
+function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
+  return Object.entries(counts).map(([label, value]) => ({ label, value }));
 }
 ---
 
@@ -157,41 +164,98 @@ function formatCounts(counts: Record<string, number>): string {
               </div>
             )}
             {readServers && (
-              <div class="stat-card">
+              <div class="stat-card" data-variant="breakdown">
                 <span class="stat-label">
                   {t("Server health distribution")}
                 </span>
-                <span class="stat-value">
-                  {formatCounts(overview.serverHealthDistribution)}
-                </span>
+                {toBreakdown(overview.serverHealthDistribution).length === 0 ? (
+                  <span class="stat-hint">{t("No servers enrolled")}</span>
+                ) : (
+                  <ul class="omes-stat-breakdown">
+                    {toBreakdown(overview.serverHealthDistribution).map(
+                      (entry) => (
+                        <li class="omes-stat-breakdown-item">
+                          <span class="omes-stat-breakdown-value">
+                            {entry.value}
+                          </span>
+                          <span class="omes-stat-breakdown-label">
+                            {entry.label}
+                          </span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                )}
               </div>
             )}
             {readJobs && (
-              <div class="stat-card">
+              <div class="stat-card" data-variant="breakdown">
                 <span class="stat-label">{t("Job state summary")}</span>
-                <span class="stat-value">
-                  {formatCounts(overview.jobStateCounts)}
-                </span>
+                {toBreakdown(overview.jobStateCounts).length === 0 ? (
+                  <span class="stat-hint">{t("No jobs recorded")}</span>
+                ) : (
+                  <ul class="omes-stat-breakdown">
+                    {toBreakdown(overview.jobStateCounts).map((entry) => (
+                      <li class="omes-stat-breakdown-item">
+                        <span class="omes-stat-breakdown-value">
+                          {entry.value}
+                        </span>
+                        <span class="omes-stat-breakdown-label">
+                          {entry.label}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
             {readBackups && (
-              <div class="stat-card">
+              <div class="stat-card" data-variant="breakdown">
                 <span class="stat-label">{t("Backup freshness")}</span>
-                <span class="stat-value">
-                  {t("Fresh")}: {overview.backupFreshness.fresh} · {t("Stale")}:{" "}
-                  {overview.backupFreshness.stale} · {t("Failed")}:{" "}
-                  {overview.backupFreshness.failed}
-                </span>
+                <ul class="omes-stat-breakdown">
+                  <li class="omes-stat-breakdown-item">
+                    <span class="omes-stat-breakdown-value">
+                      {overview.backupFreshness.fresh}
+                    </span>
+                    <span class="omes-stat-breakdown-label">{t("Fresh")}</span>
+                  </li>
+                  <li class="omes-stat-breakdown-item">
+                    <span class="omes-stat-breakdown-value">
+                      {overview.backupFreshness.stale}
+                    </span>
+                    <span class="omes-stat-breakdown-label">{t("Stale")}</span>
+                  </li>
+                  <li class="omes-stat-breakdown-item">
+                    <span class="omes-stat-breakdown-value">
+                      {overview.backupFreshness.failed}
+                    </span>
+                    <span class="omes-stat-breakdown-label">{t("Failed")}</span>
+                  </li>
+                </ul>
               </div>
             )}
             {readDeployments && (
-              <div class="stat-card">
+              <div class="stat-card" data-variant="breakdown">
                 <span class="stat-label">{t("Deployment drift")}</span>
-                <span class="stat-value">
-                  {formatCounts(
-                    overview.driftSummary.reconciliationStatusCounts
-                  )}
-                </span>
+                {toBreakdown(overview.driftSummary.reconciliationStatusCounts)
+                  .length === 0 ? (
+                  <span class="stat-hint">{t("No deployments recorded")}</span>
+                ) : (
+                  <ul class="omes-stat-breakdown">
+                    {toBreakdown(
+                      overview.driftSummary.reconciliationStatusCounts
+                    ).map((entry) => (
+                      <li class="omes-stat-breakdown-item">
+                        <span class="omes-stat-breakdown-value">
+                          {entry.value}
+                        </span>
+                        <span class="omes-stat-breakdown-label">
+                          {entry.label}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {overview.driftSummary.staleDeploymentCount > 0 && (
                   <span class="stat-hint">
                     {t("{count} deployment(s) stale or unreconciled").replace(
@@ -220,13 +284,25 @@ function formatCounts(counts: Record<string, number>): string {
             )}
           </p>
           <ol class="omes-lifecycle">
-            <li class="omes-lifecycle-step">{t("Bootstrap")}</li>
-            <li class="omes-lifecycle-step">{t("Check")}</li>
-            <li class="omes-lifecycle-step">{t("Diff")}</li>
-            <li class="omes-lifecycle-step">{t("Apply")}</li>
-            <li class="omes-lifecycle-step">{t("Verify")}</li>
-            <li class="omes-lifecycle-step" data-tone="danger">
-              {t("Rollback")}
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step">{t("Bootstrap")}</span>
+            </li>
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step">{t("Check")}</span>
+            </li>
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step">{t("Diff")}</span>
+            </li>
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step">{t("Apply")}</span>
+            </li>
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step">{t("Verify")}</span>
+            </li>
+            <li class="omes-lifecycle-item">
+              <span class="omes-lifecycle-step" data-tone="danger">
+                {t("Rollback")}
+              </span>
             </li>
           </ol>
         </section>
