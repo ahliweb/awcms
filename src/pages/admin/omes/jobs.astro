@@ -22,6 +22,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -121,220 +122,222 @@ const columns = 7 + (showActions ? 1 : 0);
     "The OMES worker dispatch queue: state, correlation and idempotency identifiers, lease ownership, retry count, and sanitized evidence."
   )}
 >
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="omes-jobs-denied">
-        {t("You do not have permission to view OMES jobs.")}
-      </p>
-    )
-  }
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-jobs-denied">
+          {t("You do not have permission to view OMES jobs.")}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="omes-jobs-error">
-        {t(
-          "The OMES jobs console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-        )}
-      </p>
-    )
-  }
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-jobs-error">
+          {t(
+            "The OMES jobs console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="omes-jobs-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
+    {
+      canSeeAnything && !loadError && (
+        <p
+          id="omes-jobs-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
 
-  {
-    canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES job summary">
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Jobs (this page)")}</span>
-            <span class="stat-value">{jobs.length}</span>
+    {
+      canSeeAnything && !loadError && (
+        <section class="admin-section fade-in-up" aria-label="OMES job summary">
+          <div class="stat-grid stagger-children">
+            <div class="stat-card">
+              <span class="stat-label">{t("Jobs (this page)")}</span>
+              <span class="stat-value">{jobs.length}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">{t("Failed (this page)")}</span>
+              <span class="stat-value">{failedCount}</span>
+            </div>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Failed (this page)")}</span>
-            <span class="stat-value">{failedCount}</span>
-          </div>
-        </div>
-      </section>
-    )
-  }
+        </section>
+      )
+    }
 
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="jobs-title"
-        id="omes-jobs-list"
-      >
-        <h2 class="admin-section-title" id="jobs-title">
-          {t("Jobs")}
-          <span class="count-pill">{jobs.length}</span>
-        </h2>
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="jobs-title"
+          id="omes-jobs-list"
+        >
+          <h2 class="admin-section-title" id="jobs-title">
+            {t("Jobs")}
+            <span class="count-pill">{jobs.length}</span>
+          </h2>
 
-        <form method="get" class="admin-toolbar" id="job-filter-form">
-          <label for="filter-server">{t("Server ID")}</label>
-          <input
-            id="filter-server"
-            name="serverId"
-            type="text"
-            value={serverIdFilter ?? ""}
-          />
-          <label for="filter-state">{t("State")}</label>
-          <select id="filter-state" name="state">
-            <option value="" selected={stateFilter === undefined}>
-              {t("Any state")}
-            </option>
-            {STATE_OPTIONS.map((value) => (
-              <option value={value} selected={stateFilter === value}>
-                {value}
+          <form method="get" class="admin-toolbar" id="job-filter-form">
+            <label for="filter-server">{t("Server ID")}</label>
+            <input
+              id="filter-server"
+              name="serverId"
+              type="text"
+              value={serverIdFilter ?? ""}
+            />
+            <label for="filter-state">{t("State")}</label>
+            <select id="filter-state" name="state">
+              <option value="" selected={stateFilter === undefined}>
+                {t("Any state")}
               </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
+              {STATE_OPTIONS.map((value) => (
+                <option value={value} selected={stateFilter === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button type="submit">{t("Apply")}</button>
+          </form>
 
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-jobs-table">
-            <caption class="sr-only">
-              {t("OMES worker jobs, newest first.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Job")}</th>
-                <th scope="col">{t("Operation")}</th>
-                <th scope="col">{t("State")}</th>
-                <th scope="col">{t("Correlation")}</th>
-                <th scope="col">{t("Lease")}</th>
-                <th scope="col">{t("Retries")}</th>
-                <th scope="col">{t("Evidence")}</th>
-                {showActions && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.length === 0 ? (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack" id="omes-jobs-table">
+              <caption class="sr-only">
+                {t("OMES worker jobs, newest first.")}
+              </caption>
+              <thead>
                 <tr>
-                  <td class="data-table-empty" colspan={columns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⏱
-                      </span>
-                      <span class="empty-state-title">{t("No jobs")}</span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Nothing matches this filter, or none has been dispatched yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
+                  <th scope="col">{t("Job")}</th>
+                  <th scope="col">{t("Operation")}</th>
+                  <th scope="col">{t("State")}</th>
+                  <th scope="col">{t("Correlation")}</th>
+                  <th scope="col">{t("Lease")}</th>
+                  <th scope="col">{t("Retries")}</th>
+                  <th scope="col">{t("Evidence")}</th>
+                  {showActions && <th scope="col">{t("Actions")}</th>}
                 </tr>
-              ) : (
-                jobs.map((job) => (
-                  <tr data-job-row={job.id}>
-                    <td data-label="Job">
-                      <span class="cell-code">{job.jobId}</span>
-                      <span class="cell-muted">
-                        {" "}
-                        · {t("Server")}: {job.serverId}
-                      </span>
-                    </td>
-                    <td data-label="Operation">
-                      <span class="cell-code">{job.operation}</span>
-                    </td>
-                    <td data-label="State">
-                      <span
-                        class="status-badge"
-                        data-variant={STATE_VARIANT[job.state] ?? "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {job.state}
-                      </span>
-                    </td>
-                    <td data-label="Correlation">
-                      <span class="cell-code">
-                        {job.operationRequestId ?? "—"}
-                      </span>
-                    </td>
-                    <td data-label="Lease">
-                      <span class="cell-muted">
-                        {job.leasedBy
-                          ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}`
-                          : "—"}
-                      </span>
-                    </td>
-                    <td data-label="Retries">{job.retryCount}</td>
-                    <td data-label="Evidence">
-                      <details>
-                        <summary>{t("View evidence")}</summary>
-                        <pre
-                          class="cell-code"
-                          set:text={JSON.stringify(
-                            {
-                              target: job.target,
-                              payload: job.payload,
-                              result: job.result
-                            },
-                            null,
-                            2
+              </thead>
+              <tbody>
+                {jobs.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={columns}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ⏱
+                        </span>
+                        <span class="empty-state-title">{t("No jobs")}</span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Nothing matches this filter, or none has been dispatched yet."
                           )}
-                        />
-                      </details>
+                        </span>
+                      </div>
                     </td>
-                    {showActions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {canApprove && job.state === "failed" && (
-                            <button
-                              type="button"
-                              class="btn-inline job-approve-btn"
-                              data-job-id={job.id}
-                            >
-                              {t("Approve retry")}
-                            </button>
-                          )}
-                          {canCancel && job.state === "queued" && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger job-cancel-btn"
-                              data-job-id={job.id}
-                            >
-                              {t("Cancel")}
-                            </button>
-                          )}
-                          {!(
-                            (canApprove && job.state === "failed") ||
-                            (canCancel && job.state === "queued")
-                          ) && <span class="cell-muted">—</span>}
-                        </div>
-                      </td>
-                    )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {nextCursor && (
-          <div class="admin-toolbar">
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
+                ) : (
+                  jobs.map((job) => (
+                    <tr data-job-row={job.id}>
+                      <td data-label="Job">
+                        <span class="cell-code">{job.jobId}</span>
+                        <span class="cell-muted">
+                          {" "}
+                          · {t("Server")}: {job.serverId}
+                        </span>
+                      </td>
+                      <td data-label="Operation">
+                        <span class="cell-code">{job.operation}</span>
+                      </td>
+                      <td data-label="State">
+                        <span
+                          class="status-badge"
+                          data-variant={STATE_VARIANT[job.state] ?? "neutral"}
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {job.state}
+                        </span>
+                      </td>
+                      <td data-label="Correlation">
+                        <span class="cell-code">
+                          {job.operationRequestId ?? "—"}
+                        </span>
+                      </td>
+                      <td data-label="Lease">
+                        <span class="cell-muted">
+                          {job.leasedBy
+                            ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}`
+                            : "—"}
+                        </span>
+                      </td>
+                      <td data-label="Retries">{job.retryCount}</td>
+                      <td data-label="Evidence">
+                        <details>
+                          <summary>{t("View evidence")}</summary>
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(
+                              {
+                                target: job.target,
+                                payload: job.payload,
+                                result: job.result
+                              },
+                              null,
+                              2
+                            )}
+                          />
+                        </details>
+                      </td>
+                      {showActions && (
+                        <td data-label="Actions">
+                          <div class="row-actions">
+                            {canApprove && job.state === "failed" && (
+                              <button
+                                type="button"
+                                class="btn-inline job-approve-btn"
+                                data-job-id={job.id}
+                              >
+                                {t("Approve retry")}
+                              </button>
+                            )}
+                            {canCancel && job.state === "queued" && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger job-cancel-btn"
+                                data-job-id={job.id}
+                              >
+                                {t("Cancel")}
+                              </button>
+                            )}
+                            {!(
+                              (canApprove && job.state === "failed") ||
+                              (canCancel && job.state === "queued")
+                            ) && <span class="cell-muted">—</span>}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </section>
-    )
-  }
+
+          {nextCursor && (
+            <div class="admin-toolbar">
+              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+                {t("Next page")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </div>
+          )}
+        </section>
+      )
+    }
+  </div>
 </AdminLayout>
 
 <script>

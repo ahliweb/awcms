@@ -25,6 +25,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -135,350 +136,356 @@ const columns = 6 + (canDelete ? 1 : 0);
     "Enrolled OMES host servers: platform and OMES fleet evidence, enrollment/trust status, and heartbeat staleness. No raw enrollment key material is ever rendered — only a fingerprint."
   )}
 >
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="omes-servers-denied">
-        {t("You do not have permission to view OMES servers.")}
-      </p>
-    )
-  }
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-servers-denied">
+          {t("You do not have permission to view OMES servers.")}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="omes-servers-error">
-        {t(
-          "The OMES servers console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-        )}
-      </p>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="omes-servers-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-label="OMES server summary"
-      >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Servers (this page)")}</span>
-            <span class="stat-value">{servers.length}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Stale (this page)")}</span>
-            <span class="stat-value">{staleCount}</span>
-            {staleCount > 0 && (
-              <span class="stat-hint">
-                {t("No heartbeat within the staleness window")}
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canRegister && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="register-title"
-      >
-        <h2 class="admin-section-title" id="register-title">
-          {t("Register a server")}
-        </h2>
-        <p class="page-description">
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-servers-error">
           {t(
-            "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
+            "The OMES servers console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
           )}
         </p>
-        <form class="admin-toolbar" id="server-register-form">
-          <label for="reg-hostname">{t("Hostname")}</label>
-          <input
-            id="reg-hostname"
-            name="hostname"
-            type="text"
-            required
-            maxlength="255"
-          />
-          <label for="reg-os">{t("OS")}</label>
-          <input id="reg-os" name="os" type="text" required maxlength="64" />
-          <label for="reg-version">{t("OS version")}</label>
-          <input
-            id="reg-version"
-            name="version"
-            type="text"
-            required
-            maxlength="64"
-          />
-          <label for="reg-arch">{t("Architecture")}</label>
-          <input
-            id="reg-arch"
-            name="arch"
-            type="text"
-            required
-            maxlength="32"
-          />
-          <label for="reg-ip">{t("IP (optional)")}</label>
-          <input id="reg-ip" name="ip" type="text" maxlength="64" />
-          <button type="submit">{t("Register")}</button>
-        </form>
-      </section>
-    )
-  }
+      )
+    }
 
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="servers-title"
-        id="omes-servers-list"
-      >
-        <h2 class="admin-section-title" id="servers-title">
-          {t("Servers")}
-          <span class="count-pill">{servers.length}</span>
-        </h2>
+    {
+      canSeeAnything && !loadError && (
+        <p
+          id="omes-servers-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
 
-        <form method="get" class="admin-toolbar" id="server-filter-form">
-          <label for="filter-status">{t("Status")}</label>
-          <select id="filter-status" name="status">
-            <option value="" selected={statusFilter === undefined}>
-              {t("Any status")}
-            </option>
-            {STATUS_OPTIONS.map((value) => (
-              <option value={value} selected={statusFilter === value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-servers-table">
-            <caption class="sr-only">{t("Enrolled OMES servers.")}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Hostname")}</th>
-                <th scope="col">{t("Platform")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Heartbeat")}</th>
-                <th scope="col">{t("Registered")}</th>
-                <th scope="col">{t("Evidence")}</th>
-                {canDelete && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {servers.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={columns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ▭
-                      </span>
-                      <span class="empty-state-title">{t("No servers")}</span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Register a server above, or wait for one to self-register."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                servers.map((server) => (
-                  <tr data-server-row={server.id}>
-                    <td data-label="Hostname">
-                      <span class="cell-code">{server.hostname}</span>
-                      {server.ip && (
-                        <span class="cell-muted"> · {server.ip}</span>
-                      )}
-                    </td>
-                    <td data-label="Platform">
-                      <span class="cell-muted">
-                        {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
-                        {server.arch ?? "—"}
-                      </span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          STATUS_VARIANT[server.status] ?? "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {server.status}
-                      </span>
-                      {server.stale && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
-                          {t("stale")}
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Heartbeat">
-                      <span class="cell-muted">
-                        {formatTimestamp(server.lastHeartbeatAt)}
-                      </span>
-                    </td>
-                    <td data-label="Registered">
-                      <span class="cell-muted">{server.createdAt}</span>
-                    </td>
-                    <td data-label="Evidence">
-                      <a
-                        class="quick-link"
-                        href={linkWith({ selected: server.id })}
-                      >
-                        {t("View evidence")}
-                      </a>
-                    </td>
-                    {canDelete && (
-                      <td data-label="Actions">
-                        {server.status === "decommissioned" ? (
-                          <span class="cell-muted">{t("decommissioned")}</span>
-                        ) : (
-                          <button
-                            type="button"
-                            class="btn-inline btn-inline--danger server-decommission-btn"
-                            data-server-id={server.id}
-                            data-hostname={server.hostname}
-                          >
-                            {t("Decommission")}
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-label="OMES server summary"
+        >
+          <div class="stat-grid stagger-children">
+            <div class="stat-card">
+              <span class="stat-label">{t("Servers (this page)")}</span>
+              <span class="stat-value">{servers.length}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">{t("Stale (this page)")}</span>
+              <span class="stat-value">{staleCount}</span>
+              {staleCount > 0 && (
+                <span class="stat-hint">
+                  {t("No heartbeat within the staleness window")}
+                </span>
               )}
-            </tbody>
-          </table>
-        </div>
-
-        {nextCursor && (
-          <div class="admin-toolbar">
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
+            </div>
           </div>
-        )}
-      </section>
-    )
-  }
+        </section>
+      )
+    }
 
-  {
-    canSeeAnything && !loadError && selectedId && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="evidence-title"
-        id="omes-server-evidence"
-      >
-        <h2 class="admin-section-title" id="evidence-title">
-          {t("Enrollment & trust evidence")}
-        </h2>
-        {selected ? (
-          <>
-            <p class="page-description">
-              <span class="cell-code">{selected.hostname}</span> ·{" "}
-              {selected.serverId}
-            </p>
-            <div class="data-table-scroll">
-              <table class="data-table data-table--stack">
-                <caption class="sr-only">
-                  {t("Worker enrollments for this server, newest first.")}
-                </caption>
-                <thead>
+    {
+      canRegister && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="register-title"
+        >
+          <h2 class="admin-section-title" id="register-title">
+            {t("Register a server")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
+            )}
+          </p>
+          <form class="admin-toolbar" id="server-register-form">
+            <label for="reg-hostname">{t("Hostname")}</label>
+            <input
+              id="reg-hostname"
+              name="hostname"
+              type="text"
+              required
+              maxlength="255"
+            />
+            <label for="reg-os">{t("OS")}</label>
+            <input id="reg-os" name="os" type="text" required maxlength="64" />
+            <label for="reg-version">{t("OS version")}</label>
+            <input
+              id="reg-version"
+              name="version"
+              type="text"
+              required
+              maxlength="64"
+            />
+            <label for="reg-arch">{t("Architecture")}</label>
+            <input
+              id="reg-arch"
+              name="arch"
+              type="text"
+              required
+              maxlength="32"
+            />
+            <label for="reg-ip">{t("IP (optional)")}</label>
+            <input id="reg-ip" name="ip" type="text" maxlength="64" />
+            <button type="submit">{t("Register")}</button>
+          </form>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="servers-title"
+          id="omes-servers-list"
+        >
+          <h2 class="admin-section-title" id="servers-title">
+            {t("Servers")}
+            <span class="count-pill">{servers.length}</span>
+          </h2>
+
+          <form method="get" class="admin-toolbar" id="server-filter-form">
+            <label for="filter-status">{t("Status")}</label>
+            <select id="filter-status" name="status">
+              <option value="" selected={statusFilter === undefined}>
+                {t("Any status")}
+              </option>
+              {STATUS_OPTIONS.map((value) => (
+                <option value={value} selected={statusFilter === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button type="submit">{t("Apply")}</button>
+          </form>
+
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack" id="omes-servers-table">
+              <caption class="sr-only">{t("Enrolled OMES servers.")}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Hostname")}</th>
+                  <th scope="col">{t("Platform")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Heartbeat")}</th>
+                  <th scope="col">{t("Registered")}</th>
+                  <th scope="col">{t("Evidence")}</th>
+                  {canDelete && <th scope="col">{t("Actions")}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {servers.length === 0 ? (
                   <tr>
-                    <th scope="col">{t("Worker")}</th>
-                    <th scope="col">{t("Status")}</th>
-                    <th scope="col">{t("Public key fingerprint (SHA-256)")}</th>
-                    <th scope="col">{t("Enrolled")}</th>
-                    <th scope="col">{t("Revoked")}</th>
+                    <td class="data-table-empty" colspan={columns}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ▭
+                        </span>
+                        <span class="empty-state-title">{t("No servers")}</span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Register a server above, or wait for one to self-register."
+                          )}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {selected.enrollments.length === 0 ? (
-                    <tr>
-                      <td class="data-table-empty" colspan={5}>
-                        <div class="empty-state">
-                          <span class="empty-state-title">
-                            {t("No enrollments")}
-                          </span>
-                          <span class="empty-state-text">
-                            {t(
-                              "This server has not completed worker enrollment yet."
-                            )}
-                          </span>
-                        </div>
+                ) : (
+                  servers.map((server) => (
+                    <tr data-server-row={server.id}>
+                      <td data-label="Hostname">
+                        <span class="cell-code">{server.hostname}</span>
+                        {server.ip && (
+                          <span class="cell-muted"> · {server.ip}</span>
+                        )}
                       </td>
-                    </tr>
-                  ) : (
-                    selected.enrollments.map((enrollment) => (
-                      <tr>
-                        <td data-label="Worker">
-                          <span class="cell-code">{enrollment.workerId}</span>
-                        </td>
-                        <td data-label="Status">
-                          <span
-                            class="status-badge"
-                            data-variant={
-                              enrollment.status === "active"
-                                ? "success"
-                                : "neutral"
-                            }
-                          >
+                      <td data-label="Platform">
+                        <span class="cell-muted">
+                          {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
+                          {server.arch ?? "—"}
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            STATUS_VARIANT[server.status] ?? "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {server.status}
+                        </span>
+                        {server.stale && (
+                          <span class="status-badge" data-variant="warning">
                             <span class="status-dot" aria-hidden="true" />
-                            {enrollment.status}
+                            {t("stale")}
                           </span>
+                        )}
+                      </td>
+                      <td data-label="Heartbeat">
+                        <span class="cell-muted">
+                          {formatTimestamp(server.lastHeartbeatAt)}
+                        </span>
+                      </td>
+                      <td data-label="Registered">
+                        <span class="cell-muted">{server.createdAt}</span>
+                      </td>
+                      <td data-label="Evidence">
+                        <a
+                          class="quick-link"
+                          href={linkWith({ selected: server.id })}
+                        >
+                          {t("View evidence")}
+                        </a>
+                      </td>
+                      {canDelete && (
+                        <td data-label="Actions">
+                          {server.status === "decommissioned" ? (
+                            <span class="cell-muted">
+                              {t("decommissioned")}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger server-decommission-btn"
+                              data-server-id={server.id}
+                              data-hostname={server.hostname}
+                            >
+                              {t("Decommission")}
+                            </button>
+                          )}
                         </td>
-                        <td data-label="Fingerprint">
-                          <span class="cell-code">
-                            {enrollment.publicKeyFingerprint}
-                          </span>
-                        </td>
-                        <td data-label="Enrolled">
-                          <span class="cell-muted">
-                            {formatTimestamp(enrollment.enrolledAt)}
-                          </span>
-                        </td>
-                        <td data-label="Revoked">
-                          <span class="cell-muted">
-                            {formatTimestamp(enrollment.revokedAt)}
-                          </span>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {nextCursor && (
+            <div class="admin-toolbar">
+              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+                {t("Next page")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </div>
+          )}
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && selectedId && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="evidence-title"
+          id="omes-server-evidence"
+        >
+          <h2 class="admin-section-title" id="evidence-title">
+            {t("Enrollment & trust evidence")}
+          </h2>
+          {selected ? (
+            <>
+              <p class="page-description">
+                <span class="cell-code">{selected.hostname}</span> ·{" "}
+                {selected.serverId}
+              </p>
+              <div class="data-table-scroll">
+                <table class="data-table data-table--stack">
+                  <caption class="sr-only">
+                    {t("Worker enrollments for this server, newest first.")}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Worker")}</th>
+                      <th scope="col">{t("Status")}</th>
+                      <th scope="col">
+                        {t("Public key fingerprint (SHA-256)")}
+                      </th>
+                      <th scope="col">{t("Enrolled")}</th>
+                      <th scope="col">{t("Revoked")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.enrollments.length === 0 ? (
+                      <tr>
+                        <td class="data-table-empty" colspan={5}>
+                          <div class="empty-state">
+                            <span class="empty-state-title">
+                              {t("No enrollments")}
+                            </span>
+                            <span class="empty-state-text">
+                              {t(
+                                "This server has not completed worker enrollment yet."
+                              )}
+                            </span>
+                          </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p class="state-notice">{t("That server could not be found.")}</p>
-        )}
-        <div class="admin-toolbar">
-          <a class="quick-link" href={linkWith({ selected: null })}>
-            {t("Close evidence panel")}
-          </a>
-        </div>
-      </section>
-    )
-  }
+                    ) : (
+                      selected.enrollments.map((enrollment) => (
+                        <tr>
+                          <td data-label="Worker">
+                            <span class="cell-code">{enrollment.workerId}</span>
+                          </td>
+                          <td data-label="Status">
+                            <span
+                              class="status-badge"
+                              data-variant={
+                                enrollment.status === "active"
+                                  ? "success"
+                                  : "neutral"
+                              }
+                            >
+                              <span class="status-dot" aria-hidden="true" />
+                              {enrollment.status}
+                            </span>
+                          </td>
+                          <td data-label="Fingerprint">
+                            <span class="cell-code">
+                              {enrollment.publicKeyFingerprint}
+                            </span>
+                          </td>
+                          <td data-label="Enrolled">
+                            <span class="cell-muted">
+                              {formatTimestamp(enrollment.enrolledAt)}
+                            </span>
+                          </td>
+                          <td data-label="Revoked">
+                            <span class="cell-muted">
+                              {formatTimestamp(enrollment.revokedAt)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p class="state-notice">{t("That server could not be found.")}</p>
+          )}
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ selected: null })}>
+              {t("Close evidence panel")}
+            </a>
+          </div>
+        </section>
+      )
+    }
+  </div>
 </AdminLayout>
 
 <script>

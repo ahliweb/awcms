@@ -68,6 +68,68 @@ Issue ahliweb/omes#200 shipped the first five screens (Overview, Servers, Deploy
 - **Audit** (`audit.read`) — TWO separate, source-labelled sections, never merged: canonical control-plane actor/action events (`awcms_audit_events` via `listAuditEvents`, narrowed to `moduleKey: "omes_control"`) and the remote OMES execution/reconciliation projection (`awcms_omes_audit_projections` via `fetchAuditProjections`). `logging.audit_trail.read`'s own `/admin/audit-trail` remains the cross-module view of the first table; this screen is a narrower, OMES-scoped read of the same data, not a second writer.
 - **Enrollments** (`enrollments.manage`) — issues and revokes worker enrollment tokens, closing the gap #201 deliberately left open. Adds no new write path: both actions call the SAME `POST /api/v1/omes/servers/{id}/enrollment-challenges` and `.../revoke` endpoints #198 shipped, unmodified by this issue. The read side is a new fleet-wide query, `application/enrollment-directory.ts`'s `fetchEnrollments` — `fetchServerDetail` (Servers) only ever looked at one server's enrollments at a time. The issued token is shown exactly once, rendered via the shared `messageBox` helper's `textContent`-only `show()` (never `innerHTML`), never written to `localStorage`/`sessionStorage`, never logged, and disappears the moment the page is left or reloaded. See that screen's own header comment for the full show-once-modal-vs-clipboard-button-vs-download tradeoff analysis, including why a copy-to-clipboard button was drafted and then removed (it pushed this single screen over the repo's client asset budget) in favor of the plain in-page reveal `machine-credentials.astro` already established.
 
+## Design system (`ahliweb/omes#246` part 1/3)
+
+The 9 screens above render inside a scoped `.omes-cc` wrapper
+(`src/styles/omes-control-center.css`) that brings them to visual parity with
+the OMES Control Panel redesign reference (`ahliweb/omes`
+`omes:redesign/redesign-omes.zip`, `omes:docs/ui-ux-design-system.md`) — the dark
+palette, KPI tiles with monospace numbers and status dots, and the
+Bootstrap → Check → Diff → Apply → Verify → Rollback lifecycle strip on the
+overview screen. Nothing outside `/admin/omes/*` is touched: the wrapper is a
+class each of the 9 pages adds around its own `<AdminLayout>` slot content,
+never a change to `AdminLayout.astro`, `tokens.css`, or any shared component.
+
+**How it composes rather than replaces.** Every component class the 9 screens
+already used — `.stat-card`, `.status-badge`, `.data-table`, `.admin-panel`,
+`.quick-link`, `.empty-state`, `.btn*` (all from `admin.css`/
+`admin-screens.css`) — is reused unmodified. `.omes-cc` overrides the SAME
+custom properties those files already consume (`--color-bg`, `--color-surface`,
+`--color-text*`, the `--color-primary`/`-success`/`-warning`/`-danger`/`-info`
+families, `--color-border*`), scoped under `.omes-cc` so no other admin screen
+is affected. Public Sans and JetBrains Mono are already self-hosted for the
+whole admin (ADR-0120's `tokens.css` `@font-face` rules) — this addition ships
+**no new font file** and widens the CSP by no origin.
+
+**Contrast** — every text/background and accent/background pair below is
+measured against WCAG 2.1 relative luminance (the same method
+`scripts/design-token-contrast-check.ts` uses for the base theme):
+
+| Pair                                                                      | Ratio                | Result                                                                         |
+| ------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------ |
+| text `#E6EDF3` on canvas `#0B0F13`                                        | 16.28:1              | pass                                                                           |
+| text `#E6EDF3` on panel `#151A20`                                         | 14.80:1              | pass                                                                           |
+| text-muted `#C6D1DA` on canvas `#0B0F13`                                  | 12.39:1              | pass                                                                           |
+| text-muted `#C6D1DA` on panel `#151A20`                                   | 11.27:1              | pass                                                                           |
+| text-faint `#8B99A6` on canvas `#0B0F13`                                  | 6.60:1               | pass                                                                           |
+| text-faint `#8B99A6` on panel `#151A20`                                   | 6.00:1               | pass                                                                           |
+| text-faint `#8B99A6` on surface-2 `#191F26`                               | 5.69:1               | pass                                                                           |
+| dim caption `#7A8894` on panel `#151A20`                                  | 4.81:1               | pass (tightest text pair)                                                      |
+| dim caption `#7A8894` on surface-2 `#191F26`                              | 4.57:1               | pass                                                                           |
+| cyan `#5FC8D6` (primary) on canvas/panel                                  | 9.82 / 8.93:1        | pass                                                                           |
+| green `#6FD08C` (success) on canvas/panel                                 | 10.14 / 9.23:1       | pass                                                                           |
+| amber `#E8B44A` (warning) on canvas/panel                                 | 10.13 / 9.21:1       | pass                                                                           |
+| rose `#E9A9A0` (danger) on canvas/panel                                   | 9.75 / 8.87:1        | pass                                                                           |
+| violet `#8B9CF7` (info) on canvas/panel                                   | 7.51 / 6.83:1        | pass                                                                           |
+| canvas `#0B0F13` on solid cyan/green/amber/rose fill                      | 9.75–10.14:1         | pass (dark-on-light-fill, not white-on-fill)                                   |
+| border-strong `#6A7683` on canvas/panel/surface-2 (WCAG 1.4.11, controls) | 4.15 / 3.78 / 3.58:1 | pass (≥3:1)                                                                    |
+| border `#242C35` (decorative card/table hairline)                         | 1.24–1.36:1          | not 3:1 — deliberate, matches ADR-0120's own decorative-vs-control distinction |
+
+The full derivation (including why the accent hues use a dark, not white,
+foreground on a solid fill) is in `omes-control-center.css`'s own header
+comment.
+
+**Asset budget.** `scripts/client-asset-budget.ts`'s `APP_BUDGET_BYTES` moved
+226,000 → 229,500 B — measured, +3,171 B for
+`src/styles/omes-control-center.css` (the only new file), imported only by
+these 9 screens. See that constant's own docblock for the full before/after
+measurement. No font budget change: no new `@font-face`, no new `.woff2`.
+
+**Scope note.** This lands part 1 of `ahliweb/omes#246` (design system only).
+The 4 missing views (Hermes, Orkestrasi langsung, Arsitektur, Progres Hermes)
+and any new projection they need are later, separate PRs — this change adds
+no new screen, no new endpoint, and no schema/contract change.
+
 ## Worker enrollment, poll, result, and heartbeat (`ahliweb/omes#199`)
 
 Four routes complete the round trip #198's own header describes: `POST /api/v1/omes/worker/{enroll,poll,result,heartbeat}`. All four are **session-UNauthenticated** — the caller is an OMES host pull worker (ADR-0027's outbound-pull architecture), not an AWCMS user, so there is no session cookie/token to check. This is the highest-risk surface this module ships, and it is authenticated by asymmetric Ed25519 identity instead:

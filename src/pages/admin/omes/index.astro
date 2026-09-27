@@ -20,6 +20,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
@@ -115,165 +116,200 @@ function formatCounts(counts: Record<string, number>): string {
     "Fleet health distribution, job state summary, backup freshness, and drift, aggregated directly from OMES control state — never from a reporting projection."
   )}
 >
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="omes-overview-denied">
-        {t("You do not have permission to view the OMES overview.")}
-      </p>
-    )
-  }
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-overview-denied">
+          {t("You do not have permission to view the OMES overview.")}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="omes-overview-error">
-        {t(
-          "The OMES overview could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-        )}
-      </p>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES fleet summary">
-        <div class="stat-grid stagger-children">
-          {readServers && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Enrolled servers")}</span>
-              <span class="stat-value">{overview.serverCount}</span>
-              {overview.staleServerCount > 0 && (
-                <span class="stat-hint">
-                  {t("{count} stale (no recent heartbeat)").replace(
-                    "{count}",
-                    String(overview.staleServerCount)
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-          {readServers && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Server health distribution")}</span>
-              <span class="stat-value">
-                {formatCounts(overview.serverHealthDistribution)}
-              </span>
-            </div>
-          )}
-          {readJobs && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Job state summary")}</span>
-              <span class="stat-value">
-                {formatCounts(overview.jobStateCounts)}
-              </span>
-            </div>
-          )}
-          {readBackups && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Backup freshness")}</span>
-              <span class="stat-value">
-                {t("Fresh")}: {overview.backupFreshness.fresh} · {t("Stale")}:{" "}
-                {overview.backupFreshness.stale} · {t("Failed")}:{" "}
-                {overview.backupFreshness.failed}
-              </span>
-            </div>
-          )}
-          {readDeployments && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Deployment drift")}</span>
-              <span class="stat-value">
-                {formatCounts(overview.driftSummary.reconciliationStatusCounts)}
-              </span>
-              {overview.driftSummary.staleDeploymentCount > 0 && (
-                <span class="stat-hint">
-                  {t("{count} deployment(s) stale or unreconciled").replace(
-                    "{count}",
-                    String(overview.driftSummary.staleDeploymentCount)
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="OMES screens">
-        <h2 class="admin-section-title">{t("Screens")}</h2>
-        <p class="page-description">
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-overview-error">
           {t(
-            "Desired and observed state are always shown separately on these screens — an observed value is never presented as the desired one, and stale or missing evidence is shown explicitly rather than as healthy."
+            "The OMES overview could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
           )}
         </p>
-        <div class="quick-links">
-          {readServers && (
-            <a class="quick-link" href="/admin/omes/servers">
-              {t("Servers")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readDeployments && (
-            <a class="quick-link" href="/admin/omes/deployments">
-              {t("Deployments")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readDeployments && (
-            <a class="quick-link" href="/admin/omes/operations">
-              {t("Operations")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readJobs && (
-            <a class="quick-link" href="/admin/omes/jobs">
-              {t("Jobs")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readServers && (
-            <a class="quick-link" href="/admin/omes/health">
-              {t("Health")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readBackups && (
-            <a class="quick-link" href="/admin/omes/backups">
-              {t("Backups & recovery")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {readAudit && (
-            <a class="quick-link" href="/admin/omes/audit">
-              {t("Audit")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-          {manageEnrollments && (
-            <a class="quick-link" href="/admin/omes/enrollments">
-              {t("Enrollments")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          )}
-        </div>
-      </section>
-    )
-  }
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-label="OMES fleet summary"
+        >
+          <div class="stat-grid stagger-children">
+            {readServers && (
+              <div class="stat-card">
+                <span class="stat-label">{t("Enrolled servers")}</span>
+                <span class="stat-value">{overview.serverCount}</span>
+                {overview.staleServerCount > 0 && (
+                  <span class="stat-hint">
+                    {t("{count} stale (no recent heartbeat)").replace(
+                      "{count}",
+                      String(overview.staleServerCount)
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+            {readServers && (
+              <div class="stat-card">
+                <span class="stat-label">
+                  {t("Server health distribution")}
+                </span>
+                <span class="stat-value">
+                  {formatCounts(overview.serverHealthDistribution)}
+                </span>
+              </div>
+            )}
+            {readJobs && (
+              <div class="stat-card">
+                <span class="stat-label">{t("Job state summary")}</span>
+                <span class="stat-value">
+                  {formatCounts(overview.jobStateCounts)}
+                </span>
+              </div>
+            )}
+            {readBackups && (
+              <div class="stat-card">
+                <span class="stat-label">{t("Backup freshness")}</span>
+                <span class="stat-value">
+                  {t("Fresh")}: {overview.backupFreshness.fresh} · {t("Stale")}:{" "}
+                  {overview.backupFreshness.stale} · {t("Failed")}:{" "}
+                  {overview.backupFreshness.failed}
+                </span>
+              </div>
+            )}
+            {readDeployments && (
+              <div class="stat-card">
+                <span class="stat-label">{t("Deployment drift")}</span>
+                <span class="stat-value">
+                  {formatCounts(
+                    overview.driftSummary.reconciliationStatusCounts
+                  )}
+                </span>
+                {overview.driftSummary.staleDeploymentCount > 0 && (
+                  <span class="stat-hint">
+                    {t("{count} deployment(s) stale or unreconciled").replace(
+                      "{count}",
+                      String(overview.driftSummary.staleDeploymentCount)
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-label={t("OMES operation lifecycle")}
+        >
+          <h2 class="admin-section-title">{t("Lifecycle")}</h2>
+          <p class="page-description">
+            {t(
+              "Every OMES change moves through the same sequence of allowlisted, auditable steps — never a shortcut around one of them."
+            )}
+          </p>
+          <ol class="omes-lifecycle">
+            <li class="omes-lifecycle-step">{t("Bootstrap")}</li>
+            <li class="omes-lifecycle-step">{t("Check")}</li>
+            <li class="omes-lifecycle-step">{t("Diff")}</li>
+            <li class="omes-lifecycle-step">{t("Apply")}</li>
+            <li class="omes-lifecycle-step">{t("Verify")}</li>
+            <li class="omes-lifecycle-step" data-tone="danger">
+              {t("Rollback")}
+            </li>
+          </ol>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section class="admin-section fade-in-up" aria-label="OMES screens">
+          <h2 class="admin-section-title">{t("Screens")}</h2>
+          <p class="page-description">
+            {t(
+              "Desired and observed state are always shown separately on these screens — an observed value is never presented as the desired one, and stale or missing evidence is shown explicitly rather than as healthy."
+            )}
+          </p>
+          <div class="quick-links">
+            {readServers && (
+              <a class="quick-link" href="/admin/omes/servers">
+                {t("Servers")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readDeployments && (
+              <a class="quick-link" href="/admin/omes/deployments">
+                {t("Deployments")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readDeployments && (
+              <a class="quick-link" href="/admin/omes/operations">
+                {t("Operations")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readJobs && (
+              <a class="quick-link" href="/admin/omes/jobs">
+                {t("Jobs")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readServers && (
+              <a class="quick-link" href="/admin/omes/health">
+                {t("Health")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readBackups && (
+              <a class="quick-link" href="/admin/omes/backups">
+                {t("Backups & recovery")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {readAudit && (
+              <a class="quick-link" href="/admin/omes/audit">
+                {t("Audit")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+            {manageEnrollments && (
+              <a class="quick-link" href="/admin/omes/enrollments">
+                {t("Enrollments")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            )}
+          </div>
+        </section>
+      )
+    }
+  </div>
 </AdminLayout>

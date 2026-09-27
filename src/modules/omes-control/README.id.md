@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:cfee180c887a7e5e39e4c3269515bbb6c5a41a8be249d6b26da9b0e5557ae3a8 -->
+<!-- i18n-source-hash: sha256:c92d55e5f2e3947398acd1005f90d183b20e8f7884133d55c21356d92f6f8c1e -->
 
 # `omes_control`
 
@@ -69,6 +69,72 @@ Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deploy
 - **Backups** (`backups.read`, `backups.restore`) — metadata artefak (kelas pemulihan dari manifest, checksum sha256, ukuran, flag `fresh` terhitung) dan manifest itu sendiri, di-escape, tidak pernah konten backup mentah. Restore adalah satu-satunya mutasi: selalu destruktif, dikecualikan dari allowlist operasi aman, dan melalui mesin `workflow-approval` yang SAMA seperti `stop`/`rollback` — layar ini tidak pernah menjalankan keputusan persetujuan kedua, hanya mengajukan dan menautkan `workflowInstanceId` hasilnya ke `/admin/approvals`.
 - **Audit** (`audit.read`) — DUA bagian terpisah berlabel sumber, tidak pernah digabung: peristiwa aktor/aksi control-plane kanonis (`awcms_audit_events` via `listAuditEvents`, dipersempit ke `moduleKey: "omes_control"`) dan proyeksi eksekusi/rekonsiliasi OMES jarak jauh (`awcms_omes_audit_projections` via `fetchAuditProjections`). `/admin/audit-trail` milik `logging.audit_trail.read` tetap menjadi tampilan lintas-modul dari tabel pertama; layar ini adalah pembacaan yang lebih sempit dan bercakupan OMES dari data yang sama, bukan penulis kedua.
 - **Enrollments** (`enrollments.manage`) — menerbitkan dan mencabut token enrollment worker, menutup celah yang sengaja dibiarkan terbuka oleh #201. Tidak menambah jalur tulis baru — kedua aksi memanggil endpoint `POST /api/v1/omes/servers/{id}/enrollment-challenges` dan `.../revoke` yang SAMA yang sudah dikirim oleh #198, tidak diubah oleh issue ini. Sisi baca adalah kueri baru lintas-armada, `application/enrollment-directory.ts`'s `fetchEnrollments` — `fetchServerDetail` (Servers) hanya pernah melihat enrollment satu server pada satu waktu. Token yang diterbitkan ditampilkan tepat satu kali, dirender via `show()` milik helper `messageBox` bersama yang hanya memakai `textContent` (tidak pernah `innerHTML`), tidak pernah ditulis ke `localStorage`/`sessionStorage`, tidak pernah dicatat log, dan hilang begitu halaman ditinggalkan atau dimuat ulang. Lihat komentar header layar itu sendiri untuk analisis trade-off lengkap modal-sekali-tampil vs tombol-clipboard vs unduh, termasuk mengapa tombol salin-ke-clipboard sempat dibuat lalu dihapus (mendorong layar tunggal ini melampaui anggaran aset klien repo) demi reveal dalam-halaman biasa yang sudah mapan di `machine-credentials.astro`.
+
+## Sistem desain (`ahliweb/omes#246` bagian 1/3)
+
+9 layar di atas dirender di dalam wrapper `.omes-cc` yang di-scope
+(`src/styles/omes-control-center.css`) yang membawanya setara secara visual
+dengan referensi redesign OMES Control Panel (`ahliweb/omes`
+`omes:redesign/redesign-omes.zip`, `omes:docs/ui-ux-design-system.md`) — palet gelap,
+kartu KPI dengan angka monospace dan titik status, serta strip siklus
+Bootstrap → Check → Diff → Apply → Verify → Rollback di layar overview. Tidak
+ada yang di luar `/admin/omes/*` yang tersentuh: wrapper ini adalah class yang
+ditambahkan masing-masing dari 9 halaman di sekitar konten slot
+`<AdminLayout>`-nya sendiri, bukan pernah perubahan pada `AdminLayout.astro`,
+`tokens.css`, atau komponen bersama mana pun.
+
+**Bagaimana ia menyusun, bukan mengganti.** Setiap class komponen yang sudah
+dipakai 9 layar itu — `.stat-card`, `.status-badge`, `.data-table`,
+`.admin-panel`, `.quick-link`, `.empty-state`, `.btn*` (semua dari
+`admin.css`/`admin-screens.css`) — dipakai ulang tanpa perubahan. `.omes-cc`
+meng-override custom property YANG SAMA yang sudah dikonsumsi berkas-berkas
+itu (`--color-bg`, `--color-surface`, `--color-text*`, keluarga
+`--color-primary`/`-success`/`-warning`/`-danger`/`-info`, `--color-border*`),
+di-scope di bawah `.omes-cc` sehingga tidak ada layar admin lain yang
+terpengaruh. Public Sans dan JetBrains Mono sudah di-host sendiri untuk
+seluruh admin (aturan `@font-face` `tokens.css` ADR-0120) — penambahan ini
+TIDAK mengirim berkas font baru dan tidak melebarkan CSP satu origin pun.
+
+**Kontras** — setiap pasangan teks/latar dan aksen/latar di bawah diukur
+terhadap luminansi relatif WCAG 2.1 (metode yang sama yang dipakai
+`scripts/design-token-contrast-check.ts` untuk tema dasar):
+
+| Pasangan                                                                      | Rasio                | Hasil                                                                                  |
+| ----------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| teks `#E6EDF3` di atas canvas `#0B0F13`                                       | 16.28:1              | lolos                                                                                  |
+| teks `#E6EDF3` di atas panel `#151A20`                                        | 14.80:1              | lolos                                                                                  |
+| teks-muted `#C6D1DA` di atas canvas `#0B0F13`                                 | 12.39:1              | lolos                                                                                  |
+| teks-muted `#C6D1DA` di atas panel `#151A20`                                  | 11.27:1              | lolos                                                                                  |
+| teks-faint `#8B99A6` di atas canvas `#0B0F13`                                 | 6.60:1               | lolos                                                                                  |
+| teks-faint `#8B99A6` di atas panel `#151A20`                                  | 6.00:1               | lolos                                                                                  |
+| teks-faint `#8B99A6` di atas surface-2 `#191F26`                              | 5.69:1               | lolos                                                                                  |
+| caption dim `#7A8894` di atas panel `#151A20`                                 | 4.81:1               | lolos (pasangan teks paling ketat)                                                     |
+| caption dim `#7A8894` di atas surface-2 `#191F26`                             | 4.57:1               | lolos                                                                                  |
+| cyan `#5FC8D6` (primary) di atas canvas/panel                                 | 9.82 / 8.93:1        | lolos                                                                                  |
+| hijau `#6FD08C` (success) di atas canvas/panel                                | 10.14 / 9.23:1       | lolos                                                                                  |
+| amber `#E8B44A` (warning) di atas canvas/panel                                | 10.13 / 9.21:1       | lolos                                                                                  |
+| rose `#E9A9A0` (danger) di atas canvas/panel                                  | 9.75 / 8.87:1        | lolos                                                                                  |
+| violet `#8B9CF7` (info) di atas canvas/panel                                  | 7.51 / 6.83:1        | lolos                                                                                  |
+| canvas `#0B0F13` di atas isian solid cyan/hijau/amber/rose                    | 9.75–10.14:1         | lolos (gelap-di-atas-isian-terang, bukan putih-di-atas-isian)                          |
+| border-strong `#6A7683` di atas canvas/panel/surface-2 (WCAG 1.4.11, kontrol) | 4.15 / 3.78 / 3.58:1 | lolos (≥3:1)                                                                           |
+| border `#242C35` (hairline dekoratif kartu/tabel)                             | 1.24–1.36:1          | bukan 3:1 — disengaja, mengikuti pembedaan dekoratif-vs-kontrol milik ADR-0120 sendiri |
+
+Derivasi lengkapnya (termasuk mengapa hue aksen memakai foreground gelap,
+bukan putih, di atas isian solid) ada di komentar header
+`omes-control-center.css` sendiri.
+
+**Anggaran aset.** `APP_BUDGET_BYTES` milik `scripts/client-asset-budget.ts`
+naik dari 226.000 → 229.500 B — terukur, +3.171 B untuk
+`src/styles/omes-control-center.css` (satu-satunya berkas baru), diimpor
+hanya oleh 9 layar ini. Lihat docblock konstanta itu sendiri untuk
+pengukuran before/after lengkap. Tidak ada perubahan anggaran font: tidak ada
+`@font-face` baru, tidak ada `.woff2` baru.
+
+**Catatan cakupan.** Ini mengirimkan bagian 1 dari `ahliweb/omes#246` (hanya
+sistem desain). 4 layar yang belum ada (Hermes, Orkestrasi langsung,
+Arsitektur, Progres Hermes) dan proyeksi baru apa pun yang dibutuhkannya
+adalah PR lanjutan yang terpisah — perubahan ini tidak menambah layar baru,
+endpoint baru, atau perubahan skema/kontrak.
 
 ## Enrollment, poll, result, dan heartbeat worker (`ahliweb/omes#199`)
 
