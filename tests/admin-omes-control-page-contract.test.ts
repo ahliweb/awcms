@@ -147,13 +147,14 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(unenforced).toEqual([]);
   });
 
-  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155, sql/161, sql/164, and sql/165 seed it", async () => {
+  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155, sql/161, sql/164, sql/165, and sql/167 seed it", async () => {
     const declared = declaredTriples();
     // 13 seeded by sql/155 (#196/#198/#233) + 2 seeded by sql/161
     // (ahliweb/omes#232's ai_privacy.read/.approve) + 1 seeded by sql/164
     // (ahliweb/omes#246 part 2's hermes_orchestration.read) + 1 seeded by
-    // sql/165 (ahliweb/omes#246 part 3's architecture.read).
-    expect(declared.size).toBe(17);
+    // sql/165 (ahliweb/omes#246 part 3's architecture.read) + 1 seeded by
+    // sql/167 (ahliweb/omes#249's repository_progress.configure).
+    expect(declared.size).toBe(18);
 
     const pageSource = await readAll(Object.values(PAGES));
     const missing = [...guardReferenceTriples(pageSource)].filter(
@@ -163,14 +164,16 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(missing).toEqual([]);
   });
 
-  test("all 17 seeded permissions are reachable from these five screens or their navigation entries", async () => {
+  test("all 18 seeded permissions are reachable from these five screens or their navigation entries", async () => {
     // Not every permission needs a screen affordance (`enrollments.manage`
-    // remains deliberately without one — see module.ts's own comment), but
-    // every one referenced anywhere in the five pages must round-trip
-    // through the declared set — already asserted above — and every nav
-    // entry's requiredPermission string (asserted separately in
-    // admin-navigation-registry.test.ts for path/label shape) must each be
-    // one of the 17 too.
+    // remains deliberately without one — see module.ts's own comment, and
+    // `repository_progress.configure` is a `progres-hermes.astro`-only
+    // in-page form gate, not a navigation-level permission — see that
+    // screen's own contract test), but every one referenced anywhere in the
+    // five pages must round-trip through the declared set — already
+    // asserted above — and every nav entry's requiredPermission string
+    // (asserted separately in admin-navigation-registry.test.ts for
+    // path/label shape) must each be one of the 18 too.
     const sql155 = await readFile(
       "sql/155_awcms_omes_control_permissions.sql",
       "utf8"
@@ -178,7 +181,8 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     // ahliweb/omes#232 added two more module permissions via a NEW
     // migration (sql/161) rather than editing the already-applied sql/155 —
     // this repo's own immutable-migration rule. ahliweb/omes#246 part 2 adds
-    // one more the same way, via sql/164; part 3 adds one more via sql/165.
+    // one more the same way, via sql/164; part 3 adds one more via sql/165;
+    // ahliweb/omes#249 (ADR-0030) adds one more via sql/167.
     const sql161 = await readFile(
       "sql/161_awcms_omes_ai_privacy_permissions.sql",
       "utf8"
@@ -191,16 +195,21 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
       "sql/165_awcms_omes_architecture_permissions.sql",
       "utf8"
     );
+    const sql167 = await readFile(
+      "sql/167_awcms_omes_repository_progress_permissions.sql",
+      "utf8"
+    );
     const seedRegex = /\('omes_control', '([a-z_]+)', '([a-z_]+)',/g;
     const seeded = new Set(
       [
         ...[...sql155.matchAll(seedRegex)],
         ...[...sql161.matchAll(seedRegex)],
         ...[...sql164.matchAll(seedRegex)],
-        ...[...sql165.matchAll(seedRegex)]
+        ...[...sql165.matchAll(seedRegex)],
+        ...[...sql167.matchAll(seedRegex)]
       ].map((match) => `omes_control.${match[1]}.${match[2]}` as Triple)
     );
-    expect(seeded.size).toBe(17);
+    expect(seeded.size).toBe(18);
     expect(seeded).toEqual(declaredTriples());
 
     // 14 as of Issue ahliweb/omes#246 part 3: the original five (#200) plus

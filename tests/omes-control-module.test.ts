@@ -18,7 +18,9 @@ import {
   OMES_AI_PRIVACY_POSTURE_LIFECYCLE_KEY,
   OMES_AI_EGRESS_APPROVALS_LIFECYCLE_KEY,
   OMES_HERMES_ORCHESTRATION_TREES_LIFECYCLE_KEY,
-  OMES_HERMES_ORCHESTRATION_EVENTS_LIFECYCLE_KEY
+  OMES_HERMES_ORCHESTRATION_EVENTS_LIFECYCLE_KEY,
+  OMES_REPOSITORY_PROGRESS_CONFIG_LIFECYCLE_KEY,
+  OMES_REPOSITORY_PROGRESS_LIFECYCLE_KEY
 } from "../src/modules/omes-control/module";
 import { getModuleByKey } from "../src/modules";
 
@@ -86,13 +88,14 @@ describe("omes_control module descriptor", () => {
     }
   });
 
-  test("defines 17 granular least-privilege permissions", () => {
+  test("defines 18 granular least-privilege permissions", () => {
     // 13 original (#196/#198/#233) + ai_privacy.read + ai_privacy.approve
     // (ahliweb/omes#232, sql/161) + hermes_orchestration.read
     // (ahliweb/omes#246 part 2, sql/164) + architecture.read
-    // (ahliweb/omes#246 part 3, sql/165).
+    // (ahliweb/omes#246 part 3, sql/165) + repository_progress.configure
+    // (ahliweb/omes#249, ADR-0030, sql/167).
     const permissions = omesControlModule.permissions ?? [];
-    expect(permissions.length).toBe(17);
+    expect(permissions.length).toBe(18);
 
     const permKeys = permissions.map(
       (p) => `omes_control.${p.activityCode}.${p.action}`
@@ -114,16 +117,18 @@ describe("omes_control module descriptor", () => {
     expect(permKeys).toContain("omes_control.ai_privacy.approve");
     expect(permKeys).toContain("omes_control.hermes_orchestration.read");
     expect(permKeys).toContain("omes_control.architecture.read");
+    expect(permKeys).toContain("omes_control.repository_progress.configure");
   });
 
-  test("defines dataLifecycle descriptors for all 14 domain tables", () => {
+  test("defines dataLifecycle descriptors for all 16 domain tables", () => {
     // 8 original (#196) + awcms_omes_worker_nonces + awcms_omes_worker_results
     // (ahliweb/omes#199, sql/159) + awcms_omes_ai_privacy_posture +
     // awcms_omes_ai_egress_approvals (ahliweb/omes#232, sql/160) +
     // awcms_omes_hermes_orchestration_trees + _events (ahliweb/omes#246,
-    // sql/163).
+    // sql/163) + awcms_omes_repository_progress_config +
+    // awcms_omes_repository_progress (ahliweb/omes#249, ADR-0030, sql/166).
     const lifecycles = omesControlModule.dataLifecycle ?? [];
-    expect(lifecycles.length).toBe(14);
+    expect(lifecycles.length).toBe(16);
 
     const keys = lifecycles.map((l) => l.key);
     expect(keys).toContain(OMES_HEALTH_SNAPSHOTS_LIFECYCLE_KEY);
@@ -138,6 +143,8 @@ describe("omes_control module descriptor", () => {
     expect(keys).toContain(OMES_AI_EGRESS_APPROVALS_LIFECYCLE_KEY);
     expect(keys).toContain(OMES_HERMES_ORCHESTRATION_TREES_LIFECYCLE_KEY);
     expect(keys).toContain(OMES_HERMES_ORCHESTRATION_EVENTS_LIFECYCLE_KEY);
+    expect(keys).toContain(OMES_REPOSITORY_PROGRESS_CONFIG_LIFECYCLE_KEY);
+    expect(keys).toContain(OMES_REPOSITORY_PROGRESS_LIFECYCLE_KEY);
 
     for (const desc of lifecycles) {
       expect(desc.scope).toBe("tenant");
@@ -189,6 +196,14 @@ describe("omes_control SQL migration sanity", () => {
         "../sql/165_awcms_omes_architecture_permissions.sql"
       ),
       "utf8"
+    ) +
+    // ahliweb/omes#249 (ADR-0030) adds the eighteenth, via sql/167.
+    readFileSync(
+      join(
+        import.meta.dir,
+        "../sql/167_awcms_omes_repository_progress_permissions.sql"
+      ),
+      "utf8"
     );
 
   test("all 8 tables enforce ENABLE and FORCE ROW LEVEL SECURITY", () => {
@@ -217,7 +232,7 @@ describe("omes_control SQL migration sanity", () => {
     }
   });
 
-  test("the permissions migrations seed exactly the 17 declared module permissions", () => {
+  test("the permissions migrations seed exactly the 18 declared module permissions", () => {
     const permissions = omesControlModule.permissions ?? [];
     for (const perm of permissions) {
       expect(permissionsSql).toContain(

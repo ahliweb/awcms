@@ -1501,6 +1501,176 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/repository-progress:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the GitHub repository-progress projection (ahliweb/omes#249)
+      description: >-
+        Gated by omes_control.hermes_orchestration.read (reused — see
+        sql/167). Milestone/issue progress for the tenant's configured
+        repository, polled from the GitHub REST API on a schedule (ADR-0030,
+        `ahliweb/omes` repository). Freshness is recomputed at read time; a
+        stale or failing poll is reported explicitly, never silently as
+        current.
+      operationId: omesReadRepositoryProgress
+      responses:
+        "200":
+          description: The tenant's repository-progress projection (or an "unconfigured" state).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      progress:
+                        type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/repository-progress/config:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the tenant's repository-progress configuration (ahliweb/omes#249)
+      description: Gated by omes_control.hermes_orchestration.read.
+      operationId: omesReadRepositoryProgressConfig
+      responses:
+        "200":
+          description: The tenant's configuration, or null if unconfigured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      config:
+                        type: object
+                        nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      tags:
+        - OMES Control Center
+      summary: Set the tenant's observed GitHub repository (ahliweb/omes#249)
+      description: >-
+        Gated by omes_control.repository_progress.configure (a NEW
+        permission — see sql/167). owner/name are re-validated server-side
+        against the GitHub identifier charset regardless of client input.
+        Reconfiguring to a different repository clears any existing
+        projection for the old one. Requires Idempotency-Key, audited.
+      operationId: omesSetRepositoryProgressConfig
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - owner
+                - name
+              properties:
+                owner:
+                  type: string
+                  pattern: "^[A-Za-z0-9._-]{1,100}$"
+                name:
+                  type: string
+                  pattern: "^[A-Za-z0-9._-]{1,100}$"
+                useToken:
+                  type: boolean
+                  description: >-
+                    When true, the poller resolves the ONE supported v1
+                    secret_ref shape ({"store":"env","key":
+                    "OMES_REPOSITORY_PROGRESS_GITHUB_TOKEN"}) — never a raw
+                    token in this request or any response.
+      responses:
+        "200":
+          description: Configuration saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      config:
+                        type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - OMES Control Center
+      summary: Clear the tenant's repository-progress configuration (ahliweb/omes#249)
+      description: >-
+        Gated by omes_control.repository_progress.configure. Also clears any
+        existing projection row. Requires Idempotency-Key, audited.
+      operationId: omesClearRepositoryProgressConfig
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Configuration cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      cleared:
+                        type: boolean
+                        enum: [true]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     OmesServer:

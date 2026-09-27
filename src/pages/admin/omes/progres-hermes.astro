@@ -1,32 +1,35 @@
 ---
 /**
- * OMES Control Center — "Progres Hermes" screen, Issue ahliweb/omes#246
- * part 2 (parent #195).
+ * OMES Control Center — "Progres Hermes" screen (Issue ahliweb/omes#249,
+ * split from #246 part 2, ADR-0030 in the `ahliweb/omes` repository).
  *
- * ## Why this is an explicit empty state, not a real view (coordinator
- * decision, ahliweb/omes#246)
+ * Replaces the explicit "not implemented yet" empty state #246 part 2 shipped
+ * with a real, polled GitHub repository-progress projection —
+ * `application/repository-progress-directory.ts`'s `fetchRepositoryProgress`
+ * reads the row `scripts/omes-repository-progress-poll.ts` (scheduled every
+ * 15 minutes by default) upserts.
  *
- * The redesign reference (`OMES Control Center.dc.html`'s `progress`
- * screen / `MILESTONES`/`ISSUES` bindings) is NOT a Hermes runtime/host
- * projection at all — it is a GitHub milestone/issue tracker FOR THE
- * `ahliweb/omes` REPOSITORY ITSELF (literal issue numbers like #195-#202,
- * #183). Per OMES `AGENTS.md`, GitHub owns repository/issue/milestone
- * observations, and GitHub integration is explicitly staged/unimplemented
- * backlog (issues #98-#102: "provider abstraction, Cloudflare, SRS-X,
- * GitHub, and domain reconciliation"). There is no v1 Control Center
- * contract for a GitHub issue/milestone projection, and per the
- * coordinator's explicit decision this screen ships NEITHER a GitHub
- * integration NOR a static/hand-maintained list masquerading as one —
- * either would misrepresent unimplemented/stale data as live evidence.
+ * ADR-0017/ADR-0030 boundary: GitHub owns repository/issue/milestone
+ * observation state; this screen renders AWCMS's own poll of it, never a
+ * live pass-through call to GitHub, and never a control action back to
+ * GitHub.
  *
- * This screen is therefore a permission-gated, explicit "not implemented
- * yet" state (AGENTS.md §4.5's own phrasing) linking the tracking issue,
- * ahliweb/omes#249, in both `id` and `en`. It still enforces
- * `omes_control.hermes_orchestration.read` server-side (the same guard the
- * other two new screens use — see module.ts's comment on why all three
- * share one permission) so that even this placeholder respects the
- * Owner/Operator navigation boundary rather than being reachable by
- * anyone.
+ * Three explicit, mutually exclusive projection states (never silently
+ * collapsed into "empty"), per ADR-0030's "AWCMS consumption expectations":
+ *   - `unconfigured` — no repository set for this tenant yet.
+ *   - `configured`, `freshness: "unknown"` — configured, but no poll has
+ *     completed yet ("awaiting first poll").
+ *   - `configured`, `freshness: "stale"` — the last successful poll is older
+ *     than 2x the poll interval; the LAST OBSERVED data is still shown, only
+ *     ever labelled stale, never presented as current.
+ *   - `configured`, `pollStatus: "error"` — the most recent poll failed; the
+ *     last successful observation (if any) is retained and shown, plus the
+ *     error class — never a raw provider error body (AGENTS.md Sec. 3).
+ *
+ * The repository-configuration form is gated separately, by
+ * `omes_control.repository_progress.configure` (module.ts's comment on this
+ * nav entry) — a viewer with only `hermes_orchestration.read` sees the
+ * projection but not the form.
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
@@ -34,26 +37,71 @@ import "../../../styles/omes-control-center.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  fetchRepositoryProgress,
+  type RepositoryProgressScreenState
+} from "../../../modules/omes-control/application/repository-progress-directory";
+import { getRepositoryProgressConfig } from "../../../modules/omes-control/application/repository-progress-config";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+// Literal triples on purpose, instead of an imported permissions-object
+// reference: `scripts/admin-screen-coverage-check.ts` resolves a screen's
+// permission claims from literal `moduleKey: "...", activityCode: "...",
+// action: "..."` text in the page source (or `permissionKey(...)`), not from
+// an imported object property access — see that script's own "FILE-FIRST and
+// deliberately narrow" header. `hermes.astro`/`orkestrasi-langsung.astro` set
+// this same precedent for `HERMES_ORCHESTRATION_READ_GUARD`.
 const HERMES_ORCHESTRATION_READ_GUARD = {
   moduleKey: "omes_control",
   activityCode: "hermes_orchestration",
   action: "read"
 } as const;
 
-const GITHUB_TRACKING_ISSUE_URL = "https://github.com/ahliweb/omes/issues/249";
+const REPOSITORY_PROGRESS_CONFIGURE_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "repository_progress",
+  action: "configure"
+} as const;
+
+const ERROR_CLASS_LABELS: Record<string, string> = {
+  not_found: t(
+    "Repository not found, or not accessible with the configured credentials."
+  ),
+  unauthorized: t("Authentication failed — check the configured token."),
+  rate_limited: t(
+    "GitHub rate limit reached — will retry on the next scheduled poll."
+  ),
+  network_error: t("A network error occurred while contacting GitHub."),
+  invalid_response: t("GitHub returned data that failed validation."),
+  blocked_request: t("The outbound request was blocked before reaching GitHub.")
+};
+
+const KIND_LABELS: Record<string, string> = {
+  epic: t("Epic"),
+  feature: t("Feature"),
+  bug: t("Bug"),
+  docs: t("Docs"),
+  other: t("Other")
+};
 
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
   authorize: HERMES_ORCHESTRATION_READ_GUARD,
-  load: async () => ({}),
+  load: async ({ tx, can }) => {
+    const now = new Date();
+    const progress = await fetchRepositoryProgress(tx, ssr.tenantId, now);
+    const canConfigure = await can(REPOSITORY_PROGRESS_CONFIGURE_GUARD);
+    const currentConfig = canConfigure
+      ? await getRepositoryProgressConfig(tx, ssr.tenantId)
+      : null;
+    return { progress, canConfigure, currentConfig };
+  },
   onError: (error) => {
     logAdminPageError(
-      "admin/omes/progres-hermes.astro: failed to load the placeholder screen",
+      "admin/omes/progres-hermes.astro: failed to load the repository progress projection",
       error,
       { correlationId: Astro.locals.correlationId }
     );
@@ -62,12 +110,17 @@ const screen = await loadAdminScreen({
 
 const canSeeAnything = screen.state !== "denied";
 const loadError = screen.state === "error";
+const progress: RepositoryProgressScreenState =
+  screen.state === "allowed" ? screen.data.progress : { state: "unconfigured" };
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+const currentConfig =
+  screen.state === "allowed" ? screen.data.currentConfig : null;
 ---
 
 <AdminLayout
   title={t("Hermes progress")}
   description={t(
-    "This view needs a GitHub repository-progress projection that is not implemented yet."
+    "Milestone and issue progress for the GitHub repository this tenant observes — a read-only projection AWCMS polls from the GitHub REST API (ADR-0030); it never sends anything to GitHub."
   )}
 >
   <div class="omes-cc">
@@ -90,7 +143,107 @@ const loadError = screen.state === "error";
     }
 
     {
-      canSeeAnything && !loadError && (
+      canSeeAnything && !loadError && canConfigure && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="repo-progress-config-title"
+          id="omes-repository-progress-config"
+        >
+          <h2 class="admin-section-title" id="repo-progress-config-title">
+            {t("Configure repository")}
+          </h2>
+          <form
+            id="repo-progress-config-form"
+            class="admin-create-form"
+            novalidate
+          >
+            <p class="form-legend">{t("Repository")}</p>
+            <label for="repo-progress-owner">
+              {t("Owner")}
+              <input
+                id="repo-progress-owner"
+                name="owner"
+                type="text"
+                required
+                maxlength="100"
+                pattern="[A-Za-z0-9._-]{1,100}"
+                value={currentConfig?.owner ?? ""}
+              />
+            </label>
+            <label for="repo-progress-name">
+              {t("Name")}
+              <input
+                id="repo-progress-name"
+                name="name"
+                type="text"
+                required
+                maxlength="100"
+                pattern="[A-Za-z0-9._-]{1,100}"
+                value={currentConfig?.name ?? ""}
+              />
+            </label>
+            <label for="repo-progress-use-token">
+              <input
+                id="repo-progress-use-token"
+                name="useToken"
+                type="checkbox"
+                checked={currentConfig?.usesToken ?? false}
+              />{" "}
+              {t(
+                "Use a GitHub token (private repositories, higher rate limit)"
+              )}
+            </label>
+            <button type="submit" id="repo-progress-config-save">
+              {t("Save")}
+            </button>
+            <button
+              type="button"
+              id="repo-progress-config-clear"
+              class="button-secondary"
+              disabled={!currentConfig}
+            >
+              {t("Clear configuration")}
+            </button>
+            <p
+              id="repo-progress-config-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+          </form>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && progress.state === "unconfigured" && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="progres-hermes-title"
+          id="omes-progres-hermes"
+        >
+          <h2 class="admin-section-title" id="progres-hermes-title">
+            {t("Hermes progress")}
+          </h2>
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ▮
+            </span>
+            <span class="empty-state-title">
+              {t("No repository configured yet")}
+            </span>
+            <span class="empty-state-text">
+              {t(
+                "Set a GitHub repository above to start tracking its milestones and issues here."
+              )}
+            </span>
+          </div>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && progress.state === "configured" && (
         <section
           class="admin-section fade-in-up"
           aria-labelledby="progres-hermes-title"
@@ -100,29 +253,268 @@ const loadError = screen.state === "error";
             {t("Hermes progress")}
           </h2>
 
-          <div class="empty-state">
-            <span class="empty-state-icon" aria-hidden="true">
-              ▮
-            </span>
-            <span class="empty-state-title">
-              {t("This view is not implemented yet")}
-            </span>
-            <span class="empty-state-text">
-              {t(
-                "Hermes integration progress needs a projection of the ahliweb/omes GitHub repository's milestones and issues, which is not implemented (it is not an OMES/Hermes runtime projection). No direct GitHub integration and no static list is shown here, because either would be misleading — see"
-              )}{" "}
-              <a
-                href={GITHUB_TRACKING_ISSUE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+          <p class="cell-muted" id="repo-progress-status-line">
+            <a
+              href={progress.repository.htmlUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {progress.repository.owner}/{progress.repository.name}
+            </a>
+            {" · "}
+            {progress.observedAt ? (
+              <span data-freshness={progress.freshness}>
+                <span
+                  class="status-badge"
+                  data-variant={
+                    progress.freshness === "stale" ? "danger" : "info"
+                  }
+                >
+                  <span class="status-dot" aria-hidden="true" />
+                  {progress.freshness === "stale" ? t("Stale") : t("Fresh")}
+                </span>{" "}
+                {t("Observed")}: {progress.observedAt}
+              </span>
+            ) : (
+              <span class="status-badge" data-variant="info">
+                <span class="status-dot" aria-hidden="true" />
+                {t("Awaiting first poll")}
+              </span>
+            )}
+            {progress.pollStatus === "error" && (
+              <>
+                {" · "}
+                <span
+                  class="status-badge"
+                  data-variant="danger"
+                  id="repo-progress-error-badge"
+                >
+                  <span class="status-dot" aria-hidden="true" />
+                  {t("Last poll failed")}
+                </span>
+                {progress.lastErrorClass && (
+                  <span class="cell-muted">
+                    {" — "}
+                    {ERROR_CLASS_LABELS[progress.lastErrorClass] ??
+                      progress.lastErrorClass}
+                  </span>
+                )}
+              </>
+            )}
+          </p>
+
+          <h3 class="admin-section-title" id="repo-progress-milestones-title">
+            {t("Milestones")}
+            <span class="count-pill">{progress.milestones.length}</span>
+          </h3>
+          {progress.milestones.length === 0 ? (
+            <div class="empty-state">
+              <span class="empty-state-title">{t("No milestones yet")}</span>
+            </div>
+          ) : (
+            <ul
+              class="repo-progress-milestone-list"
+              aria-labelledby="repo-progress-milestones-title"
+            >
+              {progress.milestones.map((milestone) => (
+                <li>
+                  <div class="repo-progress-milestone-header">
+                    <a
+                      href={milestone.htmlUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {milestone.title}
+                    </a>
+                    <span class="cell-muted">
+                      {milestone.closedIssues}/
+                      {milestone.closedIssues + milestone.openIssues}
+                    </span>
+                  </div>
+                  <progress
+                    class="repo-progress-bar"
+                    value={milestone.percentDone}
+                    max="100"
+                    aria-label={t("{title} progress", {
+                      title: milestone.title
+                    })}
+                  >
+                    {milestone.percentDone}%
+                  </progress>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h3 class="admin-section-title" id="repo-progress-issues-title">
+            {t("Issues")}
+            <span class="count-pill">{progress.issues.length}</span>
+          </h3>
+          {progress.issues.length === 0 ? (
+            <div class="empty-state">
+              <span class="empty-state-title">{t("No issues yet")}</span>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="repo-progress-issues-table"
               >
-                {t("ahliweb/omes#249")}
-              </a>
-              .
-            </span>
-          </div>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">{t("Title")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Kind")}</th>
+                    <th scope="col">{t("Milestone")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {progress.issues.map((issue) => (
+                    <tr>
+                      <td data-label="#">
+                        <a
+                          href={issue.htmlUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          #{issue.number}
+                        </a>
+                      </td>
+                      <td data-label={t("Title")}>{issue.title}</td>
+                      <td data-label={t("Status")}>
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            issue.state === "closed" ? "info" : "danger"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {issue.state}
+                        </span>
+                      </td>
+                      <td data-label={t("Kind")}>
+                        <span class="cell-muted">
+                          {KIND_LABELS[issue.kind] ?? issue.kind}
+                        </span>
+                      </td>
+                      <td data-label={t("Milestone")}>
+                        <span class="cell-muted">
+                          {issue.milestoneNumber ?? "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )
     }
   </div>
+
+  <script>
+    import {
+      field,
+      inputValue,
+      messageBox,
+      mutateAndReload,
+      onSubmit,
+      sendJson
+    } from "../../../lib/ui/admin-form-client";
+
+    const configErrorBox = messageBox("repo-progress-config-error");
+
+    onSubmit("repo-progress-config-form", async ({ data, submit }) => {
+      await mutateAndReload(
+        submit,
+        configErrorBox,
+        () =>
+          sendJson(
+            "PUT",
+            "/api/v1/omes/repository-progress/config",
+            {
+              owner: field(data, "owner"),
+              name: field(data, "name"),
+              useToken: data.get("useToken") === "on"
+            },
+            { "Idempotency-Key": crypto.randomUUID() }
+          ),
+        "Could not save the repository configuration. Check the owner/name and try again.",
+        "Saving…"
+      );
+    });
+
+    const clearButton = document.getElementById(
+      "repo-progress-config-clear"
+    ) as HTMLButtonElement | null;
+
+    clearButton?.addEventListener("click", async () => {
+      if (
+        !window.confirm(
+          "Clear the configured repository? The current projection will be removed too."
+        )
+      ) {
+        return;
+      }
+
+      await mutateAndReload(
+        clearButton,
+        configErrorBox,
+        () =>
+          sendJson(
+            "DELETE",
+            "/api/v1/omes/repository-progress/config",
+            undefined,
+            { "Idempotency-Key": crypto.randomUUID() }
+          ),
+        "Could not clear the repository configuration. Please try again.",
+        "Clearing…"
+      );
+    });
+
+    // Referenced only to keep `inputValue` a used import if a future revision
+    // needs it for a non-`<form>` control — avoids an unused-import lint trip
+    // while keeping the import list identical to other admin-form screens.
+    void inputValue;
+  </script>
 </AdminLayout>
+
+<style>
+  .repo-progress-milestone-list {
+    list-style: none;
+    margin: 0 0 var(--sp-4);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .repo-progress-milestone-header {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-1);
+  }
+  .repo-progress-bar {
+    width: 100%;
+    height: 0.6rem;
+    appearance: none;
+    border: none;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    background: var(--color-surface-2);
+  }
+  .repo-progress-bar::-webkit-progress-bar {
+    background: var(--color-surface-2);
+    border-radius: var(--radius-full);
+  }
+  .repo-progress-bar::-webkit-progress-value {
+    background: var(--color-primary);
+    border-radius: var(--radius-full);
+  }
+  .repo-progress-bar::-moz-progress-bar {
+    background: var(--color-primary);
+    border-radius: var(--radius-full);
+  }
+</style>

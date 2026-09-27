@@ -5543,3 +5543,84 @@ msgstr ""
 
 msgid "last reported: {state}"
 msgstr ""
+
+msgid "Milestone and issue progress for the GitHub repository this tenant observes — a read-only projection AWCMS polls from the GitHub REST API (ADR-0030); it never sends anything to GitHub."
+msgstr ""
+
+msgid "Configure repository"
+msgstr ""
+
+msgid "Repository"
+msgstr ""
+
+msgid "Use a GitHub token (private repositories, higher rate limit)"
+msgstr ""
+
+msgid "Clear configuration"
+msgstr ""
+
+msgid "No repository configured yet"
+msgstr ""
+
+msgid "Set a GitHub repository above to start tracking its milestones and issues here."
+msgstr ""
+
+msgid "Observed"
+msgstr ""
+
+msgid "Awaiting first poll"
+msgstr ""
+
+msgid "Last poll failed"
+msgstr ""
+
+msgid "Repository not found, or not accessible with the configured credentials."
+msgstr ""
+
+msgid "Authentication failed — check the configured token."
+msgstr ""
+
+msgid "GitHub rate limit reached — will retry on the next scheduled poll."
+msgstr ""
+
+msgid "A network error occurred while contacting GitHub."
+msgstr ""
+
+msgid "GitHub returned data that failed validation."
+msgstr ""
+
+msgid "The outbound request was blocked before reaching GitHub."
+msgstr ""
+
+msgid "Milestones"
+msgstr ""
+
+msgid "No milestones yet"
+msgstr ""
+
+msgid "{title} progress"
+msgstr ""
+
+msgid "Issues"
+msgstr ""
+
+msgid "No issues yet"
+msgstr ""
+
+msgid "Milestone"
+msgstr ""
+
+msgid "Epic"
+msgstr ""
+
+msgid "Feature"
+msgstr ""
+
+msgid "Bug"
+msgstr ""
+
+msgid "Docs"
+msgstr ""
+
+msgid "Other"
+msgstr ""

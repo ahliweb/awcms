@@ -86,6 +86,16 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0084. One row per package an operator sells — a price and a name, both authored rather than observed."
   },
   {
+    table: "awcms_omes_repository_progress_config",
+    reason:
+      'Issue ahliweb/omes#249, ADR-0030. Holds only a tenant-chosen GitHub repository identifier (owner/name, both public GitHub org/repo slugs the tenant selected) and an OPTIONAL `secret_ref` INDIRECTION ({"store":"env","key":"OMES_REPOSITORY_PROGRESS_GITHUB_TOKEN"}, never a raw token — sql/166\'s CHECK constraint enforces the one supported literal shape). Nothing here identifies a person; it identifies a repository.'
+  },
+  {
+    table: "awcms_omes_repository_progress",
+    reason:
+      "Issue ahliweb/omes#249, ADR-0030. A GitHub milestone/issue PROGRESS BOARD projection — number, title, state, label names, derived kind, html_url, updated_at. Deliberately excludes issue bodies, comments, and assignee/author identity by construction (domain/repository-progress.ts's mapping functions never read those GitHub API fields, and every stored payload is validated against the vendored, additionalProperties:false repository-progress-view schema before it is stored) — see ADR-0030's own PII boundary. A GitHub issue TITLE could theoretically mention a person's name as free text, the same residual risk any commit-message-shaped or ticket-title-shaped field carries across this codebase; it is not treated as subject data any more than an audit log's own free-text message field is."
+  },
+  {
     table: "awcms_schema_migrations",
     reason:
       "The migration ledger. It records which SQL file ran and when, which is a fact about the deployment and about nobody."

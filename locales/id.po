@@ -5531,3 +5531,84 @@ msgstr "Modul OMES"
 
 msgid "last reported: {state}"
 msgstr "terakhir dilaporkan: {state}"
+
+msgid "Milestone and issue progress for the GitHub repository this tenant observes — a read-only projection AWCMS polls from the GitHub REST API (ADR-0030); it never sends anything to GitHub."
+msgstr "Progres milestone dan issue untuk repositori GitHub yang diobservasi tenant ini — proyeksi baca-saja yang di-poll AWCMS dari GitHub REST API (ADR-0030); tidak pernah mengirim apa pun ke GitHub."
+
+msgid "Configure repository"
+msgstr "Konfigurasi repositori"
+
+msgid "Repository"
+msgstr "Repositori"
+
+msgid "Use a GitHub token (private repositories, higher rate limit)"
+msgstr "Gunakan token GitHub (repositori privat, batas laju lebih tinggi)"
+
+msgid "Clear configuration"
+msgstr "Hapus konfigurasi"
+
+msgid "No repository configured yet"
+msgstr "Belum ada repositori yang dikonfigurasi"
+
+msgid "Set a GitHub repository above to start tracking its milestones and issues here."
+msgstr "Atur repositori GitHub di atas untuk mulai melacak milestone dan issue-nya di sini."
+
+msgid "Observed"
+msgstr "Diobservasi"
+
+msgid "Awaiting first poll"
+msgstr "Menunggu poll pertama"
+
+msgid "Last poll failed"
+msgstr "Poll terakhir gagal"
+
+msgid "Repository not found, or not accessible with the configured credentials."
+msgstr "Repositori tidak ditemukan, atau tidak dapat diakses dengan kredensial yang dikonfigurasi."
+
+msgid "Authentication failed — check the configured token."
+msgstr "Autentikasi gagal — periksa token yang dikonfigurasi."
+
+msgid "GitHub rate limit reached — will retry on the next scheduled poll."
+msgstr "Batas laju GitHub tercapai — akan dicoba lagi pada poll terjadwal berikutnya."
+
+msgid "A network error occurred while contacting GitHub."
+msgstr "Terjadi kesalahan jaringan saat menghubungi GitHub."
+
+msgid "GitHub returned data that failed validation."
+msgstr "GitHub mengembalikan data yang gagal validasi."
+
+msgid "The outbound request was blocked before reaching GitHub."
+msgstr "Permintaan keluar diblokir sebelum mencapai GitHub."
+
+msgid "Milestones"
+msgstr "Milestone"
+
+msgid "No milestones yet"
+msgstr "Belum ada milestone"
+
+msgid "{title} progress"
+msgstr "Progres {title}"
+
+msgid "Issues"
+msgstr "Issue"
+
+msgid "No issues yet"
+msgstr "Belum ada issue"
+
+msgid "Milestone"
+msgstr "Milestone"
+
+msgid "Epic"
+msgstr "Epic"
+
+msgid "Feature"
+msgstr "Fitur"
+
+msgid "Bug"
+msgstr "Bug"
+
+msgid "Docs"
+msgstr "Dokumentasi"
+
+msgid "Other"
+msgstr "Lainnya"

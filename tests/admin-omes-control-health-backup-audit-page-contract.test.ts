@@ -95,13 +95,14 @@ describe("health/backups/audit screens gate on triples their endpoints actually 
     expect(unenforced).toEqual([]);
   });
 
-  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155, sql/161, sql/164, and sql/165 seed it", async () => {
+  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155, sql/161, sql/164, sql/165, and sql/167 seed it", async () => {
     const declared = declaredTriples();
     // 13 seeded by sql/155 (#196/#198/#233) + 2 seeded by sql/161
     // (ahliweb/omes#232's ai_privacy.read/.approve) + 1 seeded by sql/164
     // (ahliweb/omes#246 part 2's hermes_orchestration.read) + 1 seeded by
-    // sql/165 (ahliweb/omes#246 part 3's architecture.read).
-    expect(declared.size).toBe(17);
+    // sql/165 (ahliweb/omes#246 part 3's architecture.read) + 1 seeded by
+    // sql/167 (ahliweb/omes#249's repository_progress.configure).
+    expect(declared.size).toBe(18);
 
     const pageSource = await readAll(Object.values(PAGES));
     const missing = [...guardReferenceTriples(pageSource)].filter(

@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 165   |
-| `awcms_*` tables                    | 166   |
-| Tables with `FORCE` RLS             | 148   |
+| Migrations                          | 167   |
+| `awcms_*` tables                    | 168   |
+| Tables with `FORCE` RLS             | 150   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 538   |
-| Route files                         | 431   |
+| Test files                          | 541   |
+| Route files                         | 433   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -215,6 +215,8 @@
 | 163 | `sql/163_awcms_omes_hermes_orchestration_schema.sql`               |
 | 164 | `sql/164_awcms_omes_hermes_orchestration_permissions.sql`          |
 | 165 | `sql/165_awcms_omes_architecture_permissions.sql`                  |
+| 166 | `sql/166_awcms_omes_repository_progress_schema.sql`                |
+| 167 | `sql/167_awcms_omes_repository_progress_permissions.sql`           |
 
 ### Tables & Row-Level Security
 
@@ -308,6 +310,8 @@
 | `awcms_omes_hermes_orchestration_trees`  | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
 | `awcms_omes_jobs`                        | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_operation_requests`          | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_repository_progress`         | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
+| `awcms_omes_repository_progress_config`  | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
 | `awcms_omes_servers`                     | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_worker_nonces`               | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
 | `awcms_omes_worker_results`              | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
@@ -391,16 +395,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 434        |
+| `(root)`      | 436        |
 | `e2e`         | 20         |
-| `integration` | 83         |
+| `integration` | 84         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 337   |
+| `/api/v1/**`    | 339   |
 | `/admin/**`     | 64    |
 | publik / anonim | 30    |
 
