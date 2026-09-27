@@ -627,8 +627,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 237,558 is the measured value with no added margin.
+ *
+ * **Raised again for issue ahliweb/omes#249** (ADR-0030's repository-progress
+ * projection). `progres-hermes.astro`'s own scoped `<style>` block
+ * (accessible `<progress>` bar styling, shared through the same
+ * `AdminLayout` CSS bundle every other `/admin/omes/*` screen already pulls
+ * in) plus the ~30 new `t()` msgids the screen and its configuration form
+ * use grew the measured total over the prior ceiling:
+ *
+ * ```
+ * before (237,558 ceiling)   237,558 B
+ * + repository-progress screen  239,275 B (measured actual total)
+ * ```
+ *
+ * 239,275 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 237_558;
+export const APP_BUDGET_BYTES = 239_275;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

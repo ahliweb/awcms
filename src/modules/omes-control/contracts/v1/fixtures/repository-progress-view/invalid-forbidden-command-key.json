@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-acme",
+  "repository": {
+    "owner": "ahliweb",
+    "name": "omes",
+    "html_url": "https://github.com/ahliweb/omes"
+  },
+  "observed_at": "2026-09-27T08:00:00Z",
+  "source": "github_rest_poll",
+  "milestones": [],
+  "issues": [],
+  "command": "echo example"
+}

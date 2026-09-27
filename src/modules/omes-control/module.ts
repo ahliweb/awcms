@@ -22,6 +22,10 @@ export const OMES_HERMES_ORCHESTRATION_TREES_LIFECYCLE_KEY =
   "omes_control.hermes_orchestration_trees";
 export const OMES_HERMES_ORCHESTRATION_EVENTS_LIFECYCLE_KEY =
   "omes_control.hermes_orchestration_events";
+export const OMES_REPOSITORY_PROGRESS_CONFIG_LIFECYCLE_KEY =
+  "omes_control.repository_progress_config";
+export const OMES_REPOSITORY_PROGRESS_LIFECYCLE_KEY =
+  "omes_control.repository_progress";
 
 /**
  * `omes_control` — OMES Control Center domain module (ADR-0122, Issue ahliweb/omes#196).
@@ -181,8 +185,14 @@ export const omesControlModule = defineModule({
     // final three redesign-parity screens. All three share the single
     // `hermes_orchestration.read` permission (the same "one read
     // permission for a family of related read-only projections" precedent
-    // `health` already sets against `servers.read` above) — none accepts a
-    // write/control action, so no separate permission per screen.
+    // `health` already sets against `servers.read` above) for VIEWING.
+    // Issue ahliweb/omes#249 (ADR-0030) later adds a real projection plus a
+    // configure form to `/admin/omes/progres-hermes` specifically — that
+    // form is gated by its OWN permission, `repository_progress.configure`
+    // (checked server-side in
+    // `src/pages/api/v1/omes/repository-progress/config.ts`, not by this nav
+    // entry), so a viewer with read-only access sees the projection but not
+    // the form.
     {
       labelKey: "admin.layout.nav_omes_orkestrasi_langsung",
       path: "/admin/omes/orkestrasi-langsung",
@@ -304,6 +314,37 @@ export const omesControlModule = defineModule({
       action: "read",
       description:
         "Read the pinned OMES layered reference-architecture capability snapshot"
+    },
+    // Issue ahliweb/omes#249 (ADR-0030) — the only NEW permission this issue
+    // adds. Reading the projection reuses `hermes_orchestration.read` (see
+    // sql/167's header for why); configuring WHICH repository a tenant
+    // observes is a distinct write capability with no existing precedent.
+    {
+      activityCode: "repository_progress",
+      action: "configure",
+      description:
+        "Set or clear the GitHub repository a tenant observes for the Progres Hermes view"
+    }
+  ],
+  // Issue ahliweb/omes#249 (ADR-0030) — the AWCMS-side scheduled poller. The
+  // ONLY `omes_control` job that makes a real outbound network call to a
+  // third-party provider (GitHub), so `safeInOfflineLan: false` — every other
+  // job/screen in this module is pure host/database projection.
+  jobs: [
+    {
+      command: "bun run omes:repository-progress:poll",
+      schedule: {
+        mode: "cron",
+        expression: "*/15 * * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Poll the GitHub REST API for every tenant's configured repository (milestones + issues, ADR-0030) and upsert the repository-progress projection for /admin/omes/progres-hermes. No-op for a tenant with no repository configured.",
+      recommendedSchedule:
+        "Every 15 minutes (ADR-0030's default) — comfortably inside GitHub's unauthenticated 60 requests/hour rate limit for one repository, with conditional requests (ETag) keeping an unchanged repository's poll free.",
+      environmentNotes:
+        "Requires outbound HTTPS egress to api.github.com. Reads OMES_REPOSITORY_PROGRESS_GITHUB_TOKEN only when a tenant has opted into token-authenticated polling (application/repository-progress-config.ts) — unset by default, and never required for a public repository.",
+      safeInOfflineLan: false
     }
   ],
   dataLifecycle: [
@@ -859,6 +900,94 @@ export const omesControlModule = defineModule({
       batchLimit: 500,
       backupRestoreNotes:
         "Recent orchestration activity preserved during backups for operational continuity; not a compliance record.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_REPOSITORY_PROGRESS_CONFIG_LIFECYCLE_KEY,
+      tableName: "awcms_omes_repository_progress_config",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 30,
+      retentionMaxDays: 1825,
+      defaultRetentionDays: 365,
+      partition: {
+        eligible: false,
+        rationale:
+          "At most one configuration row per tenant (unique on tenant_id); volume is bounded by tenant count, never grows on its own."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "Admin-set configuration, not history — superseded by an update rather than archived."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Deleted when an operator clears the configuration (application/repository-progress-config.ts's clearRepositoryProgressConfig), or cascades with the tenant."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id"],
+          purpose: "Unique per-tenant configuration lookup (sql/166)."
+        },
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose: "Cursor scan index for retention purging (sql/166)."
+        }
+      ],
+      batchLimit: 500,
+      backupRestoreNotes:
+        "Included in ordinary database backups; small, operator-set configuration.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_REPOSITORY_PROGRESS_LIFECYCLE_KEY,
+      tableName: "awcms_omes_repository_progress",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "updated_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 180,
+      defaultRetentionDays: 30,
+      partition: {
+        eligible: false,
+        rationale:
+          "One current row per tenant (unique on tenant_id, upserted by every poll) — a live projection, not append-only history (issue ahliweb/omes#249, ADR-0030)."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "GitHub remains the authority for the underlying data; this is a disposable, re-fetchable observation, never a compliance record."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Deleted when the tenant's repository configuration is cleared or changed, or cascades with the tenant."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id"],
+          purpose: "Unique per-tenant projection lookup (sql/166)."
+        },
+        {
+          columns: ["tenant_id", "updated_at"],
+          purpose: "Cursor scan index for retention purging (sql/166)."
+        }
+      ],
+      batchLimit: 500,
+      backupRestoreNotes:
+        "Disposable, re-fetchable GitHub observation; excluded from disaster-recovery significance.",
       executionMode: "generic"
     }
   ]

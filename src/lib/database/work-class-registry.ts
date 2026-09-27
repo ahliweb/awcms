@@ -85,6 +85,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled retention/anonymization purge (analytics:purge) — tolerant of delay."
   },
+  "scripts/omes-repository-progress-poll.ts": {
+    workClass: "maintenance",
+    rationale:
+      "Scheduled GitHub repository-progress poll (omes:repository-progress:poll, ahliweb/omes#249, ADR-0030), every 15 minutes — tolerant of delay; the outbound GitHub call itself runs OUTSIDE any transaction, so only the short read/write DB passes around it are classified here."
+  },
   "scripts/visitor-analytics-rollup.ts": {
     workClass: "background_sync",
     rationale:

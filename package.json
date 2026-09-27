@@ -110,6 +110,7 @@
     "data-lifecycle:table-coverage:check": "bun scripts/data-lifecycle-table-coverage-check.ts",
     "analytics:rollup": "bun scripts/visitor-analytics-rollup.ts",
     "analytics:purge": "bun scripts/visitor-analytics-purge.ts",
+    "omes:repository-progress:poll": "bun scripts/omes-repository-progress-poll.ts",
     "email:dispatch": "bun scripts/email-dispatch.ts",
     "email:provider:health": "bun scripts/email-provider-health.ts",
     "email:queue:purge": "bun scripts/email-queue-purge.ts",

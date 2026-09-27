@@ -243,9 +243,9 @@
       "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
-      "permissionCount": 17,
+      "permissionCount": 18,
       "navigationCount": 14,
-      "jobCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

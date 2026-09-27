@@ -1546,7 +1546,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // the same generic data-lifecycle retention purge as every other
   // `omes_control` table above.
   awcms_omes_hermes_orchestration_trees: ["SELECT", "DELETE"],
-  awcms_omes_hermes_orchestration_events: ["SELECT", "DELETE"]
+  awcms_omes_hermes_orchestration_events: ["SELECT", "DELETE"],
+  // Issue ahliweb/omes#249 (ADR-0030). The poller reads the config table and
+  // reads+writes the projection table via `awcms_worker`; DELETE is granted
+  // on the config table too, for the generic data-lifecycle retention purge
+  // (sql/166's own header comment on why a hard_delete descriptor needs it).
+  awcms_omes_repository_progress_config: ["SELECT", "DELETE"],
+  awcms_omes_repository_progress: ["SELECT", "INSERT", "UPDATE", "DELETE"]
 };
 
 /**

@@ -1,17 +1,22 @@
 /**
- * Contract tests for the three new `/admin/omes/*` screens, Issue
- * ahliweb/omes#246 part 2 (OMES issue #183, ADR-0028; parent #195):
+ * Contract tests for the three `/admin/omes/*` screens Issue
+ * ahliweb/omes#246 part 2 (OMES issue #183, ADR-0028; parent #195) added:
  * `orkestrasi-langsung.astro`, `hermes.astro`, `progres-hermes.astro`.
  * Sibling of `admin-omes-control-enrollments-page-contract.test.ts` — same
  * pattern, same standard.
  *
- * Pure — no database, no network. RLS/cross-tenant row isolation,
- * idempotent event replay, staleness recomputation, and disallowed-key
- * rejection are exercised at runtime by
- * `tests/integration/omes-control-hermes-orchestration.integration.test.ts`.
- * What this file pins is each screen's own permission-guard contract, and
- * `progres-hermes.astro`'s deliberate no-GitHub-integration/no-static-list
- * empty state (coordinator decision, ahliweb/omes#246).
+ * Issue ahliweb/omes#249 (ADR-0030 in `ahliweb/omes`) replaced
+ * `progres-hermes.astro`'s former "not implemented yet" empty state with a
+ * real, polled GitHub repository-progress projection — see the dedicated
+ * describe block below, which supersedes this file's former "explicit empty
+ * state, no GitHub integration, no static list" assertions.
+ *
+ * Pure — no database, no network. RLS/cross-tenant row isolation, upsert
+ * idempotency, error retention, and stale-freshness recomputation are
+ * exercised at runtime by
+ * `tests/integration/omes-control-hermes-orchestration.integration.test.ts`
+ * and `tests/integration/omes-control-repository-progress.integration.test.ts`.
+ * What this file pins is each screen's own permission-guard contract.
  */
 import { readFile } from "node:fs/promises";
 
@@ -29,7 +34,9 @@ const ROUTES = [
 ];
 
 const APPLICATION_FILES = [
-  "src/modules/omes-control/application/hermes-orchestration-directory.ts"
+  "src/modules/omes-control/application/hermes-orchestration-directory.ts",
+  "src/modules/omes-control/application/repository-progress-directory.ts",
+  "src/modules/omes-control/application/repository-progress-config.ts"
 ];
 
 type Triple = `omes_control.${string}.${string}`;
@@ -71,21 +78,13 @@ function declaredTriples(): Set<Triple> {
   );
 }
 
-describe("all three new screens gate on hermes_orchestration.read, enforced by their endpoints", () => {
-  test("every OMES_GUARDS reference across the three pages is exactly omes_control.hermes_orchestration.read", async () => {
+describe("orkestrasi-langsung.astro and hermes.astro gate on hermes_orchestration.read ONLY", () => {
+  test("every OMES_GUARDS reference across these two pages is exactly omes_control.hermes_orchestration.read", async () => {
     const pageSource = await Promise.all(
-      [LIVE_TREE_PAGE, HERMES_PAGE, PROGRESS_PAGE].map((path) =>
-        readFile(path, "utf8")
-      )
+      [LIVE_TREE_PAGE, HERMES_PAGE].map((path) => readFile(path, "utf8"))
     ).then((contents) => contents.join("\n"));
     const pageTriples = guardReferenceTriples(pageSource);
 
-    // Each page's docblock prose ALSO mentions `OMES_GUARDS.hermesOrchestration.read`
-    // (explaining why the literal-object form is used instead — see
-    // ai-privacy.astro's own comment for the same pattern), so the set may
-    // contain more than one entry; what matters is that the one real,
-    // enforced triple is present and nothing else claims a DIFFERENT
-    // permission.
     expect(pageTriples.size).toBeGreaterThan(0);
     expect(pageTriples).toContain("omes_control.hermes_orchestration.read");
     for (const triple of pageTriples) {
@@ -130,6 +129,69 @@ describe("all three new screens gate on hermes_orchestration.read, enforced by t
         "omes_control.hermes_orchestration.read"
       );
     }
+  });
+});
+
+describe("progres-hermes.astro gates its configuration form on the NEW repository_progress.configure permission (ahliweb/omes#249)", () => {
+  test("the page references BOTH hermes_orchestration.read (view) and repository_progress.configure (form), and nothing else", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    const triples = guardReferenceTriples(source);
+
+    expect(triples.has("omes_control.hermes_orchestration.read")).toBe(true);
+    expect(triples.has("omes_control.repository_progress.configure")).toBe(
+      true
+    );
+    for (const triple of triples) {
+      expect([
+        "omes_control.hermes_orchestration.read",
+        "omes_control.repository_progress.configure"
+      ]).toContain(triple);
+    }
+  });
+
+  test("the write routes (PUT/DELETE config) enforce repository_progress.configure, not the read permission", async () => {
+    const source = await readFile(
+      "src/pages/api/v1/omes/repository-progress/config.ts",
+      "utf8"
+    );
+    const enforced = guardReferenceTriples(source);
+    expect(enforced.has("omes_control.repository_progress.configure")).toBe(
+      true
+    );
+  });
+
+  test("the read routes (GET progress, GET config) enforce hermes_orchestration.read", async () => {
+    for (const route of [
+      "src/pages/api/v1/omes/repository-progress/index.ts",
+      "src/pages/api/v1/omes/repository-progress/config.ts"
+    ]) {
+      const source = await readFile(route, "utf8");
+      const enforced = guardReferenceTriples(source);
+      expect(enforced.has("omes_control.hermes_orchestration.read")).toBe(true);
+    }
+  });
+
+  test("repository_progress.configure is declared by the module descriptor, so sql/167 seeds it", async () => {
+    const declared = declaredTriples();
+    expect(declared.has("omes_control.repository_progress.configure")).toBe(
+      true
+    );
+
+    const sql167 = await readFile(
+      "sql/167_awcms_omes_repository_progress_permissions.sql",
+      "utf8"
+    );
+    expect(sql167).toContain(
+      "('omes_control', 'repository_progress', 'configure',"
+    );
+  });
+
+  test("the mutating routes require an Idempotency-Key header", async () => {
+    const source = await readFile(
+      "src/pages/api/v1/omes/repository-progress/config.ts",
+      "utf8"
+    );
+    expect(source.match(/idempotency-key/gi)?.length ?? 0).toBeGreaterThan(1);
   });
 });
 
@@ -213,32 +275,67 @@ describe("stale/unknown sessions never render nodes/events with live-state color
   });
 });
 
-describe("Progres Hermes: explicit empty state, no GitHub integration, no static list", () => {
-  test("the page renders an explicit not-implemented empty state linking the tracking issue", async () => {
+describe("Progres Hermes: real, polled projection (ahliweb/omes#249, ADR-0030) — never a live GitHub call from the page", () => {
+  test("the page performs no direct GitHub API call — it only reads AWCMS's own polled projection", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");
-    expect(source).toContain("https://github.com/ahliweb/omes/issues/249");
-    expect(source).toContain('t("This view is not implemented yet")');
+    // The screen must never call GitHub directly — only the scheduled poller
+    // (scripts/omes-repository-progress-poll.ts) does that, outside any
+    // request/response cycle. No literal api.github.com host anywhere in the
+    // page, and no bare top-level `fetch(` in the server frontmatter (the
+    // client `<script>` block's `sendJson`/`mutateAndReload` helpers wrap
+    // `fetch` themselves and only ever hit this app's own `/api/v1/...`).
+    expect(source).not.toContain("api.github.com");
+    expect(source.split("---")[1] ?? "").not.toMatch(/\bfetch\(/);
   });
 
-  test("the page makes no GitHub API call and defines no static milestone/issue list", async () => {
+  test("renders the three explicit states — unconfigured, configured (with freshness), and error — never silently as empty", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");
-    // No `fetch()` at all — covers a call to api.github.com (or anywhere
-    // else) without checking for a host-shaped substring: CodeQL's
-    // "incomplete URL substring sanitization" rule flags any string
-    // containment check against a domain-like literal (js/incomplete-url-
-    // substring-sanitization), even here where nothing is being used to
-    // gate a real request — this is the only external-facing signal that
-    // matters and it is not domain-shaped.
-    expect(source).not.toMatch(/fetch\(/);
-    // No MILESTONES/ISSUES-shaped literal array the redesign's own
-    // prototype used — this screen carries no fabricated progress data.
-    expect(source).not.toMatch(/const\s+MILESTONES\s*=/);
-    expect(source).not.toMatch(/const\s+ISSUES\s*=/);
+    expect(source).toContain('progress.state === "unconfigured"');
+    expect(source).toContain('progress.state === "configured"');
+    expect(source).toContain('t("No repository configured yet")');
+    expect(source).toContain('t("Awaiting first poll")');
+    expect(source).toContain('t("Stale")');
+    expect(source).toContain('t("Fresh")');
+    expect(source).toContain('t("Last poll failed")');
   });
 
-  test("the page still enforces the permission guard server-side even though it renders no real data", async () => {
+  test("a poll error never surfaces a raw provider error body — only a translated error-class label", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    expect(source).toContain("ERROR_CLASS_LABELS");
+    // The raw `lastErrorClass` string itself is only ever used as a fallback
+    // key lookup (`?? progress.lastErrorClass`), never rendered as a
+    // provider-supplied message/body.
+    expect(source).not.toMatch(/lastError(Message|Body|Detail)/);
+  });
+
+  test("milestone progress bars are accessible — a native <progress> with an aria-label, or role=progressbar with aria-valuenow", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    const usesNativeProgress = /<progress[\s\S]*?aria-label=/.test(source);
+    const usesAriaProgressbar =
+      source.includes('role="progressbar"') && source.includes("aria-valuenow");
+    expect(usesNativeProgress || usesAriaProgressbar).toBe(true);
+  });
+
+  test("issues link out to GitHub and show number/title/state/kind/milestone", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    expect(source).toContain("issue.htmlUrl");
+    expect(source).toContain("issue.number");
+    expect(source).toContain("issue.title");
+    expect(source).toContain("issue.state");
+    expect(source).toContain("issue.kind");
+    expect(source).toContain("issue.milestoneNumber");
+  });
+
+  test("the page still enforces the read permission guard server-side, and the configuration form re-checks its own permission via `can()`", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");
     expect(source).toContain("loadAdminScreen");
-    expect(source).toContain('activityCode: "hermes_orchestration"');
+    expect(source).toContain("authorize: HERMES_ORCHESTRATION_READ_GUARD");
+    expect(source).toContain("can(REPOSITORY_PROGRESS_CONFIGURE_GUARD)");
+  });
+
+  test("the page is wrapped in the shared .omes-cc design system and introduces no inline style attributes (CSP)", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    expect(source).toContain('class="omes-cc"');
+    expect(source).not.toMatch(/\sstyle=["'{]/);
   });
 });

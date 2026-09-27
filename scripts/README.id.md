@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8f618f4f29e4cfcefd12910b2f40ff5f956a503444fd5404868a22fb3e811354 -->
+<!-- i18n-source-hash: sha256:7820c3b935e0b4f9b641c2a52729192f9da6867e9669a2c823c909ac20df55f5 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-128 target menjalankan berkas di `scripts/`; 57 di antaranya
+129 target menjalankan berkas di `scripts/`; 57 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -134,6 +134,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `modules:routes:check`                    | `validate-module-routes.ts`                    | ✅   |
 | `modules:table-writes:check`              | `table-write-ownership-check.ts`               | ✅   |
 | `news-media:reconcile`                    | `news-media-r2-reconcile.ts`                   | —    |
+| `omes:repository-progress:poll`           | `omes-repository-progress-poll.ts`             | —    |
 | `openapi:bundle`                          | `openapi-bundle.ts`                            | —    |
 | `project-state:inventory:check`           | `project-state-inventory.ts`                   | ✅   |
 | `project-state:inventory:generate`        | `project-state-inventory.ts`                   | —    |

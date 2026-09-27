@@ -393,6 +393,16 @@
     {
       "authority": "provider",
       "execution_semantics": "external_authority",
+      "id": "provider.github.repository_progress",
+      "implementation_status": "staged",
+      "name": "GitHub Repository Milestone and Issue Progress Projection (Progres Hermes view)",
+      "omes_module": null,
+      "plane": "business_control",
+      "upstream_project": "github"
+    },
+    {
+      "authority": "provider",
+      "execution_semantics": "external_authority",
       "id": "provider.srsx.registrar",
       "implementation_status": "delegated_upstream",
       "name": "SRS-X .id Registrar and Document Verification",
@@ -403,7 +413,7 @@
   ],
   "generated_at": "2026-01-01T00:00:00Z",
   "omes_commit": "0000000000000000000000000000000000000000",
-  "omes_version": "0.4.0",
+  "omes_version": "0.5.0",
   "planes": [
     {
       "execution_semantics": "external_authority",

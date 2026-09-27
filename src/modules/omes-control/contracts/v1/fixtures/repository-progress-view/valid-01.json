@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-acme",
+  "repository": {
+    "owner": "ahliweb",
+    "name": "omes",
+    "html_url": "https://github.com/ahliweb/omes"
+  },
+  "observed_at": "2026-09-27T08:00:00Z",
+  "source": "github_rest_poll",
+  "milestones": [
+    {
+      "number": 2,
+      "title": "MVP Implementation",
+      "state": "open",
+      "open_issues": 0,
+      "closed_issues": 26,
+      "due_on": null,
+      "html_url": "https://github.com/ahliweb/omes/milestone/2"
+    },
+    {
+      "number": 5,
+      "title": "Control Center and Entitlements",
+      "state": "open",
+      "open_issues": 3,
+      "closed_issues": 5,
+      "due_on": "2026-12-31T00:00:00Z",
+      "html_url": "https://github.com/ahliweb/omes/milestone/5"
+    },
+    {
+      "number": 8,
+      "title": "Domain and Integration Services",
+      "state": "open",
+      "open_issues": 0,
+      "closed_issues": 5,
+      "due_on": null,
+      "html_url": "https://github.com/ahliweb/omes/milestone/8"
+    }
+  ],
+  "issues": [
+    {
+      "number": 63,
+      "title": "[EPIC] Build Hermes multi-platform content distribution workflow",
+      "state": "closed",
+      "labels": ["type:epic", "area:content"],
+      "milestone_number": 2,
+      "kind": "epic",
+      "html_url": "https://github.com/ahliweb/omes/issues/63",
+      "updated_at": "2026-09-19T10:00:00Z"
+    },
+    {
+      "number": 98,
+      "title": "Define domain provider abstraction, capability matrix, and catalog",
+      "state": "closed",
+      "labels": ["area:architecture", "area:business", "priority:high", "type:feature", "area:integration"],
+      "milestone_number": 8,
+      "kind": "feature",
+      "html_url": "https://github.com/ahliweb/omes/issues/98",
+      "updated_at": "2026-09-20T21:39:00Z"
+    },
+    {
+      "number": 101,
+      "title": "Implement GitHub App and repository integration for OMES billing and deployment portal",
+      "state": "closed",
+      "labels": ["area:platform", "area:security", "priority:medium", "area:integration", "type:integration"],
+      "milestone_number": 8,
+      "kind": "other",
+      "html_url": "https://github.com/ahliweb/omes/issues/101",
+      "updated_at": "2026-09-20T21:39:11Z"
+    },
+    {
+      "number": 129,
+      "title": "backup_finish loses OMES_CURRENT_BACKUP_DIR unset when captured via command substitution",
+      "state": "open",
+      "labels": ["bug"],
+      "milestone_number": null,
+      "kind": "bug",
+      "html_url": "https://github.com/ahliweb/omes/issues/129",
+      "updated_at": "2026-09-19T11:50:22Z"
+    },
+    {
+      "number": 249,
+      "title": "feat(control-center): GitHub repository progress projection for the Progres Hermes view",
+      "state": "open",
+      "labels": [],
+      "milestone_number": 5,
+      "kind": "other",
+      "html_url": "https://github.com/ahliweb/omes/issues/249",
+      "updated_at": "2026-09-27T03:17:45Z"
+    }
+  ]
+}

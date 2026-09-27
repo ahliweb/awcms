@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/repository-progress-view.schema.json",
+  "title": "repository-progress-view",
+  "description": "A read-only Control Center projection of one GitHub repository's milestone and issue progress, for the AWCMS 'Progres Hermes' view (issue #249, split from #246 part 2). GitHub remains the sole authority for this observation (AGENTS.md: 'GitHub owns repository, workflow, release, and deployment observations'); AWCMS polls the GitHub REST API on a schedule (ADR-0030) and produces this tenant-scoped shape, stamped with observed_at so a stale projection can be rendered as stale rather than silently presented as current. It carries no issue bodies, no comments, and no assignee/author PII - only what a milestone/issue progress board needs: numbers, titles, state, label names, and derived kind. additionalProperties=false at every object level makes 'no raw shell/command escape hatch anywhere in this schema' structural (registry guard C1, lib/omes/py/architecture/registry.py), matching every other contracts/control-center/v1 schema.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "repository",
+    "observed_at",
+    "source",
+    "milestones",
+    "issues"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "This view contract's own version.",
+      "enum": ["1.0.0"]
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "The AWCMS tenant this projection is scoped to.",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "repository": {
+      "type": "object",
+      "description": "The GitHub repository this projection observes.",
+      "required": ["owner", "name", "html_url"],
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "The GitHub account/organization login that owns the repository.",
+          "pattern": "^[A-Za-z0-9._-]{1,100}$",
+          "maxLength": 100
+        },
+        "name": {
+          "type": "string",
+          "description": "The repository name (without the owner prefix).",
+          "pattern": "^[A-Za-z0-9._-]{1,100}$",
+          "maxLength": 100
+        },
+        "html_url": {
+          "type": "string",
+          "description": "The repository's github.com URL. Restricted to https://github.com/ so no other host can be smuggled in as an authoritative source link.",
+          "pattern": "^https://github\\.com/[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}$",
+          "maxLength": 220
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "description": "When AWCMS's polling job last successfully fetched this data from the GitHub REST API. A consumer compares this against its own freshness policy (ADR-0030) to decide whether to render the projection as fresh or stale.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "source": {
+      "type": "string",
+      "description": "How this observation was produced. 'github_rest_poll' is the only implemented path (ADR-0030). 'github_webhook' is reserved for a possible later optimization that reuses the existing lib/omes/py/domains/github.py HMAC verifier to refresh a projection sooner than the poll interval; a webhook delivery would still need a poll-based backfill for gaps and initial population, so it is additive, never a replacement for polling.",
+      "enum": ["github_rest_poll", "github_webhook"]
+    },
+    "milestones": {
+      "type": "array",
+      "description": "Open and recently-closed milestones, newest-relevant first. Never includes milestone descriptions (free-form provider text) - title only.",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": [
+          "number",
+          "title",
+          "state",
+          "open_issues",
+          "closed_issues",
+          "due_on",
+          "html_url"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "type": "integer",
+            "description": "The milestone number (GitHub's own identifier, stable and public).",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "state": {
+            "type": "string",
+            "enum": ["open", "closed"]
+          },
+          "open_issues": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "closed_issues": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "due_on": {
+            "type": ["string", "null"],
+            "description": "GitHub's due_on timestamp, or null when the milestone has no due date.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          },
+          "html_url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/milestone/[0-9]{1,10}$",
+            "maxLength": 260
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "description": "Open and recently-updated issues, bounded per poll. Never includes an issue body, comments, or assignee/author identity - see the schema description.",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "number",
+          "title",
+          "state",
+          "labels",
+          "milestone_number",
+          "kind",
+          "html_url",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "state": {
+            "type": "string",
+            "enum": ["open", "closed"]
+          },
+          "labels": {
+            "type": "array",
+            "description": "Label names only (no color, description, or id).",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          "milestone_number": {
+            "type": ["integer", "null"],
+            "description": "The owning milestone's number (cross-referencing milestones[].number), or null when the issue is not assigned to a milestone.",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "kind": {
+            "type": "string",
+            "description": "Derived deterministically from the issue's labels at projection time (never invented): 'epic' for a type:epic label, 'feature' for type:feature/enhancement, 'bug' for bug/type:bug, 'docs' for documentation/type:documentation, 'other' otherwise. See ADR-0030 for the exact mapping.",
+            "enum": ["epic", "feature", "bug", "docs", "other"]
+          },
+          "html_url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}/issues/[0-9]{1,10}$",
+            "maxLength": 260
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          }
+        }
+      }
+    }
+  }
+}

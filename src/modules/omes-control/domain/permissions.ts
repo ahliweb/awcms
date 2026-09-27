@@ -107,5 +107,12 @@ export const OMES_GUARDS = {
       activityCode: "architecture",
       action: "read" as const
     }
+  },
+  repositoryProgress: {
+    configure: {
+      moduleKey: "omes_control",
+      activityCode: "repository_progress",
+      action: "configure" as const
+    }
   }
 } as const;

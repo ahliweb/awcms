@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "tenant_id": "tenant-acme",
+  "repository": {
+    "owner": "ahliweb",
+    "name": "omes",
+    "html_url": "https://github.com/ahliweb/omes"
+  },
+  "observed_at": "2026-09-27T08:00:00Z",
+  "source": "github_rest_poll",
+  "milestones": [],
+  "issues": [
+    {
+      "number": 129,
+      "title": "backup_finish loses OMES_CURRENT_BACKUP_DIR unset when captured via command substitution",
+      "state": "open",
+      "labels": ["bug"],
+      "milestone_number": null,
+      "kind": "bug",
+      "html_url": "https://github.com/ahliweb/omes/issues/129",
+      "updated_at": "2026-09-19T11:50:22Z",
+      "body": "Full issue body text, which this contract must never carry."
+    }
+  ]
+}

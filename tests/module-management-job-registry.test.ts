@@ -113,6 +113,7 @@ describe("fetchModuleJobs", () => {
         "bun run idn-regions:rollback",
         "bun run logs:audit:purge",
         "bun run news-media:reconcile",
+        "bun run omes:repository-progress:poll",
         "bun run push:dispatch",
         "bun run push:queue:purge",
         "bun run reporting:exports:dispatch",

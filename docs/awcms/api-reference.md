@@ -9829,6 +9829,83 @@ Gated by omes_control.servers.read. A pure aggregation computed directly from th
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/omes/repository-progress` — Read the GitHub repository-progress projection (ahliweb/omes#249)
+
+- **operationId**: `omesReadRepositoryProgress`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.hermes_orchestration.read (reused — see sql/167). Milestone/issue progress for the tenant's configured repository, polled from the GitHub REST API on a schedule (ADR-0030, `ahliweb/omes` repository). Freshness is recomputed at read time; a stale or failing poll is reported explicitly, never silently as current.
+
+**Responses**
+
+| Status | Description                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's repository-progress projection (or an "unconfigured" state). | object                                 |
+| 401    | Missing or invalid session.                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                               | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omes/repository-progress/config` — Read the tenant's repository-progress configuration (ahliweb/omes#249)
+
+- **operationId**: `omesReadRepositoryProgressConfig`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.hermes_orchestration.read.
+
+**Responses**
+
+| Status | Description                                          | Schema                                 |
+| ------ | ---------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's configuration, or null if unconfigured. | object                                 |
+| 401    | Missing or invalid session.                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                          | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/omes/repository-progress/config` — Set the tenant's observed GitHub repository (ahliweb/omes#249)
+
+- **operationId**: `omesSetRepositoryProgressConfig`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.repository_progress.configure (a NEW permission — see sql/167). owner/name are re-validated server-side against the GitHub identifier charset regardless of client input. Reconfiguring to a different repository clears any existing projection for the old one. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Configuration saved.                                                            | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/omes/repository-progress/config` — Clear the tenant's repository-progress configuration (ahliweb/omes#249)
+
+- **operationId**: `omesClearRepositoryProgressConfig`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.repository_progress.configure. Also clears any existing projection row. Requires Idempotency-Key, audited.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Configuration cleared.                                                          | object                                 |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/omes/servers` — List enrolled servers
 
 - **operationId**: `omesListServers`

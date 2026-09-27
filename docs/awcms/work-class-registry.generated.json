@@ -917,6 +917,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/omes/repository-progress/config.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omes/repository-progress/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/omes/servers/[id].ts",
       "workClass": "interactive",
       "source": "factory"
@@ -1599,6 +1609,12 @@
       "workClass": "background_sync",
       "source": "registry",
       "rationale": "Outbox dispatcher (sync:objects:dispatch) — the module's own module.ts already documents this as background/low-priority traffic."
+    },
+    {
+      "path": "scripts/omes-repository-progress-poll.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled GitHub repository-progress poll (omes:repository-progress:poll, ahliweb/omes#249, ADR-0030), every 15 minutes — tolerant of delay; the outbound GitHub call itself runs OUTSIDE any transaction, so only the short read/write DB passes around it are classified here."
     },
     {
       "path": "scripts/push-dispatch.ts",
