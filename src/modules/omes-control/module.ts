@@ -200,6 +200,20 @@ export const omesControlModule = defineModule({
       path: "/admin/omes/progres-hermes",
       order: 102,
       requiredPermission: "omes_control.hermes_orchestration.read"
+    },
+    // Issue ahliweb/omes#246 part 3: the read-only Architecture Control
+    // Center screen, projected from the vendored
+    // `architecture-capabilities-view` v1 contract. This is a DIFFERENT
+    // audience/concern from `hermes_orchestration.read` above — it is not a
+    // Hermes delegated-task projection, it is the ADR-0017 layered
+    // reference-architecture registry (planes/capabilities across OMES,
+    // Hermes, Omarchy, AWCMS, and providers) — so it gets its own permission,
+    // `architecture.read`, rather than reusing `hermes_orchestration.read`.
+    {
+      labelKey: "admin.layout.nav_omes_arsitektur",
+      path: "/admin/omes/arsitektur",
+      order: 103,
+      requiredPermission: "omes_control.architecture.read"
     }
   ],
   permissions: [
@@ -284,6 +298,12 @@ export const omesControlModule = defineModule({
       action: "read",
       description:
         "Read Hermes delegated-task/subagent orchestration projections"
+    },
+    {
+      activityCode: "architecture",
+      action: "read",
+      description:
+        "Read the pinned OMES layered reference-architecture capability snapshot"
     }
   ],
   dataLifecycle: [

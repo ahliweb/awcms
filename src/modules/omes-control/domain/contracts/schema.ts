@@ -447,8 +447,14 @@ function validateInner(
         .filter((k) => !Object.hasOwn(properties, k))
         .sort();
       if (extra.length > 0) {
+        // `pyRepr`, not a plain `join`: OMES's Python validator formats the
+        // rejected key list with `!r}` (e.g. `['notes']`), and two vendored
+        // v1 fixtures (`architecture-capabilities-view/invalid-additional-
+        // property(-key)?.reason.txt`, Issue ahliweb/omes#246 part 3) assert
+        // that exact quoted substring — this message must match it
+        // byte-for-byte, same as every other error string in this file.
         errors.push(
-          `${path}: additional properties not allowed: [${extra.join(", ")}]`
+          `${path}: additional properties not allowed: ${pyRepr(extra)}`
         );
       }
     } else if (isPlainObject(additional)) {

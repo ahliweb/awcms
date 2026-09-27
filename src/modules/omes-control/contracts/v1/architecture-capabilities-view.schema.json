@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/architecture-capabilities-view.schema.json",
+  "title": "architecture-capabilities-view",
+  "description": "The READ-ONLY Control Center projection of the ADR-0017 layered reference architecture (docs/architecture.md §16.2.1, §18) for the AWCMS Architecture view (issue #246, part 3). It carries planes as lanes and capabilities as cards - only closed enums, bounded identifiers, and a provenance/version stamp, sourced from architecture/capabilities.json (schema 1.1.0) and the plane table in docs/architecture.md §18.3. This is a PROJECTION for display only: it is never itself an authorization mechanism, carries no ADR text, evidence URLs, removal triggers, or module implementation paths beyond the bounded `omes_module` identifier, and MUST NEVER carry a raw shell/command escape hatch - additionalProperties=false at every object level makes this structural, not merely a convention (registry guard C1 in lib/omes/py/architecture/registry.py additionally forbids any property key named/containing command, cmd, shell, script, exec, or argv anywhere under contracts/control-center/v1/*.schema.json). Server-side authorization (who may read this projection) is enforced by AWCMS before this shape is produced; this schema describes the wire shape only.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "omes_version",
+    "omes_commit",
+    "generated_at",
+    "planes",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "This view contract's own version (independent of the architecture/capabilities.json registry's schema_version 1.1.0).",
+      "enum": ["1.0.0"]
+    },
+    "omes_version": {
+      "type": "string",
+      "description": "The OMES release (VERSION file) the projection was generated from.",
+      "pattern": "^([0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)?|unknown)$"
+    },
+    "omes_commit": {
+      "type": "string",
+      "description": "The OMES git commit the projection was generated from, or 'unknown' when no git checkout is available.",
+      "pattern": "^(unknown|[0-9a-f]{7,40})$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "When OMES produced this projection.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "planes": {
+      "type": "array",
+      "description": "The six reference-architecture planes (docs/architecture.md §18.3), rendered as lanes.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "execution_semantics"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "business_control",
+              "host_control",
+              "agent_runtime",
+              "tool_data",
+              "infrastructure",
+              "observability"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "execution_semantics": {
+            "type": "string",
+            "enum": [
+              "probabilistic",
+              "deterministic",
+              "observational",
+              "external_authority"
+            ]
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "One card per architecture/capabilities.json entry, projected down to the fields a plane lane needs to render.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "plane",
+          "authority",
+          "execution_semantics",
+          "implementation_status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Echoed from capability_id.",
+            "pattern": "^[a-z0-9_.-]+$"
+          },
+          "name": {
+            "type": "string",
+            "description": "Echoed from title.",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plane": {
+            "type": "string",
+            "enum": [
+              "business_control",
+              "host_control",
+              "agent_runtime",
+              "tool_data",
+              "infrastructure",
+              "observability"
+            ]
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "omes",
+              "hermes",
+              "omarchy",
+              "awcms",
+              "graphify",
+              "provider",
+              "platform",
+              "external"
+            ]
+          },
+          "execution_semantics": {
+            "type": "string",
+            "enum": [
+              "probabilistic",
+              "deterministic",
+              "observational",
+              "external_authority"
+            ]
+          },
+          "implementation_status": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "delegated_upstream",
+              "staged",
+              "optional_external",
+              "logical_boundary"
+            ]
+          },
+          "upstream_project": {
+            "type": ["string", "null"],
+            "description": "The upstream project this capability is delegated/ported/adapted from, or null when OMES/AWCMS itself is the owner."
+          },
+          "omes_module": {
+            "type": ["string", "null"],
+            "description": "The lib/omes/py submodule that implements this capability, or null when none exists (delegated, staged, or a logical boundary)."
+          }
+        }
+      }
+    }
+  }
+}

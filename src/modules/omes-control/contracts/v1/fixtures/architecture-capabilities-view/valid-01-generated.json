@@ -1,0 +1,440 @@
+{
+  "capabilities": [
+    {
+      "authority": "awcms",
+      "execution_semantics": "external_authority",
+      "id": "awcms.commercial.billing",
+      "implementation_status": "staged",
+      "name": "AWCMS Commercial Subscriptions and Invoicing",
+      "omes_module": null,
+      "plane": "business_control",
+      "upstream_project": "awcms"
+    },
+    {
+      "authority": "awcms",
+      "execution_semantics": "external_authority",
+      "id": "awcms.content.orchestration",
+      "implementation_status": "staged",
+      "name": "AWCMS Domain Content Distribution Workflow",
+      "omes_module": "content",
+      "plane": "business_control",
+      "upstream_project": "awcms"
+    },
+    {
+      "authority": "awcms",
+      "execution_semantics": "external_authority",
+      "id": "awcms.tenant.portal",
+      "implementation_status": "staged",
+      "name": "AWCMS Multi-Tenant Customer Portal",
+      "omes_module": null,
+      "plane": "business_control",
+      "upstream_project": "awcms"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "probabilistic",
+      "id": "boundary.knowledge.retrieval",
+      "implementation_status": "logical_boundary",
+      "name": "RAG / knowledge retrieval services",
+      "omes_module": null,
+      "plane": "tool_data",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "probabilistic",
+      "id": "boundary.tool_gateway.mcp",
+      "implementation_status": "logical_boundary",
+      "name": "MCP / API / tool integration boundary (logical)",
+      "omes_module": null,
+      "plane": "tool_data",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "coolify.deployment.adapter",
+      "implementation_status": "staged",
+      "name": "Coolify Optional Deployment Adapter",
+      "omes_module": "coolify",
+      "plane": "host_control",
+      "upstream_project": "coollabsio/coolify"
+    },
+    {
+      "authority": "external",
+      "execution_semantics": "observational",
+      "id": "external.observability.siem",
+      "implementation_status": "optional_external",
+      "name": "Optional SIEM integration (e.g. Wazuh)",
+      "omes_module": null,
+      "plane": "observability",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "graphify",
+      "execution_semantics": "deterministic",
+      "id": "graphify.knowledge.extraction",
+      "implementation_status": "delegated_upstream",
+      "name": "Graphify Codebase Knowledge Graph Extraction",
+      "omes_module": null,
+      "plane": "tool_data",
+      "upstream_project": "graphify"
+    },
+    {
+      "authority": "graphify",
+      "execution_semantics": "deterministic",
+      "id": "graphify.mcp.server",
+      "implementation_status": "delegated_upstream",
+      "name": "Graphify MCP Server and Hermes Skill Integration",
+      "omes_module": null,
+      "plane": "tool_data",
+      "upstream_project": "graphify"
+    },
+    {
+      "authority": "graphify",
+      "execution_semantics": "deterministic",
+      "id": "graphify.skill.hermes_installer",
+      "implementation_status": "delegated_upstream",
+      "name": "Graphify Upstream Hermes Skill Installer",
+      "omes_module": null,
+      "plane": "tool_data",
+      "upstream_project": "graphify"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "deterministic",
+      "id": "hermes.agent.backup",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Profile Backup and Restore",
+      "omes_module": "hermesbackup",
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "probabilistic",
+      "id": "hermes.agent.bot_mode",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Bot Mode Specialist Personas and Routines",
+      "omes_module": null,
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "deterministic",
+      "id": "hermes.agent.docker",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Docker Topology with s6 Supervision",
+      "omes_module": "agent",
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "deterministic",
+      "id": "hermes.agent.gateway",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Gateway and Service Management",
+      "omes_module": "agent",
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "observational",
+      "id": "hermes.agent.health",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Runtime Health and Doctor Diagnostics",
+      "omes_module": "health",
+      "plane": "observability",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "deterministic",
+      "id": "hermes.agent.profiles",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Multi-Profile Isolation",
+      "omes_module": null,
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "probabilistic",
+      "id": "hermes.agent.reasoning",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Agent Core Reasoning and Tool Execution",
+      "omes_module": null,
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "hermes",
+      "execution_semantics": "deterministic",
+      "id": "hermes.agent.security",
+      "implementation_status": "delegated_upstream",
+      "name": "Hermes Dangerous-Command Approval and Toolset Filtering",
+      "omes_module": null,
+      "plane": "agent_runtime",
+      "upstream_project": "NousResearch/hermes-agent"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.arch.chroot",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Arch-Specific Chroot Packaging",
+      "omes_module": null,
+      "plane": "infrastructure",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.devtools.catalog",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Development Tools Catalog",
+      "omes_module": "desktop",
+      "plane": "infrastructure",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.release.channels",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Release Channel Update Specification",
+      "omes_module": "bootstrap",
+      "plane": "infrastructure",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.security.policy",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Desktop Security and Privilege Rules",
+      "omes_module": "desktop",
+      "plane": "host_control",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.shell.plugins",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Shell Plugins and Prompt Enhancements",
+      "omes_module": null,
+      "plane": "infrastructure",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omarchy",
+      "execution_semantics": "deterministic",
+      "id": "omarchy.theme.composition",
+      "implementation_status": "delegated_upstream",
+      "name": "Omarchy Theme Composition Specification",
+      "omes_module": "desktop",
+      "plane": "infrastructure",
+      "upstream_project": "omacom/omarchy"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.architecture.registry",
+      "implementation_status": "implemented",
+      "name": "OMES Architecture Boundary and Capability Registry",
+      "omes_module": "architecture",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.graphify.export_sync",
+      "implementation_status": "implemented",
+      "name": "OMES Graphify Safe Obsidian Export, Sync, and Privacy Controls",
+      "omes_module": "graphify",
+      "plane": "tool_data",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.host.backup",
+      "implementation_status": "implemented",
+      "name": "OMES Host Atomic Backup, Restore, and Rollback",
+      "omes_module": "backup",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.host.lifecycle",
+      "implementation_status": "implemented",
+      "name": "OMES Host Service Lifecycle and Hardening",
+      "omes_module": "agent",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.host.preflight",
+      "implementation_status": "implemented",
+      "name": "OMES Host Platform and Privilege Preflight",
+      "omes_module": "preflight",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.host.provenance",
+      "implementation_status": "implemented",
+      "name": "OMES Release Provenance and Channel Management",
+      "omes_module": "provenance",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.jobs.engine",
+      "implementation_status": "implemented",
+      "name": "OMES Subprocess Job Execution Engine",
+      "omes_module": "jobs",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.privacy.egress_policy",
+      "implementation_status": "implemented",
+      "name": "OMES AI Data-Classification and Model-Egress Policy Evaluator",
+      "omes_module": "privacy",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.privacy.posture_evidence",
+      "implementation_status": "implemented",
+      "name": "OMES AI Privacy Posture and Egress Evidence (read-only)",
+      "omes_module": "privacy",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.privacy.posture_projection",
+      "implementation_status": "implemented",
+      "name": "OMES Control Center Projection of AI Privacy Posture and Policy Decisions (read-only)",
+      "omes_module": "privacy",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.privacy.provider_assurance",
+      "implementation_status": "implemented",
+      "name": "OMES Provider-Assurance Evidence for Cloud Model Egress (retention, human access, subprocessors, residency)",
+      "omes_module": "privacy",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.privacy.restricted_local_inference",
+      "implementation_status": "implemented",
+      "name": "OMES Restricted Local-Only Inference Deployment Posture",
+      "omes_module": "privacy",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "id": "omes.provenance.model_artifact_integrity",
+      "implementation_status": "implemented",
+      "name": "OMES Model/Runtime Artifact Provenance and Integrity Evidence (threat AI-06)",
+      "omes_module": "provenance",
+      "plane": "host_control",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "platform",
+      "execution_semantics": "deterministic",
+      "id": "platform.host.infrastructure",
+      "implementation_status": "delegated_upstream",
+      "name": "Linux / systemd / storage / network / secret storage",
+      "omes_module": null,
+      "plane": "infrastructure",
+      "upstream_project": "ahliweb/omes"
+    },
+    {
+      "authority": "provider",
+      "execution_semantics": "external_authority",
+      "id": "provider.cloudflare.registrar",
+      "implementation_status": "delegated_upstream",
+      "name": "Cloudflare Registrar and DNS Reconciliation",
+      "omes_module": "domains",
+      "plane": "business_control",
+      "upstream_project": "cloudflare"
+    },
+    {
+      "authority": "provider",
+      "execution_semantics": "external_authority",
+      "id": "provider.srsx.registrar",
+      "implementation_status": "delegated_upstream",
+      "name": "SRS-X .id Registrar and Document Verification",
+      "omes_module": "domains",
+      "plane": "business_control",
+      "upstream_project": "srs-x"
+    }
+  ],
+  "generated_at": "2026-01-01T00:00:00Z",
+  "omes_commit": "0000000000000000000000000000000000000000",
+  "omes_version": "0.4.0",
+  "planes": [
+    {
+      "execution_semantics": "external_authority",
+      "id": "business_control",
+      "name": "Business & governance"
+    },
+    {
+      "execution_semantics": "deterministic",
+      "id": "host_control",
+      "name": "Host control"
+    },
+    {
+      "execution_semantics": "probabilistic",
+      "id": "agent_runtime",
+      "name": "Agent runtime"
+    },
+    {
+      "execution_semantics": "probabilistic",
+      "id": "tool_data",
+      "name": "Tool / data"
+    },
+    {
+      "execution_semantics": "deterministic",
+      "id": "infrastructure",
+      "name": "Infrastructure"
+    },
+    {
+      "execution_semantics": "observational",
+      "id": "observability",
+      "name": "Observability & evidence"
+    }
+  ],
+  "schema_version": "1.0.0"
+}

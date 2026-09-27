@@ -537,8 +537,28 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * 234,992 is the measured value with no added margin — the delta is the
  * fix's own cost, not room for unrelated future growth.
+ *
+ * **Raised again to 236,936 for Issue ahliweb/omes#246 part 3.** `/admin/omes/
+ * arsitektur` (the new Architecture Control Center screen, planes-as-lanes
+ * of capability cards rendered from the vendored, pinned OMES
+ * architecture-capabilities-view snapshot) adds its own compiled
+ * markup/script/style chunk — the same "real new screen weight" shape as
+ * every preceding raise in this history. This screen was originally
+ * measured (236,247 B) against the stale 234,443 ceiling before the
+ * orchestration-indent fix (PR #835) landed on main; after rebasing onto
+ * that fix's 234,992 ceiling, the real build measures higher still because
+ * the indent-fix CSS and this screen's own chunk both changed the shared
+ * `AdminLayout` CSS bundle. Re-measured post-rebase rather than trusting
+ * the pre-rebase estimate.
+ *
+ * ```
+ * before (234,992 ceiling)   234,992 B (post orchestration-indent fix, PR #835)
+ * + arsitektur screen        236,936 B (measured actual total, post-rebase)
+ * ```
+ *
+ * 236,936 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 234_992;
+export const APP_BUDGET_BYTES = 236_936;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

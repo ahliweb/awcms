@@ -5370,6 +5370,9 @@ msgstr "Hermes OMES"
 msgid "OMES Hermes progress"
 msgstr "Progres Hermes OMES"
 
+msgid "OMES architecture"
+msgstr "Arsitektur OMES"
+
 msgid "Live orchestration"
 msgstr "Orkestrasi langsung"
 
@@ -5486,3 +5489,42 @@ msgstr "Progres integrasi Hermes membutuhkan proyeksi milestone dan issue reposi
 
 msgid "ahliweb/omes#249"
 msgstr "ahliweb/omes#249"
+
+msgid "A read-only projection of the ADR-0017 layered reference architecture — planes and capabilities across OMES, Hermes, Omarchy, AWCMS, and provider integrations."
+msgstr "Proyeksi baca-saja dari arsitektur referensi berlapis ADR-0017 — plane dan kapabilitas di OMES, Hermes, Omarchy, AWCMS, dan integrasi penyedia."
+
+msgid "You do not have permission to view the architecture snapshot."
+msgstr "Anda tidak memiliki izin untuk melihat cuplikan arsitektur."
+
+msgid "The architecture snapshot could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Cuplikan arsitektur tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Reference architecture"
+msgstr "Arsitektur referensi"
+
+msgid "This is a pinned release snapshot from a specific OMES release — not live host state. It only changes when this screen's data is re-vendored from a newer OMES commit."
+msgstr "Ini adalah cuplikan rilis yang dipatok dari rilis OMES tertentu — bukan status host langsung. Cuplikan ini hanya berubah saat data layar ini divendorkan ulang dari commit OMES yang lebih baru."
+
+msgid "OMES version"
+msgstr "Versi OMES"
+
+msgid "OMES commit"
+msgstr "Commit OMES"
+
+msgid "Generated at"
+msgstr "Dibuat pada"
+
+msgid "Capabilities"
+msgstr "Kapabilitas"
+
+msgid "No capabilities in this plane yet"
+msgstr "Belum ada kapabilitas di plane ini"
+
+msgid "Execution semantics"
+msgstr "Semantik eksekusi"
+
+msgid "Upstream project"
+msgstr "Proyek hulu"
+
+msgid "OMES module"
+msgstr "Modul OMES"

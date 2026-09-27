@@ -41,15 +41,16 @@ describe("omes_control module descriptor", () => {
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
-  test("declares navigation for all thirteen screens ahliweb/omes#200, #201, #233, #232, and #246 landed", () => {
+  test("declares navigation for all fourteen screens ahliweb/omes#200, #201, #233, #232, and #246 (parts 2 and 3) landed", () => {
     // Was `toBeUndefined()` while the physical pages were staged work
     // (ahliweb/omes#196/#197/#198) — matching the push_delivery (ADR-0074)
     // precedent that a descriptor must not declare a path with no page
     // behind it (`tests/admin-navigation-registry.test.ts` enforces this in
     // both directions). ahliweb/omes#200 landed the first five; #201 added
     // health, backups, and audit; #233 added the ninth, enrollments; #232
-    // added the tenth, AI privacy; #246 (part 2) adds the last three: live
-    // orchestration, Hermes, and Hermes progress.
+    // added the tenth, AI privacy; #246 part 2 adds live orchestration,
+    // Hermes, and Hermes progress; #246 part 3 adds the fourteenth,
+    // Arsitektur (architecture).
     const nav = omesControlModule.navigation ?? [];
     expect(nav.map((entry) => entry.path).sort()).toEqual(
       [
@@ -65,7 +66,8 @@ describe("omes_control module descriptor", () => {
         "/admin/omes/ai-privacy",
         "/admin/omes/orkestrasi-langsung",
         "/admin/omes/hermes",
-        "/admin/omes/progres-hermes"
+        "/admin/omes/progres-hermes",
+        "/admin/omes/arsitektur"
       ].sort()
     );
 
@@ -84,12 +86,13 @@ describe("omes_control module descriptor", () => {
     }
   });
 
-  test("defines 16 granular least-privilege permissions", () => {
+  test("defines 17 granular least-privilege permissions", () => {
     // 13 original (#196/#198/#233) + ai_privacy.read + ai_privacy.approve
     // (ahliweb/omes#232, sql/161) + hermes_orchestration.read
-    // (ahliweb/omes#246, sql/164).
+    // (ahliweb/omes#246 part 2, sql/164) + architecture.read
+    // (ahliweb/omes#246 part 3, sql/165).
     const permissions = omesControlModule.permissions ?? [];
-    expect(permissions.length).toBe(16);
+    expect(permissions.length).toBe(17);
 
     const permKeys = permissions.map(
       (p) => `omes_control.${p.activityCode}.${p.action}`
@@ -110,6 +113,7 @@ describe("omes_control module descriptor", () => {
     expect(permKeys).toContain("omes_control.ai_privacy.read");
     expect(permKeys).toContain("omes_control.ai_privacy.approve");
     expect(permKeys).toContain("omes_control.hermes_orchestration.read");
+    expect(permKeys).toContain("omes_control.architecture.read");
   });
 
   test("defines dataLifecycle descriptors for all 14 domain tables", () => {
@@ -168,11 +172,21 @@ describe("omes_control SQL migration sanity", () => {
       join(import.meta.dir, "../sql/161_awcms_omes_ai_privacy_permissions.sql"),
       "utf8"
     ) +
-    // ahliweb/omes#246 adds the sixteenth the same way, via sql/164.
+    // ahliweb/omes#246 part 2 adds the sixteenth the same way, via sql/164.
     readFileSync(
       join(
         import.meta.dir,
         "../sql/164_awcms_omes_hermes_orchestration_permissions.sql"
+      ),
+      "utf8"
+    ) +
+    // ahliweb/omes#246 part 3 adds the seventeenth, via sql/165 — no schema
+    // migration accompanies it (the Architecture screen has no table; see
+    // sql/165's own header comment).
+    readFileSync(
+      join(
+        import.meta.dir,
+        "../sql/165_awcms_omes_architecture_permissions.sql"
       ),
       "utf8"
     );
@@ -203,7 +217,7 @@ describe("omes_control SQL migration sanity", () => {
     }
   });
 
-  test("the permissions migrations seed exactly the 16 declared module permissions", () => {
+  test("the permissions migrations seed exactly the 17 declared module permissions", () => {
     const permissions = omesControlModule.permissions ?? [];
     for (const perm of permissions) {
       expect(permissionsSql).toContain(
