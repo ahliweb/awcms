@@ -256,5 +256,20 @@ const rootNode = current?.nodes.find(
   .omes-hermes-task-summary dd {
     margin: var(--sp-1) 0 0;
     color: var(--color-text);
+    /*
+     * ahliweb/awcms#831 — this `<dd>` renders `rootNode.goal`, Hermes-supplied
+     * free text with no length bound, inside a `display: grid;
+     * grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))` row. A
+     * grid item's default `min-width: auto` is based on its CONTENT's
+     * min-content size, which for a long, space-free value can exceed the
+     * `minmax()` track's 200px floor — the same class of bug `.cell-muted`
+     * had (admin.css): unbounded text with no natural break point escaping
+     * its container and widening `.admin-page-body`/the whole document past
+     * the viewport. This `<dd>` has no `.cell-muted` class (a different
+     * markup path than the orchestration tree/activity list this issue was
+     * originally reported against), so it needed its own copy of the same
+     * fix rather than inheriting one.
+     */
+    overflow-wrap: anywhere;
   }
 </style>
