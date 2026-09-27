@@ -1,5 +1,5 @@
 /**
- * Every static admin screen fits a 360px-wide viewport.
+ * Every static admin screen fits a 360px-wide viewport, AND a 1024px-wide one.
  *
  * ## The gap this closes
  *
@@ -9,6 +9,25 @@
  * on mobile" has been an unverified claim, not a checked one. 360px is the
  * target because it is the narrowest width in real use — a screen that fits
  * 360 fits 375/390 too, but the reverse does not hold.
+ *
+ * ## 1024px joined it for ahliweb/awcms#843
+ *
+ * 1024px is not a phone width — it is where `.admin-brand-cluster` widens
+ * to line up with the (now fixed-position) sidebar AND, one pixel below,
+ * where `.admin-palette-open`/`.admin-tenant-switch` are still both shown
+ * (they only hide BELOW 1024, per the `@media (max-width: 1023.98px)` rule
+ * this fix widened to `1024px`). That combination briefly made every topbar
+ * control visible at once while the brand cluster also claimed its widest
+ * reserved space, and `.admin-user-menu` had no floor of its own
+ * (`min-width: 0`) to stop the flex-shrink algorithm from squeezing it below
+ * `.admin-account-link`'s real content width — so the account link rendered
+ * at its natural size regardless and spilled out of its shrunken parent,
+ * widening `document.documentElement` by ~55–66px on every admin screen
+ * (reproducible on a short page, so it was never about page content). See
+ * `.changeset/` and `src/styles/admin.css` for the fix. 1024px is added as a
+ * SECOND width in the same sweep — not a new file — because the property
+ * under test ("no admin screen scrolls sideways") is identical; only the
+ * viewport differs.
  *
  * ## Why this is a sibling of `admin-screens-render.e2e.ts`, not a change to it
  *
@@ -30,13 +49,14 @@
  *
  * ## The assertion: no sideways scroll, not a screenshot diff
  *
- * `document.documentElement.scrollWidth <= 360` (plus 1px of slack for
- * sub-pixel rounding) is the property that actually matters on a phone: if
+ * `document.documentElement.scrollWidth <= innerWidth` (plus 1px of slack for
+ * sub-pixel rounding) is the property that actually matters at any width: if
  * the document is wider than the viewport, the user can drag the whole page
- * sideways, which on real admin UI usually means a table or a fixed-width
- * element was not made to fit. A screenshot diff would need a baseline per
- * screen and would go red on every copy change; this does not, and it is
- * objectively true or false rather than "looks different".
+ * sideways, which on real admin UI usually means a table, a flex item with no
+ * floor of its own, or a fixed-width element was not made to fit. A
+ * screenshot diff would need a baseline per screen and would go red on every
+ * copy change; this does not, and it is objectively true or false rather than
+ * "looks different".
  *
  * A bare `false` is a useless failure message, so on overflow this also
  * collects which elements caused it — tag name, id/class if present, and the
@@ -61,20 +81,24 @@
  * ## The viewport override
  *
  * The `read` project supplies `devices["Desktop Chrome"]` (1280×720) plus a
- * logged-in `storageState`. `test.use({ viewport })` overrides only the
- * viewport for this file, the same per-file override pattern
- * `login.e2e.ts` uses for `storageState` — the session is inherited, the
- * screen size is not.
+ * logged-in `storageState`; the session is inherited, the screen size is not.
+ * Each width gets its own `test()` that calls `page.setViewportSize()`
+ * directly (rather than a file-level `test.use({ viewport })`, which can only
+ * express one fixed size for the whole file) — the same per-test override
+ * pattern `admin-sidebar-long-content.e2e.ts` uses for the same reason.
  */
 import { test, expect, type Page } from "./support/e2e-read-wave";
 
 import { discoverAdminRoutes, ADMIN_PAGES_ROOT } from "./support/admin-routes";
 
-const VIEWPORT_WIDTH = 360;
+// 360 (narrowest real phone width) and 1024 (ahliweb/awcms#843 — the exact
+// width where the topbar's account link overflowed on every admin screen).
+// Each gets its own `test()` below via `page.setViewportSize`, rather than a
+// file-level `test.use({ viewport })`, because that API can only express one
+// fixed viewport for the whole file/describe.
+const VIEWPORT_WIDTHS = [360, 1024] as const;
 const OVERFLOW_TOLERANCE_PX = 1;
 const MAX_REPORTED_OFFENDERS = 5;
-
-test.use({ viewport: { width: VIEWPORT_WIDTH, height: 640 } });
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -132,7 +156,7 @@ async function findOverflowOffenders(
   );
 }
 
-test.describe("every static admin screen fits a 360px viewport", () => {
+test.describe("every static admin screen fits its target viewport", () => {
   test.skip(
     !seeded,
     "requires a seeded tenant — CI e2e-smoke provisions one via POST /api/v1/setup/initialize"
@@ -147,48 +171,54 @@ test.describe("every static admin screen fits a 360px viewport", () => {
     ).toBeGreaterThan(40);
   });
 
-  test("no static admin screen scrolls sideways at 360px", async ({ page }) => {
-    test.setTimeout(180_000);
-    // Already authenticated as the owner: the `setup` project logged in once
-    // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
+  for (const width of VIEWPORT_WIDTHS) {
+    test(`no static admin screen scrolls sideways at ${width}px`, async ({
+      page
+    }) => {
+      test.setTimeout(180_000);
+      // Already authenticated as the owner: the `setup` project logged in
+      // once and this project reuses that session. See
+      // `tests/e2e/auth.setup.ts`.
+      await page.setViewportSize({ width, height: 640 });
 
-    for (const route of routes) {
-      const response = await page.goto(route.url);
-      const status = response?.status() ?? 0;
+      for (const route of routes) {
+        const response = await page.goto(route.url);
+        const status = response?.status() ?? 0;
 
-      // A screen that fails to render at all is out of scope here —
-      // `admin-screens-render.e2e.ts` is what asserts status/contents. This
-      // file only has an opinion about width, and a non-200 page has no
-      // meaningful width to assert about.
-      if (status !== 200) continue;
+        // A screen that fails to render at all is out of scope here —
+        // `admin-screens-render.e2e.ts` is what asserts status/contents. This
+        // file only has an opinion about width, and a non-200 page has no
+        // meaningful width to assert about.
+        if (status !== 200) continue;
 
-      const scrollWidth = await page.evaluate(
-        () => document.documentElement.scrollWidth
-      );
+        const scrollWidth = await page.evaluate(
+          () => document.documentElement.scrollWidth
+        );
 
-      if (scrollWidth <= VIEWPORT_WIDTH + OVERFLOW_TOLERANCE_PX) continue;
+        if (scrollWidth <= width + OVERFLOW_TOLERANCE_PX) continue;
 
-      const offenders = await findOverflowOffenders(
-        page,
-        VIEWPORT_WIDTH,
-        MAX_REPORTED_OFFENDERS
-      );
-      const offenderList = offenders
-        .map((o) => `<${o.tag}${o.identity}> right=${o.right}px`)
-        .join(", ");
+        const offenders = await findOverflowOffenders(
+          page,
+          width,
+          MAX_REPORTED_OFFENDERS
+        );
+        const offenderList = offenders
+          .map((o) => `<${o.tag}${o.identity}> right=${o.right}px`)
+          .join(", ");
 
-      expect
-        .soft(
-          scrollWidth,
-          `${route.url} (${route.source}) scrolls sideways at ${VIEWPORT_WIDTH}px: ` +
-            `document.documentElement.scrollWidth is ${scrollWidth}px. ` +
-            (offenders.length > 0
-              ? `Elements sticking out past ${VIEWPORT_WIDTH}px: ${offenderList}.`
-              : "No single element was found past the edge — the overflow " +
-                "may come from a combination (e.g. flex/grid children) rather " +
-                "than one element.")
-        )
-        .toBeLessThanOrEqual(VIEWPORT_WIDTH + OVERFLOW_TOLERANCE_PX);
-    }
-  });
+        expect
+          .soft(
+            scrollWidth,
+            `${route.url} (${route.source}) scrolls sideways at ${width}px: ` +
+              `document.documentElement.scrollWidth is ${scrollWidth}px. ` +
+              (offenders.length > 0
+                ? `Elements sticking out past ${width}px: ${offenderList}.`
+                : "No single element was found past the edge — the overflow " +
+                  "may come from a combination (e.g. flex/grid children) " +
+                  "rather than one element.")
+          )
+          .toBeLessThanOrEqual(width + OVERFLOW_TOLERANCE_PX);
+      }
+    });
+  }
 });
