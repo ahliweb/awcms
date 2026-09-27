@@ -73,7 +73,7 @@ Issue ahliweb/omes#200 shipped the first five screens (Overview, Servers, Deploy
 The 9 screens above render inside a scoped `.omes-cc` wrapper
 (`src/styles/omes-control-center.css`) that brings them to visual parity with
 the OMES Control Panel redesign reference (`ahliweb/omes`
-`redesign/redesign-omes.zip`, `docs/ui-ux-design-system.md`) — the dark
+`omes:redesign/redesign-omes.zip`, `omes:docs/ui-ux-design-system.md`) — the dark
 palette, KPI tiles with monospace numbers and status dots, and the
 Bootstrap → Check → Diff → Apply → Verify → Rollback lifecycle strip on the
 overview screen. Nothing outside `/admin/omes/*` is touched: the wrapper is a

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:087765dced39935dcc9ffa2bed6419d91a4956b41ceeb1aadbdd28cc760ea364 -->
+<!-- i18n-source-hash: sha256:c92d55e5f2e3947398acd1005f90d183b20e8f7884133d55c21356d92f6f8c1e -->
 
 # `omes_control`
 
@@ -75,7 +75,7 @@ Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deploy
 9 layar di atas dirender di dalam wrapper `.omes-cc` yang di-scope
 (`src/styles/omes-control-center.css`) yang membawanya setara secara visual
 dengan referensi redesign OMES Control Panel (`ahliweb/omes`
-`redesign/redesign-omes.zip`, `docs/ui-ux-design-system.md`) — palet gelap,
+`omes:redesign/redesign-omes.zip`, `omes:docs/ui-ux-design-system.md`) — palet gelap,
 kartu KPI dengan angka monospace dan titik status, serta strip siklus
 Bootstrap → Check → Diff → Apply → Verify → Rollback di layar overview. Tidak
 ada yang di luar `/admin/omes/*` yang tersentuh: wrapper ini adalah class yang
