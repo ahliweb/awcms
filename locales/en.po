@@ -5285,3 +5285,21 @@ msgstr ""
 
 msgid "Enrollments"
 msgstr ""
+
+msgid "OMES operation lifecycle"
+msgstr ""
+
+msgid "Every OMES change moves through the same sequence of allowlisted, auditable steps — never a shortcut around one of them."
+msgstr ""
+
+msgid "Bootstrap"
+msgstr ""
+
+msgid "Check"
+msgstr ""
+
+msgid "Diff"
+msgstr ""
+
+msgid "Rollback"
+msgstr ""

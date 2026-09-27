@@ -5273,3 +5273,21 @@ msgstr "belum disajikan"
 
 msgid "Enrollments"
 msgstr "Pendaftaran"
+
+msgid "OMES operation lifecycle"
+msgstr "Siklus operasi OMES"
+
+msgid "Every OMES change moves through the same sequence of allowlisted, auditable steps — never a shortcut around one of them."
+msgstr "Setiap perubahan OMES melewati urutan langkah yang sama — diizin-daftarkan dan dapat diaudit — tidak pernah ada jalan pintas melewati salah satunya."
+
+msgid "Bootstrap"
+msgstr "Bootstrap"
+
+msgid "Check"
+msgstr "Periksa"
+
+msgid "Diff"
+msgstr "Diff"
+
+msgid "Rollback"
+msgstr "Rollback"

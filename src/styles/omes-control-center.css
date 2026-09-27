@@ -1,0 +1,263 @@
+/*
+ * omes-control-center.css — scoped design system for the OMES Control Center
+ * screens ONLY (`src/pages/admin/omes/*.astro`, ahliweb/omes#246 part 1/3).
+ *
+ * SCOPE: every rule here is written under the `.omes-cc` class, which each of
+ * the 9 OMES screens wraps around its own `<AdminLayout>` slot content (see
+ * those files). It never redefines a bare `--color-*`/`.stat-card`/etc. rule
+ * at `:root` or without the `.omes-cc` prefix, so it changes nothing for the
+ * other ~48 admin screens — the redesign's own scope requirement
+ * (ahliweb/omes#246: "scope it to the OMES screens ... the rest of the AWCMS
+ * admin keeps its own design, untouched").
+ *
+ * HOW IT WORKS: `.omes-cc` overrides the SAME custom properties `admin.css`
+ * and `admin-screens.css` already consume (`--color-bg`, `--color-surface`,
+ * `--color-text*`, `--color-primary`/`-success`/`-warning`/`-danger`/`-info`
+ * families, `--color-border*`, `--shadow-*`). Every existing component class
+ * those two files already define — `.stat-card`, `.status-badge`,
+ * `.data-table`, `.admin-panel`, `.quick-link`, `.empty-state`, `.btn*` — is
+ * REUSED as-is; this file supplies no competing component CSS for anything
+ * that already exists, per docs/ui-ux-design-system.md §7.4 ("reuse existing
+ * admin components ... rather than introducing an unvetted third-party
+ * CSS/JS framework"). The only NEW component here is `.omes-lifecycle`, the
+ * Bootstrap → Check → Diff → Apply → Verify → Rollback strip on the overview
+ * screen, which has no existing equivalent to reuse.
+ *
+ * TYPEFACE: Public Sans + JetBrains Mono are already self-hosted for the
+ * WHOLE admin by `tokens.css` (ADR-0120, `@font-face` + `--font-sans`/
+ * `--font-mono`) — same-origin `/fonts/*.woff2`, no third-party CSP origin.
+ * This file adds NO new `@font-face` and ships NO new font file: the OMES
+ * screens already load these families via `AdminLayout` → `tokens.css`, same
+ * as every other admin screen. `--font-sans`/`--font-mono` are left
+ * un-overridden here for exactly that reason.
+ *
+ * PALETTE: the OMES Control Panel redesign reference
+ * (`redesign/redesign-omes.zip`, `OMES Control Center.dc.html`) and
+ * `docs/ui-ux-design-system.md` §2.1 (ahliweb/omes). Every text/background and
+ * accent/background pair below is measured against WCAG 2.1 AA — see
+ * `docs/awcms/omes-control-center-design-system.md` for the full contrast
+ * table. This file's job is to CONSUME those measured values, not remeasure
+ * them; a value changed here without updating that table's measurement is a
+ * regression.
+ *
+ * CSP / asset budget: pure same-origin CSS, no `@import`/font/CDN/inline (same
+ * constraint `admin-screens.css` states). Counted under the `app` audience in
+ * `scripts/client-asset-budget.ts` — see that file's docblock for the
+ * before/after measurement this addition required.
+ */
+
+/* ==================================================================== */
+/* Token overrides — one hue set, dark-only, independent of `data-theme` */
+/* ==================================================================== */
+.omes-cc {
+  /*
+   * Deliberately NOT theme-aware. The redesign reference is a single dark
+   * operator console — like the sidebar family in `tokens.css`
+   * (`--color-sidebar-*`), these screens keep this palette regardless of
+   * whether the reader's admin theme preference is light or dark. That is
+   * why this block does not nest under `:root[data-theme="dark"] .omes-cc`.
+   */
+  color-scheme: dark;
+
+  /* Canvas / surfaces (docs/ui-ux-design-system.md §2.1, ahliweb/omes) */
+  --color-bg: #0b0f13;
+  --color-surface: #151a20;
+  --color-surface-2: #191f26;
+  --color-surface-3: #0e1216;
+  --color-surface-hover: #1e262e;
+
+  /*
+   * Border is kept a DECORATIVE hairline (card edges, table rules) — matching
+   * ADR-0120's own distinction between decorative separators and operable
+   * controls (WCAG 1.4.11 governs the latter, not the former).
+   * `--color-border-strong` is the one that must clear 3:1, for controls
+   * (`<select>`, `<input>`, filter chips) that this file's screens render:
+   * measured 3.78:1 on the panel surface, 3.58:1 on surface-2, 4.15:1 on
+   * canvas — see the contrast table in the design-system doc.
+   */
+  --color-border: #242c35;
+  --color-border-soft: #1e262e;
+  --color-border-strong: #6a7683;
+
+  /* Text (docs/ui-ux-design-system.md §2.1) — measured against canvas, panel
+     and surface-2 in the contrast table; the tightest pair is 4.57:1. */
+  --color-text: #e6edf3;
+  --color-text-muted: #c6d1da;
+  --color-text-faint: #8b99a6;
+  /* A fourth, dimmer grade the base token set has no slot for (decorative
+     captions only — e.g. an inactive lifecycle step) — 4.57:1 on surface-2,
+     4.81:1 on the panel, still >=4.5:1 AA. */
+  --omes-text-dim: #7a8894;
+
+  /*
+   * Accents. The redesign's accent hues are light/pastel against this dark
+   * canvas, which is why `-contrast`/`-strong` below use a DARK foreground
+   * (`--color-bg`) rather than the base theme's white — white-on-cyan or
+   * white-on-amber both fail AA outright (a light fill needs a dark
+   * foreground, not a light one). Confirmed in the contrast table: canvas on
+   * cyan 9.82:1, on green 10.14:1, on amber 10.13:1, on rose 9.75:1.
+   */
+  --color-primary: #5fc8d6;
+  --color-primary-strong: #5fc8d6;
+  --color-primary-contrast: #0b0f13;
+  --color-primary-hover: #7ed4df;
+  --color-primary-soft: var(--color-surface-2);
+  --color-primary-on-soft: #5fc8d6;
+  --color-focus: #5fc8d6;
+
+  --color-success: #6fd08c;
+  --color-success-strong: #6fd08c;
+  --color-success-soft: var(--color-surface-2);
+  --color-success-on-soft: #6fd08c;
+
+  --color-warning: #e8b44a;
+  --color-warning-soft: var(--color-surface-2);
+  --color-warning-on-soft: #e8b44a;
+
+  /* "Danger" maps to the redesign's rose accent, not a saturated red — see
+     the design-system doc for why (docs/ui-ux-design-system.md §2.1). */
+  --color-danger: #e9a9a0;
+  --color-danger-strong: #e9a9a0;
+  --color-danger-soft: var(--color-surface-2);
+  --color-danger-on-soft: #e9a9a0;
+
+  /* "Info" maps to the redesign's control-plane violet. */
+  --color-info: #8b9cf7;
+  --color-info-strong: #8b9cf7;
+  --color-info-soft: var(--color-surface-2);
+  --color-info-on-soft: #8b9cf7;
+
+  --color-overlay: rgba(2, 4, 6, 0.72);
+
+  /* Shadows — reuse the base theme's dark-mode values (already tuned for a
+     dark surface); no new measurement needed since these are decorative
+     elevation, not text/background contrast. */
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
+
+  /*
+   * Full-bleed the page BODY (not the shared topbar/sidebar chrome, which
+   * stays whatever the reader's admin theme is — see `AdminLayout.astro`,
+   * untouched by this PR). `.admin-page-body` is the slot's immediate parent
+   * and owns the inline/vertical padding this negates; see
+   * `src/styles/admin.css` `.admin-page-body`.
+   */
+  display: block;
+  margin: -22px clamp(calc(var(--sp-4) * -1), -3vw, -34px) -44px;
+  padding: var(--sp-5) clamp(var(--sp-4), 3vw, 34px) var(--sp-7);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+@media (max-width: 767.98px) {
+  .omes-cc {
+    /* `.admin-page-body` drops to a single, smaller inline padding below the
+       tablet breakpoint (see admin.css); mirror it so the bleed stays exact
+       instead of leaving a sliver of the light canvas at the edge. */
+    margin-inline: calc(var(--sp-3) * -1);
+    padding-inline: var(--sp-3);
+  }
+}
+
+/* KPI numbers read as telemetry, not prose — monospace, tabular. */
+.omes-cc .stat-card .stat-value {
+  font-family: var(--font-mono);
+}
+
+/*
+ * Status dot on a KPI tile — a small filled circle before the label, coloured
+ * by `data-tone`. Reuses the `.status-badge .status-dot` sizing convention
+ * (admin-screens.css) rather than inventing a second dot rule.
+ */
+.omes-cc .stat-card .stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.omes-cc .stat-card .stat-label::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.omes-cc .stat-card[data-tone="success"] .stat-label::before {
+  background: var(--color-success);
+}
+
+.omes-cc .stat-card[data-tone="warning"] .stat-label::before {
+  background: var(--color-warning);
+}
+
+.omes-cc .stat-card[data-tone="danger"] .stat-label::before {
+  background: var(--color-danger);
+}
+
+.omes-cc .stat-card[data-tone="info"] .stat-label::before {
+  background: var(--color-info);
+}
+
+/* ==================================================================== */
+/* Lifecycle strip — Bootstrap -> Check -> Diff -> Apply -> Verify ->    */
+/* Rollback (overview screen only)                                       */
+/* ==================================================================== */
+.omes-cc .omes-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.omes-cc .omes-lifecycle-step {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.omes-cc .omes-lifecycle-step[data-tone="danger"] {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* Arrow connector between steps — a pseudo-element on every step but the
+   first, so the markup stays a plain flat list (keyboard/AT order is
+   unaffected: this is decorative, `aria-hidden`-equivalent content). */
+.omes-cc .omes-lifecycle-step + .omes-lifecycle-step {
+  margin-left: var(--sp-5);
+}
+
+.omes-cc .omes-lifecycle-step + .omes-lifecycle-step::before {
+  content: "\2192";
+  position: absolute;
+  left: calc(-1 * var(--sp-5));
+  color: var(--color-text-faint);
+  font-weight: var(--fw-normal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omes-cc * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
