@@ -478,7 +478,7 @@ export const READER_BUDGET_BYTES = 24_000;
  * margin the raise above used, for the same reason: this is presentational
  * and scoped to the same 9 screens.
  *
- * **Raised again to 230,550 on 27 September 2026 for the tenth
+ * **Raised again to 231,200 on 27 September 2026 for the tenth
  * `/admin/omes/*` screen, AI privacy posture and egress owner-approval
  * (ahliweb/omes#232), rebased onto part 1b above.** The screen ships no new
  * stylesheet and no new font — it imports the SAME
@@ -492,14 +492,14 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * ```
  * before (230,400 ceiling)   230,263 B (per part 1b's own measurement above)
- * + admin/omes/ai-privacy    230,411 B   (measured after rebasing onto part 1b)
+ * + admin/omes/ai-privacy    231,059 B   (measured after rebasing onto part 1b)
  * ```
  *
- * 230,550 is measured + ~140 B, the same tight margin the immediately
+ * 231,200 is measured + ~140 B, the same tight margin the immediately
  * preceding raise used, for the same reason: a new screen's own weight
  * should not buy headroom for unrelated future growth elsewhere.
  */
-export const APP_BUDGET_BYTES = 230_550;
+export const APP_BUDGET_BYTES = 231_200;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
