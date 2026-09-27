@@ -12,10 +12,25 @@
  * `contracts/v1/PIN.json` (`bun run contracts:omes:sync`). It is NOT fetched
  * from a live, enrolled OMES host, and it does not change when a host's
  * actual architecture registry changes — only a re-vendor (a new commit,
- * reviewed and re-pinned) updates it. `application/architecture-directory.ts`
- * surfaces `omesVersion`/`omesCommit`/`generatedAt` from the payload itself
- * so the screen can say plainly which pinned snapshot it is showing, rather
- * than letting a reader assume live data.
+ * reviewed and re-pinned) updates it.
+ *
+ * ## `omes_commit` / `generated_at` are DELIBERATE placeholders — never render them
+ *
+ * OMES's generator (`scripts/generate-architecture-capabilities-view.py`)
+ * writes the fixture's `omes_commit` and `generated_at` as fixed,
+ * deterministic placeholders (`0000…0` / `2026-01-01T00:00:00Z`) so the
+ * checked-in fixture reproduces byte-for-byte — they are NOT real
+ * provenance and were briefly shown as if they were on
+ * `/admin/omes/arsitektur` (ahliweb/omes#246). This module still parses them
+ * as `fixtureOmesCommit`/`fixtureGeneratedAt` below, ONLY so the round-trip
+ * schema-validation test can reconstruct a schema-valid payload from the
+ * projected shape — they must never be rendered. The real vendoring
+ * provenance (which commit of `ahliweb/omes` this snapshot was vendored
+ * from, and when) lives in `contracts/v1/PIN.json`
+ * (`sourceCommit`/`syncedAt`) and is surfaced by
+ * `application/architecture-directory.ts` as `provenance`, which the screen
+ * renders instead. `omesVersion` (the OMES release the fixture was generated
+ * from) IS real and is safe to render as-is.
  *
  * ## ADR-0017 boundary
  *
@@ -80,9 +95,22 @@ export type ArchitectureLane = {
 
 export type ProjectedArchitectureSnapshot = {
   schemaVersion: string;
+  /** Real: the OMES release (VERSION file) the fixture was generated from. Safe to render. */
   omesVersion: string;
-  omesCommit: string;
-  generatedAt: string;
+  /**
+   * The fixture's own `omes_commit` — a DELIBERATE fixed placeholder in the
+   * checked-in fixture, not real provenance. Never render this; see the
+   * module doc above and `application/architecture-directory.ts`'s
+   * `provenance` (from `PIN.json`) for what the screen should show instead.
+   */
+  fixtureOmesCommit: string;
+  /**
+   * The fixture's own `generated_at` — a DELIBERATE fixed placeholder in the
+   * checked-in fixture, not real provenance. Never render this; see the
+   * module doc above and `application/architecture-directory.ts`'s
+   * `provenance` (from `PIN.json`) for what the screen should show instead.
+   */
+  fixtureGeneratedAt: string;
   lanes: ArchitectureLane[];
 };
 
@@ -199,8 +227,8 @@ export function projectArchitectureSnapshot(
   return {
     schemaVersion: asString(record.schema_version, "$.schema_version"),
     omesVersion: asString(record.omes_version, "$.omes_version"),
-    omesCommit: asString(record.omes_commit, "$.omes_commit"),
-    generatedAt: asString(record.generated_at, "$.generated_at"),
+    fixtureOmesCommit: asString(record.omes_commit, "$.omes_commit"),
+    fixtureGeneratedAt: asString(record.generated_at, "$.generated_at"),
     lanes
   };
 }

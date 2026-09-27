@@ -16,7 +16,10 @@ import { describe, expect, test } from "bun:test";
 
 import { listModules } from "../src/modules";
 import { fetchArchitectureSnapshot } from "../src/modules/omes-control/application/architecture-directory";
-import { validateOmesContract } from "../src/modules/omes-control/domain/contracts";
+import {
+  OMES_CONTRACT_PIN,
+  validateOmesContract
+} from "../src/modules/omes-control/domain/contracts";
 
 const PAGE = "src/pages/admin/omes/arsitektur.astro";
 const APPLICATION_FILE =
@@ -122,11 +125,45 @@ describe("the screen explicitly states this is a pinned snapshot, not live host 
     expect(idPo).toContain("Ini adalah cuplikan rilis yang dipatok");
   });
 
-  test("the page renders omesVersion/omesCommit/generatedAt straight from the snapshot", async () => {
+  test("the page renders omesVersion and PIN.json-derived provenance, never the fixture's own commit/generated_at", async () => {
     const source = await readFile(PAGE, "utf8");
     expect(source).toContain("snapshot.omesVersion");
-    expect(source).toContain("snapshot.omesCommit");
-    expect(source).toContain("snapshot.generatedAt");
+    expect(source).toContain("snapshot.provenance.sourceCommit");
+    expect(source).toContain("snapshot.provenance.sourceCommitShort");
+    expect(source).toContain("snapshot.provenance.vendoredAt");
+
+    // The fixture's own `omes_commit`/`generated_at` are deliberate
+    // deterministic placeholders (OMES's
+    // scripts/generate-architecture-capabilities-view.py), not real
+    // provenance — the page's TEMPLATE must never reference them (the
+    // module doc above is allowed to explain, in prose, why not — so this
+    // checks the rendering body specifically, not the whole file text).
+    const templateBody = source.slice(source.indexOf("---", 1) + 3);
+    expect(templateBody).not.toContain("snapshot.omesCommit");
+    expect(templateBody).not.toContain("snapshot.generatedAt");
+    expect(templateBody).not.toContain("snapshot.fixtureOmesCommit");
+    expect(templateBody).not.toContain("snapshot.fixtureGeneratedAt");
+  });
+
+  test("the rendered provenance is sourced from contracts/v1/PIN.json, and the all-zero fixture placeholder is never shown", async () => {
+    const snapshot = await fetchArchitectureSnapshot();
+    const pin = await OMES_CONTRACT_PIN;
+
+    expect(snapshot.provenance.sourceCommit).toBe(pin.sourceCommit);
+    expect(snapshot.provenance.vendoredAt).toBe(pin.syncedAt);
+    expect(snapshot.provenance.sourceCommitShort).toBe(
+      pin.sourceCommit.slice(0, snapshot.provenance.sourceCommitShort.length)
+    );
+    expect(pin.sourceCommit).toMatch(/^[0-9a-f]{7,40}$/);
+
+    // The fixture's own placeholder commit must never leak into what is
+    // displayed as provenance.
+    expect(snapshot.provenance.sourceCommit).not.toBe(
+      "0000000000000000000000000000000000000000"
+    );
+    expect(snapshot.provenance.sourceCommit).not.toBe(
+      snapshot.fixtureOmesCommit
+    );
   });
 });
 
@@ -167,8 +204,12 @@ describe("fetchArchitectureSnapshot() reads the vendored fixture and validates a
       {
         schema_version: snapshot.schemaVersion,
         omes_version: snapshot.omesVersion,
-        omes_commit: snapshot.omesCommit,
-        generated_at: snapshot.generatedAt,
+        // These two round-trip the fixture's OWN placeholder fields (see
+        // domain/architecture.ts's module doc) purely to reconstruct a
+        // schema-valid payload — they are never what the page renders as
+        // provenance; `snapshot.provenance` (from PIN.json) is.
+        omes_commit: snapshot.fixtureOmesCommit,
+        generated_at: snapshot.fixtureGeneratedAt,
         planes,
         capabilities
       } as never

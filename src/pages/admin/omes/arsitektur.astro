@@ -16,12 +16,20 @@
  * Unlike every other `/admin/omes/*` screen, this one has NO database table
  * and NO tenant-scoped query behind it (`application/architecture-directory.ts`'s
  * own doc explains why) — every tenant sees the exact same vendored payload.
- * The banner below renders `omesVersion`/`omesCommit`/`generatedAt` straight
- * from that payload and says explicitly, in both `id` and `en`, that this is
- * a pinned snapshot rather than a live projection from an enrolled host —
- * the same "never let a reader assume live data" discipline
- * `orkestrasi-langsung.astro`'s staleness handling documents for its own
- * screen.
+ * The banner below renders `snapshot.omesVersion` (real — the OMES release
+ * the fixture was generated from) and `snapshot.provenance.sourceCommit` /
+ * `sourceCommitShort` / `vendoredAt` (also real — `contracts/v1/PIN.json`'s
+ * `sourceCommit`/`syncedAt`, the actual ahliweb/omes commit and timestamp
+ * this snapshot was vendored from). It deliberately does NOT render
+ * `snapshot.fixtureOmesCommit`/`fixtureGeneratedAt` — those are the vendored
+ * fixture's own `omes_commit`/`generated_at` fields, which OMES's generator
+ * writes as fixed, deterministic placeholders so the checked-in fixture
+ * reproduces byte-for-byte; they were briefly shown here as if they were real
+ * provenance (ahliweb/omes#246) and never should have been. The banner also
+ * says explicitly, in both `id` and `en`, that this is a pinned snapshot
+ * rather than a live projection from an enrolled host — the same "never let
+ * a reader assume live data" discipline `orkestrasi-langsung.astro`'s
+ * staleness handling documents for its own screen.
  *
  * ## ADR-0017 boundary
  *
@@ -47,7 +55,7 @@ import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
 import { fetchArchitectureSnapshot } from "../../../modules/omes-control/application/architecture-directory";
-import type { ProjectedArchitectureSnapshot } from "../../../modules/omes-control/domain/architecture";
+import type { ArchitectureSnapshotView } from "../../../modules/omes-control/application/architecture-directory";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
@@ -87,7 +95,7 @@ const screen = await loadAdminScreen({
 
 const canSeeAnything = screen.state !== "denied";
 const loadError = screen.state === "error";
-const snapshot: ProjectedArchitectureSnapshot | null =
+const snapshot: ArchitectureSnapshotView | null =
   screen.state === "allowed" ? screen.data.snapshot : null;
 const totalCapabilities =
   snapshot?.lanes.reduce((sum, lane) => sum + lane.capabilities.length, 0) ?? 0;
@@ -141,12 +149,14 @@ const totalCapabilities =
                 <dd class="cell-code">{snapshot.omesVersion}</dd>
               </div>
               <div>
-                <dt>{t("OMES commit")}</dt>
-                <dd class="cell-code">{snapshot.omesCommit}</dd>
+                <dt>{t("Source commit")}</dt>
+                <dd class="cell-code" title={snapshot.provenance.sourceCommit}>
+                  {snapshot.provenance.sourceCommitShort}
+                </dd>
               </div>
               <div>
-                <dt>{t("Generated at")}</dt>
-                <dd class="cell-muted">{snapshot.generatedAt}</dd>
+                <dt>{t("Vendored at")}</dt>
+                <dd class="cell-muted">{snapshot.provenance.vendoredAt}</dd>
               </div>
             </dl>
           </section>
