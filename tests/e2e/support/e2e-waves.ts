@@ -68,6 +68,11 @@
  */
 export const READ_WAVE: readonly string[] = [
   "admin-deny-path.e2e.ts",
+  // ahliweb/awcms#831 — injects a synthetic `.cell-muted` element via
+  // `page.evaluate` (a client-side DOM mutation only) to assert the CSS
+  // contract; it sends no non-GET request of its own beyond the shared
+  // `setup` project's login.
+  "admin-sidebar-long-content.e2e.ts",
   "admin-offices.e2e.ts",
   "admin-read-only-access.e2e.ts",
   "admin-screens-render.e2e.ts",

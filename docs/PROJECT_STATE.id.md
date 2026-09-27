@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f25e55244f9df3abf4bf86196aecf12bc2b4fd99d588bc64f3996cf8cb684cc2 -->
+<!-- i18n-source-hash: sha256:3205658b67ddd9b90af9a00961ccec0cd8b4d82a14697ec526af8c8014210ffb -->
 
 # AWCMS — Project State & Continuation
 
@@ -123,7 +123,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **165** (`sql/001`–`165`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0124** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **63** berkas `.astro` di `src/pages/admin/`; **0 dari 25** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **77** (42.169 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **77** (42.184 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **61** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

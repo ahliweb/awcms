@@ -573,8 +573,42 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 237,433 is the measured value with no added margin.
+ *
+ * **Raised again to 237,468 for ahliweb/awcms#831** (admin sidebar clipping
+ * fix). The fix adds one bare, universal `.cell-muted { overflow-wrap:
+ * anywhere; }` rule to `admin.css` (previously `.cell-muted`'s only wrap
+ * protection was scoped to `.data-table td`, which does nothing for the
+ * Hermes orchestration tree/activity list — a `display:flex` list, not a
+ * table) plus its doc comment. Measured actual total:
+ *
+ * ```
+ * before (237,433 ceiling)   237,433 B
+ * + .cell-muted overflow-wrap fix   237,468 B (measured actual total)
+ * ```
+ *
+ * 237,468 is the measured value with no added margin.
+ *
+ * **Raised again to 237,491, same issue.** `responsive-360.e2e.ts` (a full
+ * fleet sweep, not something this fix's own tests happened to cover) caught
+ * a SECOND instance of the identical defect on `/admin/omes/hermes`: its
+ * `.omes-hermes-task-summary dd` (a scoped `<style>` in `hermes.astro`)
+ * renders the same Hermes-supplied `goal` text as a plain `<dd>` with no
+ * `.cell-muted` class, inside a `display: grid;
+ * grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))` row — a grid
+ * item's default `min-width: auto` let a long, space-free value exceed the
+ * `minmax()` track's 200px floor the same way `.cell-muted` was overflowing
+ * `.admin-main`. Fixed with the same `overflow-wrap: anywhere;` on that
+ * `<dd>` directly (it has no shared class with the orchestration tree's
+ * `.cell-muted` to fix once for both). Measured actual total:
+ *
+ * ```
+ * before (237,468 ceiling)   237,468 B
+ * + hermes.astro dd overflow-wrap fix   237,491 B (measured actual total)
+ * ```
+ *
+ * 237,491 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 237_433;
+export const APP_BUDGET_BYTES = 237_491;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -2954,6 +2954,37 @@
   word-break: break-all;
 }
 
+/*
+ * ahliweb/awcms#831 — `.cell-muted` held free-text (goal/summary/description),
+ * and until now its ONLY wrap protection came from `.data-table td .cell-muted`
+ * (admin-screens.css) plus the `.data-table-scroll` wrapper every table sits
+ * in (`overflow-x: auto` — see the comment above `.cell-code`). That is a
+ * table-shaped safety net; a screen that renders `.cell-muted` OUTSIDE a table
+ * has none.
+ *
+ * The Hermes orchestration tree/activity list (ahliweb/omes#246 part 2,
+ * `.omes-orchestration-tree-node` / `.omes-orchestration-activity-list li` in
+ * omes-control-center.css) is exactly that: a `display:flex; flex-wrap:wrap`
+ * list, not a table, rendering Hermes-supplied `goal`/`summary` text in
+ * `.cell-muted` spans with no scroll wrapper at all. A long, space-free value
+ * (a pasted token, a URL, one very long identifier folded into a goal string)
+ * has nothing stopping it from overflowing `.admin-main` and widening the
+ * whole document past the viewport — `.admin-main`'s `min-width: 0` and
+ * `.admin-sidebar`'s `flex-shrink: 0` correctly keep both flex tracks at their
+ * assigned widths when that happens, but the PAGE becomes wider than 1440px,
+ * and a full-page screenshot captures that actual (wider) scrollable area —
+ * so the fixed-width sidebar and its labels occupy a shrunken sliver of the
+ * image, reading as a squeezed/clipped sidebar even though its own box never
+ * moved. `overflow-wrap: anywhere` (not `.cell-code`'s `break-all`) because
+ * this class holds prose: it only breaks where there is no ordinary space to
+ * break at, instead of fragmenting every word the way `break-all` would.
+ * Bare/universal like `.cell-code` above, so it protects `.cell-muted`
+ * wherever it is used — table or not — not just the OMES screens.
+ */
+.cell-muted {
+  overflow-wrap: anywhere;
+}
+
 .admin-code-inline {
   padding: 1px 5px;
   border-radius: var(--radius-sm);
