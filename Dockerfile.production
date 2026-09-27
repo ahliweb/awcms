@@ -12,6 +12,24 @@
 # (docs/awcms/deployment-profiles.md §Model dua-peran basis data).
 
 FROM oven/bun:1.4.2 AS base
+
+# oven/bun:1.4.2's Debian (trixie) base ships perl-base 5.40.1-6, which
+# carries three CRITICAL, fixed-upstream CVEs (CVE-2026-13221,
+# CVE-2026-42496, CVE-2026-8376 — fixed in 5.40.1-6+deb13u1). Checked
+# 2026-09-27 (#833): `1.4.2`/`1`/`1.4`/`latest` all resolve to the SAME
+# digest (published 2026-09-05, before the fix existed) and `1.4.2-slim`
+# carries the same three — there is no newer stable oven/bun tag whose base
+# already has the fix, so waiting for upstream is not an option today.
+# Applying the Debian security upgrade here, in `base`, instead of only in
+# the `runtime`/`jobs` stages that ship, means every derived stage (`deps`,
+# `build`, `prod-deps`, `jobs`, `runtime`) inherits it from one layer, and
+# any future fixable Debian CVE on this base is closed on the next rebuild
+# without waiting for oven/bun to republish the tag — the same pattern
+# awcms-one applies to its own storefront runtime image.
+RUN apt-get update \
+  && apt-get upgrade -y \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /home/bun/app
 
 # ---- deps: full deps (incl. dev) needed to build ----
