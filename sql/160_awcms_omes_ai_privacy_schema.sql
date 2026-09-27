@@ -145,6 +145,9 @@ CREATE INDEX IF NOT EXISTS awcms_omes_ai_egress_approvals_tenant_created_idx
 CREATE INDEX IF NOT EXISTS awcms_omes_ai_egress_approvals_workflow_instance_idx
   ON awcms_omes_ai_egress_approvals (workflow_instance_id);
 
+CREATE INDEX IF NOT EXISTS awcms_omes_ai_egress_approvals_requester_idx
+  ON awcms_omes_ai_egress_approvals (requested_by_tenant_user_id);
+
 ALTER TABLE awcms_omes_ai_egress_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE awcms_omes_ai_egress_approvals FORCE ROW LEVEL SECURITY;
 
