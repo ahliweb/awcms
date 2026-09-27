@@ -12,8 +12,10 @@
  * render as live/healthy.
  */
 import {
+  classifyOrchestrationFreshness,
   projectOrchestrationEvent,
   projectOrchestrationTree,
+  type OrchestrationFreshness,
   type ProjectedOrchestrationEvent,
   type ProjectedOrchestrationTree,
   type StoredOrchestrationNode
@@ -142,57 +144,92 @@ type EventRow = {
   received_at: Date;
 };
 
-function toEventSummary(row: EventRow): ProjectedOrchestrationEvent {
-  return projectOrchestrationEvent({
-    id: row.id,
-    eventType: row.event_type,
-    serverId: row.server_id,
-    sessionId: row.session_id,
-    turnId: row.turn_id,
-    subagentId: row.subagent_id,
-    parentSubagentId: row.parent_subagent_id,
-    role: row.role,
-    goal: row.goal,
-    state: row.state,
-    stepNumber: row.step_number,
-    activeTool: row.active_tool,
-    summary: row.summary,
-    hermesVersion: row.hermes_version,
-    eventTimestamp: row.event_timestamp.toISOString(),
-    correlationId: row.correlation_id,
-    receivedAt: row.received_at.toISOString()
-  });
+function toEventSummary(
+  row: EventRow,
+  sessionFreshness: OrchestrationFreshness
+): ProjectedOrchestrationEvent {
+  return projectOrchestrationEvent(
+    {
+      id: row.id,
+      eventType: row.event_type,
+      serverId: row.server_id,
+      sessionId: row.session_id,
+      turnId: row.turn_id,
+      subagentId: row.subagent_id,
+      parentSubagentId: row.parent_subagent_id,
+      role: row.role,
+      goal: row.goal,
+      state: row.state,
+      stepNumber: row.step_number,
+      activeTool: row.active_tool,
+      summary: row.summary,
+      hermesVersion: row.hermes_version,
+      eventTimestamp: row.event_timestamp.toISOString(),
+      correlationId: row.correlation_id,
+      receivedAt: row.received_at.toISOString()
+    },
+    sessionFreshness
+  );
 }
 
 export const HERMES_ORCHESTRATION_EVENT_LIST_LIMIT = 200;
 
-/** The tenant's most recent orchestration activity-stream events, optionally scoped to one session, newest first. */
+/**
+ * The tenant's most recent orchestration activity-stream events, optionally
+ * scoped to one session, newest first.
+ *
+ * Each row is stamped with `sessionFreshness`/`isHistorical`, RECOMPUTED
+ * here from that event's own session's current tree snapshot (a LEFT JOIN —
+ * an event can outlive its tree row, or arrive before one exists) — never
+ * merely echoed from a stored flag, and never defaulted to "live" by
+ * omission: a session with no matching tree snapshot at all classifies as
+ * "unknown" (via `classifyOrchestrationFreshness(null, ...)`), the same
+ * fail-closed default `projectOrchestrationEvent` uses. This is what keeps
+ * a stale/unknown session's activity rows from rendering with live-state
+ * coloring even though every event is, correctly, still shown (timestamped
+ * history, never hidden).
+ */
 export async function fetchOrchestrationEvents(
   tx: Bun.SQL,
   tenantId: string,
-  sessionId?: string
+  sessionId?: string,
+  now: Date = new Date()
 ): Promise<ProjectedOrchestrationEvent[]> {
   const rows = sessionId
     ? ((await tx`
-          SELECT id, event_type, server_id, session_id, turn_id, subagent_id,
-                 parent_subagent_id, role, goal, state, step_number,
-                 active_tool, summary, hermes_version, event_timestamp,
-                 correlation_id, received_at
-          FROM awcms_omes_hermes_orchestration_events
-          WHERE tenant_id = ${tenantId} AND session_id = ${sessionId}
-          ORDER BY event_timestamp DESC, id DESC
+          SELECT e.id, e.event_type, e.server_id, e.session_id, e.turn_id,
+                 e.subagent_id, e.parent_subagent_id, e.role, e.goal,
+                 e.state, e.step_number, e.active_tool, e.summary,
+                 e.hermes_version, e.event_timestamp, e.correlation_id,
+                 e.received_at, t.generated_at AS session_generated_at
+          FROM awcms_omes_hermes_orchestration_events e
+          LEFT JOIN awcms_omes_hermes_orchestration_trees t
+            ON t.tenant_id = e.tenant_id AND t.session_id = e.session_id
+          WHERE e.tenant_id = ${tenantId} AND e.session_id = ${sessionId}
+          ORDER BY e.event_timestamp DESC, e.id DESC
           LIMIT ${HERMES_ORCHESTRATION_EVENT_LIST_LIMIT}
-        `) as EventRow[])
+        `) as (EventRow & { session_generated_at: Date | null })[])
     : ((await tx`
-          SELECT id, event_type, server_id, session_id, turn_id, subagent_id,
-                 parent_subagent_id, role, goal, state, step_number,
-                 active_tool, summary, hermes_version, event_timestamp,
-                 correlation_id, received_at
-          FROM awcms_omes_hermes_orchestration_events
-          WHERE tenant_id = ${tenantId}
-          ORDER BY event_timestamp DESC, id DESC
+          SELECT e.id, e.event_type, e.server_id, e.session_id, e.turn_id,
+                 e.subagent_id, e.parent_subagent_id, e.role, e.goal,
+                 e.state, e.step_number, e.active_tool, e.summary,
+                 e.hermes_version, e.event_timestamp, e.correlation_id,
+                 e.received_at, t.generated_at AS session_generated_at
+          FROM awcms_omes_hermes_orchestration_events e
+          LEFT JOIN awcms_omes_hermes_orchestration_trees t
+            ON t.tenant_id = e.tenant_id AND t.session_id = e.session_id
+          WHERE e.tenant_id = ${tenantId}
+          ORDER BY e.event_timestamp DESC, e.id DESC
           LIMIT ${HERMES_ORCHESTRATION_EVENT_LIST_LIMIT}
-        `) as EventRow[]);
+        `) as (EventRow & { session_generated_at: Date | null })[]);
 
-  return rows.map(toEventSummary);
+  return rows.map((row) =>
+    toEventSummary(
+      row,
+      classifyOrchestrationFreshness(
+        row.session_generated_at?.toISOString() ?? null,
+        now
+      )
+    )
+  );
 }

@@ -5540,3 +5540,6 @@ msgstr ""
 
 msgid "OMES module"
 msgstr ""
+
+msgid "last reported: {state}"
+msgstr ""

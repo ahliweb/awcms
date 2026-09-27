@@ -271,6 +271,111 @@ suite("omes_control Hermes orchestration tree/event (real PostgreSQL)", () => {
     });
   });
 
+  describe("events are stamped isHistorical from their OWN session's current freshness, recomputed at read time", () => {
+    test("an event for a session whose current tree is stale reads back isHistorical, even though the event itself is freshly timestamped", async () => {
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        ingestOrchestrationTree(tx, {
+          tenantId: TENANT_A,
+          correlationId: randomUUID(),
+          serverId: "srv-evt-stale-1",
+          sessionId: "sess-evt-stale",
+          rootSubagentId: "sub-lead-001",
+          generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          activeCount: 1,
+          completedCount: 0,
+          failedCount: 0,
+          nodes: [sampleNode({ state: "RUNNING" })]
+        })
+      );
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        ingestOrchestrationEvent(tx, {
+          tenantId: TENANT_A,
+          correlationId: randomUUID(),
+          eventType: "subagent_step",
+          serverId: "srv-evt-stale-1",
+          sessionId: "sess-evt-stale",
+          subagentId: "sub-code-001",
+          state: "RUNNING",
+          hermesVersion: "v2026.9.14",
+          eventTimestamp: new Date().toISOString()
+        })
+      );
+
+      const events = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchOrchestrationEvents(tx, TENANT_A, "sess-evt-stale", new Date())
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0]!.sessionFreshness).toBe("stale");
+      expect(events[0]!.isHistorical).toBe(true);
+      // The event's own reported state is untouched — only the render
+      // treatment differs.
+      expect(events[0]!.effectiveState).toBe("RUNNING");
+    });
+
+    test("an event for a session whose current tree is live reads back NOT historical", async () => {
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        ingestOrchestrationTree(tx, {
+          tenantId: TENANT_A,
+          correlationId: randomUUID(),
+          serverId: "srv-evt-live-1",
+          sessionId: "sess-evt-live",
+          rootSubagentId: "sub-lead-001",
+          generatedAt: new Date().toISOString(),
+          activeCount: 1,
+          completedCount: 0,
+          failedCount: 0,
+          nodes: [sampleNode({ state: "RUNNING" })]
+        })
+      );
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        ingestOrchestrationEvent(tx, {
+          tenantId: TENANT_A,
+          correlationId: randomUUID(),
+          eventType: "subagent_step",
+          serverId: "srv-evt-live-1",
+          sessionId: "sess-evt-live",
+          subagentId: "sub-code-001",
+          state: "RUNNING",
+          hermesVersion: "v2026.9.14",
+          eventTimestamp: new Date().toISOString()
+        })
+      );
+
+      const events = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchOrchestrationEvents(tx, TENANT_A, "sess-evt-live", new Date())
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0]!.sessionFreshness).toBe("live");
+      expect(events[0]!.isHistorical).toBe(false);
+    });
+
+    test("an event for a session with no tree snapshot at all reads back as unknown/historical, never live", async () => {
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        ingestOrchestrationEvent(tx, {
+          tenantId: TENANT_A,
+          correlationId: randomUUID(),
+          eventType: "subagent_step",
+          serverId: "srv-evt-no-tree-1",
+          sessionId: "sess-evt-no-tree",
+          subagentId: "sub-code-001",
+          state: "RUNNING",
+          hermesVersion: "v2026.9.14",
+          eventTimestamp: new Date().toISOString()
+        })
+      );
+
+      const events = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+        fetchOrchestrationEvents(tx, TENANT_A, "sess-evt-no-tree", new Date())
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0]!.sessionFreshness).toBe("unknown");
+      expect(events[0]!.isHistorical).toBe(true);
+    });
+  });
+
   describe("idempotent replay of an orchestration event", () => {
     test("redelivering the SAME (session, subagent, event_type, step) event is a no-op, never a duplicate row", async () => {
       const input = {

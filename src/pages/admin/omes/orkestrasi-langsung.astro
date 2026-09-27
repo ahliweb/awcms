@@ -94,7 +94,12 @@ const screen = await loadAdminScreen({
   load: async ({ tx }) => {
     const now = new Date();
     const trees = await fetchOrchestrationTrees(tx, ssr.tenantId, now);
-    const events = await fetchOrchestrationEvents(tx, ssr.tenantId);
+    const events = await fetchOrchestrationEvents(
+      tx,
+      ssr.tenantId,
+      undefined,
+      now
+    );
     return { trees, events };
   },
   onError: (error) => {
@@ -217,15 +222,22 @@ function formatTimestamp(value: string | null): string {
                         Math.max(node.depth, 0),
                         MAX_INDENT_LEVEL
                       )}
+                      data-historical={node.isHistorical ? "true" : "false"}
                     >
                       <span
                         class="status-badge"
                         data-variant={
-                          STATE_VARIANT[node.effectiveState] ?? "neutral"
+                          node.isHistorical
+                            ? "neutral"
+                            : (STATE_VARIANT[node.effectiveState] ?? "neutral")
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {node.effectiveState}
+                        {node.isHistorical
+                          ? t("last reported: {state}", {
+                              state: node.effectiveState
+                            })
+                          : node.effectiveState}
                       </span>
                       <span class="cell-code">{node.subagentId}</span>
                       {node.role && <span class="cell-muted">{node.role}</span>}
@@ -272,6 +284,7 @@ function formatTimestamp(value: string | null): string {
             id="omes-orkestrasi-activity-list"
             class="omes-orchestration-activity-list"
             data-empty-label={t("No orchestration activity yet")}
+            data-last-reported-label={t("last reported: {state}")}
           >
             {events.length === 0 ? (
               <li class="empty-state">
@@ -281,15 +294,24 @@ function formatTimestamp(value: string | null): string {
               </li>
             ) : (
               events.map((event) => (
-                <li data-event-id={event.id}>
+                <li
+                  data-event-id={event.id}
+                  data-historical={event.isHistorical ? "true" : "false"}
+                >
                   <span
                     class="status-badge"
                     data-variant={
-                      STATE_VARIANT[event.effectiveState] ?? "neutral"
+                      event.isHistorical
+                        ? "neutral"
+                        : (STATE_VARIANT[event.effectiveState] ?? "neutral")
                     }
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {event.effectiveState}
+                    {event.isHistorical
+                      ? t("last reported: {state}", {
+                          state: event.effectiveState
+                        })
+                      : event.effectiveState}
                   </span>
                   <span class="cell-code">{event.subagentId}</span>
                   <span class="cell-muted">{event.effectiveEventType}</span>
@@ -350,7 +372,20 @@ function formatTimestamp(value: string | null): string {
     effectiveEventType: string;
     eventTimestamp: string;
     summary: string | null;
+    isHistorical: boolean;
   };
+
+  // Kept in sync with the server-rendered rows above: a historical (stale/
+  // unknown session) event never gets live-state coloring, even on refresh —
+  // see `domain/hermes-orchestration.ts`'s `isHistorical` and this page's
+  // own SSR block for the same "last reported: X" / neutral-dot treatment.
+  const LAST_REPORTED_LABEL =
+    document.getElementById("omes-orkestrasi-activity-list")?.dataset
+      .lastReportedLabel ?? "last reported: {state}";
+
+  function historicalLabel(state: string): string {
+    return LAST_REPORTED_LABEL.replace("{state}", state);
+  }
 
   function renderActivity(items: ActivityEvent[]): void {
     if (!activityList) return;
@@ -363,15 +398,19 @@ function formatTimestamp(value: string | null): string {
       return;
     }
     activityList.innerHTML = items
-      .map(
-        (event) => `<li data-event-id="${escapeHtml(event.id)}">
-          <span class="status-badge"><span class="status-dot" aria-hidden="true"></span>${escapeHtml(event.effectiveState)}</span>
+      .map((event) => {
+        const variant = event.isHistorical ? "neutral" : undefined;
+        const label = event.isHistorical
+          ? historicalLabel(event.effectiveState)
+          : event.effectiveState;
+        return `<li data-event-id="${escapeHtml(event.id)}" data-historical="${event.isHistorical ? "true" : "false"}">
+          <span class="status-badge"${variant ? ` data-variant="${variant}"` : ""}><span class="status-dot" aria-hidden="true"></span>${escapeHtml(label)}</span>
           <span class="cell-code">${escapeHtml(event.subagentId)}</span>
           <span class="cell-muted">${escapeHtml(event.effectiveEventType)}</span>
           <span class="cell-muted">${escapeHtml(event.eventTimestamp)}</span>
           ${event.summary ? `<span class="cell-muted">${escapeHtml(event.summary)}</span>` : ""}
-        </li>`
-      )
+        </li>`;
+      })
       .join("");
   }
 

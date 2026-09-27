@@ -188,6 +188,31 @@ describe("Hermes screen: planner/budget are explicit 'not reported', never inven
   });
 });
 
+describe("stale/unknown sessions never render nodes/events with live-state coloring", () => {
+  test("orkestrasi-langsung.astro renders the historical/muted treatment for tree nodes and activity rows", async () => {
+    const source = await readFile(LIVE_TREE_PAGE, "utf8");
+    expect(source).toContain("node.isHistorical");
+    expect(source).toContain("event.isHistorical");
+    expect(source).toContain('t("last reported: {state}"');
+    expect(source).toContain("data-historical=");
+  });
+
+  test("hermes.astro renders the historical/muted treatment for the current task's root node and log rows", async () => {
+    const source = await readFile(HERMES_PAGE, "utf8");
+    expect(source).toContain("rootNode.isHistorical");
+    expect(source).toContain("event.isHistorical");
+    expect(source).toContain('t("last reported: {state}"');
+  });
+
+  test("the domain layer stamps every node/event with isHistorical, recomputed from freshness — never a stored flag", async () => {
+    const domain = await readFile(
+      "src/modules/omes-control/domain/hermes-orchestration.ts",
+      "utf8"
+    );
+    expect(domain).toContain("isHistorical");
+  });
+});
+
 describe("Progres Hermes: explicit empty state, no GitHub integration, no static list", () => {
   test("the page renders an explicit not-implemented empty state linking the tracking issue", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");

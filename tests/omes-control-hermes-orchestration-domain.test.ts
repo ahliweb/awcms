@@ -106,6 +106,34 @@ describe("projectOrchestrationTree — staleness and node-state rollups are reco
     expect(result.isActive).toBe(false);
   });
 
+  test("a stale tree's nodes are all marked isHistorical, so a renderer never paints their last-reported state as live", () => {
+    const result = projectOrchestrationTree(
+      tree({
+        generatedAt: "2026-09-27T11:00:00Z",
+        nodes: [node({ state: "RUNNING" })]
+      }),
+      NOW
+    );
+    expect(result.freshness).toBe("stale");
+    expect(result.nodes[0]!.effectiveState).toBe("RUNNING");
+    expect(result.nodes[0]!.isHistorical).toBe(true);
+  });
+
+  test("an unknown-freshness tree's nodes are also marked isHistorical (unknown is never treated as live)", () => {
+    const result = projectOrchestrationTree(
+      tree({ generatedAt: "not-a-date" }),
+      NOW
+    );
+    expect(result.freshness).toBe("unknown");
+    expect(result.nodes[0]!.isHistorical).toBe(true);
+  });
+
+  test("a live tree's nodes are NOT marked isHistorical", () => {
+    const result = projectOrchestrationTree(tree(), NOW);
+    expect(result.freshness).toBe("live");
+    expect(result.nodes[0]!.isHistorical).toBe(false);
+  });
+
   test("stored active/completed/failed counts are IGNORED — recomputed from actual node states", () => {
     const result = projectOrchestrationTree(
       tree({
@@ -245,6 +273,28 @@ describe("projectOrchestrationEvent", () => {
   test("an unrecognized state is projected as UNKNOWN", () => {
     const result = projectOrchestrationEvent(event({ state: "VIBING" }));
     expect(result.effectiveState).toBe("UNKNOWN");
+  });
+
+  test("an event stamped with a live session freshness is not historical", () => {
+    const result = projectOrchestrationEvent(event(), "live");
+    expect(result.sessionFreshness).toBe("live");
+    expect(result.isHistorical).toBe(false);
+  });
+
+  test("an event stamped with a stale session freshness is historical, even though the event itself is timestamped/real", () => {
+    const result = projectOrchestrationEvent(event(), "stale");
+    expect(result.sessionFreshness).toBe("stale");
+    expect(result.isHistorical).toBe(true);
+    // The event's own recognized state is unchanged — only the RENDER
+    // treatment (isHistorical) differs; the domain never overwrites what
+    // was actually reported.
+    expect(result.effectiveState).toBe("RUNNING");
+  });
+
+  test("an event with no session freshness passed defaults to unknown/historical, never live", () => {
+    const result = projectOrchestrationEvent(event());
+    expect(result.sessionFreshness).toBe("unknown");
+    expect(result.isHistorical).toBe(true);
   });
 });
 

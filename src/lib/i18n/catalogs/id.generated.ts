@@ -1738,6 +1738,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "job; this screen plans, records and holds, it never deletes.": ["job; layar ini merencanakan, mencatat, dan menahan, ia tidak pernah menghapus."],
   "json": ["json"],
   "landmark\u0004Admin": ["Administrasi"],
+  "last reported: {state}": ["terakhir dilaporkan: {state}"],
   "live": ["aktif"],
   "locale; the endpoint validates and escapes the content.": ["locale; endpoint memvalidasi dan meng-escape kontennya."],
   "menu-section\u0004Commerce": ["Perdagangan"],

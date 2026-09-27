@@ -5528,3 +5528,6 @@ msgstr "Proyek hulu"
 
 msgid "OMES module"
 msgstr "Modul OMES"
+
+msgid "last reported: {state}"
+msgstr "terakhir dilaporkan: {state}"

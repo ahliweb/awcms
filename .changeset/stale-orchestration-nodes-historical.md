@@ -1,0 +1,7 @@
+---
+"awcms": patch
+---
+
+fix(control-center): stale Hermes orchestration sessions never render node/event state as live (ahliweb/omes#246 part 2 follow-up)
+
+`/admin/omes/orkestrasi-langsung` already showed a `stale`/`unknown` badge on a session header, but the nodes and activity-stream rows inside it kept their last-reported state's live color (e.g. a green `● RUNNING`), which reads as currently running even though the whole snapshot has gone stale. `domain/hermes-orchestration.ts`'s `projectOrchestrationTree`/`projectOrchestrationEvent` now stamp every node and event with a recomputed `isHistorical` flag (`freshness !== "live"` for nodes; the OWN session's current tree freshness, recomputed via a new `sessionFreshness` parameter, for events — `application/hermes-orchestration-directory.ts` joins each event to its session's current snapshot rather than trusting a stored flag, defaulting fail-closed to `"unknown"`/historical when no snapshot exists at all). Both `orkestrasi-langsung.astro` and `hermes.astro` render a historical node/event with a neutral status-badge variant, a new "last reported: {state}" ("terakhir dilaporkan: {state}") label instead of the bare state, and a muted row (`data-historical="true"`, styled in `omes-control-center.css`) — never the live success/danger color. The activity stream's client-side poll refresh applies the same treatment on every periodic re-render, not just the initial SSR paint.

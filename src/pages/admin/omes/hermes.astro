@@ -61,7 +61,7 @@ const screen = await loadAdminScreen({
     const current =
       trees.find((tree) => tree.freshness === "live") ?? trees[0] ?? null;
     const events = current
-      ? await fetchOrchestrationEvents(tx, ssr.tenantId, current.sessionId)
+      ? await fetchOrchestrationEvents(tx, ssr.tenantId, current.sessionId, now)
       : [];
     return { current, events };
   },
@@ -147,13 +147,23 @@ const rootNode = current?.nodes.find(
               </div>
               <div>
                 <dt>{t("Status")}</dt>
-                <dd>
+                <dd data-historical={rootNode.isHistorical ? "true" : "false"}>
                   <span
                     class="status-badge"
-                    data-variant={current.isActive ? "success" : "info"}
+                    data-variant={
+                      rootNode.isHistorical
+                        ? "neutral"
+                        : current.isActive
+                          ? "success"
+                          : "info"
+                    }
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {rootNode.effectiveState}
+                    {rootNode.isHistorical
+                      ? t("last reported: {state}", {
+                          state: rootNode.effectiveState
+                        })
+                      : rootNode.effectiveState}
                   </span>
                 </dd>
               </div>
@@ -210,7 +220,10 @@ const rootNode = current?.nodes.find(
               </li>
             ) : (
               events.slice(0, 20).map((event) => (
-                <li data-event-id={event.id}>
+                <li
+                  data-event-id={event.id}
+                  data-historical={event.isHistorical ? "true" : "false"}
+                >
                   <span class="cell-muted">{event.eventTimestamp}</span>
                   <span class="cell-code">{event.subagentId}</span>
                   <span class="cell-muted">{event.effectiveEventType}</span>
