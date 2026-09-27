@@ -14,6 +14,14 @@
  * a `null` value simply means "no wire value was ever provided", not a data
  * quality problem.
  *
+ * The RESPONSE'S `job_id` field (still required by the unchanged
+ * `worker-result.response.schema.json`) is satisfied by the SERVER's own
+ * `awcms_omes_jobs.id` — resolved here as `jobId` and returned on both
+ * `recorded` and `duplicate_ignored`, never a client-supplied value. See
+ * `pages/api/v1/omes/worker/result.ts`'s own header for why the `rejected`/
+ * `unknown_job` paths deliberately do NOT do the same (disclosing a
+ * resolved job id there would be an oracle).
+ *
  * Idempotent by the same `(tenant_id, server_id, idempotency_key)` via a
  * single `INSERT ... ON CONFLICT DO NOTHING RETURNING id` — same
  * rows-returned-decides pattern as `worker-nonce-store.ts` and the shared
@@ -67,8 +75,8 @@ export type WorkerResultInput = {
 };
 
 export type IngestResultOutcome =
-  | { outcome: "recorded"; reconciled: boolean }
-  | { outcome: "duplicate_ignored"; reconciled: boolean }
+  | { outcome: "recorded"; reconciled: boolean; jobId: string }
+  | { outcome: "duplicate_ignored"; reconciled: boolean; jobId: string }
   | { outcome: "unknown_job" };
 
 const JOB_STATE_FOR_REPORTED: Record<WorkerResultInput["state"], string> = {
@@ -91,6 +99,8 @@ export async function ingestWorkerResult(
   if (!jobRows[0]) {
     return { outcome: "unknown_job" };
   }
+
+  const jobId = jobRows[0].id;
 
   const redactedEvidence = redactSensitiveAttributes(input.evidence) ?? {};
   const redactedError = input.error
@@ -128,7 +138,8 @@ export async function ingestWorkerResult(
 
     return {
       outcome: "duplicate_ignored",
-      reconciled: existingRows[0]?.reconciled ?? false
+      reconciled: existingRows[0]?.reconciled ?? false,
+      jobId
     };
   }
 
@@ -166,5 +177,5 @@ export async function ingestWorkerResult(
     ON CONFLICT (tenant_id, server_id, source_event_id) DO NOTHING
   `;
 
-  return { outcome: "recorded", reconciled: inserted.reconciled };
+  return { outcome: "recorded", reconciled: inserted.reconciled, jobId };
 }

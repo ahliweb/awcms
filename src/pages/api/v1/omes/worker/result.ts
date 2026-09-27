@@ -13,10 +13,19 @@
  * longer exists on `worker-result.request` at all (issue ahliweb/omes#221,
  * re-vendored alongside ahliweb/omes#232): `additionalProperties: false`
  * means a request that still carries one is rejected by
- * `validateOmesContractText` before this handler does anything else. The
- * RESPONSE schema (`worker-result.response`, unchanged) still requires a
- * `job_id` field, so every response below emits the fixed literal
- * `"unknown"` — there is no longer a client-supplied value to echo.
+ * `validateOmesContractText` before this handler does anything else.
+ *
+ * The RESPONSE schema (`worker-result.response`, unchanged) still requires a
+ * `job_id` field. On `recorded`/`duplicate_ignored` this is the SERVER's own
+ * `awcms_omes_jobs.id` — `ingestWorkerResult` already resolved that row to
+ * do the update, so it is real, not a placeholder. On `rejected` (including
+ * the `unknown_job` outcome folded into it, per this route's own
+ * never-distinguish-the-cause discipline) the response instead emits the
+ * fixed literal `"unknown"` — deliberately, not an oversight: echoing a
+ * resolved job id on a REJECTED response would let an attacker who knows a
+ * `(tenant, server)` pair but not a worker's real signing key use this
+ * endpoint as an oracle for "does a job matching this idempotency_key
+ * exist", one bit of information cheaper than actually leasing it.
  */
 import type { APIRoute } from "astro";
 
@@ -210,7 +219,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
 
   return jsonResponse(
     {
-      job_id: "unknown",
+      job_id: outcome.jobId,
       status: outcome.outcome === "recorded" ? "recorded" : "duplicate_ignored",
       reconciled: outcome.reconciled,
       recorded_at: now.toISOString()

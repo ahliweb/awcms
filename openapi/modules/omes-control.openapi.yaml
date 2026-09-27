@@ -1116,13 +1116,15 @@ paths:
       description: >-
         `security: []`. Same envelope authentication as poll, with
         X-Omes-Nonce/X-Omes-Timestamp headers (worker-result.request has no
-        nonce/timestamp body fields). Idempotent by
-        (tenant, server, idempotency_key) — NOT the wire `job_id`, which is
-        the worker's own local job-store id; see
-        application/worker-result-ingestion.ts. A 2xx response is an
-        acknowledgement of receipt only: every recorded row is stamped
-        `source: "worker_reported"` / `reconciled: false` and is never
-        presented elsewhere as independently confirmed success.
+        nonce/timestamp body fields, and no job_id field at all — issue
+        ahliweb/omes#221). Idempotent by (tenant, server, idempotency_key).
+        The response's job_id is the server's own resolved
+        awcms_omes_jobs.id on recorded/duplicate_ignored, or the fixed
+        literal "unknown" on rejected (never a resolved id, to avoid an
+        existence oracle); see application/worker-result-ingestion.ts. A 2xx
+        response is an acknowledgement of receipt only: every recorded row
+        is stamped `source: "worker_reported"` / `reconciled: false` and is
+        never presented elsewhere as independently confirmed success.
       operationId: omesWorkerResult
       security: []
       requestBody:
