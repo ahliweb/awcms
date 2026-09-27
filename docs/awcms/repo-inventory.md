@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 161   |
+| Migrations                          | 162   |
 | `awcms_*` tables                    | 164   |
 | Tables with `FORCE` RLS             | 146   |
 | RLS-free tables (global, by design) | 18    |
@@ -211,6 +211,7 @@
 | 159 | `sql/159_awcms_omes_control_worker_ingestion.sql`                  |
 | 160 | `sql/160_awcms_omes_ai_privacy_schema.sql`                         |
 | 161 | `sql/161_awcms_omes_ai_privacy_permissions.sql`                    |
+| 162 | `sql/162_awcms_omes_worker_results_job_id_optional.sql`            |
 
 ### Tables & Row-Level Security
 
