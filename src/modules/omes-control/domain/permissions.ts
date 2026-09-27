@@ -100,5 +100,12 @@ export const OMES_GUARDS = {
       activityCode: "hermes_orchestration",
       action: "read" as const
     }
+  },
+  architecture: {
+    read: {
+      moduleKey: "omes_control",
+      activityCode: "architecture",
+      action: "read" as const
+    }
   }
 } as const;

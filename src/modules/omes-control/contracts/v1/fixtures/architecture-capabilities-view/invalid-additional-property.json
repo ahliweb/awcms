@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "omes_version": "0.4.0",
+  "omes_commit": "0000000000000000000000000000000000000000",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "notes": "not allowed",
+  "planes": [
+    {
+      "id": "host_control",
+      "name": "Host control",
+      "execution_semantics": "deterministic"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "omes.example.capability",
+      "name": "Example Capability",
+      "plane": "host_control",
+      "authority": "omes",
+      "execution_semantics": "deterministic",
+      "implementation_status": "implemented",
+      "upstream_project": null,
+      "omes_module": "jobs"
+    }
+  ]
+}

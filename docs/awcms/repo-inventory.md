@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 164   |
+| Migrations                          | 165   |
 | `awcms_*` tables                    | 166   |
 | Tables with `FORCE` RLS             | 148   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 535   |
-| Route files                         | 430   |
+| Test files                          | 536   |
+| Route files                         | 431   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -214,6 +214,7 @@
 | 162 | `sql/162_awcms_omes_worker_results_job_id_optional.sql`            |
 | 163 | `sql/163_awcms_omes_hermes_orchestration_schema.sql`               |
 | 164 | `sql/164_awcms_omes_hermes_orchestration_permissions.sql`          |
+| 165 | `sql/165_awcms_omes_architecture_permissions.sql`                  |
 
 ### Tables & Row-Level Security
 
@@ -390,7 +391,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 432        |
+| `(root)`      | 433        |
 | `e2e`         | 19         |
 | `integration` | 83         |
 | `unit`        | 1          |
@@ -400,7 +401,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 337   |
-| `/admin/**`     | 63    |
+| `/admin/**`     | 64    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

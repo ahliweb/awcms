@@ -1,0 +1,339 @@
+---
+/**
+ * OMES Control Center — "Arsitektur" (architecture) screen, Issue
+ * ahliweb/omes#246 part 3.
+ *
+ * Renders the vendored, pinned `architecture-capabilities-view` v1 contract
+ * snapshot (`src/modules/omes-control/contracts/v1/fixtures/
+ * architecture-capabilities-view/valid-01-generated.json`, re-vendored from
+ * OMES commit 339f2f371aa20b2e9ec6b839488804160ab4e08a via
+ * `bun run contracts:omes:sync` — see `contracts/v1/PIN.json`) as planes
+ * ("lanes") of capability cards, following the redesign reference's
+ * "Arsitektur" view binding (`OMES Control Center.dc.html`).
+ *
+ * ## This is a PINNED RELEASE SNAPSHOT, not live host state
+ *
+ * Unlike every other `/admin/omes/*` screen, this one has NO database table
+ * and NO tenant-scoped query behind it (`application/architecture-directory.ts`'s
+ * own doc explains why) — every tenant sees the exact same vendored payload.
+ * The banner below renders `omesVersion`/`omesCommit`/`generatedAt` straight
+ * from that payload and says explicitly, in both `id` and `en`, that this is
+ * a pinned snapshot rather than a live projection from an enrolled host —
+ * the same "never let a reader assume live data" discipline
+ * `orkestrasi-langsung.astro`'s staleness handling documents for its own
+ * screen.
+ *
+ * ## ADR-0017 boundary
+ *
+ * Read-only reference/observability projection only. It carries no control
+ * action and cannot mutate host, Hermes, or AWCMS state — the vendored
+ * schema's `additionalProperties: false` at every level and its explicit ban
+ * on any command/shell/exec-shaped property key (registry guard C1) make
+ * that structural on the OMES side, not merely a UI convention here.
+ *
+ * ## Permission: a NEW `architecture.read`, not a reuse of
+ * `hermes_orchestration.read`
+ *
+ * This screen's subject (the cross-cutting OMES/Hermes/Omarchy/AWCMS/
+ * provider layered-architecture registry) has no overlap with the Hermes
+ * delegated-task/subagent orchestration family the other three #246 screens
+ * share one permission for — see `module.ts`'s and `sql/165`'s comments for
+ * the full reasoning.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { fetchArchitectureSnapshot } from "../../../modules/omes-control/application/architecture-directory";
+import type { ProjectedArchitectureSnapshot } from "../../../modules/omes-control/domain/architecture";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+// Inlined as a literal `AccessRequest` object shape (matching
+// `OMES_GUARDS.architecture.read` byte-for-byte), same pattern as the other
+// #246 screens — see `ai-privacy.astro`'s comment for why.
+const ARCHITECTURE_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "architecture",
+  action: "read"
+} as const;
+
+const STATUS_VARIANT: Record<string, string> = {
+  implemented: "success",
+  delegated_upstream: "info",
+  staged: "warning",
+  optional_external: "neutral",
+  logical_boundary: "neutral"
+};
+
+const NOT_APPLICABLE = "—";
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: ARCHITECTURE_READ_GUARD,
+  load: async () => ({ snapshot: await fetchArchitectureSnapshot() }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/arsitektur.astro: failed to load the pinned architecture snapshot",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const snapshot: ProjectedArchitectureSnapshot | null =
+  screen.state === "allowed" ? screen.data.snapshot : null;
+const totalCapabilities =
+  snapshot?.lanes.reduce((sum, lane) => sum + lane.capabilities.length, 0) ?? 0;
+---
+
+<AdminLayout
+  title={t("Architecture")}
+  description={t(
+    "A read-only projection of the ADR-0017 layered reference architecture — planes and capabilities across OMES, Hermes, Omarchy, AWCMS, and provider integrations."
+  )}
+>
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-arsitektur-denied">
+          {t("You do not have permission to view the architecture snapshot.")}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-arsitektur-error">
+          {t(
+            "The architecture snapshot could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && snapshot && (
+        <>
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="arsitektur-snapshot-title"
+            id="omes-arsitektur-snapshot"
+          >
+            <h2 class="admin-section-title" id="arsitektur-snapshot-title">
+              {t("Reference architecture")}
+              <span class="count-pill">{totalCapabilities}</span>
+            </h2>
+            <p class="page-description">
+              {t(
+                "This is a pinned release snapshot from a specific OMES release — not live host state. It only changes when this screen's data is re-vendored from a newer OMES commit."
+              )}
+            </p>
+            <dl class="omes-architecture-meta">
+              <div>
+                <dt>{t("OMES version")}</dt>
+                <dd class="cell-code">{snapshot.omesVersion}</dd>
+              </div>
+              <div>
+                <dt>{t("OMES commit")}</dt>
+                <dd class="cell-code">{snapshot.omesCommit}</dd>
+              </div>
+              <div>
+                <dt>{t("Generated at")}</dt>
+                <dd class="cell-muted">{snapshot.generatedAt}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="arsitektur-lanes-title"
+            id="omes-arsitektur-lanes"
+          >
+            <h2 class="admin-section-title sr-only" id="arsitektur-lanes-title">
+              {t("Capabilities")}
+            </h2>
+            <div class="omes-architecture-lanes">
+              {snapshot.lanes.map((lane) => (
+                <div
+                  class="omes-architecture-lane"
+                  data-plane-id={lane.plane.id}
+                >
+                  <div class="omes-architecture-lane-header">
+                    <span class="omes-architecture-lane-name">
+                      {lane.plane.name}
+                    </span>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        STATUS_VARIANT[lane.plane.executionSemantics] ??
+                        "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {lane.plane.executionSemantics}
+                    </span>
+                    <span class="count-pill">{lane.capabilities.length}</span>
+                  </div>
+
+                  {lane.capabilities.length === 0 ? (
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No capabilities in this plane yet")}
+                      </span>
+                    </div>
+                  ) : (
+                    <ul class="omes-architecture-card-list">
+                      {lane.capabilities.map((capability) => (
+                        <li
+                          class="omes-architecture-card"
+                          data-capability-id={capability.id}
+                        >
+                          <div class="omes-architecture-card-header">
+                            <span class="omes-architecture-card-name">
+                              {capability.name}
+                            </span>
+                            <span
+                              class="status-badge"
+                              data-variant={
+                                STATUS_VARIANT[
+                                  capability.implementationStatus
+                                ] ?? "neutral"
+                              }
+                            >
+                              <span class="status-dot" aria-hidden="true" />
+                              {capability.implementationStatus}
+                            </span>
+                          </div>
+                          <dl class="omes-architecture-card-body">
+                            <div>
+                              <dt>{t("Authority")}</dt>
+                              <dd class="cell-code">{capability.authority}</dd>
+                            </div>
+                            <div>
+                              <dt>{t("Execution semantics")}</dt>
+                              <dd class="cell-muted">
+                                {capability.executionSemantics}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>{t("Upstream project")}</dt>
+                              <dd class="cell-muted">
+                                {capability.upstreamProject ?? NOT_APPLICABLE}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>{t("OMES module")}</dt>
+                              <dd class="cell-code">
+                                {capability.omesModule ?? NOT_APPLICABLE}
+                              </dd>
+                            </div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )
+    }
+  </div>
+</AdminLayout>
+
+<style>
+  .omes-architecture-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--sp-4);
+    margin: var(--sp-4) 0 0;
+  }
+  .omes-architecture-meta dt {
+    color: var(--color-text-muted);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+  }
+  .omes-architecture-meta dd {
+    margin: var(--sp-1) 0 0;
+    color: var(--color-text);
+  }
+
+  .omes-architecture-lanes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-6);
+  }
+
+  .omes-architecture-lane-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+
+  .omes-architecture-lane-name {
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    color: var(--color-text);
+  }
+
+  .omes-architecture-card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .omes-architecture-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface-1);
+  }
+
+  .omes-architecture-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+
+  .omes-architecture-card-name {
+    font-weight: var(--fw-semibold);
+    color: var(--color-text);
+  }
+
+  .omes-architecture-card-body {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-2);
+    margin: 0;
+  }
+
+  .omes-architecture-card-body dt {
+    color: var(--color-text-muted);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+  }
+
+  .omes-architecture-card-body dd {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+  }
+</style>
