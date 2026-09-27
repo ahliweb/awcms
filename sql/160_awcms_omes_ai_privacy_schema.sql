@@ -116,9 +116,21 @@ CREATE TABLE IF NOT EXISTS awcms_omes_ai_egress_approvals (
   -- `_RESTRICTED_CLOUD` check "by value", not merely via the reason_code
   -- enum above, which already excludes this pair by construction - this
   -- CHECK stays valid even if a future reason_code addition ever loosened
-  -- that enum without re-deriving this constraint).
+  -- that enum without re-deriving this constraint). This blocks the
+  -- combination from ever being stored as PENDING or APPROVED (the only
+  -- states that could reach a real egress) — it deliberately does NOT block
+  -- storing it as `decision = 'denied'`, because `submitAiEgressApproval`
+  -- (application/ai-egress-approval.ts) must still record a durable audit
+  -- row for a structurally-refused RESTRICTED->cloud_sanitized REQUEST
+  -- (a denial needs no approval authority and leaves no route to a real
+  -- egress, but it must still be visible in the approvals history).
   CONSTRAINT awcms_omes_ai_egress_approvals_no_restricted_cloud_check
-    CHECK (NOT (classification = 'RESTRICTED' AND destination = 'cloud_sanitized'))
+    CHECK (
+      NOT (
+        classification = 'RESTRICTED' AND destination = 'cloud_sanitized'
+        AND decision <> 'denied'
+      )
+    )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS awcms_omes_ai_egress_approvals_tenant_idem_idx

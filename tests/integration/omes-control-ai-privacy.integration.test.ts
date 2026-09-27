@@ -71,12 +71,46 @@ const suite = integrationEnabled ? describe : describe.skip;
 
 const TENANT_A = "a2000000-0000-4000-8000-0000000000a1";
 const TENANT_B = "a2000000-0000-4000-8000-0000000000b1";
+const OWNER_USER_A = "a2000000-0000-4000-8000-0000000000c1";
+const OWNER_USER_B = "a2000000-0000-4000-8000-0000000000c2";
 
 async function seedTenant(id: string, code: string): Promise<void> {
   await getAdminSql()`
     INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
     VALUES (${id}, ${code}, ${code})
     ON CONFLICT (id) DO NOTHING
+  `;
+}
+
+/**
+ * A real `awcms_tenant_users` row (via the same profile/identity chain the
+ * established `omes-control.integration.test.ts` harness uses) —
+ * `awcms_omes_ai_egress_approvals.requested_by_tenant_user_id` carries a
+ * genuine foreign key, so a fabricated `randomUUID()` fails closed with a
+ * foreign-key violation rather than silently accepting an unknown actor.
+ */
+async function seedTenantUser(
+  tenantId: string,
+  id: string,
+  label: string
+): Promise<void> {
+  const admin = getAdminSql();
+
+  const profile = (await admin`
+    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+    VALUES (${tenantId}, 'person', ${`Display ${label}`})
+    RETURNING id
+  `) as { id: string }[];
+
+  const identity = (await admin`
+    INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+    VALUES (${tenantId}, ${profile[0]!.id}, ${`${label}@example.test`}, 'x')
+    RETURNING id
+  `) as { id: string }[];
+
+  await admin`
+    INSERT INTO awcms_tenant_users (id, tenant_id, identity_id)
+    VALUES (${id}, ${tenantId}, ${identity[0]!.id})
   `;
 }
 
@@ -153,6 +187,8 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
     await resetDatabase();
     await seedTenant(TENANT_A, "ai-privacy-tenant-a");
     await seedTenant(TENANT_B, "ai-privacy-tenant-b");
+    await seedTenantUser(TENANT_A, OWNER_USER_A, "owner-a");
+    await seedTenantUser(TENANT_B, OWNER_USER_B, "owner-b");
   }, 30000);
 
   describe("cross-tenant denial (runtime, real RLS — awcms_app / FORCE)", () => {
@@ -179,7 +215,7 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         submitAiEgressApproval(
           tx,
           TENANT_A,
-          randomUUID(),
+          OWNER_USER_A,
           {
             correlationId: randomUUID(),
             idempotencyKey: `key-a-${randomUUID()}`,
@@ -198,7 +234,7 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         submitAiEgressApproval(
           tx,
           TENANT_B,
-          randomUUID(),
+          OWNER_USER_B,
           {
             correlationId: randomUUID(),
             idempotencyKey: `key-b-${randomUUID()}`,
@@ -240,7 +276,7 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         submitAiEgressApproval(
           tx,
           TENANT_A,
-          randomUUID(),
+          OWNER_USER_A,
           {
             correlationId: randomUUID(),
             idempotencyKey: `key-${randomUUID()}`,
@@ -267,8 +303,12 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
     });
 
     test("the database CHECK constraint independently refuses inserting that combination even bypassing the application layer", async () => {
-      await expect(
-        getAdminSql()`
+      // NOTE: `expect(promise).rejects.toThrow()` hangs indefinitely against
+      // a `Bun.SQL` `PostgresError` rejection on this Bun version — a manual
+      // try/catch is used instead, everywhere in this file, for that reason.
+      let threw = false;
+      try {
+        await getAdminSql()`
           INSERT INTO awcms_omes_ai_egress_approvals (
             tenant_id, correlation_id, idempotency_key, server_id,
             policy_version, classification, destination, reason_code,
@@ -279,8 +319,11 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
             'AI_EGRESS_APPROVAL_REQUIRED_RESTRICTED_PRIVATE_ENDPOINT',
             true, 'approved'
           )
-        `
-      ).rejects.toThrow();
+        `;
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
 
       const rows = (await getAdminSql()`
         SELECT count(*)::int AS count FROM awcms_omes_ai_egress_approvals
@@ -296,7 +339,7 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         submitAiEgressApproval(
           tx,
           TENANT_A,
-          randomUUID(),
+          OWNER_USER_A,
           {
             correlationId: randomUUID(),
             idempotencyKey: `key-${randomUUID()}`,
@@ -319,12 +362,12 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
       }
     });
 
-    test("without a published workflow, an otherwise-approvable request fails closed as approval_workflow_not_configured — nothing persisted as approved", async () => {
+    test("without a published workflow, an otherwise-approvable request fails closed as approval_workflow_not_configured — the intent row is recorded but never as approved", async () => {
       const outcome = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         submitAiEgressApproval(
           tx,
           TENANT_A,
-          randomUUID(),
+          OWNER_USER_A,
           {
             correlationId: randomUUID(),
             idempotencyKey: `key-${randomUUID()}`,
@@ -342,11 +385,18 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
 
       expect(outcome.outcome).toBe("approval_workflow_not_configured");
 
+      // Matches `backup-restore.ts`'s established pattern this module's own
+      // header documents: the INTENT row is recorded first, unconditionally
+      // — but it is left at `decision = 'pending'` with no
+      // `workflow_instance_id`, never silently marked `approved`/`denied`,
+      // since no approval authority ever ran.
       const rows = (await getAdminSql()`
-        SELECT count(*)::int AS count FROM awcms_omes_ai_egress_approvals
+        SELECT decision, workflow_instance_id FROM awcms_omes_ai_egress_approvals
         WHERE tenant_id = ${TENANT_A} AND server_id = 'srv-no-workflow-1'
-      `) as { count: number }[];
-      expect(rows[0]!.count).toBe(0);
+      `) as { decision: string; workflow_instance_id: string | null }[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.decision).toBe("pending");
+      expect(rows[0]!.workflow_instance_id).toBeNull();
     });
   });
 
@@ -463,7 +513,7 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         const outcome = await submitAiEgressApproval(
           tx,
           TENANT_A,
-          randomUUID(),
+          OWNER_USER_A,
           { correlationId: randomUUID(), idempotencyKey, ...prepared },
           new Date()
         );
@@ -522,8 +572,9 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
         )
       `;
 
-      await expect(
-        getAdminSql()`
+      let threw = false;
+      try {
+        await getAdminSql()`
           INSERT INTO awcms_omes_ai_egress_approvals (
             tenant_id, correlation_id, idempotency_key, server_id,
             policy_version, classification, destination, reason_code,
@@ -534,8 +585,11 @@ suite("omes_control AI privacy posture & egress-approval (real PostgreSQL)", () 
             'AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT',
             true, 'pending'
           )
-        `
-      ).rejects.toThrow();
+        `;
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
     });
   });
 });
@@ -585,6 +639,13 @@ function canonical(input: {
     input.nonce,
     bodyHash
   ].join("\n");
+}
+
+/** Second-precision ISO-8601 (no fractional seconds) — the exact shape
+ * `ai-privacy-posture-view.schema.json`'s `last_verified_at`/`projected_at`
+ * pattern requires; `Date.toISOString()`'s millisecond suffix fails it. */
+function secondsIso(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 const WORKER_TENANT_A = "a2000000-0000-4000-8000-0000000000c1";
@@ -659,6 +720,7 @@ suite(
         tenant_id: WORKER_TENANT_A,
         server_id: serverId,
         worker_id: workerId,
+        timestamp,
         posture: {
           tenant_id: WORKER_TENANT_A,
           correlation_id: `corr_${randomUUID()}`,
@@ -669,8 +731,8 @@ suite(
           destination_class: "local",
           status: "PASS",
           reason_codes: ["AI_PRIVACY_POSTURE_PASS_CONSISTENT"],
-          last_verified_at: timestamp,
-          projected_at: timestamp,
+          last_verified_at: secondsIso(new Date()),
+          projected_at: secondsIso(new Date()),
           latest_decision: null,
           // Structurally-disallowed field — matches the vendored contract's
           // own `invalid-additional-property-raw-prompt.json` fixture shape.
@@ -729,6 +791,7 @@ suite(
         tenant_id: WORKER_TENANT_A,
         server_id: serverId,
         worker_id: workerId,
+        timestamp,
         posture: {
           tenant_id: WORKER_TENANT_A,
           correlation_id: `corr_${randomUUID()}`,
@@ -739,8 +802,8 @@ suite(
           destination_class: "local",
           status: "PASS",
           reason_codes: ["AI_PRIVACY_POSTURE_PASS_CONSISTENT"],
-          last_verified_at: timestamp,
-          projected_at: timestamp,
+          last_verified_at: secondsIso(new Date()),
+          projected_at: secondsIso(new Date()),
           latest_decision: null
         }
       };
@@ -800,6 +863,7 @@ suite(
         tenant_id: WORKER_TENANT_A,
         server_id: ownServerId,
         worker_id: workerId,
+        timestamp,
         posture: {
           tenant_id: WORKER_TENANT_A,
           correlation_id: `corr_${randomUUID()}`,
@@ -810,8 +874,8 @@ suite(
           destination_class: "local",
           status: "PASS",
           reason_codes: ["AI_PRIVACY_POSTURE_PASS_CONSISTENT"],
-          last_verified_at: timestamp,
-          projected_at: timestamp,
+          last_verified_at: secondsIso(new Date()),
+          projected_at: secondsIso(new Date()),
           latest_decision: null
         }
       };
