@@ -130,6 +130,72 @@ The 4 missing views (Hermes, Orkestrasi langsung, Arsitektur, Progres Hermes)
 and any new projection they need are later, separate PRs — this change adds
 no new screen, no new endpoint, and no schema/contract change.
 
+### Design system polish (`ahliweb/omes#246` part 1b)
+
+A screenshot review of part 1 found 5 defects, all fixed in one PR across the
+same 9 screens:
+
+1. **Multi-value tiles.** The overview screen's 4 breakdown tiles (server
+   health distribution, job state summary, backup freshness, deployment
+   drift) rendered every part through the same 32px mono `.stat-value` style
+   as a genuine single-number KPI, wrapping onto 2-3 lines at 1440px and worse
+   below it. They now render as `.omes-stat-breakdown`, a compact wrapping
+   list of value+label chips at body text size. Every other `.stat-value` on
+   all 9 screens is a single number and is unaffected.
+2. **Form controls.** The 8 filter/create forms (register-a-server, and every
+   list screen's filter bar) used a bare `.admin-toolbar` with sibling
+   `<label>`/`<input>` markup — no card, no input/select styling, the native
+   light `<select>` popup against this dark page, and labels sitting apart
+   from their control. They now use `.admin-create-form`, the SAME vocabulary
+   the other ~18 admin list screens use (`admin.css`), which already consumes
+   the tokens `.omes-cc` overrides — so this is a markup fix, not a new
+   component, and introduces **no new color pairing** (see the contrast table
+   above; the pairs are the ones already measured there). `omes-control-center.css`
+   adds only the states `.admin-create-form` doesn't itself define: a
+   stronger focus ring (WCAG 1.4.11), placeholder color, and disabled state —
+   all reusing existing tokens.
+3. **Lifecycle strip wrap.** The `→` separator between lifecycle pills was an
+   absolutely-positioned `::before` on the FOLLOWING pill, so a flex-wrap line
+   break moved the pill but orphaned the arrow at the start of the new line.
+   Fixed by making each pill + its trailing arrow one atomic flex item, with
+   the arrow as a plain `::after` inside it — the pair always wraps together.
+   Verified at 360/390/1440px.
+4. **Panel edge/gutter at 1440px.** `.omes-cc`'s negative margin (which bleeds
+   the dark background into `.admin-page-body`'s padding) had two bugs: (a)
+   the horizontal `clamp()` was negated with its min/max bounds in the wrong
+   order, which resolves to a constant −16px instead of tracking the
+   viewport, leaving an 18px light strip on the right edge above ~1133px
+   wide; (b) `min-height: 100%` resolves against the parent's content box
+   (excluding its padding), so on a short screen the panel fell 66px short of
+   the parent's true bottom edge, leaving a light strip beneath it. Both
+   fixed — see `omes-control-center.css`'s own comments for the exact math.
+   The page title/description stays in the light admin shell rather than
+   moving into the dark panel: it is shared chrome (`AdminLayout`'s
+   breadcrumb/title band) used by every admin screen, and duplicating that
+   rendering per-screen would fragment the pattern for a fix that is about
+   the panel's own edges, not the header's placement.
+5. **Sidebar clipping at 1440px**, raised by the same review: not fixed here.
+   `.omes-cc` cannot be the cause architecturally — it is a class scoped to a
+   `<div>` inside `.admin-page-body`, a sibling subtree of `.admin-sidebar`;
+   its token overrides are custom properties, which cascade only to its own
+   descendants, never sideways to the sidebar, and it touches no file the
+   sidebar's own CSS (`admin.css`) or markup (`AdminLayout.astro`) is defined
+   in. Interactive repro attempts against both `0d6c0dfe` (the commit
+   immediately before part 1) and this branch — toggling the collapse control
+   at several transition progress points, and screenshotting immediately after
+   navigation before fonts/CSS settle — rendered the sidebar fully expanded
+   and legible on both; the exact clipped state from the review screenshot
+   could not be reproduced through normal interaction in this environment.
+   Filed as its own `ahliweb/awcms` issue with the original evidence and the
+   repro attempts, rather than guessed at or folded into this scoped PR (see
+   that PR's description for the issue number).
+
+`APP_BUDGET_BYTES` moved 229,500 → 230,400 B for the CSS this polish added
+(the multi-value-tile chip list, the lifecycle wrap fix, and the form-control
+states above) — measured +1,109 B after trimming. See
+`scripts/client-asset-budget.ts`'s own docblock for the full before/after
+accounting.
+
 ## Worker enrollment, poll, result, and heartbeat (`ahliweb/omes#199`)
 
 Four routes complete the round trip #198's own header describes: `POST /api/v1/omes/worker/{enroll,poll,result,heartbeat}`. All four are **session-UNauthenticated** — the caller is an OMES host pull worker (ADR-0027's outbound-pull architecture), not an AWCMS user, so there is no session cookie/token to check. This is the highest-risk surface this module ships, and it is authenticated by asymmetric Ed25519 identity instead:

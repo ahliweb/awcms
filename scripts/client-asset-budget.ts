@@ -450,8 +450,35 @@ export const READER_BUDGET_BYTES = 24_000;
  * 229,500 is measured + ~150 B, deliberately tighter than the ~2% margin
  * above: this addition is presentational and scoped to one screen family, so
  * it should not buy headroom for unrelated future growth elsewhere.
+ *
+ * **Raised to 230,400 on 27 September 2026 for the OMES Control Center design
+ * system polish (ahliweb/omes#246 part 1b)**, fixing 5 defects a screenshot
+ * review of part 1 found: multi-value tiles rendered as one giant wrapping
+ * KPI number, the 8 filter/create forms using an unstyled `.admin-toolbar`
+ * instead of the existing `.admin-create-form` vocabulary, the lifecycle
+ * strip's `→` separators orphaning at a line wrap below 1440px, and a
+ * `clamp()` sign error that left an 18px light-canvas strip on the panel's
+ * right/bottom edge above ~1133px wide. The growth is `omes-control-center.css`
+ * gaining the multi-value-tile chip list, the lifecycle wrap fix, and a
+ * handful of dark-theme form states (focus ring, placeholder, disabled,
+ * invalid) — no new color tokens, every value reuses a pairing already in
+ * this file's own contrast table.
+ *
+ * ```
+ * before (229,500 ceiling)   229,154 B
+ * + part 1b polish (above)   230,263 B   (+1,109)
+ * ```
+ *
+ * Trimmed before raising: selectors were consolidated with `:is()`
+ * (`input:focus-visible, select:focus-visible, textarea:focus-visible` ->
+ * `:is(input, select, textarea):focus-visible`), the empty-breakdown state
+ * reuses the existing `.stat-hint` class instead of a new one, and prose
+ * comments were cut — recovered roughly 700 B of the naive-first-pass total
+ * before this final number. 230,400 is measured + ~140 B, the same tight
+ * margin the raise above used, for the same reason: this is presentational
+ * and scoped to the same 9 screens.
  */
-export const APP_BUDGET_BYTES = 229_500;
+export const APP_BUDGET_BYTES = 230_400;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

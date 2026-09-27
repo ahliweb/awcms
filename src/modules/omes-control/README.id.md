@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:c92d55e5f2e3947398acd1005f90d183b20e8f7884133d55c21356d92f6f8c1e -->
+<!-- i18n-source-hash: sha256:69d59e82a7889e540cd7989dbdd3091d954ce73647166e34e52251ad42f9d2fa -->
 
 # `omes_control`
 
@@ -135,6 +135,76 @@ sistem desain). 4 layar yang belum ada (Hermes, Orkestrasi langsung,
 Arsitektur, Progres Hermes) dan proyeksi baru apa pun yang dibutuhkannya
 adalah PR lanjutan yang terpisah — perubahan ini tidak menambah layar baru,
 endpoint baru, atau perubahan skema/kontrak.
+
+### Penghalusan sistem desain (`ahliweb/omes#246` bagian 1b)
+
+Tinjauan tangkapan layar atas bagian 1 menemukan 5 cacat, semuanya diperbaiki
+dalam satu PR di 9 layar yang sama:
+
+1. **Tile bernilai-jamak.** 4 tile ringkasan di layar overview (distribusi
+   kesehatan server, ringkasan status job, kesegaran backup, drift deployment)
+   me-render setiap bagian lewat gaya `.stat-value` mono 32px yang sama
+   seperti KPI satu-angka sungguhan, melipat jadi 2-3 baris pada 1440px dan
+   lebih buruk di bawahnya. Kini keduanya di-render sebagai
+   `.omes-stat-breakdown`, daftar chip nilai+label yang melipat dan ringkas
+   pada ukuran teks isi. `.stat-value` lain mana pun di 9 layar tetap satu
+   angka dan tidak terpengaruh.
+2. **Kontrol form.** 8 form filter/create (daftarkan-server, dan bilah filter
+   tiap layar daftar) memakai `.admin-toolbar` polos dengan markup sibling
+   `<label>`/`<input>` — tanpa kartu, tanpa gaya input/select, popup
+   `<select>` bawaan terang berbenturan dengan halaman gelap ini, dan label
+   duduk terpisah dari kontrolnya. Kini keduanya memakai `.admin-create-form`,
+   kosakata yang SAMA dipakai ~18 layar daftar admin lain (`admin.css`), yang
+   sudah mengonsumsi token yang di-override `.omes-cc` — jadi ini perbaikan
+   markup, bukan komponen baru, dan tidak memperkenalkan **pasangan warna
+   baru** (lihat tabel kontras di atas; pasangannya adalah yang sudah diukur
+   di sana). `omes-control-center.css` hanya menambah state yang belum
+   didefinisikan `.admin-create-form` sendiri: cincin fokus yang lebih kuat
+   (WCAG 1.4.11), warna placeholder, dan state disabled — semuanya memakai
+   token yang sudah ada.
+3. **Lipatan strip lifecycle.** Pemisah `→` antar pil lifecycle dulu adalah
+   `::before` berposisi absolut pada pil BERIKUTNYA, sehingga lipatan baris
+   flex-wrap memindahkan pil tapi menyisakan panah sebatang kara di awal baris
+   baru. Diperbaiki dengan menjadikan tiap pil + panah pengekornya satu item
+   flex atomik, dengan panah sebagai `::after` polos di dalamnya — pasangan
+   itu selalu melipat bersama. Diverifikasi pada 360/390/1440px.
+4. **Tepi/gutter panel pada 1440px.** Margin negatif `.omes-cc` (yang
+   membocorkan latar gelap ke padding `.admin-page-body`) punya dua bug: (a)
+   `clamp()` horizontalnya dinegasikan dengan batas min/maks dalam urutan
+   yang salah, yang meresolusi ke konstanta −16px alih-alih mengikuti
+   viewport, menyisakan strip terang 18px di tepi kanan di atas ~1133px
+   lebar; (b) `min-height: 100%` meresolusi terhadap content box parent
+   (tanpa padding-nya), jadi pada layar pendek panel jatuh 66px lebih pendek
+   dari tepi bawah sungguhan parent, menyisakan strip terang di bawahnya.
+   Keduanya diperbaiki — lihat komentar `omes-control-center.css` sendiri
+   untuk matematika lengkapnya. Judul/deskripsi halaman tetap di admin shell
+   terang alih-alih dipindah ke panel gelap: itu adalah chrome bersama
+   (bilah breadcrumb/judul milik `AdminLayout`) yang dipakai setiap layar
+   admin, dan menduplikasi render itu per-layar akan memecah pola untuk
+   perbaikan yang sebenarnya soal tepi panel, bukan penempatan header.
+5. **Kliping sidebar pada 1440px**, diangkat tinjauan yang sama: tidak
+   diperbaiki di sini. `.omes-cc` secara arsitektural tidak mungkin jadi
+   penyebabnya — ia adalah kelas yang di-scope ke sebuah `<div>` di dalam
+   `.admin-page-body`, subtree sibling dari `.admin-sidebar`; override
+   token-nya adalah custom property, yang hanya mengalir ke descendant-nya
+   sendiri, tidak pernah menyamping ke sidebar, dan ia tidak menyentuh
+   berkas mana pun tempat CSS sidebar sendiri (`admin.css`) atau markup-nya
+   (`AdminLayout.astro`) didefinisikan. Percobaan reproduksi interaktif
+   terhadap `0d6c0dfe` (komit tepat sebelum bagian 1) maupun branch ini —
+   men-toggle kontrol collapse pada beberapa titik progres transisi, dan
+   men-screenshot segera setelah navigasi sebelum font/CSS menetap —
+   me-render sidebar sepenuhnya terbuka dan terbaca pada keduanya; state
+   terklip persis dari tangkapan layar tinjauan tidak bisa direproduksi
+   lewat interaksi normal di lingkungan ini. Diajukan sebagai issue
+   `ahliweb/awcms` tersendiri dengan bukti asli dan percobaan reproduksinya,
+   alih-alih ditebak atau dilipat ke PR terlingkup ini (lihat deskripsi PR
+   itu untuk nomor issue-nya).
+
+`APP_BUDGET_BYTES` naik 229.500 → 230.400 B untuk CSS yang ditambahkan
+penghalusan ini (daftar chip tile bernilai-jamak, perbaikan lipatan
+lifecycle, dan state kontrol form di atas) — terukur +1.109 B setelah
+dipangkas. Lihat docblock `scripts/client-asset-budget.ts` sendiri untuk
+pembukuan before/after lengkap.
 
 ## Enrollment, poll, result, dan heartbeat worker (`ahliweb/omes#199`)
 
