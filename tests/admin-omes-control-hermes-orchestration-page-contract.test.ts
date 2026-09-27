@@ -197,7 +197,12 @@ describe("Progres Hermes: explicit empty state, no GitHub integration, no static
 
   test("the page makes no GitHub API call and defines no static milestone/issue list", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");
-    expect(source).not.toMatch(/api\.github\.com/);
+    // Plain substring checks, not a regex against a URL/host-shaped string —
+    // CodeQL's "missing regular expression anchor" rule (correctly) flags an
+    // unanchored `/api\.github\.com/` pattern as a potential host-matching
+    // bypass; there is no host validation here at all, only a literal-text
+    // absence check, so `.includes()` is both simpler and avoids the alert.
+    expect(source.includes("api.github.com")).toBe(false);
     expect(source).not.toMatch(/fetch\(/);
     // No MILESTONES/ISSUES-shaped literal array the redesign's own
     // prototype used — this screen carries no fabricated progress data.
