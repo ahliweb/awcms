@@ -63,6 +63,19 @@ const FRESHNESS_VARIANT: Record<string, string> = {
   unknown: "danger"
 };
 
+/**
+ * Depth-based tree indentation is expressed as a bounded `data-indent-level`
+ * attribute + a fixed CSS rule per level (`omes-control-center.css`), NEVER
+ * as a dynamic inline `style="padding-left: ...px"` — this repo's
+ * `default-src 'self'` CSP (`lib/security/security-headers.ts`) has no
+ * `style-src`/`'unsafe-inline'`, so a per-node computed inline style is
+ * silently dropped by every real browser and the tree renders flat. Depths
+ * beyond this are clamped to the deepest styled level rather than losing
+ * indentation entirely — the depth FILTER above still uses the real,
+ * unclamped `node.depth` via `data-depth`.
+ */
+const MAX_INDENT_LEVEL = 6;
+
 const STATE_VARIANT: Record<string, string> = {
   RUNNING: "success",
   STARTING: "success",
@@ -200,7 +213,10 @@ function formatTimestamp(value: string | null): string {
                     <li
                       class="omes-orchestration-tree-node"
                       data-depth={node.depth}
-                      style={`padding-left: ${Math.max(node.depth, 0) * 20}px`}
+                      data-indent-level={Math.min(
+                        Math.max(node.depth, 0),
+                        MAX_INDENT_LEVEL
+                      )}
                     >
                       <span
                         class="status-badge"

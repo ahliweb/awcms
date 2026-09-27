@@ -445,6 +445,38 @@
   font-size: var(--fs-sm);
 }
 
+/*
+ * Depth-based indentation for the orchestration tree, keyed off the
+ * `data-indent-level` attribute `orkestrasi-langsung.astro` sets (clamped to
+ * 6). This MUST stay a fixed, finite set of attribute-selector rules rather
+ * than a per-node inline `style="padding-left: ...px"` — this repo's CSP
+ * (`default-src 'self'`, no `style-src`/`'unsafe-inline'`,
+ * `lib/security/security-headers.ts`) blocks a dynamic inline style
+ * attribute outright, which silently collapsed the whole tree to one flat
+ * indent level in every real browser.
+ */
+.omes-cc .omes-orchestration-tree-node[data-indent-level="0"] {
+  padding-left: var(--sp-3);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="1"] {
+  padding-left: calc(var(--sp-3) + 20px);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="2"] {
+  padding-left: calc(var(--sp-3) + 40px);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="3"] {
+  padding-left: calc(var(--sp-3) + 60px);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="4"] {
+  padding-left: calc(var(--sp-3) + 80px);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="5"] {
+  padding-left: calc(var(--sp-3) + 100px);
+}
+.omes-cc .omes-orchestration-tree-node[data-indent-level="6"] {
+  padding-left: calc(var(--sp-3) + 120px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .omes-cc * {
     animation-duration: 0.001ms !important;
