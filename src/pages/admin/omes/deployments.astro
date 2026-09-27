@@ -174,7 +174,11 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
             <span class="count-pill">{deployments.length}</span>
           </h2>
 
-          <form method="get" class="admin-toolbar" id="deployment-filter-form">
+          <form
+            method="get"
+            class="admin-create-form"
+            id="deployment-filter-form"
+          >
             <label for="filter-server">{t("Server ID")}</label>
             <input
               id="filter-server"

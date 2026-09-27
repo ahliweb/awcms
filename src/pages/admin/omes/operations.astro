@@ -188,7 +188,7 @@ function approvalsLink(request: OperationRequestSummary): string {
               "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
             )}
           </p>
-          <form class="admin-toolbar" id="operation-submit-form">
+          <form class="admin-create-form" id="operation-submit-form">
             <label for="op-server-id">{t("Server ID")}</label>
             <input
               id="op-server-id"
@@ -242,7 +242,11 @@ function approvalsLink(request: OperationRequestSummary): string {
             <span class="count-pill">{operationRequests.length}</span>
           </h2>
 
-          <form method="get" class="admin-toolbar" id="operation-filter-form">
+          <form
+            method="get"
+            class="admin-create-form"
+            id="operation-filter-form"
+          >
             <label for="filter-server">{t("Server ID")}</label>
             <input
               id="filter-server"

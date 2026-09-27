@@ -321,7 +321,11 @@ function linkWith(overrides: Record<string, string | null>): string {
             <span class="count-pill">{enrollments.length}</span>
           </h2>
 
-          <form method="get" class="admin-toolbar" id="enrollment-filter-form">
+          <form
+            method="get"
+            class="admin-create-form"
+            id="enrollment-filter-form"
+          >
             <label for="filter-status">{t("Status")}</label>
             <select id="filter-status" name="status">
               <option value="" selected={statusFilter === undefined}>

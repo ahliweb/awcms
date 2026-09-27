@@ -205,7 +205,7 @@ const columns = 6 + (canDelete ? 1 : 0);
               "Records registration intent only. The server becomes reachable only after its OMES pull worker completes enrollment."
             )}
           </p>
-          <form class="admin-toolbar" id="server-register-form">
+          <form class="admin-create-form" id="server-register-form">
             <label for="reg-hostname">{t("Hostname")}</label>
             <input
               id="reg-hostname"
@@ -252,7 +252,7 @@ const columns = 6 + (canDelete ? 1 : 0);
             <span class="count-pill">{servers.length}</span>
           </h2>
 
-          <form method="get" class="admin-toolbar" id="server-filter-form">
+          <form method="get" class="admin-create-form" id="server-filter-form">
             <label for="filter-status">{t("Status")}</label>
             <select id="filter-status" name="status">
               <option value="" selected={statusFilter === undefined}>
