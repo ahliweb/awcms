@@ -246,6 +246,12 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     pattern: "/api/v1/omes/worker/heartbeat",
     reason: "Same Ed25519 envelope credential as /worker/poll."
   },
+  {
+    method: "POST",
+    pattern: "/api/v1/omes/worker/ai-privacy-posture",
+    reason:
+      "Same Ed25519 envelope credential as /worker/poll (ahliweb/omes#232)."
+  },
 
   // ---- Retired: answers 410 without reading anything ----
   {
