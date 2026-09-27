@@ -5508,11 +5508,11 @@ msgstr "Ini adalah cuplikan rilis yang dipatok dari rilis OMES tertentu — buka
 msgid "OMES version"
 msgstr "Versi OMES"
 
-msgid "OMES commit"
-msgstr "Commit OMES"
+msgid "Source commit"
+msgstr "Commit sumber"
 
-msgid "Generated at"
-msgstr "Dibuat pada"
+msgid "Vendored at"
+msgstr "Divendorkan pada"
 
 msgid "Capabilities"
 msgstr "Kapabilitas"

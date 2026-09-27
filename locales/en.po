@@ -5520,10 +5520,10 @@ msgstr ""
 msgid "OMES version"
 msgstr ""
 
-msgid "OMES commit"
+msgid "Source commit"
 msgstr ""
 
-msgid "Generated at"
+msgid "Vendored at"
 msgstr ""
 
 msgid "Capabilities"
