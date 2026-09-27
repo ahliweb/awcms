@@ -145,214 +145,219 @@ function approvalsLink(request: OperationRequestSummary): string {
   )}
 >
   <div class="omes-cc">
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="omes-operations-denied">
-        {t("You do not have permission to view OMES operations.")}
-      </p>
-    )
-  }
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-operations-denied">
+          {t("You do not have permission to view OMES operations.")}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="omes-operations-error">
-        {t(
-          "The OMES operations console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-        )}
-      </p>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="omes-operations-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    canSubmitAnyOperation && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="submit-title">
-        <h2 class="admin-section-title" id="submit-title">
-          {t("Submit an operation")}
-        </h2>
-        <p class="page-description">
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-operations-error">
           {t(
-            "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
+            "The OMES operations console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
           )}
         </p>
-        <form class="admin-toolbar" id="operation-submit-form">
-          <label for="op-server-id">{t("Server ID")}</label>
-          <input
-            id="op-server-id"
-            name="serverId"
-            type="text"
-            required
-            maxlength="128"
-          />
-          <label for="op-deployment-id">{t("Deployment ID (optional)")}</label>
-          <input
-            id="op-deployment-id"
-            name="deploymentId"
-            type="text"
-            maxlength="128"
-          />
-          <label for="op-operation">{t("Operation")}</label>
-          <select id="op-operation" name="operation" required>
-            {OMES_OPERATION_CODES.map((code: OmesOperationCode) => (
-              <option
-                value={code}
-                disabled={
-                  isDestructiveOmesOperation(code) &&
-                  !canRollback &&
-                  !canOperate
-                }
-              >
-                {code}
-                {isDestructiveOmesOperation(code)
-                  ? ` (${t("destructive — requires approval")})`
-                  : ""}
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <p
+          id="omes-operations-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
+
+    {
+      canSubmitAnyOperation && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="submit-title"
+        >
+          <h2 class="admin-section-title" id="submit-title">
+            {t("Submit an operation")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "AWCMS never dispatches this to a host directly — the OMES pull worker is the only reader that turns an approved request into host execution."
+            )}
+          </p>
+          <form class="admin-toolbar" id="operation-submit-form">
+            <label for="op-server-id">{t("Server ID")}</label>
+            <input
+              id="op-server-id"
+              name="serverId"
+              type="text"
+              required
+              maxlength="128"
+            />
+            <label for="op-deployment-id">
+              {t("Deployment ID (optional)")}
+            </label>
+            <input
+              id="op-deployment-id"
+              name="deploymentId"
+              type="text"
+              maxlength="128"
+            />
+            <label for="op-operation">{t("Operation")}</label>
+            <select id="op-operation" name="operation" required>
+              {OMES_OPERATION_CODES.map((code: OmesOperationCode) => (
+                <option
+                  value={code}
+                  disabled={
+                    isDestructiveOmesOperation(code) &&
+                    !canRollback &&
+                    !canOperate
+                  }
+                >
+                  {code}
+                  {isDestructiveOmesOperation(code)
+                    ? ` (${t("destructive — requires approval")})`
+                    : ""}
+                </option>
+              ))}
+            </select>
+            <button type="submit">{t("Submit")}</button>
+          </form>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="operations-title"
+          id="omes-operations-list"
+        >
+          <h2 class="admin-section-title" id="operations-title">
+            {t("Operation requests")}
+            <span class="count-pill">{operationRequests.length}</span>
+          </h2>
+
+          <form method="get" class="admin-toolbar" id="operation-filter-form">
+            <label for="filter-server">{t("Server ID")}</label>
+            <input
+              id="filter-server"
+              name="serverId"
+              type="text"
+              value={serverIdFilter ?? ""}
+            />
+            <label for="filter-status">{t("Status")}</label>
+            <select id="filter-status" name="status">
+              <option value="" selected={statusFilter === undefined}>
+                {t("Any status")}
               </option>
-            ))}
-          </select>
-          <button type="submit">{t("Submit")}</button>
-        </form>
-      </section>
-    )
-  }
+              {STATUS_OPTIONS.map((value) => (
+                <option value={value} selected={statusFilter === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button type="submit">{t("Apply")}</button>
+          </form>
 
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="operations-title"
-        id="omes-operations-list"
-      >
-        <h2 class="admin-section-title" id="operations-title">
-          {t("Operation requests")}
-          <span class="count-pill">{operationRequests.length}</span>
-        </h2>
-
-        <form method="get" class="admin-toolbar" id="operation-filter-form">
-          <label for="filter-server">{t("Server ID")}</label>
-          <input
-            id="filter-server"
-            name="serverId"
-            type="text"
-            value={serverIdFilter ?? ""}
-          />
-          <label for="filter-status">{t("Status")}</label>
-          <select id="filter-status" name="status">
-            <option value="" selected={statusFilter === undefined}>
-              {t("Any status")}
-            </option>
-            {STATUS_OPTIONS.map((value) => (
-              <option value={value} selected={statusFilter === value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
-
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="omes-operations-table"
-          >
-            <caption class="sr-only">
-              {t("OMES operation requests, newest first.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Request")}</th>
-                <th scope="col">{t("Operation")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Requested")}</th>
-                <th scope="col">{t("Approval")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {operationRequests.length === 0 ? (
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="omes-operations-table"
+            >
+              <caption class="sr-only">
+                {t("OMES operation requests, newest first.")}
+              </caption>
+              <thead>
                 <tr>
-                  <td class="data-table-empty" colspan={5}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⚙
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No operation requests")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Nothing matches this filter, or none has been submitted yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
+                  <th scope="col">{t("Request")}</th>
+                  <th scope="col">{t("Operation")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Requested")}</th>
+                  <th scope="col">{t("Approval")}</th>
                 </tr>
-              ) : (
-                operationRequests.map((request) => (
-                  <tr data-operation-row={request.id}>
-                    <td data-label="Request">
-                      <span class="cell-code">{request.requestId}</span>
-                      <span class="cell-muted">
-                        {" "}
-                        · {t("Server")}: {request.serverId}
-                      </span>
-                    </td>
-                    <td data-label="Operation">
-                      <span class="cell-code">{request.operation}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          STATUS_VARIANT[request.status] ?? "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {request.status}
-                      </span>
-                    </td>
-                    <td data-label="Requested">
-                      <span class="cell-muted">{request.createdAt}</span>
-                    </td>
-                    <td data-label="Approval">
-                      {request.workflowInstanceId ? (
-                        <a class="quick-link" href={approvalsLink(request)}>
-                          {t("View in Approvals")}
-                        </a>
-                      ) : (
-                        <span class="cell-muted">
-                          {t("Not destructive — no approval required")}
+              </thead>
+              <tbody>
+                {operationRequests.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={5}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ⚙
                         </span>
-                      )}
+                        <span class="empty-state-title">
+                          {t("No operation requests")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Nothing matches this filter, or none has been submitted yet."
+                          )}
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {nextCursor && (
-          <div class="admin-toolbar">
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
+                ) : (
+                  operationRequests.map((request) => (
+                    <tr data-operation-row={request.id}>
+                      <td data-label="Request">
+                        <span class="cell-code">{request.requestId}</span>
+                        <span class="cell-muted">
+                          {" "}
+                          · {t("Server")}: {request.serverId}
+                        </span>
+                      </td>
+                      <td data-label="Operation">
+                        <span class="cell-code">{request.operation}</span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            STATUS_VARIANT[request.status] ?? "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {request.status}
+                        </span>
+                      </td>
+                      <td data-label="Requested">
+                        <span class="cell-muted">{request.createdAt}</span>
+                      </td>
+                      <td data-label="Approval">
+                        {request.workflowInstanceId ? (
+                          <a class="quick-link" href={approvalsLink(request)}>
+                            {t("View in Approvals")}
+                          </a>
+                        ) : (
+                          <span class="cell-muted">
+                            {t("Not destructive — no approval required")}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </section>
-    )
-  }
+
+          {nextCursor && (
+            <div class="admin-toolbar">
+              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+                {t("Next page")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </div>
+          )}
+        </section>
+      )
+    }
   </div>
 </AdminLayout>
 

@@ -423,8 +423,35 @@ export const READER_BUDGET_BYTES = 24_000;
  * does not hand-roll a sixth variant, per the same reasoning the 218,000 raise
  * above already accepted for this file. Measured clean build: 221,626 B.
  * 226,000 is measured + ~2%, the same tight margin as the raise above.
+ *
+ * **Raised to 229,500 on 27 September 2026 for the OMES Control Center design
+ * system (ahliweb/omes#246 part 1/3, this repo's `/admin/omes/*` screens
+ * only).** The addition is one new stylesheet,
+ * `src/styles/omes-control-center.css` — the `.omes-cc` scoped dark-palette
+ * token overrides (canvas/panel/text/accent values measured against WCAG 2.1
+ * AA, see `docs/awcms/omes-control-center-design-system.md`), KPI status-dot
+ * styling, and the Bootstrap -> Check -> Diff -> Apply -> Verify -> Rollback
+ * lifecycle strip — imported ONLY by the 9 `admin/omes/*.astro` screens, no
+ * other screen. It ships NO new font: Public Sans / JetBrains Mono are
+ * already self-hosted for the whole admin (ADR-0120) and this addition adds
+ * no `@font-face` and no new `.woff2`, so the `font` audience budget below is
+ * untouched.
+ *
+ * ```
+ * before (226,000 ceiling)   225,983 B
+ * + omes-control-center.css  229,154 B   (+3,171)
+ * ```
+ *
+ * It was not absorbed by trimming: every rule is a token override or the
+ * lifecycle strip, and the previous ceiling's headroom was already down to
+ * 17 B before this change — the same "next lever" section above already
+ * named the remaining duplication (six near-identical card classes) as a
+ * cross-cutting refactor out of scope for a single-screen-family change.
+ * 229,500 is measured + ~150 B, deliberately tighter than the ~2% margin
+ * above: this addition is presentational and scoped to one screen family, so
+ * it should not buy headroom for unrelated future growth elsewhere.
  */
-export const APP_BUDGET_BYTES = 226_000;
+export const APP_BUDGET_BYTES = 229_500;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

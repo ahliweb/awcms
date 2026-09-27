@@ -177,317 +177,317 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
   )}
 >
   <div class="omes-cc">
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="omes-backups-denied">
-        {t("You do not have permission to view OMES backups.")}
-      </p>
-    )
-  }
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-backups-denied">
+          {t("You do not have permission to view OMES backups.")}
+        </p>
+      )
+    }
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="omes-backups-error">
-        {t(
-          "The OMES backup catalog could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-        )}
-      </p>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="omes-backups-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-label="OMES backup summary"
-      >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Backups (this page)")}</span>
-            <span class="stat-value">{backups.length}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Not fresh (this page)")}</span>
-            <span class="stat-value">{staleCount}</span>
-            {staleCount > 0 && (
-              <span class="stat-hint">
-                {t(
-                  "Older than the 24h freshness window, or its capture failed"
-                )}
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="backups-title"
-        id="omes-backups-list"
-      >
-        <h2 class="admin-section-title" id="backups-title">
-          {t("Backup catalog")}
-          <span class="count-pill">{backups.length}</span>
-        </h2>
-
-        <form method="get" class="admin-toolbar" id="backup-filter-form">
-          <label for="filter-server">{t("Server ID")}</label>
-          <input
-            id="filter-server"
-            name="serverId"
-            type="text"
-            value={serverIdFilter ?? ""}
-          />
-          <label for="filter-status">{t("Status")}</label>
-          <select id="filter-status" name="status">
-            <option value="" selected={statusFilter === undefined}>
-              {t("Any status")}
-            </option>
-            {STATUS_OPTIONS.map((value) => (
-              <option value={value} selected={statusFilter === value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="omes-backups-table">
-            <caption class="sr-only">
-              {t("OMES backup snapshots, newest first.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Backup")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Recovery class")}</th>
-                <th scope="col">{t("Size")}</th>
-                <th scope="col">{t("Checksum (SHA-256)")}</th>
-                <th scope="col">{t("Captured")}</th>
-                <th scope="col">{t("Manifest")}</th>
-                {canRestore && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {backups.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={canRestore ? 8 : 7}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⧉
-                      </span>
-                      <span class="empty-state-title">{t("No backups")}</span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Nothing matches this filter, or no backup has been captured yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                backups.map((backup) => (
-                  <tr data-backup-row={backup.id}>
-                    <td data-label="Backup">
-                      <span class="cell-code">{backup.backupId}</span>
-                      <span class="cell-muted">
-                        {" "}
-                        · {t("Server")}: {backup.serverId}
-                      </span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          STATUS_VARIANT[backup.status] ?? "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {backup.status}
-                      </span>
-                      {!backup.fresh && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
-                          {t("not fresh")}
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Recovery class">
-                      <span class="cell-muted">
-                        {recoveryClass(backup.manifest)}
-                      </span>
-                    </td>
-                    <td data-label="Size">
-                      <span class="cell-muted">
-                        {formatSize(backup.sizeBytes)}
-                      </span>
-                    </td>
-                    <td data-label="Checksum">
-                      {backup.checksumSha256 ? (
-                        <span class="cell-code">{backup.checksumSha256}</span>
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="Captured">
-                      <span class="cell-muted">{backup.capturedAt}</span>
-                    </td>
-                    <td data-label="Manifest">
-                      <details>
-                        <summary>{t("View manifest")}</summary>
-                        <pre
-                          class="cell-code"
-                          set:text={JSON.stringify(backup.manifest, null, 2)}
-                        />
-                      </details>
-                    </td>
-                    {canRestore && (
-                      <td data-label="Actions">
-                        <button
-                          type="button"
-                          class="btn-inline btn-inline--danger backup-restore-btn"
-                          data-backup-id={backup.id}
-                          data-backup-code={backup.backupId}
-                        >
-                          {t("Restore")}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {nextCursor && (
-          <div class="admin-toolbar">
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </div>
-        )}
-      </section>
-    )
-  }
-
-  {
-    canRestore && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="restore-requests-title"
-        id="omes-restore-requests-list"
-      >
-        <h2 class="admin-section-title" id="restore-requests-title">
-          {t("Restore requests")}
-          <span class="count-pill">{restoreRequests.length}</span>
-        </h2>
-        <p class="page-description">
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-backups-error">
           {t(
-            "Every restore is always destructive and requires an approved workflow decision before the OMES pull worker will ever act on it."
+            "The OMES backup catalog could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
           )}
         </p>
+      )
+    }
 
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="omes-restore-requests-table"
-          >
-            <caption class="sr-only">
-              {t("OMES backup restore requests, newest first.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Request")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Requested")}</th>
-                <th scope="col">{t("Approval")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {restoreRequests.length === 0 ? (
+    {
+      canSeeAnything && !loadError && (
+        <p
+          id="omes-backups-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-label="OMES backup summary"
+        >
+          <div class="stat-grid stagger-children">
+            <div class="stat-card">
+              <span class="stat-label">{t("Backups (this page)")}</span>
+              <span class="stat-value">{backups.length}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">{t("Not fresh (this page)")}</span>
+              <span class="stat-value">{staleCount}</span>
+              {staleCount > 0 && (
+                <span class="stat-hint">
+                  {t(
+                    "Older than the 24h freshness window, or its capture failed"
+                  )}
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="backups-title"
+          id="omes-backups-list"
+        >
+          <h2 class="admin-section-title" id="backups-title">
+            {t("Backup catalog")}
+            <span class="count-pill">{backups.length}</span>
+          </h2>
+
+          <form method="get" class="admin-toolbar" id="backup-filter-form">
+            <label for="filter-server">{t("Server ID")}</label>
+            <input
+              id="filter-server"
+              name="serverId"
+              type="text"
+              value={serverIdFilter ?? ""}
+            />
+            <label for="filter-status">{t("Status")}</label>
+            <select id="filter-status" name="status">
+              <option value="" selected={statusFilter === undefined}>
+                {t("Any status")}
+              </option>
+              {STATUS_OPTIONS.map((value) => (
+                <option value={value} selected={statusFilter === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button type="submit">{t("Apply")}</button>
+          </form>
+
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack" id="omes-backups-table">
+              <caption class="sr-only">
+                {t("OMES backup snapshots, newest first.")}
+              </caption>
+              <thead>
                 <tr>
-                  <td class="data-table-empty" colspan={4}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ↺
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No restore requests")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t("None has been submitted yet.")}
-                      </span>
-                    </div>
-                  </td>
+                  <th scope="col">{t("Backup")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Recovery class")}</th>
+                  <th scope="col">{t("Size")}</th>
+                  <th scope="col">{t("Checksum (SHA-256)")}</th>
+                  <th scope="col">{t("Captured")}</th>
+                  <th scope="col">{t("Manifest")}</th>
+                  {canRestore && <th scope="col">{t("Actions")}</th>}
                 </tr>
-              ) : (
-                restoreRequests.map((request) => (
-                  <tr data-restore-request-row={request.id}>
-                    <td data-label="Request">
-                      <span class="cell-code">{request.requestId}</span>
-                      <span class="cell-muted">
-                        {" "}
-                        · {t("Server")}: {request.serverId}
-                      </span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          request.status === "approved" ||
-                          request.status === "completed"
-                            ? "success"
-                            : request.status === "rejected" ||
-                                request.status === "failed"
-                              ? "danger"
-                              : "info"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {request.status}
-                      </span>
-                    </td>
-                    <td data-label="Requested">
-                      <span class="cell-muted">{request.createdAt}</span>
-                    </td>
-                    <td data-label="Approval">
-                      {request.workflowInstanceId ? (
-                        <a class="quick-link" href={approvalsLink(request)}>
-                          {t("View in Approvals")}
-                        </a>
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
+              </thead>
+              <tbody>
+                {backups.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={canRestore ? 8 : 7}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ⧉
+                        </span>
+                        <span class="empty-state-title">{t("No backups")}</span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Nothing matches this filter, or no backup has been captured yet."
+                          )}
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+                ) : (
+                  backups.map((backup) => (
+                    <tr data-backup-row={backup.id}>
+                      <td data-label="Backup">
+                        <span class="cell-code">{backup.backupId}</span>
+                        <span class="cell-muted">
+                          {" "}
+                          · {t("Server")}: {backup.serverId}
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            STATUS_VARIANT[backup.status] ?? "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {backup.status}
+                        </span>
+                        {!backup.fresh && (
+                          <span class="status-badge" data-variant="warning">
+                            <span class="status-dot" aria-hidden="true" />
+                            {t("not fresh")}
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Recovery class">
+                        <span class="cell-muted">
+                          {recoveryClass(backup.manifest)}
+                        </span>
+                      </td>
+                      <td data-label="Size">
+                        <span class="cell-muted">
+                          {formatSize(backup.sizeBytes)}
+                        </span>
+                      </td>
+                      <td data-label="Checksum">
+                        {backup.checksumSha256 ? (
+                          <span class="cell-code">{backup.checksumSha256}</span>
+                        ) : (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </td>
+                      <td data-label="Captured">
+                        <span class="cell-muted">{backup.capturedAt}</span>
+                      </td>
+                      <td data-label="Manifest">
+                        <details>
+                          <summary>{t("View manifest")}</summary>
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(backup.manifest, null, 2)}
+                          />
+                        </details>
+                      </td>
+                      {canRestore && (
+                        <td data-label="Actions">
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger backup-restore-btn"
+                            data-backup-id={backup.id}
+                            data-backup-code={backup.backupId}
+                          >
+                            {t("Restore")}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {nextCursor && (
+            <div class="admin-toolbar">
+              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+                {t("Next page")}
+                <span class="quick-link-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </div>
+          )}
+        </section>
+      )
+    }
+
+    {
+      canRestore && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="restore-requests-title"
+          id="omes-restore-requests-list"
+        >
+          <h2 class="admin-section-title" id="restore-requests-title">
+            {t("Restore requests")}
+            <span class="count-pill">{restoreRequests.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Every restore is always destructive and requires an approved workflow decision before the OMES pull worker will ever act on it."
+            )}
+          </p>
+
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="omes-restore-requests-table"
+            >
+              <caption class="sr-only">
+                {t("OMES backup restore requests, newest first.")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Request")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Requested")}</th>
+                  <th scope="col">{t("Approval")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {restoreRequests.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={4}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ↺
+                        </span>
+                        <span class="empty-state-title">
+                          {t("No restore requests")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t("None has been submitted yet.")}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  restoreRequests.map((request) => (
+                    <tr data-restore-request-row={request.id}>
+                      <td data-label="Request">
+                        <span class="cell-code">{request.requestId}</span>
+                        <span class="cell-muted">
+                          {" "}
+                          · {t("Server")}: {request.serverId}
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            request.status === "approved" ||
+                            request.status === "completed"
+                              ? "success"
+                              : request.status === "rejected" ||
+                                  request.status === "failed"
+                                ? "danger"
+                                : "info"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {request.status}
+                        </span>
+                      </td>
+                      <td data-label="Requested">
+                        <span class="cell-muted">{request.createdAt}</span>
+                      </td>
+                      <td data-label="Approval">
+                        {request.workflowInstanceId ? (
+                          <a class="quick-link" href={approvalsLink(request)}>
+                            {t("View in Approvals")}
+                          </a>
+                        ) : (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
   </div>
 </AdminLayout>
 
