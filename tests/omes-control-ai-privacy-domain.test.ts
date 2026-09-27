@@ -62,12 +62,12 @@ describe("classifyFreshness", () => {
   });
 
   test("a custom max-age window is honored", () => {
-    expect(
-      classifyFreshness("2026-09-27T11:00:00Z", NOW, 30 * 60)
-    ).toBe("stale");
-    expect(
-      classifyFreshness("2026-09-27T11:50:00Z", NOW, 30 * 60)
-    ).toBe("fresh");
+    expect(classifyFreshness("2026-09-27T11:00:00Z", NOW, 30 * 60)).toBe(
+      "stale"
+    );
+    expect(classifyFreshness("2026-09-27T11:50:00Z", NOW, 30 * 60)).toBe(
+      "fresh"
+    );
   });
 });
 
@@ -175,8 +175,7 @@ describe("authorizeAiEgressApproval", () => {
       decisionRef: {
         classification: "CONFIDENTIAL",
         destination: "private_endpoint",
-        reasonCode:
-          "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
+        reasonCode: "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
       },
       approve: true
     });
@@ -210,8 +209,7 @@ describe("authorizeAiEgressApproval", () => {
       decisionRef: {
         classification: "CONFIDENTIAL",
         destination: "private_endpoint",
-        reasonCode:
-          "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
+        reasonCode: "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
       },
       approve: false
     });
@@ -244,8 +242,7 @@ describe("authorizeAiEgressApproval", () => {
       decisionRef: {
         classification: "CONFIDENTIAL",
         destination: "private_endpoint",
-        reasonCode:
-          "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
+        reasonCode: "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT"
       },
       approve: true
     });
@@ -261,7 +258,9 @@ describe("findDisallowedEvidenceKeys — structural rejection of raw-content-sha
         classification: "CONFIDENTIAL",
         destination: "cloud_sanitized",
         decision: "approval_required",
-        reason_codes: ["AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED"]
+        reason_codes: [
+          "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED"
+        ]
       })
     ).toEqual([]);
   });
