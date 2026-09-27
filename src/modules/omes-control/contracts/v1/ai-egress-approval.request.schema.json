@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/ai-egress-approval.request.schema.json",
+  "title": "ai-egress-approval.request",
+  "description": "The Control Center-facing shape of an owner-approval decision on an AI egress policy decision (issue #217, ADR-0029). This request exists ONLY for the three decisions egress_policy.py already marks 'approval_required' - `decision_ref.reason_code` is a closed enum limited to those three codes, so a request naming any other reason_code is rejected at the schema layer. This validator (issue #172's fail-closed stdlib subset) validates each field independently and has no cross-field (if/then) keyword, so the schema alone cannot refuse an internally-inconsistent combination such as `classification: RESTRICTED` + `destination: cloud_sanitized` + a mismatched `reason_code`; the actual unconditional block on RESTRICTED ever resolving to cloud_sanitized is enforced by value, independent of `reason_code`, in `lib/omes/py/privacy/posture_projection.py`'s `authorize_approval()` (see its `_RESTRICTED_CLOUD` check and tests/py/privacy/test_posture_projection.py::TestRestrictedCloudNeverApprovable) - matching egress_policy.py's own unconditional `AI_EGRESS_DENY_RESTRICTED_CLOUD_SANITIZED` deny. `justification` is bounded to a short operator note and must never contain prompt/transcript/restricted-data content or a credential. This schema never carries a command, path, or anything executable.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "idempotency_key",
+    "actor",
+    "target",
+    "decision_ref",
+    "approve"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{8,256}$"
+    },
+    "actor": {
+      "type": "object",
+      "description": "The owner/approver, not the original requester. AWCMS RBAC/ABAC must have already confirmed this actor holds the approval role BEFORE submitting this request - this field records who acted for audit, it does not itself grant permission.",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "service"]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["server_id"],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "decision_ref": {
+      "type": "object",
+      "description": "Identifies the specific egress-decision-response being approved/denied. classification/destination are bounded to the two combinations that ever produce an approval_required reason_code (CONFIDENTIAL -> private_endpoint|cloud_sanitized, RESTRICTED -> private_endpoint only); reason_code is the structural backstop.",
+      "required": ["policy_version", "classification", "destination", "reason_code"],
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$"
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["CONFIDENTIAL", "RESTRICTED"]
+        },
+        "destination": {
+          "type": "string",
+          "enum": ["private_endpoint", "cloud_sanitized"]
+        },
+        "reason_code": {
+          "type": "string",
+          "enum": [
+            "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT",
+            "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED",
+            "AI_EGRESS_APPROVAL_REQUIRED_RESTRICTED_PRIVATE_ENDPOINT"
+          ]
+        }
+      }
+    },
+    "approve": {
+      "type": "boolean"
+    },
+    "justification": {
+      "type": "string",
+      "description": "A short operator note only - never a place for prompt/transcript/restricted-data content or a credential. Bounded length is a structural discouragement, not a content filter; policy and reviewer discipline (docs/control-center-contracts.md) remain the actual control.",
+      "maxLength": 500
+    }
+  }
+}

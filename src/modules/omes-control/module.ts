@@ -14,6 +14,10 @@ export const OMES_BACKUP_SNAPSHOTS_LIFECYCLE_KEY =
   "omes_control.backup_snapshots";
 export const OMES_WORKER_NONCES_LIFECYCLE_KEY = "omes_control.worker_nonces";
 export const OMES_WORKER_RESULTS_LIFECYCLE_KEY = "omes_control.worker_results";
+export const OMES_AI_PRIVACY_POSTURE_LIFECYCLE_KEY =
+  "omes_control.ai_privacy_posture";
+export const OMES_AI_EGRESS_APPROVALS_LIFECYCLE_KEY =
+  "omes_control.ai_egress_approvals";
 
 /**
  * `omes_control` — OMES Control Center domain module (ADR-0122, Issue ahliweb/omes#196).
@@ -162,6 +166,12 @@ export const omesControlModule = defineModule({
       path: "/admin/omes/enrollments",
       order: 98,
       requiredPermission: "omes_control.enrollments.manage"
+    },
+    {
+      labelKey: "admin.layout.nav_omes_ai_privacy",
+      path: "/admin/omes/ai-privacy",
+      order: 99,
+      requiredPermission: "omes_control.ai_privacy.read"
     }
   ],
   permissions: [
@@ -229,6 +239,17 @@ export const omesControlModule = defineModule({
       activityCode: "enrollments",
       action: "manage",
       description: "Manage worker enrollment tokens and public key credentials"
+    },
+    {
+      activityCode: "ai_privacy",
+      action: "read",
+      description:
+        "Read AI privacy posture evidence and egress-approval requests"
+    },
+    {
+      activityCode: "ai_privacy",
+      action: "approve",
+      description: "Approve or deny an AI egress owner-approval request"
     }
   ],
   dataLifecycle: [
@@ -625,6 +646,85 @@ export const omesControlModule = defineModule({
       batchLimit: 500,
       backupRestoreNotes:
         "Worker-reported job evidence preserved during backups for audit continuity.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_AI_PRIVACY_POSTURE_LIFECYCLE_KEY,
+      tableName: "awcms_omes_ai_privacy_posture",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "received_at",
+      retentionClass: "audit_security",
+      retentionMinDays: 90,
+      retentionMaxDays: 1825,
+      defaultRetentionDays: 730,
+      partition: {
+        eligible: false,
+        rationale:
+          "One current row per (tenant, server, deployment) target — bounded by fleet size, not append-only history."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "Bounded metadata evidence only (issue #217/ADR-0029); no raw prompt/transcript content ever reaches this table, so it carries no separate archival value beyond the two-year audit retention."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Posture rows for a decommissioned/removed server past retention window are purged."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "received_at"],
+          purpose: "Cursor scan index for retention purging."
+        }
+      ],
+      batchLimit: 500,
+      backupRestoreNotes:
+        "AI privacy posture evidence preserved during backups for governance continuity.",
+      executionMode: "generic"
+    },
+    {
+      key: OMES_AI_EGRESS_APPROVALS_LIFECYCLE_KEY,
+      tableName: "awcms_omes_ai_egress_approvals",
+      ownerModuleKey: "omes_control",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "audit_security",
+      retentionMinDays: 365,
+      retentionMaxDays: 1825,
+      defaultRetentionDays: 730,
+      partition: {
+        eligible: false,
+        rationale:
+          "AI egress owner-approval requests are indexed by (tenant_id, idempotency_key); volume is bounded by administrative activity."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The approval decision/reason is itself the durable governance evidence for a Confidential/Restricted egress decision; excluded from separate archival, kept in the primary table for its full retention window."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale: "Approval request rows past the retention window are purged."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose: "Cursor scan index for retention purging."
+        }
+      ],
+      batchLimit: 500,
+      backupRestoreNotes:
+        "AI egress owner-approval decisions preserved during backups for governance continuity.",
       executionMode: "generic"
     }
   ]

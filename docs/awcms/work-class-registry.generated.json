@@ -827,6 +827,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/omes/ai-privacy/egress-approvals.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omes/ai-privacy/posture.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/omes/audit/index.ts",
       "workClass": "interactive",
       "source": "factory"

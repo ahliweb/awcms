@@ -1,13 +1,26 @@
 /**
  * `POST /api/v1/omes/worker/result` ingestion (ahliweb/omes#199).
  *
- * Correlated by `(tenant_id, server_id, idempotency_key)` — NOT the wire
- * `job_id`, which `worker-result.request.schema.json` requires but is the
- * WORKER's own local job-store id (see `sql/159`'s header for why: the
- * `operation-request` schema a poll response's `job` object must conform to
- * has no `job_id` property at all). `idempotency_key` is the one identifier
- * both sides agree on — AWCMS minted it at job-promotion time and handed it
- * to the worker in the poll response; the worker echoes it back unchanged.
+ * Correlated by `(tenant_id, server_id, idempotency_key)` — NOT a wire
+ * `job_id`. `idempotency_key` is the one identifier both sides agree on —
+ * AWCMS minted it at job-promotion time and handed it to the worker in the
+ * poll response; the worker echoes it back unchanged. `worker-result.
+ * request.schema.json` no longer HAS a `job_id` property at all (issue
+ * ahliweb/omes#221, re-vendored alongside ahliweb/omes#232) — the field was
+ * in practice a client-invented opaque string this repo could never
+ * validate, and `additionalProperties: false` now rejects a request that
+ * still carries one before this function is ever called. `workerJobId` is
+ * therefore optional here and `sql/162` made the column nullable to match;
+ * a `null` value simply means "no wire value was ever provided", not a data
+ * quality problem.
+ *
+ * The RESPONSE'S `job_id` field (still required by the unchanged
+ * `worker-result.response.schema.json`) is satisfied by the SERVER's own
+ * `awcms_omes_jobs.id` — resolved here as `jobId` and returned on both
+ * `recorded` and `duplicate_ignored`, never a client-supplied value. See
+ * `pages/api/v1/omes/worker/result.ts`'s own header for why the `rejected`/
+ * `unknown_job` paths deliberately do NOT do the same (disclosing a
+ * resolved job id there would be an oracle).
  *
  * Idempotent by the same `(tenant_id, server_id, idempotency_key)` via a
  * single `INSERT ... ON CONFLICT DO NOTHING RETURNING id` — same
@@ -49,7 +62,8 @@ export type WorkerResultInput = {
   tenantId: string;
   serverId: string;
   workerId: string;
-  workerJobId: string;
+  /** No longer present on the wire (issue ahliweb/omes#221) — always `undefined` today; kept optional rather than removed so a historical caller/column value is not implied to be an error. */
+  workerJobId?: string;
   correlationId: string;
   idempotencyKey: string;
   operation: string;
@@ -61,8 +75,8 @@ export type WorkerResultInput = {
 };
 
 export type IngestResultOutcome =
-  | { outcome: "recorded"; reconciled: boolean }
-  | { outcome: "duplicate_ignored"; reconciled: boolean }
+  | { outcome: "recorded"; reconciled: boolean; jobId: string }
+  | { outcome: "duplicate_ignored"; reconciled: boolean; jobId: string }
   | { outcome: "unknown_job" };
 
 const JOB_STATE_FOR_REPORTED: Record<WorkerResultInput["state"], string> = {
@@ -86,6 +100,8 @@ export async function ingestWorkerResult(
     return { outcome: "unknown_job" };
   }
 
+  const jobId = jobRows[0].id;
+
   const redactedEvidence = redactSensitiveAttributes(input.evidence) ?? {};
   const redactedError = input.error
     ? (redactSensitiveAttributes(input.error) as {
@@ -99,7 +115,8 @@ export async function ingestWorkerResult(
       (tenant_id, server_id, worker_id, worker_job_id, correlation_id, idempotency_key,
        operation, reported_state, started_at, completed_at, evidence, error)
     VALUES (
-      ${input.tenantId}, ${input.serverId}, ${input.workerId}, ${input.workerJobId},
+      ${input.tenantId}, ${input.serverId}, ${input.workerId},
+      ${input.workerJobId ?? null},
       ${input.correlationId}, ${input.idempotencyKey}, ${input.operation}, ${input.state},
       ${input.startedAt}, ${input.completedAt}, ${redactedEvidence}::jsonb,
       ${redactedError}::jsonb
@@ -121,7 +138,8 @@ export async function ingestWorkerResult(
 
     return {
       outcome: "duplicate_ignored",
-      reconciled: existingRows[0]?.reconciled ?? false
+      reconciled: existingRows[0]?.reconciled ?? false,
+      jobId
     };
   }
 
@@ -145,7 +163,7 @@ export async function ingestWorkerResult(
       ${input.tenantId}, ${input.serverId}, ${`result:${input.idempotencyKey}`},
       'worker_result_reported',
       ${{
-        workerJobId: input.workerJobId,
+        workerJobId: input.workerJobId ?? null,
         idempotencyKey: input.idempotencyKey,
         operation: input.operation,
         reportedState: input.state,
@@ -159,5 +177,5 @@ export async function ingestWorkerResult(
     ON CONFLICT (tenant_id, server_id, source_event_id) DO NOTHING
   `;
 
-  return { outcome: "recorded", reconciled: inserted.reconciled };
+  return { outcome: "recorded", reconciled: inserted.reconciled, jobId };
 }

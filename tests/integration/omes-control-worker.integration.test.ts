@@ -653,7 +653,6 @@ suite(
         tenant_id: TENANT_A,
         server_id: SERVER_ID,
         worker_id: "worker_full",
-        job_id: `worker-local-${randomUUID()}`,
         correlation_id: job.correlation_id,
         idempotency_key: job.idempotency_key,
         operation: "status",
@@ -700,6 +699,23 @@ suite(
         (r2.body as { status: string }).status
       ].sort();
       expect(resultStatuses).toEqual(["duplicate_ignored", "recorded"]);
+
+      // `job_id` in a `recorded`/`duplicate_ignored` response is the
+      // SERVER's own resolved `awcms_omes_jobs.id` (issue ahliweb/omes#221 —
+      // the wire request no longer carries one at all), not a placeholder:
+      // both concurrent responses must echo the SAME real row id, and it
+      // must be the actual job row's id, not the literal "unknown" the
+      // rejected path uses.
+      const jobIdRows = (await getHandlerAdminSql()`
+      SELECT id FROM awcms_omes_jobs WHERE tenant_id = ${TENANT_A} AND idempotency_key = ${job.idempotency_key}
+    `) as { id: string }[];
+      const jobRowId = jobIdRows[0]!.id;
+      const responseJobIds = [
+        (r1.body as { job_id: string }).job_id,
+        (r2.body as { job_id: string }).job_id
+      ];
+      expect(responseJobIds).toEqual([jobRowId, jobRowId]);
+      expect(responseJobIds[0]).not.toBe("unknown");
 
       // The exactly-once assertion: count the ROWS, not the HTTP statuses.
       const resultRows = (await getHandlerAdminSql()`
@@ -790,7 +806,6 @@ suite(
         tenant_id: TENANT_A,
         server_id: SERVER_ID,
         worker_id: "worker_other",
-        job_id: `worker-local-${randomUUID()}`,
         correlation_id: job.correlation_id,
         idempotency_key: job.idempotency_key,
         operation: "status",
@@ -816,8 +831,12 @@ suite(
       });
 
       // Same answer as a nonexistent job — no oracle distinguishing
-      // "wrong worker" from "unknown job".
+      // "wrong worker" from "unknown job". `job_id` is the fixed literal
+      // "unknown", never the real (existing!) job row's id — echoing it
+      // here would let a non-leasing caller confirm a job exists for a
+      // guessed idempotency_key even though it can never touch it.
       expect((result.body as { status: string }).status).toBe("rejected");
+      expect((result.body as { job_id: string }).job_id).toBe("unknown");
 
       const resultRows = (await getHandlerAdminSql()`
         SELECT id FROM awcms_omes_worker_results
@@ -852,6 +871,17 @@ suite(
 
       expect((legitimateResult.body as { status: string }).status).toBe(
         "recorded"
+      );
+
+      // The legitimate leasing worker's `recorded` response echoes the
+      // real `awcms_omes_jobs.id` — never the "unknown" literal the
+      // rejected path above used.
+      const legitimateJobIdRows = (await getHandlerAdminSql()`
+        SELECT id FROM awcms_omes_jobs
+        WHERE tenant_id = ${TENANT_A} AND idempotency_key = ${job.idempotency_key}
+      `) as { id: string }[];
+      expect((legitimateResult.body as { job_id: string }).job_id).toBe(
+        legitimateJobIdRows[0]!.id
       );
     });
 
@@ -1061,7 +1091,6 @@ suite(
           tenant_id: NON_UUID_TENANT_ID,
           server_id: SERVER_ID,
           worker_id: "worker_nonuuid",
-          job_id: `worker-local-${randomUUID()}`,
           correlation_id: `corr_${randomUUID()}`,
           idempotency_key: `idem_${randomUUID()}`,
           operation: "status",

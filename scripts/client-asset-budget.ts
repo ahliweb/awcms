@@ -477,8 +477,29 @@ export const READER_BUDGET_BYTES = 24_000;
  * before this final number. 230,400 is measured + ~140 B, the same tight
  * margin the raise above used, for the same reason: this is presentational
  * and scoped to the same 9 screens.
+ *
+ * **Raised again to 231,200 on 27 September 2026 for the tenth
+ * `/admin/omes/*` screen, AI privacy posture and egress owner-approval
+ * (ahliweb/omes#232), rebased onto part 1b above.** The screen ships no new
+ * stylesheet and no new font — it imports the SAME
+ * `admin-screens.css`/`omes-control-center.css` every other `omes_control`
+ * screen already imports, and its one inline `<script>` calls only the
+ * SHARED `lib/ui/admin-form-client.ts` helpers (`lockElement`, `messageBox`,
+ * `onAction`, `sendJsonForData`) every other screen's approve/deny-style
+ * action already uses — no hand-rolled lifecycle duplication for this raise
+ * to recover, unlike Issue #552's precedent. The growth is the page's own
+ * compiled markup/script chunk for a genuinely new screen, not decoration.
+ *
+ * ```
+ * before (230,400 ceiling)   230,263 B (per part 1b's own measurement above)
+ * + admin/omes/ai-privacy    231,059 B   (measured after rebasing onto part 1b)
+ * ```
+ *
+ * 231,200 is measured + ~140 B, the same tight margin the immediately
+ * preceding raise used, for the same reason: a new screen's own weight
+ * should not buy headroom for unrelated future growth elsewhere.
  */
-export const APP_BUDGET_BYTES = 230_400;
+export const APP_BUDGET_BYTES = 231_200;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

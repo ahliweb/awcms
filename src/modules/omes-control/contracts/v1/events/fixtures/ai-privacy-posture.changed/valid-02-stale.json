@@ -1,0 +1,24 @@
+{
+  "event_id": "evt-ai-posture-0002",
+  "event_version": "v1",
+  "event_type": "ai-privacy-posture.changed",
+  "occurred_at": "2026-09-24T12:05:00Z",
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-ai-posture-0011",
+  "idempotency_key": "ai-posture-evt-00000002",
+  "actor": {
+    "type": "service",
+    "id": "service-omes-health"
+  },
+  "source": "omes",
+  "data": {
+    "target": {
+      "server_id": "server-acme-01",
+      "deployment_id": "deployment-acme-hermes-01"
+    },
+    "authority": "omes-host",
+    "status": "BLOCKED",
+    "evidence_freshness": "stale",
+    "reason_codes": ["AI_PRIVACY_POSTURE_BLOCKED_EVIDENCE_STALE"]
+  }
+}

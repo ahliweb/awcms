@@ -1,0 +1,24 @@
+{
+  "status": "job_available",
+  "server_id": "srv-prod-01",
+  "tenant_id": "tenant-acme",
+  "poll_interval_seconds": 10,
+  "job": {
+    "tenant_id": "tenant-acme",
+    "correlation_id": "corr-job-0001",
+    "idempotency_key": "idem-job-status-00000001",
+    "actor": {
+      "type": "service",
+      "id": "control-center"
+    },
+    "operation": "status",
+    "target": {
+      "server_id": "srv-prod-01"
+    },
+    "permission": {
+      "granted": true,
+      "policy_id": "pol-allow-status",
+      "requires_approval": false
+    }
+  }
+}

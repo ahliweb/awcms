@@ -1532,7 +1532,14 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // as this background-job role; `awcms_worker` here gets SELECT+DELETE
   // only, for a future retention sweep that has not been written yet.
   awcms_omes_worker_nonces: ["SELECT", "DELETE"],
-  awcms_omes_worker_results: ["SELECT", "DELETE"]
+  awcms_omes_worker_results: ["SELECT", "DELETE"],
+  // ahliweb/omes#232 (sql/160) — same generic-purge shape: the AI-privacy
+  // posture ingestion and egress-approval submission endpoints run as
+  // `awcms_app` (the live request path); `awcms_worker` here gets
+  // SELECT+DELETE only, for the same generic data-lifecycle retention purge
+  // as every other `omes_control` table above.
+  awcms_omes_ai_privacy_posture: ["SELECT", "DELETE"],
+  awcms_omes_ai_egress_approvals: ["SELECT", "DELETE"]
 };
 
 /**

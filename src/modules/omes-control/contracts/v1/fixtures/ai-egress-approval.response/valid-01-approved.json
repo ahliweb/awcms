@@ -1,0 +1,15 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-approval-0001",
+  "approval_id": "approval-0000000001",
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "decision": "approved",
+  "reason": "approved: reason_code=AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT",
+  "recorded_at": "2026-09-24T12:00:05Z",
+  "actor": {
+    "type": "user",
+    "id": "user-owner-01"
+  }
+}

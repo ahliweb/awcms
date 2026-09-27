@@ -81,5 +81,17 @@ export const OMES_GUARDS = {
       activityCode: "enrollments",
       action: "manage" as const
     }
+  },
+  aiPrivacy: {
+    read: {
+      moduleKey: "omes_control",
+      activityCode: "ai_privacy",
+      action: "read" as const
+    },
+    approve: {
+      moduleKey: "omes_control",
+      activityCode: "ai_privacy",
+      action: "approve" as const
+    }
   }
 } as const;

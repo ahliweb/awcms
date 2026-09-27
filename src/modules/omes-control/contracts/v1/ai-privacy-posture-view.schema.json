@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/ai-privacy-posture-view.schema.json",
+  "title": "ai-privacy-posture-view",
+  "description": "The tenant-scoped Control Center read projection of AI privacy posture and, where one has been made, the most recent AI egress policy decision (issue #217, ADR-0029). This is a PROJECTION for display and governance only - it carries only closed enums, bounded patterns, and timestamps sourced from contracts/ai-egress/v1/privacy-posture-evidence.schema.json and contracts/ai-egress/v1/egress-decision-response.schema.json. It MUST NEVER carry prompt text, response text, transcripts, embeddings, retrieved documents, chain-of-thought, secrets/credentials, or a raw provider response - additionalProperties=false everywhere makes this structural, not merely a convention. Server-side authorization (who may read this projection) is enforced by AWCMS/the OMES pull-worker boundary BEFORE this shape is produced; this schema describes the wire shape only and is not itself an authorization mechanism - UI hiding of a field is never a substitute for that server-side check.",
+  "type": "object",
+  "required": [
+    "tenant_id",
+    "correlation_id",
+    "target",
+    "authority",
+    "evidence_freshness",
+    "classification_mode",
+    "destination_class",
+    "status",
+    "reason_codes",
+    "last_verified_at",
+    "projected_at",
+    "latest_decision"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "target": {
+      "type": "object",
+      "required": ["server_id"],
+      "additionalProperties": false,
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        }
+      }
+    },
+    "authority": {
+      "type": "string",
+      "description": "Which system asserted this posture evidence. 'hermes' for a Hermes-reported runtime/provider-routing fact, 'omes-host' for OMES host evidence (network classification, state), 'awcms' for a business/tenant policy fact AWCMS itself asserted (e.g. the expected posture it configured). This field is never inferred from the reader's tenant - it is set by the producer.",
+      "enum": ["hermes", "omes-host", "awcms"]
+    },
+    "evidence_freshness": {
+      "type": "string",
+      "description": "Computed at projection time from last_verified_at versus the default staleness window (lib/omes/py/privacy/posture_evidence.py's DEFAULT_MAX_EVIDENCE_AGE_SECONDS). 'unknown' (never 'fresh') whenever last_verified_at is null or unparsable - stale/unknown evidence is never rendered as healthy.",
+      "enum": ["fresh", "stale", "unknown"]
+    },
+    "classification_mode": {
+      "type": "string",
+      "enum": ["fail_closed_v1", "unknown"]
+    },
+    "destination_class": {
+      "type": "string",
+      "enum": ["local", "private", "cloud", "unknown"]
+    },
+    "local_endpoint_classification": {
+      "type": "string",
+      "enum": ["loopback", "private_network", "public", "not_applicable", "unknown"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Echoed from privacy-posture-evidence.status. Unknown or stale evidence is always BLOCKED, never PASS.",
+      "enum": ["PASS", "FAIL", "WARN", "BLOCKED"]
+    },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "AI_PRIVACY_POSTURE_PASS_CONSISTENT",
+          "AI_PRIVACY_POSTURE_BLOCKED_UNKNOWN_POLICY_VERSION",
+          "AI_PRIVACY_POSTURE_BLOCKED_UNKNOWN_DESTINATION_CLASS",
+          "AI_PRIVACY_POSTURE_BLOCKED_EVIDENCE_MISSING_TIMESTAMP",
+          "AI_PRIVACY_POSTURE_BLOCKED_EVIDENCE_STALE",
+          "AI_PRIVACY_POSTURE_BLOCKED_LOCAL_ONLY_SOURCE_UNAVAILABLE",
+          "AI_PRIVACY_POSTURE_FAIL_DRIFT_LOCAL_ONLY_TO_CLOUD",
+          "AI_PRIVACY_POSTURE_FAIL_LOCAL_ENDPOINT_PUBLICLY_EXPOSED",
+          "AI_PRIVACY_POSTURE_FAIL_CLOUD_FALLBACK_ENABLED_UNDER_RESTRICTED_POSTURE",
+          "AI_PRIVACY_POSTURE_FAIL_NETWORK_ISOLATION_INACTIVE_UNDER_RESTRICTED_POSTURE",
+          "AI_PRIVACY_POSTURE_FAIL_LOCAL_ONLY_SOURCE_REPORTS_FAIL",
+          "AI_PRIVACY_POSTURE_WARN_DRIFT_LOCAL_ONLY_TO_PRIVATE_ENDPOINT",
+          "AI_PRIVACY_POSTURE_WARN_LOCAL_ENDPOINT_CLASSIFICATION_UNKNOWN",
+          "AI_PRIVACY_POSTURE_WARN_CLOUD_FALLBACK_STATE_UNKNOWN",
+          "AI_PRIVACY_POSTURE_WARN_NETWORK_ISOLATION_STATE_UNKNOWN",
+          "AI_PRIVACY_POSTURE_WARN_LOCAL_ONLY_SOURCE_REPORTS_WARN",
+          "AI_PRIVACY_POSTURE_WARN_LOCAL_ONLY_SOURCE_REPORTS_UNKNOWN",
+          "AI_PRIVACY_POSTURE_WARN_EXPECTED_POSTURE_UNKNOWN",
+          "AI_PRIVACY_POSTURE_WARN_EVIDENCE_SOURCE_REJECTED",
+          "AI_PRIVACY_POSTURE_WARN_HERMES_VERSION_REFERENCE_REJECTED",
+          "AI_PRIVACY_POSTURE_PROJECTION_CROSS_TENANT_DENIED"
+        ]
+      }
+    },
+    "last_verified_at": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "projected_at": {
+      "type": "string",
+      "description": "When OMES produced this projection (distinct from last_verified_at, the age of the underlying evidence).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "latest_decision": {
+      "type": ["object", "null"],
+      "description": "The most recent AI egress policy decision for this target, projected from contracts/ai-egress/v1/egress-decision-response.schema.json, or null when no decision has been recorded yet. Required (not merely optional) so a producer cannot omit it while a decision exists.",
+      "required": ["policy_version", "classification", "destination", "decision", "reason_codes", "authority", "decided_at", "evidence_freshness"],
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$"
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED", "unknown"]
+        },
+        "destination": {
+          "type": "string",
+          "enum": ["local_only", "private_endpoint", "cloud_sanitized", "deny", "unknown"]
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "deny", "approval_required"]
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "AI_EGRESS_ALLOW_LOCAL_ONLY",
+              "AI_EGRESS_ALLOW_PRIVATE_ENDPOINT_APPROVED",
+              "AI_EGRESS_ALLOW_CLOUD_SANITIZED_APPROVED",
+              "AI_EGRESS_ALLOW_PUBLIC_CLOUD_POLICY",
+              "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_PRIVATE_ENDPOINT",
+              "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED",
+              "AI_EGRESS_APPROVAL_REQUIRED_RESTRICTED_PRIVATE_ENDPOINT",
+              "AI_EGRESS_DENY_UNKNOWN_POLICY_VERSION",
+              "AI_EGRESS_DENY_UNKNOWN_CLASSIFICATION",
+              "AI_EGRESS_DENY_UNKNOWN_DESTINATION",
+              "AI_EGRESS_DENY_UNKNOWN_PROVIDER_POSTURE",
+              "AI_EGRESS_DENY_DESTINATION_EXPLICITLY_DENIED",
+              "AI_EGRESS_DENY_AUTHENTICATION_MATERIAL",
+              "AI_EGRESS_DENY_RESTRICTED_CLOUD_SANITIZED",
+              "AI_EGRESS_DENY_RESTRICTED_PROVIDER_NOT_APPROVED",
+              "AI_EGRESS_DENY_PROVIDER_NOT_APPROVED",
+              "AI_EGRESS_DENY_MISSING_SANITIZATION_EVIDENCE"
+            ]
+          }
+        },
+        "authority": {
+          "type": "string",
+          "enum": ["hermes", "omes-host", "awcms"]
+        },
+        "decided_at": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "evidence_freshness": {
+          "type": "string",
+          "enum": ["fresh", "stale", "unknown"]
+        }
+      }
+    }
+  }
+}

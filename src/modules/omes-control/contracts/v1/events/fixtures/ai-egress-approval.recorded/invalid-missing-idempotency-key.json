@@ -1,0 +1,21 @@
+{
+  "event_id": "evt-approval-0003",
+  "event_version": "v1",
+  "event_type": "ai-egress-approval.recorded",
+  "occurred_at": "2026-09-24T12:00:15Z",
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-approval-0008",
+  "actor": {
+    "type": "user",
+    "id": "user-owner-08"
+  },
+  "source": "control-center",
+  "data": {
+    "approval_id": "approval-0000000008",
+    "target": {
+      "server_id": "server-acme-01"
+    },
+    "decision": "approved",
+    "reason_code": "AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED"
+  }
+}

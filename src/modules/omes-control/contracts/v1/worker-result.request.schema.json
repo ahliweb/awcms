@@ -2,13 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/control-center/v1/worker-result.request.schema.json",
   "title": "worker-result.request",
-  "description": "Execution result and evidence posted by pull-worker to Control Center (ADR-0027, issue #192).",
+  "description": "Execution result and evidence posted by pull-worker to Control Center (ADR-0027, issue #192). `idempotency_key` is the sole correlation handle back to the job the Control Center issued (together with `correlation_id`, `tenant_id`, `server_id` and the leasing `worker_id`) - there is deliberately no `job_id` field. Earlier v1 required `job_id` here, but nothing in this contract set (`worker-poll.response`, `operation-request`) ever gave the worker a server-known job id to echo back, so the field was in practice a client-invented opaque string the Control Center could never validate (issue #221). This was fixed by amending v1 in place rather than cutting a v2: this contract set has exactly one known consumer (AWCMS), which pins the OMES contracts directory by commit hash and has a CI drift gate on it (issue #197), so the break is detectable and cheap to re-pin today, and the field being removed was never actually implementable as a correlation handle. Consumers must re-pin/re-vendor after this change; see contracts/README.md \"Compatibility rules\" for the general additive-only policy this change is a documented, deliberate exception to.",
   "type": "object",
   "required": [
     "tenant_id",
     "server_id",
     "worker_id",
-    "job_id",
     "correlation_id",
     "idempotency_key",
     "operation",
@@ -28,10 +27,6 @@
       "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
     },
     "worker_id": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
-    },
-    "job_id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
     },

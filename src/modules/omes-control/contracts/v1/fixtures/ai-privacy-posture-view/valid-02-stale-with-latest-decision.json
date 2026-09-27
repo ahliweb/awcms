@@ -1,0 +1,25 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-ai-posture-0002",
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "authority": "omes-host",
+  "evidence_freshness": "stale",
+  "classification_mode": "fail_closed_v1",
+  "destination_class": "cloud",
+  "status": "BLOCKED",
+  "reason_codes": ["AI_PRIVACY_POSTURE_BLOCKED_EVIDENCE_STALE"],
+  "last_verified_at": "2026-09-01T00:00:00Z",
+  "projected_at": "2026-09-24T12:00:00Z",
+  "latest_decision": {
+    "policy_version": "v1",
+    "classification": "CONFIDENTIAL",
+    "destination": "cloud_sanitized",
+    "decision": "approval_required",
+    "reason_codes": ["AI_EGRESS_APPROVAL_REQUIRED_CONFIDENTIAL_CLOUD_SANITIZED"],
+    "authority": "omes-host",
+    "decided_at": "2026-09-24T10:00:00Z",
+    "evidence_freshness": "fresh"
+  }
+}

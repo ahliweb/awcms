@@ -1,0 +1,508 @@
+---
+/**
+ * OMES Control Center — AI privacy posture & egress-approval console, Issue
+ * ahliweb/omes#232 (OMES issue #217, ADR-0029; parent #195).
+ *
+ * Consumes the OMES-owned Control Center contracts
+ * `ai-privacy-posture-view` / `ai-egress-approval.request`/`.response`
+ * (vendored under `src/modules/omes-control/contracts/v1/`, re-pinned to
+ * OMES main in this same change). This screen is READ-ONLY evidence plus
+ * ONE narrow write action (an owner-approval decision on an
+ * `approval_required` AI egress decision) — it never displays or accepts a
+ * prompt, transcript, chain-of-thought, or raw provider response; every
+ * field rendered below is bounded metadata from the projection schema.
+ *
+ * ## Server-side enforcement, not UI hiding
+ *
+ * `loadAdminScreen`'s `authorize: OMES_GUARDS.aiPrivacy.read` decides
+ * whether this screen renders anything; the actual authority is that same
+ * permission (and, for the approve action, `OMES_GUARDS.aiPrivacy.approve`)
+ * re-checked server-side by `GET /api/v1/omes/ai-privacy/posture` and
+ * `POST /api/v1/omes/ai-privacy/egress-approvals` respectively — this
+ * screen hiding a button is UX only, never the enforcement boundary.
+ *
+ * ## RESTRICTED -> cloud is structurally impossible here, not merely hidden
+ *
+ * `canRenderApprove` below is a NECESSARY, not sufficient, condition — the
+ * real refusal lives in `domain/ai-privacy.ts`'s `authorizeAiEgressApproval`
+ * (an unconditional value check, run before the workflow engine is ever
+ * touched) and in `sql/160`'s CHECK constraint on
+ * `awcms_omes_ai_egress_approvals`. This page additionally never renders an
+ * approve/deny control at all for that one combination, so an operator
+ * cannot even attempt it from here — but a forged request to the API would
+ * still be refused by the two layers beneath this page, which is the actual
+ * boundary.
+ *
+ * ## Staleness/unknown evidence is never shown as healthy
+ *
+ * `effectiveStatus`/`isHealthy` (recomputed at READ time by
+ * `application/ai-privacy-directory.ts`, never read off a stored flag) are
+ * what this page renders — not the raw, possibly stale `status` a producer
+ * sent at ingest time.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  fetchAiEgressApprovals,
+  fetchAiPrivacyPosture,
+  type AiEgressApprovalSummary,
+  type AiPrivacyPostureSummary
+} from "../../../modules/omes-control/application/ai-privacy-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const STATUS_VARIANT: Record<string, string> = {
+  PASS: "success",
+  WARN: "info",
+  FAIL: "danger",
+  BLOCKED: "danger"
+};
+
+const FRESHNESS_VARIANT: Record<string, string> = {
+  fresh: "success",
+  stale: "info",
+  unknown: "danger"
+};
+
+// Inlined as literal `AccessRequest` object shapes (matching
+// `OMES_GUARDS.aiPrivacy.{read,approve}` byte-for-byte, see
+// `domain/permissions.ts`) rather than the `OMES_GUARDS` reference itself —
+// `scripts/admin-screen-coverage-check.ts`'s scanner resolves a screen's
+// permission CLAIM from this exact `moduleKey:"...", activityCode:"...",
+// action:"..."` literal pattern in the `.astro` source text, not from an
+// imported constant's value, so an object-reference guard (`OMES_GUARDS.x.y`)
+// reads as unclaimed even though it is the enforced authority. `OMES_GUARDS`
+// remains the source of truth every API route/test imports; this file's own
+// import above is kept for that byte-for-byte cross-reference, not dropped.
+const AI_PRIVACY_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "ai_privacy",
+  action: "read"
+} as const;
+const AI_PRIVACY_APPROVE_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "ai_privacy",
+  action: "approve"
+} as const;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: AI_PRIVACY_READ_GUARD,
+  load: async ({ tx, can }) => {
+    const now = new Date();
+    const [posturePage, approvals] = [
+      await fetchAiPrivacyPosture(tx, ssr.tenantId, now),
+      await fetchAiEgressApprovals(tx, ssr.tenantId)
+    ];
+
+    return {
+      posture: posturePage.posture,
+      fleetHealthy: posturePage.fleetHealthy,
+      approvals,
+      canApprove: await can(AI_PRIVACY_APPROVE_GUARD)
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/ai-privacy.astro: failed to load the AI privacy posture console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const posture: AiPrivacyPostureSummary[] =
+  screen.state === "allowed" ? screen.data.posture : [];
+const fleetHealthy =
+  screen.state === "allowed" ? screen.data.fleetHealthy : false;
+const approvals: AiEgressApprovalSummary[] =
+  screen.state === "allowed" ? screen.data.approvals : [];
+const canApprovePermission =
+  screen.state === "allowed" && screen.data.canApprove;
+
+/**
+ * A control renders ONLY when the pending decision is a real
+ * approval_required combination this screen is allowed to act on at all —
+ * in particular, NEVER for RESTRICTED -> cloud_sanitized (which has no
+ * approvable reason_code at all, so `latestDecision.reasonCodes` for that
+ * pair is always empty/absent here in practice — this check is an explicit,
+ * named belt on top of that, not the only thing standing between an
+ * operator and that combination).
+ */
+function canRenderApprove(row: AiPrivacyPostureSummary): boolean {
+  const decision = row.latestDecision;
+
+  if (!decision || decision.decision !== "approval_required") return false;
+  if (
+    decision.classification === "RESTRICTED" &&
+    decision.destination === "cloud_sanitized"
+  ) {
+    return false;
+  }
+  return decision.reasonCodes.length > 0;
+}
+
+function formatTimestamp(value: string | null): string {
+  return value ?? "—";
+}
+---
+
+<AdminLayout
+  title={t("OMES AI privacy")}
+  description={t(
+    "Read-only AI privacy posture evidence and AI egress owner-approval requests, projected from OMES. Never displays a prompt, transcript, or raw provider response — bounded metadata only."
+  )}
+>
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-ai-privacy-denied">
+          {t("You do not have permission to view AI privacy posture.")}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-ai-privacy-error">
+          {t(
+            "The AI privacy posture console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <p
+          id="omes-ai-privacy-err"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="posture-title"
+          id="omes-ai-privacy-posture"
+        >
+          <h2 class="admin-section-title" id="posture-title">
+            {t("AI privacy posture")}
+            <span
+              class="status-badge"
+              data-variant={fleetHealthy ? "success" : "danger"}
+            >
+              <span class="status-dot" aria-hidden="true" />
+              {fleetHealthy ? t("Fleet healthy") : t("Attention needed")}
+            </span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Evidence older than its freshness window, or with unrecognized fields, is always shown as stale/unknown and never as healthy."
+            )}
+          </p>
+
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="omes-ai-privacy-posture-table"
+            >
+              <caption class="sr-only">
+                {t("AI privacy posture evidence per server, newest first.")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Server")}</th>
+                  <th scope="col">{t("Authority")}</th>
+                  <th scope="col">{t("Destination class")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Evidence")}</th>
+                  <th scope="col">{t("Last verified")}</th>
+                  <th scope="col">{t("Actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posture.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={7}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ▭
+                        </span>
+                        <span class="empty-state-title">
+                          {t("No AI privacy posture evidence yet")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Evidence appears here once an enrolled OMES host reports its AI privacy posture."
+                          )}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  posture.map((row) => (
+                    <tr data-posture-row={row.id}>
+                      <td data-label="Server">
+                        <span class="cell-code">{row.serverId}</span>
+                      </td>
+                      <td data-label="Authority">
+                        <span class="cell-muted">{row.authority}</span>
+                      </td>
+                      <td data-label="Destination class">
+                        <span class="cell-muted">{row.destinationClass}</span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            STATUS_VARIANT[row.effectiveStatus] ?? "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {row.effectiveStatus}
+                        </span>
+                      </td>
+                      <td data-label="Evidence">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            FRESHNESS_VARIANT[row.evidenceFreshness] ??
+                            "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {row.evidenceFreshness}
+                        </span>
+                      </td>
+                      <td data-label="Last verified">
+                        <span class="cell-muted">
+                          {formatTimestamp(row.lastVerifiedAt)}
+                        </span>
+                      </td>
+                      <td data-label="Actions">
+                        {canApprovePermission && canRenderApprove(row) ? (
+                          <>
+                            <button
+                              type="button"
+                              class="btn-inline js-egress-decide"
+                              data-approve="true"
+                              data-server-id={row.serverId}
+                              data-policy-version={
+                                row.latestDecision!.policyVersion
+                              }
+                              data-classification={
+                                row.latestDecision!.classification
+                              }
+                              data-destination={row.latestDecision!.destination}
+                              data-reason-code={
+                                row.latestDecision!.reasonCodes[0]
+                              }
+                            >
+                              {t("Approve")}
+                            </button>
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger js-egress-decide"
+                              data-approve="false"
+                              data-server-id={row.serverId}
+                              data-policy-version={
+                                row.latestDecision!.policyVersion
+                              }
+                              data-classification={
+                                row.latestDecision!.classification
+                              }
+                              data-destination={row.latestDecision!.destination}
+                              data-reason-code={
+                                row.latestDecision!.reasonCodes[0]
+                              }
+                            >
+                              {t("Deny")}
+                            </button>
+                          </>
+                        ) : (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="approvals-title"
+          id="omes-ai-privacy-approvals"
+        >
+          <h2 class="admin-section-title" id="approvals-title">
+            {t("AI egress approval requests")}
+            <span class="count-pill">{approvals.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "A RESTRICTED classification resolving to a cloud destination has no approval path and is never offered a control here."
+            )}
+          </p>
+
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="omes-ai-privacy-approvals-table"
+            >
+              <caption class="sr-only">
+                {t("AI egress owner-approval requests, newest first.")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Server")}</th>
+                  <th scope="col">{t("Classification")}</th>
+                  <th scope="col">{t("Destination")}</th>
+                  <th scope="col">{t("Decision")}</th>
+                  <th scope="col">{t("Decided")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvals.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={5}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          ▭
+                        </span>
+                        <span class="empty-state-title">
+                          {t("No AI egress approval requests")}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  approvals.map((approval) => (
+                    <tr data-approval-row={approval.id}>
+                      <td data-label="Server">
+                        <span class="cell-code">{approval.serverId}</span>
+                      </td>
+                      <td data-label="Classification">
+                        <span class="cell-muted">
+                          {approval.classification}
+                        </span>
+                      </td>
+                      <td data-label="Destination">
+                        <span class="cell-muted">{approval.destination}</span>
+                      </td>
+                      <td data-label="Decision">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            approval.decision === "approved"
+                              ? "success"
+                              : approval.decision === "denied"
+                                ? "danger"
+                                : "info"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {approval.decision}
+                        </span>
+                      </td>
+                      <td data-label="Decided">
+                        <span class="cell-muted">
+                          {formatTimestamp(approval.decidedAt)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+  </div>
+</AdminLayout>
+
+<script>
+  // Per-row Approve/Deny buttons (`domain/ai-privacy.ts`'s `canRenderApprove`
+  // equivalent on the Astro side never even RENDERS one of these buttons for
+  // a RESTRICTED -> cloud_sanitized row — see the template above). The
+  // fields submitted come from `data-*` attributes populated from the SAME
+  // server-rendered `latestDecision` the row displays, never operator-typed
+  // free text, so there is no client-side form to validate beyond what the
+  // server re-validates anyway.
+  import {
+    lockElement,
+    messageBox,
+    onAction,
+    sendJsonForData
+  } from "../../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("omes-ai-privacy-err");
+
+  onAction(".js-egress-decide", async (button) => {
+    const approve = button.dataset.approve === "true";
+    const serverId = button.dataset.serverId;
+    const policyVersion = button.dataset.policyVersion;
+    const classification = button.dataset.classification;
+    const destination = button.dataset.destination;
+    const reasonCode = button.dataset.reasonCode;
+    if (
+      !serverId ||
+      !policyVersion ||
+      !classification ||
+      !destination ||
+      !reasonCode
+    ) {
+      return;
+    }
+
+    actionError.clear();
+    const unlock = lockElement(button, approve ? "Approving…" : "Denying…");
+
+    const result = await sendJsonForData(
+      "POST",
+      "/api/v1/omes/ai-privacy/egress-approvals",
+      {
+        serverId,
+        policyVersion,
+        classification,
+        destination,
+        reasonCode,
+        approve
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "APPROVAL_WORKFLOW_NOT_CONFIGURED"
+        ? "No active approval workflow is published for AI egress decisions yet."
+        : result.errorCode === "AI_EGRESS_APPROVAL_DENIED"
+          ? "That request cannot be approved."
+          : "Could not submit the approval decision."
+    );
+    unlock();
+  });
+</script>

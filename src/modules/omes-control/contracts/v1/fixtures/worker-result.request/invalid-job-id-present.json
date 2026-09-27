@@ -1,0 +1,17 @@
+{
+  "tenant_id": "tenant-acme",
+  "server_id": "srv-prod-01",
+  "worker_id": "wrk-srv-prod-01-001",
+  "job_id": "job-status-001",
+  "correlation_id": "corr-0001",
+  "idempotency_key": "idem-worker-result-0001",
+  "operation": "status",
+  "state": "succeeded",
+  "started_at": "2026-09-21T12:05:01Z",
+  "completed_at": "2026-09-21T12:05:03Z",
+  "evidence": {
+    "returncode": 0,
+    "output_summary": "status OK: all modules verified",
+    "readback_status": {"ok": true}
+  }
+}

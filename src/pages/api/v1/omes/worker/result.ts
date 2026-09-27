@@ -9,8 +9,23 @@
  * already-verified envelope.
  *
  * See `application/worker-result-ingestion.ts`'s header for why this is
- * correlated by `idempotency_key`, not the wire `job_id` (which is the
- * worker's own opaque local identifier).
+ * correlated by `idempotency_key`, never a wire `job_id` — that field no
+ * longer exists on `worker-result.request` at all (issue ahliweb/omes#221,
+ * re-vendored alongside ahliweb/omes#232): `additionalProperties: false`
+ * means a request that still carries one is rejected by
+ * `validateOmesContractText` before this handler does anything else.
+ *
+ * The RESPONSE schema (`worker-result.response`, unchanged) still requires a
+ * `job_id` field. On `recorded`/`duplicate_ignored` this is the SERVER's own
+ * `awcms_omes_jobs.id` — `ingestWorkerResult` already resolved that row to
+ * do the update, so it is real, not a placeholder. On `rejected` (including
+ * the `unknown_job` outcome folded into it, per this route's own
+ * never-distinguish-the-cause discipline) the response instead emits the
+ * fixed literal `"unknown"` — deliberately, not an oversight: echoing a
+ * resolved job id on a REJECTED response would let an attacker who knows a
+ * `(tenant, server)` pair but not a worker's real signing key use this
+ * endpoint as an oracle for "does a job matching this idempotency_key
+ * exist", one bit of information cheaper than actually leasing it.
  */
 import type { APIRoute } from "astro";
 
@@ -45,7 +60,6 @@ type ResultBody = {
   tenant_id?: unknown;
   server_id?: unknown;
   worker_id?: unknown;
-  job_id?: unknown;
   correlation_id?: unknown;
   idempotency_key?: unknown;
   operation?: unknown;
@@ -56,10 +70,10 @@ type ResultBody = {
   error?: unknown;
 };
 
-function rejected(jobId: unknown, now: Date): Response {
+function rejected(now: Date): Response {
   return jsonResponse(
     {
-      job_id: typeof jobId === "string" && jobId.length > 0 ? jobId : "unknown",
+      job_id: "unknown",
       status: "rejected",
       reconciled: false,
       recorded_at: now.toISOString()
@@ -73,7 +87,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   const now = new Date();
 
   if (bodyRead.tooLarge) {
-    return rejected(undefined, now);
+    return rejected(now);
   }
 
   const ipRateLimit = await checkSharedRateLimit(
@@ -101,7 +115,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   try {
     parsed = JSON.parse(bodyRead.text) as ResultBody;
   } catch {
-    return rejected(undefined, now);
+    return rejected(now);
   }
 
   const tenantId = typeof parsed.tenant_id === "string" ? parsed.tenant_id : "";
@@ -115,7 +129,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   if (!rateLimit.allowed) {
     return jsonResponse(
       {
-        job_id: typeof parsed.job_id === "string" ? parsed.job_id : "unknown",
+        job_id: "unknown",
         status: "rejected",
         reconciled: false,
         recorded_at: now.toISOString()
@@ -134,7 +148,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   ).catch(() => ["unsupported_contract_version"]);
 
   if (contractErrors.length > 0 || !tenantId) {
-    return rejected(parsed.job_id, now);
+    return rejected(now);
   }
 
   let result;
@@ -168,7 +182,6 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
           tenantId: verification.tenantId,
           serverId: verification.serverId,
           workerId: verification.workerId,
-          workerJobId: String(parsed.job_id),
           correlationId: String(parsed.correlation_id),
           idempotencyKey: String(parsed.idempotency_key),
           operation: String(parsed.operation),
@@ -185,7 +198,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     });
   } catch (error) {
     if (error instanceof InvalidWorkerTenantIdError) {
-      return rejected(parsed.job_id, now);
+      return rejected(now);
     }
     throw error;
   }
@@ -195,18 +208,18 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   }
 
   if (result.kind === "denied") {
-    return rejected(parsed.job_id, now);
+    return rejected(now);
   }
 
   const { outcome } = result;
 
   if (outcome.outcome === "unknown_job") {
-    return rejected(parsed.job_id, now);
+    return rejected(now);
   }
 
   return jsonResponse(
     {
-      job_id: String(parsed.job_id),
+      job_id: outcome.jobId,
       status: outcome.outcome === "recorded" ? "recorded" : "duplicate_ignored",
       reconciled: outcome.reconciled,
       recorded_at: now.toISOString()

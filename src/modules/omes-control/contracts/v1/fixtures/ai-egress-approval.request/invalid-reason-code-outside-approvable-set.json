@@ -1,0 +1,19 @@
+{
+  "tenant_id": "tenant-acme",
+  "correlation_id": "corr-approval-0003",
+  "idempotency_key": "approval-req-00000003",
+  "actor": {
+    "type": "user",
+    "id": "user-owner-03"
+  },
+  "target": {
+    "server_id": "server-acme-01"
+  },
+  "decision_ref": {
+    "policy_version": "v1",
+    "classification": "RESTRICTED",
+    "destination": "cloud_sanitized",
+    "reason_code": "AI_EGRESS_DENY_RESTRICTED_CLOUD_SANITIZED"
+  },
+  "approve": true
+}
