@@ -1,0 +1,128 @@
+---
+/**
+ * OMES Control Center — "Progres Hermes" screen, Issue ahliweb/omes#246
+ * part 2 (parent #195).
+ *
+ * ## Why this is an explicit empty state, not a real view (coordinator
+ * decision, ahliweb/omes#246)
+ *
+ * The redesign reference (`OMES Control Center.dc.html`'s `progress`
+ * screen / `MILESTONES`/`ISSUES` bindings) is NOT a Hermes runtime/host
+ * projection at all — it is a GitHub milestone/issue tracker FOR THE
+ * `ahliweb/omes` REPOSITORY ITSELF (literal issue numbers like #195-#202,
+ * #183). Per OMES `AGENTS.md`, GitHub owns repository/issue/milestone
+ * observations, and GitHub integration is explicitly staged/unimplemented
+ * backlog (issues #98-#102: "provider abstraction, Cloudflare, SRS-X,
+ * GitHub, and domain reconciliation"). There is no v1 Control Center
+ * contract for a GitHub issue/milestone projection, and per the
+ * coordinator's explicit decision this screen ships NEITHER a GitHub
+ * integration NOR a static/hand-maintained list masquerading as one —
+ * either would misrepresent unimplemented/stale data as live evidence.
+ *
+ * This screen is therefore a permission-gated, explicit "not implemented
+ * yet" state (AGENTS.md §4.5's own phrasing) linking the tracking issue,
+ * ahliweb/omes#249, in both `id` and `en`. It still enforces
+ * `omes_control.hermes_orchestration.read` server-side (the same guard the
+ * other two new screens use — see module.ts's comment on why all three
+ * share one permission) so that even this placeholder respects the
+ * Owner/Operator navigation boundary rather than being reachable by
+ * anyone.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const HERMES_ORCHESTRATION_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "hermes_orchestration",
+  action: "read"
+} as const;
+
+const GITHUB_TRACKING_ISSUE_URL = "https://github.com/ahliweb/omes/issues/249";
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: HERMES_ORCHESTRATION_READ_GUARD,
+  load: async () => ({}),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/progres-hermes.astro: failed to load the placeholder screen",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+---
+
+<AdminLayout
+  title={t("Hermes progress")}
+  description={t(
+    "This view needs a GitHub repository-progress projection that is not implemented yet."
+  )}
+>
+  <div class="omes-cc">
+    {
+      !canSeeAnything && (
+        <p class="state-notice fade-in-up" id="omes-progres-hermes-denied">
+          {t("You do not have permission to view Hermes orchestration.")}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && loadError && (
+        <p class="state-notice fade-in-up" id="omes-progres-hermes-error">
+          {t(
+            "This screen could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+          )}
+        </p>
+      )
+    }
+
+    {
+      canSeeAnything && !loadError && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="progres-hermes-title"
+          id="omes-progres-hermes"
+        >
+          <h2 class="admin-section-title" id="progres-hermes-title">
+            {t("Hermes progress")}
+          </h2>
+
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ▮
+            </span>
+            <span class="empty-state-title">
+              {t("This view is not implemented yet")}
+            </span>
+            <span class="empty-state-text">
+              {t(
+                "Hermes integration progress needs a projection of the ahliweb/omes GitHub repository's milestones and issues, which is not implemented (it is not an OMES/Hermes runtime projection). No direct GitHub integration and no static list is shown here, because either would be misleading — see"
+              )}{" "}
+              <a
+                href={GITHUB_TRACKING_ISSUE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("ahliweb/omes#249")}
+              </a>
+              .
+            </span>
+          </div>
+        </section>
+      )
+    }
+  </div>
+</AdminLayout>

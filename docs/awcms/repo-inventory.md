@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 162   |
-| `awcms_*` tables                    | 164   |
-| Tables with `FORCE` RLS             | 146   |
+| Migrations                          | 164   |
+| `awcms_*` tables                    | 166   |
+| Tables with `FORCE` RLS             | 148   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 532   |
-| Route files                         | 423   |
+| Test files                          | 535   |
+| Route files                         | 430   |
 | ADR                                 | 250   |
 
 ### Modules
@@ -212,6 +212,8 @@
 | 160 | `sql/160_awcms_omes_ai_privacy_schema.sql`                         |
 | 161 | `sql/161_awcms_omes_ai_privacy_permissions.sql`                    |
 | 162 | `sql/162_awcms_omes_worker_results_job_id_optional.sql`            |
+| 163 | `sql/163_awcms_omes_hermes_orchestration_schema.sql`               |
+| 164 | `sql/164_awcms_omes_hermes_orchestration_permissions.sql`          |
 
 ### Tables & Row-Level Security
 
@@ -301,6 +303,8 @@
 | `awcms_omes_deployments`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_enrollments`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_health_snapshots`            | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_hermes_orchestration_events` | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
+| `awcms_omes_hermes_orchestration_trees`  | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
 | `awcms_omes_jobs`                        | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_operation_requests`          | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
 | `awcms_omes_servers`                     | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
@@ -386,17 +390,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 430        |
+| `(root)`      | 432        |
 | `e2e`         | 19         |
-| `integration` | 82         |
+| `integration` | 83         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 333   |
-| `/admin/**`     | 60    |
+| `/api/v1/**`    | 337   |
+| `/admin/**`     | 63    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

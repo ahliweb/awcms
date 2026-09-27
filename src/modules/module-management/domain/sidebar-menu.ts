@@ -265,7 +265,10 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_omes_backups": "OMES backups",
   "admin.layout.nav_omes_audit": "OMES audit",
   "admin.layout.nav_omes_enrollments": "OMES enrollment tokens",
-  "admin.layout.nav_omes_ai_privacy": "OMES AI privacy"
+  "admin.layout.nav_omes_ai_privacy": "OMES AI privacy",
+  "admin.layout.nav_omes_orkestrasi_langsung": "OMES live orchestration",
+  "admin.layout.nav_omes_hermes": "OMES Hermes",
+  "admin.layout.nav_omes_progres_hermes": "OMES Hermes progress"
 };
 
 /**
@@ -361,7 +364,10 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_omes_backups": "database",
   "admin.layout.nav_omes_audit": "clock",
   "admin.layout.nav_omes_enrollments": "key",
-  "admin.layout.nav_omes_ai_privacy": "shield"
+  "admin.layout.nav_omes_ai_privacy": "shield",
+  "admin.layout.nav_omes_orkestrasi_langsung": "bolt",
+  "admin.layout.nav_omes_hermes": "layers",
+  "admin.layout.nav_omes_progres_hermes": "chart"
 };
 
 /** Display name for the synthetic core group. Rendered as a module sub-label. */

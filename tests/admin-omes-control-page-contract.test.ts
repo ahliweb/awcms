@@ -147,11 +147,12 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(unenforced).toEqual([]);
   });
 
-  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155 and sql/161 seed it", async () => {
+  test("every OMES_GUARDS reference is declared by the module descriptor, so sql/155, sql/161, and sql/164 seed it", async () => {
     const declared = declaredTriples();
     // 13 seeded by sql/155 (#196/#198/#233) + 2 seeded by sql/161
-    // (ahliweb/omes#232's ai_privacy.read/.approve).
-    expect(declared.size).toBe(15);
+    // (ahliweb/omes#232's ai_privacy.read/.approve) + 1 seeded by sql/164
+    // (ahliweb/omes#246's hermes_orchestration.read).
+    expect(declared.size).toBe(16);
 
     const pageSource = await readAll(Object.values(PAGES));
     const missing = [...guardReferenceTriples(pageSource)].filter(
@@ -161,45 +162,52 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     expect(missing).toEqual([]);
   });
 
-  test("all 15 seeded permissions are reachable from these five screens or their navigation entries", async () => {
+  test("all 16 seeded permissions are reachable from these five screens or their navigation entries", async () => {
     // Not every permission needs a screen affordance (`enrollments.manage`
     // remains deliberately without one — see module.ts's own comment), but
     // every one referenced anywhere in the five pages must round-trip
     // through the declared set — already asserted above — and every nav
     // entry's requiredPermission string (asserted separately in
     // admin-navigation-registry.test.ts for path/label shape) must each be
-    // one of the 15 too.
+    // one of the 16 too.
     const sql155 = await readFile(
       "sql/155_awcms_omes_control_permissions.sql",
       "utf8"
     );
     // ahliweb/omes#232 added two more module permissions via a NEW
     // migration (sql/161) rather than editing the already-applied sql/155 —
-    // this repo's own immutable-migration rule.
+    // this repo's own immutable-migration rule. ahliweb/omes#246 adds one
+    // more the same way, via sql/164.
     const sql161 = await readFile(
       "sql/161_awcms_omes_ai_privacy_permissions.sql",
+      "utf8"
+    );
+    const sql164 = await readFile(
+      "sql/164_awcms_omes_hermes_orchestration_permissions.sql",
       "utf8"
     );
     const seedRegex = /\('omes_control', '([a-z_]+)', '([a-z_]+)',/g;
     const seeded = new Set(
       [
         ...[...sql155.matchAll(seedRegex)],
-        ...[...sql161.matchAll(seedRegex)]
+        ...[...sql161.matchAll(seedRegex)],
+        ...[...sql164.matchAll(seedRegex)]
       ].map((match) => `omes_control.${match[1]}.${match[2]}` as Triple)
     );
-    expect(seeded.size).toBe(15);
+    expect(seeded.size).toBe(16);
     expect(seeded).toEqual(declaredTriples());
 
-    // 10 as of Issue ahliweb/omes#232: the original five (#200) plus health,
+    // 13 as of Issue ahliweb/omes#246: the original five (#200) plus health,
     // backups, and audit (#201) — see
     // tests/admin-omes-control-health-backup-audit-page-contract.test.ts for
     // that trio's own screen contract — plus enrollments (#233), see
     // tests/admin-omes-control-enrollments-page-contract.test.ts — plus AI
-    // privacy (#232).
+    // privacy (#232) — plus live orchestration, Hermes, and Hermes progress
+    // (#246 part 2).
     const nav = listModules().find(
       (module) => module.key === "omes_control"
     )?.navigation;
-    expect(nav?.length).toBe(10);
+    expect(nav?.length).toBe(13);
 
     for (const entry of nav ?? []) {
       expect(entry.requiredPermission).toBeDefined();

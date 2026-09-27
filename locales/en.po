@@ -5372,3 +5372,129 @@ msgstr ""
 
 msgid "No AI egress approval requests"
 msgstr ""
+
+msgid "OMES live orchestration"
+msgstr ""
+
+msgid "OMES Hermes"
+msgstr ""
+
+msgid "OMES Hermes progress"
+msgstr ""
+
+msgid "Live orchestration"
+msgstr ""
+
+msgid "The live Hermes manager → agent → subagent tree, filtered by depth, plus the activity stream. Read-only projection — OMES never sends a command to a Hermes agent."
+msgstr ""
+
+msgid "You do not have permission to view Hermes orchestration."
+msgstr ""
+
+msgid "The live orchestration console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "Orchestration tree"
+msgstr ""
+
+msgid "A snapshot older than its liveness window is shown as stale/unknown, never as live."
+msgstr ""
+
+msgid "Depth filter"
+msgstr ""
+
+msgid "All depths"
+msgstr ""
+
+msgid "Root only"
+msgstr ""
+
+msgid "Up to depth 1"
+msgstr ""
+
+msgid "Up to depth 2"
+msgstr ""
+
+msgid "Up to depth 3"
+msgstr ""
+
+msgid "No orchestration snapshot yet"
+msgstr ""
+
+msgid "Appears here once an enrolled OMES host reports a Hermes delegation tree."
+msgstr ""
+
+msgid "Completed"
+msgstr ""
+
+msgid "Tool"
+msgstr ""
+
+msgid "Activity stream"
+msgstr ""
+
+msgid "Subagent lifecycle events, newest first. Refreshes periodically without reloading the page."
+msgstr ""
+
+msgid "No orchestration activity yet"
+msgstr ""
+
+msgid "Hermes"
+msgstr ""
+
+msgid "Summary of the currently active Hermes delegated task — a read-only projection from OMES; it never sends a command to a Hermes agent."
+msgstr ""
+
+msgid "The Hermes task summary could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "Current Hermes task"
+msgstr ""
+
+msgid "No Hermes task reported yet"
+msgstr ""
+
+msgid "Appears here once an enrolled OMES host reports a Hermes delegation session."
+msgstr ""
+
+msgid "Goal"
+msgstr ""
+
+msgid "Step count"
+msgstr ""
+
+msgid "Planner"
+msgstr ""
+
+msgid "not available in the v1 contract"
+msgstr ""
+
+msgid "not reported"
+msgstr ""
+
+msgid "Step budget"
+msgstr ""
+
+msgid "Hermes log"
+msgstr ""
+
+msgid "No log yet"
+msgstr ""
+
+msgid "Hermes progress"
+msgstr ""
+
+msgid "This view needs a GitHub repository-progress projection that is not implemented yet."
+msgstr ""
+
+msgid "This screen could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "This view is not implemented yet"
+msgstr ""
+
+msgid "Hermes integration progress needs a projection of the ahliweb/omes GitHub repository's milestones and issues, which is not implemented (it is not an OMES/Hermes runtime projection). No direct GitHub integration and no static list is shown here, because either would be misleading — see"
+msgstr ""
+
+msgid "ahliweb/omes#249"
+msgstr ""

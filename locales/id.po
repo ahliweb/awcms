@@ -5360,3 +5360,129 @@ msgstr "Diputuskan"
 
 msgid "No AI egress approval requests"
 msgstr "Tidak ada permintaan persetujuan egress AI"
+
+msgid "OMES live orchestration"
+msgstr "Orkestrasi langsung OMES"
+
+msgid "OMES Hermes"
+msgstr "Hermes OMES"
+
+msgid "OMES Hermes progress"
+msgstr "Progres Hermes OMES"
+
+msgid "Live orchestration"
+msgstr "Orkestrasi langsung"
+
+msgid "The live Hermes manager → agent → subagent tree, filtered by depth, plus the activity stream. Read-only projection — OMES never sends a command to a Hermes agent."
+msgstr "Pohon manajer → agen → subagent Hermes secara langsung, difilter berdasarkan kedalaman, beserta aliran aktivitas. Proyeksi baca saja — OMES tidak pernah mengirim perintah ke agen Hermes."
+
+msgid "You do not have permission to view Hermes orchestration."
+msgstr "Anda tidak memiliki izin untuk melihat orkestrasi Hermes."
+
+msgid "The live orchestration console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Konsol orkestrasi langsung tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Orchestration tree"
+msgstr "Pohon orkestrasi"
+
+msgid "A snapshot older than its liveness window is shown as stale/unknown, never as live."
+msgstr "Sebuah snapshot yang lebih tua dari jendela kesegarannya ditampilkan sebagai stale/unknown, tidak pernah sebagai langsung (live)."
+
+msgid "Depth filter"
+msgstr "Filter kedalaman"
+
+msgid "All depths"
+msgstr "Semua kedalaman"
+
+msgid "Root only"
+msgstr "Root saja"
+
+msgid "Up to depth 1"
+msgstr "Hingga kedalaman 1"
+
+msgid "Up to depth 2"
+msgstr "Hingga kedalaman 2"
+
+msgid "Up to depth 3"
+msgstr "Hingga kedalaman 3"
+
+msgid "No orchestration snapshot yet"
+msgstr "Belum ada snapshot orkestrasi"
+
+msgid "Appears here once an enrolled OMES host reports a Hermes delegation tree."
+msgstr "Muncul di sini setelah host OMES yang terdaftar melaporkan pohon delegasi Hermes."
+
+msgid "Completed"
+msgstr "Selesai"
+
+msgid "Tool"
+msgstr "Alat"
+
+msgid "Activity stream"
+msgstr "Aliran aktivitas"
+
+msgid "Subagent lifecycle events, newest first. Refreshes periodically without reloading the page."
+msgstr "Peristiwa siklus hidup subagent, terbaru lebih dulu. Diperbarui secara berkala tanpa memuat ulang halaman."
+
+msgid "No orchestration activity yet"
+msgstr "Belum ada aktivitas orkestrasi"
+
+msgid "Hermes"
+msgstr "Hermes"
+
+msgid "Summary of the currently active Hermes delegated task — a read-only projection from OMES; it never sends a command to a Hermes agent."
+msgstr "Ringkasan tugas delegasi Hermes yang sedang aktif — proyeksi baca saja dari OMES, tidak pernah mengirim perintah ke agen Hermes."
+
+msgid "The Hermes task summary could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Ringkasan tugas Hermes tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Current Hermes task"
+msgstr "Tugas Hermes saat ini"
+
+msgid "No Hermes task reported yet"
+msgstr "Belum ada tugas Hermes yang dilaporkan"
+
+msgid "Appears here once an enrolled OMES host reports a Hermes delegation session."
+msgstr "Muncul di sini setelah host OMES yang terdaftar melaporkan sesi delegasi Hermes."
+
+msgid "Goal"
+msgstr "Tujuan"
+
+msgid "Step count"
+msgstr "Jumlah langkah"
+
+msgid "Planner"
+msgstr "Perencana (planner)"
+
+msgid "not available in the v1 contract"
+msgstr "tidak tersedia di kontrak v1"
+
+msgid "not reported"
+msgstr "tidak dilaporkan"
+
+msgid "Step budget"
+msgstr "Anggaran langkah (budget)"
+
+msgid "Hermes log"
+msgstr "Log Hermes"
+
+msgid "No log yet"
+msgstr "Belum ada log"
+
+msgid "Hermes progress"
+msgstr "Progres Hermes"
+
+msgid "This view needs a GitHub repository-progress projection that is not implemented yet."
+msgstr "Tampilan ini membutuhkan proyeksi progres repositori GitHub yang belum diimplementasikan."
+
+msgid "This screen could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Layar ini tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "This view is not implemented yet"
+msgstr "Tampilan ini belum diimplementasikan"
+
+msgid "Hermes integration progress needs a projection of the ahliweb/omes GitHub repository's milestones and issues, which is not implemented (it is not an OMES/Hermes runtime projection). No direct GitHub integration and no static list is shown here, because either would be misleading — see"
+msgstr "Progres integrasi Hermes membutuhkan proyeksi milestone dan issue repositori GitHub ahliweb/omes, yang belum diimplementasikan (bukan proyeksi runtime OMES/Hermes). Tidak ada integrasi GitHub langsung dan tidak ada daftar statis yang ditampilkan di sini, karena keduanya akan menyesatkan — lihat"
+
+msgid "ahliweb/omes#249"
+msgstr "ahliweb/omes#249"
