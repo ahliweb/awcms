@@ -73,7 +73,8 @@ ALTER TABLE awcms_omes_ai_privacy_posture FORCE ROW LEVEL SECURITY;
 CREATE POLICY awcms_omes_ai_privacy_posture_tenant_isolation ON awcms_omes_ai_privacy_posture
   FOR ALL USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON awcms_omes_ai_privacy_posture TO awcms_app, awcms_worker;
+GRANT SELECT, INSERT, UPDATE, DELETE ON awcms_omes_ai_privacy_posture TO awcms_app;
+GRANT SELECT, DELETE ON awcms_omes_ai_privacy_posture TO awcms_worker;
 
 
 -- 2. AI egress owner-approval requests -----------------------------------
@@ -154,7 +155,8 @@ ALTER TABLE awcms_omes_ai_egress_approvals FORCE ROW LEVEL SECURITY;
 CREATE POLICY awcms_omes_ai_egress_approvals_tenant_isolation ON awcms_omes_ai_egress_approvals
   FOR ALL USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON awcms_omes_ai_egress_approvals TO awcms_app, awcms_worker;
+GRANT SELECT, INSERT, UPDATE, DELETE ON awcms_omes_ai_egress_approvals TO awcms_app;
+GRANT SELECT, DELETE ON awcms_omes_ai_egress_approvals TO awcms_worker;
 
 
 -- 3. Extend the worker-nonce route allowlist (sql/159) with the fourth
