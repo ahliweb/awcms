@@ -52,7 +52,7 @@ A manifest `declared` value MUST equal the real value at the `source` it points 
 | Bun (CI current) | `1.4.2`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
 | Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
 | Astro            | `^7.3.2`  | `^7.3.2`          | `package.json` `dependencies.astro`                            |
-| `@astrojs/node`  | `^11.1.5` | `^11.1.5`         | `package.json` `dependencies`                                  |
+| `@astrojs/node`  | `^11.1.6` | `^11.1.6`         | `package.json` `dependencies`                                  |
 | TypeScript       | `^7.0.2`  | `^7.0.2`          | `package.json` `devDependencies`                               |
 | PostgreSQL       | `18.4`    | `18.4`            | `.github/workflows/ci.yml` `services.postgres`                 |
 
