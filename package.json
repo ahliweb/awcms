@@ -201,7 +201,7 @@
     "svgo": "^4.1.0"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.5",
+    "@astrojs/node": "^11.1.6",
     "astro": "^7.3.2"
   }
 }
