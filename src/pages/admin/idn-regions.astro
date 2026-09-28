@@ -460,420 +460,398 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     "The Indonesia administrative-region hierarchy (province, regency/city, district, village) that address forms and regional reports read from. Versions are imported on deploy; exactly one is served at a time, to every tenant."
   )}
 >
-  {
-    !canEnterPage && (
-      <p class="state-notice fade-in-up" id="idn-regions-denied">
-        {t(
-          "You do not have permission to view region datasets or look up Indonesia administrative regions."
-        )}
-      </p>
-    )
-  }
+  {!canEnterPage && (
+    <p class="state-notice fade-in-up" id="idn-regions-denied">
+      {t(
+        "You do not have permission to view region datasets or look up Indonesia administrative regions."
+      )}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="idn-regions-error">
-        {t(
-          "The dataset console could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="idn-regions-error">
+      {t(
+        "The dataset console could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
 
   <p
     id="idn-regions-action-error"
     class="admin-create-error"
     role="alert"
     hidden
-  >
-  </p>
+  ></p>
 
-  {
-    canReadDatasets && (
-      <section class="admin-section fade-in-up" id="idn-regions-summary">
-        <h2 class="admin-section-title">{t("Currently served")}</h2>
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Active version")}</span>
-            <span class="stat-value stat-value--mono">
-              {activeDataset ? activeDataset.datasetCode : "none"}
-            </span>
-            {activeDataset && (
-              <span class="stat-hint">
-                {t("since {timestamp} UTC", {
-                  timestamp: formatTimestamp(activeDataset.activatedAt)
-                })}
-              </span>
-            )}
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Regions in this version")}</span>
-            <span class="stat-value">
-              {activeDataset
-                ? numberFormatter.format(activeDataset.rowCount)
-                : "—"}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Imported versions")}</span>
-            <span class="stat-value">{datasets.length}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Deployment")}</span>
-            <span class="stat-value stat-value--mono">{tenancyMode}</span>
+  {canReadDatasets && (
+    <section class="admin-section fade-in-up" id="idn-regions-summary">
+      <h2 class="admin-section-title">{t("Currently served")}</h2>
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Active version")}</span>
+          <span class="stat-value stat-value--mono">
+            {activeDataset ? activeDataset.datasetCode : "none"}
+          </span>
+          {activeDataset && (
             <span class="stat-hint">
-              {tenancyMode === "single"
-                ? "one active tenant"
-                : "serving more than one tenant"}
+              {t("since {timestamp} UTC", {
+                timestamp: formatTimestamp(activeDataset.activatedAt)
+              })}
             </span>
-          </div>
+          )}
         </div>
-      </section>
-    )
-  }
+        <div class="stat-card">
+          <span class="stat-label">{t("Regions in this version")}</span>
+          <span class="stat-value">
+            {activeDataset
+              ? numberFormatter.format(activeDataset.rowCount)
+              : "—"}
+          </span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Imported versions")}</span>
+          <span class="stat-value">{datasets.length}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Deployment")}</span>
+          <span class="stat-value stat-value--mono">{tenancyMode}</span>
+          <span class="stat-hint">
+            {tenancyMode === "single"
+              ? "one active tenant"
+              : "serving more than one tenant"}
+          </span>
+        </div>
+      </div>
+    </section>
+  )}
 
-  {
-    withheldByPlatformScope && (
-      <section class="admin-section fade-in-up" id="idn-regions-scope-notice">
-        <h2 class="admin-section-title">{t("Read-only here")}</h2>
-        {/* TWO whole msgids rather than one sentence with an optional
+  {withheldByPlatformScope && (
+    <section class="admin-section fade-in-up" id="idn-regions-scope-notice">
+      <h2 class="admin-section-title">{t("Read-only here")}</h2>
+      {/* TWO whole msgids rather than one sentence with an optional
             fragment spliced into its middle. The tenant code is not always
             resolvable, and a single `{code}` msgid would render "platform
             tenant () —" when it is not. */}
-        <p class="page-description">
-          {platformTenantCode
-            ? t(
-                "Changing the served version affects every tenant, so it can only be done from the platform tenant ({code}) — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it.",
-                { code: platformTenantCode }
-              )
-            : t(
-                "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
-              )}
-        </p>
-      </section>
-    )
-  }
-
-  {
-    (canActivate || canRollback) && (
-      <section class="admin-section fade-in-up" id="idn-regions-actions">
-        <h2 class="admin-section-title">{t("Serve a different version")}</h2>
-        <p class="page-description">
-          {tenancyMode === "multi"
-            ? "This deployment serves more than one tenant. A change here reaches all of them at once."
-            : "This deployment currently has one tenant, but the data is platform-wide: the same change would reach every tenant added later."}
-        </p>
-        {canRollback && (
-          <div class="admin-toolbar">
-            <button
-              type="button"
-              id="idn-regions-rollback"
-              class="btn-inline btn-inline--danger"
-              disabled={!hasPreviousDataset}
-            >
-              {t("Roll back to previous version")}
-            </button>
-            {!hasPreviousDataset && (
-              <span class="cell-muted">
-                No superseded version to return to.
-              </span>
+      <p class="page-description">
+        {platformTenantCode
+          ? t(
+              "Changing the served version affects every tenant, so it can only be done from the platform tenant ({code}) — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it.",
+              { code: platformTenantCode }
+            )
+          : t(
+              "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
             )}
-          </div>
-        )}
-      </section>
-    )
-  }
+      </p>
+    </section>
+  )}
 
-  {
-    canReadDatasets && (
-      <section class="admin-section fade-in-up" id="idn-regions-datasets">
-        <h2 class="admin-section-title">
-          {t("Imported versions")}
-          <span class="count-pill">{datasets.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Every imported dataset version, newest first")}
-            </caption>
-            <thead>
+  {(canActivate || canRollback) && (
+    <section class="admin-section fade-in-up" id="idn-regions-actions">
+      <h2 class="admin-section-title">{t("Serve a different version")}</h2>
+      <p class="page-description">
+        {tenancyMode === "multi"
+          ? "This deployment serves more than one tenant. A change here reaches all of them at once."
+          : "This deployment currently has one tenant, but the data is platform-wide: the same change would reach every tenant added later."}
+      </p>
+      {canRollback && (
+        <div class="admin-toolbar">
+          <button
+            type="button"
+            id="idn-regions-rollback"
+            class="btn-inline btn-inline--danger"
+            disabled={!hasPreviousDataset}
+          >
+            {t("Roll back to previous version")}
+          </button>
+          {!hasPreviousDataset && (
+            <span class="cell-muted">No superseded version to return to.</span>
+          )}
+        </div>
+      )}
+    </section>
+  )}
+
+  {canReadDatasets && (
+    <section class="admin-section fade-in-up" id="idn-regions-datasets">
+      <h2 class="admin-section-title">
+        {t("Imported versions")}
+        <span class="count-pill">{datasets.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Every imported dataset version, newest first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Version")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Regions")}</th>
+              <th scope="col">{t("Imported")}</th>
+              <th scope="col">{t("Activated")}</th>
+              <th scope="col">{t("Provenance")}</th>
+              <th scope="col">{t("Compare")}</th>
+              {canActivate && <th scope="col">{t("Action")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {datasets.length === 0 && (
               <tr>
-                <th scope="col">{t("Version")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Regions")}</th>
-                <th scope="col">{t("Imported")}</th>
-                <th scope="col">{t("Activated")}</th>
-                <th scope="col">{t("Provenance")}</th>
-                <th scope="col">{t("Compare")}</th>
-                {canActivate && <th scope="col">{t("Action")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {datasets.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={canActivate ? 8 : 7}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        📦
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No versions imported")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t("Run {command} to import the vendored dataset.", {
-                          command: "bun run idn-regions:import -- --commit"
-                        })}{" "}
-                        {t(
-                          "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
-                          { image: "ghcr.io/ahliweb/awcms-jobs" }
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {datasets.map((dataset) => (
-                <tr>
-                  <td data-label="Version">
-                    <span class="cell-code">{dataset.datasetCode}</span>
-                  </td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={statusVariant(dataset.status)}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {dataset.status}
+                <td class="data-table-empty" colspan={canActivate ? 8 : 7}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      📦
                     </span>
-                  </td>
-                  <td data-label="Regions">
-                    {numberFormatter.format(dataset.rowCount)}
-                  </td>
-                  <td data-label="Imported">
-                    <span class="cell-code">
-                      {formatTimestamp(dataset.createdAt)}
+                    <span class="empty-state-title">
+                      {t("No versions imported")}
                     </span>
-                  </td>
-                  <td data-label="Activated">
-                    <span class="cell-code">
-                      {formatTimestamp(dataset.activatedAt)}
-                    </span>
-                  </td>
-                  <td data-label="Provenance">
-                    {/* Operator-facing evidence, rendered as escaped TEXT
-                        inside `<details>` — never as HTML. */}
-                    <details>
-                      <summary>{t("Source")}</summary>
-                      <p>
-                        <strong>{t("Repository:")}</strong>{" "}
-                        {dataset.sourceRepository}
-                      </p>
-                      <p>
-                        <strong>{t("Commit:")}</strong>{" "}
-                        <span class="cell-code">{dataset.sourceCommitSha}</span>
-                      </p>
-                      <p>
-                        <strong>{t("File SHA-256:")}</strong>{" "}
-                        <span class="cell-code">
-                          {dataset.sourceFileSha256}
-                        </span>
-                      </p>
-                      <p>
-                        <strong>{t("License:")}</strong> {dataset.sourceLicense}
-                      </p>
-                      {dataset.sourceReference && (
-                        <p>
-                          <strong>{t("Decree:")}</strong>{" "}
-                          {dataset.sourceReference}
-                        </p>
+                    <span class="empty-state-text">
+                      {t("Run {command} to import the vendored dataset.", {
+                        command: "bun run idn-regions:import -- --commit"
+                      })}{" "}
+                      {t(
+                        "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
+                        { image: "ghcr.io/ahliweb/awcms-jobs" }
                       )}
-                    </details>
-                    {dataset.status === "rejected" &&
-                      dataset.rejectionReason && (
-                        <p class="cell-error">
-                          {/* Escaped TEXT, never HTML — the reason is the
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {datasets.map((dataset) => (
+              <tr>
+                <td data-label="Version">
+                  <span class="cell-code">{dataset.datasetCode}</span>
+                </td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={statusVariant(dataset.status)}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {dataset.status}
+                  </span>
+                </td>
+                <td data-label="Regions">
+                  {numberFormatter.format(dataset.rowCount)}
+                </td>
+                <td data-label="Imported">
+                  <span class="cell-code">
+                    {formatTimestamp(dataset.createdAt)}
+                  </span>
+                </td>
+                <td data-label="Activated">
+                  <span class="cell-code">
+                    {formatTimestamp(dataset.activatedAt)}
+                  </span>
+                </td>
+                <td data-label="Provenance">
+                  {/* Operator-facing evidence, rendered as escaped TEXT
+                        inside `<details>` — never as HTML. */}
+                  <details>
+                    <summary>{t("Source")}</summary>
+                    <p>
+                      <strong>{t("Repository:")}</strong>{" "}
+                      {dataset.sourceRepository}
+                    </p>
+                    <p>
+                      <strong>{t("Commit:")}</strong>{" "}
+                      <span class="cell-code">{dataset.sourceCommitSha}</span>
+                    </p>
+                    <p>
+                      <strong>{t("File SHA-256:")}</strong>{" "}
+                      <span class="cell-code">{dataset.sourceFileSha256}</span>
+                    </p>
+                    <p>
+                      <strong>{t("License:")}</strong> {dataset.sourceLicense}
+                    </p>
+                    {dataset.sourceReference && (
+                      <p>
+                        <strong>{t("Decree:")}</strong>{" "}
+                        {dataset.sourceReference}
+                      </p>
+                    )}
+                  </details>
+                  {dataset.status === "rejected" && dataset.rejectionReason && (
+                    <p class="cell-error">
+                      {/* Escaped TEXT, never HTML — the reason is the
                               validation problems joined by planDatasetImport,
                               which can contain arbitrary dump content. */}
-                          <strong>{t("Rejected:")}</strong>{" "}
-                          {dataset.rejectionReason}
-                        </p>
-                      )}
-                  </td>
-                  <td data-label="Compare">
-                    {/* Issue #766 — reachable from the row about to be
+                      <strong>{t("Rejected:")}</strong>{" "}
+                      {dataset.rejectionReason}
+                    </p>
+                  )}
+                </td>
+                <td data-label="Compare">
+                  {/* Issue #766 — reachable from the row about to be
                         activated, so the comparison is in front of the
                         operator at the moment of the decision. `compareFrom`
                         is reset to null (falling back to the active dataset)
                         rather than carried over from the current URL, so this
                         link always means "compare with what is served now". */}
-                    {dataset.status === "active" ? (
-                      <span class="cell-muted">{t("Currently active")}</span>
-                    ) : (
-                      <a
-                        class="btn-inline"
-                        href={
-                          regionQueryLink({
-                            compareTo: dataset.datasetCode,
-                            compareFrom: null,
-                            addedAfter: null,
-                            removedAfter: null,
-                            renamedAfter: null
-                          }) + "#idn-regions-compare"
-                        }
+                  {dataset.status === "active" ? (
+                    <span class="cell-muted">{t("Currently active")}</span>
+                  ) : (
+                    <a
+                      class="btn-inline"
+                      href={
+                        regionQueryLink({
+                          compareTo: dataset.datasetCode,
+                          compareFrom: null,
+                          addedAfter: null,
+                          removedAfter: null,
+                          renamedAfter: null
+                        }) + "#idn-regions-compare"
+                      }
+                    >
+                      {t("Compare with active")}
+                    </a>
+                  )}
+                </td>
+                {canActivate && (
+                  <td data-label="Action">
+                    {dataset.status === "validated" ? (
+                      <button
+                        type="button"
+                        class="module-toggle"
+                        data-activate-dataset={dataset.id}
+                        data-dataset-code={dataset.datasetCode}
                       >
-                        {t("Compare with active")}
-                      </a>
+                        {t("Serve this version")}
+                      </button>
+                    ) : (
+                      <span class="cell-muted">—</span>
                     )}
                   </td>
-                  {canActivate && (
-                    <td data-label="Action">
-                      {dataset.status === "validated" ? (
-                        <button
-                          type="button"
-                          class="module-toggle"
-                          data-activate-dataset={dataset.id}
-                          data-dataset-code={dataset.datasetCode}
-                        >
-                          {t("Serve this version")}
-                        </button>
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                  )}
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canReadDatasets && (
+    <section class="admin-section fade-in-up" id="idn-regions-compare">
+      <h2 class="admin-section-title">{t("Compare dataset versions")}</h2>
+      <p class="page-description">
+        {t(
+          "See exactly what changes before you activate a version: per-tier counts on both sides, codes added, codes removed, and regions whose name changed. Defaults to the active version against the one being considered."
+        )}
+      </p>
+
+      {/* A GET form, like the region browser's filter — linkable, works
+            with JavaScript disabled, ships no bundle. Submitting it carries
+            no `*After` cursor, so choosing a new pair always starts each list
+            from its first page rather than resuming a stale one. */}
+      <form class="admin-create-form fade-in-up" method="get">
+        <p class="form-legend">{t("Versions to compare")}</p>
+
+        <label for="compare-from">
+          {t("From")}
+          <select id="compare-from" name="compareFrom">
+            {datasets.map((dataset) => (
+              <option
+                value={dataset.datasetCode}
+                selected={dataset.datasetCode === compareFromCode}
+              >
+                {dataset.datasetCode} ({dataset.status})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label for="compare-to">
+          {t("To")}
+          <select id="compare-to" name="compareTo">
+            {datasets.map((dataset) => (
+              <option
+                value={dataset.datasetCode}
+                selected={dataset.datasetCode === compareToCode}
+              >
+                {dataset.datasetCode} ({dataset.status})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button type="submit" class="module-toggle">
+          {t("Compare")}
+        </button>
+      </form>
+
+      {datasets.length < 2 && (
+        <p class="page-description">
+          {t(
+            "Import at least two versions to compare them — there is nothing to compare a single version against."
+          )}
+        </p>
+      )}
+
+      {datasets.length >= 2 && !compare && (
+        <p class="page-description">
+          {t("Choose two versions above to see what differs between them.")}
+        </p>
+      )}
+
+      {compare && compare.sameVersion && (
+        <p class="page-description" id="idn-regions-compare-same-version">
+          {t("{from} and {to} are the same version — nothing differs.", {
+            from: compare.fromCode,
+            to: compare.toCode
+          })}
+        </p>
+      )}
+
+      {compare && !compare.sameVersion && (
+        <div class="data-table-scroll">
+          <table class="data-table" id="idn-regions-compare-tiers">
+            <caption class="sr-only">
+              {t("Per-tier region counts, {from} versus {to}", {
+                from: compare.fromCode,
+                to: compare.toCode
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Tier")}</th>
+                <th scope="col">
+                  <span class="cell-code">{compare.fromCode}</span>
+                </th>
+                <th scope="col">
+                  <span class="cell-code">{compare.toCode}</span>
+                </th>
+                <th scope="col">{t("Delta")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compare.tierRows.map((row) => (
+                <tr>
+                  <td data-label="Tier">{regionTierLabel(row.level)}</td>
+                  <td data-label={compare!.fromCode}>
+                    {numberFormatter.format(row.fromCount)}
+                  </td>
+                  <td data-label={compare!.toCode}>
+                    {numberFormatter.format(row.toCount)}
+                  </td>
+                  <td data-label="Delta">
+                    {row.delta === 0 ? (
+                      <span class="cell-muted">0</span>
+                    ) : (
+                      <span class={row.delta < 0 ? "cell-error" : "cell-code"}>
+                        {row.delta > 0 ? `+${row.delta}` : row.delta}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
-    )
-  }
-
-  {
-    canReadDatasets && (
-      <section class="admin-section fade-in-up" id="idn-regions-compare">
-        <h2 class="admin-section-title">{t("Compare dataset versions")}</h2>
-        <p class="page-description">
-          {t(
-            "See exactly what changes before you activate a version: per-tier counts on both sides, codes added, codes removed, and regions whose name changed. Defaults to the active version against the one being considered."
-          )}
-        </p>
-
-        {/* A GET form, like the region browser's filter — linkable, works
-            with JavaScript disabled, ships no bundle. Submitting it carries
-            no `*After` cursor, so choosing a new pair always starts each list
-            from its first page rather than resuming a stale one. */}
-        <form class="admin-create-form fade-in-up" method="get">
-          <p class="form-legend">{t("Versions to compare")}</p>
-
-          <label for="compare-from">
-            {t("From")}
-            <select id="compare-from" name="compareFrom">
-              {datasets.map((dataset) => (
-                <option
-                  value={dataset.datasetCode}
-                  selected={dataset.datasetCode === compareFromCode}
-                >
-                  {dataset.datasetCode} ({dataset.status})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label for="compare-to">
-            {t("To")}
-            <select id="compare-to" name="compareTo">
-              {datasets.map((dataset) => (
-                <option
-                  value={dataset.datasetCode}
-                  selected={dataset.datasetCode === compareToCode}
-                >
-                  {dataset.datasetCode} ({dataset.status})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button type="submit" class="module-toggle">
-            {t("Compare")}
-          </button>
-        </form>
-
-        {datasets.length < 2 && (
-          <p class="page-description">
-            {t(
-              "Import at least two versions to compare them — there is nothing to compare a single version against."
-            )}
-          </p>
-        )}
-
-        {datasets.length >= 2 && !compare && (
-          <p class="page-description">
-            {t("Choose two versions above to see what differs between them.")}
-          </p>
-        )}
-
-        {compare && compare.sameVersion && (
-          <p class="page-description" id="idn-regions-compare-same-version">
-            {t("{from} and {to} are the same version — nothing differs.", {
-              from: compare.fromCode,
-              to: compare.toCode
-            })}
-          </p>
-        )}
-
-        {compare && !compare.sameVersion && (
-          <div class="data-table-scroll">
-            <table class="data-table" id="idn-regions-compare-tiers">
-              <caption class="sr-only">
-                {t("Per-tier region counts, {from} versus {to}", {
-                  from: compare.fromCode,
-                  to: compare.toCode
-                })}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("Tier")}</th>
-                  <th scope="col">
-                    <span class="cell-code">{compare.fromCode}</span>
-                  </th>
-                  <th scope="col">
-                    <span class="cell-code">{compare.toCode}</span>
-                  </th>
-                  <th scope="col">{t("Delta")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {compare.tierRows.map((row) => (
-                  <tr>
-                    <td data-label="Tier">{regionTierLabel(row.level)}</td>
-                    <td data-label={compare!.fromCode}>
-                      {numberFormatter.format(row.fromCount)}
-                    </td>
-                    <td data-label={compare!.toCode}>
-                      {numberFormatter.format(row.toCount)}
-                    </td>
-                    <td data-label="Delta">
-                      {row.delta === 0 ? (
-                        <span class="cell-muted">0</span>
-                      ) : (
-                        <span
-                          class={row.delta < 0 ? "cell-error" : "cell-code"}
-                        >
-                          {row.delta > 0 ? `+${row.delta}` : row.delta}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    )
-  }
+      )}
+    </section>
+  )}
 
   {
     // Three SIBLING sections, one per diff kind — the same "several
@@ -971,313 +949,303 @@ const numberFormatter = new Intl.NumberFormat("en-US");
       })
   }
 
-  {
-    canReadDatasets && (
-      <section class="admin-section fade-in-up" id="idn-regions-caveat">
-        <h2 class="admin-section-title">
-          {t("What this data is, and is not")}
-        </h2>
-        <p class="page-description">
-          {IDN_ADMIN_REGIONS_PROVENANCE.officialReferenceCaveat}
-        </p>
-        <p class="page-description">
-          {t("New versions arrive by deploy, not from this screen:")}
-          <code>{t("bun run idn-regions:import -- --commit")}</code>
-          {t(
-            "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
-            { image: "ghcr.io/ahliweb/awcms-jobs" }
-          )}
-          {t(
-            "It parses the dump vendored in the repository. Importing never activates \u2014 a new version lands as"
-          )}
-          <span class="cell-code">{t("validated")}</span>
-          {t("and is served only when someone chooses it here.")}
-        </p>
-      </section>
-    )
-  }
+  {canReadDatasets && (
+    <section class="admin-section fade-in-up" id="idn-regions-caveat">
+      <h2 class="admin-section-title">{t("What this data is, and is not")}</h2>
+      <p class="page-description">
+        {IDN_ADMIN_REGIONS_PROVENANCE.officialReferenceCaveat}
+      </p>
+      <p class="page-description">
+        {t("New versions arrive by deploy, not from this screen:")}
+        <code>{t("bun run idn-regions:import -- --commit")}</code>
+        {t(
+          "That command runs in the awcms-jobs image ({image}), not in the application container serving this page.",
+          { image: "ghcr.io/ahliweb/awcms-jobs" }
+        )}
+        {t(
+          "It parses the dump vendored in the repository. Importing never activates \u2014 a new version lands as"
+        )}
+        <span class="cell-code">{t("validated")}</span>
+        {t("and is served only when someone chooses it here.")}
+      </p>
+    </section>
+  )}
 
-  {
-    canReadRegions && (
-      <>
-        <section
-          class="admin-section fade-in-up"
-          id="idn-regions-browser-filter"
-        >
-          <h2 class="admin-section-title">{t("Browse regions")}</h2>
-          <p class="page-description">
-            {t(
-              "Drill down by tier — province, regency/city, district, village — or search by name. Pages are 50 rows at a time."
-            )}
-          </p>
-          {/* A GET form: it navigates with query params, so filtering works
+  {canReadRegions && (
+    <>
+      <section class="admin-section fade-in-up" id="idn-regions-browser-filter">
+        <h2 class="admin-section-title">{t("Browse regions")}</h2>
+        <p class="page-description">
+          {t(
+            "Drill down by tier — province, regency/city, district, village — or search by name. Pages are 50 rows at a time."
+          )}
+        </p>
+        {/* A GET form: it navigates with query params, so filtering works
               with JavaScript disabled and ships no bundle — the same
               pattern as the audit trail and media library filters. */}
-          <form class="admin-create-form fade-in-up" method="get" role="search">
-            <p class="form-legend">{t("Filter")}</p>
+        <form class="admin-create-form fade-in-up" method="get" role="search">
+          <p class="form-legend">{t("Filter")}</p>
 
-            <label for="region-filter-level">
-              {t("Tier")}
-              <select id="region-filter-level" name="level">
-                <option value="" selected={regionLevel === null}>
-                  {t("Any tier")}
+          <label for="region-filter-level">
+            {t("Tier")}
+            <select id="region-filter-level" name="level">
+              <option value="" selected={regionLevel === null}>
+                {t("Any tier")}
+              </option>
+              {[1, 2, 3, 4].map((levelOption) => (
+                <option
+                  value={String(levelOption)}
+                  selected={regionLevel === levelOption}
+                >
+                  {regionTierLabel(levelOption)}
                 </option>
-                {[1, 2, 3, 4].map((levelOption) => (
-                  <option
-                    value={String(levelOption)}
-                    selected={regionLevel === levelOption}
-                  >
-                    {regionTierLabel(levelOption)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              ))}
+            </select>
+          </label>
 
-            <label for="region-filter-parent">
-              {t("Parent code")}
-              <input
-                type="text"
-                id="region-filter-parent"
-                name="parentCode"
-                value={regionParentCode ?? ""}
-                placeholder="11.01"
-              />
-            </label>
+          <label for="region-filter-parent">
+            {t("Parent code")}
+            <input
+              type="text"
+              id="region-filter-parent"
+              name="parentCode"
+              value={regionParentCode ?? ""}
+              placeholder="11.01"
+            />
+          </label>
 
-            <label for="region-filter-search">
-              {t("Name")}
-              <input
-                type="text"
-                id="region-filter-search"
-                name="search"
-                value={regionSearchParam ?? ""}
-                placeholder={t("Search by name…")}
-              />
-            </label>
+          <label for="region-filter-search">
+            {t("Name")}
+            <input
+              type="text"
+              id="region-filter-search"
+              name="search"
+              value={regionSearchParam ?? ""}
+              placeholder={t("Search by name…")}
+            />
+          </label>
 
-            <label for="region-filter-dataset">
-              {t("Dataset code (optional)")}
-              <input
-                type="text"
-                id="region-filter-dataset"
-                name="dataset"
-                value={regionDatasetParam ?? ""}
-                placeholder={t("Leave blank for the active dataset")}
-              />
-            </label>
+          <label for="region-filter-dataset">
+            {t("Dataset code (optional)")}
+            <input
+              type="text"
+              id="region-filter-dataset"
+              name="dataset"
+              value={regionDatasetParam ?? ""}
+              placeholder={t("Leave blank for the active dataset")}
+            />
+          </label>
 
-            <button type="submit" class="module-toggle">
-              {t("Apply filter")}
-            </button>
-            {(regionSearchParam ||
-              regionParentCode ||
-              regionDatasetParam ||
-              regionLevel !== 1) && (
-              <a class="btn-inline" href="/admin/idn-regions">
-                {t("Reset to provinces")}
-              </a>
-            )}
-          </form>
-
-          {parentRegion?.region && (
-            <p class="page-description" id="idn-regions-browser-breadcrumb">
-              {t("Browsing children of: {path}", {
-                path:
-                  parentRegion.region.fullPathName ?? parentRegion.region.name
-              })}{" "}
-              <a
-                class="btn-inline"
-                href={regionQueryLink({
-                  level: String(parentRegion.region.level),
-                  parentCode: parentRegion.region.parentCode,
-                  code: null,
-                  after: null
-                })}
-              >
-                {t("Up one level")}
-              </a>
-            </p>
+          <button type="submit" class="module-toggle">
+            {t("Apply filter")}
+          </button>
+          {(regionSearchParam ||
+            regionParentCode ||
+            regionDatasetParam ||
+            regionLevel !== 1) && (
+            <a class="btn-inline" href="/admin/idn-regions">
+              {t("Reset to provinces")}
+            </a>
           )}
-        </section>
+        </form>
 
-        <section
-          class="admin-section fade-in-up"
-          id="idn-regions-browser-results"
-        >
-          <h2 class="admin-section-title">
-            {t("Regions")}
-            <span class="count-pill">{regionItems.length}</span>
-          </h2>
+        {parentRegion?.region && (
+          <p class="page-description" id="idn-regions-browser-breadcrumb">
+            {t("Browsing children of: {path}", {
+              path: parentRegion.region.fullPathName ?? parentRegion.region.name
+            })}{" "}
+            <a
+              class="btn-inline"
+              href={regionQueryLink({
+                level: String(parentRegion.region.level),
+                parentCode: parentRegion.region.parentCode,
+                code: null,
+                after: null
+              })}
+            >
+              {t("Up one level")}
+            </a>
+          </p>
+        )}
+      </section>
 
-          {regionReason === "no_active_dataset" && (
-            <div class="empty-state" id="idn-regions-browser-no-active-dataset">
-              <span class="empty-state-icon" aria-hidden="true">
-                🗺
-              </span>
-              <span class="empty-state-title">{t("No active dataset")}</span>
-              <span class="empty-state-text">
+      <section
+        class="admin-section fade-in-up"
+        id="idn-regions-browser-results"
+      >
+        <h2 class="admin-section-title">
+          {t("Regions")}
+          <span class="count-pill">{regionItems.length}</span>
+        </h2>
+
+        {regionReason === "no_active_dataset" && (
+          <div class="empty-state" id="idn-regions-browser-no-active-dataset">
+            <span class="empty-state-icon" aria-hidden="true">
+              🗺
+            </span>
+            <span class="empty-state-title">{t("No active dataset")}</span>
+            <span class="empty-state-text">
+              {t(
+                "No region dataset has been activated yet, so there is nothing to browse. Ask a platform operator to activate an imported version."
+              )}
+            </span>
+          </div>
+        )}
+
+        {regionReason === "dataset_not_found" && (
+          <div class="empty-state" id="idn-regions-browser-dataset-not-found">
+            <span class="empty-state-icon" aria-hidden="true">
+              🗺
+            </span>
+            <span class="empty-state-title">{t("Dataset not found")}</span>
+            <span class="empty-state-text">
+              {t("No dataset with the code {code} exists.", {
+                code: regionDatasetParam ?? ""
+              })}
+            </span>
+          </div>
+        )}
+
+        {regionReason === null && (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <caption class="sr-only">
                 {t(
-                  "No region dataset has been activated yet, so there is nothing to browse. Ask a platform operator to activate an imported version."
+                  "Indonesia administrative regions matching the current filter"
                 )}
-              </span>
-            </div>
-          )}
-
-          {regionReason === "dataset_not_found" && (
-            <div class="empty-state" id="idn-regions-browser-dataset-not-found">
-              <span class="empty-state-icon" aria-hidden="true">
-                🗺
-              </span>
-              <span class="empty-state-title">{t("Dataset not found")}</span>
-              <span class="empty-state-text">
-                {t("No dataset with the code {code} exists.", {
-                  code: regionDatasetParam ?? ""
-                })}
-              </span>
-            </div>
-          )}
-
-          {regionReason === null && (
-            <div class="data-table-scroll">
-              <table class="data-table data-table--stack">
-                <caption class="sr-only">
-                  {t(
-                    "Indonesia administrative regions matching the current filter"
-                  )}
-                </caption>
-                <thead>
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Code")}</th>
+                  <th scope="col">{t("Name")}</th>
+                  <th scope="col">{t("Tier")}</th>
+                  <th scope="col">{t("Action")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {regionItems.length === 0 && (
                   <tr>
-                    <th scope="col">{t("Code")}</th>
-                    <th scope="col">{t("Name")}</th>
-                    <th scope="col">{t("Tier")}</th>
-                    <th scope="col">{t("Action")}</th>
+                    <td class="data-table-empty" colspan={4}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          🔍
+                        </span>
+                        <span class="empty-state-title">
+                          {t("No regions match this filter")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Try a different tier, parent, or name, or clear the filter."
+                          )}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {regionItems.length === 0 && (
-                    <tr>
-                      <td class="data-table-empty" colspan={4}>
-                        <div class="empty-state">
-                          <span class="empty-state-icon" aria-hidden="true">
-                            🔍
-                          </span>
-                          <span class="empty-state-title">
-                            {t("No regions match this filter")}
-                          </span>
-                          <span class="empty-state-text">
-                            {t(
-                              "Try a different tier, parent, or name, or clear the filter."
-                            )}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  {regionItems.map((region) => (
-                    <tr>
-                      <td data-label="Code">
-                        <span class="cell-code">{region.code}</span>
-                      </td>
-                      <td data-label="Name">
-                        {region.name}
-                        {region.localTerm && (
-                          <span class="cell-muted"> ({region.localTerm})</span>
-                        )}
-                      </td>
-                      <td data-label="Tier">{regionTierLabel(region.level)}</td>
-                      <td data-label="Action">
-                        {region.level < 4 && (
-                          <a
-                            class="btn-inline"
-                            href={regionQueryLink({
-                              level: String(region.level + 1),
-                              parentCode: region.code,
-                              search: null,
-                              after: null,
-                              code: null
-                            })}
-                          >
-                            {t("Browse children")}
-                          </a>
-                        )}{" "}
+                )}
+                {regionItems.map((region) => (
+                  <tr>
+                    <td data-label="Code">
+                      <span class="cell-code">{region.code}</span>
+                    </td>
+                    <td data-label="Name">
+                      {region.name}
+                      {region.localTerm && (
+                        <span class="cell-muted"> ({region.localTerm})</span>
+                      )}
+                    </td>
+                    <td data-label="Tier">{regionTierLabel(region.level)}</td>
+                    <td data-label="Action">
+                      {region.level < 4 && (
                         <a
                           class="btn-inline"
-                          href={regionQueryLink({ code: region.code })}
+                          href={regionQueryLink({
+                            level: String(region.level + 1),
+                            parentCode: region.code,
+                            search: null,
+                            after: null,
+                            code: null
+                          })}
                         >
-                          {t("View path")}
+                          {t("Browse children")}
                         </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      )}{" "}
+                      <a
+                        class="btn-inline"
+                        href={regionQueryLink({ code: region.code })}
+                      >
+                        {t("View path")}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {regionReason === null && regionPage.nextCursor && (
-            <p class="page-description" id="idn-regions-browser-next">
-              <a
-                class="quick-link"
-                href={regionQueryLink({ after: regionPage.nextCursor })}
-              >
-                {t("Next page")}
+        {regionReason === null && regionPage.nextCursor && (
+          <p class="page-description" id="idn-regions-browser-next">
+            <a
+              class="quick-link"
+              href={regionQueryLink({ after: regionPage.nextCursor })}
+            >
+              {t("Next page")}
+            </a>
+          </p>
+        )}
+      </section>
+
+      {regionSelectedCode && (
+        <section
+          class="admin-section fade-in-up"
+          id="idn-regions-browser-selected"
+        >
+          <h2 class="admin-section-title">{t("Selected region")}</h2>
+          {selectedRegion?.region ? (
+            <>
+              <p>
+                <strong>{t("Code:")}</strong>{" "}
+                <span class="cell-code">{selectedRegion.region.code}</span>
+              </p>
+              <p>
+                <strong>{t("Name:")}</strong> {selectedRegion.region.name}
+              </p>
+              <p>
+                <strong>{t("Tier:")}</strong>{" "}
+                {regionTierLabel(selectedRegion.region.level)}
+              </p>
+              {selectedRegion.region.localTerm && (
+                <p>
+                  <strong>{t("Local term:")}</strong>{" "}
+                  {selectedRegion.region.localTerm}
+                </p>
+              )}
+              <p>
+                <strong>{t("Resolved path:")}</strong>{" "}
+                {selectedRegion.region.fullPathName ??
+                  selectedRegion.region.name}
+              </p>
+              <p>
+                <strong>{t("Dataset:")}</strong>{" "}
+                <span class="cell-code">{selectedRegion.dataset}</span>
+              </p>
+              <a class="btn-inline" href={regionQueryLink({ code: null })}>
+                {t("Close")}
               </a>
+            </>
+          ) : (
+            <p class="page-description">
+              {selectedRegion?.reason === "no_active_dataset"
+                ? t("No region dataset has been activated yet.")
+                : t("Region {code} was not found in this dataset.", {
+                    code: regionSelectedCode
+                  })}
             </p>
           )}
         </section>
-
-        {regionSelectedCode && (
-          <section
-            class="admin-section fade-in-up"
-            id="idn-regions-browser-selected"
-          >
-            <h2 class="admin-section-title">{t("Selected region")}</h2>
-            {selectedRegion?.region ? (
-              <>
-                <p>
-                  <strong>{t("Code:")}</strong>{" "}
-                  <span class="cell-code">{selectedRegion.region.code}</span>
-                </p>
-                <p>
-                  <strong>{t("Name:")}</strong> {selectedRegion.region.name}
-                </p>
-                <p>
-                  <strong>{t("Tier:")}</strong>{" "}
-                  {regionTierLabel(selectedRegion.region.level)}
-                </p>
-                {selectedRegion.region.localTerm && (
-                  <p>
-                    <strong>{t("Local term:")}</strong>{" "}
-                    {selectedRegion.region.localTerm}
-                  </p>
-                )}
-                <p>
-                  <strong>{t("Resolved path:")}</strong>{" "}
-                  {selectedRegion.region.fullPathName ??
-                    selectedRegion.region.name}
-                </p>
-                <p>
-                  <strong>{t("Dataset:")}</strong>{" "}
-                  <span class="cell-code">{selectedRegion.dataset}</span>
-                </p>
-                <a class="btn-inline" href={regionQueryLink({ code: null })}>
-                  {t("Close")}
-                </a>
-              </>
-            ) : (
-              <p class="page-description">
-                {selectedRegion?.reason === "no_active_dataset"
-                  ? t("No region dataset has been activated yet.")
-                  : t("Region {code} was not found in this dataset.", {
-                      code: regionSelectedCode
-                    })}
-              </p>
-            )}
-          </section>
-        )}
-      </>
-    )
-  }
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <script>

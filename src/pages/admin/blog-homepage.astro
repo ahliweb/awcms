@@ -184,500 +184,488 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
     "The ordered sections a reader sees on the homepage. A section that references content which is no longer public renders nothing rather than an error."
   )}
 >
-  {
-    screen.state === "denied" && (
-      <p class="state-notice" id="homepage-denied">
-        {t("You do not have permission to view the homepage composition.")}
-      </p>
-    )
-  }
+  {screen.state === "denied" && (
+    <p class="state-notice" id="homepage-denied">
+      {t("You do not have permission to view the homepage composition.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice" id="homepage-error">
-        {t("Could not load homepage sections. Please try again.")}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice" id="homepage-error">
+      {t("Could not load homepage sections. Please try again.")}
+    </p>
+  )}
 
   <p class="form-error" id="homepage-action-error" hidden></p>
 
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="homepage-list-title"
-      >
-        <h2 class="admin-section-title" id="homepage-list-title">
-          {t("Sections")}
-          <span class="count-pill">{sections.length}</span>
-        </h2>
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="homepage-list-title"
+    >
+      <h2 class="admin-section-title" id="homepage-list-title">
+        {t("Sections")}
+        <span class="count-pill">{sections.length}</span>
+      </h2>
 
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="homepage-sections-table"
-          >
-            <caption class="sr-only">
-              {t("Homepage sections, in display order.")}
-            </caption>
-            <thead>
+      <div class="data-table-scroll">
+        <table
+          class="data-table data-table--stack"
+          id="homepage-sections-table"
+        >
+          <caption class="sr-only">
+            {t("Homepage sections, in display order.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Order")}</th>
+              <th scope="col">{t("Key")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Title")}</th>
+              <th scope="col">{t("Enabled")}</th>
+              <th scope="col">{t("Schedule")}</th>
+              {canConfigure && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {sections.length === 0 ? (
               <tr>
-                <th scope="col">{t("Order")}</th>
-                <th scope="col">{t("Key")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Title")}</th>
-                <th scope="col">{t("Enabled")}</th>
-                <th scope="col">{t("Schedule")}</th>
-                {canConfigure && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {sections.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={columnCount}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ▤
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No sections yet")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Until one exists the homepage falls back to the most recent eligible articles."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                sections.map((section) => (
-                  <tr data-section-row={section.id}>
-                    <td data-label="Order">{section.sortOrder}</td>
-                    <td data-label="Key">
-                      <span class="cell-code" set:text={section.sectionKey} />
-                    </td>
-                    <td data-label="Type">
-                      <span class="status-badge" data-variant="neutral">
-                        <span class="status-dot" aria-hidden="true" />
-                        {section.sectionType}
-                      </span>
-                    </td>
-                    <td data-label="Title">
-                      {section.title ? (
-                        <span set:text={section.title} />
-                      ) : (
-                        <span class="cell-muted">—</span>
+                <td class="data-table-empty" colspan={columnCount}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ▤
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No sections yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Until one exists the homepage falls back to the most recent eligible articles."
                       )}
-                    </td>
-                    <td data-label="Enabled">
-                      <span
-                        class="status-badge"
-                        data-variant={section.isEnabled ? "success" : "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {section.isEnabled ? t("Enabled") : t("Disabled")}
-                      </span>
-                    </td>
-                    <td data-label="Schedule">
-                      <span class="cell-muted">{formatWindow(section)}</span>
-                    </td>
-                    {canConfigure && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          <a
-                            class="quick-link"
-                            href={`/admin/blog-homepage?edit=${section.id}`}
-                          >
-                            {t("Edit")}
-                            <span class="quick-link-arrow" aria-hidden="true">
-                              →
-                            </span>
-                          </a>
-                          <button
-                            type="button"
-                            class="btn-inline section-delete-btn"
-                            data-section-id={section.id}
-                            data-section-key={section.sectionKey}
-                          >
-                            {t("Delete")}
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canConfigure && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="homepage-form-title"
-      >
-        <h2 class="admin-section-title" id="homepage-form-title">
-          {editing ? t("Edit section") : t("Add section")}
-        </h2>
-
-        <p class="form-error" id="homepage-form-error" hidden />
-
-        <form id="homepage-section-form" class="admin-form">
-          <input
-            type="hidden"
-            id="section-id"
-            value={editing ? editing.id : ""}
-          />
-
-          <div class="form-row">
-            <label for="section-key">{t("Key")}</label>
-            {editing ? (
-              <p class="form-hint">
-                <span class="cell-code" set:text={editing.sectionKey} />
-              </p>
-            ) : (
-              <input
-                id="section-key"
-                name="sectionKey"
-                type="text"
-                required
-                maxlength="64"
-                pattern="[a-z0-9][a-z0-9_-]*"
-              />
-            )}
-            <p class="form-hint">
-              {t(
-                "Lowercase letters, digits, hyphen and underscore. Unique per tenant, and fixed once created."
-              )}
-            </p>
-          </div>
-
-          <div class="form-row">
-            <label for="section-type">{t("Type")}</label>
-            {editing ? (
-              <>
-                <p class="form-hint">
-                  <span set:text={editing.sectionType} />
-                </p>
-                <input
-                  type="hidden"
-                  id="section-type"
-                  name="sectionType"
-                  value={editing.sectionType}
-                />
-                <p class="form-hint">
-                  {t("The type cannot be changed after a section is created.")}
-                </p>
-              </>
-            ) : (
-              <select id="section-type" name="sectionType" required>
-                {HOMEPAGE_SECTION_TYPES.map((type) => (
-                  <option value={type}>{type}</option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          <div class="form-row">
-            <label for="section-title">{t("Title")}</label>
-            <input
-              id="section-title"
-              name="title"
-              type="text"
-              value={editing?.title ?? ""}
-            />
-            <p class="form-hint">
-              {t("Shown above the section. Leave blank for no heading.")}
-            </p>
-          </div>
-
-          <div class="form-row">
-            <label for="section-sort-order">{t("Order")}</label>
-            <input
-              id="section-sort-order"
-              name="sortOrder"
-              type="number"
-              step="1"
-              value={editing ? String(editing.sortOrder) : "0"}
-            />
-          </div>
-
-          <div class="form-row">
-            <label for="section-enabled">{t("Enabled")}</label>
-            <input
-              id="section-enabled"
-              name="isEnabled"
-              type="checkbox"
-              checked={editing ? editing.isEnabled : true}
-            />
-          </div>
-
-          <div class="form-row">
-            <label for="section-starts-at">{t("Starts at")}</label>
-            <input
-              id="section-starts-at"
-              name="startsAt"
-              type="datetime-local"
-              value={toLocalInputValue(editing?.startsAt ?? null)}
-            />
-          </div>
-
-          <div class="form-row">
-            <label for="section-ends-at">{t("Ends at")}</label>
-            <input
-              id="section-ends-at"
-              name="endsAt"
-              type="datetime-local"
-              value={toLocalInputValue(editing?.endsAt ?? null)}
-            />
-            <p class="form-hint">
-              {t(
-                "Leave both blank for a section that is always on. Times are entered in your own timezone and stored as absolute instants."
-              )}
-            </p>
-          </div>
-
-          {/* One group per type; the script unhides exactly the one that
-              matches the selected type and reads only that group's fields. */}
-          <fieldset
-            class="admin-fieldset section-config"
-            data-config-for="headline"
-            hidden
-          >
-            <legend>{t("Headline")}</legend>
-            <div class="form-row">
-              <label for="config-headline-post">{t("Article")}</label>
-              <select id="config-headline-post" name="headlinePostId">
-                <option value="">{t("Choose an article")}</option>
-                {eligiblePosts.map((post) => (
-                  <option
-                    value={post.id}
-                    selected={configString(editing, "postId") === post.id}
-                  >
-                    {post.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </fieldset>
-
-          <fieldset
-            class="admin-fieldset section-config"
-            data-config-for="latest_posts"
-            hidden
-          >
-            <legend>{t("Latest articles")}</legend>
-            <div class="form-row">
-              <label for="config-latest-limit">{t("How many")}</label>
-              <input
-                id="config-latest-limit"
-                name="latestLimit"
-                type="number"
-                min="1"
-                max="20"
-                value={String(configNumber(editing, "limit", 5))}
-              />
-            </div>
-            <div class="form-row">
-              <label for="config-latest-category">{t("Category")}</label>
-              <select id="config-latest-category" name="latestCategorySlug">
-                <option value="">{t("Every category")}</option>
-                {categories.map((term) => (
-                  <option
-                    value={term.slug}
-                    selected={
-                      configString(editing, "categorySlug") === term.slug
-                    }
-                  >
-                    {term.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </fieldset>
-
-          <fieldset
-            class="admin-fieldset section-config"
-            data-config-for="curated"
-            hidden
-          >
-            <legend>{t("Curated articles")}</legend>
-            <div class="form-row">
-              <label for="config-curated-post-ids">{t("Article ids")}</label>
-              <textarea
-                id="config-curated-post-ids"
-                name="curatedPostIds"
-                rows="6"
-                set:text={configLines(editing, "postIds")}
-              />
-              <p class="form-hint">
-                {t(
-                  "One id per line, in the order they should appear. Between 1 and 20. Copy them from the table below."
-                )}
-              </p>
-            </div>
-          </fieldset>
-
-          <fieldset
-            class="admin-fieldset section-config"
-            data-config-for="category_grid"
-            hidden
-          >
-            <legend>{t("Category grid")}</legend>
-            <div class="form-row">
-              <label for="config-grid-categories">{t("Categories")}</label>
-              <select
-                id="config-grid-categories"
-                name="gridCategorySlugs"
-                multiple
-                size="6"
-              >
-                {categories.map((term) => (
-                  <option
-                    value={term.slug}
-                    selected={selectedSlugs.includes(term.slug)}
-                  >
-                    {term.name}
-                  </option>
-                ))}
-              </select>
-              <p class="form-hint">{t("Between 1 and 8 categories.")}</p>
-            </div>
-            <div class="form-row">
-              <label for="config-grid-per-category">
-                {t("Articles per category")}
-              </label>
-              <input
-                id="config-grid-per-category"
-                name="gridPostsPerCategory"
-                type="number"
-                min="1"
-                max="6"
-                value={String(configNumber(editing, "postsPerCategory", 3))}
-              />
-            </div>
-          </fieldset>
-
-          <fieldset
-            class="admin-fieldset section-config"
-            data-config-for="gallery_block"
-            hidden
-          >
-            <legend>{t("Gallery")}</legend>
-            <div class="form-row">
-              <label for="config-gallery-media-ids">{t("Media ids")}</label>
-              <textarea
-                id="config-gallery-media-ids"
-                name="galleryMediaObjectIds"
-                rows="6"
-                set:text={configLines(editing, "mediaObjectIds")}
-              />
-              <p class="form-hint">
-                {t(
-                  "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen."
-                )}
-              </p>
-            </div>
-            <div class="form-row">
-              <label for="config-gallery-caption">{t("Caption")}</label>
-              <input
-                id="config-gallery-caption"
-                name="galleryCaption"
-                type="text"
-                value={configString(editing, "caption")}
-              />
-            </div>
-          </fieldset>
-
-          <div class="form-actions">
-            <button type="submit">
-              {editing ? t("Save section") : t("Create section")}
-            </button>
-            {editing && (
-              <a class="btn-inline" href="/admin/blog-homepage">
-                {t("Cancel")}
-              </a>
-            )}
-          </div>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="homepage-eligible-title"
-      >
-        <h2 class="admin-section-title" id="homepage-eligible-title">
-          {t("Articles you can curate")}
-          <span class="count-pill">{eligiblePosts.length}</span>
-        </h2>
-        <p class="form-hint">
-          {t(
-            "The most recent published, publicly visible articles — the only ones a curated slot will render. Drafts, unlisted and scheduled articles are deliberately absent."
-          )}
-        </p>
-
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="homepage-eligible-table"
-          >
-            <caption class="sr-only">
-              {t("Articles eligible for curation, newest first.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Title")}</th>
-                <th scope="col">{t("Slug")}</th>
-                <th scope="col">{t("Id")}</th>
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {eligiblePosts.length === 0 ? (
+            ) : (
+              sections.map((section) => (
+                <tr data-section-row={section.id}>
+                  <td data-label="Order">{section.sortOrder}</td>
+                  <td data-label="Key">
+                    <span class="cell-code" set:text={section.sectionKey} />
+                  </td>
+                  <td data-label="Type">
+                    <span class="status-badge" data-variant="neutral">
+                      <span class="status-dot" aria-hidden="true" />
+                      {section.sectionType}
+                    </span>
+                  </td>
+                  <td data-label="Title">
+                    {section.title ? (
+                      <span set:text={section.title} />
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  <td data-label="Enabled">
+                    <span
+                      class="status-badge"
+                      data-variant={section.isEnabled ? "success" : "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {section.isEnabled ? t("Enabled") : t("Disabled")}
+                    </span>
+                  </td>
+                  <td data-label="Schedule">
+                    <span class="cell-muted">{formatWindow(section)}</span>
+                  </td>
+                  {canConfigure && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        <a
+                          class="quick-link"
+                          href={`/admin/blog-homepage?edit=${section.id}`}
+                        >
+                          {t("Edit")}
+                          <span class="quick-link-arrow" aria-hidden="true">
+                            →
+                          </span>
+                        </a>
+                        <button
+                          type="button"
+                          class="btn-inline section-delete-btn"
+                          data-section-id={section.id}
+                          data-section-key={section.sectionKey}
+                        >
+                          {t("Delete")}
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canConfigure && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="homepage-form-title"
+    >
+      <h2 class="admin-section-title" id="homepage-form-title">
+        {editing ? t("Edit section") : t("Add section")}
+      </h2>
+
+      <p class="form-error" id="homepage-form-error" hidden />
+
+      <form id="homepage-section-form" class="admin-form">
+        <input
+          type="hidden"
+          id="section-id"
+          value={editing ? editing.id : ""}
+        />
+
+        <div class="form-row">
+          <label for="section-key">{t("Key")}</label>
+          {editing ? (
+            <p class="form-hint">
+              <span class="cell-code" set:text={editing.sectionKey} />
+            </p>
+          ) : (
+            <input
+              id="section-key"
+              name="sectionKey"
+              type="text"
+              required
+              maxlength="64"
+              pattern="[a-z0-9][a-z0-9_-]*"
+            />
+          )}
+          <p class="form-hint">
+            {t(
+              "Lowercase letters, digits, hyphen and underscore. Unique per tenant, and fixed once created."
+            )}
+          </p>
+        </div>
+
+        <div class="form-row">
+          <label for="section-type">{t("Type")}</label>
+          {editing ? (
+            <>
+              <p class="form-hint">
+                <span set:text={editing.sectionType} />
+              </p>
+              <input
+                type="hidden"
+                id="section-type"
+                name="sectionType"
+                value={editing.sectionType}
+              />
+              <p class="form-hint">
+                {t("The type cannot be changed after a section is created.")}
+              </p>
+            </>
+          ) : (
+            <select id="section-type" name="sectionType" required>
+              {HOMEPAGE_SECTION_TYPES.map((type) => (
+                <option value={type}>{type}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div class="form-row">
+          <label for="section-title">{t("Title")}</label>
+          <input
+            id="section-title"
+            name="title"
+            type="text"
+            value={editing?.title ?? ""}
+          />
+          <p class="form-hint">
+            {t("Shown above the section. Leave blank for no heading.")}
+          </p>
+        </div>
+
+        <div class="form-row">
+          <label for="section-sort-order">{t("Order")}</label>
+          <input
+            id="section-sort-order"
+            name="sortOrder"
+            type="number"
+            step="1"
+            value={editing ? String(editing.sortOrder) : "0"}
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="section-enabled">{t("Enabled")}</label>
+          <input
+            id="section-enabled"
+            name="isEnabled"
+            type="checkbox"
+            checked={editing ? editing.isEnabled : true}
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="section-starts-at">{t("Starts at")}</label>
+          <input
+            id="section-starts-at"
+            name="startsAt"
+            type="datetime-local"
+            value={toLocalInputValue(editing?.startsAt ?? null)}
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="section-ends-at">{t("Ends at")}</label>
+          <input
+            id="section-ends-at"
+            name="endsAt"
+            type="datetime-local"
+            value={toLocalInputValue(editing?.endsAt ?? null)}
+          />
+          <p class="form-hint">
+            {t(
+              "Leave both blank for a section that is always on. Times are entered in your own timezone and stored as absolute instants."
+            )}
+          </p>
+        </div>
+
+        {/* One group per type; the script unhides exactly the one that
+              matches the selected type and reads only that group's fields. */}
+        <fieldset
+          class="admin-fieldset section-config"
+          data-config-for="headline"
+          hidden
+        >
+          <legend>{t("Headline")}</legend>
+          <div class="form-row">
+            <label for="config-headline-post">{t("Article")}</label>
+            <select id="config-headline-post" name="headlinePostId">
+              <option value="">{t("Choose an article")}</option>
+              {eligiblePosts.map((post) => (
+                <option
+                  value={post.id}
+                  selected={configString(editing, "postId") === post.id}
+                >
+                  {post.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </fieldset>
+
+        <fieldset
+          class="admin-fieldset section-config"
+          data-config-for="latest_posts"
+          hidden
+        >
+          <legend>{t("Latest articles")}</legend>
+          <div class="form-row">
+            <label for="config-latest-limit">{t("How many")}</label>
+            <input
+              id="config-latest-limit"
+              name="latestLimit"
+              type="number"
+              min="1"
+              max="20"
+              value={String(configNumber(editing, "limit", 5))}
+            />
+          </div>
+          <div class="form-row">
+            <label for="config-latest-category">{t("Category")}</label>
+            <select id="config-latest-category" name="latestCategorySlug">
+              <option value="">{t("Every category")}</option>
+              {categories.map((term) => (
+                <option
+                  value={term.slug}
+                  selected={configString(editing, "categorySlug") === term.slug}
+                >
+                  {term.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </fieldset>
+
+        <fieldset
+          class="admin-fieldset section-config"
+          data-config-for="curated"
+          hidden
+        >
+          <legend>{t("Curated articles")}</legend>
+          <div class="form-row">
+            <label for="config-curated-post-ids">{t("Article ids")}</label>
+            <textarea
+              id="config-curated-post-ids"
+              name="curatedPostIds"
+              rows="6"
+              set:text={configLines(editing, "postIds")}
+            />
+            <p class="form-hint">
+              {t(
+                "One id per line, in the order they should appear. Between 1 and 20. Copy them from the table below."
+              )}
+            </p>
+          </div>
+        </fieldset>
+
+        <fieldset
+          class="admin-fieldset section-config"
+          data-config-for="category_grid"
+          hidden
+        >
+          <legend>{t("Category grid")}</legend>
+          <div class="form-row">
+            <label for="config-grid-categories">{t("Categories")}</label>
+            <select
+              id="config-grid-categories"
+              name="gridCategorySlugs"
+              multiple
+              size="6"
+            >
+              {categories.map((term) => (
+                <option
+                  value={term.slug}
+                  selected={selectedSlugs.includes(term.slug)}
+                >
+                  {term.name}
+                </option>
+              ))}
+            </select>
+            <p class="form-hint">{t("Between 1 and 8 categories.")}</p>
+          </div>
+          <div class="form-row">
+            <label for="config-grid-per-category">
+              {t("Articles per category")}
+            </label>
+            <input
+              id="config-grid-per-category"
+              name="gridPostsPerCategory"
+              type="number"
+              min="1"
+              max="6"
+              value={String(configNumber(editing, "postsPerCategory", 3))}
+            />
+          </div>
+        </fieldset>
+
+        <fieldset
+          class="admin-fieldset section-config"
+          data-config-for="gallery_block"
+          hidden
+        >
+          <legend>{t("Gallery")}</legend>
+          <div class="form-row">
+            <label for="config-gallery-media-ids">{t("Media ids")}</label>
+            <textarea
+              id="config-gallery-media-ids"
+              name="galleryMediaObjectIds"
+              rows="6"
+              set:text={configLines(editing, "mediaObjectIds")}
+            />
+            <p class="form-hint">
+              {t(
+                "One verified media object id per line, in display order. Between 1 and 20. Ids are listed on the media library screen."
+              )}
+            </p>
+          </div>
+          <div class="form-row">
+            <label for="config-gallery-caption">{t("Caption")}</label>
+            <input
+              id="config-gallery-caption"
+              name="galleryCaption"
+              type="text"
+              value={configString(editing, "caption")}
+            />
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit">
+            {editing ? t("Save section") : t("Create section")}
+          </button>
+          {editing && (
+            <a class="btn-inline" href="/admin/blog-homepage">
+              {t("Cancel")}
+            </a>
+          )}
+        </div>
+      </form>
+    </section>
+  )}
+
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="homepage-eligible-title"
+    >
+      <h2 class="admin-section-title" id="homepage-eligible-title">
+        {t("Articles you can curate")}
+        <span class="count-pill">{eligiblePosts.length}</span>
+      </h2>
+      <p class="form-hint">
+        {t(
+          "The most recent published, publicly visible articles — the only ones a curated slot will render. Drafts, unlisted and scheduled articles are deliberately absent."
+        )}
+      </p>
+
+      <div class="data-table-scroll">
+        <table
+          class="data-table data-table--stack"
+          id="homepage-eligible-table"
+        >
+          <caption class="sr-only">
+            {t("Articles eligible for curation, newest first.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Title")}</th>
+              <th scope="col">{t("Slug")}</th>
+              <th scope="col">{t("Id")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {eligiblePosts.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={3}>
+                  <div class="empty-state">
+                    <span class="empty-state-title">
+                      {t("No published articles yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Publish an article before curating a homepage slot for it."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              eligiblePosts.map((post) => (
                 <tr>
-                  <td class="data-table-empty" colspan={3}>
-                    <div class="empty-state">
-                      <span class="empty-state-title">
-                        {t("No published articles yet")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Publish an article before curating a homepage slot for it."
-                        )}
-                      </span>
-                    </div>
+                  <td data-label="Title">
+                    <span set:text={post.title} />
+                  </td>
+                  <td data-label="Slug">
+                    <span class="cell-code" set:text={post.slug} />
+                  </td>
+                  <td data-label="Id">
+                    <span class="cell-code" set:text={post.id} />
                   </td>
                 </tr>
-              ) : (
-                eligiblePosts.map((post) => (
-                  <tr>
-                    <td data-label="Title">
-                      <span set:text={post.title} />
-                    </td>
-                    <td data-label="Slug">
-                      <span class="cell-code" set:text={post.slug} />
-                    </td>
-                    <td data-label="Id">
-                      <span class="cell-code" set:text={post.id} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

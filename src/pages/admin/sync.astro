@@ -239,456 +239,427 @@ const queueColumns = canRetryQueue ? 7 : 6;
     "Offline/LAN replication: the nodes that push and pull, the conflicts that need a human decision, and the object upload queue. Nodes authenticate with an HMAC signature, not a session \u2014 this screen manages them, it never performs a sync."
   )}
 >
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="sync-denied">
-        {t("You do not have permission to view sync and storage.")}
-      </p>
-    )
-  }
+  {!canSeeAnything && (
+    <p class="state-notice fade-in-up" id="sync-denied">
+      {t("You do not have permission to view sync and storage.")}
+    </p>
+  )}
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="sync-error">
+  {canSeeAnything && loadError && (
+    <p class="state-notice fade-in-up" id="sync-error">
+      {t(
+        "The sync console could not be loaded right now. This is a problem reading it, not a healthy silence \u2014 please try again later."
+      )}
+    </p>
+  )}
+
+  {canSeeAnything && !loadError && (
+    <p id="sync-action-error" class="admin-create-error" role="alert" hidden />
+  )}
+
+  {canSeeAnything && !loadError && (
+    <section class="admin-section fade-in-up" aria-label="Sync summary">
+      <div class="stat-grid stagger-children">
+        {canReadNodes && (
+          <div class="stat-card">
+            <span class="stat-label">{t("Active nodes")}</span>
+            <span class="stat-value">
+              {activeNodeCount}/{nodes.length}
+            </span>
+          </div>
+        )}
+        {canReadConflicts && (
+          <div class="stat-card">
+            <span class="stat-label">{t("Open conflicts")}</span>
+            <span class="stat-value">{openConflictCount}</span>
+            {openConflictCount > 0 && (
+              <span class="stat-hint">{t("Each needs a human decision")}</span>
+            )}
+          </div>
+        )}
+        {canReadQueue && (
+          <div class="stat-card">
+            <span class="stat-label">{t("Failed objects (this page)")}</span>
+            <span class="stat-value">{failedQueueCount}</span>
+          </div>
+        )}
+      </div>
+    </section>
+  )}
+
+  {canReadNodes && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="nodes-title"
+      id="sync-nodes"
+    >
+      <h2 class="admin-section-title" id="nodes-title">
+        {t("Nodes")}
+        <span class="count-pill">{nodes.length}</span>
+      </h2>
+      <p class="page-description">
         {t(
-          "The sync console could not be loaded right now. This is a problem reading it, not a healthy silence \u2014 please try again later."
+          "Deactivating a node stops it syncing. Its queued objects and past conflicts are kept \u2014 deactivation is not deletion."
         )}
       </p>
-    )
-  }
 
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="sync-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    canSeeAnything && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="Sync summary">
-        <div class="stat-grid stagger-children">
-          {canReadNodes && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Active nodes")}</span>
-              <span class="stat-value">
-                {activeNodeCount}/{nodes.length}
-              </span>
-            </div>
-          )}
-          {canReadConflicts && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Open conflicts")}</span>
-              <span class="stat-value">{openConflictCount}</span>
-              {openConflictCount > 0 && (
-                <span class="stat-hint">
-                  {t("Each needs a human decision")}
-                </span>
-              )}
-            </div>
-          )}
-          {canReadQueue && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Failed objects (this page)")}</span>
-              <span class="stat-value">{failedQueueCount}</span>
-            </div>
-          )}
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadNodes && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="nodes-title"
-        id="sync-nodes"
-      >
-        <h2 class="admin-section-title" id="nodes-title">
-          {t("Nodes")}
-          <span class="count-pill">{nodes.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "Deactivating a node stops it syncing. Its queued objects and past conflicts are kept \u2014 deactivation is not deletion."
-          )}
-        </p>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="sync-nodes-table">
-            <caption class="sr-only">{t("Registered sync nodes.")}</caption>
-            <thead>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="sync-nodes-table">
+          <caption class="sr-only">{t("Registered sync nodes.")}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Node")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Last push")}</th>
+              <th scope="col">{t("Last pull")}</th>
+              <th scope="col">{t("Pull sequence")}</th>
+              {canUpdateNodes && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {nodes.length === 0 ? (
               <tr>
-                <th scope="col">{t("Node")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Last push")}</th>
-                <th scope="col">{t("Last pull")}</th>
-                <th scope="col">{t("Pull sequence")}</th>
-                {canUpdateNodes && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={nodeColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⇅
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No sync nodes")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "A node registers itself on its first authenticated push, inactive until an administrator activates it."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                nodes.map((node) => (
-                  <tr data-node-row={node.nodeId}>
-                    <td data-label="Node">
-                      <span class="cell-code">{node.nodeCode}</span>
-                      <span class="cell-muted"> · {node.nodeName}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          node.status === "active" ? "success" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {node.status}
-                      </span>
-                    </td>
-                    <td data-label="Last push">
-                      <span class="cell-muted">
-                        {formatTimestamp(node.lastPushedAt)}
-                      </span>
-                    </td>
-                    <td data-label="Last pull">
-                      <span class="cell-muted">
-                        {formatTimestamp(node.lastPulledAt)}
-                      </span>
-                    </td>
-                    <td data-label="Pull sequence">{node.lastPullSequence}</td>
-                    {canUpdateNodes && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          <button
-                            type="button"
-                            class={
-                              node.status === "active"
-                                ? "btn-inline btn-inline--danger node-status-btn"
-                                : "btn-inline node-status-btn"
-                            }
-                            data-node-id={node.nodeId}
-                            data-node-code={node.nodeCode}
-                            data-next-status={
-                              node.status === "active" ? "inactive" : "active"
-                            }
-                          >
-                            {node.status === "active"
-                              ? "Deactivate"
-                              : "Activate"}
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadConflicts && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="conflicts-title"
-        id="sync-conflicts"
-      >
-        <h2 class="admin-section-title" id="conflicts-title">
-          {t("Conflicts")}
-          <span class="count-pill">{conflicts.length}</span>
-        </h2>
-
-        <form method="get" class="admin-toolbar" id="conflict-filter-form">
-          <label for="filter-conflict-status">{t("Status")}</label>
-          <select id="filter-conflict-status" name="conflictStatus">
-            <option value="" selected={conflictStatusFilter === undefined}>
-              {t("Any status")}
-            </option>
-            {CONFLICT_STATUS_OPTIONS.map((value) => (
-              <option value={value} selected={conflictStatusFilter === value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="sync-conflicts-table">
-            <caption class="sr-only">
-              {t("Sync conflicts, newest first, capped at 50 rows.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Aggregate")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Resolution")}</th>
-                <th scope="col">{t("Raised")}</th>
-                <th scope="col">{t("Payload")}</th>
-                {canResolveConflicts && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {conflicts.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={conflictColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✓
-                      </span>
-                      <span class="empty-state-title">{t("No conflicts")}</span>
-                      <span class="empty-state-text">
-                        {t("Nothing is waiting on a human decision.")}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                conflicts.map((conflict) => (
-                  <tr data-conflict-row={conflict.id}>
-                    <td data-label="Aggregate">
-                      <span class="cell-code">{conflict.aggregateType}</span>
-                      <span class="cell-muted"> · {conflict.aggregateId}</span>
-                    </td>
-                    <td data-label="Type">
-                      <span class="cell-code">{conflict.conflictType}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          conflict.status === "open" ? "warning" : "success"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {conflict.status}
-                      </span>
-                    </td>
-                    <td data-label="Resolution">
-                      <span class="cell-code">
-                        {conflict.resolution ?? "—"}
-                      </span>
-                      {conflict.resolutionNote && (
-                        <span
-                          class="cell-muted"
-                          set:text={` · ${conflict.resolutionNote}`}
-                        />
+                <td class="data-table-empty" colspan={nodeColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⇅
+                    </span>
+                    <span class="empty-state-title">{t("No sync nodes")}</span>
+                    <span class="empty-state-text">
+                      {t(
+                        "A node registers itself on its first authenticated push, inactive until an administrator activates it."
                       )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              nodes.map((node) => (
+                <tr data-node-row={node.nodeId}>
+                  <td data-label="Node">
+                    <span class="cell-code">{node.nodeCode}</span>
+                    <span class="cell-muted"> · {node.nodeName}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        node.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {node.status}
+                    </span>
+                  </td>
+                  <td data-label="Last push">
+                    <span class="cell-muted">
+                      {formatTimestamp(node.lastPushedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Last pull">
+                    <span class="cell-muted">
+                      {formatTimestamp(node.lastPulledAt)}
+                    </span>
+                  </td>
+                  <td data-label="Pull sequence">{node.lastPullSequence}</td>
+                  {canUpdateNodes && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        <button
+                          type="button"
+                          class={
+                            node.status === "active"
+                              ? "btn-inline btn-inline--danger node-status-btn"
+                              : "btn-inline node-status-btn"
+                          }
+                          data-node-id={node.nodeId}
+                          data-node-code={node.nodeCode}
+                          data-next-status={
+                            node.status === "active" ? "inactive" : "active"
+                          }
+                        >
+                          {node.status === "active" ? "Deactivate" : "Activate"}
+                        </button>
+                      </div>
                     </td>
-                    <td data-label="Raised">
-                      <span class="cell-muted">{conflict.createdAt}</span>
-                    </td>
-                    <td data-label="Payload">
-                      <details>
-                        <summary>{t("Payload")}</summary>
-                        {/* `set:text` rather than a child expression: <pre>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canReadConflicts && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="conflicts-title"
+      id="sync-conflicts"
+    >
+      <h2 class="admin-section-title" id="conflicts-title">
+        {t("Conflicts")}
+        <span class="count-pill">{conflicts.length}</span>
+      </h2>
+
+      <form method="get" class="admin-toolbar" id="conflict-filter-form">
+        <label for="filter-conflict-status">{t("Status")}</label>
+        <select id="filter-conflict-status" name="conflictStatus">
+          <option value="" selected={conflictStatusFilter === undefined}>
+            {t("Any status")}
+          </option>
+          {CONFLICT_STATUS_OPTIONS.map((value) => (
+            <option value={value} selected={conflictStatusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <button type="submit">{t("Apply")}</button>
+      </form>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="sync-conflicts-table">
+          <caption class="sr-only">
+            {t("Sync conflicts, newest first, capped at 50 rows.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Aggregate")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Resolution")}</th>
+              <th scope="col">{t("Raised")}</th>
+              <th scope="col">{t("Payload")}</th>
+              {canResolveConflicts && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {conflicts.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={conflictColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span class="empty-state-title">{t("No conflicts")}</span>
+                    <span class="empty-state-text">
+                      {t("Nothing is waiting on a human decision.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              conflicts.map((conflict) => (
+                <tr data-conflict-row={conflict.id}>
+                  <td data-label="Aggregate">
+                    <span class="cell-code">{conflict.aggregateType}</span>
+                    <span class="cell-muted"> · {conflict.aggregateId}</span>
+                  </td>
+                  <td data-label="Type">
+                    <span class="cell-code">{conflict.conflictType}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        conflict.status === "open" ? "warning" : "success"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {conflict.status}
+                    </span>
+                  </td>
+                  <td data-label="Resolution">
+                    <span class="cell-code">{conflict.resolution ?? "—"}</span>
+                    {conflict.resolutionNote && (
+                      <span
+                        class="cell-muted"
+                        set:text={` · ${conflict.resolutionNote}`}
+                      />
+                    )}
+                  </td>
+                  <td data-label="Raised">
+                    <span class="cell-muted">{conflict.createdAt}</span>
+                  </td>
+                  <td data-label="Payload">
+                    <details>
+                      <summary>{t("Payload")}</summary>
+                      {/* `set:text` rather than a child expression: <pre>
                             preserves whitespace and prettier reindents .astro
                             children, so an expression written between the tags
                             comes back wrapped in template indentation that
                             <pre> then renders. */}
-                        <pre
-                          class="cell-code"
-                          set:text={JSON.stringify(
-                            conflict.payload ?? {},
-                            null,
-                            2
-                          )}
-                        />
-                      </details>
-                    </td>
-                    {canResolveConflicts && (
-                      <td data-label="Actions">
-                        {conflict.status === "open" ? (
-                          <div class="row-actions">
-                            {RESOLUTION_OPTIONS.map((resolution) => (
-                              <button
-                                type="button"
-                                class="btn-inline conflict-resolve-btn"
-                                data-conflict-id={conflict.id}
-                                data-resolution={resolution}
-                              >
-                                {resolution.replace("_", " ")}
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <span class="cell-muted">{t("resolved")}</span>
+                      <pre
+                        class="cell-code"
+                        set:text={JSON.stringify(
+                          conflict.payload ?? {},
+                          null,
+                          2
                         )}
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadQueue && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="queue-title"
-        id="sync-object-queue"
-      >
-        <h2 class="admin-section-title" id="queue-title">
-          {t("Object queue")}
-          <span class="count-pill">{queue.length}</span>
-        </h2>
-
-        <form method="get" class="admin-toolbar" id="queue-filter-form">
-          <label for="filter-queue-status">{t("Status")}</label>
-          <select id="filter-queue-status" name="queueStatus">
-            <option value="" selected={queueStatusFilter === undefined}>
-              {t("Any status")}
-            </option>
-            {QUEUE_STATUS_OPTIONS.map((value) => (
-              <option value={value} selected={queueStatusFilter === value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <button type="submit">{t("Apply")}</button>
-        </form>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="sync-queue-table">
-            <caption class="sr-only">
-              {t("Object upload queue, newest first, 200 per page.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Object")}</th>
-                <th scope="col">{t("Node")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Retries")}</th>
-                <th scope="col">{t("Next retry")}</th>
-                <th scope="col">{t("Last error")}</th>
-                {canRetryQueue && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {queue.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={queueColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌸
-                      </span>
-                      <span class="empty-state-title">
-                        {t("Queue is empty")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t("Nothing is waiting to upload under this filter.")}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                queue.map((entry) => (
-                  <tr data-queue-row={entry.objectQueueId}>
-                    <td data-label="Object">
-                      <span class="cell-code">{entry.objectKey}</span>
-                      <span class="cell-muted">
-                        {" "}
-                        · {formatBytes(entry.byteSize)}
-                      </span>
-                    </td>
-                    <td data-label="Node">
-                      <span class="cell-code">{entry.nodeCode}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={QUEUE_VARIANT[entry.status] ?? "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {entry.status}
-                      </span>
-                    </td>
-                    <td data-label="Retries">{entry.retryCount}</td>
-                    <td data-label="Next retry">
-                      <span class="cell-muted">
-                        {formatTimestamp(entry.nextRetryAt)}
-                      </span>
-                    </td>
-                    <td data-label="Last error">
-                      {/* Escaped via `set:text`, never parsed. */}
-                      <span
-                        class="cell-muted"
-                        set:text={entry.lastError ?? "—"}
                       />
-                    </td>
-                    {canRetryQueue && (
-                      <td data-label="Actions">
+                    </details>
+                  </td>
+                  {canResolveConflicts && (
+                    <td data-label="Actions">
+                      {conflict.status === "open" ? (
                         <div class="row-actions">
-                          {entry.status === "failed" ? (
+                          {RESOLUTION_OPTIONS.map((resolution) => (
                             <button
                               type="button"
-                              class="btn-inline queue-retry-btn"
-                              data-queue-id={entry.objectQueueId}
+                              class="btn-inline conflict-resolve-btn"
+                              data-conflict-id={conflict.id}
+                              data-resolution={resolution}
                             >
-                              {t("Retry")}
+                              {resolution.replace("_", " ")}
                             </button>
-                          ) : (
-                            <span class="cell-muted">—</span>
-                          )}
+                          ))}
                         </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                      ) : (
+                        <span class="cell-muted">{t("resolved")}</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 
-        {queueNextCursor && (
-          <div class="admin-toolbar">
-            {/* Keyset, not offset: the cursor carries full-precision
+  {canReadQueue && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="queue-title"
+      id="sync-object-queue"
+    >
+      <h2 class="admin-section-title" id="queue-title">
+        {t("Object queue")}
+        <span class="count-pill">{queue.length}</span>
+      </h2>
+
+      <form method="get" class="admin-toolbar" id="queue-filter-form">
+        <label for="filter-queue-status">{t("Status")}</label>
+        <select id="filter-queue-status" name="queueStatus">
+          <option value="" selected={queueStatusFilter === undefined}>
+            {t("Any status")}
+          </option>
+          {QUEUE_STATUS_OPTIONS.map((value) => (
+            <option value={value} selected={queueStatusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <button type="submit">{t("Apply")}</button>
+      </form>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="sync-queue-table">
+          <caption class="sr-only">
+            {t("Object upload queue, newest first, 200 per page.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Object")}</th>
+              <th scope="col">{t("Node")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Retries")}</th>
+              <th scope="col">{t("Next retry")}</th>
+              <th scope="col">{t("Last error")}</th>
+              {canRetryQueue && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {queue.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={queueColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌸
+                    </span>
+                    <span class="empty-state-title">{t("Queue is empty")}</span>
+                    <span class="empty-state-text">
+                      {t("Nothing is waiting to upload under this filter.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              queue.map((entry) => (
+                <tr data-queue-row={entry.objectQueueId}>
+                  <td data-label="Object">
+                    <span class="cell-code">{entry.objectKey}</span>
+                    <span class="cell-muted">
+                      {" "}
+                      · {formatBytes(entry.byteSize)}
+                    </span>
+                  </td>
+                  <td data-label="Node">
+                    <span class="cell-code">{entry.nodeCode}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={QUEUE_VARIANT[entry.status] ?? "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {entry.status}
+                    </span>
+                  </td>
+                  <td data-label="Retries">{entry.retryCount}</td>
+                  <td data-label="Next retry">
+                    <span class="cell-muted">
+                      {formatTimestamp(entry.nextRetryAt)}
+                    </span>
+                  </td>
+                  <td data-label="Last error">
+                    {/* Escaped via `set:text`, never parsed. */}
+                    <span
+                      class="cell-muted"
+                      set:text={entry.lastError ?? "—"}
+                    />
+                  </td>
+                  {canRetryQueue && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {entry.status === "failed" ? (
+                          <button
+                            type="button"
+                            class="btn-inline queue-retry-btn"
+                            data-queue-id={entry.objectQueueId}
+                          >
+                            {t("Retry")}
+                          </button>
+                        ) : (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {queueNextCursor && (
+        <div class="admin-toolbar">
+          {/* Keyset, not offset: the cursor carries full-precision
                 `created_at` TEXT, so a page boundary cannot skip rows sharing
                 a millisecond the way a re-parsed `Date` would. */}
-            <a class="quick-link" href={linkWith({ cursor: queueNextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </div>
-        )}
-      </section>
-    )
-  }
+          <a class="quick-link" href={linkWith({ cursor: queueNextCursor })}>
+            {t("Next page")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
+      )}
+    </section>
+  )}
 </AdminLayout>
 
 <script>

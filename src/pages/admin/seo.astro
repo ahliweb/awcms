@@ -280,277 +280,269 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       {t("SEO defaults")}
     </h2>
 
-    {
-      !canReadConfig && (
-        <p class="state-notice" id="seo-config-denied">
-          {t("You do not have permission to view this tenant's SEO defaults.")}
-        </p>
-      )
-    }
+    {!canReadConfig && (
+      <p class="state-notice" id="seo-config-denied">
+        {t("You do not have permission to view this tenant's SEO defaults.")}
+      </p>
+    )}
 
-    {
-      canReadConfig && loadError && (
-        <p class="state-notice" id="seo-config-error">
+    {canReadConfig && loadError && (
+      <p class="state-notice" id="seo-config-error">
+        {t(
+          "SEO defaults could not be loaded right now. Please try again later."
+        )}
+      </p>
+    )}
+
+    {canReadConfig && !loadError && !canUpdateConfig && (
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="seo-config-table">
+          <caption class="sr-only">
+            {t("Current SEO defaults for this tenant (read-only)")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Setting")}</th>
+              <th scope="col">{t("Value")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Setting">{t("Site name")}</td>
+              <td data-label="Value">
+                {seoConfig.siteName ?? <span class="cell-muted">—</span>}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Default meta description")}</td>
+              <td data-label="Value">
+                {seoConfig.defaultMetaDescription ?? (
+                  <span class="cell-muted">—</span>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Twitter site handle")}</td>
+              <td data-label="Value">
+                {seoConfig.twitterSiteHandle ?? (
+                  <span class="cell-muted">—</span>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Organization name")}</td>
+              <td data-label="Value">
+                {seoConfig.organizationName ?? (
+                  <span class="cell-muted">—</span>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Site-wide noindex")}</td>
+              <td data-label="Value">
+                <span
+                  class="status-badge"
+                  data-variant={
+                    seoConfig.defaultRobotsNoindex ? "danger" : "success"
+                  }
+                >
+                  <span class="status-dot" aria-hidden="true" />
+                  {seoConfig.defaultRobotsNoindex ? "noindex" : "indexable"}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Sitemap served")}</td>
+              <td data-label="Value">
+                {seoConfig.sitemapEnabled ? "Yes" : "No"}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Feeds served")}</td>
+              <td data-label="Value">
+                {seoConfig.feedsEnabled ? "Yes" : "No"}
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Feed item limit")}</td>
+              <td data-label="Value">{seoConfig.feedItemLimit}</td>
+            </tr>
+            <tr>
+              <td data-label="Setting">{t("Included resource types")}</td>
+              <td data-label="Value">
+                {includedTypesValue === "" ? (
+                  <span class="cell-muted">{t("all eligible types")}</span>
+                ) : (
+                  <span class="cell-code">{includedTypesValue}</span>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {canReadConfig && !loadError && canUpdateConfig && (
+      <form id="seo-config-form" class="admin-create-form">
+        <p class="form-legend">
           {t(
-            "SEO defaults could not be loaded right now. Please try again later."
+            "Edit SEO defaults (a full replace \u2014 every field below is sent)"
           )}
         </p>
-      )
-    }
+        <p
+          id="seo-config-form-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
 
-    {
-      canReadConfig && !loadError && !canUpdateConfig && (
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="seo-config-table">
-            <caption class="sr-only">
-              {t("Current SEO defaults for this tenant (read-only)")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Setting")}</th>
-                <th scope="col">{t("Value")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-label="Setting">{t("Site name")}</td>
-                <td data-label="Value">
-                  {seoConfig.siteName ?? <span class="cell-muted">—</span>}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Default meta description")}</td>
-                <td data-label="Value">
-                  {seoConfig.defaultMetaDescription ?? (
-                    <span class="cell-muted">—</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Twitter site handle")}</td>
-                <td data-label="Value">
-                  {seoConfig.twitterSiteHandle ?? (
-                    <span class="cell-muted">—</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Organization name")}</td>
-                <td data-label="Value">
-                  {seoConfig.organizationName ?? (
-                    <span class="cell-muted">—</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Site-wide noindex")}</td>
-                <td data-label="Value">
-                  <span
-                    class="status-badge"
-                    data-variant={
-                      seoConfig.defaultRobotsNoindex ? "danger" : "success"
-                    }
-                  >
-                    <span class="status-dot" aria-hidden="true" />
-                    {seoConfig.defaultRobotsNoindex ? "noindex" : "indexable"}
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Sitemap served")}</td>
-                <td data-label="Value">
-                  {seoConfig.sitemapEnabled ? "Yes" : "No"}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Feeds served")}</td>
-                <td data-label="Value">
-                  {seoConfig.feedsEnabled ? "Yes" : "No"}
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Feed item limit")}</td>
-                <td data-label="Value">{seoConfig.feedItemLimit}</td>
-              </tr>
-              <tr>
-                <td data-label="Setting">{t("Included resource types")}</td>
-                <td data-label="Value">
-                  {includedTypesValue === "" ? (
-                    <span class="cell-muted">{t("all eligible types")}</span>
-                  ) : (
-                    <span class="cell-code">{includedTypesValue}</span>
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+        <label for="seo-site-name">{t("Site name")}</label>
+        <input
+          id="seo-site-name"
+          name="siteName"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.siteName ?? ""}
+        />
 
-    {
-      canReadConfig && !loadError && canUpdateConfig && (
-        <form id="seo-config-form" class="admin-create-form">
-          <p class="form-legend">
-            {t(
-              "Edit SEO defaults (a full replace \u2014 every field below is sent)"
-            )}
-          </p>
-          <p
-            id="seo-config-form-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
+        <label for="seo-meta-description">
+          {t("Default meta description")}
+        </label>
+        <input
+          id="seo-meta-description"
+          name="defaultMetaDescription"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.defaultMetaDescription ?? ""}
+        />
 
-          <label for="seo-site-name">{t("Site name")}</label>
-          <input
-            id="seo-site-name"
-            name="siteName"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.siteName ?? ""}
-          />
+        <label for="seo-twitter-handle">{t("Twitter site handle")}</label>
+        <input
+          id="seo-twitter-handle"
+          name="twitterSiteHandle"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.twitterSiteHandle ?? ""}
+        />
 
-          <label for="seo-meta-description">
-            {t("Default meta description")}
-          </label>
-          <input
-            id="seo-meta-description"
-            name="defaultMetaDescription"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.defaultMetaDescription ?? ""}
-          />
+        <label for="seo-organization-name">{t("Organization name")}</label>
+        <input
+          id="seo-organization-name"
+          name="organizationName"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.organizationName ?? ""}
+        />
 
-          <label for="seo-twitter-handle">{t("Twitter site handle")}</label>
-          <input
-            id="seo-twitter-handle"
-            name="twitterSiteHandle"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.twitterSiteHandle ?? ""}
-          />
+        <label for="seo-social-media-id">
+          {t("Default social image (media object UUID)")}
+        </label>
+        <input
+          id="seo-social-media-id"
+          name="defaultSocialMediaId"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.defaultSocialMediaId ?? ""}
+        />
 
-          <label for="seo-organization-name">{t("Organization name")}</label>
-          <input
-            id="seo-organization-name"
-            name="organizationName"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.organizationName ?? ""}
-          />
+        <label for="seo-org-logo-media-id">
+          {t("Organization logo (media object UUID)")}
+        </label>
+        <input
+          id="seo-org-logo-media-id"
+          name="organizationLogoMediaId"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.organizationLogoMediaId ?? ""}
+        />
 
-          <label for="seo-social-media-id">
-            {t("Default social image (media object UUID)")}
-          </label>
-          <input
-            id="seo-social-media-id"
-            name="defaultSocialMediaId"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.defaultSocialMediaId ?? ""}
-          />
+        <label for="seo-feed-title">{t("Feed title")}</label>
+        <input
+          id="seo-feed-title"
+          name="feedTitle"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.feedTitle ?? ""}
+        />
 
-          <label for="seo-org-logo-media-id">
-            {t("Organization logo (media object UUID)")}
-          </label>
-          <input
-            id="seo-org-logo-media-id"
-            name="organizationLogoMediaId"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.organizationLogoMediaId ?? ""}
-          />
+        <label for="seo-feed-description">{t("Feed description")}</label>
+        <input
+          id="seo-feed-description"
+          name="feedDescription"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.feedDescription ?? ""}
+        />
 
-          <label for="seo-feed-title">{t("Feed title")}</label>
-          <input
-            id="seo-feed-title"
-            name="feedTitle"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.feedTitle ?? ""}
-          />
+        <label for="seo-feed-logo-media-id">
+          {t("Feed logo (media object UUID)")}
+        </label>
+        <input
+          id="seo-feed-logo-media-id"
+          name="feedLogoMediaId"
+          type="text"
+          autocomplete="off"
+          value={seoConfig.feedLogoMediaId ?? ""}
+        />
 
-          <label for="seo-feed-description">{t("Feed description")}</label>
-          <input
-            id="seo-feed-description"
-            name="feedDescription"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.feedDescription ?? ""}
-          />
+        <label for="seo-feed-item-limit">
+          {t("Feed item limit (1\u2013200)")}
+        </label>
+        <input
+          id="seo-feed-item-limit"
+          name="feedItemLimit"
+          type="number"
+          min="1"
+          max="200"
+          value={String(seoConfig.feedItemLimit)}
+        />
 
-          <label for="seo-feed-logo-media-id">
-            {t("Feed logo (media object UUID)")}
-          </label>
-          <input
-            id="seo-feed-logo-media-id"
-            name="feedLogoMediaId"
-            type="text"
-            autocomplete="off"
-            value={seoConfig.feedLogoMediaId ?? ""}
-          />
+        <label for="seo-included-types">
+          {t("Included resource types (comma separated; blank = all)")}
+        </label>
+        <input
+          id="seo-included-types"
+          name="includedResourceTypes"
+          type="text"
+          autocomplete="off"
+          value={includedTypesValue}
+        />
 
-          <label for="seo-feed-item-limit">
-            {t("Feed item limit (1\u2013200)")}
-          </label>
-          <input
-            id="seo-feed-item-limit"
-            name="feedItemLimit"
-            type="number"
-            min="1"
-            max="200"
-            value={String(seoConfig.feedItemLimit)}
-          />
+        <label for="seo-noindex">{t("Site-wide noindex")}</label>
+        <select id="seo-noindex" name="defaultRobotsNoindex">
+          <option value="false" selected={!seoConfig.defaultRobotsNoindex}>
+            {t("indexable")}
+          </option>
+          <option value="true" selected={seoConfig.defaultRobotsNoindex}>
+            {t("noindex (hide the whole site from crawlers)")}
+          </option>
+        </select>
 
-          <label for="seo-included-types">
-            {t("Included resource types (comma separated; blank = all)")}
-          </label>
-          <input
-            id="seo-included-types"
-            name="includedResourceTypes"
-            type="text"
-            autocomplete="off"
-            value={includedTypesValue}
-          />
+        <label for="seo-sitemap-enabled">{t("Serve sitemap")}</label>
+        <select id="seo-sitemap-enabled" name="sitemapEnabled">
+          <option value="true" selected={seoConfig.sitemapEnabled}>
+            {t("yes")}
+          </option>
+          <option value="false" selected={!seoConfig.sitemapEnabled}>
+            no
+          </option>
+        </select>
 
-          <label for="seo-noindex">{t("Site-wide noindex")}</label>
-          <select id="seo-noindex" name="defaultRobotsNoindex">
-            <option value="false" selected={!seoConfig.defaultRobotsNoindex}>
-              {t("indexable")}
-            </option>
-            <option value="true" selected={seoConfig.defaultRobotsNoindex}>
-              {t("noindex (hide the whole site from crawlers)")}
-            </option>
-          </select>
+        <label for="seo-feeds-enabled">{t("Serve feeds")}</label>
+        <select id="seo-feeds-enabled" name="feedsEnabled">
+          <option value="true" selected={seoConfig.feedsEnabled}>
+            {t("yes")}
+          </option>
+          <option value="false" selected={!seoConfig.feedsEnabled}>
+            no
+          </option>
+        </select>
 
-          <label for="seo-sitemap-enabled">{t("Serve sitemap")}</label>
-          <select id="seo-sitemap-enabled" name="sitemapEnabled">
-            <option value="true" selected={seoConfig.sitemapEnabled}>
-              {t("yes")}
-            </option>
-            <option value="false" selected={!seoConfig.sitemapEnabled}>
-              no
-            </option>
-          </select>
-
-          <label for="seo-feeds-enabled">{t("Serve feeds")}</label>
-          <select id="seo-feeds-enabled" name="feedsEnabled">
-            <option value="true" selected={seoConfig.feedsEnabled}>
-              {t("yes")}
-            </option>
-            <option value="false" selected={!seoConfig.feedsEnabled}>
-              no
-            </option>
-          </select>
-
-          <button type="submit" id="seo-config-submit">
-            {t("Save SEO defaults")}
-          </button>
-        </form>
-      )
-    }
+        <button type="submit" id="seo-config-submit">
+          {t("Save SEO defaults")}
+        </button>
+      </form>
+    )}
   </section>
 
   <!-- ================= Redirect policy ================= -->
@@ -562,116 +554,103 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       {t("Redirect policy")}
     </h2>
 
-    {
-      !canReadRedirect && (
-        <p class="state-notice" id="redirect-policy-denied">
-          {t(
-            "You do not have permission to view this tenant's redirect policy."
-          )}
-        </p>
-      )
-    }
+    {!canReadRedirect && (
+      <p class="state-notice" id="redirect-policy-denied">
+        {t("You do not have permission to view this tenant's redirect policy.")}
+      </p>
+    )}
 
-    {
-      canReadRedirect && loadError && (
-        <p class="state-notice" id="redirect-policy-error">
-          {t(
-            "The redirect policy could not be loaded right now. Please try again later."
-          )}
-        </p>
-      )
-    }
+    {canReadRedirect && loadError && (
+      <p class="state-notice" id="redirect-policy-error">
+        {t(
+          "The redirect policy could not be loaded right now. Please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canReadRedirect && !loadError && !canUpdateRedirect && (
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="redirect-policy-table"
+    {canReadRedirect && !loadError && !canUpdateRedirect && (
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="redirect-policy-table">
+          <caption class="sr-only">
+            {t("Current redirect policy for this tenant (read-only)")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Policy")}</th>
+              <th scope="col">{t("Value")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Policy">{t("URL-change capture")}</td>
+              <td data-label="Value">
+                <span class="cell-code">
+                  {redirectSettings.urlChangeAutoPolicy}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Policy">{t("Legacy /blog redirect")}</td>
+              <td data-label="Value">
+                {redirectSettings.legacyBlogRedirectEnabled
+                  ? "enabled"
+                  : "disabled"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {canReadRedirect && !loadError && canUpdateRedirect && (
+      <form id="redirect-settings-form" class="admin-create-form">
+        <p class="form-legend">{t("Edit redirect policy")}</p>
+        <p
+          id="redirect-settings-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="redirect-url-change-policy">
+          {t("When a resource's URL changes")}
+        </label>
+        <select id="redirect-url-change-policy" name="urlChangeAutoPolicy">
+          {URL_CHANGE_AUTO_POLICIES.map((value) => (
+            <option
+              value={value}
+              selected={value === redirectSettings.urlChangeAutoPolicy}
+            >
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="redirect-legacy-blog">
+          {t(
+            "Legacy /blog redirect (inert in this base \u2014 no /news routes)"
+          )}
+        </label>
+        <select id="redirect-legacy-blog" name="legacyBlogRedirectEnabled">
+          <option
+            value="false"
+            selected={!redirectSettings.legacyBlogRedirectEnabled}
           >
-            <caption class="sr-only">
-              {t("Current redirect policy for this tenant (read-only)")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Policy")}</th>
-                <th scope="col">{t("Value")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-label="Policy">{t("URL-change capture")}</td>
-                <td data-label="Value">
-                  <span class="cell-code">
-                    {redirectSettings.urlChangeAutoPolicy}
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td data-label="Policy">{t("Legacy /blog redirect")}</td>
-                <td data-label="Value">
-                  {redirectSettings.legacyBlogRedirectEnabled
-                    ? "enabled"
-                    : "disabled"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+            {t("disabled")}
+          </option>
+          <option
+            value="true"
+            selected={redirectSettings.legacyBlogRedirectEnabled}
+          >
+            {t("enabled")}
+          </option>
+        </select>
 
-    {
-      canReadRedirect && !loadError && canUpdateRedirect && (
-        <form id="redirect-settings-form" class="admin-create-form">
-          <p class="form-legend">{t("Edit redirect policy")}</p>
-          <p
-            id="redirect-settings-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-
-          <label for="redirect-url-change-policy">
-            {t("When a resource's URL changes")}
-          </label>
-          <select id="redirect-url-change-policy" name="urlChangeAutoPolicy">
-            {URL_CHANGE_AUTO_POLICIES.map((value) => (
-              <option
-                value={value}
-                selected={value === redirectSettings.urlChangeAutoPolicy}
-              >
-                {value}
-              </option>
-            ))}
-          </select>
-
-          <label for="redirect-legacy-blog">
-            {t(
-              "Legacy /blog redirect (inert in this base \u2014 no /news routes)"
-            )}
-          </label>
-          <select id="redirect-legacy-blog" name="legacyBlogRedirectEnabled">
-            <option
-              value="false"
-              selected={!redirectSettings.legacyBlogRedirectEnabled}
-            >
-              {t("disabled")}
-            </option>
-            <option
-              value="true"
-              selected={redirectSettings.legacyBlogRedirectEnabled}
-            >
-              {t("enabled")}
-            </option>
-          </select>
-
-          <button type="submit" id="redirect-settings-submit">
-            {t("Save redirect policy")}
-          </button>
-        </form>
-      )
-    }
+        <button type="submit" id="redirect-settings-submit">
+          {t("Save redirect policy")}
+        </button>
+      </form>
+    )}
   </section>
 
   <!-- ================= Redirect rules ================= -->
@@ -684,451 +663,433 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       <span class="count-pill">{redirects.length}</span>
     </h2>
 
-    {
-      !canReadRedirect && (
-        <p class="state-notice" id="redirect-rules-denied">
-          {t("You do not have permission to view redirect rules.")}
-        </p>
-      )
-    }
+    {!canReadRedirect && (
+      <p class="state-notice" id="redirect-rules-denied">
+        {t("You do not have permission to view redirect rules.")}
+      </p>
+    )}
 
-    {
-      canReadRedirect && loadError && (
-        <p class="state-notice" id="redirect-rules-error">
-          {t(
-            "Redirect rules could not be loaded right now. Please try again later."
-          )}
-        </p>
-      )
-    }
+    {canReadRedirect && loadError && (
+      <p class="state-notice" id="redirect-rules-error">
+        {t(
+          "Redirect rules could not be loaded right now. Please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canReadRedirect && !loadError && (
-        <form method="get" class="admin-toolbar" id="redirect-filter-form">
-          <label for="redirect-filter-q">{t("Source contains")}</label>
-          <input
-            id="redirect-filter-q"
-            name="q"
-            type="search"
-            autocomplete="off"
-            value={qFilter}
-          />
+    {canReadRedirect && !loadError && (
+      <form method="get" class="admin-toolbar" id="redirect-filter-form">
+        <label for="redirect-filter-q">{t("Source contains")}</label>
+        <input
+          id="redirect-filter-q"
+          name="q"
+          type="search"
+          autocomplete="off"
+          value={qFilter}
+        />
 
-          <label for="redirect-filter-state">{t("State")}</label>
-          <select id="redirect-filter-state" name="state">
-            <option value="">{t("any")}</option>
-            {REDIRECT_STATE_FILTERS.map((value) => (
-              <option value={value} selected={value === stateFilter}>
-                {value}
-              </option>
-            ))}
-          </select>
+        <label for="redirect-filter-state">{t("State")}</label>
+        <select id="redirect-filter-state" name="state">
+          <option value="">{t("any")}</option>
+          {REDIRECT_STATE_FILTERS.map((value) => (
+            <option value={value} selected={value === stateFilter}>
+              {value}
+            </option>
+          ))}
+        </select>
 
-          <label for="redirect-filter-target-type">{t("Target type")}</label>
-          <select id="redirect-filter-target-type" name="targetType">
-            <option value="">{t("any")}</option>
-            {REDIRECT_TARGET_TYPES.map((value) => (
-              <option value={value} selected={value === targetTypeFilter}>
-                {value}
-              </option>
-            ))}
-          </select>
+        <label for="redirect-filter-target-type">{t("Target type")}</label>
+        <select id="redirect-filter-target-type" name="targetType">
+          <option value="">{t("any")}</option>
+          {REDIRECT_TARGET_TYPES.map((value) => (
+            <option value={value} selected={value === targetTypeFilter}>
+              {value}
+            </option>
+          ))}
+        </select>
 
-          {/* Keeps the 404 panel's own filter across a redirect-filter submit;
+        {/* Keeps the 404 panel's own filter across a redirect-filter submit;
               `cursor` is deliberately NOT carried — changing a filter restarts
               pagination at the first page. */}
-          {unresolvedOnly && (
-            <input type="hidden" name="unresolvedOnly" value="true" />
-          )}
+        {unresolvedOnly && (
+          <input type="hidden" name="unresolvedOnly" value="true" />
+        )}
 
-          <button type="submit">{t("Apply filters")}</button>
-        </form>
-      )
-    }
+        <button type="submit">{t("Apply filters")}</button>
+      </form>
+    )}
 
-    {
-      canCreateRedirect && (
-        <form id="redirect-create-form" class="admin-create-form">
-          <p class="form-legend">{t("Create a redirect rule")}</p>
-          <p
-            id="redirect-create-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-          <p
-            id="redirect-validate-result"
-            class="state-notice"
-            role="status"
-            hidden
-          />
-
-          <label for="redirect-source-path">{t("Source path")}</label>
-          <input
-            id="redirect-source-path"
-            name="sourcePath"
-            type="text"
-            required
-            autocomplete="off"
-            placeholder="/old-page"
-          />
-
-          <label for="redirect-target">{t("Target")}</label>
-          <input
-            id="redirect-target"
-            name="target"
-            type="text"
-            required
-            autocomplete="off"
-            placeholder="/new-page or https://verified-host/new-page"
-          />
-
-          <label for="redirect-status-code">{t("Status code")}</label>
-          <select id="redirect-status-code" name="statusCode">
-            {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
-              <option value={String(value)} selected={value === 301}>
-                {value}
-              </option>
-            ))}
-          </select>
-
-          <label for="redirect-state">{t("Initial state")}</label>
-          <select id="redirect-state" name="state">
-            {ALLOWED_REDIRECT_STATES.map((value) => (
-              <option value={value} selected={value === "active"}>
-                {value}
-              </option>
-            ))}
-          </select>
-
-          <label for="redirect-domain-scope">
-            {t(
-              "Host scope (one of this tenant's verified domains; blank = all)"
-            )}
-          </label>
-          <input
-            id="redirect-domain-scope"
-            name="domainScopeHost"
-            type="text"
-            autocomplete="off"
-          />
-
-          <label for="redirect-preserve-query">
-            {t("Preserve query string")}
-          </label>
-          <select id="redirect-preserve-query" name="preserveQuery">
-            <option value="false" selected>
-              no
-            </option>
-            <option value="true">{t("yes")}</option>
-          </select>
-
-          <label for="redirect-reason">{t("Reason (optional)")}</label>
-          <input
-            id="redirect-reason"
-            name="reason"
-            type="text"
-            autocomplete="off"
-          />
-
-          <div class="row-actions">
-            {/* Read-only dry run: normalize, preview the chain, explain a
-                conflict — WITHOUT writing. Gated by `redirect.read`, which a
-                holder of `redirect.create` necessarily needs to reach this
-                panel, and it sends NO Idempotency-Key (nothing is stored). */}
-            <button type="button" class="btn-inline" id="redirect-validate-btn">
-              {t("Dry run")}
-            </button>
-            <button type="submit" id="redirect-create-submit">
-              {t("Create rule")}
-            </button>
-          </div>
-        </form>
-      )
-    }
-
-    {
-      canReadRedirect && !loadError && (
+    {canCreateRedirect && (
+      <form id="redirect-create-form" class="admin-create-form">
+        <p class="form-legend">{t("Create a redirect rule")}</p>
         <p
-          id="redirect-action-error"
+          id="redirect-create-error"
           class="admin-create-error"
           role="alert"
           hidden
         />
-      )
-    }
+        <p
+          id="redirect-validate-result"
+          class="state-notice"
+          role="status"
+          hidden
+        />
 
-    {
-      canReadRedirect && !loadError && (
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="redirect-rules-table">
-            <caption class="sr-only">
-              {t("Redirect rules for this tenant, newest first")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Source")}</th>
-                <th scope="col">{t("Target")}</th>
-                <th scope="col">{t("Code")}</th>
-                <th scope="col">{t("State")}</th>
-                <th scope="col">{t("Query")}</th>
-                <th scope="col">{t("Hits")}</th>
-                {showRedirectActions && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {redirects.length === 0 ? (
-                <tr>
-                  <td
-                    class="data-table-empty"
-                    colspan={showRedirectActions ? 7 : 6}
-                  >
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ↪
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No redirect rules match")}
-                      </span>
-                      <span class="empty-state-text">
-                        {canCreateRedirect
-                          ? "Create one above, or widen the filters."
-                          : "Rules created for this tenant will appear here."}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                redirects.map((rule) => (
-                  <tr
-                    data-redirect-row={rule.id}
-                    data-redirect-locale={rule.localeScope ?? ""}
-                    data-redirect-host={rule.domainScopeHost ?? ""}
-                    data-redirect-from={rule.effectiveFrom ?? ""}
-                    data-redirect-until={rule.effectiveUntil ?? ""}
-                    data-redirect-reason={rule.reason ?? ""}
-                    data-redirect-state={rule.state}
-                  >
-                    <td data-label="Source">
-                      <span class="cell-code">{rule.normalizedSourcePath}</span>
-                      {rule.domainScopeHost && (
-                        <span class="cell-muted"> @{rule.domainScopeHost}</span>
-                      )}
-                    </td>
-                    <td
-                      data-label="Target"
-                      class={canUpdateRedirect ? "stacked-block" : ""}
-                    >
-                      {canUpdateRedirect ? (
-                        <input
-                          type="text"
-                          value={rule.target}
-                          aria-label={`Target for ${rule.normalizedSourcePath}`}
-                          data-redirect-target={rule.id}
-                        />
-                      ) : (
-                        <span class="cell-code">{rule.target}</span>
-                      )}
-                    </td>
-                    <td
-                      data-label="Code"
-                      class={canUpdateRedirect ? "stacked-block" : ""}
-                    >
-                      {canUpdateRedirect ? (
-                        <select
-                          aria-label={`Status code for ${rule.normalizedSourcePath}`}
-                          data-redirect-code={rule.id}
-                        >
-                          {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
-                            <option
-                              value={String(value)}
-                              selected={value === rule.statusCode}
-                            >
-                              {value}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        rule.statusCode
-                      )}
-                    </td>
-                    <td data-label="State">
-                      <span
-                        class="status-badge"
-                        data-variant={redirectStateVariant(rule.state)}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {rule.state}
-                      </span>
-                    </td>
-                    <td
-                      data-label="Query"
-                      class={canUpdateRedirect ? "stacked-block" : ""}
-                    >
-                      {canUpdateRedirect ? (
-                        <select
-                          aria-label={`Preserve query for ${rule.normalizedSourcePath}`}
-                          data-redirect-query={rule.id}
-                        >
-                          <option value="false" selected={!rule.preserveQuery}>
-                            no
-                          </option>
-                          <option value="true" selected={rule.preserveQuery}>
-                            {t("yes")}
-                          </option>
-                        </select>
-                      ) : rule.preserveQuery ? (
-                        "yes"
-                      ) : (
-                        "no"
-                      )}
-                    </td>
-                    <td data-label="Hits">
-                      <span class="cell-muted">{rule.hitCount}</span>
-                    </td>
-                    {showRedirectActions && (
-                      <td data-label="Actions" class="stacked-block">
-                        <div class="row-actions">
-                          {canUpdateRedirect && (
-                            <button
-                              type="button"
-                              class="module-toggle redirect-save-btn"
-                              data-redirect-id={rule.id}
-                            >
-                              {t("Save")}
-                            </button>
-                          )}
-                          {/* activate/deactivate/archive/restore all resolve to
-                              `redirect.update` at the lifecycle endpoint. */}
-                          {canUpdateRedirect && rule.state !== "active" && (
-                            <button
-                              type="button"
-                              class="module-toggle redirect-lifecycle-btn"
-                              data-redirect-id={rule.id}
-                              data-lifecycle-action="activate"
-                            >
-                              {t("Activate")}
-                            </button>
-                          )}
-                          {canUpdateRedirect && rule.state === "active" && (
-                            <button
-                              type="button"
-                              class="module-toggle redirect-lifecycle-btn"
-                              data-redirect-id={rule.id}
-                              data-lifecycle-action="deactivate"
-                            >
-                              {t("Deactivate")}
-                            </button>
-                          )}
-                          {canUpdateRedirect && rule.state !== "archived" && (
-                            <button
-                              type="button"
-                              class="module-toggle redirect-lifecycle-btn"
-                              data-redirect-id={rule.id}
-                              data-lifecycle-action="archive"
-                              data-lifecycle-confirm={`Archive ${rule.normalizedSourcePath}? It stops redirecting immediately.`}
-                            >
-                              {t("Archive")}
-                            </button>
-                          )}
-                          {canDeleteRedirect && (
-                            <button
-                              type="button"
-                              class="module-toggle redirect-delete-btn"
-                              data-redirect-id={rule.id}
-                              data-redirect-source={rule.normalizedSourcePath}
-                            >
-                              {t("Delete")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <label for="redirect-source-path">{t("Source path")}</label>
+        <input
+          id="redirect-source-path"
+          name="sourcePath"
+          type="text"
+          required
+          autocomplete="off"
+          placeholder="/old-page"
+        />
+
+        <label for="redirect-target">{t("Target")}</label>
+        <input
+          id="redirect-target"
+          name="target"
+          type="text"
+          required
+          autocomplete="off"
+          placeholder="/new-page or https://verified-host/new-page"
+        />
+
+        <label for="redirect-status-code">{t("Status code")}</label>
+        <select id="redirect-status-code" name="statusCode">
+          {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
+            <option value={String(value)} selected={value === 301}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="redirect-state">{t("Initial state")}</label>
+        <select id="redirect-state" name="state">
+          {ALLOWED_REDIRECT_STATES.map((value) => (
+            <option value={value} selected={value === "active"}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="redirect-domain-scope">
+          {t("Host scope (one of this tenant's verified domains; blank = all)")}
+        </label>
+        <input
+          id="redirect-domain-scope"
+          name="domainScopeHost"
+          type="text"
+          autocomplete="off"
+        />
+
+        <label for="redirect-preserve-query">
+          {t("Preserve query string")}
+        </label>
+        <select id="redirect-preserve-query" name="preserveQuery">
+          <option value="false" selected>
+            no
+          </option>
+          <option value="true">{t("yes")}</option>
+        </select>
+
+        <label for="redirect-reason">{t("Reason (optional)")}</label>
+        <input
+          id="redirect-reason"
+          name="reason"
+          type="text"
+          autocomplete="off"
+        />
+
+        <div class="row-actions">
+          {/* Read-only dry run: normalize, preview the chain, explain a
+                conflict — WITHOUT writing. Gated by `redirect.read`, which a
+                holder of `redirect.create` necessarily needs to reach this
+                panel, and it sends NO Idempotency-Key (nothing is stored). */}
+          <button type="button" class="btn-inline" id="redirect-validate-btn">
+            {t("Dry run")}
+          </button>
+          <button type="submit" id="redirect-create-submit">
+            {t("Create rule")}
+          </button>
         </div>
-      )
-    }
+      </form>
+    )}
 
-    {
-      canReadRedirect && !loadError && nextCursor && (
-        <p class="row-actions">
-          {/* Keyset pagination, driven entirely by the query string so the next
+    {canReadRedirect && !loadError && (
+      <p
+        id="redirect-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )}
+
+    {canReadRedirect && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="redirect-rules-table">
+          <caption class="sr-only">
+            {t("Redirect rules for this tenant, newest first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Target")}</th>
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("State")}</th>
+              <th scope="col">{t("Query")}</th>
+              <th scope="col">{t("Hits")}</th>
+              {showRedirectActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {redirects.length === 0 ? (
+              <tr>
+                <td
+                  class="data-table-empty"
+                  colspan={showRedirectActions ? 7 : 6}
+                >
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ↪
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No redirect rules match")}
+                    </span>
+                    <span class="empty-state-text">
+                      {canCreateRedirect
+                        ? "Create one above, or widen the filters."
+                        : "Rules created for this tenant will appear here."}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              redirects.map((rule) => (
+                <tr
+                  data-redirect-row={rule.id}
+                  data-redirect-locale={rule.localeScope ?? ""}
+                  data-redirect-host={rule.domainScopeHost ?? ""}
+                  data-redirect-from={rule.effectiveFrom ?? ""}
+                  data-redirect-until={rule.effectiveUntil ?? ""}
+                  data-redirect-reason={rule.reason ?? ""}
+                  data-redirect-state={rule.state}
+                >
+                  <td data-label="Source">
+                    <span class="cell-code">{rule.normalizedSourcePath}</span>
+                    {rule.domainScopeHost && (
+                      <span class="cell-muted"> @{rule.domainScopeHost}</span>
+                    )}
+                  </td>
+                  <td
+                    data-label="Target"
+                    class={canUpdateRedirect ? "stacked-block" : ""}
+                  >
+                    {canUpdateRedirect ? (
+                      <input
+                        type="text"
+                        value={rule.target}
+                        aria-label={`Target for ${rule.normalizedSourcePath}`}
+                        data-redirect-target={rule.id}
+                      />
+                    ) : (
+                      <span class="cell-code">{rule.target}</span>
+                    )}
+                  </td>
+                  <td
+                    data-label="Code"
+                    class={canUpdateRedirect ? "stacked-block" : ""}
+                  >
+                    {canUpdateRedirect ? (
+                      <select
+                        aria-label={`Status code for ${rule.normalizedSourcePath}`}
+                        data-redirect-code={rule.id}
+                      >
+                        {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
+                          <option
+                            value={String(value)}
+                            selected={value === rule.statusCode}
+                          >
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      rule.statusCode
+                    )}
+                  </td>
+                  <td data-label="State">
+                    <span
+                      class="status-badge"
+                      data-variant={redirectStateVariant(rule.state)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {rule.state}
+                    </span>
+                  </td>
+                  <td
+                    data-label="Query"
+                    class={canUpdateRedirect ? "stacked-block" : ""}
+                  >
+                    {canUpdateRedirect ? (
+                      <select
+                        aria-label={`Preserve query for ${rule.normalizedSourcePath}`}
+                        data-redirect-query={rule.id}
+                      >
+                        <option value="false" selected={!rule.preserveQuery}>
+                          no
+                        </option>
+                        <option value="true" selected={rule.preserveQuery}>
+                          {t("yes")}
+                        </option>
+                      </select>
+                    ) : rule.preserveQuery ? (
+                      "yes"
+                    ) : (
+                      "no"
+                    )}
+                  </td>
+                  <td data-label="Hits">
+                    <span class="cell-muted">{rule.hitCount}</span>
+                  </td>
+                  {showRedirectActions && (
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        {canUpdateRedirect && (
+                          <button
+                            type="button"
+                            class="module-toggle redirect-save-btn"
+                            data-redirect-id={rule.id}
+                          >
+                            {t("Save")}
+                          </button>
+                        )}
+                        {/* activate/deactivate/archive/restore all resolve to
+                              `redirect.update` at the lifecycle endpoint. */}
+                        {canUpdateRedirect && rule.state !== "active" && (
+                          <button
+                            type="button"
+                            class="module-toggle redirect-lifecycle-btn"
+                            data-redirect-id={rule.id}
+                            data-lifecycle-action="activate"
+                          >
+                            {t("Activate")}
+                          </button>
+                        )}
+                        {canUpdateRedirect && rule.state === "active" && (
+                          <button
+                            type="button"
+                            class="module-toggle redirect-lifecycle-btn"
+                            data-redirect-id={rule.id}
+                            data-lifecycle-action="deactivate"
+                          >
+                            {t("Deactivate")}
+                          </button>
+                        )}
+                        {canUpdateRedirect && rule.state !== "archived" && (
+                          <button
+                            type="button"
+                            class="module-toggle redirect-lifecycle-btn"
+                            data-redirect-id={rule.id}
+                            data-lifecycle-action="archive"
+                            data-lifecycle-confirm={`Archive ${rule.normalizedSourcePath}? It stops redirecting immediately.`}
+                          >
+                            {t("Archive")}
+                          </button>
+                        )}
+                        {canDeleteRedirect && (
+                          <button
+                            type="button"
+                            class="module-toggle redirect-delete-btn"
+                            data-redirect-id={rule.id}
+                            data-redirect-source={rule.normalizedSourcePath}
+                          >
+                            {t("Delete")}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {canReadRedirect && !loadError && nextCursor && (
+      <p class="row-actions">
+        {/* Keyset pagination, driven entirely by the query string so the next
               page is a plain GET (bookmarkable, back-button safe) rather than
               client state. */}
-          <a class="btn-inline" href={nextPageHref(nextCursor)} rel="next">
-            {t("Next page")}
-          </a>
-        </p>
-      )
-    }
+        <a class="btn-inline" href={nextPageHref(nextCursor)} rel="next">
+          {t("Next page")}
+        </a>
+      </p>
+    )}
   </section>
 
   <!-- ================= Recover a deleted rule ================= -->
-  {
-    canReadRedirect && !loadError && showRedirectActions && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="redirect-recover-title"
-      >
-        <h2 class="admin-section-title" id="redirect-recover-title">
-          {t("Recover a deleted rule")}
-        </h2>
-        <p class="page-description">
-          {t(
-            "Soft-deleted rules are excluded from the list above, so restore and purge are addressed by rule id. Deleting a rule on this page sends you back here with its id filled in."
+  {canReadRedirect && !loadError && showRedirectActions && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="redirect-recover-title"
+    >
+      <h2 class="admin-section-title" id="redirect-recover-title">
+        {t("Recover a deleted rule")}
+      </h2>
+      <p class="page-description">
+        {t(
+          "Soft-deleted rules are excluded from the list above, so restore and purge are addressed by rule id. Deleting a rule on this page sends you back here with its id filled in."
+        )}
+      </p>
+      <form id="redirect-recover-form" class="admin-create-form">
+        <p class="form-legend">{t("Rule id")}</p>
+        <p
+          id="redirect-recover-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="redirect-recover-id">{t("Deleted rule id (UUID)")}</label>
+        <input
+          id="redirect-recover-id"
+          name="recoverId"
+          type="text"
+          autocomplete="off"
+          value={recoverId}
+        />
+
+        <div class="row-actions">
+          {canUpdateRedirect && (
+            <button
+              type="button"
+              class="module-toggle"
+              id="redirect-restore-btn"
+              data-lifecycle-action="restore"
+            >
+              {t("Restore")}
+            </button>
           )}
-        </p>
-        <form id="redirect-recover-form" class="admin-create-form">
-          <p class="form-legend">{t("Rule id")}</p>
-          <p
-            id="redirect-recover-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-
-          <label for="redirect-recover-id">{t("Deleted rule id (UUID)")}</label>
-          <input
-            id="redirect-recover-id"
-            name="recoverId"
-            type="text"
-            autocomplete="off"
-            value={recoverId}
-          />
-
-          <div class="row-actions">
-            {canUpdateRedirect && (
-              <button
-                type="button"
-                class="module-toggle"
-                id="redirect-restore-btn"
-                data-lifecycle-action="restore"
-              >
-                {t("Restore")}
-              </button>
-            )}
-            {/* Purge is the ONE lifecycle action the endpoint gates on
+          {/* Purge is the ONE lifecycle action the endpoint gates on
                 `redirect.delete` (every other action needs `redirect.update`),
                 so it is gated here on delete and nothing else. */}
-            {canDeleteRedirect && (
-              <button
-                type="button"
-                class="btn-inline btn-inline--danger"
-                id="redirect-purge-btn"
-                data-lifecycle-action="purge"
-              >
-                {t("Purge permanently")}
-              </button>
-            )}
-          </div>
-        </form>
-      </section>
-    )
-  }
+          {canDeleteRedirect && (
+            <button
+              type="button"
+              class="btn-inline btn-inline--danger"
+              id="redirect-purge-btn"
+              data-lifecycle-action="purge"
+            >
+              {t("Purge permanently")}
+            </button>
+          )}
+        </div>
+      </form>
+    </section>
+  )}
 
   <!-- ================= 404 governance ================= -->
   <section class="admin-section fade-in-up" aria-labelledby="not-found-title">
@@ -1137,166 +1098,156 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       <span class="count-pill">{observations.length}</span>
     </h2>
 
-    {
-      !canReadNotFound && (
-        <p class="state-notice" id="not-found-denied">
-          {t("You do not have permission to view the 404 log.")}
-        </p>
-      )
-    }
+    {!canReadNotFound && (
+      <p class="state-notice" id="not-found-denied">
+        {t("You do not have permission to view the 404 log.")}
+      </p>
+    )}
 
-    {
-      canReadNotFound && loadError && (
-        <p class="state-notice" id="not-found-error">
-          {t(
-            "The 404 log could not be loaded right now. Please try again later."
-          )}
-        </p>
-      )
-    }
+    {canReadNotFound && loadError && (
+      <p class="state-notice" id="not-found-error">
+        {t(
+          "The 404 log could not be loaded right now. Please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canReadNotFound && !loadError && (
-        <form method="get" class="admin-toolbar" id="not-found-filter-form">
-          <label for="not-found-unresolved">{t("Show")}</label>
-          <select id="not-found-unresolved" name="unresolvedOnly">
-            <option value="" selected={!unresolvedOnly}>
-              {t("all observations")}
-            </option>
-            <option value="true" selected={unresolvedOnly}>
-              {t("unresolved only")}
-            </option>
-          </select>
+    {canReadNotFound && !loadError && (
+      <form method="get" class="admin-toolbar" id="not-found-filter-form">
+        <label for="not-found-unresolved">{t("Show")}</label>
+        <select id="not-found-unresolved" name="unresolvedOnly">
+          <option value="" selected={!unresolvedOnly}>
+            {t("all observations")}
+          </option>
+          <option value="true" selected={unresolvedOnly}>
+            {t("unresolved only")}
+          </option>
+        </select>
 
-          {/* Carries the redirect panel's filters so switching this one does
+        {/* Carries the redirect panel's filters so switching this one does
               not silently reset them. */}
-          {qFilter.trim() && (
-            <input type="hidden" name="q" value={qFilter.trim()} />
-          )}
-          {stateFilter && (
-            <input type="hidden" name="state" value={stateFilter} />
-          )}
-          {targetTypeFilter && (
-            <input type="hidden" name="targetType" value={targetTypeFilter} />
-          )}
+        {qFilter.trim() && (
+          <input type="hidden" name="q" value={qFilter.trim()} />
+        )}
+        {stateFilter && (
+          <input type="hidden" name="state" value={stateFilter} />
+        )}
+        {targetTypeFilter && (
+          <input type="hidden" name="targetType" value={targetTypeFilter} />
+        )}
 
-          <button type="submit">{t("Apply")}</button>
-        </form>
-      )
-    }
+        <button type="submit">{t("Apply")}</button>
+      </form>
+    )}
 
-    {
-      canReadNotFound && !loadError && (
-        <p
-          id="not-found-action-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
-      )
-    }
+    {canReadNotFound && !loadError && (
+      <p
+        id="not-found-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )}
 
-    {
-      canReadNotFound && !loadError && (
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="not-found-table">
-            <caption class="sr-only">
-              {t("Privacy-minimized 404 observations, most-hit first")}
-            </caption>
-            <thead>
+    {canReadNotFound && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="not-found-table">
+          <caption class="sr-only">
+            {t("Privacy-minimized 404 observations, most-hit first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Path")}</th>
+              <th scope="col">{t("Referrer")}</th>
+              <th scope="col">{t("Hits")}</th>
+              <th scope="col">{t("Last seen")}</th>
+              <th scope="col">{t("Status")}</th>
+              {showNotFoundActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {observations.length === 0 ? (
               <tr>
-                <th scope="col">{t("Path")}</th>
-                <th scope="col">{t("Referrer")}</th>
-                <th scope="col">{t("Hits")}</th>
-                <th scope="col">{t("Last seen")}</th>
-                <th scope="col">{t("Status")}</th>
-                {showNotFoundActions && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {observations.length === 0 ? (
-                <tr>
-                  <td
-                    class="data-table-empty"
-                    colspan={showNotFoundActions ? 6 : 5}
-                  >
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✓
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No 404s recorded")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Broken links visitors hit on this tenant's public site will be aggregated here."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                observations.map((row) => (
-                  <tr data-observation-row={row.id}>
-                    <td data-label="Path">
-                      <span class="cell-code">{row.normalizedPath}</span>
-                    </td>
-                    <td data-label="Referrer">
-                      {row.referrerDomain ? (
-                        <span class="cell-muted">{row.referrerDomain}</span>
-                      ) : (
-                        <span class="cell-muted">—</span>
+                <td
+                  class="data-table-empty"
+                  colspan={showNotFoundActions ? 6 : 5}
+                >
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No 404s recorded")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Broken links visitors hit on this tenant's public site will be aggregated here."
                       )}
-                    </td>
-                    <td data-label="Hits">{row.hitCount}</td>
-                    <td data-label="Last seen">
-                      <span class="cell-muted">{row.lastSeenAt}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={row.resolvedAt ? "success" : "warning"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {row.resolvedAt ? "resolved" : "open"}
-                      </span>
-                    </td>
-                    {showNotFoundActions && (
-                      <td data-label="Actions" class="stacked-block">
-                        <div class="row-actions">
-                          <input
-                            type="text"
-                            placeholder="redirect rule id (optional)"
-                            aria-label={`Suggested redirect rule id for ${row.normalizedPath}`}
-                            data-observation-suggested={row.id}
-                            value={row.suggestedRedirectId ?? ""}
-                          />
-                          <button
-                            type="button"
-                            class="module-toggle observation-resolve-btn"
-                            data-observation-id={row.id}
-                          >
-                            {t("Resolve")}
-                          </button>
-                          <button
-                            type="button"
-                            class="btn-inline btn-inline--danger observation-dismiss-btn"
-                            data-observation-id={row.id}
-                            data-observation-path={row.normalizedPath}
-                          >
-                            {t("Dismiss")}
-                          </button>
-                        </div>
-                      </td>
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              observations.map((row) => (
+                <tr data-observation-row={row.id}>
+                  <td data-label="Path">
+                    <span class="cell-code">{row.normalizedPath}</span>
+                  </td>
+                  <td data-label="Referrer">
+                    {row.referrerDomain ? (
+                      <span class="cell-muted">{row.referrerDomain}</span>
+                    ) : (
+                      <span class="cell-muted">—</span>
                     )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+                  </td>
+                  <td data-label="Hits">{row.hitCount}</td>
+                  <td data-label="Last seen">
+                    <span class="cell-muted">{row.lastSeenAt}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={row.resolvedAt ? "success" : "warning"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {row.resolvedAt ? "resolved" : "open"}
+                    </span>
+                  </td>
+                  {showNotFoundActions && (
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        <input
+                          type="text"
+                          placeholder="redirect rule id (optional)"
+                          aria-label={`Suggested redirect rule id for ${row.normalizedPath}`}
+                          data-observation-suggested={row.id}
+                          value={row.suggestedRedirectId ?? ""}
+                        />
+                        <button
+                          type="button"
+                          class="module-toggle observation-resolve-btn"
+                          data-observation-id={row.id}
+                        >
+                          {t("Resolve")}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-inline btn-inline--danger observation-dismiss-btn"
+                          data-observation-id={row.id}
+                          data-observation-path={row.normalizedPath}
+                        >
+                          {t("Dismiss")}
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )}
   </section>
 </AdminLayout>
 

@@ -431,925 +431,892 @@ const selectedPost = selectedPostId
 ---
 
 <AdminLayout title={t("Blog posts")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "The post lifecycle: draft, review, scheduled, published, archived. Pages, taxonomy, presentation and homepage composition are separate screens. Scheduled posts are published by"
-      )
-    }<code>{t("blog:publish:scheduled")}</code>{
-      t("\u2014 scheduling sets the time, it does not publish.")
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "The post lifecycle: draft, review, scheduled, published, archived. Pages, taxonomy, presentation and homepage composition are separate screens. Scheduled posts are published by"
+    )}
+    <code>{t("blog:publish:scheduled")}</code>
+    {t("\u2014 scheduling sets the time, it does not publish.")}
+  </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="blog-denied">
-        {t("You do not have permission to view blog posts.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="blog-denied">
+      {t("You do not have permission to view blog posts.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="blog-error">
-        {t(
-          "Posts could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="blog-error">
+      {t(
+        "Posts could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <p
-        id="blog-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
+  {canRead && !loadError && (
+    <p id="blog-action-error" class="admin-create-error" role="alert" hidden />
+  )}
+
+  {canRead && !loadError && (
+    <form method="get" class="admin-toolbar fade-in-up" id="post-filter-form">
+      <label for="filter-search">{t("Search titles")}</label>
+      <input
+        id="filter-search"
+        name="search"
+        type="search"
+        value={searchFilter}
+        autocomplete="off"
       />
-    )
-  }
 
-  {
-    canRead && !loadError && (
-      <form method="get" class="admin-toolbar fade-in-up" id="post-filter-form">
-        <label for="filter-search">{t("Search titles")}</label>
-        <input
-          id="filter-search"
-          name="search"
-          type="search"
-          value={searchFilter}
-          autocomplete="off"
-        />
-
-        <label for="filter-status">{t("Status")}</label>
-        <select id="filter-status" name="status">
-          <option value="" selected={statusFilter === undefined}>
-            {t("Any status")}
+      <label for="filter-status">{t("Status")}</label>
+      <select id="filter-status" name="status">
+        <option value="" selected={statusFilter === undefined}>
+          {t("Any status")}
+        </option>
+        {BLOG_CONTENT_STATUSES.map((value) => (
+          <option value={value} selected={statusFilter === value}>
+            {value}
           </option>
-          {BLOG_CONTENT_STATUSES.map((value) => (
-            <option value={value} selected={statusFilter === value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        ))}
+      </select>
 
-        <button type="submit">{t("Apply filters")}</button>
+      <button type="submit">{t("Apply filters")}</button>
 
-        {/* Carried across submit, so applying a filter does not silently
+      {/* Carried across submit, so applying a filter does not silently
             bounce the operator out of the bin. */}
-        {showsBin && <input type="hidden" name="view" value="deleted" />}
+      {showsBin && <input type="hidden" name="view" value="deleted" />}
 
-        <a
-          class="quick-link"
-          href={linkWith({ view: showsBin ? null : "deleted" })}
-        >
-          {showsBin ? "← Back to live posts" : "View deleted posts"}
-        </a>
-      </form>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="post-list-title"
+      <a
+        class="quick-link"
+        href={linkWith({ view: showsBin ? null : "deleted" })}
       >
-        <h2 class="admin-section-title" id="post-list-title">
-          {showsBin ? "Deleted posts" : "Posts"}
-          <span class="count-pill">{total}</span>
-        </h2>
+        {showsBin ? "← Back to live posts" : "View deleted posts"}
+      </a>
+    </form>
+  )}
 
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="blog-posts-table">
-            <caption class="sr-only">
-              {t("Blog posts, most recently updated first.")}
-            </caption>
-            <thead>
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" aria-labelledby="post-list-title">
+      <h2 class="admin-section-title" id="post-list-title">
+        {showsBin ? "Deleted posts" : "Posts"}
+        <span class="count-pill">{total}</span>
+      </h2>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="blog-posts-table">
+          <caption class="sr-only">
+            {t("Blog posts, most recently updated first.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Title")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Visibility")}</th>
+              <th scope="col">{t("Published")}</th>
+              <th scope="col">{t("Updated")}</th>
+              {showsRowActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {posts.length === 0 ? (
               <tr>
-                <th scope="col">{t("Title")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Visibility")}</th>
-                <th scope="col">{t("Published")}</th>
-                <th scope="col">{t("Updated")}</th>
-                {showsRowActions && <th scope="col">{t("Actions")}</th>}
+                <td class="data-table-empty" colspan={postColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✎
+                    </span>
+                    <span class="empty-state-title">
+                      {showsBin
+                        ? "Nothing in the bin"
+                        : hasFilters
+                          ? "No posts match these filters"
+                          : "No posts yet"}
+                    </span>
+                    <span class="empty-state-text">
+                      {showsBin
+                        ? "Deleted posts appear here until they are purged."
+                        : hasFilters
+                          ? "Clear or widen the filters above to see more posts."
+                          : "Create a draft below to get started."}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {posts.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={postColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✎
-                      </span>
-                      <span class="empty-state-title">
-                        {showsBin
-                          ? "Nothing in the bin"
-                          : hasFilters
-                            ? "No posts match these filters"
-                            : "No posts yet"}
-                      </span>
-                      <span class="empty-state-text">
-                        {showsBin
-                          ? "Deleted posts appear here until they are purged."
-                          : hasFilters
-                            ? "Clear or widen the filters above to see more posts."
-                            : "Create a draft below to get started."}
-                      </span>
-                    </div>
+            ) : (
+              posts.map((post) => (
+                <tr data-post-row={post.id}>
+                  <td data-label="Title">
+                    <span set:text={post.title} />
+                    <span class="cell-muted">
+                      {" "}
+                      · <span class="cell-code">{post.slug}</span> ·{" "}
+                      {post.locale}
+                    </span>
                   </td>
-                </tr>
-              ) : (
-                posts.map((post) => (
-                  <tr data-post-row={post.id}>
-                    <td data-label="Title">
-                      <span set:text={post.title} />
-                      <span class="cell-muted">
-                        {" "}
-                        · <span class="cell-code">{post.slug}</span> ·{" "}
-                        {post.locale}
-                      </span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={STATUS_VARIANT[post.status] ?? "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {post.status}
-                      </span>
-                    </td>
-                    <td data-label="Visibility">
-                      <span class="cell-code">{post.visibility}</span>
-                    </td>
-                    <td data-label="Published">
-                      <span class="cell-muted">
-                        {formatTimestamp(post.publishedAt)}
-                      </span>
-                    </td>
-                    <td data-label="Updated">
-                      <span class="cell-muted">
-                        {formatTimestamp(post.updatedAt)}
-                      </span>
-                    </td>
-                    {showsRowActions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {canReadRevisions && (
-                            <a
-                              class="quick-link"
-                              href={linkWith({ post: post.id })}
-                            >
-                              {t("Revisions")}
-                              <span class="quick-link-arrow" aria-hidden="true">
-                                →
-                              </span>
-                            </a>
-                          )}
-                          {/* A binned post cannot be updated — the endpoint
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={STATUS_VARIANT[post.status] ?? "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {post.status}
+                    </span>
+                  </td>
+                  <td data-label="Visibility">
+                    <span class="cell-code">{post.visibility}</span>
+                  </td>
+                  <td data-label="Published">
+                    <span class="cell-muted">
+                      {formatTimestamp(post.publishedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Updated">
+                    <span class="cell-muted">
+                      {formatTimestamp(post.updatedAt)}
+                    </span>
+                  </td>
+                  {showsRowActions && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {canReadRevisions && (
+                          <a
+                            class="quick-link"
+                            href={linkWith({ post: post.id })}
+                          >
+                            {t("Revisions")}
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
+                        )}
+                        {/* A binned post cannot be updated — the endpoint
                               matches `deleted_at IS NULL` — so the editor is
                               offered on live rows only. */}
-                          {canUpdate && !showsBin && (
-                            <a
-                              class="quick-link"
-                              href={linkWith({ edit: post.id })}
-                            >
-                              {t("Edit")}
-                              <span class="quick-link-arrow" aria-hidden="true">
-                                →
-                              </span>
-                            </a>
-                          )}
-                          {/* Issue #592 — the article through the SAME public
+                        {canUpdate && !showsBin && (
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: post.id })}
+                          >
+                            {t("Edit")}
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
+                        )}
+                        {/* Issue #592 — the article through the SAME public
                               template, so an editor stops guessing. Same guard
                               as Edit: the person who may change it is the person
                               who may see it unpublished. Opens in a new tab
                               because it is a whole page, not a panel. */}
-                          {canUpdate && !showsBin && (
-                            <a
-                              class="quick-link"
-                              href={`/admin/blog/${post.id}/preview`}
-                              target="_blank"
-                              rel="noopener"
-                            >
-                              {t("Preview")}
-                              <span class="quick-link-arrow" aria-hidden="true">
-                                →
-                              </span>
-                            </a>
-                          )}
-                          {canUpdate &&
-                            !showsBin &&
-                            post.status === "draft" && (
-                              <button
-                                type="button"
-                                class="btn-inline post-submit-btn"
-                                data-post-id={post.id}
-                              >
-                                {t("Submit for review")}
-                              </button>
-                            )}
-                          {canPublish &&
-                            !showsBin &&
-                            post.status !== "published" && (
-                              <button
-                                type="button"
-                                class="btn-inline post-publish-btn"
-                                data-post-id={post.id}
-                              >
-                                {t("Publish")}
-                              </button>
-                            )}
-                          {canSchedule &&
-                            !showsBin &&
-                            post.status !== "published" && (
-                              <button
-                                type="button"
-                                class="btn-inline post-schedule-btn"
-                                data-post-id={post.id}
-                              >
-                                {t("Schedule")}
-                              </button>
-                            )}
-                          {canArchive &&
-                            !showsBin &&
-                            post.status === "published" && (
-                              <button
-                                type="button"
-                                class="btn-inline post-archive-btn"
-                                data-post-id={post.id}
-                              >
-                                {t("Archive")}
-                              </button>
-                            )}
-                          {/* Restore undoes the BIN, so it belongs to rows in
-                              the bin — not to `status === "archived"`, which is
-                              a different axis and makes the endpoint 404. */}
-                          {canRestore && showsBin && (
-                            <button
-                              type="button"
-                              class="btn-inline post-restore-btn"
-                              data-post-id={post.id}
-                            >
-                              {t("Restore")}
-                            </button>
-                          )}
-                          {canDelete && !showsBin && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger post-delete-btn"
-                              data-post-id={post.id}
-                              data-post-title={post.title}
-                            >
-                              {t("Delete")}
-                            </button>
-                          )}
-                          {/* `canPurgePost` accepts archived OR soft-deleted,
-                              so both views can offer it. */}
-                          {canPurge &&
-                            (showsBin || post.status === "archived") && (
-                              <button
-                                type="button"
-                                class="btn-inline btn-inline--danger post-purge-btn"
-                                data-post-id={post.id}
-                                data-post-title={post.title}
-                              >
-                                {t("Purge")}
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {total > pageSize && (
-          <div class="admin-toolbar">
-            {/* Page numbers, not a cursor: `listBlogPostsForAdmin` is
-                LIMIT/OFFSET by design for a human-browsed table, and its own
-                header comment records that choice. */}
-            {pageNumber > 1 && (
-              <a
-                class="quick-link"
-                href={linkWith({ page: String(pageNumber - 1) })}
-              >
-                {t("\u2190 Previous")}
-              </a>
-            )}
-            <span class="cell-muted">
-              {t("Page")} {pageNumber} of {lastPage}
-            </span>
-            {pageNumber < lastPage && (
-              <a
-                class="quick-link"
-                href={linkWith({ page: String(pageNumber + 1) })}
-              >
-                {t("Next \u2192")}
-              </a>
-            )}
-          </div>
-        )}
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && canReadRevisions && selectedPostId && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="revisions-title"
-        id="blog-revisions"
-      >
-        <h2 class="admin-section-title" id="revisions-title">
-          {t("Revisions")}
-          <span class="count-pill">{revisions.length}</span>
-        </h2>
-        <p class="page-description">
-          <span class="cell-code">{selectedPostId}</span>
-          {selectedPost && (
-            <span class="cell-muted"> · {selectedPost.title}</span>
-          )}
-          {" · "}
-          <a href={linkWith({ post: null })}>{t("Close")}</a>
-        </p>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Revisions for the selected post.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">{t("Title at revision")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Note")}</th>
-                <th scope="col">{t("Created")}</th>
-                {canRestoreRevisions && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {revisions.length === 0 ? (
-                <tr>
-                  <td
-                    class="data-table-empty"
-                    colspan={canRestoreRevisions ? 6 : 5}
-                  >
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌸
-                      </span>
-                      <span class="empty-state-title">{t("No revisions")}</span>
-                      <span class="empty-state-text">
-                        {t(
-                          "A revision is recorded when a post is edited \u2014 or the id does not name a post in this tenant."
+                        {canUpdate && !showsBin && (
+                          <a
+                            class="quick-link"
+                            href={`/admin/blog/${post.id}/preview`}
+                            target="_blank"
+                            rel="noopener"
+                          >
+                            {t("Preview")}
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
                         )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                revisions.map((revision) => (
-                  <tr>
-                    <td data-label="#">{revision.revisionNumber}</td>
-                    <td data-label="Title at revision">
-                      <span set:text={revision.title} />
-                    </td>
-                    <td data-label="Status">
-                      <span class="cell-code">{revision.status}</span>
-                    </td>
-                    <td data-label="Note">
-                      <span
-                        class="cell-muted"
-                        set:text={revision.changeNote ?? "—"}
-                      />
-                    </td>
-                    <td data-label="Created">
-                      <span class="cell-muted">
-                        {formatTimestamp(revision.createdAt)}
-                      </span>
-                    </td>
-                    {canRestoreRevisions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
+                        {canUpdate && !showsBin && post.status === "draft" && (
                           <button
                             type="button"
-                            class="btn-inline revision-restore-btn"
-                            data-post-id={selectedPostId}
-                            data-revision-id={revision.id}
-                            data-revision-number={String(
-                              revision.revisionNumber
-                            )}
+                            class="btn-inline post-submit-btn"
+                            data-post-id={post.id}
+                          >
+                            {t("Submit for review")}
+                          </button>
+                        )}
+                        {canPublish &&
+                          !showsBin &&
+                          post.status !== "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-publish-btn"
+                              data-post-id={post.id}
+                            >
+                              {t("Publish")}
+                            </button>
+                          )}
+                        {canSchedule &&
+                          !showsBin &&
+                          post.status !== "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-schedule-btn"
+                              data-post-id={post.id}
+                            >
+                              {t("Schedule")}
+                            </button>
+                          )}
+                        {canArchive &&
+                          !showsBin &&
+                          post.status === "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-archive-btn"
+                              data-post-id={post.id}
+                            >
+                              {t("Archive")}
+                            </button>
+                          )}
+                        {/* Restore undoes the BIN, so it belongs to rows in
+                              the bin — not to `status === "archived"`, which is
+                              a different axis and makes the endpoint 404. */}
+                        {canRestore && showsBin && (
+                          <button
+                            type="button"
+                            class="btn-inline post-restore-btn"
+                            data-post-id={post.id}
                           >
                             {t("Restore")}
                           </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canUpdate && !loadError && editingPost && (
-      <section class="admin-section fade-in-up" aria-labelledby="edit-title">
-        <h2 class="admin-section-title" id="edit-title">
-          {t("Edit post")}
-        </h2>
-        <form id="post-edit-form" class="admin-create-form">
-          <p class="form-legend">
-            <span class="cell-code">{editingPost.id}</span>
-            {" · "}
-            <a href={linkWith({ edit: null })}>{t("Close")}</a>
-          </p>
-          <p class="form-legend">
-            {t(
-              "A partial update: only the fields below are sent, so a change made elsewhere to the SEO fields, terms or featured media is not clobbered by a stale copy of them."
+                        )}
+                        {canDelete && !showsBin && (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger post-delete-btn"
+                            data-post-id={post.id}
+                            data-post-title={post.title}
+                          >
+                            {t("Delete")}
+                          </button>
+                        )}
+                        {/* `canPurgePost` accepts archived OR soft-deleted,
+                              so both views can offer it. */}
+                        {canPurge &&
+                          (showsBin || post.status === "archived") && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger post-purge-btn"
+                              data-post-id={post.id}
+                              data-post-title={post.title}
+                            >
+                              {t("Purge")}
+                            </button>
+                          )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
             )}
-          </p>
-          <p
-            id="post-edit-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
+          </tbody>
+        </table>
+      </div>
 
-          <input type="hidden" id="edit-post-id" value={editingPost.id} />
+      {total > pageSize && (
+        <div class="admin-toolbar">
+          {/* Page numbers, not a cursor: `listBlogPostsForAdmin` is
+                LIMIT/OFFSET by design for a human-browsed table, and its own
+                header comment records that choice. */}
+          {pageNumber > 1 && (
+            <a
+              class="quick-link"
+              href={linkWith({ page: String(pageNumber - 1) })}
+            >
+              {t("\u2190 Previous")}
+            </a>
+          )}
+          <span class="cell-muted">
+            {t("Page")} {pageNumber} of {lastPage}
+          </span>
+          {pageNumber < lastPage && (
+            <a
+              class="quick-link"
+              href={linkWith({ page: String(pageNumber + 1) })}
+            >
+              {t("Next \u2192")}
+            </a>
+          )}
+        </div>
+      )}
+    </section>
+  )}
 
-          <label for="edit-title-field">
-            {t("Title")}
-            <input
-              type="text"
-              id="edit-title-field"
-              name="title"
-              required
-              maxlength={MAX_TITLE_LENGTH}
-              value={editingPost.title}
-              autocomplete="off"
-            />
-          </label>
+  {canRead && !loadError && canReadRevisions && selectedPostId && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="revisions-title"
+      id="blog-revisions"
+    >
+      <h2 class="admin-section-title" id="revisions-title">
+        {t("Revisions")}
+        <span class="count-pill">{revisions.length}</span>
+      </h2>
+      <p class="page-description">
+        <span class="cell-code">{selectedPostId}</span>
+        {selectedPost && (
+          <span class="cell-muted"> · {selectedPost.title}</span>
+        )}
+        {" · "}
+        <a href={linkWith({ post: null })}>{t("Close")}</a>
+      </p>
 
-          <label for="edit-slug">
-            {t("Slug")}
-            <input
-              type="text"
-              id="edit-slug"
-              name="slug"
-              required
-              value={editingPost.slug}
-              autocomplete="off"
-            />
-          </label>
-
-          <label for="edit-visibility">
-            {t("Visibility")}
-            <select id="edit-visibility" name="visibility">
-              {BLOG_CONTENT_VISIBILITIES.map((value) => (
-                <option
-                  value={value}
-                  selected={editingPost.visibility === value}
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Revisions for the selected post.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">{t("Title at revision")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Note")}</th>
+              <th scope="col">{t("Created")}</th>
+              {canRestoreRevisions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {revisions.length === 0 ? (
+              <tr>
+                <td
+                  class="data-table-empty"
+                  colspan={canRestoreRevisions ? 6 : 5}
                 >
-                  {value}
-                </option>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌸
+                    </span>
+                    <span class="empty-state-title">{t("No revisions")}</span>
+                    <span class="empty-state-text">
+                      {t(
+                        "A revision is recorded when a post is edited \u2014 or the id does not name a post in this tenant."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              revisions.map((revision) => (
+                <tr>
+                  <td data-label="#">{revision.revisionNumber}</td>
+                  <td data-label="Title at revision">
+                    <span set:text={revision.title} />
+                  </td>
+                  <td data-label="Status">
+                    <span class="cell-code">{revision.status}</span>
+                  </td>
+                  <td data-label="Note">
+                    <span
+                      class="cell-muted"
+                      set:text={revision.changeNote ?? "—"}
+                    />
+                  </td>
+                  <td data-label="Created">
+                    <span class="cell-muted">
+                      {formatTimestamp(revision.createdAt)}
+                    </span>
+                  </td>
+                  {canRestoreRevisions && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        <button
+                          type="button"
+                          class="btn-inline revision-restore-btn"
+                          data-post-id={selectedPostId}
+                          data-revision-id={revision.id}
+                          data-revision-number={String(revision.revisionNumber)}
+                        >
+                          {t("Restore")}
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canUpdate && !loadError && editingPost && (
+    <section class="admin-section fade-in-up" aria-labelledby="edit-title">
+      <h2 class="admin-section-title" id="edit-title">
+        {t("Edit post")}
+      </h2>
+      <form id="post-edit-form" class="admin-create-form">
+        <p class="form-legend">
+          <span class="cell-code">{editingPost.id}</span>
+          {" · "}
+          <a href={linkWith({ edit: null })}>{t("Close")}</a>
+        </p>
+        <p class="form-legend">
+          {t(
+            "A partial update: only the fields below are sent, so a change made elsewhere to the SEO fields, terms or featured media is not clobbered by a stale copy of them."
+          )}
+        </p>
+        <p
+          id="post-edit-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <input type="hidden" id="edit-post-id" value={editingPost.id} />
+
+        <label for="edit-title-field">
+          {t("Title")}
+          <input
+            type="text"
+            id="edit-title-field"
+            name="title"
+            required
+            maxlength={MAX_TITLE_LENGTH}
+            value={editingPost.title}
+            autocomplete="off"
+          />
+        </label>
+
+        <label for="edit-slug">
+          {t("Slug")}
+          <input
+            type="text"
+            id="edit-slug"
+            name="slug"
+            required
+            value={editingPost.slug}
+            autocomplete="off"
+          />
+        </label>
+
+        <label for="edit-visibility">
+          {t("Visibility")}
+          <select id="edit-visibility" name="visibility">
+            {BLOG_CONTENT_VISIBILITIES.map((value) => (
+              <option value={value} selected={editingPost.visibility === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label for="edit-excerpt">
+          {t("Excerpt (optional)")}
+          <textarea
+            id="edit-excerpt"
+            name="excerpt"
+            rows="2"
+            maxlength={MAX_EXCERPT_LENGTH}
+            set:text={editingPost.excerpt ?? ""}
+          />
+        </label>
+
+        <div class="pt-editor" id="edit-body-editor">
+          <div class="pt-toolbar" role="toolbar" aria-label={t("Formatting")}>
+            <button type="button" class="pt-mark" data-mark="strong">
+              <strong>B</strong>
+            </button>
+            <button type="button" class="pt-mark" data-mark="em">
+              <em>I</em>
+            </button>
+            <button type="button" class="pt-mark" data-mark="code">
+              {"<>"}
+            </button>
+            <button type="button" class="pt-link">
+              {t("Link")}
+            </button>
+            <button type="button" class="pt-unlink">
+              {t("Unlink")}
+            </button>
+            <select class="pt-style" aria-label={t("Block style")}>
+              {PORTABLE_TEXT_BLOCK_STYLES.map((style) => (
+                <option value={style}>{style}</option>
               ))}
             </select>
-          </label>
-
-          <label for="edit-excerpt">
-            {t("Excerpt (optional)")}
-            <textarea
-              id="edit-excerpt"
-              name="excerpt"
-              rows="2"
-              maxlength={MAX_EXCERPT_LENGTH}
-              set:text={editingPost.excerpt ?? ""}
-            />
-          </label>
-
-          <div class="pt-editor" id="edit-body-editor">
-            <div class="pt-toolbar" role="toolbar" aria-label={t("Formatting")}>
-              <button type="button" class="pt-mark" data-mark="strong">
-                <strong>B</strong>
-              </button>
-              <button type="button" class="pt-mark" data-mark="em">
-                <em>I</em>
-              </button>
-              <button type="button" class="pt-mark" data-mark="code">
-                {"<>"}
-              </button>
-              <button type="button" class="pt-link">
-                {t("Link")}
-              </button>
-              <button type="button" class="pt-unlink">
-                {t("Unlink")}
-              </button>
-              <select class="pt-style" aria-label={t("Block style")}>
-                {PORTABLE_TEXT_BLOCK_STYLES.map((style) => (
-                  <option value={style}>{style}</option>
-                ))}
-              </select>
-              <button type="button" class="pt-list" data-list="bullet">
-                {t("Bullet")}
-              </button>
-              <button type="button" class="pt-list" data-list="number">
-                {t("Numbered")}
-              </button>
-              <button type="button" class="pt-add">
-                {t("Add block")}
-              </button>
-            </div>
-
-            <div class="pt-rows" id="edit-body-rows">
-              {editorRows.map((row) =>
-                row.opaque ? (
-                  <div
-                    class="pt-row pt-row--opaque"
-                    data-opaque={JSON.stringify(row.node)}
-                  >
-                    <span class="pt-opaque-label">
-                      {describeOpaqueNode(row.node)}
-                    </span>
-                    <span class="cell-muted">
-                      {t("Preserved as-is — edit it in the media library.")}
-                    </span>
-                  </div>
-                ) : (
-                  <div
-                    class="pt-row"
-                    data-key={(row.node as PortableTextBlock)._key}
-                    data-style={(row.node as PortableTextBlock).style}
-                    data-list={(row.node as PortableTextBlock).listItem ?? ""}
-                    data-markdefs={JSON.stringify(
-                      (row.node as PortableTextBlock).markDefs ?? []
-                    )}
-                  >
-                    <div
-                      class="pt-block"
-                      contenteditable="true"
-                      set:html={blockToEditableHtml(
-                        row.node as PortableTextBlock
-                      )}
-                    />
-                  </div>
-                )
-              )}
-            </div>
+            <button type="button" class="pt-list" data-list="bullet">
+              {t("Bullet")}
+            </button>
+            <button type="button" class="pt-list" data-list="number">
+              {t("Numbered")}
+            </button>
+            <button type="button" class="pt-add">
+              {t("Add block")}
+            </button>
           </div>
 
-          {/* Issue #595 — terms. The vocabulary is read from the BROWSER
+          <div class="pt-rows" id="edit-body-rows">
+            {editorRows.map((row) =>
+              row.opaque ? (
+                <div
+                  class="pt-row pt-row--opaque"
+                  data-opaque={JSON.stringify(row.node)}
+                >
+                  <span class="pt-opaque-label">
+                    {describeOpaqueNode(row.node)}
+                  </span>
+                  <span class="cell-muted">
+                    {t("Preserved as-is — edit it in the media library.")}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  class="pt-row"
+                  data-key={(row.node as PortableTextBlock)._key}
+                  data-style={(row.node as PortableTextBlock).style}
+                  data-list={(row.node as PortableTextBlock).listItem ?? ""}
+                  data-markdefs={JSON.stringify(
+                    (row.node as PortableTextBlock).markDefs ?? []
+                  )}
+                >
+                  <div
+                    class="pt-block"
+                    contenteditable="true"
+                    set:html={blockToEditableHtml(
+                      row.node as PortableTextBlock
+                    )}
+                  />
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Issue #595 — terms. The vocabulary is read from the BROWSER
               against `GET /api/v1/blog/terms`, which enforces
               `blog_content.taxonomies.read` itself, so this screen still gates
               on `posts.*` only. Grouped by vocabulary because sql/131 made
               category/tag/channel/topic four different questions. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Categories, channels and topics")}</legend>
-            <div
-              class="term-picker"
-              id="edit-term-picker"
-              data-selected={editingPostTermIds.join(",")}
-            >
-              <p class="form-hint">{t("Loading vocabularies…")}</p>
-            </div>
-          </fieldset>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Categories, channels and topics")}</legend>
+          <div
+            class="term-picker"
+            id="edit-term-picker"
+            data-selected={editingPostTermIds.join(",")}
+          >
+            <p class="form-hint">{t("Loading vocabularies…")}</p>
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
+        {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
               sql/131 made institution a table, not a taxonomy type, and it is
               guarded by `institutions.read` rather than `taxonomies.read`, so
               an editor can hold one permission and not the other and the two
               surfaces must fail independently. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Institutions")}</legend>
-            <div
-              class="institution-picker"
-              id="edit-institution-picker"
-              data-selected={editingPostInstitutionIds.join(",")}
-            >
-              <p class="form-hint">{t("Loading institutions…")}</p>
-            </div>
-          </fieldset>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Institutions")}</legend>
+          <div
+            class="institution-picker"
+            id="edit-institution-picker"
+            data-selected={editingPostInstitutionIds.join(",")}
+          >
+            <p class="form-hint">{t("Loading institutions…")}</p>
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — the featured image. The catalogue is read from the
+        {/* Issue #595 — the featured image. The catalogue is read from the
               BROWSER against `GET /api/v1/media/objects/list`, which enforces
               `media_library.media.read` itself: this screen holds
               `blog_content.posts.*` and nothing else, and borrowing another
               module's permission server-side is a decision the contract test
               exists to force. A caller without that permission is told so,
               rather than shown an empty library. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Featured image")}</legend>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Featured image")}</legend>
 
-            <input
-              type="hidden"
-              id="edit-featured-media-id"
-              name="featuredMediaId"
-              value={editingPost.featuredMediaId ?? ""}
-            />
+          <input
+            type="hidden"
+            id="edit-featured-media-id"
+            name="featuredMediaId"
+            value={editingPost.featuredMediaId ?? ""}
+          />
 
-            <div class="media-choice" id="edit-featured-choice">
-              <p class="form-hint" id="edit-featured-label">
-                {editingPost.featuredMediaId
-                  ? t("An image is attached.")
-                  : t("No image attached.")}
-              </p>
-              <div class="media-choice-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary media-pick-btn"
-                  data-target="edit-featured-media-id"
-                  data-label="edit-featured-label"
-                >
-                  {t("Choose image")}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary media-clear-btn"
-                  data-target="edit-featured-media-id"
-                  data-label="edit-featured-label"
-                >
-                  {t("Remove image")}
-                </button>
-              </div>
-              <div class="media-picker-panel" hidden />
+          <div class="media-choice" id="edit-featured-choice">
+            <p class="form-hint" id="edit-featured-label">
+              {editingPost.featuredMediaId
+                ? t("An image is attached.")
+                : t("No image attached.")}
+            </p>
+            <div class="media-choice-actions">
+              <button
+                type="button"
+                class="btn btn-secondary media-pick-btn"
+                data-target="edit-featured-media-id"
+                data-label="edit-featured-label"
+              >
+                {t("Choose image")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary media-clear-btn"
+                data-target="edit-featured-media-id"
+                data-label="edit-featured-label"
+              >
+                {t("Remove image")}
+              </button>
             </div>
-          </fieldset>
+            <div class="media-picker-panel" hidden />
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — same three fields as the create form, prefilled.
+        {/* Issue #595 — same three fields as the create form, prefilled.
               Clearing one sends `null` rather than omitting it: the PATCH
               validator reads absent as "leave unchanged" and `null` as
               "clear", so an omitted empty field would make these
               write-once. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Search & social (optional)")}</legend>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Search & social (optional)")}</legend>
 
-            <label for="edit-seo-title">
-              {t("SEO title")}
-              <input
-                type="text"
-                id="edit-seo-title"
-                name="seoTitle"
-                maxlength={MAX_SEO_TITLE_LENGTH}
-                value={editingPost.seoTitle ?? ""}
-              />
-              <span class="form-hint">
-                {t("Falls back to the article title when empty.")}
-              </span>
-            </label>
+          <label for="edit-seo-title">
+            {t("SEO title")}
+            <input
+              type="text"
+              id="edit-seo-title"
+              name="seoTitle"
+              maxlength={MAX_SEO_TITLE_LENGTH}
+              value={editingPost.seoTitle ?? ""}
+            />
+            <span class="form-hint">
+              {t("Falls back to the article title when empty.")}
+            </span>
+          </label>
 
-            <label for="edit-meta-description">
-              {t("Meta description")}
-              <textarea
-                id="edit-meta-description"
-                name="metaDescription"
-                rows="2"
-                maxlength={MAX_META_DESCRIPTION_LENGTH}
-                set:text={editingPost.metaDescription ?? ""}
-              />
-            </label>
+          <label for="edit-meta-description">
+            {t("Meta description")}
+            <textarea
+              id="edit-meta-description"
+              name="metaDescription"
+              rows="2"
+              maxlength={MAX_META_DESCRIPTION_LENGTH}
+              set:text={editingPost.metaDescription ?? ""}
+            />
+          </label>
 
-            <label for="edit-canonical-url">
-              {t("Canonical URL")}
-              <input
-                type="url"
-                id="edit-canonical-url"
-                name="canonicalUrl"
-                placeholder="https://"
-                value={editingPost.canonicalUrl ?? ""}
-              />
-              <span class="form-hint">
-                {t(
-                  "Set this only when this article is a copy of one that lives elsewhere."
-                )}
-              </span>
-            </label>
-          </fieldset>
+          <label for="edit-canonical-url">
+            {t("Canonical URL")}
+            <input
+              type="url"
+              id="edit-canonical-url"
+              name="canonicalUrl"
+              placeholder="https://"
+              value={editingPost.canonicalUrl ?? ""}
+            />
+            <span class="form-hint">
+              {t(
+                "Set this only when this article is a copy of one that lives elsewhere."
+              )}
+            </span>
+          </label>
+        </fieldset>
 
-          <button type="submit" id="post-edit-submit">
-            {t("Save post")}
-          </button>
-        </form>
-      </section>
-    )
-  }
+        <button type="submit" id="post-edit-submit">
+          {t("Save post")}
+        </button>
+      </form>
+    </section>
+  )}
 
-  {
-    canCreate && !loadError && (
-      <section class="admin-section fade-in-up" aria-labelledby="create-title">
-        <h2 class="admin-section-title" id="create-title">
-          {t("New draft")}
-        </h2>
-        <form id="post-create-form" class="admin-create-form">
-          <p class="form-legend">
-            {t(
-              "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
-            )}
-            <code>{t("paragraph")}</code>
-            {t("block, the only block type this editor writes.")}
-          </p>
-          <p
-            id="post-create-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
+  {canCreate && !loadError && (
+    <section class="admin-section fade-in-up" aria-labelledby="create-title">
+      <h2 class="admin-section-title" id="create-title">
+        {t("New draft")}
+      </h2>
+      <form id="post-create-form" class="admin-create-form">
+        <p class="form-legend">
+          {t(
+            "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
+          )}
+          <code>{t("paragraph")}</code>
+          {t("block, the only block type this editor writes.")}
+        </p>
+        <p
+          id="post-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
 
-          <label for="create-title-field">
-            {t("Title")}
-            {/* `maxlength` comes from the SAME constant the validator
+        <label for="create-title-field">
+          {t("Title")}
+          {/* `maxlength` comes from the SAME constant the validator
                 enforces, so the browser cannot accept what the server
                 rejects. */}
-            <input
-              type="text"
-              id="create-title-field"
-              name="title"
-              required
-              maxlength={MAX_TITLE_LENGTH}
-              autocomplete="off"
-            />
-          </label>
+          <input
+            type="text"
+            id="create-title-field"
+            name="title"
+            required
+            maxlength={MAX_TITLE_LENGTH}
+            autocomplete="off"
+          />
+        </label>
 
-          <label for="create-slug">
-            {t("Slug")}
-            <input
-              type="text"
-              id="create-slug"
-              name="slug"
-              required
-              autocomplete="off"
-              placeholder="url-safe-identifier"
-            />
-          </label>
+        <label for="create-slug">
+          {t("Slug")}
+          <input
+            type="text"
+            id="create-slug"
+            name="slug"
+            required
+            autocomplete="off"
+            placeholder="url-safe-identifier"
+          />
+        </label>
 
-          <label for="create-locale">
-            {t("Locale")}
-            <input
-              type="text"
-              id="create-locale"
-              name="locale"
-              value="id"
-              autocomplete="off"
-            />
-          </label>
+        <label for="create-locale">
+          {t("Locale")}
+          <input
+            type="text"
+            id="create-locale"
+            name="locale"
+            value="id"
+            autocomplete="off"
+          />
+        </label>
 
-          <label for="create-visibility">
-            {t("Visibility")}
-            <select id="create-visibility" name="visibility">
-              {BLOG_CONTENT_VISIBILITIES.map((value) => (
-                <option value={value}>{value}</option>
-              ))}
-            </select>
-          </label>
+        <label for="create-visibility">
+          {t("Visibility")}
+          <select id="create-visibility" name="visibility">
+            {BLOG_CONTENT_VISIBILITIES.map((value) => (
+              <option value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
 
-          <label for="create-excerpt">
-            {t("Excerpt (optional)")}
-            <textarea
-              id="create-excerpt"
-              name="excerpt"
-              rows="2"
-              maxlength={MAX_EXCERPT_LENGTH}
-            />
-          </label>
+        <label for="create-excerpt">
+          {t("Excerpt (optional)")}
+          <textarea
+            id="create-excerpt"
+            name="excerpt"
+            rows="2"
+            maxlength={MAX_EXCERPT_LENGTH}
+          />
+        </label>
 
-          {/* The field whose absence made this form unusable: the API requires
+        {/* The field whose absence made this form unusable: the API requires
               a non-empty `contentText`, and the screen sent `""`. No
               `maxlength` — the validator imposes no bound on the body, and a
               hand-typed one would be a limit no server enforces. */}
-          <label for="create-body">
-            {t("Body")}
-            <textarea id="create-body" name="body" rows="14" required />
-          </label>
+        <label for="create-body">
+          {t("Body")}
+          <textarea id="create-body" name="body" rows="14" required />
+        </label>
 
-          {/* Issue #595 — terms. The vocabulary is read from the BROWSER
+        {/* Issue #595 — terms. The vocabulary is read from the BROWSER
               against `GET /api/v1/blog/terms`, which enforces
               `blog_content.taxonomies.read` itself, so this screen still gates
               on `posts.*` only. Grouped by vocabulary because sql/131 made
               category/tag/channel/topic four different questions. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Categories, channels and topics")}</legend>
-            <div class="term-picker" id="create-term-picker" data-selected="">
-              <p class="form-hint">{t("Loading vocabularies…")}</p>
-            </div>
-          </fieldset>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Categories, channels and topics")}</legend>
+          <div class="term-picker" id="create-term-picker" data-selected="">
+            <p class="form-hint">{t("Loading vocabularies…")}</p>
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
+        {/* Issue #595 — institutions. A SEPARATE fetch from the terms one:
               sql/131 made institution a table, not a taxonomy type, and it is
               guarded by `institutions.read` rather than `taxonomies.read`, so
               an editor can hold one permission and not the other and the two
               surfaces must fail independently. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Institutions")}</legend>
-            <div
-              class="institution-picker"
-              id="create-institution-picker"
-              data-selected=""
-            >
-              <p class="form-hint">{t("Loading institutions…")}</p>
-            </div>
-          </fieldset>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Institutions")}</legend>
+          <div
+            class="institution-picker"
+            id="create-institution-picker"
+            data-selected=""
+          >
+            <p class="form-hint">{t("Loading institutions…")}</p>
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — the same picker as the edit form, driven by the same
+        {/* Issue #595 — the same picker as the edit form, driven by the same
               generic client wiring (`data-target`/`data-label`). */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Featured image")}</legend>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Featured image")}</legend>
 
-            <input
-              type="hidden"
-              id="create-featured-media-id"
-              name="featuredMediaId"
-              value=""
-            />
+          <input
+            type="hidden"
+            id="create-featured-media-id"
+            name="featuredMediaId"
+            value=""
+          />
 
-            <div class="media-choice" id="create-featured-choice">
-              <p class="form-hint" id="create-featured-label">
-                {t("No image attached.")}
-              </p>
-              <div class="media-choice-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary media-pick-btn"
-                  data-target="create-featured-media-id"
-                  data-label="create-featured-label"
-                >
-                  {t("Choose image")}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary media-clear-btn"
-                  data-target="create-featured-media-id"
-                  data-label="create-featured-label"
-                >
-                  {t("Remove image")}
-                </button>
-              </div>
-              <div class="media-picker-panel" hidden />
+          <div class="media-choice" id="create-featured-choice">
+            <p class="form-hint" id="create-featured-label">
+              {t("No image attached.")}
+            </p>
+            <div class="media-choice-actions">
+              <button
+                type="button"
+                class="btn btn-secondary media-pick-btn"
+                data-target="create-featured-media-id"
+                data-label="create-featured-label"
+              >
+                {t("Choose image")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary media-clear-btn"
+                data-target="create-featured-media-id"
+                data-label="create-featured-label"
+              >
+                {t("Remove image")}
+              </button>
             </div>
-          </fieldset>
+            <div class="media-picker-panel" hidden />
+          </div>
+        </fieldset>
 
-          {/* Issue #595 — every article used to publish with no meta
+        {/* Issue #595 — every article used to publish with no meta
               description and no canonical, and `seo_distribution` faithfully
               rendered that absence into `<head>` and into every share card.
               `maxlength` mirrors the validator's own bounds so the browser
               refuses what the server would refuse. */}
-          <fieldset class="admin-fieldset">
-            <legend>{t("Search & social (optional)")}</legend>
+        <fieldset class="admin-fieldset">
+          <legend>{t("Search & social (optional)")}</legend>
 
-            <label for="create-seo-title">
-              {t("SEO title")}
-              <input
-                type="text"
-                id="create-seo-title"
-                name="seoTitle"
-                maxlength={MAX_SEO_TITLE_LENGTH}
-              />
-              <span class="form-hint">
-                {t("Falls back to the article title when empty.")}
-              </span>
-            </label>
+          <label for="create-seo-title">
+            {t("SEO title")}
+            <input
+              type="text"
+              id="create-seo-title"
+              name="seoTitle"
+              maxlength={MAX_SEO_TITLE_LENGTH}
+            />
+            <span class="form-hint">
+              {t("Falls back to the article title when empty.")}
+            </span>
+          </label>
 
-            <label for="create-meta-description">
-              {t("Meta description")}
-              <textarea
-                id="create-meta-description"
-                name="metaDescription"
-                rows="2"
-                maxlength={MAX_META_DESCRIPTION_LENGTH}
-              />
-            </label>
+          <label for="create-meta-description">
+            {t("Meta description")}
+            <textarea
+              id="create-meta-description"
+              name="metaDescription"
+              rows="2"
+              maxlength={MAX_META_DESCRIPTION_LENGTH}
+            />
+          </label>
 
-            <label for="create-canonical-url">
-              {t("Canonical URL")}
-              <input
-                type="url"
-                id="create-canonical-url"
-                name="canonicalUrl"
-                placeholder="https://"
-              />
-              <span class="form-hint">
-                {t(
-                  "Set this only when this article is a copy of one that lives elsewhere."
-                )}
-              </span>
-            </label>
-          </fieldset>
+          <label for="create-canonical-url">
+            {t("Canonical URL")}
+            <input
+              type="url"
+              id="create-canonical-url"
+              name="canonicalUrl"
+              placeholder="https://"
+            />
+            <span class="form-hint">
+              {t(
+                "Set this only when this article is a copy of one that lives elsewhere."
+              )}
+            </span>
+          </label>
+        </fieldset>
 
-          <button type="submit" id="post-create-submit">
-            {t("Create draft")}
-          </button>
-        </form>
-      </section>
-    )
-  }
+        <button type="submit" id="post-create-submit">
+          {t("Create draft")}
+        </button>
+      </form>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

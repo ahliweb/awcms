@@ -196,269 +196,250 @@ function linkWith(overrides: Record<string, string | null>): string {
   )}
 >
   <div class="omes-cc">
-    {
-      !canSeeAnything && (
-        <p class="state-notice fade-in-up" id="omes-enrollments-denied">
-          {t("You do not have permission to manage OMES enrollment tokens.")}
-        </p>
-      )
-    }
+    {!canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-enrollments-denied">
+        {t("You do not have permission to manage OMES enrollment tokens.")}
+      </p>
+    )}
 
-    {
-      canSeeAnything && loadError && (
-        <p class="state-notice fade-in-up" id="omes-enrollments-error">
+    {canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-enrollments-error">
+        {t(
+          "The OMES enrollment-token console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )}
+
+    {canSeeAnything && !loadError && (
+      <p id="omes-enroll-err" class="admin-create-error" role="alert" hidden />
+    )}
+
+    {canSeeAnything && !loadError && (
+      <p id="enroll-token-msg" class="state-notice" role="status" hidden />
+    )}
+
+    {canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="issue-title"
+        id="omes-enrollments-issue"
+      >
+        <h2 class="admin-section-title" id="issue-title">
+          {t("Issue a token")}
+        </h2>
+        <p class="page-description">
           {t(
-            "The OMES enrollment-token console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+            "Only servers registered but not yet enrolled (status “offline”) are eligible — a server with a live worker already has valid credentials, and re-issuing one would let two worker identities exist for the same host."
           )}
         </p>
-      )
-    }
 
-    {
-      canSeeAnything && !loadError && (
-        <p
-          id="omes-enroll-err"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && (
-        <p id="enroll-token-msg" class="state-notice" role="status" hidden />
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="issue-title"
-          id="omes-enrollments-issue"
-        >
-          <h2 class="admin-section-title" id="issue-title">
-            {t("Issue a token")}
-          </h2>
-          <p class="page-description">
-            {t(
-              "Only servers registered but not yet enrolled (status “offline”) are eligible — a server with a live worker already has valid credentials, and re-issuing one would let two worker identities exist for the same host."
-            )}
-          </p>
-
-          {eligibleServers.length === 0 ? (
-            <div class="empty-state">
-              <span class="empty-state-icon" aria-hidden="true">
-                ▭
-              </span>
-              <span class="empty-state-title">
-                {t("No server is eligible for a new token")}
-              </span>
-              <span class="empty-state-text">
-                {t(
-                  "Register a server on the Servers screen first, or wait for an existing one to become eligible."
-                )}
-              </span>
-            </div>
-          ) : (
-            <div class="data-table-scroll">
-              <table class="data-table data-table--stack">
-                <caption class="sr-only">
-                  {t("Servers eligible for a new enrollment token.")}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{t("Hostname")}</th>
-                    <th scope="col">{t("Platform")}</th>
-                    <th scope="col">{t("Registered")}</th>
-                    <th scope="col">{t("Actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {eligibleServers.map((server) => (
-                    <tr>
-                      <td data-label="Hostname">
-                        <span class="cell-code">{server.hostname}</span>
-                      </td>
-                      <td data-label="Platform">
-                        <span class="cell-muted">
-                          {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
-                          {server.arch ?? "—"}
-                        </span>
-                      </td>
-                      <td data-label="Registered">
-                        <span class="cell-muted">{server.createdAt}</span>
-                      </td>
-                      <td data-label="Actions">
-                        <button
-                          type="button"
-                          class="btn-inline js-issue-tok"
-                          data-server-id={server.id}
-                        >
-                          {t("Issue token")}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="enrollments-title"
-          id="omes-enrollments-list"
-        >
-          <h2 class="admin-section-title" id="enrollments-title">
-            {t("Enrollment tokens")}
-            <span class="count-pill">{enrollments.length}</span>
-          </h2>
-
-          <form
-            method="get"
-            class="admin-create-form"
-            id="enrollment-filter-form"
-          >
-            <label for="filter-status">{t("Status")}</label>
-            <select id="filter-status" name="status">
-              <option value="" selected={statusFilter === undefined}>
-                {t("Any status")}
-              </option>
-              {STATUS_OPTIONS.map((value) => (
-                <option value={value} selected={statusFilter === value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-            <button type="submit">{t("Apply")}</button>
-          </form>
-
+        {eligibleServers.length === 0 ? (
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ▭
+            </span>
+            <span class="empty-state-title">
+              {t("No server is eligible for a new token")}
+            </span>
+            <span class="empty-state-text">
+              {t(
+                "Register a server on the Servers screen first, or wait for an existing one to become eligible."
+              )}
+            </span>
+          </div>
+        ) : (
           <div class="data-table-scroll">
-            <table
-              class="data-table data-table--stack"
-              id="omes-enrollments-table"
-            >
+            <table class="data-table data-table--stack">
               <caption class="sr-only">
-                {t("OMES worker enrollment tokens, newest first.")}
+                {t("Servers eligible for a new enrollment token.")}
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">{t("Server")}</th>
-                  <th scope="col">{t("Worker")}</th>
-                  <th scope="col">{t("Status")}</th>
-                  <th scope="col">{t("Public key fingerprint (SHA-256)")}</th>
-                  <th scope="col">{t("Challenge expires")}</th>
-                  <th scope="col">{t("Enrolled")}</th>
-                  <th scope="col">{t("Revoked")}</th>
+                  <th scope="col">{t("Hostname")}</th>
+                  <th scope="col">{t("Platform")}</th>
+                  <th scope="col">{t("Registered")}</th>
                   <th scope="col">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {enrollments.length === 0 ? (
+                {eligibleServers.map((server) => (
                   <tr>
-                    <td class="data-table-empty" colspan={8}>
-                      <div class="empty-state">
-                        <span class="empty-state-icon" aria-hidden="true">
-                          ▭
-                        </span>
-                        <span class="empty-state-title">
-                          {t("No enrollment tokens")}
-                        </span>
-                        <span class="empty-state-text">
-                          {t(
-                            "Issue one above, or wait for a worker to complete enrollment."
-                          )}
-                        </span>
-                      </div>
+                    <td data-label="Hostname">
+                      <span class="cell-code">{server.hostname}</span>
+                    </td>
+                    <td data-label="Platform">
+                      <span class="cell-muted">
+                        {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
+                        {server.arch ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Registered">
+                      <span class="cell-muted">{server.createdAt}</span>
+                    </td>
+                    <td data-label="Actions">
+                      <button
+                        type="button"
+                        class="btn-inline js-issue-tok"
+                        data-server-id={server.id}
+                      >
+                        {t("Issue token")}
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  enrollments.map((enrollment) => (
-                    <tr data-enrollment-row={enrollment.id}>
-                      <td data-label="Server">
-                        <span class="cell-code">{enrollment.hostname}</span>
-                      </td>
-                      <td data-label="Worker">
-                        <span class="cell-code">{enrollment.workerId}</span>
-                      </td>
-                      <td data-label="Status">
-                        <span
-                          class="status-badge"
-                          data-variant={
-                            STATUS_VARIANT[enrollment.status] ?? "neutral"
-                          }
-                        >
-                          <span class="status-dot" aria-hidden="true" />
-                          {enrollment.status}
-                        </span>
-                      </td>
-                      <td data-label="Fingerprint">
-                        {enrollment.publicKeyFingerprint ? (
-                          <span class="cell-code">
-                            {enrollment.publicKeyFingerprint}
-                          </span>
-                        ) : (
-                          <span class="cell-muted">
-                            {t("not yet presented")}
-                          </span>
-                        )}
-                      </td>
-                      <td data-label="Challenge expires">
-                        <span class="cell-muted">
-                          {formatTimestamp(enrollment.challengeExpiresAt)}
-                        </span>
-                      </td>
-                      <td data-label="Enrolled">
-                        <span class="cell-muted">
-                          {formatTimestamp(enrollment.enrolledAt)}
-                        </span>
-                      </td>
-                      <td data-label="Revoked">
-                        <span class="cell-muted">
-                          {formatTimestamp(enrollment.revokedAt)}
-                        </span>
-                      </td>
-                      <td data-label="Actions">
-                        {REVOCABLE_STATUSES.has(enrollment.status) ? (
-                          <button
-                            type="button"
-                            class="btn-inline btn-inline--danger js-revoke-tok"
-                            data-server-id={enrollment.serverRowId}
-                            data-worker-id={enrollment.workerId}
-                          >
-                            {t("Revoke")}
-                          </button>
-                        ) : (
-                          <span class="cell-muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+    )}
 
-          {nextCursor && (
-            <div class="admin-toolbar">
-              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-                {t("Next page")}
-                <span class="quick-link-arrow" aria-hidden="true">
-                  →
-                </span>
-              </a>
-            </div>
-          )}
-        </section>
-      )
-    }
+    {canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="enrollments-title"
+        id="omes-enrollments-list"
+      >
+        <h2 class="admin-section-title" id="enrollments-title">
+          {t("Enrollment tokens")}
+          <span class="count-pill">{enrollments.length}</span>
+        </h2>
+
+        <form
+          method="get"
+          class="admin-create-form"
+          id="enrollment-filter-form"
+        >
+          <label for="filter-status">{t("Status")}</label>
+          <select id="filter-status" name="status">
+            <option value="" selected={statusFilter === undefined}>
+              {t("Any status")}
+            </option>
+            {STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={statusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">{t("Apply")}</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="omes-enrollments-table"
+          >
+            <caption class="sr-only">
+              {t("OMES worker enrollment tokens, newest first.")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Server")}</th>
+                <th scope="col">{t("Worker")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Public key fingerprint (SHA-256)")}</th>
+                <th scope="col">{t("Challenge expires")}</th>
+                <th scope="col">{t("Enrolled")}</th>
+                <th scope="col">{t("Revoked")}</th>
+                <th scope="col">{t("Actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrollments.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={8}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▭
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No enrollment tokens")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Issue one above, or wait for a worker to complete enrollment."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                enrollments.map((enrollment) => (
+                  <tr data-enrollment-row={enrollment.id}>
+                    <td data-label="Server">
+                      <span class="cell-code">{enrollment.hostname}</span>
+                    </td>
+                    <td data-label="Worker">
+                      <span class="cell-code">{enrollment.workerId}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[enrollment.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {enrollment.status}
+                      </span>
+                    </td>
+                    <td data-label="Fingerprint">
+                      {enrollment.publicKeyFingerprint ? (
+                        <span class="cell-code">
+                          {enrollment.publicKeyFingerprint}
+                        </span>
+                      ) : (
+                        <span class="cell-muted">{t("not yet presented")}</span>
+                      )}
+                    </td>
+                    <td data-label="Challenge expires">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.challengeExpiresAt)}
+                      </span>
+                    </td>
+                    <td data-label="Enrolled">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.enrolledAt)}
+                      </span>
+                    </td>
+                    <td data-label="Revoked">
+                      <span class="cell-muted">
+                        {formatTimestamp(enrollment.revokedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Actions">
+                      {REVOCABLE_STATUSES.has(enrollment.status) ? (
+                        <button
+                          type="button"
+                          class="btn-inline btn-inline--danger js-revoke-tok"
+                          data-server-id={enrollment.serverRowId}
+                          data-worker-id={enrollment.workerId}
+                        >
+                          {t("Revoke")}
+                        </button>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )}
   </div>
 </AdminLayout>
 

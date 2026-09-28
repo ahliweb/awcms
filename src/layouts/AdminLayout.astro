@@ -385,23 +385,21 @@ const accountInitials =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title} · AWCMS</title>
-    {
-      /* The one inline script in this repo — must run before body paint or the
+    {/* The one inline script in this repo — must run before body paint or the
         shell flashes the wrong theme. CSP admits it by SHA-256; `set:html`
-        guarantees the rendered bytes are exactly the hashed constant. */
-    }
+        guarantees the rendered bytes are exactly the hashed constant. */}
     <script is:inline set:html={THEME_INIT_SCRIPT_BODY} />
   </head>
   <body class="admin-body">
-    <a class="skip-link" href="#admin-main">{t("Skip to main content")}</a>
+    <a class="skip-link" href="#admin-main">
+      {t("Skip to main content")}
+    </a>
 
     <div class="admin-shell">
-      {
-        /* CSS-only responsive drawer toggle (see admin.css). The checkbox,
+      {/* CSS-only responsive drawer toggle (see admin.css). The checkbox,
           topbar and layout row must stay SIBLINGS — admin.css drives the
           drawer with `:checked + .admin-topbar` / `:checked ~ .admin-layout`
-          selectors. */
-      }
+          selectors. */}
       <input
         type="checkbox"
         id="admin-nav-toggle"
@@ -416,61 +414,53 @@ const accountInitials =
             <span class="sr-only">{t("Toggle navigation menu")}</span>
           </label>
           <a href="/admin" class="admin-brand">
-            {
-              /* ADR-0120 — a letterform tile, not an image file: it costs no
+            {/* ADR-0120 — a letterform tile, not an image file: it costs no
                 request on a page that renders for every `/admin/*` hit, it
-                inherits the theme, and it cannot 404. */
-            }
-            <span class="admin-brand-mark" aria-hidden="true">A</span>
-            {
-              /* Wrapped so the wordmark can be hidden at phone widths while the
+                inherits the theme, and it cannot 404. */}
+            <span class="admin-brand-mark" aria-hidden="true">
+              A
+            </span>
+            {/* Wrapped so the wordmark can be hidden at phone widths while the
                 mark stays. A bare text node cannot be targeted by CSS, and the
                 topbar is a fixed-height row that must fit — see the phone-width
                 block in admin.css. The link keeps its full accessible name
                 either way, because the text is hidden with `display: none`
-                only on the SPAN, and the mark carries `aria-hidden`. */
-            }
+                only on the SPAN, and the mark carries `aria-hidden`. */}
             <span class="admin-brand-text">AWCMS</span>
           </a>
         </div>
 
-        {
-          /* ADR-0120 — the command-palette launcher. A `<button>` rather than an
+        {/* ADR-0120 — the command-palette launcher. A `<button>` rather than an
             `<input>`, because it opens a dialog instead of accepting text where
             it stands. It is rendered only when there is something to search:
             with no visible nav entries the dialog below is absent, and a button
-            that opens nothing is worse than no button. */
-        }
-        {
-          paletteEntries.length > 0 && (
-            <button
-              type="button"
-              id="admin-palette-open"
-              class="admin-palette-open"
-              aria-haspopup="dialog"
-              aria-controls="admin-palette"
+            that opens nothing is worse than no button. */}
+        {paletteEntries.length > 0 && (
+          <button
+            type="button"
+            id="admin-palette-open"
+            class="admin-palette-open"
+            aria-haspopup="dialog"
+            aria-controls="admin-palette"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+              focusable="false"
+              class="admin-palette-open-icon"
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
-                focusable="false"
-                class="admin-palette-open-icon"
-              >
-                <path d={ADMIN_ICON_PATHS.search} />
-              </svg>
-              <span class="admin-palette-open-label">
-                {t("Search screens")}
-              </span>
-              <kbd class="admin-kbd">Ctrl K</kbd>
-            </button>
-          )
-        }
+              <path d={ADMIN_ICON_PATHS.search} />
+            </svg>
+            <span class="admin-palette-open-label">{t("Search screens")}</span>
+            <kbd class="admin-kbd">Ctrl K</kbd>
+          </button>
+        )}
 
         <div class="admin-topbar-spacer"></div>
 
@@ -487,22 +477,18 @@ const accountInitials =
             lightLabel={tx("theme", "Light")}
             darkLabel={tx("theme", "Dark")}
           />
-          {
-            /* `persist` because this shell only ever renders inside a resolved
+          {/* `persist` because this shell only ever renders inside a resolved
               session (the middleware redirects to /login otherwise), so the
-              choice can be stored against the principal and not merely cookied. */
-          }
+              choice can be stored against the principal and not merely cookied. */}
           <LanguageSwitcher persist />
           <div class="admin-topbar-divider" aria-hidden="true"></div>
           <div class="admin-user-menu">
-            {
-              /* ADR-0096 — the avatar is a LINK. ADR-0120 turned it into an
+            {/* ADR-0096 — the avatar is a LINK. ADR-0120 turned it into an
                 initials disc: a stroked person-glyph at 26px reads as a smudge,
                 where two letters read as a person. Both the disc and the role
                 line are `aria-hidden`/decorative-adjacent — the accessible name
                 comes from the link's own label, so a screen reader announces
-                "My account", not "OW owner". */
-            }
+                "My account", not "OW owner". */}
             <a
               href="/admin/account"
               class="admin-account-link"
@@ -512,7 +498,9 @@ const accountInitials =
                 {accountInitials}
               </span>
               <span class="admin-account-meta" aria-hidden="true">
-                <span class="admin-account-name" id="admin-roles">{roles}</span>
+                <span class="admin-account-name" id="admin-roles">
+                  {roles}
+                </span>
               </span>
             </a>
           </div>
@@ -520,11 +508,13 @@ const accountInitials =
       </header>
 
       <div class="admin-layout">
-        <label class="admin-scrim" for="admin-nav-toggle" aria-hidden="true"
+        <label
+          class="admin-scrim"
+          for="admin-nav-toggle"
+          aria-hidden="true"
         ></label>
         <aside class="admin-sidebar" id="admin-sidebar">
-          {
-            /* awcms-one#170 — the rail's own compact identity block: a brand
+          {/* awcms-one#170 — the rail's own compact identity block: a brand
               tile plus the active tenant's name in the monospace family. This
               is NOT a replacement for `.admin-brand` in the topbar (still the
               accessible `/admin` landmark link) or `TenantBadge` (still the
@@ -532,8 +522,7 @@ const accountInitials =
               exactly as the topbar and sidebar are already two independent
               chrome regions everywhere else in this shell. Decorative/
               `aria-hidden`, so a screen reader is not told the tenant name
-              twice. */
-          }
+              twice. */}
           <div class="admin-sidebar-brand" aria-hidden="true">
             <span class="admin-sidebar-brand-mark">A</span>
             <div class="admin-sidebar-brand-text-group">
@@ -541,8 +530,7 @@ const accountInitials =
               <span class="admin-sidebar-tenant">{tenantName}</span>
             </div>
           </div>
-          {
-            /* ADR-0095 — the sidebar is translated by passing the composed
+          {/* ADR-0095 — the sidebar is translated by passing the composed
               ENGLISH labels through the catalog, because `msgid` is the English
               source text. `SIDEBAR_LABELS` and `ModuleDescriptor.name` therefore
               stay exactly as they are: no descriptor grows a label key, and no
@@ -554,14 +542,12 @@ const accountInitials =
 
               Section labels take a context: "System" and "General" are also a
               theme mode and a module group, and gettext has no other way to keep
-              three different translations of one English word apart. */
-          }
+              three different translations of one English word apart. */}
           <nav aria-label={tx("landmark", "Admin")}>
             <ul class="admin-sidebar-groups">
-              {
-                navSections.map((section) => (
-                  <li>
-                    {/* ADR-0120 — sections COLLAPSE, via `<details>`/`<summary>`
+              {navSections.map((section) => (
+                <li>
+                  {/* ADR-0120 — sections COLLAPSE, via `<details>`/`<summary>`
                         rather than script. This shell's header records why awcms
                         kept a CSS-only drawer where awcms-micro used JS: a
                         script-free control is strictly better under
@@ -573,42 +559,42 @@ const accountInitials =
                         Nothing persists the toggle, and a remembered-collapsed
                         section would hide a screen from someone who does not
                         know it collapses. */}
-                    <details class="admin-sidebar-group" open>
-                      <summary class="admin-sidebar-group-label">
-                        <span class="admin-sidebar-group-label-text">
-                          {tx("menu-section", section.label)}
-                        </span>
-                        <svg
-                          class="admin-sidebar-caret"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2.4"
-                          stroke-linecap="round"
-                          aria-hidden="true"
-                          focusable="false"
-                        >
-                          <path d="m6 9 6 6 6-6" />
-                        </svg>
-                      </summary>
-                      <ul class="admin-sidebar-modules">
-                        {section.groups.map((group) => (
-                          <li class="admin-sidebar-module">
-                            {group.moduleLabel !== null && (
-                              <span class="admin-sidebar-module-label">
-                                {t(group.moduleLabel)}
-                              </span>
-                            )}
-                            <ul class="admin-sidebar-links">
-                              {group.entries.map((entry) => (
-                                <li>
-                                  <a
-                                    href={entry.path}
-                                    aria-current={
-                                      entry.isCurrent ? "page" : undefined
-                                    }
-                                  >
-                                    {/* ADR-0120 — `entry.icon` was a field the
+                  <details class="admin-sidebar-group" open>
+                    <summary class="admin-sidebar-group-label">
+                      <span class="admin-sidebar-group-label-text">
+                        {tx("menu-section", section.label)}
+                      </span>
+                      <svg
+                        class="admin-sidebar-caret"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </summary>
+                    <ul class="admin-sidebar-modules">
+                      {section.groups.map((group) => (
+                        <li class="admin-sidebar-module">
+                          {group.moduleLabel !== null && (
+                            <span class="admin-sidebar-module-label">
+                              {t(group.moduleLabel)}
+                            </span>
+                          )}
+                          <ul class="admin-sidebar-links">
+                            {group.entries.map((entry) => (
+                              <li>
+                                <a
+                                  href={entry.path}
+                                  aria-current={
+                                    entry.isCurrent ? "page" : undefined
+                                  }
+                                >
+                                  {/* ADR-0120 — `entry.icon` was a field the
                                         contract declared, the composition
                                         checker validated, and NOTHING rendered.
                                         This is the read that makes it real.
@@ -616,74 +602,69 @@ const accountInitials =
                                         unknown name back, so a bad descriptor
                                         value becomes a neutral dot rather than
                                         attribute content. */}
-                                    <svg
-                                      class="admin-sidebar-icon"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      stroke-width="1.8"
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      aria-hidden="true"
-                                      focusable="false"
-                                    >
-                                      <path d={resolveAdminIcon(entry.icon)} />
-                                    </svg>
-                                    <span class="admin-sidebar-link-label">
-                                      {t(entry.label)}
-                                    </span>
-                                    {/* See `ModuleNavigationEntry.badgeCount`
+                                  <svg
+                                    class="admin-sidebar-icon"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                  >
+                                    <path d={resolveAdminIcon(entry.icon)} />
+                                  </svg>
+                                  <span class="admin-sidebar-link-label">
+                                    {t(entry.label)}
+                                  </span>
+                                  {/* See `ModuleNavigationEntry.badgeCount`
                                         (module-contract.ts) — an optional
                                         field nothing populates yet. Rendered
                                         only when a composed entry actually
                                         carries one. */}
-                                    {entry.badgeCount !== undefined && (
-                                      <span class="admin-sidebar-count">
-                                        {entry.badgeCount}
-                                      </span>
-                                    )}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  </li>
-                ))
-              }
+                                  {entry.badgeCount !== undefined && (
+                                    <span class="admin-sidebar-count">
+                                      {entry.badgeCount}
+                                    </span>
+                                  )}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
+              ))}
             </ul>
           </nav>
-          {
-            /* awcms-one#170 — the rail's status card, fed by the SAME
+          {/* awcms-one#170 — the rail's status card, fed by the SAME
               `syncActive` boolean the topbar's `SyncIndicator` already uses
               (`fetchSyncIndicatorActive`, one bounded `EXISTS` over
               `awcms_sync_nodes` per `/admin/*` render — no second query). Not
               a new "outbox" concept: this is the existing sync signal, shown a
-              second time in the slot the redesign's mockup reserves for it. */
-          }
+              second time in the slot the redesign's mockup reserves for it. */}
           <div class="admin-sidebar-status" role="status">
             <div class="admin-sidebar-status-head">
               <span
                 class="admin-sidebar-status-dot"
                 data-active={syncActive ? "true" : "false"}
-                aria-hidden="true"></span>
+                aria-hidden="true"
+              ></span>
               <span class="admin-sidebar-status-title">
                 {syncActive ? t("Sync active") : t("Sync inactive")}
               </span>
             </div>
             <span class="admin-sidebar-status-meta">
-              {
-                syncActive
-                  ? t("An offline sync node is pushing changes.")
-                  : t("No offline sync node is registered.")
-              }
+              {syncActive
+                ? t("An offline sync node is pushing changes.")
+                : t("No offline sync node is registered.")}
             </span>
           </div>
           <div class="admin-sidebar-footer">
-            {
-              /* ADR-0120 — sign-out moved here from the topbar. It is the last
+            {/* ADR-0120 — sign-out moved here from the topbar. It is the last
                 thing in the navigation, which is where it belongs and where
                 every other admin puts it; in a fixed-height topbar it was a
                 bordered button competing with four other controls.
@@ -692,8 +673,7 @@ const accountInitials =
                 in the script: client code cannot reach the catalog (it is a
                 server module, and shipping it would send both languages to every
                 browser), and this is the same seam `ThemeToggle` uses for its
-                three mode labels. */
-            }
+                three mode labels. */}
             <button
               type="button"
               id="admin-logout"
@@ -712,9 +692,7 @@ const accountInitials =
                 aria-hidden="true"
                 focusable="false"
               >
-                <path
-                  d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
-                ></path>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path>
               </svg>
               {t("Log out")}
             </button>
@@ -726,20 +704,20 @@ const accountInitials =
         </aside>
 
         <main class="admin-main" id="admin-main" tabindex="-1">
-          {
-            /* ADR-0120 — the page-header band: breadcrumb, title, description
+          {/* ADR-0120 — the page-header band: breadcrumb, title, description
               and the screen's own actions, above one rule, at the same inline
               padding as the body below it.
 
               Before this every screen positioned its own `<h1>` and its own
               primary button, and no two agreed on where either belonged. The
               `page-actions` slot is what lets a screen put its button here
-              instead of inventing a place for it. */
-          }
+              instead of inventing a place for it. */}
           <div class="admin-page-head">
             <nav class="admin-breadcrumb" aria-label={t("Breadcrumb")}>
               <ol>
-                <li><a href="/admin">AWCMS</a></li>
+                <li>
+                  <a href="/admin">AWCMS</a>
+                </li>
                 {currentSectionLabel && <li>{currentSectionLabel}</li>}
                 <li aria-current="page">{title}</li>
               </ol>
@@ -747,8 +725,7 @@ const accountInitials =
             <div class="admin-page-head-main">
               <div class="admin-page-heading">
                 <h1>{title}</h1>
-                {
-                  /* Two ways to fill one slot, because the screens genuinely
+                {/* Two ways to fill one slot, because the screens genuinely
                     need both.
 
                     Thirty screens have a description that is a single `t(…)`
@@ -762,20 +739,15 @@ const accountInitials =
                     `Astro.slots.has` rather than an always-present `<p>` with a
                     slot inside it: an empty paragraph still occupies its
                     line-height, which would leave a ragged gap under the title
-                    of every screen that has no description at all. */
-                }
-                {
-                  description !== undefined && (
-                    <p class="admin-page-description">{description}</p>
-                  )
-                }
-                {
-                  description === undefined && hasPageDescriptionSlot && (
-                    <p class="admin-page-description">
-                      <slot name="page-description" />
-                    </p>
-                  )
-                }
+                    of every screen that has no description at all. */}
+                {description !== undefined && (
+                  <p class="admin-page-description">{description}</p>
+                )}
+                {description === undefined && hasPageDescriptionSlot && (
+                  <p class="admin-page-description">
+                    <slot name="page-description" />
+                  </p>
+                )}
               </div>
               <div class="admin-page-actions">
                 <slot name="page-actions" />
@@ -789,8 +761,7 @@ const accountInitials =
       </div>
     </div>
 
-    {
-      /* ADR-0120 — the command palette.
+    {/* ADR-0120 — the command palette.
 
         Every entry is rendered SERVER-SIDE, already filtered by
         `composeSidebarSections` against this caller's permissions and the
@@ -802,69 +773,66 @@ const accountInitials =
 
         A native `<dialog>`: `showModal()` supplies the focus trap, Escape,
         page inertness, the backdrop and focus restoration, none of which is
-        then ours to own. */
-    }
-    {
-      paletteEntries.length > 0 && (
-        <dialog
-          id="admin-palette"
-          class="admin-palette"
-          aria-label={t("Search screens")}
-        >
-          <div class="admin-palette-search">
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d={ADMIN_ICON_PATHS.search} />
-            </svg>
-            <input
-              type="text"
-              id="admin-palette-input"
-              class="admin-palette-input"
-              autocomplete="off"
-              placeholder={t("Type a screen name…")}
-              aria-label={t("Type a screen name…")}
-            />
-            <kbd class="admin-kbd">Esc</kbd>
-          </div>
-          <ul class="admin-palette-results">
-            {paletteEntries.map((entry) => (
-              <li data-search={entry.search}>
-                <a href={entry.path}>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <path d={entry.icon} />
-                  </svg>
-                  <span class="admin-palette-label">{entry.label}</span>
-                  <span class="admin-palette-group">{entry.group}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-          <p class="admin-palette-empty" id="admin-palette-empty" hidden>
-            {t("No screen matches that.")}
-          </p>
-        </dialog>
-      )
-    }
+        then ours to own. */}
+    {paletteEntries.length > 0 && (
+      <dialog
+        id="admin-palette"
+        class="admin-palette"
+        aria-label={t("Search screens")}
+      >
+        <div class="admin-palette-search">
+          <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d={ADMIN_ICON_PATHS.search} />
+          </svg>
+          <input
+            type="text"
+            id="admin-palette-input"
+            class="admin-palette-input"
+            autocomplete="off"
+            placeholder={t("Type a screen name…")}
+            aria-label={t("Type a screen name…")}
+          />
+          <kbd class="admin-kbd">Esc</kbd>
+        </div>
+        <ul class="admin-palette-results">
+          {paletteEntries.map((entry) => (
+            <li data-search={entry.search}>
+              <a href={entry.path}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d={entry.icon} />
+                </svg>
+                <span class="admin-palette-label">{entry.label}</span>
+                <span class="admin-palette-group">{entry.group}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p class="admin-palette-empty" id="admin-palette-empty" hidden>
+          {t("No screen matches that.")}
+        </p>
+      </dialog>
+    )}
 
     <script>
       // The import forces Astro to bundle this to an EXTERNAL file — an

@@ -127,252 +127,240 @@ const ICON_MODULES =
 ---
 
 <AdminLayout title={t("Dashboard")}>
-  <h1 id="admin-dashboard-heading" class="sr-only">{t("Dashboard")}</h1>
+  <h1 id="admin-dashboard-heading" class="sr-only">
+    {t("Dashboard")}
+  </h1>
 
-  {
-    !hasDashboardAccess && (
-      <p class="state-notice fade-in-up" id="dashboard-denied">
-        {t("You do not have permission to view the tenant dashboard reports")} (
-        <code>{DASHBOARD_PERMISSION}</code>).{" "}
-        {t("Your session details are shown below.")}
-      </p>
-    )
-  }
+  {!hasDashboardAccess && (
+    <p class="state-notice fade-in-up" id="dashboard-denied">
+      {t("You do not have permission to view the tenant dashboard reports")} (
+      <code>{DASHBOARD_PERMISSION}</code>).{" "}
+      {t("Your session details are shown below.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="dashboard-error">
-        {t(
-          "The dashboard reports could not be loaded right now. Your session details are shown below; try again shortly."
-        )}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="dashboard-error">
+      {t(
+        "The dashboard reports could not be loaded right now. Your session details are shown below; try again shortly."
+      )}
+    </p>
+  )}
 
-  {
-    dashboard && (
-      <div class="dashboard">
-        <div class="kpi-grid stagger-children">
-          <article class="kpi kpi--primary fade-in-up">
-            <div class="kpi-head">
-              <span class="kpi-icon" set:html={ICON_USERS} />
-            </div>
-            <span class="kpi-value">
-              {dashboard.tenantActivity.activeUserCount}
-            </span>
-            <span class="kpi-label">{t("Active users")}</span>
-          </article>
-
-          <article class="kpi kpi--info fade-in-up">
-            <div class="kpi-head">
-              <span class="kpi-icon" set:html={ICON_OFFICE} />
-            </div>
-            <span class="kpi-value">
-              {dashboard.tenantActivity.activeOfficeCount}
-            </span>
-            <span class="kpi-label">{t("Active offices")}</span>
-          </article>
-
-          <article class="kpi kpi--success fade-in-up">
-            <div class="kpi-head">
-              <span class="kpi-icon" set:html={ICON_SHIELD} />
-            </div>
-            <span class="kpi-value">{dashboard.accessAudit.allowCount}</span>
-            <span class="kpi-label">
-              {t("Allow ({days} days)", {
-                days: dashboard.accessAudit.decisionWindowDays
-              })}
-            </span>
-          </article>
-
-          <article
-            class:list={[
-              "kpi",
-              "fade-in-up",
-              syncNeedsAttention ? "kpi--warning" : "kpi--muted"
-            ]}
-          >
-            <div class="kpi-head">
-              <span class="kpi-icon" set:html={ICON_SYNC} />
-              {syncNeedsAttention && (
-                <span class="kpi-status">
-                  <span class="badge badge--warning">
-                    {t("Needs attention")}
-                  </span>
-                </span>
-              )}
-              {syncNotConfigured && (
-                <span class="kpi-status">
-                  <span class="badge badge--muted">{t("Not configured")}</span>
-                </span>
-              )}
-            </div>
-            <span class="kpi-value">
-              {dashboard.syncHealth.activeNodeCount}/
-              {dashboard.syncHealth.totalNodeCount}
-            </span>
-            <span class="kpi-label">{t("Active nodes")}</span>
-          </article>
-        </div>
-
-        <div class="dashboard-grid">
-          <section class="dashboard-card fade-in-up">
-            <header class="card-header">
-              <span class="card-icon" set:html={ICON_USERS} />
-              <h2>{t("Tenant Activity")}</h2>
-            </header>
-            <dl>
-              <div class="row">
-                <dt>{t("Tenant")}</dt>
-                <dd>
-                  {dashboard.tenantActivity.tenantName}
-                  <span class="badge badge--muted">
-                    {dashboard.tenantActivity.tenantStatus}
-                  </span>
-                </dd>
-              </div>
-              <div class="row">
-                <dt>{t("Active users")}</dt>
-                <dd>{dashboard.tenantActivity.activeUserCount}</dd>
-              </div>
-              <div class="row">
-                <dt>{t("Active offices")}</dt>
-                <dd>{dashboard.tenantActivity.activeOfficeCount}</dd>
-              </div>
-              <div class="row">
-                <dt>{t("Last login")}</dt>
-                <dd>{dashboard.tenantActivity.mostRecentLoginAt ?? "—"}</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section class="dashboard-card fade-in-up">
-            <header class="card-header">
-              <span class="card-icon" set:html={ICON_SHIELD} />
-              <h2>{t("Access & Audit")}</h2>
-            </header>
-            <dl>
-              <div class="row">
-                <dt>
-                  {t("Allow ({days} days)", {
-                    days: dashboard.accessAudit.decisionWindowDays
-                  })}
-                </dt>
-                <dd>{dashboard.accessAudit.allowCount}</dd>
-              </div>
-              <div class="row">
-                <dt>
-                  {t("Deny ({days} days)", {
-                    days: dashboard.accessAudit.decisionWindowDays
-                  })}
-                </dt>
-                <dd
-                  class={
-                    dashboard.accessAudit.denyCount > 0 ? "dd-alert" : undefined
-                  }
-                >
-                  {dashboard.accessAudit.denyCount}
-                </dd>
-              </div>
-              <div class="row">
-                <dt>{t("Total decision logs")}</dt>
-                <dd>{dashboard.accessAudit.totalDecisionCount}</dd>
-              </div>
-              <div class="row">
-                <dt>{t("Audit events")}</dt>
-                <dd>{dashboard.accessAudit.auditEventCount}</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section class="dashboard-card fade-in-up">
-            <header class="card-header">
-              <span class="card-icon" set:html={ICON_SYNC} />
-              <h2>{t("Sync Health")}</h2>
-              {syncNeedsAttention && (
-                <span class="card-header-badge">
-                  <span class="badge badge--warning">
-                    {t("Needs attention")}
-                  </span>
-                </span>
-              )}
-              {syncNotConfigured && (
-                <span class="card-header-badge">
-                  <span class="badge badge--muted">{t("Not configured")}</span>
-                </span>
-              )}
-            </header>
-            <dl>
-              <div class="row">
-                <dt>{t("Active nodes")}</dt>
-                <dd>
-                  {dashboard.syncHealth.activeNodeCount} /{" "}
-                  {dashboard.syncHealth.totalNodeCount}
-                </dd>
-              </div>
-              <div class="row">
-                <dt>{t("Open conflicts")}</dt>
-                <dd
-                  class={
-                    dashboard.syncHealth.hasOpenConflicts
-                      ? "dd-alert"
-                      : undefined
-                  }
-                >
-                  {dashboard.syncHealth.openConflictCount}
-                </dd>
-              </div>
-              <div class="row">
-                <dt>{t("Pending objects")}</dt>
-                <dd>{dashboard.syncHealth.pendingObjectCount}</dd>
-              </div>
-              <div class="row">
-                <dt>{t("Failed objects")}</dt>
-                <dd
-                  class={
-                    dashboard.syncHealth.hasFailedObjects
-                      ? "dd-alert"
-                      : undefined
-                  }
-                >
-                  {dashboard.syncHealth.failedObjectCount}
-                </dd>
-              </div>
-            </dl>
-          </section>
-        </div>
-
-        <section class="dashboard-card dashboard-card--wide fade-in-up">
-          <header class="card-header">
-            <span class="card-icon" set:html={ICON_MODULES} />
-            <h2>{t("Module Usage")}</h2>
-          </header>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t("Module")}</th>
-                  <th scope="col">{t("Metric")}</th>
-                  <th scope="col" class="num">
-                    {t("Count")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard.moduleUsage.map((entry) => (
-                  <tr>
-                    <td>{entry.moduleName}</td>
-                    <td>{entry.metricLabel}</td>
-                    <td class="num">{entry.recordCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  {dashboard && (
+    <div class="dashboard">
+      <div class="kpi-grid stagger-children">
+        <article class="kpi kpi--primary fade-in-up">
+          <div class="kpi-head">
+            <span class="kpi-icon" set:html={ICON_USERS} />
           </div>
+          <span class="kpi-value">
+            {dashboard.tenantActivity.activeUserCount}
+          </span>
+          <span class="kpi-label">{t("Active users")}</span>
+        </article>
+
+        <article class="kpi kpi--info fade-in-up">
+          <div class="kpi-head">
+            <span class="kpi-icon" set:html={ICON_OFFICE} />
+          </div>
+          <span class="kpi-value">
+            {dashboard.tenantActivity.activeOfficeCount}
+          </span>
+          <span class="kpi-label">{t("Active offices")}</span>
+        </article>
+
+        <article class="kpi kpi--success fade-in-up">
+          <div class="kpi-head">
+            <span class="kpi-icon" set:html={ICON_SHIELD} />
+          </div>
+          <span class="kpi-value">{dashboard.accessAudit.allowCount}</span>
+          <span class="kpi-label">
+            {t("Allow ({days} days)", {
+              days: dashboard.accessAudit.decisionWindowDays
+            })}
+          </span>
+        </article>
+
+        <article
+          class:list={[
+            "kpi",
+            "fade-in-up",
+            syncNeedsAttention ? "kpi--warning" : "kpi--muted"
+          ]}
+        >
+          <div class="kpi-head">
+            <span class="kpi-icon" set:html={ICON_SYNC} />
+            {syncNeedsAttention && (
+              <span class="kpi-status">
+                <span class="badge badge--warning">{t("Needs attention")}</span>
+              </span>
+            )}
+            {syncNotConfigured && (
+              <span class="kpi-status">
+                <span class="badge badge--muted">{t("Not configured")}</span>
+              </span>
+            )}
+          </div>
+          <span class="kpi-value">
+            {dashboard.syncHealth.activeNodeCount}/
+            {dashboard.syncHealth.totalNodeCount}
+          </span>
+          <span class="kpi-label">{t("Active nodes")}</span>
+        </article>
+      </div>
+
+      <div class="dashboard-grid">
+        <section class="dashboard-card fade-in-up">
+          <header class="card-header">
+            <span class="card-icon" set:html={ICON_USERS} />
+            <h2>{t("Tenant Activity")}</h2>
+          </header>
+          <dl>
+            <div class="row">
+              <dt>{t("Tenant")}</dt>
+              <dd>
+                {dashboard.tenantActivity.tenantName}
+                <span class="badge badge--muted">
+                  {dashboard.tenantActivity.tenantStatus}
+                </span>
+              </dd>
+            </div>
+            <div class="row">
+              <dt>{t("Active users")}</dt>
+              <dd>{dashboard.tenantActivity.activeUserCount}</dd>
+            </div>
+            <div class="row">
+              <dt>{t("Active offices")}</dt>
+              <dd>{dashboard.tenantActivity.activeOfficeCount}</dd>
+            </div>
+            <div class="row">
+              <dt>{t("Last login")}</dt>
+              <dd>{dashboard.tenantActivity.mostRecentLoginAt ?? "—"}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="dashboard-card fade-in-up">
+          <header class="card-header">
+            <span class="card-icon" set:html={ICON_SHIELD} />
+            <h2>{t("Access & Audit")}</h2>
+          </header>
+          <dl>
+            <div class="row">
+              <dt>
+                {t("Allow ({days} days)", {
+                  days: dashboard.accessAudit.decisionWindowDays
+                })}
+              </dt>
+              <dd>{dashboard.accessAudit.allowCount}</dd>
+            </div>
+            <div class="row">
+              <dt>
+                {t("Deny ({days} days)", {
+                  days: dashboard.accessAudit.decisionWindowDays
+                })}
+              </dt>
+              <dd
+                class={
+                  dashboard.accessAudit.denyCount > 0 ? "dd-alert" : undefined
+                }
+              >
+                {dashboard.accessAudit.denyCount}
+              </dd>
+            </div>
+            <div class="row">
+              <dt>{t("Total decision logs")}</dt>
+              <dd>{dashboard.accessAudit.totalDecisionCount}</dd>
+            </div>
+            <div class="row">
+              <dt>{t("Audit events")}</dt>
+              <dd>{dashboard.accessAudit.auditEventCount}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="dashboard-card fade-in-up">
+          <header class="card-header">
+            <span class="card-icon" set:html={ICON_SYNC} />
+            <h2>{t("Sync Health")}</h2>
+            {syncNeedsAttention && (
+              <span class="card-header-badge">
+                <span class="badge badge--warning">{t("Needs attention")}</span>
+              </span>
+            )}
+            {syncNotConfigured && (
+              <span class="card-header-badge">
+                <span class="badge badge--muted">{t("Not configured")}</span>
+              </span>
+            )}
+          </header>
+          <dl>
+            <div class="row">
+              <dt>{t("Active nodes")}</dt>
+              <dd>
+                {dashboard.syncHealth.activeNodeCount} /{" "}
+                {dashboard.syncHealth.totalNodeCount}
+              </dd>
+            </div>
+            <div class="row">
+              <dt>{t("Open conflicts")}</dt>
+              <dd
+                class={
+                  dashboard.syncHealth.hasOpenConflicts ? "dd-alert" : undefined
+                }
+              >
+                {dashboard.syncHealth.openConflictCount}
+              </dd>
+            </div>
+            <div class="row">
+              <dt>{t("Pending objects")}</dt>
+              <dd>{dashboard.syncHealth.pendingObjectCount}</dd>
+            </div>
+            <div class="row">
+              <dt>{t("Failed objects")}</dt>
+              <dd
+                class={
+                  dashboard.syncHealth.hasFailedObjects ? "dd-alert" : undefined
+                }
+              >
+                {dashboard.syncHealth.failedObjectCount}
+              </dd>
+            </div>
+          </dl>
         </section>
       </div>
-    )
-  }
+
+      <section class="dashboard-card dashboard-card--wide fade-in-up">
+        <header class="card-header">
+          <span class="card-icon" set:html={ICON_MODULES} />
+          <h2>{t("Module Usage")}</h2>
+        </header>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{t("Module")}</th>
+                <th scope="col">{t("Metric")}</th>
+                <th scope="col" class="num">
+                  {t("Count")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {dashboard.moduleUsage.map((entry) => (
+                <tr>
+                  <td>{entry.moduleName}</td>
+                  <td>{entry.metricLabel}</td>
+                  <td class="num">{entry.recordCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  )}
 
   <section class="admin-section" aria-label={t("Session")}>
     <h2 class="admin-section-title">{t("Your session")}</h2>

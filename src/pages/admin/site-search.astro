@@ -163,391 +163,376 @@ const showIndexActions = canReconcile || canRebuild;
     "The tenant's full-text search index over published content: how fresh it is, what it contains, the last runs, and the items that failed to index. The index is a projection of public content only \u2014 it is never an authorization source."
   )}
 >
-  {
-    !canReadIndex && !canReadSettings && !canReadDiagnostics && (
-      <p class="state-notice fade-in-up" id="site-search-denied">
-        {t("You do not have permission to view the search console.")}
-      </p>
-    )
-  }
+  {!canReadIndex && !canReadSettings && !canReadDiagnostics && (
+    <p class="state-notice fade-in-up" id="site-search-denied">
+      {t("You do not have permission to view the search console.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="site-search-error">
-        {t(
-          "The search console could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="site-search-error">
+      {t(
+        "The search console could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
 
   <p
     id="site-search-action-error"
     class="admin-create-error"
     role="alert"
     hidden
-  >
-  </p>
+  ></p>
 
-  {
-    canReadIndex && status && (
-      <section class="admin-section fade-in-up" id="site-search-status">
-        <h2 class="admin-section-title">{t("Index status")}</h2>
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Documents indexed")}</span>
-            <span class="stat-value">{status.documentCount}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Last indexed")}</span>
-            <span class="stat-value stat-value--mono">
-              {formatTimestamp(status.latestIndexedAt)}
-            </span>
-            <span class="stat-hint">{t("UTC")}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Open failures")}</span>
-            <span class="stat-value">{status.openFailureCount}</span>
-            {status.openFailureCount > 0 && (
-              <span class="stat-hint">{t("See diagnostics below")}</span>
-            )}
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Last run")}</span>
-            <span class="stat-value stat-value--mono">
-              {status.lastRun ? status.lastRun.runType : "—"}
-            </span>
-            {status.lastRun && (
-              <span class="stat-hint">
-                {formatTimestamp(status.lastRun.startedAt)}
-              </span>
-            )}
-          </div>
+  {canReadIndex && status && (
+    <section class="admin-section fade-in-up" id="site-search-status">
+      <h2 class="admin-section-title">{t("Index status")}</h2>
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Documents indexed")}</span>
+          <span class="stat-value">{status.documentCount}</span>
         </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Last indexed")}</span>
+          <span class="stat-value stat-value--mono">
+            {formatTimestamp(status.latestIndexedAt)}
+          </span>
+          <span class="stat-hint">{t("UTC")}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Open failures")}</span>
+          <span class="stat-value">{status.openFailureCount}</span>
+          {status.openFailureCount > 0 && (
+            <span class="stat-hint">{t("See diagnostics below")}</span>
+          )}
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Last run")}</span>
+          <span class="stat-value stat-value--mono">
+            {status.lastRun ? status.lastRun.runType : "—"}
+          </span>
+          {status.lastRun && (
+            <span class="stat-hint">
+              {formatTimestamp(status.lastRun.startedAt)}
+            </span>
+          )}
+        </div>
+      </div>
 
-        {status.byResourceType.length > 0 && (
-          <div class="data-table-scroll">
-            <table class="data-table data-table--stack">
-              <caption>{t("Documents by resource type")}</caption>
-              <thead>
+      {status.byResourceType.length > 0 && (
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption>{t("Documents by resource type")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Resource type")}</th>
+                <th scope="col">{t("Documents")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {status.byResourceType.map((row) => (
                 <tr>
-                  <th scope="col">{t("Resource type")}</th>
-                  <th scope="col">{t("Documents")}</th>
+                  <td data-label="Resource type">
+                    <span class="cell-code">{row.resourceType}</span>
+                  </td>
+                  <td data-label="Documents">{row.count}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {status.byResourceType.map((row) => (
-                  <tr>
-                    <td data-label="Resource type">
-                      <span class="cell-code">{row.resourceType}</span>
-                    </td>
-                    <td data-label="Documents">{row.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )}
+
+  {showIndexActions && (
+    <section class="admin-section fade-in-up" id="site-search-actions">
+      <h2 class="admin-section-title">{t("Index operations")}</h2>
+      <p class="page-description">
+        {t(
+          "Reconcile upserts current public documents and removes stale ones. Rebuild deletes every document and re-extracts from scratch \u2014 slower, and the public search surface is degraded while it runs."
         )}
-      </section>
-    )
-  }
+      </p>
+      <div class="admin-toolbar">
+        {canReconcile && (
+          <button
+            type="button"
+            id="site-search-reconcile"
+            class="module-toggle"
+          >
+            {t("Reconcile index")}
+          </button>
+        )}
+        {canRebuild && (
+          <button
+            type="button"
+            id="site-search-rebuild"
+            class="btn-inline btn-inline--danger"
+          >
+            {t("Rebuild index")}
+          </button>
+        )}
+      </div>
+    </section>
+  )}
 
-  {
-    showIndexActions && (
-      <section class="admin-section fade-in-up" id="site-search-actions">
-        <h2 class="admin-section-title">{t("Index operations")}</h2>
-        <p class="page-description">
-          {t(
-            "Reconcile upserts current public documents and removes stale ones. Rebuild deletes every document and re-extracts from scratch \u2014 slower, and the public search surface is degraded while it runs."
-          )}
+  {canReadSettings && settings && (
+    <section class="admin-section fade-in-up" id="site-search-settings">
+      <h2 class="admin-section-title">{t("Search configuration")}</h2>
+      <form id="site-search-settings-form" class="admin-create-form">
+        <p class="form-legend">
+          {canUpdateSettings
+            ? "These values shape the public search surface."
+            : "Read-only — you do not have permission to change these."}
         </p>
-        <div class="admin-toolbar">
-          {canReconcile && (
-            <button
-              type="button"
-              id="site-search-reconcile"
-              class="module-toggle"
-            >
-              {t("Reconcile index")}
-            </button>
-          )}
-          {canRebuild && (
-            <button
-              type="button"
-              id="site-search-rebuild"
-              class="btn-inline btn-inline--danger"
-            >
-              {t("Rebuild index")}
-            </button>
-          )}
-        </div>
-      </section>
-    )
-  }
+        <p
+          id="site-search-settings-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
 
-  {
-    canReadSettings && settings && (
-      <section class="admin-section fade-in-up" id="site-search-settings">
-        <h2 class="admin-section-title">{t("Search configuration")}</h2>
-        <form id="site-search-settings-form" class="admin-create-form">
-          <p class="form-legend">
-            {canUpdateSettings
-              ? "These values shape the public search surface."
-              : "Read-only — you do not have permission to change these."}
-          </p>
-          <p
-            id="site-search-settings-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
+        <label for="setting-enabled">
+          <input
+            type="checkbox"
+            id="setting-enabled"
+            name="enabled"
+            checked={settings.enabled}
+            disabled={!canUpdateSettings}
           />
+          {t("Search enabled")}
+        </label>
 
-          <label for="setting-enabled">
-            <input
-              type="checkbox"
-              id="setting-enabled"
-              name="enabled"
-              checked={settings.enabled}
-              disabled={!canUpdateSettings}
-            />
-            {t("Search enabled")}
-          </label>
+        <label for="setting-suggestions-enabled">
+          <input
+            type="checkbox"
+            id="setting-suggestions-enabled"
+            name="suggestionsEnabled"
+            checked={settings.suggestionsEnabled}
+            disabled={!canUpdateSettings}
+          />
+          {t("Suggestions enabled")}
+        </label>
 
-          <label for="setting-suggestions-enabled">
-            <input
-              type="checkbox"
-              id="setting-suggestions-enabled"
-              name="suggestionsEnabled"
-              checked={settings.suggestionsEnabled}
-              disabled={!canUpdateSettings}
-            />
-            {t("Suggestions enabled")}
-          </label>
+        <label for="setting-analytics-enabled">
+          <input
+            type="checkbox"
+            id="setting-analytics-enabled"
+            name="analyticsEnabled"
+            checked={settings.analyticsEnabled}
+            disabled={!canUpdateSettings}
+          />
+          {t("Query analytics (opt-in, stores query hashes and counts only)")}
+        </label>
 
-          <label for="setting-analytics-enabled">
-            <input
-              type="checkbox"
-              id="setting-analytics-enabled"
-              name="analyticsEnabled"
-              checked={settings.analyticsEnabled}
-              disabled={!canUpdateSettings}
-            />
-            {t("Query analytics (opt-in, stores query hashes and counts only)")}
-          </label>
+        <label for="setting-result-limit">
+          {t("Result limit")}
+          <input
+            type="number"
+            id="setting-result-limit"
+            name="resultLimit"
+            value={settings.resultLimit}
+            min={RESULT_LIMIT_MIN}
+            max={RESULT_LIMIT_MAX}
+            disabled={!canUpdateSettings}
+          />
+        </label>
 
-          <label for="setting-result-limit">
-            {t("Result limit")}
-            <input
-              type="number"
-              id="setting-result-limit"
-              name="resultLimit"
-              value={settings.resultLimit}
-              min={RESULT_LIMIT_MIN}
-              max={RESULT_LIMIT_MAX}
-              disabled={!canUpdateSettings}
-            />
-          </label>
+        <label for="setting-min-query-length">
+          {t("Minimum query length")}
+          <input
+            type="number"
+            id="setting-min-query-length"
+            name="minQueryLength"
+            value={settings.minQueryLength}
+            min={MIN_QUERY_LENGTH_MIN}
+            max={MIN_QUERY_LENGTH_MAX}
+            disabled={!canUpdateSettings}
+          />
+        </label>
 
-          <label for="setting-min-query-length">
-            {t("Minimum query length")}
-            <input
-              type="number"
-              id="setting-min-query-length"
-              name="minQueryLength"
-              value={settings.minQueryLength}
-              min={MIN_QUERY_LENGTH_MIN}
-              max={MIN_QUERY_LENGTH_MAX}
-              disabled={!canUpdateSettings}
-            />
-          </label>
+        <label for="setting-suggestion-limit">
+          {t("Suggestion limit")}
+          <input
+            type="number"
+            id="setting-suggestion-limit"
+            name="suggestionLimit"
+            value={settings.suggestionLimit}
+            min={SUGGESTION_LIMIT_MIN}
+            max={SUGGESTION_LIMIT_MAX}
+            disabled={!canUpdateSettings}
+          />
+        </label>
 
-          <label for="setting-suggestion-limit">
-            {t("Suggestion limit")}
-            <input
-              type="number"
-              id="setting-suggestion-limit"
-              name="suggestionLimit"
-              value={settings.suggestionLimit}
-              min={SUGGESTION_LIMIT_MIN}
-              max={SUGGESTION_LIMIT_MAX}
-              disabled={!canUpdateSettings}
-            />
-          </label>
+        <label for="setting-resource-types">
+          {t("Indexed resource types")}
+          <input
+            type="text"
+            id="setting-resource-types"
+            name="enabledResourceTypes"
+            value={resourceTypesValue}
+            placeholder="Leave empty for every admitted type"
+            disabled={!canUpdateSettings}
+          />
+        </label>
 
-          <label for="setting-resource-types">
-            {t("Indexed resource types")}
-            <input
-              type="text"
-              id="setting-resource-types"
-              name="enabledResourceTypes"
-              value={resourceTypesValue}
-              placeholder="Leave empty for every admitted type"
-              disabled={!canUpdateSettings}
-            />
-          </label>
+        {canUpdateSettings && (
+          <button
+            type="submit"
+            id="site-search-settings-submit"
+            class="module-toggle"
+          >
+            {t("Save configuration")}
+          </button>
+        )}
+      </form>
+    </section>
+  )}
 
-          {canUpdateSettings && (
-            <button
-              type="submit"
-              id="site-search-settings-submit"
-              class="module-toggle"
-            >
-              {t("Save configuration")}
-            </button>
-          )}
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canReadIndex && (
-      <section class="admin-section fade-in-up" id="site-search-runs">
-        <h2 class="admin-section-title">
-          {t("Recent index runs")}
-          <span class="count-pill">{recentRuns.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("The ten most recent index runs")}
-            </caption>
-            <thead>
+  {canReadIndex && (
+    <section class="admin-section fade-in-up" id="site-search-runs">
+      <h2 class="admin-section-title">
+        {t("Recent index runs")}
+        <span class="count-pill">{recentRuns.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("The ten most recent index runs")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Started")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Indexed")}</th>
+              <th scope="col">{t("Updated")}</th>
+              <th scope="col">{t("Removed")}</th>
+              <th scope="col">{t("Failures")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentRuns.length === 0 && (
               <tr>
-                <th scope="col">{t("Started")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Indexed")}</th>
-                <th scope="col">{t("Updated")}</th>
-                <th scope="col">{t("Removed")}</th>
-                <th scope="col">{t("Failures")}</th>
+                <td class="data-table-empty" colspan={7}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌛
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No index runs yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Run a reconcile to build the index for the first time."
+                      )}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {recentRuns.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={7}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌛
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No index runs yet")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Run a reconcile to build the index for the first time."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {recentRuns.map((run) => (
-                <tr>
-                  <td data-label="Started">
-                    <span class="cell-code">
-                      {formatTimestamp(run.startedAt)}
-                    </span>
-                  </td>
-                  <td data-label="Type">{run.runType}</td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={runStatusVariant(run.status)}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {run.status}
-                    </span>
-                  </td>
-                  <td data-label="Indexed">{run.documentsIndexed}</td>
-                  <td data-label="Updated">{run.documentsUpdated}</td>
-                  <td data-label="Removed">{run.documentsRemoved}</td>
-                  <td data-label="Failures">
-                    {run.failureCount > 0 ? (
-                      run.failureCount
-                    ) : (
-                      <span class="cell-muted">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadDiagnostics && (
-      <section class="admin-section fade-in-up" id="site-search-failures">
-        <h2 class="admin-section-title">
-          {t("Failed items")}
-          <span class="count-pill">{failures.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Items that could not be indexed, most recent first")}
-            </caption>
-            <thead>
+            )}
+            {recentRuns.map((run) => (
               <tr>
-                <th scope="col">{t("Source")}</th>
-                <th scope="col">{t("Resource")}</th>
-                <th scope="col">{t("Locale")}</th>
-                <th scope="col">{t("Error")}</th>
-                <th scope="col">{t("Seen")}</th>
-                <th scope="col">{t("Last seen")}</th>
+                <td data-label="Started">
+                  <span class="cell-code">
+                    {formatTimestamp(run.startedAt)}
+                  </span>
+                </td>
+                <td data-label="Type">{run.runType}</td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={runStatusVariant(run.status)}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {run.status}
+                  </span>
+                </td>
+                <td data-label="Indexed">{run.documentsIndexed}</td>
+                <td data-label="Updated">{run.documentsUpdated}</td>
+                <td data-label="Removed">{run.documentsRemoved}</td>
+                <td data-label="Failures">
+                  {run.failureCount > 0 ? (
+                    run.failureCount
+                  ) : (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {failures.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={6}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✓
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No failed items")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t("Every source item indexed cleanly.")}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {failures.map((item) => (
-                <tr>
-                  <td data-label="Source">
-                    <span class="cell-code">{item.sourceKey}</span>
-                  </td>
-                  <td data-label="Resource">
-                    <span class="cell-code">{item.resourceId}</span>
-                  </td>
-                  <td data-label="Locale">{item.locale}</td>
-                  <td data-label="Error">
-                    <span class="status-badge" data-variant="danger">
-                      <span class="status-dot" aria-hidden="true" />
-                      {item.errorClass}
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canReadDiagnostics && (
+    <section class="admin-section fade-in-up" id="site-search-failures">
+      <h2 class="admin-section-title">
+        {t("Failed items")}
+        <span class="count-pill">{failures.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Items that could not be indexed, most recent first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Resource")}</th>
+              <th scope="col">{t("Locale")}</th>
+              <th scope="col">{t("Error")}</th>
+              <th scope="col">{t("Seen")}</th>
+              <th scope="col">{t("Last seen")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {failures.length === 0 && (
+              <tr>
+                <td class="data-table-empty" colspan={6}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✓
                     </span>
-                  </td>
-                  <td data-label="Seen">{item.occurrenceCount}</td>
-                  <td data-label="Last seen">
-                    <span class="cell-code">
-                      {formatTimestamp(item.lastSeenAt)}
+                    <span class="empty-state-title">
+                      {t("No failed items")}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+                    <span class="empty-state-text">
+                      {t("Every source item indexed cleanly.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {failures.map((item) => (
+              <tr>
+                <td data-label="Source">
+                  <span class="cell-code">{item.sourceKey}</span>
+                </td>
+                <td data-label="Resource">
+                  <span class="cell-code">{item.resourceId}</span>
+                </td>
+                <td data-label="Locale">{item.locale}</td>
+                <td data-label="Error">
+                  <span class="status-badge" data-variant="danger">
+                    <span class="status-dot" aria-hidden="true" />
+                    {item.errorClass}
+                  </span>
+                </td>
+                <td data-label="Seen">{item.occurrenceCount}</td>
+                <td data-label="Last seen">
+                  <span class="cell-code">
+                    {formatTimestamp(item.lastSeenAt)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

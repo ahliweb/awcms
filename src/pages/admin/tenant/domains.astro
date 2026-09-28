@@ -109,205 +109,195 @@ function statusVariant(status: string): string {
     "Hostname/subdomain mappings for this tenant. Add a mapping, verify ownership (manual-first), and choose one active primary. Deleting a mapping frees its hostname for reuse."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="tenant-domains-denied">
-        {t("You do not have permission to view tenant domains.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="tenant-domains-denied">
+      {t("You do not have permission to view tenant domains.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="tenant-domains-error">
-        {t(
-          "Tenant domains could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="tenant-domains-error">
+      {t(
+        "Tenant domains could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canCreate && (
-      <form id="domain-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">{t("Add a domain")}</p>
-        <p
-          id="domain-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
-
-        <label for="domain-hostname">{t("Hostname")}</label>
-        <input
-          id="domain-hostname"
-          name="hostname"
-          type="text"
-          required
-          autocomplete="off"
-          placeholder="tenant.example.com"
-        />
-
-        <label for="domain-type">{t("Domain type")}</label>
-        <select id="domain-type" name="domainType">
-          {TENANT_DOMAIN_TYPES.map((value) => (
-            <option value={value} selected={value === "custom_domain"}>
-              {value}
-            </option>
-          ))}
-        </select>
-
-        <label for="domain-route-mode">{t("Route mode")}</label>
-        <select id="domain-route-mode" name="routeMode">
-          {TENANT_DOMAIN_ROUTE_MODES.map((value) => (
-            <option value={value} selected={value === "canonical"}>
-              {value}
-            </option>
-          ))}
-        </select>
-
-        <p class="cell-muted">
-          {t(
-            "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify."
-          )}
-        </p>
-
-        <button type="submit" id="domain-create-submit">
-          {t("Add domain")}
-        </button>
-      </form>
-    )
-  }
-
-  {
-    canRead && !loadError && (
+  {canCreate && (
+    <form id="domain-create-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Add a domain")}</p>
       <p
-        id="domain-action-error"
+        id="domain-create-error"
         class="admin-create-error"
         role="alert"
         hidden
       />
-    )
-  }
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="tenant-domains-table">
-          <caption>
-            {tn("{count} domain", "{count} domains", domains.length, {
-              count: domains.length
-            })}
-          </caption>
-          <thead>
+      <label for="domain-hostname">{t("Hostname")}</label>
+      <input
+        id="domain-hostname"
+        name="hostname"
+        type="text"
+        required
+        autocomplete="off"
+        placeholder="tenant.example.com"
+      />
+
+      <label for="domain-type">{t("Domain type")}</label>
+      <select id="domain-type" name="domainType">
+        {TENANT_DOMAIN_TYPES.map((value) => (
+          <option value={value} selected={value === "custom_domain"}>
+            {value}
+          </option>
+        ))}
+      </select>
+
+      <label for="domain-route-mode">{t("Route mode")}</label>
+      <select id="domain-route-mode" name="routeMode">
+        {TENANT_DOMAIN_ROUTE_MODES.map((value) => (
+          <option value={value} selected={value === "canonical"}>
+            {value}
+          </option>
+        ))}
+      </select>
+
+      <p class="cell-muted">
+        {t(
+          "A DNS TXT record is generated when the domain is added. Publish it in the domain's zone, then press Verify."
+        )}
+      </p>
+
+      <button type="submit" id="domain-create-submit">
+        {t("Add domain")}
+      </button>
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <p
+      id="domain-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="tenant-domains-table">
+        <caption>
+          {tn("{count} domain", "{count} domains", domains.length, {
+            count: domains.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Hostname")}</th>
+            <th scope="col">{t("Type")}</th>
+            <th scope="col">{t("Route mode")}</th>
+            <th scope="col">{t("Status")}</th>
+            <th scope="col">{t("Primary")}</th>
+            {showActions && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {domains.length === 0 ? (
             <tr>
-              <th scope="col">{t("Hostname")}</th>
-              <th scope="col">{t("Type")}</th>
-              <th scope="col">{t("Route mode")}</th>
-              <th scope="col">{t("Status")}</th>
-              <th scope="col">{t("Primary")}</th>
-              {showActions && <th scope="col">{t("Actions")}</th>}
+              <td class="data-table-empty" colspan={showActions ? 6 : 5}>
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ⌂
+                  </span>
+                  <span class="empty-state-title">{t("No domains yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? "Add your first domain mapping using the form above."
+                      : "Domain mappings for this tenant will appear here."}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {domains.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={showActions ? 6 : 5}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ⌂
-                    </span>
-                    <span class="empty-state-title">{t("No domains yet")}</span>
-                    <span class="empty-state-text">
-                      {canCreate
-                        ? "Add your first domain mapping using the form above."
-                        : "Domain mappings for this tenant will appear here."}
-                    </span>
-                  </div>
+          ) : (
+            domains.map((domain) => (
+              <tr data-domain-row={domain.id}>
+                <td data-label="Hostname" class="stacked-block">
+                  <span class="cell-code">{domain.hostname}</span>
+                  {domain.status !== "active" &&
+                    domain.verificationRecordName &&
+                    domain.verificationRecordValue && (
+                      <p class="cell-muted">
+                        {t("Publish TXT")}{" "}
+                        <span class="cell-code">
+                          {domain.verificationRecordName}
+                        </span>{" "}
+                        ={" "}
+                        <span class="cell-code">
+                          {domain.verificationRecordValue}
+                        </span>
+                      </p>
+                    )}
                 </td>
-              </tr>
-            ) : (
-              domains.map((domain) => (
-                <tr data-domain-row={domain.id}>
-                  <td data-label="Hostname" class="stacked-block">
-                    <span class="cell-code">{domain.hostname}</span>
-                    {domain.status !== "active" &&
-                      domain.verificationRecordName &&
-                      domain.verificationRecordValue && (
-                        <p class="cell-muted">
-                          {t("Publish TXT")}{" "}
-                          <span class="cell-code">
-                            {domain.verificationRecordName}
-                          </span>{" "}
-                          ={" "}
-                          <span class="cell-code">
-                            {domain.verificationRecordValue}
-                          </span>
-                        </p>
-                      )}
-                  </td>
-                  <td data-label="Type">
-                    <span class="cell-muted">{domain.domainType}</span>
-                  </td>
-                  <td data-label="Route mode">
-                    <span class="cell-muted">{domain.routeMode}</span>
-                  </td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={statusVariant(domain.status)}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {domain.status}
-                    </span>
-                  </td>
-                  <td data-label="Primary">{domain.isPrimary ? "Yes" : "—"}</td>
-                  {showActions && (
-                    <td data-label="Actions" class="stacked-block">
-                      <div class="row-actions">
-                        {canVerify &&
-                          (domain.status === "pending_verification" ||
-                            domain.status === "failed") && (
-                            <button
-                              type="button"
-                              class="module-toggle domain-verify-btn"
-                              data-domain-id={domain.id}
-                            >
-                              {t("Verify")}
-                            </button>
-                          )}
-                        {canSetPrimary &&
-                          domain.status === "active" &&
-                          !domain.isPrimary && (
-                            <button
-                              type="button"
-                              class="module-toggle domain-primary-btn"
-                              data-domain-id={domain.id}
-                            >
-                              {t("Set primary")}
-                            </button>
-                          )}
-                        {canDelete && (
+                <td data-label="Type">
+                  <span class="cell-muted">{domain.domainType}</span>
+                </td>
+                <td data-label="Route mode">
+                  <span class="cell-muted">{domain.routeMode}</span>
+                </td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={statusVariant(domain.status)}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {domain.status}
+                  </span>
+                </td>
+                <td data-label="Primary">{domain.isPrimary ? "Yes" : "—"}</td>
+                {showActions && (
+                  <td data-label="Actions" class="stacked-block">
+                    <div class="row-actions">
+                      {canVerify &&
+                        (domain.status === "pending_verification" ||
+                          domain.status === "failed") && (
                           <button
                             type="button"
-                            class="module-toggle domain-delete-btn"
+                            class="module-toggle domain-verify-btn"
                             data-domain-id={domain.id}
-                            data-domain-host={domain.hostname}
                           >
-                            {t("Delete")}
+                            {t("Verify")}
                           </button>
                         )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+                      {canSetPrimary &&
+                        domain.status === "active" &&
+                        !domain.isPrimary && (
+                          <button
+                            type="button"
+                            class="module-toggle domain-primary-btn"
+                            data-domain-id={domain.id}
+                          >
+                            {t("Set primary")}
+                          </button>
+                        )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="module-toggle domain-delete-btn"
+                          data-domain-id={domain.id}
+                          data-domain-host={domain.hostname}
+                        >
+                          {t("Delete")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>
 
 <script>

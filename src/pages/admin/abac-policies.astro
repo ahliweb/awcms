@@ -84,8 +84,7 @@ const canUpdate = canConfigure;
     "Per-tenant custom access policies. This table is empty by default — the evaluator applies the built-in role/permission rules, and custom policies are an opt-in extension surface."
   )}
 >
-  {
-    /*
+  {/*
         The screen used to say only that the table is empty by default, which
         reads as "nothing here yet" rather than "nothing written here takes
         effect". Policies authored on THIS screen keep `is_dsl_managed = false`
@@ -93,181 +92,168 @@ const canUpdate = canConfigure;
         a flat row cannot be scoped or conditioned and a flat `deny` would deny
         every request in the tenant. But an operator writing a rule here and
         expecting it to bite deserves to be told, not to discover it.
-      */
-  }
+      */}
   <p class="state-notice" id="abac-policies-inert-notice">
-    {
-      t(
-        "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
-      )
-    }
+    {t(
+      "Policies created here are stored but never evaluated. The policies the evaluator consults are on the Access policies screen."
+    )}
   </p>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="abac-policies-denied">
-        {t("You do not have permission to view ABAC policies.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="abac-policies-denied">
+      {t("You do not have permission to view ABAC policies.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="abac-policies-error">
-        {t("Policies could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="abac-policies-error">
+      {t("Policies could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canCreate && (
-      <form id="policy-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">{t("Create a policy")}</p>
-        <p
-          id="policy-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
-
-        <label for="policy-code">{t("Policy code")}</label>
-        <input
-          id="policy-code"
-          name="policyCode"
-          type="text"
-          required
-          autocomplete="off"
-        />
-
-        <label for="policy-effect">{t("Effect")}</label>
-        <select id="policy-effect" name="effect">
-          <option value="allow">{t("allow")}</option>
-          <option value="deny">{t("deny")}</option>
-        </select>
-
-        <label for="policy-description">{t("Description (optional)")}</label>
-        <input
-          id="policy-description"
-          name="description"
-          type="text"
-          autocomplete="off"
-        />
-
-        <button type="submit" id="policy-create-submit">
-          {t("Create policy")}
-        </button>
-      </form>
-    )
-  }
-
-  {
-    canUpdate && (
+  {canCreate && (
+    <form id="policy-create-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Create a policy")}</p>
       <p
-        id="policy-update-error"
+        id="policy-create-error"
         class="admin-create-error"
         role="alert"
         hidden
       />
-    )
-  }
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="abac-policies-table">
-          <caption>
-            {tn("{count} policy", "{count} policies", policies.length, {
-              count: policies.length
-            })}
-          </caption>
-          <thead>
+      <label for="policy-code">{t("Policy code")}</label>
+      <input
+        id="policy-code"
+        name="policyCode"
+        type="text"
+        required
+        autocomplete="off"
+      />
+
+      <label for="policy-effect">{t("Effect")}</label>
+      <select id="policy-effect" name="effect">
+        <option value="allow">{t("allow")}</option>
+        <option value="deny">{t("deny")}</option>
+      </select>
+
+      <label for="policy-description">{t("Description (optional)")}</label>
+      <input
+        id="policy-description"
+        name="description"
+        type="text"
+        autocomplete="off"
+      />
+
+      <button type="submit" id="policy-create-submit">
+        {t("Create policy")}
+      </button>
+    </form>
+  )}
+
+  {canUpdate && (
+    <p
+      id="policy-update-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="abac-policies-table">
+        <caption>
+          {tn("{count} policy", "{count} policies", policies.length, {
+            count: policies.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Code")}</th>
+            <th scope="col">{t("Effect")}</th>
+            <th scope="col">{t("Description")}</th>
+            <th scope="col">{t("Active")}</th>
+            {canUpdate && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {policies.length === 0 ? (
             <tr>
-              <th scope="col">{t("Code")}</th>
-              <th scope="col">{t("Effect")}</th>
-              <th scope="col">{t("Description")}</th>
-              <th scope="col">{t("Active")}</th>
-              {canUpdate && <th scope="col">{t("Actions")}</th>}
+              <td class="data-table-empty" colspan={canUpdate ? 5 : 4}>
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ⚖
+                  </span>
+                  <span class="empty-state-title">
+                    {t("No custom policies")}
+                  </span>
+                  <span class="empty-state-text">
+                    {t(
+                      "The built-in role/permission rules apply. Add a custom policy to extend or override them for this tenant."
+                    )}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {policies.length === 0 ? (
+          ) : (
+            policies.map((policy) => (
               <tr>
-                <td class="data-table-empty" colspan={canUpdate ? 5 : 4}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ⚖
-                    </span>
-                    <span class="empty-state-title">
-                      {t("No custom policies")}
-                    </span>
-                    <span class="empty-state-text">
-                      {t(
-                        "The built-in role/permission rules apply. Add a custom policy to extend or override them for this tenant."
-                      )}
-                    </span>
-                  </div>
+                <td data-label="Code">
+                  <span class="cell-code">{policy.policyCode}</span>
                 </td>
+                <td data-label="Effect">
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      policy.effect === "allow" ? "success" : "danger"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {policy.effect}
+                  </span>
+                </td>
+                <td data-label="Description">
+                  {policy.description ?? <span class="cell-muted">—</span>}
+                </td>
+                <td data-label="Active">
+                  <span
+                    class="status-badge"
+                    data-variant={policy.isActive ? "success" : "neutral"}
+                  >
+                    {policy.isActive ? "active" : "inactive"}
+                  </span>
+                </td>
+                {canUpdate && (
+                  <td data-label="Actions" class="stacked-block">
+                    <div class="row-actions">
+                      <button
+                        type="button"
+                        class="module-toggle policy-edit"
+                        data-policy-id={policy.id}
+                        data-policy-code={policy.policyCode}
+                        data-effect={policy.effect}
+                        data-description={policy.description ?? ""}
+                      >
+                        {t("Edit")}
+                      </button>
+                      <button
+                        type="button"
+                        class="module-toggle policy-toggle"
+                        data-policy-id={policy.id}
+                        data-active={policy.isActive ? "true" : "false"}
+                      >
+                        {policy.isActive ? "Disable" : "Enable"}
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
-            ) : (
-              policies.map((policy) => (
-                <tr>
-                  <td data-label="Code">
-                    <span class="cell-code">{policy.policyCode}</span>
-                  </td>
-                  <td data-label="Effect">
-                    <span
-                      class="status-badge"
-                      data-variant={
-                        policy.effect === "allow" ? "success" : "danger"
-                      }
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {policy.effect}
-                    </span>
-                  </td>
-                  <td data-label="Description">
-                    {policy.description ?? <span class="cell-muted">—</span>}
-                  </td>
-                  <td data-label="Active">
-                    <span
-                      class="status-badge"
-                      data-variant={policy.isActive ? "success" : "neutral"}
-                    >
-                      {policy.isActive ? "active" : "inactive"}
-                    </span>
-                  </td>
-                  {canUpdate && (
-                    <td data-label="Actions" class="stacked-block">
-                      <div class="row-actions">
-                        <button
-                          type="button"
-                          class="module-toggle policy-edit"
-                          data-policy-id={policy.id}
-                          data-policy-code={policy.policyCode}
-                          data-effect={policy.effect}
-                          data-description={policy.description ?? ""}
-                        >
-                          {t("Edit")}
-                        </button>
-                        <button
-                          type="button"
-                          class="module-toggle policy-toggle"
-                          data-policy-id={policy.id}
-                          data-active={policy.isActive ? "true" : "false"}
-                        >
-                          {policy.isActive ? "Disable" : "Enable"}
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>
 
 <script>

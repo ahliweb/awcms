@@ -107,175 +107,169 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
     "Which tenants on this deployment may be engaged as partners. A row here grants nothing \u2014 it is the precondition a customer's engagement checks. Whether a partner actually reaches a customer is that customer's decision, taken on their own Partner access screen."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="partner-registry-denied">
-        {t(
-          "You do not have permission to view the partner registry. It is platform-scoped: only the platform tenant can reach it."
-        )}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="partner-registry-denied">
+      {t(
+        "You do not have permission to view the partner registry. It is platform-scoped: only the platform tenant can reach it."
+      )}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="partner-registry-load-error">
-        {t("Could not load the partner registry. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="partner-registry-load-error">
+      {t("Could not load the partner registry. Please try again.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <>
-        <p
-          id="partner-registry-action-error"
-          class="state-notice"
-          role="alert"
-          hidden
-        />
+  {canRead && !loadError && (
+    <>
+      <p
+        id="partner-registry-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+      />
 
-        {canCreate && (
-          <section
-            class="fade-in-up"
-            aria-labelledby="partner-registry-add-heading"
-          >
-            <h2 id="partner-registry-add-heading">{t("Register a partner")}</h2>
-
-            <form id="register-partner-form" class="admin-form">
-              <p class="page-description">
-                {t(
-                  "The tenant must already exist \u2014 this does not create one. There is no picker on purpose: a selectable list of every tenant is the directory this design declines to hand out. Look the id up on the Tenants screen if you need it."
-                )}
-              </p>
-
-              <label for="register-partner-tenant-id">
-                {t("Partner tenant id")}
-              </label>
-              <input
-                id="register-partner-tenant-id"
-                name="partnerTenantId"
-                type="text"
-                required
-                autocomplete="off"
-                placeholder="00000000-0000-0000-0000-000000000000"
-              />
-
-              <label for="register-partner-code">{t("Partner code")}</label>
-              <input
-                id="register-partner-code"
-                name="partnerCode"
-                type="text"
-                required
-                maxlength="64"
-                pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?"
-                placeholder="acme-digital"
-              />
-              <p class="page-description">
-                {t(
-                  "Lower-case letters, digits and hyphens, unique across the deployment. Case matters to the index and not to a human, so a stray capital would make a second partner that reads like the first one."
-                )}
-              </p>
-
-              <label for="register-partner-name">{t("Display name")}</label>
-              <input
-                id="register-partner-name"
-                name="displayName"
-                type="text"
-                required
-                maxlength="160"
-              />
-
-              <button id="register-partner-submit" type="submit">
-                {t("Register partner")}
-              </button>
-            </form>
-          </section>
-        )}
-
+      {canCreate && (
         <section
           class="fade-in-up"
-          aria-labelledby="partner-registry-list-heading"
+          aria-labelledby="partner-registry-add-heading"
         >
-          <h2 id="partner-registry-list-heading">{t("Registered partners")}</h2>
+          <h2 id="partner-registry-add-heading">{t("Register a partner")}</h2>
 
-          {partners.length === 0 ? (
-            <div class="empty-state">
-              <p id="partner-registry-empty">
-                {t(
-                  "No tenant on this deployment is registered as a partner. Nobody can be engaged until one is."
-                )}
-              </p>
-            </div>
-          ) : (
-            <div class="data-table-scroll">
-              <table class="data-table data-table--stack">
-                <thead>
+          <form id="register-partner-form" class="admin-form">
+            <p class="page-description">
+              {t(
+                "The tenant must already exist \u2014 this does not create one. There is no picker on purpose: a selectable list of every tenant is the directory this design declines to hand out. Look the id up on the Tenants screen if you need it."
+              )}
+            </p>
+
+            <label for="register-partner-tenant-id">
+              {t("Partner tenant id")}
+            </label>
+            <input
+              id="register-partner-tenant-id"
+              name="partnerTenantId"
+              type="text"
+              required
+              autocomplete="off"
+              placeholder="00000000-0000-0000-0000-000000000000"
+            />
+
+            <label for="register-partner-code">{t("Partner code")}</label>
+            <input
+              id="register-partner-code"
+              name="partnerCode"
+              type="text"
+              required
+              maxlength="64"
+              pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?"
+              placeholder="acme-digital"
+            />
+            <p class="page-description">
+              {t(
+                "Lower-case letters, digits and hyphens, unique across the deployment. Case matters to the index and not to a human, so a stray capital would make a second partner that reads like the first one."
+              )}
+            </p>
+
+            <label for="register-partner-name">{t("Display name")}</label>
+            <input
+              id="register-partner-name"
+              name="displayName"
+              type="text"
+              required
+              maxlength="160"
+            />
+
+            <button id="register-partner-submit" type="submit">
+              {t("Register partner")}
+            </button>
+          </form>
+        </section>
+      )}
+
+      <section
+        class="fade-in-up"
+        aria-labelledby="partner-registry-list-heading"
+      >
+        <h2 id="partner-registry-list-heading">{t("Registered partners")}</h2>
+
+        {partners.length === 0 ? (
+          <div class="empty-state">
+            <p id="partner-registry-empty">
+              {t(
+                "No tenant on this deployment is registered as a partner. Nobody can be engaged until one is."
+              )}
+            </p>
+          </div>
+        ) : (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Partner code")}</th>
+                  <th scope="col">{t("Display name")}</th>
+                  <th scope="col">{t("Tenant")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Registered")}</th>
+                  {(canSuspend || canReinstate) && (
+                    <th scope="col">{t("Reach")}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {partners.map((partner) => (
                   <tr>
-                    <th scope="col">{t("Partner code")}</th>
-                    <th scope="col">{t("Display name")}</th>
-                    <th scope="col">{t("Tenant")}</th>
-                    <th scope="col">{t("Status")}</th>
-                    <th scope="col">{t("Registered")}</th>
+                    <th scope="row" data-label="Partner code">
+                      {partner.partnerCode}
+                    </th>
+                    <td data-label="Display name">{partner.displayName}</td>
+                    <td data-label="Tenant">
+                      {partner.tenantName} ({partner.tenantCode})
+                    </td>
+                    <td data-label="Status">{partner.status}</td>
+                    <td data-label="Registered">
+                      {partner.registeredAt.toISOString().slice(0, 10)}
+                    </td>
                     {(canSuspend || canReinstate) && (
-                      <th scope="col">{t("Reach")}</th>
+                      <td data-label="Reach">
+                        {partner.status === "active" && canSuspend && (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger js-suspend-partner"
+                            data-partner-tenant-id={partner.partnerTenantId}
+                            data-partner-code={partner.partnerCode}
+                          >
+                            {t("Suspend")}
+                          </button>
+                        )}
+                        {partner.status === "suspended" && canReinstate && (
+                          <button
+                            type="button"
+                            class="module-toggle js-reinstate-partner"
+                            data-partner-tenant-id={partner.partnerTenantId}
+                            data-partner-code={partner.partnerCode}
+                          >
+                            {t("Reinstate")}
+                          </button>
+                        )}
+                      </td>
                     )}
                   </tr>
-                </thead>
-                <tbody>
-                  {partners.map((partner) => (
-                    <tr>
-                      <th scope="row" data-label="Partner code">
-                        {partner.partnerCode}
-                      </th>
-                      <td data-label="Display name">{partner.displayName}</td>
-                      <td data-label="Tenant">
-                        {partner.tenantName} ({partner.tenantCode})
-                      </td>
-                      <td data-label="Status">{partner.status}</td>
-                      <td data-label="Registered">
-                        {partner.registeredAt.toISOString().slice(0, 10)}
-                      </td>
-                      {(canSuspend || canReinstate) && (
-                        <td data-label="Reach">
-                          {partner.status === "active" && canSuspend && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger js-suspend-partner"
-                              data-partner-tenant-id={partner.partnerTenantId}
-                              data-partner-code={partner.partnerCode}
-                            >
-                              {t("Suspend")}
-                            </button>
-                          )}
-                          {partner.status === "suspended" && canReinstate && (
-                            <button
-                              type="button"
-                              class="module-toggle js-reinstate-partner"
-                              data-partner-tenant-id={partner.partnerTenantId}
-                              data-partner-code={partner.partnerCode}
-                            >
-                              {t("Reinstate")}
-                            </button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          <p class="page-description">
-            {t(
-              "There is no way to REMOVE a partner here, and that is deliberate: engagements and delegated grants reference these rows, and grants are built to outlive the partnership that produced them. Suspending is the retirement path, and it removes nothing \u2014 every grant row survives as the record of who could reach which customer and until when. What stops is the reach: each delegated actor the partner placed is refused at their next request, in every customer tenant, and reinstating restores all of it without anybody rewriting a row."
-            )}
-          </p>
-        </section>
-      </>
-    )
-  }
+        <p class="page-description">
+          {t(
+            "There is no way to REMOVE a partner here, and that is deliberate: engagements and delegated grants reference these rows, and grants are built to outlive the partnership that produced them. Suspending is the retirement path, and it removes nothing \u2014 every grant row survives as the record of who could reach which customer and until when. What stops is the reach: each delegated actor the partner placed is refused at their next request, in every customer tenant, and reinstating restores all of it without anybody rewriting a row."
+          )}
+        </p>
+      </section>
+    </>
+  )}
 </AdminLayout>
 
 <script>

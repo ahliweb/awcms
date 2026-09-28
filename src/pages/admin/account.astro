@@ -238,24 +238,20 @@ const themeOptions = [
     "Your name, the language and theme you read this admin in, your password, and the devices and sign-in methods attached to your account. Everything here is about you — nothing on this page can change anyone else."
   )}
 >
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="account-load-error">
-        {t("Could not load your account. Please try again.")}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="account-load-error">
+      {t("Could not load your account. Please try again.")}
+    </p>
+  )}
 
-  {
-    /* Translated strings for `admin-account-client.ts`.
+  {/* Translated strings for `admin-account-client.ts`.
 
       The catalog is a SERVER module: importing it into client code would ship
       every locale to every browser, and it cannot be read at runtime there at
       all. So the strings the script needs are rendered here as data attributes —
       the same seam `ThemeToggle` uses for its mode labels — and the script reads
       them with English fallbacks, so a missing attribute degrades to a readable
-      sentence rather than `undefined`. */
-  }
+      sentence rather than `undefined`. */}
   <div
     id="account-i18n"
     hidden
@@ -312,8 +308,7 @@ const themeOptions = [
     data-sso-last-method={t(
       "That is the only way you can sign in, so it cannot be disconnected. Set a password first."
     )}
-  >
-  </div>
+  ></div>
 
   <section
     class="admin-card fade-in-up"
@@ -321,11 +316,9 @@ const themeOptions = [
   >
     <h2 id="account-profile-heading">{t("Profile")}</h2>
     <p class="admin-card-hint">
-      {
-        t(
-          "Your display name is what other people in this tenant see next to your actions."
-        )
-      }
+      {t(
+        "Your display name is what other people in this tenant see next to your actions."
+      )}
     </p>
 
     <form id="account-profile-form" class="admin-form">
@@ -352,11 +345,9 @@ const themeOptions = [
           aria-describedby="account-public-byline-hint"
         />
         <p id="account-public-byline-hint" class="admin-field-hint">
-          {
-            t(
-              "The name your articles are published under. Leave it empty and articles are attributed to this site, not to you."
-            )
-          }
+          {t(
+            "The name your articles are published under. Leave it empty and articles are attributed to this site, not to you."
+          )}
         </p>
       </div>
 
@@ -370,21 +361,19 @@ const themeOptions = [
           aria-describedby="account-login-identifier-hint"
         />
         <p class="admin-field-hint" id="account-login-identifier-hint">
-          {
-            /* Stated rather than silently disabled: a read-only field with no
+          {/* Stated rather than silently disabled: a read-only field with no
               explanation reads as a bug. ADR-0096 §3 lists this as a known gap —
-              changing it is account recovery, not profile editing. */
-          }
-          {
-            t(
-              "Changing the address you sign in with is not available here yet — it needs proof that the new address is yours."
-            )
-          }
+              changing it is account recovery, not profile editing. */}
+          {t(
+            "Changing the address you sign in with is not available here yet — it needs proof that the new address is yours."
+          )}
         </p>
       </div>
 
       <p class="form-error" id="account-profile-error" role="alert" hidden></p>
-      <button type="submit" class="btn-primary">{t("Save profile")}</button>
+      <button type="submit" class="btn-primary">
+        {t("Save profile")}
+      </button>
     </form>
   </section>
 
@@ -394,11 +383,9 @@ const themeOptions = [
   >
     <h2 id="account-preferences-heading">{t("Language and appearance")}</h2>
     <p class="admin-card-hint">
-      {
-        t(
-          "These follow you to any device you sign in from, because they belong to you rather than to one tenant."
-        )
-      }
+      {t(
+        "These follow you to any device you sign in from, because they belong to you rather than to one tenant."
+      )}
     </p>
 
     <form id="account-preferences-form" class="admin-form">
@@ -408,45 +395,37 @@ const themeOptions = [
           <option value="" selected={storedLocale === null}>
             {t("Follow this tenant's default")}
           </option>
-          {
-            listLocales().map((option) => (
-              <option
-                value={option}
-                selected={storedLocale === option}
-                lang={option}
-              >
-                {LOCALE_ENDONYM[option]}
-              </option>
-            ))
-          }
+          {listLocales().map((option) => (
+            <option
+              value={option}
+              selected={storedLocale === option}
+              lang={option}
+            >
+              {LOCALE_ENDONYM[option]}
+            </option>
+          ))}
         </select>
       </div>
 
       <div class="admin-field">
         <label for="account-theme">{t("Colour theme")}</label>
         <select id="account-theme" name="theme">
-          {
-            themeOptions.map((option) => (
-              <option
-                value={option.value}
-                selected={(storedTheme ?? "") === option.value}
-              >
-                {option.label}
-              </option>
-            ))
-          }
+          {themeOptions.map((option) => (
+            <option
+              value={option.value}
+              selected={(storedTheme ?? "") === option.value}
+            >
+              {option.label}
+            </option>
+          ))}
         </select>
         <p class="admin-field-hint">
-          {
-            /* The precedence is genuinely surprising, so it is written down
+          {/* The precedence is genuinely surprising, so it is written down
               rather than left to be discovered: the topbar toggle writes
-              localStorage, which wins on THIS device. */
-          }
-          {
-            t(
-              "The theme button in the top bar changes this device straight away. What you choose here applies on devices you have not used yet."
-            )
-          }
+              localStorage, which wins on THIS device. */}
+          {t(
+            "The theme button in the top bar changes this device straight away. What you choose here applies on devices you have not used yet."
+          )}
         </p>
       </div>
 
@@ -456,8 +435,7 @@ const themeOptions = [
           <option value="" selected={storedTimeZone === null}>
             {t("Coordinated Universal Time (UTC)")}
           </option>
-          {
-            /* Rendered from `Intl.supportedValuesOf`, not a list this repo
+          {/* Rendered from `Intl.supportedValuesOf`, not a list this repo
               keeps: the IANA database ships with the runtime and changes
               several times a year, so a checked-in list would start missing
               zones. sql/130 constrains only the shape for the same reason.
@@ -466,22 +444,17 @@ const themeOptions = [
               without JavaScript and so the selected value is correct on first
               paint. It is ~445 options of SSR HTML on one admin page — no
               client asset, so it does not touch the budget `bun run build`
-              enforces. */
-          }
-          {
-            supportedTimeZones.map((zone) => (
-              <option value={zone} selected={storedTimeZone === zone}>
-                {zone.replaceAll("_", " ")}
-              </option>
-            ))
-          }
+              enforces. */}
+          {supportedTimeZones.map((zone) => (
+            <option value={zone} selected={storedTimeZone === zone}>
+              {zone.replaceAll("_", " ")}
+            </option>
+          ))}
         </select>
         <p class="admin-field-hint">
-          {
-            t(
-              "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
-            )
-          }
+          {t(
+            "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
+          )}
         </p>
         <button
           type="button"
@@ -492,9 +465,15 @@ const themeOptions = [
         </button>
       </div>
 
-      <p class="form-error" id="account-preferences-error" role="alert" hidden>
-      </p>
-      <button type="submit" class="btn-primary">{t("Save preferences")}</button>
+      <p
+        class="form-error"
+        id="account-preferences-error"
+        role="alert"
+        hidden
+      ></p>
+      <button type="submit" class="btn-primary">
+        {t("Save preferences")}
+      </button>
     </form>
   </section>
 
@@ -528,74 +507,72 @@ const themeOptions = [
       </div>
 
       <p class="form-error" id="account-password-error" role="alert" hidden></p>
-      <button type="submit" class="btn-primary">{t("Change password")}</button>
+      <button type="submit" class="btn-primary">
+        {t("Change password")}
+      </button>
     </form>
   </section>
 
   <section class="admin-card fade-in-up" aria-labelledby="account-mfa-heading">
     <h2 id="account-mfa-heading">{t("Two-factor authentication")}</h2>
 
-    {
-      mfaEnabled ? (
-        <>
-          <p class="admin-card-hint" id="account-mfa-state">
-            {mfaActivatedAt
-              ? t("Enabled since {activated}.", {
-                  activated: formatDateTime(
-                    locale,
-                    mfaActivatedAt,
-                    DISPLAY_TIME_ZONE
-                  )
-                })
-              : t("Enabled.")}
-          </p>
-          <div class="admin-actions">
-            <button type="button" class="btn-secondary" id="account-mfa-codes">
-              {t("Generate new recovery codes")}
-            </button>
-            <button type="button" class="btn-danger" id="account-mfa-disable">
-              {t("Turn off two-factor authentication")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p class="admin-card-hint" id="account-mfa-state">
-            {mfaFeatureEnabled
-              ? t(
-                  "Not enabled. Two-factor authentication asks for a code from your phone in addition to your password."
+    {mfaEnabled ? (
+      <>
+        <p class="admin-card-hint" id="account-mfa-state">
+          {mfaActivatedAt
+            ? t("Enabled since {activated}.", {
+                activated: formatDateTime(
+                  locale,
+                  mfaActivatedAt,
+                  DISPLAY_TIME_ZONE
                 )
-              : /* Enrolment is off for this deployment. Say so, rather than
+              })
+            : t("Enabled.")}
+        </p>
+        <div class="admin-actions">
+          <button type="button" class="btn-secondary" id="account-mfa-codes">
+            {t("Generate new recovery codes")}
+          </button>
+          <button type="button" class="btn-danger" id="account-mfa-disable">
+            {t("Turn off two-factor authentication")}
+          </button>
+        </div>
+      </>
+    ) : (
+      <>
+        <p class="admin-card-hint" id="account-mfa-state">
+          {mfaFeatureEnabled
+            ? t(
+                "Not enabled. Two-factor authentication asks for a code from your phone in addition to your password."
+              )
+            : /* Enrolment is off for this deployment. Say so, rather than
                    offering a button whose endpoint answers 400 — a control that
                    cannot work is worse than an absent one, because the person
                    keeps trying. */
-                t(
-                  "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
-                )}
-          </p>
-          {mfaFeatureEnabled && (
-            <button type="button" class="btn-primary" id="account-mfa-enrol">
-              {t("Set up two-factor authentication")}
-            </button>
-          )}
-        </>
-      )
-    }
+              t(
+                "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
+              )}
+        </p>
+        {mfaFeatureEnabled && (
+          <button type="button" class="btn-primary" id="account-mfa-enrol">
+            {t("Set up two-factor authentication")}
+          </button>
+        )}
+      </>
+    )}
 
-    {
-      /* Filled in by the client script after enrolment starts. The secret is
+    {/* Filled in by the client script after enrolment starts. The secret is
         rendered into the DOM only for the person enrolling, on a `no-store`
-        page, and never reaches the server log — it is already theirs. */
-    }
+        page, and never reaches the server log — it is already theirs. */}
     <div id="account-mfa-enrolment" hidden>
       <p class="admin-card-hint">
-        {
-          t(
-            "Add this secret to your authenticator app, then enter the six-digit code it shows."
-          )
-        }
+        {t(
+          "Add this secret to your authenticator app, then enter the six-digit code it shows."
+        )}
       </p>
-      <p class="account-secret"><code id="account-mfa-secret"></code></p>
+      <p class="account-secret">
+        <code id="account-mfa-secret"></code>
+      </p>
       <form id="account-mfa-verify-form" class="admin-form">
         <div class="admin-field">
           <label for="account-mfa-code">{t("Six-digit code")}</label>
@@ -609,17 +586,17 @@ const themeOptions = [
             required
           />
         </div>
-        <button type="submit" class="btn-primary">{t("Confirm code")}</button>
+        <button type="submit" class="btn-primary">
+          {t("Confirm code")}
+        </button>
       </form>
     </div>
 
     <div id="account-mfa-recovery" hidden>
       <p class="admin-card-hint">
-        {
-          t(
-            "Save these recovery codes somewhere safe. Each one works once, and they are shown only now."
-          )
-        }
+        {t(
+          "Save these recovery codes somewhere safe. Each one works once, and they are shown only now."
+        )}
       </p>
       <ul class="account-recovery-codes" id="account-mfa-recovery-list"></ul>
     </div>
@@ -700,76 +677,62 @@ const themeOptions = [
   >
     <h2 id="account-sessions-heading">{t("Where you are signed in")}</h2>
     <p class="admin-card-hint">
-      {
-        t(
-          "Each row is a browser or device holding a live session. Signing one out takes effect immediately."
-        )
-      }
+      {t(
+        "Each row is a browser or device holding a live session. Signing one out takes effect immediately."
+      )}
     </p>
 
-    {
-      sessions.length === 0 ? (
-        <p class="state-notice" id="account-sessions-empty">
-          {t("No other sessions to show.")}
-        </p>
-      ) : (
-        <div class="table-scroll">
-          <table class="admin-table" id="account-sessions-table">
-            <thead>
+    {sessions.length === 0 ? (
+      <p class="state-notice" id="account-sessions-empty">
+        {t("No other sessions to show.")}
+      </p>
+    ) : (
+      <div class="table-scroll">
+        <table class="admin-table" id="account-sessions-table">
+          <thead>
+            <tr>
+              <th scope="col">{t("Device")}</th>
+              <th scope="col">{t("Signed in")}</th>
+              <th scope="col">{t("Expires")}</th>
+              <th scope="col">{t("Sign-in method")}</th>
+              <th scope="col">
+                <span class="sr-only">{t("Actions")}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((session) => (
               <tr>
-                <th scope="col">{t("Device")}</th>
-                <th scope="col">{t("Signed in")}</th>
-                <th scope="col">{t("Expires")}</th>
-                <th scope="col">{t("Sign-in method")}</th>
-                <th scope="col">
-                  <span class="sr-only">{t("Actions")}</span>
-                </th>
+                <td>
+                  {session.userAgentSummary ?? t("Unknown device")}
+                  {session.current && (
+                    <span class="badge badge-current">{t("This device")}</span>
+                  )}
+                </td>
+                <td>
+                  {formatDateTime(locale, session.issuedAt, DISPLAY_TIME_ZONE)}
+                </td>
+                <td>
+                  {formatDateTime(locale, session.expiresAt, DISPLAY_TIME_ZONE)}
+                </td>
+                <td>{session.originAuth}</td>
+                <td>
+                  {!session.current && (
+                    <button
+                      type="button"
+                      class="btn-danger btn-small account-session-revoke"
+                      data-session-id={session.id}
+                    >
+                      {t("Sign out")}
+                    </button>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {sessions.map((session) => (
-                <tr>
-                  <td>
-                    {session.userAgentSummary ?? t("Unknown device")}
-                    {session.current && (
-                      <span class="badge badge-current">
-                        {t("This device")}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {formatDateTime(
-                      locale,
-                      session.issuedAt,
-                      DISPLAY_TIME_ZONE
-                    )}
-                  </td>
-                  <td>
-                    {formatDateTime(
-                      locale,
-                      session.expiresAt,
-                      DISPLAY_TIME_ZONE
-                    )}
-                  </td>
-                  <td>{session.originAuth}</td>
-                  <td>
-                    {!session.current && (
-                      <button
-                        type="button"
-                        class="btn-danger btn-small account-session-revoke"
-                        data-session-id={session.id}
-                      >
-                        {t("Sign out")}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
 
     <p class="form-error" id="account-sessions-error" role="alert" hidden></p>
     <button type="button" class="btn-danger" id="account-sessions-revoke-all">

@@ -89,244 +89,234 @@ const pending = requests.filter(
 ---
 
 <AdminLayout title={t("Subject requests")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "Exports and erasures answered for a named person. A subject is answered"
-      )
-    }<strong>{t("per tenant")}</strong>{
-      t(
-        ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each."
-      )
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "Exports and erasures answered for a named person. A subject is answered"
+    )}
+    <strong>{t("per tenant")}</strong>
+    {t(
+      ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each."
+    )}
+  </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="subject-requests-denied">
-        {t("You do not have permission to view subject requests.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="subject-requests-denied">
+      {t("You do not have permission to view subject requests.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="subject-requests-load-error">
-        {t("Could not load subject requests. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="subject-requests-load-error">
+      {t("Could not load subject requests. Please try again.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <>
-        <p
-          id="subject-requests-action-error"
-          class="state-notice"
-          role="alert"
-          hidden
-        />
-        <p
-          id="subject-requests-notice"
-          class="state-notice"
-          role="status"
-          hidden
-        />
+  {canRead && !loadError && (
+    <>
+      <p
+        id="subject-requests-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+      />
+      <p
+        id="subject-requests-notice"
+        class="state-notice"
+        role="status"
+        hidden
+      />
 
-        {canExport && (
-          <section class="fade-in-up" aria-labelledby="subject-export-heading">
-            <h2 id="subject-export-heading">{t("Export a subject's data")}</h2>
+      {canExport && (
+        <section class="fade-in-up" aria-labelledby="subject-export-heading">
+          <h2 id="subject-export-heading">{t("Export a subject's data")}</h2>
 
-            <form id="subject-export-form" class="admin-form">
-              <p class="page-description">
-                {t("This is a")}
-                <strong>{t("disclosure")}</strong>
-                {t(
-                  ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
-                )}
-              </p>
-
-              <label for="subject-export-user">{t("Tenant user id")}</label>
-              <input
-                id="subject-export-user"
-                name="tenantUserId"
-                type="text"
-                required
-                autocomplete="off"
-              />
-
-              <label for="subject-export-reason">
-                {t("Reason for disclosure")}
-              </label>
-              <input
-                id="subject-export-reason"
-                name="reason"
-                type="text"
-                required
-                minlength="8"
-                placeholder="Subject access request received 2026-08-13"
-              />
-
-              <button id="subject-export-submit" type="submit">
-                {t("Export subject data")}
-              </button>
-            </form>
-
-            <div id="subject-export-result" hidden>
-              <h3>{t("Export result")}</h3>
-              <p id="subject-export-summary" class="page-description" />
-              <div id="subject-export-tables" />
-              <h4>{t("Not covered by this answer")}</h4>
-              <p class="page-description">
-                {t(
-                  "Tables this report deliberately does not reach, and why. A report that omitted them silently would look complete."
-                )}
-              </p>
-              <ul id="subject-export-unanswered" />
-            </div>
-          </section>
-        )}
-
-        {canRequestErasure && (
-          <section class="fade-in-up" aria-labelledby="subject-erase-heading">
-            <h2 id="subject-erase-heading">{t("Request an erasure")}</h2>
-
-            <form id="subject-erase-form" class="admin-form">
-              <p class="page-description">
-                {t(
-                  "Requesting does not erase anything. A DIFFERENT person holding the approval permission must decide — the two permissions are a segregation-of-duties conflict, so you will not normally be able to do both."
-                )}
-              </p>
-
-              <label for="subject-erase-user">{t("Tenant user id")}</label>
-              <input
-                id="subject-erase-user"
-                name="tenantUserId"
-                type="text"
-                required
-                autocomplete="off"
-              />
-
-              <label for="subject-erase-reason">
-                {t("Ground for erasure")}
-              </label>
-              <input
-                id="subject-erase-reason"
-                name="reason"
-                type="text"
-                required
-                minlength="8"
-                placeholder="Erasure request received 2026-08-13, no retention obligation"
-              />
-
-              <button id="subject-erase-submit" type="submit">
-                {t("Request erasure")}
-              </button>
-            </form>
-          </section>
-        )}
-
-        <section class="fade-in-up" aria-labelledby="subject-pending-heading">
-          <h2 id="subject-pending-heading">{t("Awaiting a decision")}</h2>
-
-          {pending.length === 0 ? (
-            <div class="empty-state">
-              <p id="subject-requests-pending-empty">
-                {t("Nothing is waiting for a decision.")}
-              </p>
-            </div>
-          ) : (
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">{t("Subject")}</th>
-                  <th scope="col">{t("Requested by")}</th>
-                  <th scope="col">{t("Requested at")}</th>
-                  <th scope="col">{t("Ground")}</th>
-                  {canDecide && <th scope="col">{t("Decision")}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((request) => (
-                  <tr data-request-id={request.id}>
-                    <td>{request.subjectTenantUserId}</td>
-                    <td>{request.requestedBy}</td>
-                    <td>{request.requestedAt}</td>
-                    <td>{request.reason}</td>
-                    {canDecide && (
-                      <td>
-                        <button
-                          type="button"
-                          class="js-decide-request"
-                          data-request-id={request.id}
-                          data-decision="approve"
-                        >
-                          {t("Approve and erase")}
-                        </button>
-                        <button
-                          type="button"
-                          class="js-decide-request"
-                          data-request-id={request.id}
-                          data-decision="reject"
-                        >
-                          {t("Reject")}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {!canDecide && pending.length > 0 && (
-            <p class="page-description" id="subject-requests-cannot-decide">
+          <form id="subject-export-form" class="admin-form">
+            <p class="page-description">
+              {t("This is a")}
+              <strong>{t("disclosure")}</strong>
               {t(
-                "You can see what is pending but not decide it. That separation is deliberate."
+                ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
               )}
             </p>
-          )}
+
+            <label for="subject-export-user">{t("Tenant user id")}</label>
+            <input
+              id="subject-export-user"
+              name="tenantUserId"
+              type="text"
+              required
+              autocomplete="off"
+            />
+
+            <label for="subject-export-reason">
+              {t("Reason for disclosure")}
+            </label>
+            <input
+              id="subject-export-reason"
+              name="reason"
+              type="text"
+              required
+              minlength="8"
+              placeholder="Subject access request received 2026-08-13"
+            />
+
+            <button id="subject-export-submit" type="submit">
+              {t("Export subject data")}
+            </button>
+          </form>
+
+          <div id="subject-export-result" hidden>
+            <h3>{t("Export result")}</h3>
+            <p id="subject-export-summary" class="page-description" />
+            <div id="subject-export-tables" />
+            <h4>{t("Not covered by this answer")}</h4>
+            <p class="page-description">
+              {t(
+                "Tables this report deliberately does not reach, and why. A report that omitted them silently would look complete."
+              )}
+            </p>
+            <ul id="subject-export-unanswered" />
+          </div>
         </section>
+      )}
 
-        <section class="fade-in-up" aria-labelledby="subject-log-heading">
-          <h2 id="subject-log-heading">{t("Request log")}</h2>
+      {canRequestErasure && (
+        <section class="fade-in-up" aria-labelledby="subject-erase-heading">
+          <h2 id="subject-erase-heading">{t("Request an erasure")}</h2>
 
-          {requests.length === 0 ? (
-            <div class="empty-state">
-              <p id="subject-requests-empty">
-                {t("No subject request has been made in this tenant.")}
-              </p>
-            </div>
-          ) : (
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">{t("Type")}</th>
-                  <th scope="col">{t("Subject")}</th>
-                  <th scope="col">{t("Status")}</th>
-                  <th scope="col">{t("Requested by")}</th>
-                  <th scope="col">{t("Decided by")}</th>
-                  <th scope="col">{t("Rows")}</th>
+          <form id="subject-erase-form" class="admin-form">
+            <p class="page-description">
+              {t(
+                "Requesting does not erase anything. A DIFFERENT person holding the approval permission must decide — the two permissions are a segregation-of-duties conflict, so you will not normally be able to do both."
+              )}
+            </p>
+
+            <label for="subject-erase-user">{t("Tenant user id")}</label>
+            <input
+              id="subject-erase-user"
+              name="tenantUserId"
+              type="text"
+              required
+              autocomplete="off"
+            />
+
+            <label for="subject-erase-reason">{t("Ground for erasure")}</label>
+            <input
+              id="subject-erase-reason"
+              name="reason"
+              type="text"
+              required
+              minlength="8"
+              placeholder="Erasure request received 2026-08-13, no retention obligation"
+            />
+
+            <button id="subject-erase-submit" type="submit">
+              {t("Request erasure")}
+            </button>
+          </form>
+        </section>
+      )}
+
+      <section class="fade-in-up" aria-labelledby="subject-pending-heading">
+        <h2 id="subject-pending-heading">{t("Awaiting a decision")}</h2>
+
+        {pending.length === 0 ? (
+          <div class="empty-state">
+            <p id="subject-requests-pending-empty">
+              {t("Nothing is waiting for a decision.")}
+            </p>
+          </div>
+        ) : (
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Subject")}</th>
+                <th scope="col">{t("Requested by")}</th>
+                <th scope="col">{t("Requested at")}</th>
+                <th scope="col">{t("Ground")}</th>
+                {canDecide && <th scope="col">{t("Decision")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map((request) => (
+                <tr data-request-id={request.id}>
+                  <td>{request.subjectTenantUserId}</td>
+                  <td>{request.requestedBy}</td>
+                  <td>{request.requestedAt}</td>
+                  <td>{request.reason}</td>
+                  {canDecide && (
+                    <td>
+                      <button
+                        type="button"
+                        class="js-decide-request"
+                        data-request-id={request.id}
+                        data-decision="approve"
+                      >
+                        {t("Approve and erase")}
+                      </button>
+                      <button
+                        type="button"
+                        class="js-decide-request"
+                        data-request-id={request.id}
+                        data-decision="reject"
+                      >
+                        {t("Reject")}
+                      </button>
+                    </td>
+                  )}
                 </tr>
-              </thead>
-              <tbody>
-                {requests.map((request) => (
-                  <tr>
-                    <td>{request.requestType}</td>
-                    <td>{request.subjectTenantUserId}</td>
-                    <td>{request.status}</td>
-                    <td>{request.requestedBy}</td>
-                    <td>{request.decidedBy ?? "—"}</td>
-                    <td>{request.rowsAffected ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      </>
-    )
-  }
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {!canDecide && pending.length > 0 && (
+          <p class="page-description" id="subject-requests-cannot-decide">
+            {t(
+              "You can see what is pending but not decide it. That separation is deliberate."
+            )}
+          </p>
+        )}
+      </section>
+
+      <section class="fade-in-up" aria-labelledby="subject-log-heading">
+        <h2 id="subject-log-heading">{t("Request log")}</h2>
+
+        {requests.length === 0 ? (
+          <div class="empty-state">
+            <p id="subject-requests-empty">
+              {t("No subject request has been made in this tenant.")}
+            </p>
+          </div>
+        ) : (
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Subject")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Requested by")}</th>
+                <th scope="col">{t("Decided by")}</th>
+                <th scope="col">{t("Rows")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr>
+                  <td>{request.requestType}</td>
+                  <td>{request.subjectTenantUserId}</td>
+                  <td>{request.status}</td>
+                  <td>{request.requestedBy}</td>
+                  <td>{request.decidedBy ?? "—"}</td>
+                  <td>{request.rowsAffected ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  )}
 </AdminLayout>
 
 <script>

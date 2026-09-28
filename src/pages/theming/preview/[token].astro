@@ -30,59 +30,57 @@ const model = context
 const tokenCssHref = `/theming/preview-tokens/${encodeURIComponent(token)}.css`;
 ---
 
-{
-  model ? (
-    <PublicThemeLayout
-      title={`Preview — ${model.themeName}`}
-      tokenCssHref={tokenCssHref}
-      model={model}
-      noindex={true}
-    >
-      <h1 data-preview-heading>{model.themeName} preview</h1>
-      <p>This is a private, non-indexable preview of your draft theme.</p>
-      {model.sections.map((section) => (
-        <section
-          class="theme-section"
-          data-section={section.key}
-          aria-label={section.label}
-        >
-          <h2>{section.heading}</h2>
-          <p>{section.body}</p>
-          {section.key === "cta" && (
-            <a class="theme-cta" href="#">
-              Learn more
-            </a>
-          )}
-        </section>
-      ))}
-      <form class="theme-section" aria-label="Sample contact form">
-        <h2>Contact</h2>
-        <label>
-          Email
-          <input type="email" name="email" autocomplete="email" />
-        </label>
-        <button type="submit" class="theme-cta">
-          Send
-        </button>
-      </form>
-    </PublicThemeLayout>
-  ) : (
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="robots" content="noindex, nofollow" />
-        <title>Preview not found</title>
-      </head>
-      <body>
-        <main role="main">
-          <h1>Preview not found or expired</h1>
-          <p>
-            This preview link is invalid or has expired. Generate a new preview
-            from the theme admin.
-          </p>
-        </main>
-      </body>
-    </html>
-  )
-}
+{model ? (
+  <PublicThemeLayout
+    title={`Preview — ${model.themeName}`}
+    tokenCssHref={tokenCssHref}
+    model={model}
+    noindex={true}
+  >
+    <h1 data-preview-heading>{model.themeName} preview</h1>
+    <p>This is a private, non-indexable preview of your draft theme.</p>
+    {model.sections.map((section) => (
+      <section
+        class="theme-section"
+        data-section={section.key}
+        aria-label={section.label}
+      >
+        <h2>{section.heading}</h2>
+        <p>{section.body}</p>
+        {section.key === "cta" && (
+          <a class="theme-cta" href="#">
+            Learn more
+          </a>
+        )}
+      </section>
+    ))}
+    <form class="theme-section" aria-label="Sample contact form">
+      <h2>Contact</h2>
+      <label>
+        Email
+        <input type="email" name="email" autocomplete="email" />
+      </label>
+      <button type="submit" class="theme-cta">
+        Send
+      </button>
+    </form>
+  </PublicThemeLayout>
+) : (
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="robots" content="noindex, nofollow" />
+      <title>Preview not found</title>
+    </head>
+    <body>
+      <main role="main">
+        <h1>Preview not found or expired</h1>
+        <p>
+          This preview link is invalid or has expired. Generate a new preview
+          from the theme admin.
+        </p>
+      </main>
+    </body>
+  </html>
+)}

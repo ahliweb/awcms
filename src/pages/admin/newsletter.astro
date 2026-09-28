@@ -140,188 +140,178 @@ const columnCount = canConfigure ? 6 : 5;
     "Who asked to receive this tenant's newsletter, when they confirmed, and who has stopped. Addresses arrive only through the public form and only become active when somebody follows the confirmation link — there is deliberately no way to add one from here."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="newsletter-denied">
-        {t("You do not have permission to read the subscriber list.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="newsletter-denied">
+      {t("You do not have permission to read the subscriber list.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="newsletter-error">
-        {t("The subscriber list could not be loaded. Please try again.")}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="newsletter-error">
+      {t("The subscriber list could not be loaded. Please try again.")}
+    </p>
+  )}
 
   <p class="form-error" id="newsletter-action-error" hidden></p>
 
-  {
-    canRead && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="Subscriber summary">
-        <div class="stat-grid stagger-children">
-          {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
-            <div class="stat-card">
-              <span class="stat-label">{status}</span>
-              <span class="stat-value">{counts[status] ?? 0}</span>
-              {status === "pending" && (
-                <span class="stat-hint">
-                  {t(
-                    "Submitted and never confirmed. A number that only grows usually means this tenant has no active confirmation email template."
-                  )}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="newsletter-filter-title"
-      >
-        <h2 class="admin-section-title" id="newsletter-filter-title">
-          {t("Filter")}
-        </h2>
-        <form method="get" action="/admin/newsletter" class="admin-filter-form">
-          <label class="field">
-            <span class="field-label">{t("Status")}</span>
-            <select name="status" class="field-input">
-              <option value="">{t("All")}</option>
-              {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
-                <option value={status} selected={status === statusFilter}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div class="admin-toolbar">
-            <button type="submit" class="btn-primary">
-              {t("Apply")}
-            </button>
-            <a class="quick-link" href="/admin/newsletter">
-              {t("Reset")}
-            </a>
-          </div>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="newsletter-list-title"
-      >
-        <h2 class="admin-section-title" id="newsletter-list-title">
-          {t("Subscribers")}
-          <span class="count-pill">{subscribers.length}</span>
-        </h2>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">{t("Newsletter subscribers.")}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Address")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Source")}</th>
-                <th scope="col">{t("Consent")}</th>
-                <th scope="col">{t("Ended")}</th>
-                {canConfigure && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {subscribers.length === 0 ? (
-                <tr>
-                  <td colspan={columnCount} class="cell-muted">
-                    {t("No subscribers match this filter.")}
-                  </td>
-                </tr>
-              ) : (
-                subscribers.map((item) => (
-                  <tr>
-                    {/* `set:text`, never parsed — an address is caller-supplied
-                        and reaches this table verbatim. */}
-                    <td data-label="Address">
-                      <span class="cell-strong" set:text={item.email} />
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {item.status}
-                      </span>
-                    </td>
-                    <td data-label="Source" set:text={item.source} />
-                    <td data-label="Consent">
-                      <span class="cell-muted">
-                        {formatTimestamp(item.consentAt)}
-                      </span>
-                    </td>
-                    <td data-label="Ended">
-                      {item.suppressedAt ? (
-                        <>
-                          <span class="cell-muted">
-                            {formatTimestamp(item.suppressedAt)}
-                          </span>
-                          <span
-                            class="cell-muted"
-                            set:text={item.suppressionReason ?? ""}
-                          />
-                        </>
-                      ) : (
-                        <span class="cell-muted">
-                          {formatTimestamp(item.unsubscribedAt)}
-                        </span>
-                      )}
-                    </td>
-                    {canConfigure && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {item.status !== "suppressed" && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger newsletter-suppress-btn"
-                              data-subscriber-id={item.id}
-                            >
-                              {t("Suppress")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {nextCursor && (
-          <div class="admin-toolbar">
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" aria-label="Subscriber summary">
+      <div class="stat-grid stagger-children">
+        {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
+          <div class="stat-card">
+            <span class="stat-label">{status}</span>
+            <span class="stat-value">{counts[status] ?? 0}</span>
+            {status === "pending" && (
+              <span class="stat-hint">
+                {t(
+                  "Submitted and never confirmed. A number that only grows usually means this tenant has no active confirmation email template."
+                )}
               </span>
-            </a>
+            )}
           </div>
-        )}
-        <p class="form-hint">
-          {t("Up to")} {SUBSCRIBER_LIST_LIMIT} {t("per page.")}
-        </p>
-      </section>
-    )
-  }
+        ))}
+      </div>
+    </section>
+  )}
+
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="newsletter-filter-title"
+    >
+      <h2 class="admin-section-title" id="newsletter-filter-title">
+        {t("Filter")}
+      </h2>
+      <form method="get" action="/admin/newsletter" class="admin-filter-form">
+        <label class="field">
+          <span class="field-label">{t("Status")}</span>
+          <select name="status" class="field-input">
+            <option value="">{t("All")}</option>
+            {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
+              <option value={status} selected={status === statusFilter}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div class="admin-toolbar">
+          <button type="submit" class="btn-primary">
+            {t("Apply")}
+          </button>
+          <a class="quick-link" href="/admin/newsletter">
+            {t("Reset")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
+
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="newsletter-list-title"
+    >
+      <h2 class="admin-section-title" id="newsletter-list-title">
+        {t("Subscribers")}
+        <span class="count-pill">{subscribers.length}</span>
+      </h2>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">{t("Newsletter subscribers.")}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Address")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Consent")}</th>
+              <th scope="col">{t("Ended")}</th>
+              {canConfigure && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {subscribers.length === 0 ? (
+              <tr>
+                <td colspan={columnCount} class="cell-muted">
+                  {t("No subscribers match this filter.")}
+                </td>
+              </tr>
+            ) : (
+              subscribers.map((item) => (
+                <tr>
+                  {/* `set:text`, never parsed — an address is caller-supplied
+                        and reaches this table verbatim. */}
+                  <td data-label="Address">
+                    <span class="cell-strong" set:text={item.email} />
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {item.status}
+                    </span>
+                  </td>
+                  <td data-label="Source" set:text={item.source} />
+                  <td data-label="Consent">
+                    <span class="cell-muted">
+                      {formatTimestamp(item.consentAt)}
+                    </span>
+                  </td>
+                  <td data-label="Ended">
+                    {item.suppressedAt ? (
+                      <>
+                        <span class="cell-muted">
+                          {formatTimestamp(item.suppressedAt)}
+                        </span>
+                        <span
+                          class="cell-muted"
+                          set:text={item.suppressionReason ?? ""}
+                        />
+                      </>
+                    ) : (
+                      <span class="cell-muted">
+                        {formatTimestamp(item.unsubscribedAt)}
+                      </span>
+                    )}
+                  </td>
+                  {canConfigure && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {item.status !== "suppressed" && (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger newsletter-suppress-btn"
+                            data-subscriber-id={item.id}
+                          >
+                            {t("Suppress")}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {nextCursor && (
+        <div class="admin-toolbar">
+          <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+            {t("Next page")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
+      )}
+      <p class="form-hint">
+        {t("Up to")} {SUBSCRIBER_LIST_LIMIT} {t("per page.")}
+      </p>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

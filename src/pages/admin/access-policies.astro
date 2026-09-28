@@ -105,148 +105,131 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
     "The policies the access evaluator consults. A policy is only consulted when it is DSL-managed and enabled — policies written on the legacy ABAC policies screen are stored but never evaluated."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="access-policies-denied">
-        {t("You do not have permission to view access policies.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="access-policies-denied">
+      {t("You do not have permission to view access policies.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="access-policies-error">
-        {t("Policies could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="access-policies-error">
+      {t("Policies could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && policies.length === 0 && (
-      <p class="state-notice fade-in-up" id="access-policies-empty">
+  {canRead && !loadError && policies.length === 0 && (
+    <p class="state-notice fade-in-up" id="access-policies-empty">
+      {t(
+        "No access policies are stored. The evaluator is applying its built-in role and permission rules."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && policies.length > 0 && (
+    <table class="admin-table fade-in-up" id="access-policies-table">
+      <thead>
+        <tr>
+          <th scope="col">{t("Policy code")}</th>
+          <th scope="col">{t("Effect")}</th>
+          <th scope="col">{t("Applies to")}</th>
+          <th scope="col">{t("Priority")}</th>
+          <th scope="col">{t("In force")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {policies.map((policy) => (
+          <tr data-policy-id={policy.id}>
+            <td>
+              {policy.policyCode}
+              {policy.description && (
+                <span class="cell-secondary">{policy.description}</span>
+              )}
+            </td>
+            <td>{policy.effect === "allow" ? t("Allow") : t("Deny")}</td>
+            <td>{scopeOf(policy)}</td>
+            <td>{policy.priority}</td>
+            <td>
+              {inForce(policy)
+                ? t("Yes")
+                : policy.isDslManaged
+                  ? t("No — disabled")
+                  : t("No — not evaluated")}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+
+  {canRead && canAnalyze && (
+    <section
+      class="admin-create-form fade-in-up"
+      aria-labelledby="simulate-legend"
+    >
+      <p class="form-legend" id="simulate-legend">
+        {t("Simulate a decision")}
+      </p>
+      <p class="page-description">
         {t(
-          "No access policies are stored. The evaluator is applying its built-in role and permission rules."
+          "Ask what the evaluator would answer for a hypothetical subject. Nothing is written and no decision is recorded."
         )}
       </p>
-    )
-  }
 
-  {
-    canRead && !loadError && policies.length > 0 && (
-      <table class="admin-table fade-in-up" id="access-policies-table">
-        <thead>
-          <tr>
-            <th scope="col">{t("Policy code")}</th>
-            <th scope="col">{t("Effect")}</th>
-            <th scope="col">{t("Applies to")}</th>
-            <th scope="col">{t("Priority")}</th>
-            <th scope="col">{t("In force")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {policies.map((policy) => (
-            <tr data-policy-id={policy.id}>
-              <td>
-                {policy.policyCode}
-                {policy.description && (
-                  <span class="cell-secondary">{policy.description}</span>
-                )}
-              </td>
-              <td>{policy.effect === "allow" ? t("Allow") : t("Deny")}</td>
-              <td>{scopeOf(policy)}</td>
-              <td>{policy.priority}</td>
-              <td>
-                {inForce(policy)
-                  ? t("Yes")
-                  : policy.isDslManaged
-                    ? t("No — disabled")
-                    : t("No — not evaluated")}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )
-  }
+      <form id="policy-simulate-form">
+        <p id="simulate-error" class="admin-create-error" role="alert" hidden />
 
-  {
-    canRead && canAnalyze && (
-      <section
-        class="admin-create-form fade-in-up"
-        aria-labelledby="simulate-legend"
-      >
-        <p class="form-legend" id="simulate-legend">
-          {t("Simulate a decision")}
-        </p>
-        <p class="page-description">
-          {t(
-            "Ask what the evaluator would answer for a hypothetical subject. Nothing is written and no decision is recorded."
-          )}
-        </p>
+        <label for="simulate-roles">{t("Role codes (comma-separated)")}</label>
+        <input
+          id="simulate-roles"
+          name="roles"
+          type="text"
+          autocomplete="off"
+        />
 
-        <form id="policy-simulate-form">
-          <p
-            id="simulate-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
+        <label for="simulate-module">{t("Module key")}</label>
+        <input
+          id="simulate-module"
+          name="moduleKey"
+          type="text"
+          required
+          autocomplete="off"
+        />
 
-          <label for="simulate-roles">
-            {t("Role codes (comma-separated)")}
-          </label>
-          <input
-            id="simulate-roles"
-            name="roles"
-            type="text"
-            autocomplete="off"
-          />
+        <label for="simulate-activity">{t("Activity code")}</label>
+        <input
+          id="simulate-activity"
+          name="activityCode"
+          type="text"
+          required
+          autocomplete="off"
+        />
 
-          <label for="simulate-module">{t("Module key")}</label>
-          <input
-            id="simulate-module"
-            name="moduleKey"
-            type="text"
-            required
-            autocomplete="off"
-          />
+        <label for="simulate-action">{t("Action")}</label>
+        <input
+          id="simulate-action"
+          name="action"
+          type="text"
+          required
+          autocomplete="off"
+        />
 
-          <label for="simulate-activity">{t("Activity code")}</label>
-          <input
-            id="simulate-activity"
-            name="activityCode"
-            type="text"
-            required
-            autocomplete="off"
-          />
+        <button type="submit">{t("Simulate")}</button>
+      </form>
 
-          <label for="simulate-action">{t("Action")}</label>
-          <input
-            id="simulate-action"
-            name="action"
-            type="text"
-            required
-            autocomplete="off"
-          />
-
-          <button type="submit">{t("Simulate")}</button>
-        </form>
-
-        {/*
+      {/*
           `aria-live` so the answer is announced: the result replaces itself in
           place and a screen-reader user would otherwise get no signal that the
           button did anything.
         */}
-        <p
-          id="simulate-result"
-          class="state-notice"
-          role="status"
-          aria-live="polite"
-          hidden
-        />
-      </section>
-    )
-  }
+      <p
+        id="simulate-result"
+        class="state-notice"
+        role="status"
+        aria-live="polite"
+        hidden
+      />
+    </section>
+  )}
 </AdminLayout>
 
 <script>

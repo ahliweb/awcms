@@ -92,151 +92,143 @@ const rootNode = current?.nodes.find(
   )}
 >
   <div class="omes-cc">
-    {
-      !canSeeAnything && (
-        <p class="state-notice fade-in-up" id="omes-hermes-denied">
-          {t("You do not have permission to view Hermes orchestration.")}
-        </p>
-      )
-    }
+    {!canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-hermes-denied">
+        {t("You do not have permission to view Hermes orchestration.")}
+      </p>
+    )}
 
-    {
-      canSeeAnything && loadError && (
-        <p class="state-notice fade-in-up" id="omes-hermes-error">
-          {t(
-            "The Hermes task summary could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-          )}
-        </p>
-      )
-    }
+    {canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-hermes-error">
+        {t(
+          "The Hermes task summary could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canSeeAnything && !loadError && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="hermes-task-title"
-          id="omes-hermes-task"
-        >
-          <h2 class="admin-section-title" id="hermes-task-title">
-            {t("Current Hermes task")}
-          </h2>
+    {canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="hermes-task-title"
+        id="omes-hermes-task"
+      >
+        <h2 class="admin-section-title" id="hermes-task-title">
+          {t("Current Hermes task")}
+        </h2>
 
-          {!current || !rootNode ? (
-            <div class="empty-state">
-              <span class="empty-state-icon" aria-hidden="true">
-                ▭
-              </span>
-              <span class="empty-state-title">
-                {t("No Hermes task reported yet")}
-              </span>
-              <span class="empty-state-text">
-                {t(
-                  "Appears here once an enrolled OMES host reports a Hermes delegation session."
-                )}
-              </span>
+        {!current || !rootNode ? (
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ▭
+            </span>
+            <span class="empty-state-title">
+              {t("No Hermes task reported yet")}
+            </span>
+            <span class="empty-state-text">
+              {t(
+                "Appears here once an enrolled OMES host reports a Hermes delegation session."
+              )}
+            </span>
+          </div>
+        ) : (
+          <dl class="omes-hermes-task-summary">
+            <div>
+              <dt>{t("Session")}</dt>
+              <dd class="cell-code">{current.sessionId}</dd>
             </div>
-          ) : (
-            <dl class="omes-hermes-task-summary">
-              <div>
-                <dt>{t("Session")}</dt>
-                <dd class="cell-code">{current.sessionId}</dd>
-              </div>
-              <div>
-                <dt>{t("Goal")}</dt>
-                <dd>{rootNode.goal ?? NOT_REPORTED}</dd>
-              </div>
-              <div>
-                <dt>{t("Status")}</dt>
-                <dd data-historical={rootNode.isHistorical ? "true" : "false"}>
-                  <span
-                    class="status-badge"
-                    data-variant={
-                      rootNode.isHistorical
-                        ? "neutral"
-                        : current.isActive
-                          ? "success"
-                          : "info"
-                    }
-                  >
-                    <span class="status-dot" aria-hidden="true" />
-                    {rootNode.isHistorical
-                      ? t("last reported: {state}", {
-                          state: rootNode.effectiveState
-                        })
-                      : rootNode.effectiveState}
-                  </span>
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Started")}</dt>
-                <dd>{rootNode.startedAt ?? NOT_REPORTED}</dd>
-              </div>
-              <div>
-                <dt>{t("Step count")}</dt>
-                <dd>{rootNode.stepCount ?? NOT_REPORTED}</dd>
-              </div>
-              <div>
-                <dt>
-                  {t("Planner")}
-                  <span class="cell-muted">
-                    {" "}
-                    · {t("not available in the v1 contract")}
-                  </span>
-                </dt>
-                <dd class="cell-muted">{t("not reported")}</dd>
-              </div>
-              <div>
-                <dt>
-                  {t("Step budget")}
-                  <span class="cell-muted">
-                    {" "}
-                    · {t("not available in the v1 contract")}
-                  </span>
-                </dt>
-                <dd class="cell-muted">{t("not reported")}</dd>
-              </div>
-            </dl>
-          )}
-        </section>
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && current && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="hermes-log-title"
-          id="omes-hermes-log"
-        >
-          <h2 class="admin-section-title" id="hermes-log-title">
-            {t("Hermes log")}
-            <span class="count-pill">{events.length}</span>
-          </h2>
-
-          <ul class="omes-orchestration-activity-list">
-            {events.length === 0 ? (
-              <li class="empty-state">
-                <span class="empty-state-title">{t("No log yet")}</span>
-              </li>
-            ) : (
-              events.slice(0, 20).map((event) => (
-                <li
-                  data-event-id={event.id}
-                  data-historical={event.isHistorical ? "true" : "false"}
+            <div>
+              <dt>{t("Goal")}</dt>
+              <dd>{rootNode.goal ?? NOT_REPORTED}</dd>
+            </div>
+            <div>
+              <dt>{t("Status")}</dt>
+              <dd data-historical={rootNode.isHistorical ? "true" : "false"}>
+                <span
+                  class="status-badge"
+                  data-variant={
+                    rootNode.isHistorical
+                      ? "neutral"
+                      : current.isActive
+                        ? "success"
+                        : "info"
+                  }
                 >
-                  <span class="cell-muted">{event.eventTimestamp}</span>
-                  <span class="cell-code">{event.subagentId}</span>
-                  <span class="cell-muted">{event.effectiveEventType}</span>
-                  {event.summary && (
-                    <span class="cell-muted">{event.summary}</span>
-                  )}
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
-      )
-    }
+                  <span class="status-dot" aria-hidden="true" />
+                  {rootNode.isHistorical
+                    ? t("last reported: {state}", {
+                        state: rootNode.effectiveState
+                      })
+                    : rootNode.effectiveState}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>{t("Started")}</dt>
+              <dd>{rootNode.startedAt ?? NOT_REPORTED}</dd>
+            </div>
+            <div>
+              <dt>{t("Step count")}</dt>
+              <dd>{rootNode.stepCount ?? NOT_REPORTED}</dd>
+            </div>
+            <div>
+              <dt>
+                {t("Planner")}
+                <span class="cell-muted">
+                  {" "}
+                  · {t("not available in the v1 contract")}
+                </span>
+              </dt>
+              <dd class="cell-muted">{t("not reported")}</dd>
+            </div>
+            <div>
+              <dt>
+                {t("Step budget")}
+                <span class="cell-muted">
+                  {" "}
+                  · {t("not available in the v1 contract")}
+                </span>
+              </dt>
+              <dd class="cell-muted">{t("not reported")}</dd>
+            </div>
+          </dl>
+        )}
+      </section>
+    )}
+
+    {canSeeAnything && !loadError && current && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="hermes-log-title"
+        id="omes-hermes-log"
+      >
+        <h2 class="admin-section-title" id="hermes-log-title">
+          {t("Hermes log")}
+          <span class="count-pill">{events.length}</span>
+        </h2>
+
+        <ul class="omes-orchestration-activity-list">
+          {events.length === 0 ? (
+            <li class="empty-state">
+              <span class="empty-state-title">{t("No log yet")}</span>
+            </li>
+          ) : (
+            events.slice(0, 20).map((event) => (
+              <li
+                data-event-id={event.id}
+                data-historical={event.isHistorical ? "true" : "false"}
+              >
+                <span class="cell-muted">{event.eventTimestamp}</span>
+                <span class="cell-code">{event.subagentId}</span>
+                <span class="cell-muted">{event.effectiveEventType}</span>
+                {event.summary && (
+                  <span class="cell-muted">{event.summary}</span>
+                )}
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
+    )}
   </div>
 </AdminLayout>
 

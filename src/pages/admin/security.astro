@@ -231,319 +231,309 @@ const mfaContradiction =
     "How this tenant signs in: password and SSO policy, break-glass accounts, and MFA enforcement. Changes here go through the same guarded, audited endpoints an API client would use."
   )}
 >
-  {
-    !canReadAnything && (
-      <p class="state-notice fade-in-up" id="security-denied">
-        {t("You do not have permission to view authentication settings.")}
-      </p>
-    )
-  }
+  {!canReadAnything && (
+    <p class="state-notice fade-in-up" id="security-denied">
+      {t("You do not have permission to view authentication settings.")}
+    </p>
+  )}
 
-  {
-    canReadAnything && loadError && (
-      <p class="state-notice fade-in-up" id="security-load-error">
-        {t("Could not load authentication settings. Please try again.")}
-      </p>
-    )
-  }
+  {canReadAnything && loadError && (
+    <p class="state-notice fade-in-up" id="security-load-error">
+      {t("Could not load authentication settings. Please try again.")}
+    </p>
+  )}
 
-  {
-    canReadAnything && !loadError && (
-      <>
-        <section class="fade-in-up" aria-labelledby="security-deployment">
-          <h2 id="security-deployment">{t("Deployment posture")}</h2>
-          <p class="page-description">
-            {t(
-              "Decided by this deployment's environment, not by the tenant \u2014 shown because the policies below depend on it. No key or secret value is displayed."
-            )}
-          </p>
-          <div class="data-table-scroll">
-            <table class="data-table data-table--stack">
-              <thead>
+  {canReadAnything && !loadError && (
+    <>
+      <section class="fade-in-up" aria-labelledby="security-deployment">
+        <h2 id="security-deployment">{t("Deployment posture")}</h2>
+        <p class="page-description">
+          {t(
+            "Decided by this deployment's environment, not by the tenant \u2014 shown because the policies below depend on it. No key or secret value is displayed."
+          )}
+        </p>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <thead>
+              <tr>
+                <th scope="col">{t("Control")}</th>
+                <th scope="col">{t("State")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statusRows.map((row) => (
                 <tr>
-                  <th scope="col">{t("Control")}</th>
-                  <th scope="col">{t("State")}</th>
+                  <th scope="row" data-label="Control">
+                    {row.label}
+                  </th>
+                  <td data-label="State">
+                    <span
+                      class="status-badge"
+                      data-variant={row.state === "on" ? "success" : "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {row.value}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {statusRows.map((row) => (
-                  <tr>
-                    <th scope="row" data-label="Control">
-                      {row.label}
-                    </th>
-                    <td data-label="State">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          row.state === "on" ? "success" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {row.value}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        {canReadPolicy && policy && (
-          <section class="fade-in-up" aria-labelledby="security-auth-policy">
-            <h2 id="security-auth-policy">
-              {t("Tenant authentication policy")}
-            </h2>
+      {canReadPolicy && policy && (
+        <section class="fade-in-up" aria-labelledby="security-auth-policy">
+          <h2 id="security-auth-policy">{t("Tenant authentication policy")}</h2>
 
-            {ssoContradiction && (
-              <p class="state-notice" id="security-sso-contradiction">
-                {t(
-                  "SSO is required for this tenant, but SSO sign-in is switched off for this deployment. Nobody outside the break-glass list can sign in until"
-                )}
-                <code>{t("AUTH_SSO_ENABLED")}</code>
-                {t("is turned on.")}
-              </p>
-            )}
+          {ssoContradiction && (
+            <p class="state-notice" id="security-sso-contradiction">
+              {t(
+                "SSO is required for this tenant, but SSO sign-in is switched off for this deployment. Nobody outside the break-glass list can sign in until"
+              )}
+              <code>{t("AUTH_SSO_ENABLED")}</code>
+              {t("is turned on.")}
+            </p>
+          )}
 
-            <form class="admin-create-form" id="security-policy-form">
-              <p class="form-legend">{t("Sign-in methods")}</p>
-              <p
-                id="security-policy-error"
-                class="admin-create-error"
-                role="alert"
-                hidden
-              />
+          <form class="admin-create-form" id="security-policy-form">
+            <p class="form-legend">{t("Sign-in methods")}</p>
+            <p
+              id="security-policy-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
 
-              <label>
-                <input
-                  type="checkbox"
-                  name="passwordLoginEnabled"
-                  checked={policy.passwordLoginEnabled}
-                  disabled={!canUpdatePolicy}
-                />
-                {t("Allow password sign-in")}
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  name="ssoEnabled"
-                  checked={policy.ssoEnabled}
-                  disabled={!canUpdatePolicy}
-                />
-                {t("Allow SSO sign-in")}
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  name="ssoRequired"
-                  checked={policy.ssoRequired}
-                  disabled={!canUpdatePolicy}
-                />
-                {t(
-                  "Require SSO (password sign-in refused except for break-glass accounts)"
-                )}
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  name="autoLinkVerifiedEmail"
-                  checked={policy.autoLinkVerifiedEmail}
-                  disabled={!canUpdatePolicy}
-                />
-                {t(
-                  "Auto-link an SSO login to an existing account with the same verified email"
-                )}
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  name="jitProvisioningEnabled"
-                  checked={policy.jitProvisioningEnabled}
-                  disabled={!canUpdatePolicy}
-                />
-                {t("Create an account on first SSO login (no roles granted)")}
-              </label>
-
-              <label for="security-allowed-domains">
-                {t("Allowed email domains (comma separated; empty means any)")}
-              </label>
+            <label>
               <input
-                id="security-allowed-domains"
-                name="allowedEmailDomains"
-                type="text"
-                autocomplete="off"
-                spellcheck={false}
-                value={policy.allowedEmailDomains.join(", ")}
+                type="checkbox"
+                name="passwordLoginEnabled"
+                checked={policy.passwordLoginEnabled}
                 disabled={!canUpdatePolicy}
               />
+              {t("Allow password sign-in")}
+            </label>
 
-              <p class="form-legend">{t("Break-glass accounts")}</p>
-              <p class="page-description">
-                {t(
-                  "Accounts that keep password sign-in even when SSO is required. Turning off password sign-in, or requiring SSO, is refused server-side unless at least one of these is still active \u2014 that is what stops an identity-provider outage from locking everyone out of the tenant permanently."
-                )}
-              </p>
-
-              {canUpdatePolicy && breakGlassCandidates.length === 0 && (
-                <p class="state-notice" id="security-no-candidates">
-                  {t("No active account is currently eligible.")}
-                </p>
-              )}
-
-              {canUpdatePolicy &&
-                breakGlassCandidates.map((candidate) => (
-                  <label>
-                    <input
-                      type="checkbox"
-                      name="breakGlassIdentityIds"
-                      value={candidate.identityId}
-                      checked={policy!.breakGlassIdentityIds.includes(
-                        candidate.identityId
-                      )}
-                    />
-                    {candidate.loginIdentifierMasked}
-                  </label>
-                ))}
-
-              {!canUpdatePolicy && (
-                <p class="page-description" id="security-break-glass-count">
-                  {tn(
-                    "{count} account configured.",
-                    "{count} accounts configured.",
-                    policy.breakGlassIdentityIds.length,
-                    { count: policy.breakGlassIdentityIds.length }
-                  )}
-                </p>
-              )}
-
-              {canUpdatePolicy && (
-                <button type="submit" id="security-policy-submit">
-                  {t("Save authentication policy")}
-                </button>
-              )}
-            </form>
-          </section>
-        )}
-
-        {canReadMfa && mfaPolicy && (
-          <section class="fade-in-up" aria-labelledby="security-mfa">
-            <h2 id="security-mfa">{t("Multi-factor authentication")}</h2>
-
-            {mfaContradiction && (
-              <p class="state-notice" id="security-mfa-contradiction">
-                {t(
-                  "MFA is enforced for this tenant, but enrolment is closed for this deployment ({setting}). A user without a factor cannot enrol one, and cannot sign in.",
-                  { setting: "AUTH_MFA_ENABLED=false" }
-                )}
-              </p>
-            )}
-
-            <form class="admin-create-form" id="security-mfa-form">
-              <p class="form-legend">{t("Enforcement level")}</p>
-              <p
-                id="security-mfa-error"
-                class="admin-create-error"
-                role="alert"
-                hidden
+            <label>
+              <input
+                type="checkbox"
+                name="ssoEnabled"
+                checked={policy.ssoEnabled}
+                disabled={!canUpdatePolicy}
               />
+              {t("Allow SSO sign-in")}
+            </label>
 
-              {MFA_LEVELS.map((level) => (
-                <label>
-                  <input
-                    type="radio"
-                    name="enforcementLevel"
-                    value={level.value}
-                    checked={mfaPolicy!.enforcementLevel === level.value}
-                    disabled={!canConfigureMfa}
-                  />
-                  {level.label} — {level.hint}
-                </label>
-              ))}
-
-              {canConfigureMfa && (
-                <button type="submit" id="security-mfa-submit">
-                  {t("Save MFA policy")}
-                </button>
+            <label>
+              <input
+                type="checkbox"
+                name="ssoRequired"
+                checked={policy.ssoRequired}
+                disabled={!canUpdatePolicy}
+              />
+              {t(
+                "Require SSO (password sign-in refused except for break-glass accounts)"
               )}
-            </form>
-          </section>
-        )}
+            </label>
 
-        {canReadProviders && (
-          <section class="fade-in-up" aria-labelledby="security-providers">
-            <h2 id="security-providers">{t("OIDC providers")}</h2>
+            <label>
+              <input
+                type="checkbox"
+                name="autoLinkVerifiedEmail"
+                checked={policy.autoLinkVerifiedEmail}
+                disabled={!canUpdatePolicy}
+              />
+              {t(
+                "Auto-link an SSO login to an existing account with the same verified email"
+              )}
+            </label>
+
+            <label>
+              <input
+                type="checkbox"
+                name="jitProvisioningEnabled"
+                checked={policy.jitProvisioningEnabled}
+                disabled={!canUpdatePolicy}
+              />
+              {t("Create an account on first SSO login (no roles granted)")}
+            </label>
+
+            <label for="security-allowed-domains">
+              {t("Allowed email domains (comma separated; empty means any)")}
+            </label>
+            <input
+              id="security-allowed-domains"
+              name="allowedEmailDomains"
+              type="text"
+              autocomplete="off"
+              spellcheck={false}
+              value={policy.allowedEmailDomains.join(", ")}
+              disabled={!canUpdatePolicy}
+            />
+
+            <p class="form-legend">{t("Break-glass accounts")}</p>
             <p class="page-description">
               {t(
-                "Read-only here. Adding, editing and removing a provider stays on"
-              )}
-              <code>{t("/api/v1/auth/sso-providers")}</code>
-              {t(
-                "\u2014 those writes carry a client secret, and a form that posts one deserves its own change."
+                "Accounts that keep password sign-in even when SSO is required. Turning off password sign-in, or requiring SSO, is refused server-side unless at least one of these is still active \u2014 that is what stops an identity-provider outage from locking everyone out of the tenant permanently."
               )}
             </p>
 
-            {providers.length === 0 ? (
-              <div class="empty-state" id="security-providers-empty">
-                <p class="empty-state-title">{t("No provider configured")}</p>
-                <p class="empty-state-text">
-                  {t(
-                    "This tenant has no OIDC provider, so SSO sign-in cannot succeed regardless of the policy above."
-                  )}
-                </p>
-              </div>
-            ) : (
-              <div class="data-table-scroll">
-                <table class="data-table data-table--stack">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("Key")}</th>
-                      <th scope="col">{t("Name")}</th>
-                      <th scope="col">{t("Issuer")}</th>
-                      <th scope="col">{t("Secret")}</th>
-                      <th scope="col">{t("State")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {providers.map((provider) => (
-                      <tr>
-                        <th scope="row" data-label="Key">
-                          <code class="cell-code">{provider.providerKey}</code>
-                        </th>
-                        <td data-label="Name">{provider.displayName}</td>
-                        <td data-label="Issuer">
-                          <code class="cell-code">{provider.issuerUrl}</code>
-                        </td>
-                        <td data-label="Secret">
-                          {provider.secretSource === "env"
-                            ? `Environment (${provider.clientSecretEnvVar})`
-                            : "Encrypted at rest"}
-                        </td>
-                        <td data-label="State">
-                          <span
-                            class="status-badge"
-                            data-variant={
-                              provider.enabled ? "success" : "neutral"
-                            }
-                          >
-                            <span class="status-dot" aria-hidden="true" />
-                            {provider.enabled ? "Enabled" : "Disabled"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {canUpdatePolicy && breakGlassCandidates.length === 0 && (
+              <p class="state-notice" id="security-no-candidates">
+                {t("No active account is currently eligible.")}
+              </p>
             )}
-          </section>
-        )}
-      </>
-    )
-  }
+
+            {canUpdatePolicy &&
+              breakGlassCandidates.map((candidate) => (
+                <label>
+                  <input
+                    type="checkbox"
+                    name="breakGlassIdentityIds"
+                    value={candidate.identityId}
+                    checked={policy!.breakGlassIdentityIds.includes(
+                      candidate.identityId
+                    )}
+                  />
+                  {candidate.loginIdentifierMasked}
+                </label>
+              ))}
+
+            {!canUpdatePolicy && (
+              <p class="page-description" id="security-break-glass-count">
+                {tn(
+                  "{count} account configured.",
+                  "{count} accounts configured.",
+                  policy.breakGlassIdentityIds.length,
+                  { count: policy.breakGlassIdentityIds.length }
+                )}
+              </p>
+            )}
+
+            {canUpdatePolicy && (
+              <button type="submit" id="security-policy-submit">
+                {t("Save authentication policy")}
+              </button>
+            )}
+          </form>
+        </section>
+      )}
+
+      {canReadMfa && mfaPolicy && (
+        <section class="fade-in-up" aria-labelledby="security-mfa">
+          <h2 id="security-mfa">{t("Multi-factor authentication")}</h2>
+
+          {mfaContradiction && (
+            <p class="state-notice" id="security-mfa-contradiction">
+              {t(
+                "MFA is enforced for this tenant, but enrolment is closed for this deployment ({setting}). A user without a factor cannot enrol one, and cannot sign in.",
+                { setting: "AUTH_MFA_ENABLED=false" }
+              )}
+            </p>
+          )}
+
+          <form class="admin-create-form" id="security-mfa-form">
+            <p class="form-legend">{t("Enforcement level")}</p>
+            <p
+              id="security-mfa-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+
+            {MFA_LEVELS.map((level) => (
+              <label>
+                <input
+                  type="radio"
+                  name="enforcementLevel"
+                  value={level.value}
+                  checked={mfaPolicy!.enforcementLevel === level.value}
+                  disabled={!canConfigureMfa}
+                />
+                {level.label} — {level.hint}
+              </label>
+            ))}
+
+            {canConfigureMfa && (
+              <button type="submit" id="security-mfa-submit">
+                {t("Save MFA policy")}
+              </button>
+            )}
+          </form>
+        </section>
+      )}
+
+      {canReadProviders && (
+        <section class="fade-in-up" aria-labelledby="security-providers">
+          <h2 id="security-providers">{t("OIDC providers")}</h2>
+          <p class="page-description">
+            {t(
+              "Read-only here. Adding, editing and removing a provider stays on"
+            )}
+            <code>{t("/api/v1/auth/sso-providers")}</code>
+            {t(
+              "\u2014 those writes carry a client secret, and a form that posts one deserves its own change."
+            )}
+          </p>
+
+          {providers.length === 0 ? (
+            <div class="empty-state" id="security-providers-empty">
+              <p class="empty-state-title">{t("No provider configured")}</p>
+              <p class="empty-state-text">
+                {t(
+                  "This tenant has no OIDC provider, so SSO sign-in cannot succeed regardless of the policy above."
+                )}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Key")}</th>
+                    <th scope="col">{t("Name")}</th>
+                    <th scope="col">{t("Issuer")}</th>
+                    <th scope="col">{t("Secret")}</th>
+                    <th scope="col">{t("State")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providers.map((provider) => (
+                    <tr>
+                      <th scope="row" data-label="Key">
+                        <code class="cell-code">{provider.providerKey}</code>
+                      </th>
+                      <td data-label="Name">{provider.displayName}</td>
+                      <td data-label="Issuer">
+                        <code class="cell-code">{provider.issuerUrl}</code>
+                      </td>
+                      <td data-label="Secret">
+                        {provider.secretSource === "env"
+                          ? `Environment (${provider.clientSecretEnvVar})`
+                          : "Encrypted at rest"}
+                      </td>
+                      <td data-label="State">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            provider.enabled ? "success" : "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {provider.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <script>

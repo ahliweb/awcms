@@ -140,192 +140,182 @@ function severityVariant(severity: string): string {
     "Append-only record of high-risk actions taken in this tenant \u2014 who did what, to which resource, and when. Sensitive values are redacted before an event is ever stored, so nothing here can be un-redacted."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="audit-trail-denied">
-        {t("You do not have permission to view the audit trail.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="audit-trail-denied">
+      {t("You do not have permission to view the audit trail.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="audit-trail-error">
-        {t(
-          "The audit trail could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="audit-trail-error">
+      {t(
+        "The audit trail could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <>
-        {/* A GET form: it navigates with query params, so the filter works
+  {canRead && !loadError && (
+    <>
+      {/* A GET form: it navigates with query params, so the filter works
             with JavaScript disabled and ships no bundle. */}
-        <form class="admin-create-form fade-in-up" method="get" role="search">
-          <p class="form-legend">{t("Filter")}</p>
+      <form class="admin-create-form fade-in-up" method="get" role="search">
+        <p class="form-legend">{t("Filter")}</p>
 
-          <label for="filter-resource-type">
-            {t("Resource type")}
-            <input
-              type="text"
-              id="filter-resource-type"
-              name="resourceType"
-              value={resourceTypeFilter}
-              list="audit-resource-types"
-              placeholder="Any resource type"
-            />
-          </label>
-          <datalist id="audit-resource-types">
-            {suggestedResourceTypes.map((resourceType) => (
-              <option value={resourceType} />
-            ))}
-          </datalist>
+        <label for="filter-resource-type">
+          {t("Resource type")}
+          <input
+            type="text"
+            id="filter-resource-type"
+            name="resourceType"
+            value={resourceTypeFilter}
+            list="audit-resource-types"
+            placeholder="Any resource type"
+          />
+        </label>
+        <datalist id="audit-resource-types">
+          {suggestedResourceTypes.map((resourceType) => (
+            <option value={resourceType} />
+          ))}
+        </datalist>
 
-          <label for="filter-limit">
-            {t("Rows (max {max})", { max: MAX_LIMIT })}
-            <input
-              type="number"
-              id="filter-limit"
-              name="limit"
-              value={limit}
-              min="1"
-              max={MAX_LIMIT}
-            />
-          </label>
+        <label for="filter-limit">
+          {t("Rows (max {max})", { max: MAX_LIMIT })}
+          <input
+            type="number"
+            id="filter-limit"
+            name="limit"
+            value={limit}
+            min="1"
+            max={MAX_LIMIT}
+          />
+        </label>
 
-          <button type="submit" class="module-toggle">
-            {t("Apply filter")}
-          </button>
-          {(resourceTypeFilter !== "" || limit !== DEFAULT_LIMIT) && (
-            <a class="btn-inline" href="/admin/audit-trail">
-              {t("Clear filter")}
-            </a>
-          )}
-        </form>
+        <button type="submit" class="module-toggle">
+          {t("Apply filter")}
+        </button>
+        {(resourceTypeFilter !== "" || limit !== DEFAULT_LIMIT) && (
+          <a class="btn-inline" href="/admin/audit-trail">
+            {t("Clear filter")}
+          </a>
+        )}
+      </form>
 
-        <section class="admin-section fade-in-up" id="audit-trail-events">
-          <h2 class="admin-section-title">
-            {t("Events")}
-            <span class="count-pill">{events.length}</span>
-          </h2>
+      <section class="admin-section fade-in-up" id="audit-trail-events">
+        <h2 class="admin-section-title">
+          {t("Events")}
+          <span class="count-pill">{events.length}</span>
+        </h2>
 
-          <div class="data-table-scroll">
-            <table class="data-table data-table--stack">
-              <caption class="sr-only">
-                {t("Audit events, newest first")}
-                {resourceTypeFilter !== "" &&
-                  `, filtered to resource type ${resourceTypeFilter}`}
-              </caption>
-              <thead>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              {t("Audit events, newest first")}
+              {resourceTypeFilter !== "" &&
+                `, filtered to resource type ${resourceTypeFilter}`}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("When (UTC)")}</th>
+                <th scope="col">{t("Severity")}</th>
+                <th scope="col">{t("Module")}</th>
+                <th scope="col">{t("Action")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Message")}</th>
+                <th scope="col">{t("Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length === 0 && (
                 <tr>
-                  <th scope="col">{t("When (UTC)")}</th>
-                  <th scope="col">{t("Severity")}</th>
-                  <th scope="col">{t("Module")}</th>
-                  <th scope="col">{t("Action")}</th>
-                  <th scope="col">{t("Resource")}</th>
-                  <th scope="col">{t("Message")}</th>
-                  <th scope="col">{t("Detail")}</th>
+                  <td class="data-table-empty" colspan={7}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        🗒
+                      </span>
+                      <span class="empty-state-title">
+                        {resourceTypeFilter === ""
+                          ? "No audit events yet"
+                          : "No audit events match this filter"}
+                      </span>
+                      <span class="empty-state-text">
+                        {resourceTypeFilter === ""
+                          ? "High-risk actions are recorded here as they happen."
+                          : "Try a different resource type, or clear the filter."}
+                      </span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {events.length === 0 && (
-                  <tr>
-                    <td class="data-table-empty" colspan={7}>
-                      <div class="empty-state">
-                        <span class="empty-state-icon" aria-hidden="true">
-                          🗒
-                        </span>
-                        <span class="empty-state-title">
-                          {resourceTypeFilter === ""
-                            ? "No audit events yet"
-                            : "No audit events match this filter"}
-                        </span>
-                        <span class="empty-state-text">
-                          {resourceTypeFilter === ""
-                            ? "High-risk actions are recorded here as they happen."
-                            : "Try a different resource type, or clear the filter."}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                {events.map((event) => (
-                  <tr>
-                    <td data-label="When (UTC)">
-                      <span class="cell-code">
-                        {formatTimestamp(event.createdAt)}
-                      </span>
-                    </td>
-                    <td data-label="Severity">
-                      <span
-                        class="status-badge"
-                        data-variant={severityVariant(event.severity)}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {event.severity}
-                      </span>
-                    </td>
-                    <td data-label="Module">
-                      <span class="cell-code">{event.moduleKey}</span>
-                    </td>
-                    <td data-label="Action">
-                      <span class="cell-code">{event.action}</span>
-                    </td>
-                    <td data-label="Resource">
-                      <span class="cell-code">{event.resourceType}</span>
-                      {event.resourceId !== null && (
-                        <>
-                          {" "}
-                          <span class="cell-muted">{event.resourceId}</span>
-                        </>
-                      )}
-                    </td>
-                    <td data-label="Message">{event.message}</td>
-                    <td data-label="Detail" class="stacked-block">
-                      {event.attributes === null &&
-                      event.correlationId === null ? (
-                        <span class="cell-muted">—</span>
-                      ) : (
-                        <details>
-                          <summary>{t("View")}</summary>
-                          {event.correlationId !== null && (
-                            <p class="cell-muted">
-                              {t("Correlation:")}{" "}
-                              <span class="cell-code">
-                                {event.correlationId}
-                              </span>
-                            </p>
-                          )}
-                          {event.attributes !== null && (
-                            /* Escaped text, never `set:html` — the value is
-                               redacted but still caller-supplied JSON. */
-                            <pre class="audit-attributes">
-                              {JSON.stringify(event.attributes, null, 2)}
-                            </pre>
-                          )}
-                        </details>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {possiblyTruncated && (
-            <p class="page-description" id="audit-trail-truncated">
-              {t(
-                "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy.",
-                { shown: events.length, max: MAX_LIMIT }
               )}
-            </p>
-          )}
-        </section>
-      </>
-    )
-  }
+              {events.map((event) => (
+                <tr>
+                  <td data-label="When (UTC)">
+                    <span class="cell-code">
+                      {formatTimestamp(event.createdAt)}
+                    </span>
+                  </td>
+                  <td data-label="Severity">
+                    <span
+                      class="status-badge"
+                      data-variant={severityVariant(event.severity)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {event.severity}
+                    </span>
+                  </td>
+                  <td data-label="Module">
+                    <span class="cell-code">{event.moduleKey}</span>
+                  </td>
+                  <td data-label="Action">
+                    <span class="cell-code">{event.action}</span>
+                  </td>
+                  <td data-label="Resource">
+                    <span class="cell-code">{event.resourceType}</span>
+                    {event.resourceId !== null && (
+                      <>
+                        {" "}
+                        <span class="cell-muted">{event.resourceId}</span>
+                      </>
+                    )}
+                  </td>
+                  <td data-label="Message">{event.message}</td>
+                  <td data-label="Detail" class="stacked-block">
+                    {event.attributes === null &&
+                    event.correlationId === null ? (
+                      <span class="cell-muted">—</span>
+                    ) : (
+                      <details>
+                        <summary>{t("View")}</summary>
+                        {event.correlationId !== null && (
+                          <p class="cell-muted">
+                            {t("Correlation:")}{" "}
+                            <span class="cell-code">{event.correlationId}</span>
+                          </p>
+                        )}
+                        {event.attributes !==
+                          null /* Escaped text, never `set:html` — the value is
+                               redacted but still caller-supplied JSON. */ && <pre class="audit-attributes">
+                              {JSON.stringify(event.attributes, null, 2)}
+                            </pre>}
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {possiblyTruncated && (
+          <p class="page-description" id="audit-trail-truncated">
+            {t(
+              "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy.",
+              { shown: events.length, max: MAX_LIMIT }
+            )}
+          </p>
+        )}
+      </section>
+    </>
+  )}
 </AdminLayout>
 
 <style>

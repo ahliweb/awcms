@@ -168,350 +168,328 @@ const hasFilter = typeFilter !== undefined;
 ---
 
 <AdminLayout title={t("Blog taxonomy")}>
-  <Fragment slot="page-description"
-    >{t("Categories and tags for")}<a href="/admin/blog">{t("blog posts")}</a>{
-      t(
-        ". Categories may nest; tags may not. Terms are assigned to a post from the post itself, not from here."
-      )
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t("Categories and tags for")}
+    <a href="/admin/blog">{t("blog posts")}</a>
+    {t(
+      ". Categories may nest; tags may not. Terms are assigned to a post from the post itself, not from here."
+    )}
+  </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="taxonomy-denied">
-        {t("You do not have permission to view blog taxonomy.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="taxonomy-denied">
+      {t("You do not have permission to view blog taxonomy.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="taxonomy-error">
-        {t(
-          "Terms could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="taxonomy-error">
+      {t(
+        "Terms could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <p
-        id="taxonomy-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
+  {canRead && !loadError && (
+    <p
+      id="taxonomy-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
 
-  {
-    canRead && !loadError && (
-      <form method="get" class="admin-toolbar fade-in-up" id="term-filter-form">
-        <label for="filter-taxonomy-type">{t("Type")}</label>
-        <select id="filter-taxonomy-type" name="taxonomyType">
-          <option value="" selected={typeFilter === undefined}>
-            {t("All vocabularies")}
+  {canRead && !loadError && (
+    <form method="get" class="admin-toolbar fade-in-up" id="term-filter-form">
+      <label for="filter-taxonomy-type">{t("Type")}</label>
+      <select id="filter-taxonomy-type" name="taxonomyType">
+        <option value="" selected={typeFilter === undefined}>
+          {t("All vocabularies")}
+        </option>
+        {TAXONOMY_TYPES.map((type) => (
+          <option value={type} selected={typeFilter === type}>
+            {t(type)}
           </option>
-          {TAXONOMY_TYPES.map((type) => (
-            <option value={type} selected={typeFilter === type}>
-              {t(type)}
-            </option>
-          ))}
-        </select>
+        ))}
+      </select>
 
-        <button type="submit">{t("Apply filter")}</button>
-      </form>
-    )
-  }
+      <button type="submit">{t("Apply filter")}</button>
+    </form>
+  )}
 
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="term-list-title"
-      >
-        <h2 class="admin-section-title" id="term-list-title">
-          {t("Terms")}
-          <span class="count-pill">{terms.length}</span>
-        </h2>
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" aria-labelledby="term-list-title">
+      <h2 class="admin-section-title" id="term-list-title">
+        {t("Terms")}
+        <span class="count-pill">{terms.length}</span>
+      </h2>
 
-        {/* Bounded read, and the screen says so rather than implying the
+      {/* Bounded read, and the screen says so rather than implying the
             tenant has no more. `listBlogTerms` is LIMIT 100. */}
-        {terms.length === 100 && (
-          <p class="state-notice" id="taxonomy-truncated">
-            {t(
-              "Showing the first 100 terms by name. Filter by type to narrow the list."
-            )}
-          </p>
-        )}
+      {terms.length === 100 && (
+        <p class="state-notice" id="taxonomy-truncated">
+          {t(
+            "Showing the first 100 terms by name. Filter by type to narrow the list."
+          )}
+        </p>
+      )}
 
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="blog-terms-table">
-            <caption class="sr-only">
-              {t("Blog categories and tags, by name.")}
-            </caption>
-            <thead>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="blog-terms-table">
+          <caption class="sr-only">
+            {t("Blog categories and tags, by name.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Parent")}</th>
+              <th scope="col">{t("Description")}</th>
+              <th scope="col">{t("Updated")}</th>
+              {showsRowActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {terms.length === 0 ? (
               <tr>
-                <th scope="col">{t("Name")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Parent")}</th>
-                <th scope="col">{t("Description")}</th>
-                <th scope="col">{t("Updated")}</th>
-                {showsRowActions && <th scope="col">{t("Actions")}</th>}
+                <td class="data-table-empty" colspan={termColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ▤
+                    </span>
+                    <span class="empty-state-title">
+                      {hasFilter
+                        ? "No terms of this type"
+                        : "No categories or tags yet"}
+                    </span>
+                    <span class="empty-state-text">
+                      {hasFilter
+                        ? "Clear the filter above to see every term."
+                        : "Create one below to start organising posts."}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {terms.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={termColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ▤
-                      </span>
-                      <span class="empty-state-title">
-                        {hasFilter
-                          ? "No terms of this type"
-                          : "No categories or tags yet"}
-                      </span>
-                      <span class="empty-state-text">
-                        {hasFilter
-                          ? "Clear the filter above to see every term."
-                          : "Create one below to start organising posts."}
-                      </span>
-                    </div>
+            ) : (
+              terms.map((entry) => (
+                <tr data-term-row={entry.id}>
+                  <td data-label="Name">
+                    <span set:text={entry.name} />
+                    <span class="cell-muted">
+                      {" "}
+                      · <span class="cell-code">{entry.slug}</span>
+                    </span>
                   </td>
-                </tr>
-              ) : (
-                terms.map((entry) => (
-                  <tr data-term-row={entry.id}>
-                    <td data-label="Name">
-                      <span set:text={entry.name} />
-                      <span class="cell-muted">
-                        {" "}
-                        · <span class="cell-code">{entry.slug}</span>
-                      </span>
-                    </td>
-                    <td data-label="Type">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          entry.taxonomyType === "category" ? "info" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {entry.taxonomyType}
-                      </span>
-                    </td>
-                    <td data-label="Parent">
-                      {entry.parentId ? (
-                        <span set:text={nameById.get(entry.parentId) ?? "—"} />
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="Description">
-                      {entry.description ? (
-                        <span set:text={entry.description} />
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="Updated">
-                      <span class="cell-muted">
-                        {formatTimestamp(entry.updatedAt)}
-                      </span>
-                    </td>
-                    {showsRowActions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          <a
-                            class="quick-link"
-                            href={linkWith({ edit: entry.id })}
-                          >
-                            {t("Edit")}
-                            <span class="quick-link-arrow" aria-hidden="true">
-                              →
-                            </span>
-                          </a>
-                          <button
-                            type="button"
-                            class="btn-inline term-delete-btn"
-                            data-term-id={entry.id}
-                            data-term-name={entry.name}
-                          >
-                            {t("Delete")}
-                          </button>
-                        </div>
-                      </td>
+                  <td data-label="Type">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        entry.taxonomyType === "category" ? "info" : "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {entry.taxonomyType}
+                    </span>
+                  </td>
+                  <td data-label="Parent">
+                    {entry.parentId ? (
+                      <span set:text={nameById.get(entry.parentId) ?? "—"} />
+                    ) : (
+                      <span class="cell-muted">—</span>
                     )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                  </td>
+                  <td data-label="Description">
+                    {entry.description ? (
+                      <span set:text={entry.description} />
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  <td data-label="Updated">
+                    <span class="cell-muted">
+                      {formatTimestamp(entry.updatedAt)}
+                    </span>
+                  </td>
+                  {showsRowActions && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        <a
+                          class="quick-link"
+                          href={linkWith({ edit: entry.id })}
+                        >
+                          {t("Edit")}
+                          <span class="quick-link-arrow" aria-hidden="true">
+                            →
+                          </span>
+                        </a>
+                        <button
+                          type="button"
+                          class="btn-inline term-delete-btn"
+                          data-term-id={entry.id}
+                          data-term-name={entry.name}
+                        >
+                          {t("Delete")}
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canRead && !loadError && canConfigure && editingTerm && (
+    <section class="admin-section fade-in-up" aria-labelledby="term-edit-title">
+      <h2 class="admin-section-title" id="term-edit-title">
+        {t("Edit term")}
+      </h2>
+
+      <form class="admin-form" id="term-edit-form">
+        <input type="hidden" id="edit-term-id" value={editingTerm.id} />
+
+        <div class="admin-form-row">
+          <label for="edit-name">{t("Name")}</label>
+          <input
+            id="edit-name"
+            name="name"
+            type="text"
+            required
+            value={editingTerm.name}
+          />
         </div>
-      </section>
-    )
-  }
 
-  {
-    canRead && !loadError && canConfigure && editingTerm && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="term-edit-title"
-      >
-        <h2 class="admin-section-title" id="term-edit-title">
-          {t("Edit term")}
-        </h2>
+        <div class="admin-form-row">
+          <label for="edit-slug">{t("Slug")}</label>
+          <input
+            id="edit-slug"
+            name="slug"
+            type="text"
+            required
+            value={editingTerm.slug}
+          />
+        </div>
 
-        <form class="admin-form" id="term-edit-form">
-          <input type="hidden" id="edit-term-id" value={editingTerm.id} />
+        <div class="admin-form-row">
+          <label for="edit-description">{t("Description")}</label>
+          <input
+            id="edit-description"
+            name="description"
+            type="text"
+            value={editingTerm.description ?? ""}
+          />
+        </div>
 
-          <div class="admin-form-row">
-            <label for="edit-name">{t("Name")}</label>
-            <input
-              id="edit-name"
-              name="name"
-              type="text"
-              required
-              value={editingTerm.name}
-            />
-          </div>
-
-          <div class="admin-form-row">
-            <label for="edit-slug">{t("Slug")}</label>
-            <input
-              id="edit-slug"
-              name="slug"
-              type="text"
-              required
-              value={editingTerm.slug}
-            />
-          </div>
-
-          <div class="admin-form-row">
-            <label for="edit-description">{t("Description")}</label>
-            <input
-              id="edit-description"
-              name="description"
-              type="text"
-              value={editingTerm.description ?? ""}
-            />
-          </div>
-
-          {/* Type and parent are READ-ONLY here, and for two different
+        {/* Type and parent are READ-ONLY here, and for two different
               reasons. Parent: neither route detects cycles, so pointing a
               parent at its own descendant is accepted and every reader then
               walks forever — the same call `/admin/blog-pages` made. Type: a
               category with children flipping to `tag` would violate
               `awcms_blog_terms_flat_taxonomy_no_parent_check` for its children, which
               the API cannot express as one atomic edit. */}
-          {/* ONE msgid, not four fragments around two `<strong>`s. Indonesian
+        {/* ONE msgid, not four fragments around two `<strong>`s. Indonesian
               puts "type" and "parent" in a different order from English, which
               a translator cannot express while each half is a separate entry.
               The emphasis is the cost of saying it in one sentence. */}
-          <p class="form-hint" id="term-edit-immutable-hint">
-            {t(
-              "Type is {type} and parent is {parent}. Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead.",
-              {
-                type: editingTerm.taxonomyType,
-                parent: editingTerm.parentId
-                  ? (nameById.get(editingTerm.parentId) ?? "—")
-                  : "none"
-              }
-            )}
-          </p>
+        <p class="form-hint" id="term-edit-immutable-hint">
+          {t(
+            "Type is {type} and parent is {parent}. Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead.",
+            {
+              type: editingTerm.taxonomyType,
+              parent: editingTerm.parentId
+                ? (nameById.get(editingTerm.parentId) ?? "—")
+                : "none"
+            }
+          )}
+        </p>
 
-          <p
-            class="admin-create-error"
-            id="term-edit-error"
-            role="alert"
-            hidden
-          />
+        <p
+          class="admin-create-error"
+          id="term-edit-error"
+          role="alert"
+          hidden
+        />
 
-          <div class="admin-form-actions">
-            <button type="submit" id="term-edit-submit">
-              {t("Save term")}
-            </button>
-            <a class="quick-link" href={linkWith({ edit: null })}>
-              {t("Cancel")}
-            </a>
-          </div>
-        </form>
-      </section>
-    )
-  }
+        <div class="admin-form-actions">
+          <button type="submit" id="term-edit-submit">
+            {t("Save term")}
+          </button>
+          <a class="quick-link" href={linkWith({ edit: null })}>
+            {t("Cancel")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
 
-  {
-    canRead && !loadError && canConfigure && !editingTerm && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="term-create-title"
-      >
-        <h2 class="admin-section-title" id="term-create-title">
-          {t("Create a term")}
-        </h2>
+  {canRead && !loadError && canConfigure && !editingTerm && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="term-create-title"
+    >
+      <h2 class="admin-section-title" id="term-create-title">
+        {t("Create a term")}
+      </h2>
 
-        <form class="admin-form" id="term-create-form">
-          <div class="admin-form-row">
-            <label for="create-taxonomy-type">{t("Type")}</label>
-            <select id="create-taxonomy-type" name="taxonomyType" required>
-              {TAXONOMY_TYPES.map((type) => (
-                <option value={type}>{t(type)}</option>
-              ))}
-            </select>
-          </div>
+      <form class="admin-form" id="term-create-form">
+        <div class="admin-form-row">
+          <label for="create-taxonomy-type">{t("Type")}</label>
+          <select id="create-taxonomy-type" name="taxonomyType" required>
+            {TAXONOMY_TYPES.map((type) => (
+              <option value={type}>{t(type)}</option>
+            ))}
+          </select>
+        </div>
 
-          <div class="admin-form-row">
-            <label for="create-name">{t("Name")}</label>
-            <input id="create-name" name="name" type="text" required />
-          </div>
+        <div class="admin-form-row">
+          <label for="create-name">{t("Name")}</label>
+          <input id="create-name" name="name" type="text" required />
+        </div>
 
-          <div class="admin-form-row">
-            <label for="create-slug">{t("Slug")}</label>
-            <input id="create-slug" name="slug" type="text" required />
-          </div>
+        <div class="admin-form-row">
+          <label for="create-slug">{t("Slug")}</label>
+          <input id="create-slug" name="slug" type="text" required />
+        </div>
 
-          <div class="admin-form-row">
-            <label for="create-parent">{t("Parent category")}</label>
-            <select id="create-parent" name="parentId">
-              <option value="">{t("No parent")}</option>
-              {parentChoices.map((choice) => (
-                <option value={choice.id}>{choice.name}</option>
-              ))}
-            </select>
-            {/* Safe here in a way it is not on edit: a term being created has
+        <div class="admin-form-row">
+          <label for="create-parent">{t("Parent category")}</label>
+          <select id="create-parent" name="parentId">
+            <option value="">{t("No parent")}</option>
+            {parentChoices.map((choice) => (
+              <option value={choice.id}>{choice.name}</option>
+            ))}
+          </select>
+          {/* Safe here in a way it is not on edit: a term being created has
                 no children, so it cannot close a loop. The client clears this
                 field for `tag`, which the database forbids from having one. */}
-            <p class="form-hint" id="term-create-parent-hint">
-              {t(
-                "Categories only \u2014 a tag or topic may not have a parent."
-              )}
-            </p>
-          </div>
+          <p class="form-hint" id="term-create-parent-hint">
+            {t("Categories only \u2014 a tag or topic may not have a parent.")}
+          </p>
+        </div>
 
-          <div class="admin-form-row">
-            <label for="create-description">{t("Description")}</label>
-            <input id="create-description" name="description" type="text" />
-          </div>
+        <div class="admin-form-row">
+          <label for="create-description">{t("Description")}</label>
+          <input id="create-description" name="description" type="text" />
+        </div>
 
-          <p
-            class="admin-create-error"
-            id="term-create-error"
-            role="alert"
-            hidden
-          />
+        <p
+          class="admin-create-error"
+          id="term-create-error"
+          role="alert"
+          hidden
+        />
 
-          <div class="admin-form-actions">
-            <button type="submit" id="term-create-submit">
-              {t("Create term")}
-            </button>
-          </div>
-        </form>
-      </section>
-    )
-  }
+        <div class="admin-form-actions">
+          <button type="submit" id="term-create-submit">
+            {t("Create term")}
+          </button>
+        </div>
+      </form>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

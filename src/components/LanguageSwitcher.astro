@@ -105,7 +105,9 @@ const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
 
 <form class="locale-switcher" method="post" action={action}>
   <input type="hidden" name="return_to" value={returnPath} />
-  <label class="sr-only" for="locale-switcher-select">{t("Language")}</label>
+  <label class="sr-only" for="locale-switcher-select">
+    {t("Language")}
+  </label>
   <span class="locale-switcher-flag" aria-hidden="true">
     {LOCALE_FLAG[current] ?? "🌐"}
   </span>
@@ -115,23 +117,19 @@ const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
     name="locale"
     aria-label={t("Change language")}
   >
-    {
-      listLocales().map((option) => (
-        <option value={option} selected={option === current} lang={option}>
-          {LOCALE_ENDONYM[option]}
-        </option>
-      ))
-    }
+    {listLocales().map((option) => (
+      <option value={option} selected={option === current} lang={option}>
+        {LOCALE_ENDONYM[option]}
+      </option>
+    ))}
   </select>
-  {
-    /* `hidden` in the MARKUP, not hidden later by script. The switch cannot work
+  {/* `hidden` in the MARKUP, not hidden later by script. The switch cannot work
       without script (see the header), so a button that is visible until script
       runs is a control that is broken for exactly the readers who cannot use it.
-      The script unhides nothing; it simply takes over the `submit` event. */
-  }
-  <button type="submit" class="locale-switcher-submit" hidden
-    >{t("Change language")}</button
-  >
+      The script unhides nothing; it simply takes over the `submit` event. */}
+  <button type="submit" class="locale-switcher-submit" hidden>
+    {t("Change language")}
+  </button>
 </form>
 
 <style>
