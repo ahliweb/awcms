@@ -4,7 +4,7 @@
  * pull-request exclusion, ETag/conditional-request short-circuiting, rate-
  * limit/error classification, and the fail-closed contract-validation path.
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
   pollOneRepository,
@@ -12,6 +12,7 @@ import {
   type GithubFetch,
   type GithubFetchResult
 } from "../src/modules/omes-control/application/repository-progress-poller";
+import { ssrfSafeFetch } from "../src/lib/auth/ssrf-guard";
 
 function milestoneJson(number: number): Record<string, unknown> {
   return {
@@ -175,6 +176,120 @@ describe("pollOneRepository — happy path", () => {
       fakeFetch
     );
 
+    expect(outcome.outcome).toBe("not_modified");
+  });
+});
+
+describe("pollOneRepository — real ssrfSafeFetch transport, 304 Not Modified", () => {
+  // Regression for the bug fixed alongside this test: `ssrfSafeFetch`'s
+  // manual redirect loop used to treat EVERY 3xx status as a redirect that
+  // required a `Location` header, so a real conditional-GET 304 response
+  // (which legitimately carries no `Location`) failed as `request_failed`
+  // instead of completing — the poller then saw a synthetic 599 and reported
+  // `error`/`network_error` on every unchanged-repository poll forever, even
+  // though nothing was actually wrong. This exercises the REAL `ssrfSafeFetch`
+  // transport (not the fake `GithubFetch` used elsewhere in this file)
+  // against a local server standing in for `api.github.com`, so the fix in
+  // `src/lib/auth/ssrf-guard.ts` is actually on the call path.
+  let server: ReturnType<typeof Bun.serve>;
+  let base: string;
+  let env: NodeJS.ProcessEnv;
+
+  beforeAll(() => {
+    server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url);
+        const ifNoneMatch = request.headers.get("if-none-match");
+        if (ifNoneMatch === '"cached-etag"') {
+          // A real GitHub 304: no body, no Location header.
+          return new Response(null, { status: 304 });
+        }
+        if (url.pathname.includes("/milestones")) {
+          return new Response("[]", {
+            status: 200,
+            headers: { etag: '"cached-etag"' }
+          });
+        }
+        return new Response("[]", {
+          status: 200,
+          headers: { etag: '"cached-etag"' }
+        });
+      }
+    });
+    base = `127.0.0.1:${server.port}`;
+    env = {
+      ...process.env,
+      AUTH_SSO_ALLOW_INSECURE_HOSTS: base
+    } as NodeJS.ProcessEnv;
+  });
+
+  afterAll(() => {
+    server.stop(true);
+  });
+
+  test("a real 304 with no Location keeps last-good data, reports not_modified (ok/fresh), not error", async () => {
+    // Stands in for `defaultGithubFetch`, but pointed at the local test
+    // server instead of the hardcoded `https://api.github.com` — same
+    // `ssrfSafeFetch` call, same header shape.
+    const realTransportGithubFetch: GithubFetch = async ({ path, etag }) => {
+      const headers: Record<string, string> = {};
+      if (etag) headers["If-None-Match"] = etag;
+
+      const result = await ssrfSafeFetch(`http://${base}${path}`, {
+        timeoutMs: 5000,
+        maxResponseBytes: 65_536,
+        method: "GET",
+        headers,
+        env
+      });
+
+      if (!result.ok) {
+        return {
+          status: result.reason === "response_too_large" ? 502 : 599,
+          headers: {},
+          bodyText: ""
+        };
+      }
+
+      const responseHeaders: Record<string, string> = {};
+      result.response.headers.forEach((value, key) => {
+        responseHeaders[key.toLowerCase()] = value;
+      });
+
+      return {
+        status: result.response.status,
+        headers: responseHeaders,
+        bodyText: await result.response.text()
+      };
+    };
+
+    const cachedMilestone = {
+      number: 1,
+      title: "Cached",
+      state: "open" as const,
+      openIssues: 0,
+      closedIssues: 0,
+      dueOn: null,
+      htmlUrl: "https://github.com/acme/widgets/milestone/1"
+    };
+
+    const outcome = await pollOneRepository(
+      {
+        ...BASE_INPUT,
+        previousMilestonesEtag: '"cached-etag"',
+        previousIssuesEtag: '"cached-etag"',
+        previousMilestones: [cachedMilestone],
+        previousIssues: []
+      },
+      realTransportGithubFetch
+    );
+
+    // Not "error" (the pre-fix regression) — the poll is treated as
+    // successful-and-unchanged, which is what lets the caller (the job
+    // script / `recordRepositoryProgressUnchanged`) mark status `ok`, bump
+    // `observed_at` to the current poll time (freshness), and keep the
+    // cached milestones/issues and last-error columns untouched.
     expect(outcome.outcome).toBe("not_modified");
   });
 });
