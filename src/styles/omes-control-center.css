@@ -377,6 +377,66 @@
   border-color: var(--color-danger);
 }
 
+/*
+ * `.admin-create-form button` (admin.css) fills EVERY button in these forms
+ * with the same solid primary background — right for the one submit action,
+ * wrong for a destructive one placed beside it (Progres Hermes's "Clear
+ * configuration" next to "Save", ahliweb/omes#249 UX polish). `.btn-danger`
+ * (admin.css's own outlined-destructive vocabulary — reused, not invented)
+ * is a lower-specificity class selector than `.admin-create-form button`'s
+ * class+type pair, so without this it is silently overridden. Re-declared
+ * here at matching specificity, same tokens `.btn-danger` already uses.
+ */
+.omes-cc .admin-create-form button.btn-danger {
+  background: transparent;
+  /* `.admin-create-form button` (admin.css) sets `border: none` at the same
+     class+type specificity `.btn-danger` alone can't out-rank — the shorthand
+     has to be re-declared whole here, not just `border-color`, or the border
+     style stays `none` and the button reads as plain colored text. */
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+.omes-cc .admin-create-form button.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-on-soft);
+}
+
+/*
+ * `.admin-create-form input` styles EVERY `<input>` — text, select-adjacent,
+ * checkbox alike — with a 38px-tall bordered/padded/filled box meant for a
+ * text field. On `<input type="checkbox">` (Progres Hermes's "Use a GitHub
+ * token" toggle) that box swallows the native checkbox affordance entirely,
+ * rendering as an oversized plain square with no visible check mark.
+ * Restored to a normal-sized, accessible checkbox: native control (full
+ * keyboard + assistive-tech support, no custom widget to maintain),
+ * `accent-color` tinted with the same primary token already in this file's
+ * measured contrast table, and its own focus ring since the shared
+ * `:focus-visible` rule above is tuned for the 38px text-input box.
+ * `:has()` already has precedent in `admin-screens.css`.
+ */
+.omes-cc .admin-create-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  accent-color: var(--color-primary-strong);
+  flex: none;
+}
+
+.omes-cc .admin-create-form input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.omes-cc .admin-create-form label:has(> input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
 /* ==================================================================== */
 /* Hermes orchestration tree / activity stream                          */
 /* (ahliweb/omes#246 part 2; OMES issue #183) — "Orkestrasi langsung"    */

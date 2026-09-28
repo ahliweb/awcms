@@ -326,6 +326,43 @@ describe("Progres Hermes: real, polled projection (ahliweb/omes#249, ADR-0030) �
     expect(source).toContain("issue.milestoneNumber");
   });
 
+  // ahliweb/omes#249 UX polish follow-up (three fixes below).
+
+  test("the issues table's Milestone column resolves the number to that milestone's TITLE, not the bare number", async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    // Looked up from the SAME poll's milestones list (never a second fetch),
+    // falling back to `#<n>` when the number isn't in that list rather than
+    // silently rendering nothing.
+    expect(source).toContain("milestoneByNumber");
+    expect(source).toContain("milestoneCellFor");
+    expect(source).toMatch(/`#\$\{milestoneNumber\}`/);
+    // The bare number is no longer rendered directly into the cell — only
+    // ever read to key the lookup above.
+    expect(source).not.toMatch(
+      /<td[^>]*>\s*<span class="cell-muted">\s*\{issue\.milestoneNumber/
+    );
+  });
+
+  test('"Clear configuration" uses the existing outlined .btn-danger vocabulary, not the same filled style as "Save"', async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    expect(source).toContain('id="repo-progress-config-clear"');
+    expect(source).toMatch(
+      /id="repo-progress-config-clear"[\s\S]{0,40}class="btn btn-danger"/
+    );
+    // Not the old, unstyled, invented class this screen shipped with.
+    expect(source).not.toContain("button-secondary");
+    // It already requires confirmation before the destructive DELETE —
+    // this screen's own `window.confirm`, the same pattern every other
+    // destructive admin action in this codebase uses.
+    expect(source).toContain("window.confirm");
+  });
+
+  test('"Use a GitHub token" is a real, normally-sized checkbox — not the `.admin-create-form input` text-field box model', async () => {
+    const source = await readFile(PROGRESS_PAGE, "utf8");
+    expect(source).toContain('id="repo-progress-use-token"');
+    expect(source).toContain('type="checkbox"');
+  });
+
   test("the page still enforces the read permission guard server-side, and the configuration form re-checks its own permission via `can()`", async () => {
     const source = await readFile(PROGRESS_PAGE, "utf8");
     expect(source).toContain("loadAdminScreen");

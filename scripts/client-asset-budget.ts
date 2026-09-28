@@ -641,8 +641,23 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 239,275 is the measured value with no added margin.
+ *
+ * **Raised again for the ahliweb/omes#249 UX polish follow-up** (danger-button
+ * override + checkbox reset added to `omes-control-center.css`, plus the
+ * milestone-lookup helper in `progres-hermes.astro`'s frontmatter — no new
+ * `t()` msgids). Measured actual total:
+ *
+ * ```
+ * before (239,275 ceiling)   239,275 B
+ * + progres-hermes danger-button/checkbox CSS fixes   239,956 B (measured actual total)
+ * ```
+ *
+ * 239,956 is the measured value with no added margin (the `border: 1px solid
+ * var(--color-danger)` shorthand — needed whole, not just `border-color`, to
+ * out-rank `.admin-create-form button`'s own `border: none` — cost 4 B more
+ * than first measured).
  */
-export const APP_BUDGET_BYTES = 239_275;
+export const APP_BUDGET_BYTES = 239_956;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
