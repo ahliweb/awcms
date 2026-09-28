@@ -88,11 +88,15 @@ const CAPABILITIES = [
     <script is:inline set:html={THEME_INIT_SCRIPT_BODY} />
   </head>
   <body>
-    <a class="skip-link" href="#konten">Lompat ke konten</a>
+    <a class="skip-link" href="#konten">
+      Lompat ke konten
+    </a>
 
     <header class="site-header">
       <span class="wordmark">AWCMS</span>
-      <a class="btn btn--ghost" href="/login">Masuk</a>
+      <a class="btn btn--ghost" href="/login">
+        Masuk
+      </a>
     </header>
 
     <main id="konten">
@@ -104,12 +108,16 @@ const CAPABILITIES = [
           menolak secara default, dan setiap kapabilitas dirakit sebagai modul.
         </p>
         <div class="hero__actions">
-          <a class="btn btn--primary" href="/login">Masuk ke dasbor</a>
+          <a class="btn btn--primary" href="/login">
+            Masuk ke dasbor
+          </a>
           <a
             class="btn btn--ghost"
             href="https://github.com/ahliweb/awcms"
-            rel="noreferrer noopener">Lihat repositori</a
+            rel="noreferrer noopener"
           >
+            Lihat repositori
+          </a>
         </div>
         <p class="hero__note">
           Instance ini adalah deployment rujukan dari template AWCMS. Akses
@@ -120,24 +128,23 @@ const CAPABILITIES = [
       <section class="capabilities" aria-labelledby="kapabilitas">
         <h2 id="kapabilitas">Yang ada di dalamnya</h2>
         <ul class="card-grid">
-          {
-            CAPABILITIES.map((item) => (
-              <li class="card">
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-              </li>
-            ))
-          }
+          {CAPABILITIES.map((item) => (
+            <li class="card">
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </li>
+          ))}
         </ul>
       </section>
     </main>
 
     <footer class="site-footer">
       <p>
-        AWCMS — perangkat lunak sumber tersedia dari <a
-          href="https://github.com/ahliweb/awcms"
-          rel="noreferrer noopener">ahliweb/awcms</a
-        >.
+        AWCMS — perangkat lunak sumber tersedia dari{" "}
+        <a href="https://github.com/ahliweb/awcms" rel="noreferrer noopener">
+          ahliweb/awcms
+        </a>
+        .
       </p>
     </footer>
   </body>

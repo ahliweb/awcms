@@ -78,220 +78,214 @@ const profile: SiteProfileView | null =
     "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
   )}
 >
-  {
-    !canRead && (
-      <p class="admin-empty" id="site-profile-denied">
-        {t("You do not have permission to view the site profile.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="admin-empty" id="site-profile-denied">
+      {t("You do not have permission to view the site profile.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="admin-empty">
-        {t("The site profile could not be loaded. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="admin-empty">
+      {t("The site profile could not be loaded. Please try again.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && profile && (
-      <>
-        <p
-          id="site-profile-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
+  {canRead && !loadError && profile && (
+    <>
+      <p
+        id="site-profile-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
 
-        <section class="admin-section fade-in-up">
-          <p class="admin-section-hint">
+      <section class="admin-section fade-in-up">
+        <p class="admin-section-hint">
+          {t(
+            "The site name, organisation name and default social image are edited on the SEO screen — they are what search engines and share cards read, and they are set by whoever owns index impact."
+          )}
+        </p>
+      </section>
+
+      <form id="site-profile-form" class="admin-create-form">
+        <fieldset class="admin-fieldset" disabled={!canUpdate}>
+          <legend>{t("Masthead and footer")}</legend>
+
+          <label for="profile-tagline">
+            {t("Tagline")}
+            <input
+              type="text"
+              id="profile-tagline"
+              name="tagline"
+              maxlength={SITE_PROFILE_LIMITS.tagline}
+              value={profile.tagline ?? ""}
+            />
+          </label>
+
+          <label for="profile-copyright">
+            {t("Copyright notice")}
+            <input
+              type="text"
+              id="profile-copyright"
+              name="copyrightNotice"
+              maxlength={SITE_PROFILE_LIMITS.copyrightNotice}
+              value={profile.copyrightNotice ?? ""}
+            />
+          </label>
+        </fieldset>
+
+        <fieldset class="admin-fieldset" disabled={!canUpdate}>
+          <legend>{t("Logo and favicon")}</legend>
+
+          <input
+            type="hidden"
+            id="profile-logo-media-id"
+            name="logoMediaId"
+            value={profile.logoMediaId ?? ""}
+          />
+          <div class="media-choice" id="profile-logo-choice">
+            <p class="form-hint" id="profile-logo-label">
+              {profile.logoMediaId
+                ? t("An image is attached.")
+                : t("No image attached.")}
+            </p>
+            <div class="media-choice-actions">
+              <button
+                type="button"
+                class="btn btn-secondary media-pick-btn"
+                data-target="profile-logo-media-id"
+                data-label="profile-logo-label"
+              >
+                {t("Choose image")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary media-clear-btn"
+                data-target="profile-logo-media-id"
+                data-label="profile-logo-label"
+              >
+                {t("Remove image")}
+              </button>
+            </div>
+            <div class="media-picker-panel" hidden />
+          </div>
+
+          <input
+            type="hidden"
+            id="profile-favicon-media-id"
+            name="faviconMediaId"
+            value={profile.faviconMediaId ?? ""}
+          />
+          <div class="media-choice" id="profile-favicon-choice">
+            <p class="form-hint" id="profile-favicon-label">
+              {profile.faviconMediaId
+                ? t("A favicon is attached.")
+                : t("No favicon attached.")}
+            </p>
+            <div class="media-choice-actions">
+              <button
+                type="button"
+                class="btn btn-secondary media-pick-btn"
+                data-target="profile-favicon-media-id"
+                data-label="profile-favicon-label"
+              >
+                {t("Choose favicon")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary media-clear-btn"
+                data-target="profile-favicon-media-id"
+                data-label="profile-favicon-label"
+              >
+                {t("Remove favicon")}
+              </button>
+            </div>
+            <div class="media-picker-panel" hidden />
+          </div>
+        </fieldset>
+
+        <fieldset class="admin-fieldset" disabled={!canUpdate}>
+          <legend>{t("Editorial and contact")}</legend>
+
+          <label for="profile-address">
+            {t("Editorial address")}
+            <textarea
+              id="profile-address"
+              name="editorialAddress"
+              rows="3"
+              maxlength={SITE_PROFILE_LIMITS.editorialAddress}
+              set:text={profile.editorialAddress ?? ""}
+            />
+          </label>
+
+          <label for="profile-email">
+            {t("Contact email")}
+            <input
+              type="email"
+              id="profile-email"
+              name="contactEmail"
+              maxlength={SITE_PROFILE_LIMITS.contactEmail}
+              value={profile.contactEmail ?? ""}
+            />
+          </label>
+
+          <label for="profile-phone">
+            {t("Contact phone")}
+            <input
+              type="text"
+              id="profile-phone"
+              name="contactPhone"
+              maxlength={SITE_PROFILE_LIMITS.contactPhone}
+              value={profile.contactPhone ?? ""}
+            />
+          </label>
+
+          <label for="profile-whatsapp">
+            {t("WhatsApp number")}
+            <input
+              type="text"
+              id="profile-whatsapp"
+              name="whatsappNumber"
+              maxlength={SITE_PROFILE_LIMITS.whatsappNumber}
+              value={profile.whatsappNumber ?? ""}
+            />
+            <span class="form-hint">
+              {t(
+                "Kept separate from the contact phone: a tip line is often not the switchboard."
+              )}
+            </span>
+          </label>
+        </fieldset>
+
+        <fieldset class="admin-fieldset" disabled={!canUpdate}>
+          <legend>{t("Social profiles")}</legend>
+          <p class="form-hint">
             {t(
-              "The site name, organisation name and default social image are edited on the SEO screen — they are what search engines and share cards read, and they are set by whoever owns index impact."
+              "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page.",
+              { max: SITE_PROFILE_LIMITS.socialLinks }
             )}
           </p>
-        </section>
+          <div
+            id="profile-social-links"
+            data-links={JSON.stringify(profile.socialLinks)}
+          />
+          <button
+            type="button"
+            class="btn btn-secondary"
+            id="profile-add-social"
+          >
+            {t("Add a social profile")}
+          </button>
+        </fieldset>
 
-        <form id="site-profile-form" class="admin-create-form">
-          <fieldset class="admin-fieldset" disabled={!canUpdate}>
-            <legend>{t("Masthead and footer")}</legend>
-
-            <label for="profile-tagline">
-              {t("Tagline")}
-              <input
-                type="text"
-                id="profile-tagline"
-                name="tagline"
-                maxlength={SITE_PROFILE_LIMITS.tagline}
-                value={profile.tagline ?? ""}
-              />
-            </label>
-
-            <label for="profile-copyright">
-              {t("Copyright notice")}
-              <input
-                type="text"
-                id="profile-copyright"
-                name="copyrightNotice"
-                maxlength={SITE_PROFILE_LIMITS.copyrightNotice}
-                value={profile.copyrightNotice ?? ""}
-              />
-            </label>
-          </fieldset>
-
-          <fieldset class="admin-fieldset" disabled={!canUpdate}>
-            <legend>{t("Logo and favicon")}</legend>
-
-            <input
-              type="hidden"
-              id="profile-logo-media-id"
-              name="logoMediaId"
-              value={profile.logoMediaId ?? ""}
-            />
-            <div class="media-choice" id="profile-logo-choice">
-              <p class="form-hint" id="profile-logo-label">
-                {profile.logoMediaId
-                  ? t("An image is attached.")
-                  : t("No image attached.")}
-              </p>
-              <div class="media-choice-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary media-pick-btn"
-                  data-target="profile-logo-media-id"
-                  data-label="profile-logo-label"
-                >
-                  {t("Choose image")}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary media-clear-btn"
-                  data-target="profile-logo-media-id"
-                  data-label="profile-logo-label"
-                >
-                  {t("Remove image")}
-                </button>
-              </div>
-              <div class="media-picker-panel" hidden />
-            </div>
-
-            <input
-              type="hidden"
-              id="profile-favicon-media-id"
-              name="faviconMediaId"
-              value={profile.faviconMediaId ?? ""}
-            />
-            <div class="media-choice" id="profile-favicon-choice">
-              <p class="form-hint" id="profile-favicon-label">
-                {profile.faviconMediaId
-                  ? t("A favicon is attached.")
-                  : t("No favicon attached.")}
-              </p>
-              <div class="media-choice-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary media-pick-btn"
-                  data-target="profile-favicon-media-id"
-                  data-label="profile-favicon-label"
-                >
-                  {t("Choose favicon")}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary media-clear-btn"
-                  data-target="profile-favicon-media-id"
-                  data-label="profile-favicon-label"
-                >
-                  {t("Remove favicon")}
-                </button>
-              </div>
-              <div class="media-picker-panel" hidden />
-            </div>
-          </fieldset>
-
-          <fieldset class="admin-fieldset" disabled={!canUpdate}>
-            <legend>{t("Editorial and contact")}</legend>
-
-            <label for="profile-address">
-              {t("Editorial address")}
-              <textarea
-                id="profile-address"
-                name="editorialAddress"
-                rows="3"
-                maxlength={SITE_PROFILE_LIMITS.editorialAddress}
-                set:text={profile.editorialAddress ?? ""}
-              />
-            </label>
-
-            <label for="profile-email">
-              {t("Contact email")}
-              <input
-                type="email"
-                id="profile-email"
-                name="contactEmail"
-                maxlength={SITE_PROFILE_LIMITS.contactEmail}
-                value={profile.contactEmail ?? ""}
-              />
-            </label>
-
-            <label for="profile-phone">
-              {t("Contact phone")}
-              <input
-                type="text"
-                id="profile-phone"
-                name="contactPhone"
-                maxlength={SITE_PROFILE_LIMITS.contactPhone}
-                value={profile.contactPhone ?? ""}
-              />
-            </label>
-
-            <label for="profile-whatsapp">
-              {t("WhatsApp number")}
-              <input
-                type="text"
-                id="profile-whatsapp"
-                name="whatsappNumber"
-                maxlength={SITE_PROFILE_LIMITS.whatsappNumber}
-                value={profile.whatsappNumber ?? ""}
-              />
-              <span class="form-hint">
-                {t(
-                  "Kept separate from the contact phone: a tip line is often not the switchboard."
-                )}
-              </span>
-            </label>
-          </fieldset>
-
-          <fieldset class="admin-fieldset" disabled={!canUpdate}>
-            <legend>{t("Social profiles")}</legend>
-            <p class="form-hint">
-              {t(
-                "One row per platform, up to {max}. Links must be absolute http(s) URLs — they are rendered on every public page.",
-                { max: SITE_PROFILE_LIMITS.socialLinks }
-              )}
-            </p>
-            <div
-              id="profile-social-links"
-              data-links={JSON.stringify(profile.socialLinks)}
-            />
-            <button
-              type="button"
-              class="btn btn-secondary"
-              id="profile-add-social"
-            >
-              {t("Add a social profile")}
-            </button>
-          </fieldset>
-
-          {canUpdate && (
-            <button type="submit" id="site-profile-submit">
-              {t("Save site profile")}
-            </button>
-          )}
-        </form>
-      </>
-    )
-  }
+        {canUpdate && (
+          <button type="submit" id="site-profile-submit">
+            {t("Save site profile")}
+          </button>
+        )}
+      </form>
+    </>
+  )}
 </AdminLayout>
 
 <script>

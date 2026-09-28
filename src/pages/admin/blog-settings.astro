@@ -119,183 +119,177 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
 <AdminLayout title={t("Blog settings")}>
   <h1>{t("Blog settings")}</h1>
 
-  {
-    !canRead && (
-      <p class="admin-empty" id="blog-settings-denied">
-        {t("You do not have permission to view blog settings.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="admin-empty" id="blog-settings-denied">
+      {t("You do not have permission to view blog settings.")}
+    </p>
+  )}
 
   {loadError && <p class="admin-error">{loadError}</p>}
 
-  {
-    canRead && settings && (
-      <>
-        {!canConfigure && (
-          <p class="admin-note">
-            {t("Read-only — changing these needs {permission}.", {
-              permission: "blog_content.settings.configure"
-            })}
-          </p>
-        )}
+  {canRead && settings && (
+    <>
+      {!canConfigure && (
+        <p class="admin-note">
+          {t("Read-only — changing these needs {permission}.", {
+            permission: "blog_content.settings.configure"
+          })}
+        </p>
+      )}
 
-        {/* The client script cannot read the message catalog — it is a server
+      {/* The client script cannot read the message catalog — it is a server
              module — so the page renders the strings it needs onto this host and
              `admin-form-client` consumers read them back, with English
              fallbacks. Same seam `/admin/account` uses. */}
-        <div
-          id="blog-settings-i18n"
-          hidden
-          data-saving={t("Saving…")}
-          data-saved={t("Saved.")}
-          data-save-failed={t(
-            "Could not save these settings. Please try again."
-          )}
-        />
+      <div
+        id="blog-settings-i18n"
+        hidden
+        data-saving={t("Saving…")}
+        data-saved={t("Saved.")}
+        data-save-failed={t("Could not save these settings. Please try again.")}
+      />
 
-        {/* Both boxes render EMPTY. `messageBox().show()` overwrites
+      {/* Both boxes render EMPTY. `messageBox().show()` overwrites
              `textContent` and only then unhides, so any text placed here is
              unreachable by construction — it was `Tersimpan.` before, which is
              how an Indonesian string survived in this file unnoticed. */}
-        <p class="admin-error" id="settings-error" hidden />
-        <p class="admin-note" id="settings-ok" hidden />
+      <p class="admin-error" id="settings-error" hidden />
+      <p class="admin-note" id="settings-ok" hidden />
 
-        <form id="blog-settings-form" class="admin-form">
-          <fieldset disabled={!canConfigure}>
-            {/* NOT `t("Identity")`: that msgid already exists carrying the
+      <form id="blog-settings-form" class="admin-form">
+        <fieldset disabled={!canConfigure}>
+          {/* NOT `t("Identity")`: that msgid already exists carrying the
                  `menu-section` context, where it means the identity_access
                  module group. Reusing the bare word would put two unrelated
                  senses on one key — the ambiguity `msgctxt` exists to prevent.
                  This legend is about the blog's own title and description. */}
-            <legend>{t("Blog identity")}</legend>
+          <legend>{t("Blog identity")}</legend>
 
-            <label>
-              {t("Blog title")}
-              <input
-                type="text"
-                name="blogTitle"
-                maxlength="200"
-                required
-                value={settings.blogTitle}
-              />
-            </label>
+          <label>
+            {t("Blog title")}
+            <input
+              type="text"
+              name="blogTitle"
+              maxlength="200"
+              required
+              value={settings.blogTitle}
+            />
+          </label>
 
-            <label>
-              {t("Description")}
-              <textarea name="blogDescription" maxlength="500" rows="3">
+          <label>
+            {t("Description")}
+            <textarea name="blogDescription" maxlength="500" rows="3">
                 {settings.blogDescription ?? ""}
               </textarea>
-            </label>
+          </label>
 
-            <legend>{t("Listing")}</legend>
+          <legend>{t("Listing")}</legend>
 
-            <label>
-              {t("Posts per page")}
-              <input
-                type="number"
-                name="postsPerPage"
-                min="1"
-                max="100"
-                required
-                value={String(settings.postsPerPage)}
-              />
-            </label>
+          <label>
+            {t("Posts per page")}
+            <input
+              type="number"
+              name="postsPerPage"
+              min="1"
+              max="100"
+              required
+              value={String(settings.postsPerPage)}
+            />
+          </label>
 
-            <label>
-              {t("Default locale")}
-              <input
-                type="text"
-                name="defaultLocale"
-                required
-                value={settings.defaultLocale}
-              />
-            </label>
+          <label>
+            {t("Default locale")}
+            <input
+              type="text"
+              name="defaultLocale"
+              required
+              value={settings.defaultLocale}
+            />
+          </label>
 
-            <label>
-              {t("Default visibility")}
-              <select name="defaultVisibility">
-                {VISIBILITY_OPTIONS.map((option) => (
-                  <option
-                    value={option}
-                    selected={settings!.defaultVisibility === option}
-                  >
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <label>
+            {t("Default visibility")}
+            <select name="defaultVisibility">
+              {VISIBILITY_OPTIONS.map((option) => (
+                <option
+                  value={option}
+                  selected={settings!.defaultVisibility === option}
+                >
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
 
-            <legend>{t("Discovery")}</legend>
+          <legend>{t("Discovery")}</legend>
 
-            {/*
+          {/*
               These two decide whether `seo_distribution` serves this tenant's
               feed and sitemap at all. They are the reason the screen exists.
             */}
-            <label class="admin-checkbox">
-              <input
-                type="checkbox"
-                name="rssEnabled"
-                checked={settings.rssEnabled}
-              />
-              {t("RSS enabled")}
-            </label>
+          <label class="admin-checkbox">
+            <input
+              type="checkbox"
+              name="rssEnabled"
+              checked={settings.rssEnabled}
+            />
+            {t("RSS enabled")}
+          </label>
 
-            <label class="admin-checkbox">
-              <input
-                type="checkbox"
-                name="sitemapEnabled"
-                checked={settings.sitemapEnabled}
-              />
-              {t("Sitemap enabled")}
-            </label>
+          <label class="admin-checkbox">
+            <input
+              type="checkbox"
+              name="sitemapEnabled"
+              checked={settings.sitemapEnabled}
+            />
+            {t("Sitemap enabled")}
+          </label>
 
-            <legend>{t("SEO defaults")}</legend>
+          <legend>{t("SEO defaults")}</legend>
 
-            <label>
-              {t("Default SEO title")}
-              <input
-                type="text"
-                name="seoDefaultTitle"
-                maxlength="200"
-                value={settings.seoDefaultTitle ?? ""}
-              />
-            </label>
+          <label>
+            {t("Default SEO title")}
+            <input
+              type="text"
+              name="seoDefaultTitle"
+              maxlength="200"
+              value={settings.seoDefaultTitle ?? ""}
+            />
+          </label>
 
-            <label>
-              {t("Default SEO description")}
-              <textarea name="seoDefaultDescription" maxlength="300" rows="2">
+          <label>
+            {t("Default SEO description")}
+            <textarea name="seoDefaultDescription" maxlength="300" rows="2">
                 {settings.seoDefaultDescription ?? ""}
               </textarea>
-            </label>
+          </label>
 
-            <button type="submit" id="blog-settings-save">
-              {t("Save")}
-            </button>
-          </fieldset>
-        </form>
+          <button type="submit" id="blog-settings-save">
+            {t("Save")}
+          </button>
+        </fieldset>
+      </form>
 
-        {/* One msgid per SENTENCE, not one per fragment. This note used to be
+      {/* One msgid per SENTENCE, not one per fragment. This note used to be
              five `t()` calls interleaved with `<code>`/`<a>`, which asks a
              translator to reorder a sentence they can only see in pieces \u2014 and
              Indonesian does not put those pieces in the same order English
              does. The identifiers are placeholders; the link keeps its own
              label, because a link is a control rather than a phrase. */}
-        <p class="admin-note">
-          {t(
-            "The public-route switch {setting} is NOT here \u2014 it is a module setting, stored in {table}. It is linked rather than mirrored into this form: a field two screens both render is the field that goes stale silently.",
-            {
-              setting: "legacyTenantRouteEnabled",
-              table: "awcms_module_settings"
-            }
-          )}{" "}
-          <a href="/admin/modules/blog_content">
-            {t("Edit it on the blog_content module screen")}
-          </a>
-        </p>
-      </>
-    )
-  }
+      <p class="admin-note">
+        {t(
+          "The public-route switch {setting} is NOT here \u2014 it is a module setting, stored in {table}. It is linked rather than mirrored into this form: a field two screens both render is the field that goes stale silently.",
+          {
+            setting: "legacyTenantRouteEnabled",
+            table: "awcms_module_settings"
+          }
+        )}{" "}
+        <a href="/admin/modules/blog_content">
+          {t("Edit it on the blog_content module screen")}
+        </a>
+      </p>
+    </>
+  )}
 </AdminLayout>
 
 <script>

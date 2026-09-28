@@ -101,152 +101,144 @@ const canToggle = canEnable || canDisable;
     "Per-module enablement for this tenant. Core modules cannot be disabled, and a module other enabled modules depend on will refuse to turn off."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="modules-denied">
-        {t("You do not have permission to view modules.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="modules-denied">
+      {t("You do not have permission to view modules.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="modules-error">
-        {t("Modules could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="modules-error">
+      {t("Modules could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canToggle && (
-      <p
-        id="modules-toggle-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
+  {canToggle && (
+    <p
+      id="modules-toggle-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="modules-table">
-          <caption>
-            {tn("{count} module", "{count} modules", modules.length, {
-              count: modules.length
-            })}
-          </caption>
-          <thead>
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="modules-table">
+        <caption>
+          {tn("{count} module", "{count} modules", modules.length, {
+            count: modules.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Key")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Version")}</th>
+            <th scope="col">{t("Enabled")}</th>
+            <th scope="col">{t("Core")}</th>
+            {canToggle && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {modules.length === 0 ? (
             <tr>
-              <th scope="col">{t("Key")}</th>
-              <th scope="col">{t("Name")}</th>
-              <th scope="col">{t("Version")}</th>
-              <th scope="col">{t("Enabled")}</th>
-              <th scope="col">{t("Core")}</th>
-              {canToggle && <th scope="col">{t("Actions")}</th>}
+              <td class="data-table-empty" colspan={canToggle ? 6 : 5}>
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ▦
+                  </span>
+                  <span class="empty-state-title">{t("No modules")}</span>
+                  <span class="empty-state-text">
+                    {t("No modules are registered for this tenant yet.")}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {modules.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={canToggle ? 6 : 5}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ▦
-                    </span>
-                    <span class="empty-state-title">{t("No modules")}</span>
-                    <span class="empty-state-text">
-                      {t("No modules are registered for this tenant yet.")}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              modules.map((module) => {
-                // Only offer the action the current state + permission allows:
-                // an enabled non-core module can be disabled; a disabled module
-                // can be enabled. Core modules are never disable-able (endpoint
-                // 409s), so they get no disable button.
-                const showDisable =
-                  module.tenantEnabled && !module.isCore && canDisable;
-                const showEnable = !module.tenantEnabled && canEnable;
-                return (
-                  <tr>
-                    <td data-label="Key">
-                      {canReadSettings ? (
-                        <a
-                          class="cell-code"
-                          href={`/admin/modules/${module.moduleKey}`}
-                        >
-                          {module.moduleKey}
-                        </a>
-                      ) : (
-                        <span class="cell-code">{module.moduleKey}</span>
-                      )}
-                    </td>
-                    <td data-label="Name">{module.name}</td>
-                    <td data-label="Version">
-                      <span class="cell-muted">{module.version}</span>
-                    </td>
-                    <td data-label="Enabled">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          module.tenantEnabled ? "success" : "neutral"
-                        }
+          ) : (
+            modules.map((module) => {
+              // Only offer the action the current state + permission allows:
+              // an enabled non-core module can be disabled; a disabled module
+              // can be enabled. Core modules are never disable-able (endpoint
+              // 409s), so they get no disable button.
+              const showDisable =
+                module.tenantEnabled && !module.isCore && canDisable;
+              const showEnable = !module.tenantEnabled && canEnable;
+              return (
+                <tr>
+                  <td data-label="Key">
+                    {canReadSettings ? (
+                      <a
+                        class="cell-code"
+                        href={`/admin/modules/${module.moduleKey}`}
                       >
-                        <span class="status-dot" aria-hidden="true" />
-                        {module.tenantEnabled ? "enabled" : "disabled"}
-                      </span>
-                    </td>
-                    <td data-label="Core">
-                      {module.isCore ? (
-                        <span class="status-badge" data-variant="info">
-                          {t("core")}
-                        </span>
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    {canToggle && (
-                      <td data-label="Actions" class="stacked-block">
-                        <div class="row-actions">
-                          {showDisable && (
-                            <button
-                              type="button"
-                              class="module-toggle"
-                              data-module-key={module.moduleKey}
-                              data-action="disable"
-                            >
-                              {t("Disable")}
-                            </button>
-                          )}
-                          {showEnable && (
-                            <button
-                              type="button"
-                              class="module-toggle"
-                              data-module-key={module.moduleKey}
-                              data-action="enable"
-                            >
-                              {t("Enable")}
-                            </button>
-                          )}
-                          {!showDisable && !showEnable && (
-                            <span class="cell-muted">—</span>
-                          )}
-                        </div>
-                      </td>
+                        {module.moduleKey}
+                      </a>
+                    ) : (
+                      <span class="cell-code">{module.moduleKey}</span>
                     )}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+                  </td>
+                  <td data-label="Name">{module.name}</td>
+                  <td data-label="Version">
+                    <span class="cell-muted">{module.version}</span>
+                  </td>
+                  <td data-label="Enabled">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        module.tenantEnabled ? "success" : "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {module.tenantEnabled ? "enabled" : "disabled"}
+                    </span>
+                  </td>
+                  <td data-label="Core">
+                    {module.isCore ? (
+                      <span class="status-badge" data-variant="info">
+                        {t("core")}
+                      </span>
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  {canToggle && (
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        {showDisable && (
+                          <button
+                            type="button"
+                            class="module-toggle"
+                            data-module-key={module.moduleKey}
+                            data-action="disable"
+                          >
+                            {t("Disable")}
+                          </button>
+                        )}
+                        {showEnable && (
+                          <button
+                            type="button"
+                            class="module-toggle"
+                            data-module-key={module.moduleKey}
+                            data-action="enable"
+                          >
+                            {t("Enable")}
+                          </button>
+                        )}
+                        {!showDisable && !showEnable && (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>
 
 <script>

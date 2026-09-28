@@ -102,116 +102,106 @@ const columnCount = canApprove || canReject ? 4 : 3;
     "People who asked to join this tenant. Approving creates their account and emails them a link to set a password \u2014 it does not set one for them. Rejecting creates nothing and notifies nobody."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="registrations-denied">
-        {t("You do not have permission to view registration requests.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="registrations-denied">
+      {t("You do not have permission to view registration requests.")}
+    </p>
+  )}
 
-  {
-    canRead && !selfRegistrationEnabled && (
-      <p class="state-notice fade-in-up" id="registrations-disabled">
-        {t(
-          "Self-registration is switched off for this deployment ({setting}), so no new request can arrive. Anything already queued below can still be reviewed.",
-          { setting: "AUTH_SELF_REGISTRATION_ENABLED" }
-        )}
-      </p>
-    )
-  }
+  {canRead && !selfRegistrationEnabled && (
+    <p class="state-notice fade-in-up" id="registrations-disabled">
+      {t(
+        "Self-registration is switched off for this deployment ({setting}), so no new request can arrive. Anything already queued below can still be reviewed.",
+        { setting: "AUTH_SELF_REGISTRATION_ENABLED" }
+      )}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="registrations-load-error">
-        {t("Could not load registration requests. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="registrations-load-error">
+      {t("Could not load registration requests. Please try again.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <>
-        <p
-          id="registrations-action-error"
-          class="state-notice"
-          role="alert"
-          hidden
-        />
+  {canRead && !loadError && (
+    <>
+      <p
+        id="registrations-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+      />
 
-        {requests.length === 0 ? (
-          <div class="empty-state fade-in-up" id="registrations-empty">
-            <p class="empty-state-title">{t("Nothing waiting")}</p>
-            <p class="empty-state-text">
-              {t("No registration request is pending review.")}
-            </p>
-          </div>
-        ) : (
-          <div class="data-table-scroll fade-in-up">
-            <table class="data-table data-table--stack">
-              <thead>
+      {requests.length === 0 ? (
+        <div class="empty-state fade-in-up" id="registrations-empty">
+          <p class="empty-state-title">{t("Nothing waiting")}</p>
+          <p class="empty-state-text">
+            {t("No registration request is pending review.")}
+          </p>
+        </div>
+      ) : (
+        <div class="data-table-scroll fade-in-up">
+          <table class="data-table data-table--stack">
+            <thead>
+              <tr>
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Email")}</th>
+                <th scope="col">{t("Requested")}</th>
+                {columnCount === 4 && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((entry) => (
                 <tr>
-                  <th scope="col">{t("Name")}</th>
-                  <th scope="col">{t("Email")}</th>
-                  <th scope="col">{t("Requested")}</th>
-                  {columnCount === 4 && <th scope="col">{t("Actions")}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((entry) => (
-                  <tr>
-                    <th scope="row" data-label="Name">
-                      {entry.displayName}
-                    </th>
-                    <td data-label="Email">
-                      <code class="cell-code">
-                        {entry.loginIdentifierMasked}
-                      </code>
+                  <th scope="row" data-label="Name">
+                    {entry.displayName}
+                  </th>
+                  <td data-label="Email">
+                    <code class="cell-code">{entry.loginIdentifierMasked}</code>
+                  </td>
+                  <td data-label="Requested">{entry.requestedAt}</td>
+                  {columnCount === 4 && (
+                    <td data-label="Actions">
+                      {canApprove && roles.length > 0 && (
+                        <select
+                          id={`role-${entry.id}`}
+                          aria-label="Role to grant on approval (optional)"
+                        >
+                          <option value="">{t("No role")}</option>
+                          {roles.map((role) => (
+                            <option value={role.id}>{role.roleCode}</option>
+                          ))}
+                        </select>
+                      )}
+                      {canApprove && (
+                        <button
+                          type="button"
+                          class="js-approve-registration"
+                          data-request-id={entry.id}
+                          data-select-id={`role-${entry.id}`}
+                        >
+                          {t("Approve")}
+                        </button>
+                      )}
+                      {canReject && (
+                        <button
+                          type="button"
+                          class="js-reject-registration"
+                          data-request-id={entry.id}
+                        >
+                          {t("Reject")}
+                        </button>
+                      )}
                     </td>
-                    <td data-label="Requested">{entry.requestedAt}</td>
-                    {columnCount === 4 && (
-                      <td data-label="Actions">
-                        {canApprove && roles.length > 0 && (
-                          <select
-                            id={`role-${entry.id}`}
-                            aria-label="Role to grant on approval (optional)"
-                          >
-                            <option value="">{t("No role")}</option>
-                            {roles.map((role) => (
-                              <option value={role.id}>{role.roleCode}</option>
-                            ))}
-                          </select>
-                        )}
-                        {canApprove && (
-                          <button
-                            type="button"
-                            class="js-approve-registration"
-                            data-request-id={entry.id}
-                            data-select-id={`role-${entry.id}`}
-                          >
-                            {t("Approve")}
-                          </button>
-                        )}
-                        {canReject && (
-                          <button
-                            type="button"
-                            class="js-reject-registration"
-                            data-request-id={entry.id}
-                          >
-                            {t("Reject")}
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </>
-    )
-  }
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <script>

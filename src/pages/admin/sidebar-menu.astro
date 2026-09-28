@@ -109,193 +109,183 @@ const typeOptions = [
   <section class="admin-section">
     <h1>{t("Sidebar menu")}</h1>
     <p class="admin-section-lead">
-      {
-        t(
-          "Rearrange this tenant&rsquo;s admin sidebar. The list of links comes from the installed modules and cannot be added to here &mdash; you can reorder, rename, move between sections, or hide an entry."
-        )
-      }
+      {t(
+        "Rearrange this tenant&rsquo;s admin sidebar. The list of links comes from the installed modules and cannot be added to here &mdash; you can reorder, rename, move between sections, or hide an entry."
+      )}
     </p>
 
-    {
-      !canRead && (
-        <p class="admin-empty" id="sidebar-menu-denied">
-          {t("You do not have permission to view the sidebar configuration.")}
-        </p>
-      )
-    }
+    {!canRead && (
+      <p class="admin-empty" id="sidebar-menu-denied">
+        {t("You do not have permission to view the sidebar configuration.")}
+      </p>
+    )}
 
-    {
-      canRead && loadFailed && (
-        <p class="admin-empty">
-          {t("Could not load the sidebar configuration right now.")}
-        </p>
-      )
-    }
+    {canRead && loadFailed && (
+      <p class="admin-empty">
+        {t("Could not load the sidebar configuration right now.")}
+      </p>
+    )}
 
-    {
-      canRead && model && !canConfigure && (
-        <p class="admin-empty">
-          {t(
-            "Read-only: you do not have permission to change the sidebar arrangement."
-          )}
-        </p>
-      )
-    }
+    {canRead && model && !canConfigure && (
+      <p class="admin-empty">
+        {t(
+          "Read-only: you do not have permission to change the sidebar arrangement."
+        )}
+      </p>
+    )}
 
-    {
-      canRead && model && (
-        <form id="sidebar-form">
-          <div class="admin-table-wrap">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">{t("Link")}</th>
-                  <th scope="col">{t("Owner")}</th>
-                  <th scope="col">{t("Section")}</th>
-                  <th scope="col">{t("Position")}</th>
-                  <th scope="col">{t("Label override")}</th>
-                  <th scope="col">{t("Hidden")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {model.entries.map((entry) => {
-                  const override = itemOverrides.get(entry.entryKey);
+    {canRead && model && (
+      <form id="sidebar-form">
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Link")}</th>
+                <th scope="col">{t("Owner")}</th>
+                <th scope="col">{t("Section")}</th>
+                <th scope="col">{t("Position")}</th>
+                <th scope="col">{t("Label override")}</th>
+                <th scope="col">{t("Hidden")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.entries.map((entry) => {
+                const override = itemOverrides.get(entry.entryKey);
 
-                  return (
-                    <tr data-entry-key={entry.entryKey}>
-                      <td>
-                        <code>{entry.path}</code>
-                        <span class="admin-muted">
-                          {resolveSidebarLabel(entry.defaultLabel)}
-                        </span>
-                      </td>
-                      <td>{entry.moduleName}</td>
-                      <td>
-                        <select
-                          name="typeKey"
-                          disabled={!canConfigure}
-                          aria-label={`Section for ${entry.path}`}
-                        >
-                          {typeOptions.map((option) => (
-                            <option
-                              value={option.typeKey}
-                              selected={
-                                (override?.typeKey ?? entry.defaultTypeKey) ===
-                                option.typeKey
-                              }
-                            >
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          name="position"
-                          value={String(override?.position ?? 0)}
-                          disabled={!canConfigure}
-                          aria-label={`Position for ${entry.path}`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          name="labelOverride"
-                          maxlength="120"
-                          value={override?.labelOverride ?? ""}
-                          placeholder={resolveSidebarLabel(entry.defaultLabel)}
-                          disabled={!canConfigure}
-                          aria-label={`Label override for ${entry.path}`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          name="hidden"
-                          checked={override?.hidden === true}
-                          disabled={!canConfigure}
-                          aria-label={`Hide ${entry.path}`}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                return (
+                  <tr data-entry-key={entry.entryKey}>
+                    <td>
+                      <code>{entry.path}</code>
+                      <span class="admin-muted">
+                        {resolveSidebarLabel(entry.defaultLabel)}
+                      </span>
+                    </td>
+                    <td>{entry.moduleName}</td>
+                    <td>
+                      <select
+                        name="typeKey"
+                        disabled={!canConfigure}
+                        aria-label={`Section for ${entry.path}`}
+                      >
+                        {typeOptions.map((option) => (
+                          <option
+                            value={option.typeKey}
+                            selected={
+                              (override?.typeKey ?? entry.defaultTypeKey) ===
+                              option.typeKey
+                            }
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        name="position"
+                        value={String(override?.position ?? 0)}
+                        disabled={!canConfigure}
+                        aria-label={`Position for ${entry.path}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        name="labelOverride"
+                        maxlength="120"
+                        value={override?.labelOverride ?? ""}
+                        placeholder={resolveSidebarLabel(entry.defaultLabel)}
+                        disabled={!canConfigure}
+                        aria-label={`Label override for ${entry.path}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        name="hidden"
+                        checked={override?.hidden === true}
+                        disabled={!canConfigure}
+                        aria-label={`Hide ${entry.path}`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <h2>{t("Sections")}</h2>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Section")}</th>
+                <th scope="col">{t("Position")}</th>
+                <th scope="col">{t("Label override")}</th>
+                <th scope="col">{t("Hidden")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {typeOptions.map((option, index) => {
+                const override = typeOverrides.get(option.typeKey);
+
+                return (
+                  <tr data-type-key={option.typeKey}>
+                    <td>
+                      <code>{option.typeKey}</code>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        name="typePosition"
+                        value={String(override?.position ?? index)}
+                        disabled={!canConfigure}
+                        aria-label={`Position for section ${option.typeKey}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        name="typeLabelOverride"
+                        maxlength="120"
+                        value={override?.labelOverride ?? ""}
+                        placeholder={option.label}
+                        disabled={!canConfigure}
+                        aria-label={`Label override for section ${option.typeKey}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        name="typeHidden"
+                        checked={override?.hidden === true}
+                        disabled={!canConfigure}
+                        aria-label={`Hide section ${option.typeKey}`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <p id="sidebar-error" class="admin-error" hidden />
+
+        {canConfigure && (
+          <div class="admin-form-actions">
+            <button type="submit" id="sidebar-save">
+              {t("Save arrangement")}
+            </button>
+            <button type="button" id="sidebar-reset" class="admin-secondary">
+              {t("Reset to default")}
+            </button>
           </div>
-
-          <h2>{t("Sections")}</h2>
-          <div class="admin-table-wrap">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">{t("Section")}</th>
-                  <th scope="col">{t("Position")}</th>
-                  <th scope="col">{t("Label override")}</th>
-                  <th scope="col">{t("Hidden")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {typeOptions.map((option, index) => {
-                  const override = typeOverrides.get(option.typeKey);
-
-                  return (
-                    <tr data-type-key={option.typeKey}>
-                      <td>
-                        <code>{option.typeKey}</code>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          name="typePosition"
-                          value={String(override?.position ?? index)}
-                          disabled={!canConfigure}
-                          aria-label={`Position for section ${option.typeKey}`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          name="typeLabelOverride"
-                          maxlength="120"
-                          value={override?.labelOverride ?? ""}
-                          placeholder={option.label}
-                          disabled={!canConfigure}
-                          aria-label={`Label override for section ${option.typeKey}`}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          name="typeHidden"
-                          checked={override?.hidden === true}
-                          disabled={!canConfigure}
-                          aria-label={`Hide section ${option.typeKey}`}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <p id="sidebar-error" class="admin-error" hidden />
-
-          {canConfigure && (
-            <div class="admin-form-actions">
-              <button type="submit" id="sidebar-save">
-                {t("Save arrangement")}
-              </button>
-              <button type="button" id="sidebar-reset" class="admin-secondary">
-                {t("Reset to default")}
-              </button>
-            </div>
-          )}
-        </form>
-      )
-    }
+        )}
+      </form>
+    )}
   </section>
 </AdminLayout>
 

@@ -337,510 +337,478 @@ const columnCount = canActOnAny ? 9 : 8;
     "Every media object this tenant has registered, in any state \u2014 including the ones that never finished uploading or failed verification. Deleting is reversible; purging is not, and clears the registry row rather than the stored file."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="media-denied">
-        {t("You do not have permission to view the media library.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="media-denied">
+      {t("You do not have permission to view the media library.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="media-error">
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="media-error">
+      {t(
+        "The media library could not be loaded right now. This is a problem reading it, not an empty library \u2014 please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <p id="media-action-error" class="admin-create-error" role="alert" hidden />
+  )}
+
+  {uploadEnabled && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="media-upload-title"
+    >
+      <h2 class="admin-section-title" id="media-upload-title">
+        {t("Upload an image")}
+      </h2>
+      <p class="admin-section-hint">
         {t(
-          "The media library could not be loaded right now. This is a problem reading it, not an empty library \u2014 please try again later."
+          "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
         )}
       </p>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <p
-        id="media-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    uploadEnabled && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="media-upload-title"
-      >
-        <h2 class="admin-section-title" id="media-upload-title">
-          {t("Upload an image")}
-        </h2>
-        <p class="admin-section-hint">
-          {t(
-            "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
-          )}
-        </p>
-        <form id="media-upload-form" class="admin-form media-upload-form">
-          <div class="form-field">
-            <label class="form-label" for="media-upload-file">
-              {t("Image file")}
-            </label>
-            <input
-              class="form-input"
-              type="file"
-              id="media-upload-file"
-              name="file"
-              accept={uploadAccept}
-              required
-            />
-            <p class="form-hint">
-              {t("Accepted: {types}. Maximum {max} kB.", {
-                types: uploadConfig.allowedMimeTypes.join(", "),
-                max: Math.floor(uploadMaxBytes / 1024)
-              })}
-            </p>
-          </div>
-          <p
-            id="media-upload-progress"
-            class="form-hint"
-            role="status"
-            hidden
+      <form id="media-upload-form" class="admin-form media-upload-form">
+        <div class="form-field">
+          <label class="form-label" for="media-upload-file">
+            {t("Image file")}
+          </label>
+          <input
+            class="form-input"
+            type="file"
+            id="media-upload-file"
+            name="file"
+            accept={uploadAccept}
+            required
           />
-          <p
-            id="media-upload-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-          <button
-            type="submit"
-            class="btn btn-primary"
-            id="media-upload-submit"
-          >
-            {t("Upload")}
-          </button>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section class="admin-section fade-in-up" aria-label="Media summary">
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("On this page")}</span>
-            <span class="stat-value">{objects.length}</span>
-            <span class="stat-hint">
-              {t("{count} per page", { count: MEDIA_OBJECT_LIST_LIMIT })}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Not publicly referenceable")}</span>
-            <span class="stat-value">{unsafeCount}</span>
-            {unsafeCount > 0 && (
-              <span class="stat-hint">
-                {t("Only verified and attached objects resolve")}
-              </span>
-            )}
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Soft-deleted (this page)")}</span>
-            <span class="stat-value">{deletedCount}</span>
-          </div>
+          <p class="form-hint">
+            {t("Accepted: {types}. Maximum {max} kB.", {
+              types: uploadConfig.allowedMimeTypes.join(", "),
+              max: Math.floor(uploadMaxBytes / 1024)
+            })}
+          </p>
         </div>
-      </section>
-    )
-  }
+        <p id="media-upload-progress" class="form-hint" role="status" hidden />
+        <p
+          id="media-upload-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+        <button type="submit" class="btn btn-primary" id="media-upload-submit">
+          {t("Upload")}
+        </button>
+      </form>
+    </section>
+  )}
 
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="media-filter-title"
-      >
-        <h2 class="admin-section-title" id="media-filter-title">
-          {t("Filters")}
-        </h2>
-        {/* A GET form, so every filtered view is a shareable URL and the back
-            button works. Paging drops `cursor` by omitting it. */}
-        <form method="get" action="/admin/media" class="admin-filter-form">
-          <label class="field">
-            <span class="field-label">{t("Status")}</span>
-            <select name="status" class="field-input">
-              <option value="">{t("Any")}</option>
-              {STATUS_OPTIONS.map((option) => (
-                <option value={option} selected={statusRaw === option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label class="field">
-            <span class="field-label">{t("Deletion")}</span>
-            <select name="deletion" class="field-input">
-              {DELETION_OPTIONS.map((option) => (
-                <option value={option} selected={deletionFilter === option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label class="field">
-            <span class="field-label">{t("Mime type")}</span>
-            <input
-              type="text"
-              name="mimeType"
-              class="field-input"
-              value={readParam("mimeType")}
-              placeholder="image/png"
-            />
-          </label>
-
-          <div class="admin-toolbar">
-            <button type="submit" class="btn-primary">
-              {t("Apply")}
-            </button>
-            <a class="quick-link" href="/admin/media">
-              {t("Reset")}
-            </a>
-          </div>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="media-objects-title"
-        id="media-objects"
-      >
-        <h2 class="admin-section-title" id="media-objects-title">
-          {t("Objects")}
-          <span class="count-pill">{objects.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "Deleting an object stops every reference to it resolving immediately \u2014 a published page pointing at it loses its image. That is the point when the object should not be served, and restore is how it comes back. Purging removes the registry row only; the stored file is removed later by the reconciliation job, which owns the bucket."
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" aria-label="Media summary">
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("On this page")}</span>
+          <span class="stat-value">{objects.length}</span>
+          <span class="stat-hint">
+            {t("{count} per page", { count: MEDIA_OBJECT_LIST_LIMIT })}
+          </span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Not publicly referenceable")}</span>
+          <span class="stat-value">{unsafeCount}</span>
+          {unsafeCount > 0 && (
+            <span class="stat-hint">
+              {t("Only verified and attached objects resolve")}
+            </span>
           )}
-        </p>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Soft-deleted (this page)")}</span>
+          <span class="stat-value">{deletedCount}</span>
+        </div>
+      </div>
+    </section>
+  )}
 
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="media-objects-table">
-            <caption class="sr-only">{t("Registered media objects.")}</caption>
-            <thead>
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="media-filter-title"
+    >
+      <h2 class="admin-section-title" id="media-filter-title">
+        {t("Filters")}
+      </h2>
+      {/* A GET form, so every filtered view is a shareable URL and the back
+            button works. Paging drops `cursor` by omitting it. */}
+      <form method="get" action="/admin/media" class="admin-filter-form">
+        <label class="field">
+          <span class="field-label">{t("Status")}</span>
+          <select name="status" class="field-input">
+            <option value="">{t("Any")}</option>
+            {STATUS_OPTIONS.map((option) => (
+              <option value={option} selected={statusRaw === option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">{t("Deletion")}</span>
+          <select name="deletion" class="field-input">
+            {DELETION_OPTIONS.map((option) => (
+              <option value={option} selected={deletionFilter === option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">{t("Mime type")}</span>
+          <input
+            type="text"
+            name="mimeType"
+            class="field-input"
+            value={readParam("mimeType")}
+            placeholder="image/png"
+          />
+        </label>
+
+        <div class="admin-toolbar">
+          <button type="submit" class="btn-primary">
+            {t("Apply")}
+          </button>
+          <a class="quick-link" href="/admin/media">
+            {t("Reset")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
+
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="media-objects-title"
+      id="media-objects"
+    >
+      <h2 class="admin-section-title" id="media-objects-title">
+        {t("Objects")}
+        <span class="count-pill">{objects.length}</span>
+      </h2>
+      <p class="page-description">
+        {t(
+          "Deleting an object stops every reference to it resolving immediately \u2014 a published page pointing at it loses its image. That is the point when the object should not be served, and restore is how it comes back. Purging removes the registry row only; the stored file is removed later by the reconciliation job, which owns the bucket."
+        )}
+      </p>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="media-objects-table">
+          <caption class="sr-only">{t("Registered media objects.")}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Object")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Size")}</th>
+              <th scope="col">{t("Dimensions")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Created")}</th>
+              <th scope="col">{t("Deleted")}</th>
+              <th scope="col">{t("Rights")}</th>
+              {canActOnAny && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {objects.length === 0 ? (
               <tr>
-                <th scope="col">{t("Object")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Size")}</th>
-                <th scope="col">{t("Dimensions")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Created")}</th>
-                <th scope="col">{t("Deleted")}</th>
-                <th scope="col">{t("Rights")}</th>
-                {canActOnAny && <th scope="col">{t("Actions")}</th>}
+                <td colspan={columnCount} class="cell-muted">
+                  {t("No media objects match these filters.")}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {objects.length === 0 ? (
+            ) : (
+              objects.map((item) => (
                 <tr>
-                  <td colspan={columnCount} class="cell-muted">
-                    {t("No media objects match these filters.")}
-                  </td>
-                </tr>
-              ) : (
-                objects.map((item) => (
-                  <tr>
-                    <td data-label="Object">
-                      {/* `set:text`, never parsed: a filename is caller-supplied
+                  <td data-label="Object">
+                    {/* `set:text`, never parsed: a filename is caller-supplied
                           and reaches this table verbatim. No image tag either — see
                           this file's header. */}
-                      <span
-                        class="cell-strong"
-                        set:text={item.originalFilename ?? item.objectKey}
-                      />
-                      <span class="cell-muted" set:text={item.objectKey} />
-                    </td>
-                    <td data-label="Type" set:text={item.mimeType} />
-                    <td data-label="Size">{formatBytes(item.sizeBytes)}</td>
-                    <td data-label="Dimensions">{formatDimensions(item)}</td>
-                    <td data-label="Status">
-                      <span
-                        class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {item.status}
-                      </span>
-                    </td>
-                    <td data-label="Created">
-                      <span class="cell-muted">
-                        {formatTimestamp(item.createdAt)}
-                      </span>
-                    </td>
-                    <td data-label="Deleted">
-                      {item.deletedAt === null ? (
-                        <span class="cell-muted">—</span>
-                      ) : (
-                        <>
-                          <span class="cell-muted">
-                            {formatTimestamp(item.deletedAt)}
-                          </span>
-                          <span
-                            class="cell-muted"
-                            set:text={item.deleteReason ?? ""}
-                          />
-                        </>
-                      )}
-                    </td>
-                    <td data-label="Rights">
-                      {/* `set:text` for both — a credit line is caller-supplied
-                          and reaches this table verbatim. */}
-                      {item.creditLine ? (
-                        <span class="cell-strong" set:text={item.creditLine} />
-                      ) : (
+                    <span
+                      class="cell-strong"
+                      set:text={item.originalFilename ?? item.objectKey}
+                    />
+                    <span class="cell-muted" set:text={item.objectKey} />
+                  </td>
+                  <td data-label="Type" set:text={item.mimeType} />
+                  <td data-label="Size">{formatBytes(item.sizeBytes)}</td>
+                  <td data-label="Dimensions">{formatDimensions(item)}</td>
+                  <td data-label="Status">
+                    <span
+                      class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {item.status}
+                    </span>
+                  </td>
+                  <td data-label="Created">
+                    <span class="cell-muted">
+                      {formatTimestamp(item.createdAt)}
+                    </span>
+                  </td>
+                  <td data-label="Deleted">
+                    {item.deletedAt === null ? (
+                      <span class="cell-muted">—</span>
+                    ) : (
+                      <>
                         <span class="cell-muted">
-                          {t("No credit recorded")}
+                          {formatTimestamp(item.deletedAt)}
                         </span>
-                      )}
-                      <span
-                        class={`status-badge status-badge--${RIGHTS_VARIANT[item.rightsVerificationStatus] ?? "info"}`}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {t("Rights")}: {item.rightsVerificationStatus}
-                      </span>
-                    </td>
-                    {canActOnAny && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {/* Issue #615 — a link, not a button: the editor is
+                        <span
+                          class="cell-muted"
+                          set:text={item.deleteReason ?? ""}
+                        />
+                      </>
+                    )}
+                  </td>
+                  <td data-label="Rights">
+                    {/* `set:text` for both — a credit line is caller-supplied
+                          and reaches this table verbatim. */}
+                    {item.creditLine ? (
+                      <span class="cell-strong" set:text={item.creditLine} />
+                    ) : (
+                      <span class="cell-muted">{t("No credit recorded")}</span>
+                    )}
+                    <span
+                      class={`status-badge status-badge--${RIGHTS_VARIANT[item.rightsVerificationStatus] ?? "info"}`}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {t("Rights")}: {item.rightsVerificationStatus}
+                    </span>
+                  </td>
+                  {canActOnAny && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {/* Issue #615 — a link, not a button: the editor is
                               server-rendered from `?rights=<id>`, so the URL of
                               a specific photo's credit can be shared. Offered
                               only for a live object; a soft-deleted one's rights
                               record is evidence about something withdrawn. */}
-                          {canUpdate && item.deletedAt === null && (
-                            <a
-                              class="btn-inline"
-                              href={`${linkWith({ rights: item.id })}#media-rights-form`}
-                            >
-                              {t("Edit rights")}
-                            </a>
-                          )}
-                          {item.deletedAt === null
-                            ? canDelete && (
+                        {canUpdate && item.deletedAt === null && (
+                          <a
+                            class="btn-inline"
+                            href={`${linkWith({ rights: item.id })}#media-rights-form`}
+                          >
+                            {t("Edit rights")}
+                          </a>
+                        )}
+                        {item.deletedAt === null
+                          ? canDelete && (
+                              <button
+                                type="button"
+                                class="btn-inline media-delete-btn"
+                                data-media-id={item.id}
+                                data-media-label={
+                                  item.originalFilename ?? item.objectKey
+                                }
+                              >
+                                {t("Delete")}
+                              </button>
+                            )
+                          : [
+                              canRestore && (
                                 <button
                                   type="button"
-                                  class="btn-inline media-delete-btn"
+                                  class="btn-inline media-restore-btn"
+                                  data-media-id={item.id}
+                                >
+                                  {t("Restore")}
+                                </button>
+                              ),
+                              canPurge && (
+                                <button
+                                  type="button"
+                                  class="btn-inline btn-inline--danger media-purge-btn"
                                   data-media-id={item.id}
                                   data-media-label={
                                     item.originalFilename ?? item.objectKey
                                   }
                                 >
-                                  {t("Delete")}
+                                  {t("Purge")}
                                 </button>
                               )
-                            : [
-                                canRestore && (
-                                  <button
-                                    type="button"
-                                    class="btn-inline media-restore-btn"
-                                    data-media-id={item.id}
-                                  >
-                                    {t("Restore")}
-                                  </button>
-                                ),
-                                canPurge && (
-                                  <button
-                                    type="button"
-                                    class="btn-inline btn-inline--danger media-purge-btn"
-                                    data-media-id={item.id}
-                                    data-media-label={
-                                      item.originalFilename ?? item.objectKey
-                                    }
-                                  >
-                                    {t("Purge")}
-                                  </button>
-                                )
-                              ]}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                            ]}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-        {nextCursor && (
-          <div class="admin-toolbar">
-            {/* Keyset, not offset: the cursor carries full-precision
+      {nextCursor && (
+        <div class="admin-toolbar">
+          {/* Keyset, not offset: the cursor carries full-precision
                 `created_at` TEXT, so a page boundary cannot skip rows sharing a
                 millisecond — which a batch upload produces by the dozen. */}
-            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              {t("Next page")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </div>
+          <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+            {t("Next page")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
+      )}
+    </section>
+  )}
+
+  {rightsEditing && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="media-rights-title"
+      id="media-rights-form"
+    >
+      <h2 class="admin-section-title" id="media-rights-title">
+        {t("Usage rights")}
+      </h2>
+      <p class="admin-section-hint">
+        {t(
+          "Who took this photograph, where it came from, and whether anyone has checked that it may be published. This is not the same as the object status above \u2014 that says the FILE passed a format check; this says a person read the licence."
         )}
-      </section>
-    )
-  }
+      </p>
+      <p class="cell-muted" set:text={rightsEditing.objectKey} />
 
-  {
-    rightsEditing && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="media-rights-title"
-        id="media-rights-form"
-      >
-        <h2 class="admin-section-title" id="media-rights-title">
-          {t("Usage rights")}
-        </h2>
-        <p class="admin-section-hint">
-          {t(
-            "Who took this photograph, where it came from, and whether anyone has checked that it may be published. This is not the same as the object status above \u2014 that says the FILE passed a format check; this says a person read the licence."
-          )}
-        </p>
-        <p class="cell-muted" set:text={rightsEditing.objectKey} />
+      <p class="form-error" id="media-rights-error" hidden />
 
-        <p class="form-error" id="media-rights-error" hidden />
+      <form class="admin-form" id="media-rights-fields">
+        <input type="hidden" id="media-rights-id" value={rightsEditing.id} />
 
-        <form class="admin-form" id="media-rights-fields">
-          <input type="hidden" id="media-rights-id" value={rightsEditing.id} />
+        <div class="form-field">
+          <label class="form-label" for="media-rights-credit">
+            {t("Credit line")}
+          </label>
+          <input
+            class="form-input"
+            id="media-rights-credit"
+            type="text"
+            maxlength={MAX_CREDIT_LINE_LENGTH}
+            value={rightsEditing.creditLine ?? ""}
+          />
+          <p class="form-hint">
+            {t(
+              "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene."
+            )}
+          </p>
+        </div>
 
-          <div class="form-field">
-            <label class="form-label" for="media-rights-credit">
-              {t("Credit line")}
-            </label>
-            <input
-              class="form-input"
-              id="media-rights-credit"
-              type="text"
-              maxlength={MAX_CREDIT_LINE_LENGTH}
-              value={rightsEditing.creditLine ?? ""}
-            />
-            <p class="form-hint">
-              {t(
-                "Printed beside the image. Not the alt text, which describes the picture for a screen reader, and not the caption, which tells the reader about the scene."
-              )}
-            </p>
-          </div>
+        <div class="form-field">
+          <label class="form-label" for="media-rights-source">
+            {t("Source")}
+          </label>
+          <input
+            class="form-input"
+            id="media-rights-source"
+            type="text"
+            maxlength={MAX_SOURCE_NAME_LENGTH}
+            value={rightsEditing.sourceName ?? ""}
+          />
+          <p class="form-hint">
+            {t(
+              "Where the file came from, which is often not who is credited \u2014 a takedown request names the agency, not the stringer."
+            )}
+          </p>
+        </div>
 
-          <div class="form-field">
-            <label class="form-label" for="media-rights-source">
-              {t("Source")}
-            </label>
-            <input
-              class="form-input"
-              id="media-rights-source"
-              type="text"
-              maxlength={MAX_SOURCE_NAME_LENGTH}
-              value={rightsEditing.sourceName ?? ""}
-            />
-            <p class="form-hint">
-              {t(
-                "Where the file came from, which is often not who is credited \u2014 a takedown request names the agency, not the stringer."
-              )}
-            </p>
-          </div>
+        <div class="form-field">
+          <label class="form-label" for="media-rights-copyright">
+            {t("Copyright status")}
+          </label>
+          <select class="form-input" id="media-rights-copyright">
+            {COPYRIGHT_STATUSES.map((status) => (
+              <option
+                value={status}
+                selected={status === rightsEditing.copyrightStatus}
+              >
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div class="form-field">
-            <label class="form-label" for="media-rights-copyright">
-              {t("Copyright status")}
-            </label>
-            <select class="form-input" id="media-rights-copyright">
-              {COPYRIGHT_STATUSES.map((status) => (
-                <option
-                  value={status}
-                  selected={status === rightsEditing.copyrightStatus}
-                >
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div class="form-field">
+          <label class="form-label" for="media-rights-status">
+            {t("Rights verification")}
+          </label>
+          {/*
+           * Issue #794 — this transition now needs `media.adjudicate_rights`
+           * IN ADDITION to `media.update` (the permission that gates the rest
+           * of this form). Disabled rather than omitted for a caller who
+           * lacks it: the current decision is still worth showing, and the
+           * submit handler below reads `media-rights-status-original`
+           * (never this control) to decide whether the body may omit the
+           * field entirely — a disabled `<select>` still reports its
+           * (unchanged) `.value`, so disabling alone would not stop the
+           * request from requiring `adjudicate_rights` for a submit that
+           * changed nothing.
+           */}
+          <select
+            class="form-input"
+            id="media-rights-status"
+            disabled={!canAdjudicateRights}
+          >
+            {RIGHTS_VERIFICATION_STATUSES.map((status) => (
+              <option
+                value={status}
+                selected={status === rightsEditing.rightsVerificationStatus}
+              >
+                {status}
+              </option>
+            ))}
+          </select>
+          <input
+            type="hidden"
+            id="media-rights-status-original"
+            value={rightsEditing.rightsVerificationStatus}
+          />
+          <p class="form-hint">
+            {canAdjudicateRights
+              ? t(
+                  "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
+                )
+              : t(
+                  "Only a rights reviewer may change this (media_library.media.adjudicate_rights)."
+                )}
+          </p>
+        </div>
 
-          <div class="form-field">
-            <label class="form-label" for="media-rights-status">
-              {t("Rights verification")}
-            </label>
-            {/*
-             * Issue #794 — this transition now needs `media.adjudicate_rights`
-             * IN ADDITION to `media.update` (the permission that gates the rest
-             * of this form). Disabled rather than omitted for a caller who
-             * lacks it: the current decision is still worth showing, and the
-             * submit handler below reads `media-rights-status-original`
-             * (never this control) to decide whether the body may omit the
-             * field entirely — a disabled `<select>` still reports its
-             * (unchanged) `.value`, so disabling alone would not stop the
-             * request from requiring `adjudicate_rights` for a submit that
-             * changed nothing.
-             */}
-            <select
-              class="form-input"
-              id="media-rights-status"
-              disabled={!canAdjudicateRights}
-            >
-              {RIGHTS_VERIFICATION_STATUSES.map((status) => (
-                <option
-                  value={status}
-                  selected={status === rightsEditing.rightsVerificationStatus}
-                >
-                  {status}
-                </option>
-              ))}
-            </select>
-            <input
-              type="hidden"
-              id="media-rights-status-original"
-              value={rightsEditing.rightsVerificationStatus}
-            />
-            <p class="form-hint">
-              {canAdjudicateRights
-                ? t(
-                    "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both."
-                  )
-                : t(
-                    "Only a rights reviewer may change this (media_library.media.adjudicate_rights)."
-                  )}
-            </p>
-          </div>
+        <div class="form-field">
+          <label class="form-label" for="media-rights-notes">
+            {t("Licence notes")}
+          </label>
+          <textarea
+            class="form-input"
+            id="media-rights-notes"
+            rows="3"
+            maxlength={MAX_RIGHTS_NOTES_LENGTH}
+            set:text={rightsEditing.rightsNotes ?? ""}
+          />
+        </div>
 
-          <div class="form-field">
-            <label class="form-label" for="media-rights-notes">
-              {t("Licence notes")}
-            </label>
-            <textarea
-              class="form-input"
-              id="media-rights-notes"
-              rows="3"
-              maxlength={MAX_RIGHTS_NOTES_LENGTH}
-              set:text={rightsEditing.rightsNotes ?? ""}
-            />
-          </div>
-
-          <div class="admin-toolbar">
-            <button
-              type="submit"
-              class="btn btn-primary"
-              id="media-rights-submit"
-            >
-              {t("Save rights")}
-            </button>
-            <a class="quick-link" href={linkWith({ rights: null })}>
-              {t("Cancel")}
-            </a>
-          </div>
-        </form>
-      </section>
-    )
-  }
+        <div class="admin-toolbar">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            id="media-rights-submit"
+          >
+            {t("Save rights")}
+          </button>
+          <a class="quick-link" href={linkWith({ rights: null })}>
+            {t("Cancel")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

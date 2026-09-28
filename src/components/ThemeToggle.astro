@@ -70,33 +70,29 @@ const MODE_ICONS = [
   data-label-dark={darkLabel}
   aria-label={ariaLabel}
 >
-  {
-    /* ADR-0120 — all three glyphs render; `theme-toggle-client.ts` shows one by
+  {/* ADR-0120 — all three glyphs render; `theme-toggle-client.ts` shows one by
       toggling `hidden`. Rendering them here rather than assigning markup in the
       client is what keeps `innerHTML` out of the admin shell entirely. They are
-      `aria-hidden` because the button already has a name and a description. */
-  }
-  {
-    MODE_ICONS.map((mode) => (
-      <svg
-        class="theme-toggle-icon"
-        data-mode={mode.key}
-        hidden={mode.key !== "system"}
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path d={mode.path} />
-      </svg>
-    ))
-  }
+      `aria-hidden` because the button already has a name and a description. */}
+  {MODE_ICONS.map((mode) => (
+    <svg
+      class="theme-toggle-icon"
+      data-mode={mode.key}
+      hidden={mode.key !== "system"}
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={mode.path} />
+    </svg>
+  ))}
   <span class="theme-toggle-label">{systemLabel}</span>
 </button>
 

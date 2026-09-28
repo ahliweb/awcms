@@ -145,308 +145,296 @@ function milestoneCellFor(
   )}
 >
   <div class="omes-cc">
-    {
-      !canSeeAnything && (
-        <p class="state-notice fade-in-up" id="omes-progres-hermes-denied">
-          {t("You do not have permission to view Hermes orchestration.")}
-        </p>
-      )
-    }
+    {!canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-progres-hermes-denied">
+        {t("You do not have permission to view Hermes orchestration.")}
+      </p>
+    )}
 
-    {
-      canSeeAnything && loadError && (
-        <p class="state-notice fade-in-up" id="omes-progres-hermes-error">
-          {t(
-            "This screen could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-          )}
-        </p>
-      )
-    }
+    {canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-progres-hermes-error">
+        {t(
+          "This screen could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canSeeAnything && !loadError && canConfigure && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="repo-progress-config-title"
-          id="omes-repository-progress-config"
+    {canSeeAnything && !loadError && canConfigure && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="repo-progress-config-title"
+        id="omes-repository-progress-config"
+      >
+        <h2 class="admin-section-title" id="repo-progress-config-title">
+          {t("Configure repository")}
+        </h2>
+        <form
+          id="repo-progress-config-form"
+          class="admin-create-form"
+          novalidate
         >
-          <h2 class="admin-section-title" id="repo-progress-config-title">
-            {t("Configure repository")}
-          </h2>
-          <form
-            id="repo-progress-config-form"
-            class="admin-create-form"
-            novalidate
-          >
-            <p class="form-legend">{t("Repository")}</p>
-            <label for="repo-progress-owner">
-              {t("Owner")}
-              <input
-                id="repo-progress-owner"
-                name="owner"
-                type="text"
-                required
-                maxlength="100"
-                pattern="[A-Za-z0-9._-]{1,100}"
-                value={currentConfig?.owner ?? ""}
-              />
-            </label>
-            <label for="repo-progress-name">
-              {t("Name")}
-              <input
-                id="repo-progress-name"
-                name="name"
-                type="text"
-                required
-                maxlength="100"
-                pattern="[A-Za-z0-9._-]{1,100}"
-                value={currentConfig?.name ?? ""}
-              />
-            </label>
-            <label for="repo-progress-use-token">
-              <input
-                id="repo-progress-use-token"
-                name="useToken"
-                type="checkbox"
-                checked={currentConfig?.usesToken ?? false}
-              />{" "}
-              {t(
-                "Use a GitHub token (private repositories, higher rate limit)"
-              )}
-            </label>
-            <button type="submit" id="repo-progress-config-save">
-              {t("Save")}
-            </button>
-            <button
-              type="button"
-              id="repo-progress-config-clear"
-              class="btn btn-danger"
-              disabled={!currentConfig}
-            >
-              {t("Clear configuration")}
-            </button>
-            <p
-              id="repo-progress-config-error"
-              class="admin-create-error"
-              role="alert"
-              hidden
+          <p class="form-legend">{t("Repository")}</p>
+          <label for="repo-progress-owner">
+            {t("Owner")}
+            <input
+              id="repo-progress-owner"
+              name="owner"
+              type="text"
+              required
+              maxlength="100"
+              pattern="[A-Za-z0-9._-]{1,100}"
+              value={currentConfig?.owner ?? ""}
             />
-          </form>
-        </section>
-      )
-    }
+          </label>
+          <label for="repo-progress-name">
+            {t("Name")}
+            <input
+              id="repo-progress-name"
+              name="name"
+              type="text"
+              required
+              maxlength="100"
+              pattern="[A-Za-z0-9._-]{1,100}"
+              value={currentConfig?.name ?? ""}
+            />
+          </label>
+          <label for="repo-progress-use-token">
+            <input
+              id="repo-progress-use-token"
+              name="useToken"
+              type="checkbox"
+              checked={currentConfig?.usesToken ?? false}
+            />{" "}
+            {t("Use a GitHub token (private repositories, higher rate limit)")}
+          </label>
+          <button type="submit" id="repo-progress-config-save">
+            {t("Save")}
+          </button>
+          <button
+            type="button"
+            id="repo-progress-config-clear"
+            class="btn btn-danger"
+            disabled={!currentConfig}
+          >
+            {t("Clear configuration")}
+          </button>
+          <p
+            id="repo-progress-config-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+        </form>
+      </section>
+    )}
 
-    {
-      canSeeAnything && !loadError && progress.state === "unconfigured" && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="progres-hermes-title"
-          id="omes-progres-hermes"
-        >
-          <h2 class="admin-section-title" id="progres-hermes-title">
-            {t("Hermes progress")}
-          </h2>
-          <div class="empty-state">
-            <span class="empty-state-icon" aria-hidden="true">
-              ▮
-            </span>
-            <span class="empty-state-title">
-              {t("No repository configured yet")}
-            </span>
-            <span class="empty-state-text">
-              {t(
-                "Set a GitHub repository above to start tracking its milestones and issues here."
-              )}
-            </span>
-          </div>
-        </section>
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && progress.state === "configured" && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="progres-hermes-title"
-          id="omes-progres-hermes"
-        >
-          <h2 class="admin-section-title" id="progres-hermes-title">
-            {t("Hermes progress")}
-          </h2>
-
-          <p class="cell-muted" id="repo-progress-status-line">
-            <a
-              href={progress.repository.htmlUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {progress.repository.owner}/{progress.repository.name}
-            </a>
-            {" · "}
-            {progress.observedAt ? (
-              <span data-freshness={progress.freshness}>
-                <span
-                  class="status-badge"
-                  data-variant={
-                    progress.freshness === "stale" ? "danger" : "info"
-                  }
-                >
-                  <span class="status-dot" aria-hidden="true" />
-                  {progress.freshness === "stale" ? t("Stale") : t("Fresh")}
-                </span>{" "}
-                {t("Observed")}: {progress.observedAt}
-              </span>
-            ) : (
-              <span class="status-badge" data-variant="info">
-                <span class="status-dot" aria-hidden="true" />
-                {t("Awaiting first poll")}
-              </span>
+    {canSeeAnything && !loadError && progress.state === "unconfigured" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="progres-hermes-title"
+        id="omes-progres-hermes"
+      >
+        <h2 class="admin-section-title" id="progres-hermes-title">
+          {t("Hermes progress")}
+        </h2>
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ▮
+          </span>
+          <span class="empty-state-title">
+            {t("No repository configured yet")}
+          </span>
+          <span class="empty-state-text">
+            {t(
+              "Set a GitHub repository above to start tracking its milestones and issues here."
             )}
-            {progress.pollStatus === "error" && (
-              <>
-                {" · "}
-                <span
-                  class="status-badge"
-                  data-variant="danger"
-                  id="repo-progress-error-badge"
-                >
-                  <span class="status-dot" aria-hidden="true" />
-                  {t("Last poll failed")}
-                </span>
-                {progress.lastErrorClass && (
-                  <span class="cell-muted">
-                    {" — "}
-                    {ERROR_CLASS_LABELS[progress.lastErrorClass] ??
-                      progress.lastErrorClass}
-                  </span>
-                )}
-              </>
-            )}
-          </p>
+          </span>
+        </div>
+      </section>
+    )}
 
-          <h3 class="admin-section-title" id="repo-progress-milestones-title">
-            {t("Milestones")}
-            <span class="count-pill">{progress.milestones.length}</span>
-          </h3>
-          {progress.milestones.length === 0 ? (
-            <div class="empty-state">
-              <span class="empty-state-title">{t("No milestones yet")}</span>
-            </div>
-          ) : (
-            <ul
-              class="repo-progress-milestone-list"
-              aria-labelledby="repo-progress-milestones-title"
-            >
-              {progress.milestones.map((milestone) => (
-                <li>
-                  <div class="repo-progress-milestone-header">
-                    <a
-                      href={milestone.htmlUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {milestone.title}
-                    </a>
-                    <span class="cell-muted">
-                      {milestone.closedIssues}/
-                      {milestone.closedIssues + milestone.openIssues}
-                    </span>
-                  </div>
-                  <progress
-                    class="repo-progress-bar"
-                    value={milestone.percentDone}
-                    max="100"
-                    aria-label={t("{title} progress", {
-                      title: milestone.title
-                    })}
-                  >
-                    {milestone.percentDone}%
-                  </progress>
-                </li>
-              ))}
-            </ul>
-          )}
+    {canSeeAnything && !loadError && progress.state === "configured" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="progres-hermes-title"
+        id="omes-progres-hermes"
+      >
+        <h2 class="admin-section-title" id="progres-hermes-title">
+          {t("Hermes progress")}
+        </h2>
 
-          <h3 class="admin-section-title" id="repo-progress-issues-title">
-            {t("Issues")}
-            <span class="count-pill">{progress.issues.length}</span>
-          </h3>
-          {progress.issues.length === 0 ? (
-            <div class="empty-state">
-              <span class="empty-state-title">{t("No issues yet")}</span>
-            </div>
-          ) : (
-            <div class="data-table-scroll">
-              <table
-                class="data-table data-table--stack"
-                id="repo-progress-issues-table"
+        <p class="cell-muted" id="repo-progress-status-line">
+          <a
+            href={progress.repository.htmlUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {progress.repository.owner}/{progress.repository.name}
+          </a>
+          {" · "}
+          {progress.observedAt ? (
+            <span data-freshness={progress.freshness}>
+              <span
+                class="status-badge"
+                data-variant={
+                  progress.freshness === "stale" ? "danger" : "info"
+                }
               >
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">{t("Title")}</th>
-                    <th scope="col">{t("Status")}</th>
-                    <th scope="col">{t("Kind")}</th>
-                    <th scope="col">{t("Milestone")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {progress.issues.map((issue) => (
-                    <tr>
-                      <td data-label="#">
-                        <a
-                          href={issue.htmlUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          #{issue.number}
-                        </a>
-                      </td>
-                      <td data-label={t("Title")}>{issue.title}</td>
-                      <td data-label={t("Status")}>
-                        <span
-                          class="status-badge"
-                          data-variant={
-                            issue.state === "closed" ? "info" : "danger"
-                          }
-                        >
-                          <span class="status-dot" aria-hidden="true" />
-                          {issue.state}
-                        </span>
-                      </td>
-                      <td data-label={t("Kind")}>
-                        <span class="cell-muted">
-                          {KIND_LABELS[issue.kind] ?? issue.kind}
-                        </span>
-                      </td>
-                      <td data-label={t("Milestone")}>
-                        {(() => {
-                          const cell = milestoneCellFor(issue.milestoneNumber);
-                          if (!cell) {
-                            return <span class="cell-muted">—</span>;
-                          }
-                          return cell.href ? (
-                            <a
-                              href={cell.href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {cell.label}
-                            </a>
-                          ) : (
-                            <span class="cell-muted">{cell.label}</span>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                <span class="status-dot" aria-hidden="true" />
+                {progress.freshness === "stale" ? t("Stale") : t("Fresh")}
+              </span>{" "}
+              {t("Observed")}: {progress.observedAt}
+            </span>
+          ) : (
+            <span class="status-badge" data-variant="info">
+              <span class="status-dot" aria-hidden="true" />
+              {t("Awaiting first poll")}
+            </span>
           )}
-        </section>
-      )
-    }
+          {progress.pollStatus === "error" && (
+            <>
+              {" · "}
+              <span
+                class="status-badge"
+                data-variant="danger"
+                id="repo-progress-error-badge"
+              >
+                <span class="status-dot" aria-hidden="true" />
+                {t("Last poll failed")}
+              </span>
+              {progress.lastErrorClass && (
+                <span class="cell-muted">
+                  {" — "}
+                  {ERROR_CLASS_LABELS[progress.lastErrorClass] ??
+                    progress.lastErrorClass}
+                </span>
+              )}
+            </>
+          )}
+        </p>
+
+        <h3 class="admin-section-title" id="repo-progress-milestones-title">
+          {t("Milestones")}
+          <span class="count-pill">{progress.milestones.length}</span>
+        </h3>
+        {progress.milestones.length === 0 ? (
+          <div class="empty-state">
+            <span class="empty-state-title">{t("No milestones yet")}</span>
+          </div>
+        ) : (
+          <ul
+            class="repo-progress-milestone-list"
+            aria-labelledby="repo-progress-milestones-title"
+          >
+            {progress.milestones.map((milestone) => (
+              <li>
+                <div class="repo-progress-milestone-header">
+                  <a
+                    href={milestone.htmlUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {milestone.title}
+                  </a>
+                  <span class="cell-muted">
+                    {milestone.closedIssues}/
+                    {milestone.closedIssues + milestone.openIssues}
+                  </span>
+                </div>
+                <progress
+                  class="repo-progress-bar"
+                  value={milestone.percentDone}
+                  max="100"
+                  aria-label={t("{title} progress", {
+                    title: milestone.title
+                  })}
+                >
+                  {milestone.percentDone}%
+                </progress>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <h3 class="admin-section-title" id="repo-progress-issues-title">
+          {t("Issues")}
+          <span class="count-pill">{progress.issues.length}</span>
+        </h3>
+        {progress.issues.length === 0 ? (
+          <div class="empty-state">
+            <span class="empty-state-title">{t("No issues yet")}</span>
+          </div>
+        ) : (
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="repo-progress-issues-table"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">{t("Title")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Kind")}</th>
+                  <th scope="col">{t("Milestone")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {progress.issues.map((issue) => (
+                  <tr>
+                    <td data-label="#">
+                      <a
+                        href={issue.htmlUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        #{issue.number}
+                      </a>
+                    </td>
+                    <td data-label={t("Title")}>{issue.title}</td>
+                    <td data-label={t("Status")}>
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          issue.state === "closed" ? "info" : "danger"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {issue.state}
+                      </span>
+                    </td>
+                    <td data-label={t("Kind")}>
+                      <span class="cell-muted">
+                        {KIND_LABELS[issue.kind] ?? issue.kind}
+                      </span>
+                    </td>
+                    <td data-label={t("Milestone")}>
+                      {(() => {
+                        const cell = milestoneCellFor(issue.milestoneNumber);
+                        if (!cell) {
+                          return <span class="cell-muted">—</span>;
+                        }
+                        return cell.href ? (
+                          <a
+                            href={cell.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {cell.label}
+                          </a>
+                        ) : (
+                          <span class="cell-muted">{cell.label}</span>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )}
   </div>
 
   <script>

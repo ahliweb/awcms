@@ -129,142 +129,136 @@ function formatTimestamp(value: string): string {
 <AdminLayout title={t("Moderation queue")}>
   <h1>{t("Comment moderation")}</h1>
   <p class="page-description">
-    {
-      t(
-        "Review comments submitted against published content. Every decision here is audited with its reason code and re-checked against your permissions on the server."
-      )
-    }
+    {t(
+      "Review comments submitted against published content. Every decision here is audited with its reason code and re-checked against your permissions on the server."
+    )}
   </p>
 
-  {
-    !canRead && (
-      <div
-        class="state-notice state-notice--denied"
+  {!canRead && (
+    <div
+      class="state-notice state-notice--denied"
+      role="status"
+      id="comments-denied"
+    >
+      <p>
+        <strong>{t("Access denied.")}</strong>
+        {t("You do not have the")}
+        <code>{t("comments.moderation.read")}</code>
+        {t("permission for this tenant.")}
+      </p>
+    </div>
+  )}
+
+  {canRead && (
+    <>
+      <nav class="filter-bar" aria-label="Filter by status">
+        {STATUS_TABS.map((tab) => (
+          <a
+            href={`/admin/comments?status=${tab.value}`}
+            aria-current={tab.value === activeStatus ? "page" : undefined}
+          >
+            {tab.label}
+          </a>
+        ))}
+      </nav>
+
+      {loadFailed && (
+        <div class="state-notice state-notice--error" role="alert">
+          <p>{t("The moderation queue could not be loaded. Try again.")}</p>
+        </div>
+      )}
+
+      <p
+        class="form-banner"
+        data-queue-banner
         role="status"
-        id="comments-denied"
-      >
-        <p>
-          <strong>{t("Access denied.")}</strong>
-          {t("You do not have the")}
-          <code>{t("comments.moderation.read")}</code>
-          {t("permission for this tenant.")}
-        </p>
-      </div>
-    )
-  }
+        aria-live="polite"
+        hidden
+      />
 
-  {
-    canRead && (
-      <>
-        <nav class="filter-bar" aria-label="Filter by status">
-          {STATUS_TABS.map((tab) => (
-            <a
-              href={`/admin/comments?status=${tab.value}`}
-              aria-current={tab.value === activeStatus ? "page" : undefined}
-            >
-              {tab.label}
-            </a>
-          ))}
-        </nav>
+      {!loadFailed && items.length === 0 && (
+        <div class="state-notice" role="status">
+          <p>{t("No {status} comments.", { status: activeStatus })}</p>
+        </div>
+      )}
 
-        {loadFailed && (
-          <div class="state-notice state-notice--error" role="alert">
-            <p>{t("The moderation queue could not be loaded. Try again.")}</p>
-          </div>
-        )}
-
-        <p
-          class="form-banner"
-          data-queue-banner
-          role="status"
-          aria-live="polite"
-          hidden
-        />
-
-        {!loadFailed && items.length === 0 && (
-          <div class="state-notice" role="status">
-            <p>{t("No {status} comments.", { status: activeStatus })}</p>
-          </div>
-        )}
-
-        {!loadFailed && items.length > 0 && (
-          <div class="table-scroll">
-            <table class="data-table" data-comments-queue>
-              <caption class="sr-only">
-                {t("{status} comments awaiting moderation", {
-                  status: activeStatus
-                })}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("Comment")}</th>
-                  <th scope="col">{t("Author")}</th>
-                  <th scope="col">{t("Resource")}</th>
-                  <th scope="col">{t("Reports")}</th>
-                  <th scope="col">{t("Submitted")}</th>
-                  <th scope="col">{t("Actions")}</th>
+      {!loadFailed && items.length > 0 && (
+        <div class="table-scroll">
+          <table class="data-table" data-comments-queue>
+            <caption class="sr-only">
+              {t("{status} comments awaiting moderation", {
+                status: activeStatus
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Comment")}</th>
+                <th scope="col">{t("Author")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Reports")}</th>
+                <th scope="col">{t("Submitted")}</th>
+                <th scope="col">{t("Actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr data-comment-id={item.id}>
+                  <td class="cell-body">{item.bodyText}</td>
+                  <td>
+                    <span>{item.authorDisplayName ?? "Anonymous"}</span>
+                    {item.authorEmailMasked && (
+                      <>
+                        <br />
+                        <small>{item.authorEmailMasked}</small>
+                      </>
+                    )}
+                    <br />
+                    <small>{item.authorKind}</small>
+                  </td>
+                  <td>
+                    <a href={item.resourceUrl}>{item.resourceType}</a>
+                  </td>
+                  <td>{item.reportCount}</td>
+                  <td>
+                    <time datetime={item.createdAt}>
+                      {formatTimestamp(item.createdAt)}
+                    </time>
+                  </td>
+                  <td class="cell-actions">
+                    {canApprove && item.status !== "approved" && (
+                      <button type="button" data-action="approve">
+                        {t("Approve")}
+                      </button>
+                    )}
+                    {canReject && item.status !== "rejected" && (
+                      <button type="button" data-action="reject">
+                        {t("Reject")}
+                      </button>
+                    )}
+                    {canReject && item.status !== "spam" && (
+                      <button type="button" data-action="spam">
+                        {t("Spam")}
+                      </button>
+                    )}
+                    {canArchive && item.status === "approved" && (
+                      <button type="button" data-action="archive">
+                        {t("Archive")}
+                      </button>
+                    )}
+                    {canRestore && item.status !== "pending" && (
+                      <button type="button" data-action="restore">
+                        {t("Restore")}
+                      </button>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr data-comment-id={item.id}>
-                    <td class="cell-body">{item.bodyText}</td>
-                    <td>
-                      <span>{item.authorDisplayName ?? "Anonymous"}</span>
-                      {item.authorEmailMasked && (
-                        <>
-                          <br />
-                          <small>{item.authorEmailMasked}</small>
-                        </>
-                      )}
-                      <br />
-                      <small>{item.authorKind}</small>
-                    </td>
-                    <td>
-                      <a href={item.resourceUrl}>{item.resourceType}</a>
-                    </td>
-                    <td>{item.reportCount}</td>
-                    <td>
-                      <time datetime={item.createdAt}>
-                        {formatTimestamp(item.createdAt)}
-                      </time>
-                    </td>
-                    <td class="cell-actions">
-                      {canApprove && item.status !== "approved" && (
-                        <button type="button" data-action="approve">
-                          {t("Approve")}
-                        </button>
-                      )}
-                      {canReject && item.status !== "rejected" && (
-                        <button type="button" data-action="reject">
-                          {t("Reject")}
-                        </button>
-                      )}
-                      {canReject && item.status !== "spam" && (
-                        <button type="button" data-action="spam">
-                          {t("Spam")}
-                        </button>
-                      )}
-                      {canArchive && item.status === "approved" && (
-                        <button type="button" data-action="archive">
-                          {t("Archive")}
-                        </button>
-                      )}
-                      {canRestore && item.status !== "pending" && (
-                        <button type="button" data-action="restore">
-                          {t("Restore")}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </>
-    )
-  }
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <script>

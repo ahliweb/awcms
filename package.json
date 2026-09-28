@@ -188,7 +188,7 @@
     "@playwright/test": "^1.63.0",
     "@types/bun": "^1.4.2",
     "prettier": "^3.9.9",
-    "prettier-plugin-astro": "^0.14.1",
+    "prettier-plugin-astro": "^1.1.0",
     "typescript": "^7.0.2",
     "yaml": "^2.9.1"
   },

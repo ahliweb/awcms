@@ -118,261 +118,243 @@ const showActions = canUpdate || canDelete;
     "The tenant's office hierarchy. Offices can be edited inline, soft-deleted, and restored \u2014 deleted offices are listed separately so they remain reachable."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="offices-denied">
-        {t("You do not have permission to view offices.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="offices-denied">
+      {t("You do not have permission to view offices.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="offices-error">
-        {t("Offices could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="offices-error">
+      {t("Offices could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canCreate && (
-      <form id="office-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">{t("Create an office")}</p>
-        <p
-          id="office-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
-
-        <label for="office-code">{t("Office code")}</label>
-        <input
-          id="office-code"
-          name="officeCode"
-          type="text"
-          required
-          autocomplete="off"
-        />
-
-        <label for="office-name">{t("Office name")}</label>
-        <input
-          id="office-name"
-          name="officeName"
-          type="text"
-          required
-          autocomplete="off"
-        />
-
-        <label for="office-type">{t("Office type")}</label>
-        <select id="office-type" name="officeType">
-          <option value="head_office">{t("head_office")}</option>
-          <option value="branch">{t("branch")}</option>
-          <option value="store">{t("store")}</option>
-          <option value="warehouse">{t("warehouse")}</option>
-          <option value="other">{t("other")}</option>
-        </select>
-
-        <button type="submit" id="office-create-submit">
-          {t("Create office")}
-        </button>
-      </form>
-    )
-  }
-
-  {
-    canRead && !loadError && (
+  {canCreate && (
+    <form id="office-create-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Create an office")}</p>
       <p
-        id="office-action-error"
+        id="office-create-error"
         class="admin-create-error"
         role="alert"
         hidden
       />
-    )
-  }
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="offices-table">
+      <label for="office-code">{t("Office code")}</label>
+      <input
+        id="office-code"
+        name="officeCode"
+        type="text"
+        required
+        autocomplete="off"
+      />
+
+      <label for="office-name">{t("Office name")}</label>
+      <input
+        id="office-name"
+        name="officeName"
+        type="text"
+        required
+        autocomplete="off"
+      />
+
+      <label for="office-type">{t("Office type")}</label>
+      <select id="office-type" name="officeType">
+        <option value="head_office">{t("head_office")}</option>
+        <option value="branch">{t("branch")}</option>
+        <option value="store">{t("store")}</option>
+        <option value="warehouse">{t("warehouse")}</option>
+        <option value="other">{t("other")}</option>
+      </select>
+
+      <button type="submit" id="office-create-submit">
+        {t("Create office")}
+      </button>
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <p
+      id="office-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="offices-table">
+        <caption>
+          {tn("{count} office", "{count} offices", offices.length, {
+            count: offices.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Code")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Type")}</th>
+            <th scope="col">{t("Status")}</th>
+            {showActions && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {offices.length === 0 ? (
+            <tr>
+              <td class="data-table-empty" colspan={showActions ? 5 : 4}>
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ⌂
+                  </span>
+                  <span class="empty-state-title">{t("No offices yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? "Create your first office using the form above."
+                      : "Offices created for this tenant will appear here."}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            offices.map((office) => (
+              <tr data-office-row={office.id}>
+                <td data-label="Code">
+                  <span class="cell-code">{office.officeCode}</span>
+                </td>
+                <td data-label="Name" class={canUpdate ? "stacked-block" : ""}>
+                  {canUpdate ? (
+                    <input
+                      class="office-name-input"
+                      type="text"
+                      value={office.officeName}
+                      aria-label={`Office name for ${office.officeCode}`}
+                      data-office-name={office.id}
+                    />
+                  ) : (
+                    office.officeName
+                  )}
+                </td>
+                <td data-label="Type">
+                  <span class="cell-muted">{office.officeType}</span>
+                </td>
+                <td
+                  data-label="Status"
+                  class={canUpdate ? "stacked-block" : ""}
+                >
+                  {canUpdate ? (
+                    <select
+                      class="office-status-select"
+                      aria-label={`Status for ${office.officeCode}`}
+                      data-office-status={office.id}
+                    >
+                      {OFFICE_STATUS_OPTIONS.map((value) => (
+                        <option
+                          value={value}
+                          selected={office.status === value}
+                        >
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        office.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {office.status}
+                    </span>
+                  )}
+                </td>
+                {showActions && (
+                  <td data-label="Actions" class="stacked-block">
+                    <div class="row-actions">
+                      {canUpdate && (
+                        <button
+                          type="button"
+                          class="module-toggle office-save-btn"
+                          data-office-id={office.id}
+                        >
+                          {t("Save")}
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="module-toggle office-delete-btn"
+                          data-office-id={office.id}
+                          data-office-code={office.officeCode}
+                        >
+                          {t("Delete")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {canRead && !loadError && canUpdate && deletedOffices.length > 0 && (
+    <section class="admin-section fade-in-up" id="deleted-offices">
+      <h2 class="admin-section-title">
+        {t("Deleted offices")}
+        <span class="count-pill">{deletedOffices.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="deleted-offices-table">
           <caption>
-            {tn("{count} office", "{count} offices", offices.length, {
-              count: offices.length
-            })}
+            {tn(
+              "{count} deleted office",
+              "{count} deleted offices",
+              deletedOffices.length,
+              { count: deletedOffices.length }
+            )}
           </caption>
           <thead>
             <tr>
               <th scope="col">{t("Code")}</th>
               <th scope="col">{t("Name")}</th>
               <th scope="col">{t("Type")}</th>
-              <th scope="col">{t("Status")}</th>
-              {showActions && <th scope="col">{t("Actions")}</th>}
+              <th scope="col">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {offices.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={showActions ? 5 : 4}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ⌂
-                    </span>
-                    <span class="empty-state-title">{t("No offices yet")}</span>
-                    <span class="empty-state-text">
-                      {canCreate
-                        ? "Create your first office using the form above."
-                        : "Offices created for this tenant will appear here."}
-                    </span>
+            {deletedOffices.map((office) => (
+              <tr data-deleted-office-row={office.id}>
+                <td data-label="Code">
+                  <span class="cell-code">{office.officeCode}</span>
+                </td>
+                <td data-label="Name">{office.officeName}</td>
+                <td data-label="Type">
+                  <span class="cell-muted">{office.officeType}</span>
+                </td>
+                <td data-label="Actions" class="stacked-block">
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="module-toggle office-restore-btn"
+                      data-office-id={office.id}
+                      data-office-code={office.officeCode}
+                    >
+                      {t("Restore")}
+                    </button>
                   </div>
                 </td>
               </tr>
-            ) : (
-              offices.map((office) => (
-                <tr data-office-row={office.id}>
-                  <td data-label="Code">
-                    <span class="cell-code">{office.officeCode}</span>
-                  </td>
-                  <td
-                    data-label="Name"
-                    class={canUpdate ? "stacked-block" : ""}
-                  >
-                    {canUpdate ? (
-                      <input
-                        class="office-name-input"
-                        type="text"
-                        value={office.officeName}
-                        aria-label={`Office name for ${office.officeCode}`}
-                        data-office-name={office.id}
-                      />
-                    ) : (
-                      office.officeName
-                    )}
-                  </td>
-                  <td data-label="Type">
-                    <span class="cell-muted">{office.officeType}</span>
-                  </td>
-                  <td
-                    data-label="Status"
-                    class={canUpdate ? "stacked-block" : ""}
-                  >
-                    {canUpdate ? (
-                      <select
-                        class="office-status-select"
-                        aria-label={`Status for ${office.officeCode}`}
-                        data-office-status={office.id}
-                      >
-                        {OFFICE_STATUS_OPTIONS.map((value) => (
-                          <option
-                            value={value}
-                            selected={office.status === value}
-                          >
-                            {value}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          office.status === "active" ? "success" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {office.status}
-                      </span>
-                    )}
-                  </td>
-                  {showActions && (
-                    <td data-label="Actions" class="stacked-block">
-                      <div class="row-actions">
-                        {canUpdate && (
-                          <button
-                            type="button"
-                            class="module-toggle office-save-btn"
-                            data-office-id={office.id}
-                          >
-                            {t("Save")}
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            type="button"
-                            class="module-toggle office-delete-btn"
-                            data-office-id={office.id}
-                            data-office-code={office.officeCode}
-                          >
-                            {t("Delete")}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>
-    )
-  }
-
-  {
-    canRead && !loadError && canUpdate && deletedOffices.length > 0 && (
-      <section class="admin-section fade-in-up" id="deleted-offices">
-        <h2 class="admin-section-title">
-          {t("Deleted offices")}
-          <span class="count-pill">{deletedOffices.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="deleted-offices-table"
-          >
-            <caption>
-              {tn(
-                "{count} deleted office",
-                "{count} deleted offices",
-                deletedOffices.length,
-                { count: deletedOffices.length }
-              )}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Code")}</th>
-                <th scope="col">{t("Name")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {deletedOffices.map((office) => (
-                <tr data-deleted-office-row={office.id}>
-                  <td data-label="Code">
-                    <span class="cell-code">{office.officeCode}</span>
-                  </td>
-                  <td data-label="Name">{office.officeName}</td>
-                  <td data-label="Type">
-                    <span class="cell-muted">{office.officeType}</span>
-                  </td>
-                  <td data-label="Actions" class="stacked-block">
-                    <div class="row-actions">
-                      <button
-                        type="button"
-                        class="module-toggle office-restore-btn"
-                        data-office-id={office.id}
-                        data-office-code={office.officeCode}
-                      >
-                        {t("Restore")}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+    </section>
+  )}
 </AdminLayout>
 
 <script>

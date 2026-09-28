@@ -40,30 +40,29 @@ const {
 const canSwitch = availableTenants.length > 0;
 ---
 
-{
-  canSwitch ? (
-    <form
-      class="tenant-badge tenant-switch-form"
-      method="get"
-      action="/admin/tenant/switch"
+{canSwitch ? (
+  <form
+    class="tenant-badge tenant-switch-form"
+    method="get"
+    action="/admin/tenant/switch"
+  >
+    <label class="sr-only" for="tenant-switch-select">
+      {ariaLabel}
+    </label>
+    <select
+      id="tenant-switch-select"
+      name="tenantId"
+      class="tenant-switch-select"
+      aria-label={ariaLabel}
     >
-      <label class="sr-only" for="tenant-switch-select">
-        {ariaLabel}
-      </label>
-      <select
-        id="tenant-switch-select"
-        name="tenantId"
-        class="tenant-switch-select"
-        aria-label={ariaLabel}
-      >
-        {availableTenants.map((tenant) => (
-          <option value={tenant.id}>{tenant.name}</option>
-        ))}
-      </select>
-    </form>
-  ) : (
-    <div class="tenant-badge" role="status" aria-label={ariaLabel}>
-      {/* ADR-0120 — the design reference draws this as a workspace SWITCHER: a
+      {availableTenants.map((tenant) => (
+        <option value={tenant.id}>{tenant.name}</option>
+      ))}
+    </select>
+  </form>
+) : (
+  <div class="tenant-badge" role="status" aria-label={ariaLabel}>
+    {/* ADR-0120 — the design reference draws this as a workspace SWITCHER: a
           bordered pill with a chevron. The chevron is deliberately NOT adopted.
           The header above explains why at length — one identity is scoped to
           exactly one tenant, so there is nothing to switch to — and a chevron is
@@ -71,13 +70,12 @@ const canSwitch = availableTenants.length > 0;
           that reasoning rejects. What IS adopted is the mark tile and the pill
           shape, which say "you are inside this workspace" without promising a
           menu. */}
-      <span class="tenant-badge-mark" aria-hidden="true">
-        {tenantName.trim().charAt(0).toUpperCase() || "?"}
-      </span>
-      <span class="tenant-badge-text">{tenantName}</span>
-    </div>
-  )
-}
+    <span class="tenant-badge-mark" aria-hidden="true">
+      {tenantName.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+    <span class="tenant-badge-text">{tenantName}</span>
+  </div>
+)}
 
 <style>
   .tenant-badge {

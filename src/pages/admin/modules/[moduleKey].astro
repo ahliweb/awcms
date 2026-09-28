@@ -86,8 +86,7 @@ function pretty(value: Record<string, unknown>): string {
 ---
 
 <AdminLayout title={t("Module settings")} breadcrumb={t("Modules")}>
-  {
-    /* ADR-0120 — the title is now `t("Module settings")` rather than the
+  {/* ADR-0120 — the title is now `t("Module settings")` rather than the
       template literal `` `Module settings — ${moduleKey}` ``. The module key is
       not lost: it moves into the description below, where it was already being
       shown, and it stops being the one admin title that was untranslated
@@ -95,130 +94,119 @@ function pretty(value: Record<string, unknown>): string {
 
       `breadcrumb` is passed explicitly because this screen is reached FROM the
       modules list and has no sidebar entry of its own, so the shell has nothing
-      to derive the middle crumb from. */
-  }
+      to derive the middle crumb from. */}
   <Fragment slot="page-description">
-    {t("Per-tenant overrides for")}<code>{moduleKey}</code>{
-      t(
-        ". The module ships defaults in code; this tenant may override them key by key. What the rest of the system reads is the two merged together."
-      )
-    }
+    {t("Per-tenant overrides for")}
+    <code>{moduleKey}</code>
+    {t(
+      ". The module ships defaults in code; this tenant may override them key by key. What the rest of the system reads is the two merged together."
+    )}
   </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="module-settings-denied">
-        {t("You do not have permission to view module settings.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="module-settings-denied">
+      {t("You do not have permission to view module settings.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="module-settings-load-error">
-        {t("Could not load these settings. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="module-settings-load-error">
+      {t("Could not load these settings. Please try again.")}
+    </p>
+  )}
 
-  {
-    /* The link keeps its own label — a link is a control, not a phrase, and
-      folding it into the sentence would cost the anchor. */
-  }
-  {
-    canRead && !loadError && !view && (
-      <p class="state-notice fade-in-up" id="module-settings-unknown">
-        {t("No module is registered under that key. Check the list on")}{" "}
-        <a href="/admin/modules">{t("/admin/modules")}</a>.
-      </p>
-    )
-  }
+  {/* The link keeps its own label — a link is a control, not a phrase, and
+      folding it into the sentence would cost the anchor. */}
+  {canRead && !loadError && !view && (
+    <p class="state-notice fade-in-up" id="module-settings-unknown">
+      {t("No module is registered under that key. Check the list on")}{" "}
+      <a href="/admin/modules">{t("/admin/modules")}</a>.
+    </p>
+  )}
 
-  {
-    canRead && !loadError && view && (
-      <>
-        <p
-          id="module-settings-action-error"
-          class="state-notice"
-          role="alert"
-          hidden
-        />
+  {canRead && !loadError && view && (
+    <>
+      <p
+        id="module-settings-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+      />
 
+      <section
+        class="fade-in-up"
+        aria-labelledby="module-settings-effective-heading"
+      >
+        <h2 id="module-settings-effective-heading">{t("In force now")}</h2>
+        <p class="page-description">
+          {t("Schema version")} {view.schemaVersion}.{" "}
+          {view.updatedAt
+            ? `This tenant last changed it on ${view.updatedAt.slice(0, 10)}.`
+            : "This tenant has never overridden anything — the defaults are in force."}
+        </p>
+        <pre id="module-settings-effective">{pretty(view.effective)}</pre>
+      </section>
+
+      <section
+        class="fade-in-up"
+        aria-labelledby="module-settings-parts-heading"
+      >
+        <h2 id="module-settings-parts-heading">
+          {t("Where those values come from")}
+        </h2>
+
+        <h3>
+          {t("Defaults (from the module's code \u2014 not editable here)")}
+        </h3>
+        <pre id="module-settings-defaults">{pretty(view.defaults)}</pre>
+
+        <h3>{t("This tenant's override")}</h3>
+        <pre id="module-settings-override">{pretty(view.tenantOverride)}</pre>
+      </section>
+
+      {canUpdate && (
         <section
           class="fade-in-up"
-          aria-labelledby="module-settings-effective-heading"
+          aria-labelledby="module-settings-patch-heading"
         >
-          <h2 id="module-settings-effective-heading">{t("In force now")}</h2>
-          <p class="page-description">
-            {t("Schema version")} {view.schemaVersion}.{" "}
-            {view.updatedAt
-              ? `This tenant last changed it on ${view.updatedAt.slice(0, 10)}.`
-              : "This tenant has never overridden anything — the defaults are in force."}
-          </p>
-          <pre id="module-settings-effective">{pretty(view.effective)}</pre>
+          <h2 id="module-settings-patch-heading">{t("Change some keys")}</h2>
+
+          <form id="module-settings-form" class="admin-form">
+            <p class="page-description">
+              {t(
+                "This is a PATCH, not a replacement. Keys you write here are merged into the override above; keys you leave out are kept as they are."
+              )}
+              <strong>{t("Leaving a key out does not remove it")}</strong>
+              {t(
+                "\u2014 there is no way to remove an override through the API yet, so to undo one, set it back to the default value shown above."
+              )}
+            </p>
+            <p class="page-description">
+              {t(
+                "Secrets are refused, both by key name and by the shape of the value. These settings are stored in the database and readable by every admin who can see this page; a provider credential belongs in an environment variable."
+              )}
+            </p>
+
+            <label for="module-settings-patch">
+              {t("Keys to set (JSON object)")}
+            </label>
+            <textarea
+              id="module-settings-patch"
+              name="patch"
+              rows="10"
+              required
+              spellcheck="false"
+              placeholder={'{ "someSetting": true }'}
+            />
+
+            <button id="module-settings-submit" type="submit">
+              {t("Apply changes")}
+            </button>
+          </form>
         </section>
-
-        <section
-          class="fade-in-up"
-          aria-labelledby="module-settings-parts-heading"
-        >
-          <h2 id="module-settings-parts-heading">
-            {t("Where those values come from")}
-          </h2>
-
-          <h3>
-            {t("Defaults (from the module's code \u2014 not editable here)")}
-          </h3>
-          <pre id="module-settings-defaults">{pretty(view.defaults)}</pre>
-
-          <h3>{t("This tenant's override")}</h3>
-          <pre id="module-settings-override">{pretty(view.tenantOverride)}</pre>
-        </section>
-
-        {canUpdate && (
-          <section
-            class="fade-in-up"
-            aria-labelledby="module-settings-patch-heading"
-          >
-            <h2 id="module-settings-patch-heading">{t("Change some keys")}</h2>
-
-            <form id="module-settings-form" class="admin-form">
-              <p class="page-description">
-                {t(
-                  "This is a PATCH, not a replacement. Keys you write here are merged into the override above; keys you leave out are kept as they are."
-                )}
-                <strong>{t("Leaving a key out does not remove it")}</strong>
-                {t(
-                  "\u2014 there is no way to remove an override through the API yet, so to undo one, set it back to the default value shown above."
-                )}
-              </p>
-              <p class="page-description">
-                {t(
-                  "Secrets are refused, both by key name and by the shape of the value. These settings are stored in the database and readable by every admin who can see this page; a provider credential belongs in an environment variable."
-                )}
-              </p>
-
-              <label for="module-settings-patch">
-                {t("Keys to set (JSON object)")}
-              </label>
-              <textarea
-                id="module-settings-patch"
-                name="patch"
-                rows="10"
-                required
-                spellcheck="false"
-                placeholder={'{ "someSetting": true }'}
-              />
-
-              <button id="module-settings-submit" type="submit">
-                {t("Apply changes")}
-              </button>
-            </form>
-          </section>
-        )}
-      </>
-    )
-  }
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <script>

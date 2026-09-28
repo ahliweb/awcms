@@ -58,31 +58,29 @@ const {
     data-nav={model.navVariant}
     data-nav-placement={model.navPlacement}
   >
-    <a class="skip-link" href="#main">Skip to content</a>
+    <a class="skip-link" href="#main">
+      Skip to content
+    </a>
     <div class="theme-shell">
       <header class="theme-header" role="banner">
         <div class="theme-brand">
-          {
-            model.logo ? (
-              <img
-                class="theme-logo"
-                src={model.logo.url}
-                alt={model.logo.altText ?? model.themeName}
-              />
-            ) : (
-              <span class="theme-logo-fallback">{model.themeName}</span>
-            )
-          }
+          {model.logo ? (
+            <img
+              class="theme-logo"
+              src={model.logo.url}
+              alt={model.logo.altText ?? model.themeName}
+            />
+          ) : (
+            <span class="theme-logo-fallback">{model.themeName}</span>
+          )}
         </div>
         <nav class="theme-nav" role="navigation" aria-label="Primary">
           <ul>
-            {
-              model.navItems.map((item) => (
-                <li>
-                  <a href={item.href}>{item.label}</a>
-                </li>
-              ))
-            }
+            {model.navItems.map((item) => (
+              <li>
+                <a href={item.href}>{item.label}</a>
+              </li>
+            ))}
           </ul>
         </nav>
       </header>

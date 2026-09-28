@@ -171,234 +171,220 @@ function statusVariant(status: string): string {
     "Every party this deployment serves. Provisioning creates a tenant with its head office and owner account in one transaction \u2014 the same code path the setup wizard uses, so the two cannot drift."
   )}
 >
-  {
-    !canRead && isPlatformTenant && (
-      <p class="state-notice fade-in-up" id="tenants-denied">
-        {t("You do not have permission to view the tenant directory.")}
-      </p>
-    )
-  }
+  {!canRead && isPlatformTenant && (
+    <p class="state-notice fade-in-up" id="tenants-denied">
+      {t("You do not have permission to view the tenant directory.")}
+    </p>
+  )}
 
-  {
-    /* Two whole msgids, not one sentence with an optional fragment spliced into
+  {/* Two whole msgids, not one sentence with an optional fragment spliced into
       its middle — the code is not always resolvable, and a single `{code}`
-      msgid would render "platform tenant (), not to this one". */
-  }
-  {
-    withheldByPlatformScope && (
-      <p class="state-notice fade-in-up" id="tenants-scope-notice">
-        {platformTenantCode
-          ? t(
-              "The tenant directory belongs to the platform tenant ({code}), not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it.",
-              { code: platformTenantCode }
-            )
-          : t(
-              "The tenant directory belongs to the platform tenant, not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
-            )}
-      </p>
-    )
-  }
+      msgid would render "platform tenant (), not to this one". */}
+  {withheldByPlatformScope && (
+    <p class="state-notice fade-in-up" id="tenants-scope-notice">
+      {platformTenantCode
+        ? t(
+            "The tenant directory belongs to the platform tenant ({code}), not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it.",
+            { code: platformTenantCode }
+          )
+        : t(
+            "The tenant directory belongs to the platform tenant, not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+          )}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="tenants-error">
+  {loadError && (
+    <p class="state-notice fade-in-up" id="tenants-error">
+      {t(
+        "The tenant directory could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  <p
+    id="tenants-action-error"
+    class="admin-create-error"
+    role="alert"
+    hidden
+  ></p>
+
+  {canRead && (
+    <section class="admin-section fade-in-up" id="tenants-summary">
+      <h2 class="admin-section-title">{t("Deployment")}</h2>
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Tenancy mode")}</span>
+          <span class="stat-value stat-value--mono">{tenancyMode}</span>
+          <span class="stat-hint">
+            {tenancyMode === "single"
+              ? "one active tenant — provisioning a second flips this"
+              : "derived from the active-tenant count, never configured"}
+          </span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Tenants listed")}</span>
+          <span class="stat-value">{tenants.length}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Platform tenant")}</span>
+          <span class="stat-value stat-value--mono">
+            {platformTenantCode ?? "—"}
+          </span>
+          <span class="stat-hint">
+            {t("holds platform-scoped permissions")}
+          </span>
+        </div>
+      </div>
+    </section>
+  )}
+
+  {canCreate && (
+    <section class="admin-section fade-in-up" id="tenants-create">
+      <h2 class="admin-section-title">{t("Provision a tenant")}</h2>
+      <p class="page-description">
         {t(
-          "The tenant directory could not be loaded right now. Please try again later."
+          "The owner account is created with the password you set here \u2014 it is sent once and never stored by this screen. The new tenant receives the tenant-scoped permission catalogue only; platform permissions are never granted to a provisioned tenant."
         )}
       </p>
-    )
-  }
+      <form id="tenants-create-form" class="admin-create-form">
+        <p
+          id="tenants-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
 
-  <p id="tenants-action-error" class="admin-create-error" role="alert" hidden>
-  </p>
+        <label for="tenant-code">
+          {t("Tenant code")}
+          <input type="text" id="tenant-code" name="tenantCode" required />
+        </label>
 
-  {
-    canRead && (
-      <section class="admin-section fade-in-up" id="tenants-summary">
-        <h2 class="admin-section-title">{t("Deployment")}</h2>
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Tenancy mode")}</span>
-            <span class="stat-value stat-value--mono">{tenancyMode}</span>
-            <span class="stat-hint">
-              {tenancyMode === "single"
-                ? "one active tenant — provisioning a second flips this"
-                : "derived from the active-tenant count, never configured"}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Tenants listed")}</span>
-            <span class="stat-value">{tenants.length}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Platform tenant")}</span>
-            <span class="stat-value stat-value--mono">
-              {platformTenantCode ?? "—"}
-            </span>
-            <span class="stat-hint">
-              {t("holds platform-scoped permissions")}
-            </span>
-          </div>
-        </div>
-      </section>
-    )
-  }
+        <label for="tenant-name">
+          {t("Tenant name")}
+          <input type="text" id="tenant-name" name="tenantName" required />
+        </label>
 
-  {
-    canCreate && (
-      <section class="admin-section fade-in-up" id="tenants-create">
-        <h2 class="admin-section-title">{t("Provision a tenant")}</h2>
-        <p class="page-description">
-          {t(
-            "The owner account is created with the password you set here \u2014 it is sent once and never stored by this screen. The new tenant receives the tenant-scoped permission catalogue only; platform permissions are never granted to a provisioned tenant."
-          )}
-        </p>
-        <form id="tenants-create-form" class="admin-create-form">
-          <p
-            id="tenants-create-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
+        <label for="office-code">
+          {t("Head office code")}
+          <input type="text" id="office-code" name="officeCode" required />
+        </label>
+
+        <label for="office-name">
+          {t("Head office name")}
+          <input type="text" id="office-name" name="officeName" required />
+        </label>
+
+        <label for="owner-display-name">
+          {t("Owner name")}
+          <input
+            type="text"
+            id="owner-display-name"
+            name="ownerDisplayName"
+            required
           />
+        </label>
 
-          <label for="tenant-code">
-            {t("Tenant code")}
-            <input type="text" id="tenant-code" name="tenantCode" required />
-          </label>
+        <label for="owner-login-identifier">
+          {t("Owner login identifier")}
+          <input
+            type="text"
+            id="owner-login-identifier"
+            name="ownerLoginIdentifier"
+            required
+          />
+        </label>
 
-          <label for="tenant-name">
-            {t("Tenant name")}
-            <input type="text" id="tenant-name" name="tenantName" required />
-          </label>
+        <label for="owner-password">
+          {t("Owner password")}
+          <input
+            type="password"
+            id="owner-password"
+            name="ownerPassword"
+            minlength="8"
+            autocomplete="new-password"
+            required
+          />
+        </label>
 
-          <label for="office-code">
-            {t("Head office code")}
-            <input type="text" id="office-code" name="officeCode" required />
-          </label>
+        <button type="submit" id="tenants-create-submit" class="module-toggle">
+          {t("Provision tenant")}
+        </button>
+      </form>
+    </section>
+  )}
 
-          <label for="office-name">
-            {t("Head office name")}
-            <input type="text" id="office-name" name="officeName" required />
-          </label>
-
-          <label for="owner-display-name">
-            {t("Owner name")}
-            <input
-              type="text"
-              id="owner-display-name"
-              name="ownerDisplayName"
-              required
-            />
-          </label>
-
-          <label for="owner-login-identifier">
-            {t("Owner login identifier")}
-            <input
-              type="text"
-              id="owner-login-identifier"
-              name="ownerLoginIdentifier"
-              required
-            />
-          </label>
-
-          <label for="owner-password">
-            {t("Owner password")}
-            <input
-              type="password"
-              id="owner-password"
-              name="ownerPassword"
-              minlength="8"
-              autocomplete="new-password"
-              required
-            />
-          </label>
-
-          <button
-            type="submit"
-            id="tenants-create-submit"
-            class="module-toggle"
-          >
-            {t("Provision tenant")}
-          </button>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canRead && (
-      <section class="admin-section fade-in-up" id="tenants-directory">
-        <h2 class="admin-section-title">
-          {t("Directory")}
-          <span class="count-pill">{tenants.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Every tenant on this deployment, newest first")}
-            </caption>
-            <thead>
+  {canRead && (
+    <section class="admin-section fade-in-up" id="tenants-directory">
+      <h2 class="admin-section-title">
+        {t("Directory")}
+        <span class="count-pill">{tenants.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Every tenant on this deployment, newest first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Created")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tenants.length === 0 && (
               <tr>
-                <th scope="col">{t("Code")}</th>
-                <th scope="col">{t("Name")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Created")}</th>
+                <td class="data-table-empty" colspan={4}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      🏢
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No tenants listed")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "This should not happen \u2014 the platform tenant itself is a tenant. Check the server logs."
+                      )}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {tenants.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={4}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        🏢
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No tenants listed")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "This should not happen \u2014 the platform tenant itself is a tenant. Check the server logs."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {tenants.map((tenant) => (
-                <tr>
-                  <td data-label="Code">
-                    <span class="cell-code">{tenant.tenantCode}</span>
-                    {tenant.tenantCode === platformTenantCode && (
-                      <span class="status-badge" data-variant="info">
-                        <span class="status-dot" aria-hidden="true" />
-                        {t("platform")}
-                      </span>
-                    )}
-                  </td>
-                  <td data-label="Name">{tenant.tenantName}</td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={statusVariant(tenant.status)}
-                    >
+            )}
+            {tenants.map((tenant) => (
+              <tr>
+                <td data-label="Code">
+                  <span class="cell-code">{tenant.tenantCode}</span>
+                  {tenant.tenantCode === platformTenantCode && (
+                    <span class="status-badge" data-variant="info">
                       <span class="status-dot" aria-hidden="true" />
-                      {tenant.status}
+                      {t("platform")}
                     </span>
-                  </td>
-                  <td data-label="Created">
-                    <span class="cell-code">
-                      {formatTimestamp(tenant.createdAt)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+                  )}
+                </td>
+                <td data-label="Name">{tenant.tenantName}</td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={statusVariant(tenant.status)}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {tenant.status}
+                  </span>
+                </td>
+                <td data-label="Created">
+                  <span class="cell-code">
+                    {formatTimestamp(tenant.createdAt)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

@@ -93,167 +93,155 @@ const colCount = canMutate ? 6 : 5;
     "A group is a subject: it can hold role grants, and everyone in it holds them too. Granting a group a role is done from the role assignment surface \u2014 this screen manages who is in which group."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="user-groups-denied">
-        {t("You do not have permission to view user groups.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="user-groups-denied">
+      {t("You do not have permission to view user groups.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="user-groups-error">
-        {t(
-          "User groups could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="user-groups-error">
+      {t("User groups could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
+  {canRead && !loadError && (
+    <p
+      id="user-groups-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canCreate && !loadError && (
+    <form id="user-group-create-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Create a group")}</p>
       <p
-        id="user-groups-action-error"
+        id="user-group-create-error"
         class="admin-create-error"
         role="alert"
         hidden
       />
-    )
-  }
 
-  {
-    canCreate && !loadError && (
-      <form id="user-group-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">{t("Create a group")}</p>
-        <p
-          id="user-group-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
+      <label for="user-group-code">{t("Group code")}</label>
+      <input
+        id="user-group-code"
+        name="groupCode"
+        type="text"
+        required
+        autocomplete="off"
+      />
 
-        <label for="user-group-code">{t("Group code")}</label>
-        <input
-          id="user-group-code"
-          name="groupCode"
-          type="text"
-          required
-          autocomplete="off"
-        />
+      <label for="user-group-name">{t("Group name")}</label>
+      <input
+        id="user-group-name"
+        name="groupName"
+        type="text"
+        required
+        autocomplete="off"
+      />
 
-        <label for="user-group-name">{t("Group name")}</label>
-        <input
-          id="user-group-name"
-          name="groupName"
-          type="text"
-          required
-          autocomplete="off"
-        />
+      <button type="submit" id="user-group-create-submit">
+        {t("Create group")}
+      </button>
+    </form>
+  )}
 
-        <button type="submit" id="user-group-create-submit">
-          {t("Create group")}
-        </button>
-      </form>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="user-groups-table">
-          <caption>
-            {tn("{count} group", "{count} groups", groups.length, {
-              count: groups.length
-            })}
-          </caption>
-          <thead>
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="user-groups-table">
+        <caption>
+          {tn("{count} group", "{count} groups", groups.length, {
+            count: groups.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Code")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Source")}</th>
+            <th scope="col">{t("Members")}</th>
+            <th scope="col">{t("Roles held")}</th>
+            {canMutate && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.length === 0 ? (
             <tr>
-              <th scope="col">{t("Code")}</th>
-              <th scope="col">{t("Name")}</th>
-              <th scope="col">{t("Source")}</th>
-              <th scope="col">{t("Members")}</th>
-              <th scope="col">{t("Roles held")}</th>
-              {canMutate && <th scope="col">{t("Actions")}</th>}
+              <td class="data-table-empty" colspan={colCount}>
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ◆
+                  </span>
+                  <span class="empty-state-title">{t("No groups yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? "Create the first group using the form above."
+                      : "Groups defined for this tenant will appear here."}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {groups.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={colCount}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ◆
-                    </span>
-                    <span class="empty-state-title">{t("No groups yet")}</span>
-                    <span class="empty-state-text">
-                      {canCreate
-                        ? "Create the first group using the form above."
-                        : "Groups defined for this tenant will appear here."}
-                    </span>
-                  </div>
+          ) : (
+            groups.map((group) => (
+              <tr data-group-id={group.id}>
+                <td data-label="Code">
+                  <code>{group.groupCode}</code>
                 </td>
+                <td data-label="Name">{group.groupName}</td>
+                <td data-label="Source">
+                  {group.source === "scim" ? "Directory" : "Local"}
+                </td>
+                <td data-label="Members">{group.memberCount}</td>
+                <td data-label="Roles held">{group.roleCount}</td>
+                {canMutate && (
+                  <td data-label="Actions">
+                    {group.source !== "local" ? (
+                      <span class="state-notice">
+                        {t("Managed externally")}
+                      </span>
+                    ) : (
+                      <>
+                        {canUpdate && (
+                          <button
+                            type="button"
+                            data-action="rename"
+                            data-group-id={group.id}
+                            data-group-name={group.groupName}
+                          >
+                            {t("Rename")}
+                          </button>
+                        )}
+                        {canAssign && (
+                          <button
+                            type="button"
+                            data-action="add-member"
+                            data-group-id={group.id}
+                          >
+                            {t("Add member")}
+                          </button>
+                        )}
+                        {canAssign && group.memberCount > 0 && (
+                          <button
+                            type="button"
+                            data-action="remove-member"
+                            data-group-id={group.id}
+                          >
+                            {t("Remove member")}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </td>
+                )}
               </tr>
-            ) : (
-              groups.map((group) => (
-                <tr data-group-id={group.id}>
-                  <td data-label="Code">
-                    <code>{group.groupCode}</code>
-                  </td>
-                  <td data-label="Name">{group.groupName}</td>
-                  <td data-label="Source">
-                    {group.source === "scim" ? "Directory" : "Local"}
-                  </td>
-                  <td data-label="Members">{group.memberCount}</td>
-                  <td data-label="Roles held">{group.roleCount}</td>
-                  {canMutate && (
-                    <td data-label="Actions">
-                      {group.source !== "local" ? (
-                        <span class="state-notice">
-                          {t("Managed externally")}
-                        </span>
-                      ) : (
-                        <>
-                          {canUpdate && (
-                            <button
-                              type="button"
-                              data-action="rename"
-                              data-group-id={group.id}
-                              data-group-name={group.groupName}
-                            >
-                              {t("Rename")}
-                            </button>
-                          )}
-                          {canAssign && (
-                            <button
-                              type="button"
-                              data-action="add-member"
-                              data-group-id={group.id}
-                            >
-                              {t("Add member")}
-                            </button>
-                          )}
-                          {canAssign && group.memberCount > 0 && (
-                            <button
-                              type="button"
-                              data-action="remove-member"
-                              data-group-id={group.id}
-                            >
-                              {t("Remove member")}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>
 
 <script>

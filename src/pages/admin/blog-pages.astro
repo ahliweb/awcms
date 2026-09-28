@@ -297,525 +297,502 @@ const editingBodyText = editingPage
 ---
 
 <AdminLayout title={t("Blog pages")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "Standing site content \u2014 about, contact, policies. Pages have a narrower lifecycle than posts:"
-      )
-    }<strong>{t("draft, published, archived")}</strong>{
-      t(", with no review queue and no scheduling. Posts live on")
-    }<a href="/admin/blog">{t("the blog console")}</a>.</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "Standing site content \u2014 about, contact, policies. Pages have a narrower lifecycle than posts:"
+    )}
+    <strong>{t("draft, published, archived")}</strong>
+    {t(", with no review queue and no scheduling. Posts live on")}
+    <a href="/admin/blog">{t("the blog console")}</a>.
+  </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="pages-denied">
-        {t("You do not have permission to view blog pages.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="pages-denied">
+      {t("You do not have permission to view blog pages.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="pages-error">
-        {t(
-          "Pages could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
-        )}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="pages-error">
+      {t(
+        "Pages could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <p
-        id="pages-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
+  {canRead && !loadError && (
+    <p id="pages-action-error" class="admin-create-error" role="alert" hidden />
+  )}
+
+  {canRead && !loadError && (
+    <form method="get" class="admin-toolbar fade-in-up" id="page-filter-form">
+      <label for="filter-search">{t("Search titles")}</label>
+      <input
+        id="filter-search"
+        name="search"
+        type="search"
+        value={searchFilter}
+        autocomplete="off"
       />
-    )
-  }
 
-  {
-    canRead && !loadError && (
-      <form method="get" class="admin-toolbar fade-in-up" id="page-filter-form">
-        <label for="filter-search">{t("Search titles")}</label>
-        <input
-          id="filter-search"
-          name="search"
-          type="search"
-          value={searchFilter}
-          autocomplete="off"
-        />
-
-        <label for="filter-status">{t("Status")}</label>
-        <select id="filter-status" name="status">
-          <option value="" selected={statusFilter === undefined}>
-            {t("Any status")}
-          </option>
-          {/* The page lifecycle's three, not all five: offering `review` or
+      <label for="filter-status">{t("Status")}</label>
+      <select id="filter-status" name="status">
+        <option value="" selected={statusFilter === undefined}>
+          {t("Any status")}
+        </option>
+        {/* The page lifecycle's three, not all five: offering `review` or
               `scheduled` would filter for states no page can reach. */}
-          {BLOG_PAGE_STATUSES.map((value) => (
-            <option value={value} selected={statusFilter === value}>
-              {value}
-            </option>
-          ))}
-        </select>
-
-        <label for="filter-page-type">{t("Type")}</label>
-        <select id="filter-page-type" name="pageType">
-          <option value="" selected={pageTypeFilter === undefined}>
-            {t("Any type")}
+        {BLOG_PAGE_STATUSES.map((value) => (
+          <option value={value} selected={statusFilter === value}>
+            {value}
           </option>
-          {PAGE_TYPES.map((value) => (
-            <option value={value} selected={pageTypeFilter === value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        ))}
+      </select>
 
-        <button type="submit">{t("Apply filters")}</button>
+      <label for="filter-page-type">{t("Type")}</label>
+      <select id="filter-page-type" name="pageType">
+        <option value="" selected={pageTypeFilter === undefined}>
+          {t("Any type")}
+        </option>
+        {PAGE_TYPES.map((value) => (
+          <option value={value} selected={pageTypeFilter === value}>
+            {value}
+          </option>
+        ))}
+      </select>
 
-        {/* Carried across submit, so applying a filter does not silently
+      <button type="submit">{t("Apply filters")}</button>
+
+      {/* Carried across submit, so applying a filter does not silently
             bounce the operator out of the bin. */}
-        {showsBin && <input type="hidden" name="view" value="deleted" />}
+      {showsBin && <input type="hidden" name="view" value="deleted" />}
 
-        <a
-          class="quick-link"
-          href={linkWith({ view: showsBin ? null : "deleted", edit: null })}
-        >
-          {showsBin ? "← Back to live pages" : "View deleted pages"}
-        </a>
-      </form>
-    )
-  }
-
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="page-list-title"
+      <a
+        class="quick-link"
+        href={linkWith({ view: showsBin ? null : "deleted", edit: null })}
       >
-        <h2 class="admin-section-title" id="page-list-title">
-          {showsBin ? "Deleted pages" : "Pages"}
-          <span class="count-pill">{total}</span>
-        </h2>
+        {showsBin ? "← Back to live pages" : "View deleted pages"}
+      </a>
+    </form>
+  )}
 
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="blog-pages-table">
-            <caption class="sr-only">
-              {t("Blog pages, most recently updated first.")}
-            </caption>
-            <thead>
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" aria-labelledby="page-list-title">
+      <h2 class="admin-section-title" id="page-list-title">
+        {showsBin ? "Deleted pages" : "Pages"}
+        <span class="count-pill">{total}</span>
+      </h2>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="blog-pages-table">
+          <caption class="sr-only">
+            {t("Blog pages, most recently updated first.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Title")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Menu order")}</th>
+              <th scope="col">{t("Updated")}</th>
+              {showsRowActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {pages.length === 0 ? (
               <tr>
-                <th scope="col">{t("Title")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Menu order")}</th>
-                <th scope="col">{t("Updated")}</th>
-                {showsRowActions && <th scope="col">{t("Actions")}</th>}
+                <td class="data-table-empty" colspan={pageColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ▤
+                    </span>
+                    <span class="empty-state-title">
+                      {showsBin
+                        ? "Nothing in the bin"
+                        : hasFilters
+                          ? "No pages match these filters"
+                          : "No pages yet"}
+                    </span>
+                    <span class="empty-state-text">
+                      {showsBin
+                        ? "Deleted pages appear here until they are purged."
+                        : hasFilters
+                          ? "Clear or widen the filters above to see more pages."
+                          : "Create a draft below to get started."}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {pages.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={pageColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ▤
-                      </span>
-                      <span class="empty-state-title">
-                        {showsBin
-                          ? "Nothing in the bin"
-                          : hasFilters
-                            ? "No pages match these filters"
-                            : "No pages yet"}
-                      </span>
-                      <span class="empty-state-text">
-                        {showsBin
-                          ? "Deleted pages appear here until they are purged."
-                          : hasFilters
-                            ? "Clear or widen the filters above to see more pages."
-                            : "Create a draft below to get started."}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                pages.map((entry) => (
-                  <tr data-page-row={entry.id}>
-                    <td data-label="Title">
-                      <span set:text={entry.title} />
+            ) : (
+              pages.map((entry) => (
+                <tr data-page-row={entry.id}>
+                  <td data-label="Title">
+                    <span set:text={entry.title} />
+                    <span class="cell-muted">
+                      {" "}
+                      · <span class="cell-code">{entry.slug}</span> ·{" "}
+                      {entry.locale}
+                    </span>
+                    {entry.parentPageId && (
                       <span class="cell-muted">
                         {" "}
-                        · <span class="cell-code">{entry.slug}</span> ·{" "}
-                        {entry.locale}
+                        · child of{" "}
+                        <span class="cell-code">{entry.parentPageId}</span>
                       </span>
-                      {entry.parentPageId && (
-                        <span class="cell-muted">
-                          {" "}
-                          · child of{" "}
-                          <span class="cell-code">{entry.parentPageId}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={STATUS_VARIANT[entry.status] ?? "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {entry.status}
-                      </span>
-                    </td>
-                    <td data-label="Type">
-                      <span class="cell-code">{entry.pageType}</span>
-                    </td>
-                    <td data-label="Menu order">
-                      <span class="cell-muted">{entry.menuOrder}</span>
-                    </td>
-                    <td data-label="Updated">
-                      <span class="cell-muted">
-                        {formatTimestamp(entry.updatedAt)}
-                      </span>
-                    </td>
-                    {showsRowActions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {canUpdate && !showsBin && (
-                            <a
-                              class="quick-link"
-                              href={linkWith({ edit: entry.id })}
-                            >
-                              {t("Edit")}
-                              <span class="quick-link-arrow" aria-hidden="true">
-                                →
-                              </span>
-                            </a>
-                          )}
-                          {/* `transitionBlogPageStatus` matches
+                    )}
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={STATUS_VARIANT[entry.status] ?? "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {entry.status}
+                    </span>
+                  </td>
+                  <td data-label="Type">
+                    <span class="cell-code">{entry.pageType}</span>
+                  </td>
+                  <td data-label="Menu order">
+                    <span class="cell-muted">{entry.menuOrder}</span>
+                  </td>
+                  <td data-label="Updated">
+                    <span class="cell-muted">
+                      {formatTimestamp(entry.updatedAt)}
+                    </span>
+                  </td>
+                  {showsRowActions && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {canUpdate && !showsBin && (
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: entry.id })}
+                          >
+                            {t("Edit")}
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
+                        )}
+                        {/* `transitionBlogPageStatus` matches
                               `deleted_at IS NULL`, so a binned page has no
                               transition to offer. */}
-                          {canPublish &&
-                            !showsBin &&
-                            entry.status !== "published" && (
-                              <button
-                                type="button"
-                                class="btn-inline page-publish-btn"
-                                data-page-id={entry.id}
-                              >
-                                {t("Publish")}
-                              </button>
-                            )}
-                          {canArchive &&
-                            !showsBin &&
-                            entry.status === "published" && (
-                              <button
-                                type="button"
-                                class="btn-inline page-archive-btn"
-                                data-page-id={entry.id}
-                              >
-                                {t("Archive")}
-                              </button>
-                            )}
-                          {/* Restore undoes the BIN. Hanging it off
+                        {canPublish &&
+                          !showsBin &&
+                          entry.status !== "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline page-publish-btn"
+                              data-page-id={entry.id}
+                            >
+                              {t("Publish")}
+                            </button>
+                          )}
+                        {canArchive &&
+                          !showsBin &&
+                          entry.status === "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline page-archive-btn"
+                              data-page-id={entry.id}
+                            >
+                              {t("Archive")}
+                            </button>
+                          )}
+                        {/* Restore undoes the BIN. Hanging it off
                               `status === "archived"` is the defect #351 fixed
                               on the post console: archived is a different axis
                               and the endpoint answers 404. */}
-                          {canRestore && showsBin && (
+                        {canRestore && showsBin && (
+                          <button
+                            type="button"
+                            class="btn-inline page-restore-btn"
+                            data-page-id={entry.id}
+                          >
+                            {t("Restore")}
+                          </button>
+                        )}
+                        {canDelete && !showsBin && (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger page-delete-btn"
+                            data-page-id={entry.id}
+                            data-page-title={entry.title}
+                          >
+                            {t("Delete")}
+                          </button>
+                        )}
+                        {/* `canPurgePage` accepts archived OR soft-deleted,
+                              so both views can offer it. */}
+                        {canPurge &&
+                          (showsBin || entry.status === "archived") && (
                             <button
                               type="button"
-                              class="btn-inline page-restore-btn"
-                              data-page-id={entry.id}
-                            >
-                              {t("Restore")}
-                            </button>
-                          )}
-                          {canDelete && !showsBin && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger page-delete-btn"
+                              class="btn-inline btn-inline--danger page-purge-btn"
                               data-page-id={entry.id}
                               data-page-title={entry.title}
                             >
-                              {t("Delete")}
+                              {t("Purge")}
                             </button>
                           )}
-                          {/* `canPurgePage` accepts archived OR soft-deleted,
-                              so both views can offer it. */}
-                          {canPurge &&
-                            (showsBin || entry.status === "archived") && (
-                              <button
-                                type="button"
-                                class="btn-inline btn-inline--danger page-purge-btn"
-                                data-page-id={entry.id}
-                                data-page-title={entry.title}
-                              >
-                                {t("Purge")}
-                              </button>
-                            )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {total > pageSize && (
+        <div class="admin-toolbar">
+          {pageNumber > 1 && (
+            <a
+              class="quick-link"
+              href={linkWith({ page: String(pageNumber - 1) })}
+            >
+              {t("\u2190 Previous")}
+            </a>
+          )}
+          <span class="cell-muted">
+            {t("Page")} {pageNumber} of {lastPage}
+          </span>
+          {pageNumber < lastPage && (
+            <a
+              class="quick-link"
+              href={linkWith({ page: String(pageNumber + 1) })}
+            >
+              {t("Next \u2192")}
+            </a>
+          )}
         </div>
+      )}
+    </section>
+  )}
 
-        {total > pageSize && (
-          <div class="admin-toolbar">
-            {pageNumber > 1 && (
-              <a
-                class="quick-link"
-                href={linkWith({ page: String(pageNumber - 1) })}
-              >
-                {t("\u2190 Previous")}
-              </a>
-            )}
-            <span class="cell-muted">
-              {t("Page")} {pageNumber} of {lastPage}
-            </span>
-            {pageNumber < lastPage && (
-              <a
-                class="quick-link"
-                href={linkWith({ page: String(pageNumber + 1) })}
-              >
-                {t("Next \u2192")}
-              </a>
-            )}
-          </div>
-        )}
-      </section>
-    )
-  }
+  {canUpdate && !loadError && editingPage && (
+    <section class="admin-section fade-in-up" aria-labelledby="edit-title">
+      <h2 class="admin-section-title" id="edit-title">
+        {t("Edit page")}
+      </h2>
+      <form id="page-edit-form" class="admin-create-form">
+        <p class="form-legend">
+          <span class="cell-code">{editingPage.id}</span>
+          {" · "}
+          <a href={linkWith({ edit: null })}>{t("Close")}</a>
+        </p>
+        <p class="form-legend">
+          {t(
+            "Title, address, menu placement and body. Re-parenting is not offered here: it needs cycle detection the API does not perform, and a control that can build a loop is worse than none."
+          )}
+        </p>
+        <p
+          id="page-edit-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
 
-  {
-    canUpdate && !loadError && editingPage && (
-      <section class="admin-section fade-in-up" aria-labelledby="edit-title">
-        <h2 class="admin-section-title" id="edit-title">
-          {t("Edit page")}
-        </h2>
-        <form id="page-edit-form" class="admin-create-form">
-          <p class="form-legend">
-            <span class="cell-code">{editingPage.id}</span>
-            {" · "}
-            <a href={linkWith({ edit: null })}>{t("Close")}</a>
-          </p>
-          <p class="form-legend">
-            {t(
-              "Title, address, menu placement and body. Re-parenting is not offered here: it needs cycle detection the API does not perform, and a control that can build a loop is worse than none."
-            )}
-          </p>
-          <p
-            id="page-edit-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
+        <input type="hidden" id="edit-page-id" value={editingPage.id} />
 
-          <input type="hidden" id="edit-page-id" value={editingPage.id} />
-
-          <label for="edit-title-field">
-            {t("Title")}
-            {/* `maxlength` comes from the SAME constant the validator
+        <label for="edit-title-field">
+          {t("Title")}
+          {/* `maxlength` comes from the SAME constant the validator
                 enforces, so the browser cannot accept what the server
                 rejects. */}
-            <input
-              type="text"
-              id="edit-title-field"
-              name="title"
-              required
-              maxlength={MAX_TITLE_LENGTH}
-              value={editingPage.title}
-              autocomplete="off"
-            />
-          </label>
+          <input
+            type="text"
+            id="edit-title-field"
+            name="title"
+            required
+            maxlength={MAX_TITLE_LENGTH}
+            value={editingPage.title}
+            autocomplete="off"
+          />
+        </label>
 
-          <label for="edit-slug">
-            {t("Slug")}
-            <input
-              type="text"
-              id="edit-slug"
-              name="slug"
-              required
-              value={editingPage.slug}
-              autocomplete="off"
-            />
-          </label>
+        <label for="edit-slug">
+          {t("Slug")}
+          <input
+            type="text"
+            id="edit-slug"
+            name="slug"
+            required
+            value={editingPage.slug}
+            autocomplete="off"
+          />
+        </label>
 
-          <label for="edit-page-type">
-            {t("Page type")}
-            <select id="edit-page-type" name="pageType">
-              {PAGE_TYPES.map((value) => (
-                <option value={value} selected={editingPage.pageType === value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
+        <label for="edit-page-type">
+          {t("Page type")}
+          <select id="edit-page-type" name="pageType">
+            {PAGE_TYPES.map((value) => (
+              <option value={value} selected={editingPage.pageType === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label for="edit-menu-order">
-            {t("Menu order")}
-            <input
-              type="number"
-              id="edit-menu-order"
-              name="menuOrder"
-              step="1"
-              value={String(editingPage.menuOrder)}
-            />
-          </label>
+        <label for="edit-menu-order">
+          {t("Menu order")}
+          <input
+            type="number"
+            id="edit-menu-order"
+            name="menuOrder"
+            step="1"
+            value={String(editingPage.menuOrder)}
+          />
+        </label>
 
-          <label for="edit-excerpt">
-            {t("Excerpt (optional)")}
-            <textarea
-              id="edit-excerpt"
-              name="excerpt"
-              rows="2"
-              maxlength={MAX_EXCERPT_LENGTH}
-              set:text={editingPage.excerpt ?? ""}
-            />
-          </label>
+        <label for="edit-excerpt">
+          {t("Excerpt (optional)")}
+          <textarea
+            id="edit-excerpt"
+            name="excerpt"
+            rows="2"
+            maxlength={MAX_EXCERPT_LENGTH}
+            set:text={editingPage.excerpt ?? ""}
+          />
+        </label>
 
-          {editingBodyText === null ? (
-            <p class="form-legend">
-              {t(
-                "The body of this page holds blocks this plain-text editor cannot represent \u2014 an image gallery or a video embed. Structure and excerpt are still editable; the body is left untouched, because saving it from here would drop those blocks."
-              )}
-            </p>
-          ) : (
-            <label for="edit-body">
-              {t("Body")}
-              <textarea
-                id="edit-body"
-                name="body"
-                rows="14"
-                required
-                set:text={editingBodyText}
-              />
-            </label>
-          )}
-
-          <button type="submit" id="page-edit-submit">
-            {t("Save page")}
-          </button>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canCreate && !loadError && !showsBin && (
-      <section class="admin-section fade-in-up" aria-labelledby="create-title">
-        <h2 class="admin-section-title" id="create-title">
-          {t("New page")}
-        </h2>
-        <form id="page-create-form" class="admin-create-form">
+        {editingBodyText === null ? (
           <p class="form-legend">
             {t(
-              "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
+              "The body of this page holds blocks this plain-text editor cannot represent \u2014 an image gallery or a video embed. Structure and excerpt are still editable; the body is left untouched, because saving it from here would drop those blocks."
             )}
-            <code>{t("paragraph")}</code>
-            {t("block, the only block type this editor writes.")}
           </p>
-          <p
-            id="page-create-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-
-          <label for="create-title-field">
-            {t("Title")}
-            <input
-              type="text"
-              id="create-title-field"
-              name="title"
-              required
-              maxlength={MAX_TITLE_LENGTH}
-              autocomplete="off"
-            />
-          </label>
-
-          <label for="create-slug">
-            {t("Slug")}
-            <input
-              type="text"
-              id="create-slug"
-              name="slug"
-              required
-              autocomplete="off"
-              placeholder="url-safe-identifier"
-            />
-          </label>
-
-          <label for="create-locale">
-            {t("Locale")}
-            <input
-              type="text"
-              id="create-locale"
-              name="locale"
-              value="id"
-              autocomplete="off"
-            />
-          </label>
-
-          <label for="create-page-type">
-            {t("Page type")}
-            <select id="create-page-type" name="pageType">
-              {PAGE_TYPES.map((value) => (
-                <option value={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-
-          <label for="create-visibility">
-            {t("Visibility")}
-            <select id="create-visibility" name="visibility">
-              {BLOG_CONTENT_VISIBILITIES.map((value) => (
-                <option value={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-
-          <label for="create-menu-order">
-            {t("Menu order")}
-            <input
-              type="number"
-              id="create-menu-order"
-              name="menuOrder"
-              step="1"
-              value="0"
-            />
-          </label>
-
-          <label for="create-excerpt">
-            {t("Excerpt (optional)")}
+        ) : (
+          <label for="edit-body">
+            {t("Body")}
             <textarea
-              id="create-excerpt"
-              name="excerpt"
-              rows="2"
-              maxlength={MAX_EXCERPT_LENGTH}
+              id="edit-body"
+              name="body"
+              rows="14"
+              required
+              set:text={editingBodyText}
             />
           </label>
+        )}
 
-          {/* The field whose absence made this form unusable: the API requires
+        <button type="submit" id="page-edit-submit">
+          {t("Save page")}
+        </button>
+      </form>
+    </section>
+  )}
+
+  {canCreate && !loadError && !showsBin && (
+    <section class="admin-section fade-in-up" aria-labelledby="create-title">
+      <h2 class="admin-section-title" id="create-title">
+        {t("New page")}
+      </h2>
+      <form id="page-create-form" class="admin-create-form">
+        <p class="form-legend">
+          {t(
+            "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
+          )}
+          <code>{t("paragraph")}</code>
+          {t("block, the only block type this editor writes.")}
+        </p>
+        <p
+          id="page-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="create-title-field">
+          {t("Title")}
+          <input
+            type="text"
+            id="create-title-field"
+            name="title"
+            required
+            maxlength={MAX_TITLE_LENGTH}
+            autocomplete="off"
+          />
+        </label>
+
+        <label for="create-slug">
+          {t("Slug")}
+          <input
+            type="text"
+            id="create-slug"
+            name="slug"
+            required
+            autocomplete="off"
+            placeholder="url-safe-identifier"
+          />
+        </label>
+
+        <label for="create-locale">
+          {t("Locale")}
+          <input
+            type="text"
+            id="create-locale"
+            name="locale"
+            value="id"
+            autocomplete="off"
+          />
+        </label>
+
+        <label for="create-page-type">
+          {t("Page type")}
+          <select id="create-page-type" name="pageType">
+            {PAGE_TYPES.map((value) => (
+              <option value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+
+        <label for="create-visibility">
+          {t("Visibility")}
+          <select id="create-visibility" name="visibility">
+            {BLOG_CONTENT_VISIBILITIES.map((value) => (
+              <option value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+
+        <label for="create-menu-order">
+          {t("Menu order")}
+          <input
+            type="number"
+            id="create-menu-order"
+            name="menuOrder"
+            step="1"
+            value="0"
+          />
+        </label>
+
+        <label for="create-excerpt">
+          {t("Excerpt (optional)")}
+          <textarea
+            id="create-excerpt"
+            name="excerpt"
+            rows="2"
+            maxlength={MAX_EXCERPT_LENGTH}
+          />
+        </label>
+
+        {/* The field whose absence made this form unusable: the API requires
               a non-empty `contentText`, and the screen sent `""`. No
               `maxlength` — the validator imposes no bound on the body, and a
               hand-typed one would be a limit no server enforces. */}
-          <label for="create-body">
-            {t("Body")}
-            <textarea id="create-body" name="body" rows="14" required />
-          </label>
+        <label for="create-body">
+          {t("Body")}
+          <textarea id="create-body" name="body" rows="14" required />
+        </label>
 
-          <button type="submit" id="page-create-submit">
-            {t("Create draft")}
-          </button>
-        </form>
-      </section>
-    )
-  }
+        <button type="submit" id="page-create-submit">
+          {t("Create draft")}
+        </button>
+      </form>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

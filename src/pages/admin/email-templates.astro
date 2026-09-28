@@ -67,140 +67,125 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
 ---
 
 <AdminLayout title={t("Email templates")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "Transactional email templates for this tenant, including inactive ones. Subject and body are captured for the"
-      )
-    }<code>en</code>{
-      t("locale; the endpoint validates and escapes the content.")
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "Transactional email templates for this tenant, including inactive ones. Subject and body are captured for the"
+    )}
+    <code>en</code>
+    {t("locale; the endpoint validates and escapes the content.")}
+  </Fragment>
 
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="email-templates-denied">
-        {t("You do not have permission to view email templates.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="email-templates-denied">
+      {t("You do not have permission to view email templates.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="email-templates-error">
-        {t("Templates could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="email-templates-error">
+      {t("Templates could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canCreate && (
-      <form
-        id="email-template-create-form"
-        class="admin-create-form fade-in-up"
-      >
-        <p class="form-legend">{t("Create a template")}</p>
-        <p
-          id="email-template-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
-        />
+  {canCreate && (
+    <form id="email-template-create-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Create a template")}</p>
+      <p
+        id="email-template-create-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
 
-        <label for="email-template-key">{t("Template key")}</label>
-        <select id="email-template-key" name="templateKey">
-          {BASE_EMAIL_TEMPLATE_CATEGORIES.map((category) => (
-            <option value={category}>{category}</option>
-          ))}
-        </select>
+      <label for="email-template-key">{t("Template key")}</label>
+      <select id="email-template-key" name="templateKey">
+        {BASE_EMAIL_TEMPLATE_CATEGORIES.map((category) => (
+          <option value={category}>{category}</option>
+        ))}
+      </select>
 
-        <label for="email-template-name">{t("Name")}</label>
-        <input
-          id="email-template-name"
-          name="name"
-          type="text"
-          required
-          autocomplete="off"
-        />
+      <label for="email-template-name">{t("Name")}</label>
+      <input
+        id="email-template-name"
+        name="name"
+        type="text"
+        required
+        autocomplete="off"
+      />
 
-        <label for="email-template-subject">{t("Subject (en)")}</label>
-        <input
-          id="email-template-subject"
-          name="subject"
-          type="text"
-          required
-          autocomplete="off"
-        />
+      <label for="email-template-subject">{t("Subject (en)")}</label>
+      <input
+        id="email-template-subject"
+        name="subject"
+        type="text"
+        required
+        autocomplete="off"
+      />
 
-        <label for="email-template-body">{t("Text body (en)")}</label>
-        <textarea id="email-template-body" name="body" rows="3" required />
+      <label for="email-template-body">{t("Text body (en)")}</label>
+      <textarea id="email-template-body" name="body" rows="3" required />
 
-        <button type="submit" id="email-template-create-submit">
-          {t("Create template")}
-        </button>
-      </form>
-    )
-  }
+      <button type="submit" id="email-template-create-submit">
+        {t("Create template")}
+      </button>
+    </form>
+  )}
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="email-templates-table">
-          <caption>
-            {tn("{count} template", "{count} templates", templates.length, {
-              count: templates.length
-            })}
-          </caption>
-          <thead>
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="email-templates-table">
+        <caption>
+          {tn("{count} template", "{count} templates", templates.length, {
+            count: templates.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Key")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Active")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {templates.length === 0 ? (
             <tr>
-              <th scope="col">{t("Key")}</th>
-              <th scope="col">{t("Name")}</th>
-              <th scope="col">{t("Active")}</th>
+              <td class="data-table-empty" colspan="3">
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ✉
+                  </span>
+                  <span class="empty-state-title">{t("No templates yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? "Create your first email template using the form above."
+                      : "Email templates configured for this tenant will appear here."}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {templates.length === 0 ? (
+          ) : (
+            templates.map((template) => (
               <tr>
-                <td class="data-table-empty" colspan="3">
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ✉
-                    </span>
-                    <span class="empty-state-title">
-                      {t("No templates yet")}
-                    </span>
-                    <span class="empty-state-text">
-                      {canCreate
-                        ? "Create your first email template using the form above."
-                        : "Email templates configured for this tenant will appear here."}
-                    </span>
-                  </div>
+                <td data-label="Key">
+                  <span class="cell-code">{template.templateKey}</span>
+                </td>
+                <td data-label="Name">{template.name}</td>
+                <td data-label="Active">
+                  <span
+                    class="status-badge"
+                    data-variant={template.isActive ? "success" : "neutral"}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {template.isActive ? "active" : "inactive"}
+                  </span>
                 </td>
               </tr>
-            ) : (
-              templates.map((template) => (
-                <tr>
-                  <td data-label="Key">
-                    <span class="cell-code">{template.templateKey}</span>
-                  </td>
-                  <td data-label="Name">{template.name}</td>
-                  <td data-label="Active">
-                    <span
-                      class="status-badge"
-                      data-variant={template.isActive ? "success" : "neutral"}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {template.isActive ? "active" : "inactive"}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>
 
 <script>

@@ -203,473 +203,447 @@ const deliveryColumns = canReplay ? 7 : 6;
 ---
 
 <AdminLayout title={t("Domain events")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "The transactional outbox and its consumers. Events are recorded in the same transaction as the change that caused them; delivery is what happens afterwards, on the"
-      )
-    }<code>{t("domain-events:dispatch")}</code>{
-      t(
-        "schedule. A dead-lettered delivery has exhausted its attempts and will not be retried until it is replayed."
-      )
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "The transactional outbox and its consumers. Events are recorded in the same transaction as the change that caused them; delivery is what happens afterwards, on the"
+    )}
+    <code>{t("domain-events:dispatch")}</code>
+    {t(
+      "schedule. A dead-lettered delivery has exhausted its attempts and will not be retried until it is replayed."
+    )}
+  </Fragment>
 
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="domain-events-denied">
-        {t("You do not have permission to view the domain event runtime.")}
-      </p>
-    )
-  }
+  {!canSeeAnything && (
+    <p class="state-notice fade-in-up" id="domain-events-denied">
+      {t("You do not have permission to view the domain event runtime.")}
+    </p>
+  )}
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="domain-events-error">
-        {t(
-          "The event runtime console could not be loaded right now. This is a problem reading it, not an idle runtime \u2014 please try again later."
-        )}
-      </p>
-    )
-  }
+  {canSeeAnything && loadError && (
+    <p class="state-notice fade-in-up" id="domain-events-error">
+      {t(
+        "The event runtime console could not be loaded right now. This is a problem reading it, not an idle runtime \u2014 please try again later."
+      )}
+    </p>
+  )}
 
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="domain-events-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
+  {canSeeAnything && !loadError && (
+    <p
+      id="domain-events-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
 
-  {
-    canReadConsumers && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="consumers-title"
-        id="domain-events-consumers"
-      >
-        <h2 class="admin-section-title" id="consumers-title">
-          {t("Consumers")}
-          <span class="count-pill">{consumers.length}</span>
-        </h2>
+  {canReadConsumers && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="consumers-title"
+      id="domain-events-consumers"
+    >
+      <h2 class="admin-section-title" id="consumers-title">
+        {t("Consumers")}
+        <span class="count-pill">{consumers.length}</span>
+      </h2>
 
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Pending deliveries")}</span>
-            <span class="stat-value">{pendingTotal}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Dead-lettered")}</span>
-            <span class="stat-value">{deadLetterTotal}</span>
-            {deadLetterTotal > 0 && (
-              <span class="stat-hint">
-                {t("Replay below once the cause is fixed")}
-              </span>
-            )}
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Paused consumers")}</span>
-            <span class="stat-value">{pausedCount}</span>
-            {pausedCount > 0 && (
-              <span class="stat-hint">
-                {t("A paused consumer accrues backlog")}
-              </span>
-            )}
-          </div>
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Pending deliveries")}</span>
+          <span class="stat-value">{pendingTotal}</span>
         </div>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="consumers-table">
-            <caption class="sr-only">
-              {t("Registered domain event consumers and their backlog.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Consumer")}</th>
-                <th scope="col">{t("Events")}</th>
-                <th scope="col">{t("State")}</th>
-                <th scope="col">{t("Pending")}</th>
-                <th scope="col">{t("Dead-lettered")}</th>
-                {canManageConsumers && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {consumers.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={consumerColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⇉
-                      </span>
-                      <span class="empty-state-title">{t("No consumers")}</span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Consumers are a static, reviewed source-code registry \u2014 never registered at runtime."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                consumers.map((consumer) => (
-                  <tr data-consumer-row={consumer.name}>
-                    <td data-label="Consumer">
-                      <span class="cell-code">{consumer.name}</span>
-                      <span class="cell-muted"> · {consumer.description}</span>
-                    </td>
-                    <td data-label="Events">
-                      <span class="cell-code">
-                        {consumer.eventTypes.join(", ")}
-                      </span>
-                    </td>
-                    <td data-label="State">
-                      <span
-                        class="status-badge"
-                        data-variant={consumer.isPaused ? "warning" : "success"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {consumer.isPaused ? "paused" : "running"}
-                      </span>
-                      {consumer.isPaused && (
-                        <span class="cell-muted">
-                          {" "}
-                          since {formatTimestamp(consumer.pausedAt)}
-                          {consumer.pausedReason && (
-                            <span set:text={` · ${consumer.pausedReason}`} />
-                          )}
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Pending">{consumer.pendingCount}</td>
-                    <td data-label="Dead-lettered">
-                      {consumer.deadLetterCount}
-                    </td>
-                    {canManageConsumers && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {consumer.isPaused ? (
-                            <button
-                              type="button"
-                              class="btn-inline consumer-resume-btn"
-                              data-consumer-name={consumer.name}
-                            >
-                              {t("Resume")}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger consumer-pause-btn"
-                              data-consumer-name={consumer.name}
-                            >
-                              {t("Pause")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div class="stat-card">
+          <span class="stat-label">{t("Dead-lettered")}</span>
+          <span class="stat-value">{deadLetterTotal}</span>
+          {deadLetterTotal > 0 && (
+            <span class="stat-hint">
+              {t("Replay below once the cause is fixed")}
+            </span>
+          )}
         </div>
-      </section>
-    )
-  }
+        <div class="stat-card">
+          <span class="stat-label">{t("Paused consumers")}</span>
+          <span class="stat-value">{pausedCount}</span>
+          {pausedCount > 0 && (
+            <span class="stat-hint">
+              {t("A paused consumer accrues backlog")}
+            </span>
+          )}
+        </div>
+      </div>
 
-  {
-    (canReadDeliveries || canReadEvents) && !loadError && (
-      <form
-        method="get"
-        class="admin-toolbar fade-in-up"
-        id="event-filter-form"
-      >
-        {canReadDeliveries && (
-          <>
-            <label for="filter-delivery-status">{t("Delivery status")}</label>
-            <select id="filter-delivery-status" name="deliveryStatus">
-              <option value="" selected={deliveryStatusFilter === ""}>
-                {t("Any status")}
-              </option>
-              {DELIVERY_STATUS_OPTIONS.map((value) => (
-                <option value={value} selected={deliveryStatusFilter === value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-
-            <label for="filter-consumer">{t("Consumer")}</label>
-            <input
-              id="filter-consumer"
-              name="consumer"
-              type="text"
-              value={consumerFilter}
-              autocomplete="off"
-            />
-          </>
-        )}
-
-        <label for="filter-event-type">{t("Event type")}</label>
-        <input
-          id="filter-event-type"
-          name="eventType"
-          type="text"
-          value={eventTypeFilter}
-          autocomplete="off"
-          placeholder="e.g. awcms.blog.post.published"
-        />
-
-        {canReadEvents && (
-          <>
-            <label for="filter-aggregate-type">{t("Aggregate type")}</label>
-            <input
-              id="filter-aggregate-type"
-              name="aggregateType"
-              type="text"
-              value={aggregateTypeFilter}
-              autocomplete="off"
-            />
-          </>
-        )}
-
-        <button type="submit">{t("Apply filters")}</button>
-      </form>
-    )
-  }
-
-  {
-    canReadDeliveries && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="deliveries-title"
-        id="domain-events-deliveries"
-      >
-        <h2 class="admin-section-title" id="deliveries-title">
-          {t("Deliveries")}
-          <span class="count-pill">{deliveries.length}</span>
-        </h2>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="deliveries-table">
-            <caption class="sr-only">
-              {t("Delivery attempts, newest first, capped at 100 rows.")}
-            </caption>
-            <thead>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="consumers-table">
+          <caption class="sr-only">
+            {t("Registered domain event consumers and their backlog.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Consumer")}</th>
+              <th scope="col">{t("Events")}</th>
+              <th scope="col">{t("State")}</th>
+              <th scope="col">{t("Pending")}</th>
+              <th scope="col">{t("Dead-lettered")}</th>
+              {canManageConsumers && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {consumers.length === 0 ? (
               <tr>
-                <th scope="col">{t("Event")}</th>
-                <th scope="col">{t("Consumer")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Attempts")}</th>
-                <th scope="col">{t("Next attempt")}</th>
-                <th scope="col">{t("Last error")}</th>
-                {canReplay && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {deliveries.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={deliveryColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✓
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No deliveries match")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Widen the filters above, or nothing has been dispatched yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                deliveries.map((delivery) => (
-                  <tr data-delivery-row={delivery.id}>
-                    <td data-label="Event">
-                      <span class="cell-code">{delivery.eventType}</span>
-                      <span class="cell-muted"> v{delivery.eventVersion}</span>
-                    </td>
-                    <td data-label="Consumer">
-                      <span class="cell-code">{delivery.consumerName}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          DELIVERY_VARIANT[delivery.status] ?? "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {delivery.status}
-                      </span>
-                      {delivery.replayOfDeliveryId && (
-                        <span class="cell-muted">{t("\u00b7 replay")}</span>
+                <td class="data-table-empty" colspan={consumerColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⇉
+                    </span>
+                    <span class="empty-state-title">{t("No consumers")}</span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Consumers are a static, reviewed source-code registry \u2014 never registered at runtime."
                       )}
-                    </td>
-                    <td data-label="Attempts">
-                      {delivery.attemptCount}/{delivery.maxAttempts}
-                    </td>
-                    <td data-label="Next attempt">
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              consumers.map((consumer) => (
+                <tr data-consumer-row={consumer.name}>
+                  <td data-label="Consumer">
+                    <span class="cell-code">{consumer.name}</span>
+                    <span class="cell-muted"> · {consumer.description}</span>
+                  </td>
+                  <td data-label="Events">
+                    <span class="cell-code">
+                      {consumer.eventTypes.join(", ")}
+                    </span>
+                  </td>
+                  <td data-label="State">
+                    <span
+                      class="status-badge"
+                      data-variant={consumer.isPaused ? "warning" : "success"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {consumer.isPaused ? "paused" : "running"}
+                    </span>
+                    {consumer.isPaused && (
                       <span class="cell-muted">
-                        {formatTimestamp(delivery.nextAttemptAt)}
+                        {" "}
+                        since {formatTimestamp(consumer.pausedAt)}
+                        {consumer.pausedReason && (
+                          <span set:text={` · ${consumer.pausedReason}`} />
+                        )}
                       </span>
+                    )}
+                  </td>
+                  <td data-label="Pending">{consumer.pendingCount}</td>
+                  <td data-label="Dead-lettered">{consumer.deadLetterCount}</td>
+                  {canManageConsumers && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {consumer.isPaused ? (
+                          <button
+                            type="button"
+                            class="btn-inline consumer-resume-btn"
+                            data-consumer-name={consumer.name}
+                          >
+                            {t("Resume")}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger consumer-pause-btn"
+                            data-consumer-name={consumer.name}
+                          >
+                            {t("Pause")}
+                          </button>
+                        )}
+                      </div>
                     </td>
-                    <td data-label="Last error">
-                      {/* Already redacted at write time by
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {(canReadDeliveries || canReadEvents) && !loadError && (
+    <form method="get" class="admin-toolbar fade-in-up" id="event-filter-form">
+      {canReadDeliveries && (
+        <>
+          <label for="filter-delivery-status">{t("Delivery status")}</label>
+          <select id="filter-delivery-status" name="deliveryStatus">
+            <option value="" selected={deliveryStatusFilter === ""}>
+              {t("Any status")}
+            </option>
+            {DELIVERY_STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={deliveryStatusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+
+          <label for="filter-consumer">{t("Consumer")}</label>
+          <input
+            id="filter-consumer"
+            name="consumer"
+            type="text"
+            value={consumerFilter}
+            autocomplete="off"
+          />
+        </>
+      )}
+
+      <label for="filter-event-type">{t("Event type")}</label>
+      <input
+        id="filter-event-type"
+        name="eventType"
+        type="text"
+        value={eventTypeFilter}
+        autocomplete="off"
+        placeholder="e.g. awcms.blog.post.published"
+      />
+
+      {canReadEvents && (
+        <>
+          <label for="filter-aggregate-type">{t("Aggregate type")}</label>
+          <input
+            id="filter-aggregate-type"
+            name="aggregateType"
+            type="text"
+            value={aggregateTypeFilter}
+            autocomplete="off"
+          />
+        </>
+      )}
+
+      <button type="submit">{t("Apply filters")}</button>
+    </form>
+  )}
+
+  {canReadDeliveries && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="deliveries-title"
+      id="domain-events-deliveries"
+    >
+      <h2 class="admin-section-title" id="deliveries-title">
+        {t("Deliveries")}
+        <span class="count-pill">{deliveries.length}</span>
+      </h2>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="deliveries-table">
+          <caption class="sr-only">
+            {t("Delivery attempts, newest first, capped at 100 rows.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Event")}</th>
+              <th scope="col">{t("Consumer")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Attempts")}</th>
+              <th scope="col">{t("Next attempt")}</th>
+              <th scope="col">{t("Last error")}</th>
+              {canReplay && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {deliveries.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={deliveryColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No deliveries match")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Widen the filters above, or nothing has been dispatched yet."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              deliveries.map((delivery) => (
+                <tr data-delivery-row={delivery.id}>
+                  <td data-label="Event">
+                    <span class="cell-code">{delivery.eventType}</span>
+                    <span class="cell-muted"> v{delivery.eventVersion}</span>
+                  </td>
+                  <td data-label="Consumer">
+                    <span class="cell-code">{delivery.consumerName}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        DELIVERY_VARIANT[delivery.status] ?? "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {delivery.status}
+                    </span>
+                    {delivery.replayOfDeliveryId && (
+                      <span class="cell-muted">{t("\u00b7 replay")}</span>
+                    )}
+                  </td>
+                  <td data-label="Attempts">
+                    {delivery.attemptCount}/{delivery.maxAttempts}
+                  </td>
+                  <td data-label="Next attempt">
+                    <span class="cell-muted">
+                      {formatTimestamp(delivery.nextAttemptAt)}
+                    </span>
+                  </td>
+                  <td data-label="Last error">
+                    {/* Already redacted at write time by
                           `sanitizeErrorForLog`/`redactSecretsInText`; rendered
                           via `set:text` so it is escaped, never parsed. */}
-                      {delivery.lastErrorCode ? (
-                        <details>
-                          <summary>
-                            <span class="cell-code">
-                              {delivery.lastErrorCode}
-                            </span>
-                          </summary>
-                          <span
-                            class="cell-muted"
-                            set:text={
-                              delivery.deadLetterReason ??
-                              delivery.lastErrorMessage ??
-                              ""
-                            }
-                          />
-                        </details>
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    {canReplay && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {delivery.status === "dead_letter" ? (
-                            <button
-                              type="button"
-                              class="btn-inline delivery-replay-btn"
-                              data-delivery-id={delivery.id}
-                            >
-                              {t("Replay")}
-                            </button>
-                          ) : (
-                            <span class="cell-muted">—</span>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadEvents && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="events-title"
-        id="domain-events-events"
-      >
-        <h2 class="admin-section-title" id="events-title">
-          {t("Events")}
-          <span class="count-pill">{events.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "The outbox itself, newest first. These rows are append-only evidence of what happened \u2014 they are never edited, and replaying a delivery does not create a new one."
-          )}
-        </p>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack" id="events-table">
-            <caption class="sr-only">
-              {t("Recorded domain events, newest first, capped at 100 rows.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Seq")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Aggregate")}</th>
-                <th scope="col">{t("Producer")}</th>
-                <th scope="col">{t("Occurred")}</th>
-                <th scope="col">{t("Payload")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={6}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌸
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No events match")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Widen the filters above, or nothing has published an event yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                events.map((event) => (
-                  <tr>
-                    <td data-label="Seq">
-                      <span class="cell-code">{event.eventSequence}</span>
-                    </td>
-                    <td data-label="Type">
-                      <span class="cell-code">{event.eventType}</span>
-                      <span class="cell-muted"> v{event.eventVersion}</span>
-                    </td>
-                    <td data-label="Aggregate">
-                      <span class="cell-code">{event.aggregateType}</span>
-                      <span class="cell-muted"> · {event.aggregateId}</span>
-                    </td>
-                    <td data-label="Producer">
-                      <span class="cell-code">{event.producerModule}</span>
-                    </td>
-                    <td data-label="Occurred">
-                      <span class="cell-muted">
-                        {formatTimestamp(event.occurredAt)}
-                      </span>
-                    </td>
-                    <td data-label="Payload">
+                    {delivery.lastErrorCode ? (
                       <details>
-                        <summary>{t("Payload")}</summary>
-                        {/* `set:text` rather than a child expression: <pre>
+                        <summary>
+                          <span class="cell-code">
+                            {delivery.lastErrorCode}
+                          </span>
+                        </summary>
+                        <span
+                          class="cell-muted"
+                          set:text={
+                            delivery.deadLetterReason ??
+                            delivery.lastErrorMessage ??
+                            ""
+                          }
+                        />
+                      </details>
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  {canReplay && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {delivery.status === "dead_letter" ? (
+                          <button
+                            type="button"
+                            class="btn-inline delivery-replay-btn"
+                            data-delivery-id={delivery.id}
+                          >
+                            {t("Replay")}
+                          </button>
+                        ) : (
+                          <span class="cell-muted">—</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canReadEvents && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="events-title"
+      id="domain-events-events"
+    >
+      <h2 class="admin-section-title" id="events-title">
+        {t("Events")}
+        <span class="count-pill">{events.length}</span>
+      </h2>
+      <p class="page-description">
+        {t(
+          "The outbox itself, newest first. These rows are append-only evidence of what happened \u2014 they are never edited, and replaying a delivery does not create a new one."
+        )}
+      </p>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack" id="events-table">
+          <caption class="sr-only">
+            {t("Recorded domain events, newest first, capped at 100 rows.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Seq")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Aggregate")}</th>
+              <th scope="col">{t("Producer")}</th>
+              <th scope="col">{t("Occurred")}</th>
+              <th scope="col">{t("Payload")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={6}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌸
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No events match")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Widen the filters above, or nothing has published an event yet."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              events.map((event) => (
+                <tr>
+                  <td data-label="Seq">
+                    <span class="cell-code">{event.eventSequence}</span>
+                  </td>
+                  <td data-label="Type">
+                    <span class="cell-code">{event.eventType}</span>
+                    <span class="cell-muted"> v{event.eventVersion}</span>
+                  </td>
+                  <td data-label="Aggregate">
+                    <span class="cell-code">{event.aggregateType}</span>
+                    <span class="cell-muted"> · {event.aggregateId}</span>
+                  </td>
+                  <td data-label="Producer">
+                    <span class="cell-code">{event.producerModule}</span>
+                  </td>
+                  <td data-label="Occurred">
+                    <span class="cell-muted">
+                      {formatTimestamp(event.occurredAt)}
+                    </span>
+                  </td>
+                  <td data-label="Payload">
+                    <details>
+                      <summary>{t("Payload")}</summary>
+                      {/* `set:text` rather than a child expression: <pre>
                             preserves whitespace and prettier reindents .astro
                             children, so an expression written between the tags
                             comes back wrapped in template indentation that
                             <pre> then renders. */}
-                        <pre
-                          class="cell-code"
-                          set:text={JSON.stringify(
-                            event.payload ?? {},
-                            null,
-                            2
-                          )}
-                        />
-                      </details>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+                      <pre
+                        class="cell-code"
+                        set:text={JSON.stringify(event.payload ?? {}, null, 2)}
+                      />
+                    </details>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

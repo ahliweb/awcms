@@ -65,126 +65,116 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
     "The tenant's central directory of people and organizations. Sensitive identifiers (email, phone, NIK) are never listed here \u2014 they are surfaced only through the dedicated, masked identifiers view."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="profiles-denied">
-        {t("You do not have permission to view profiles.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="profiles-denied">
+      {t("You do not have permission to view profiles.")}
+    </p>
+  )}
 
-  {
-    canCreate && (
-      <form
-        id="profile-create-form"
-        class="admin-create-form fade-in-up"
-        novalidate
-      >
-        <p class="form-legend">{t("Create a profile")}</p>
-        <label for="profile-type">
-          {t("Type")}
-          <select id="profile-type" name="profileType">
-            <option value="person" selected>
-              {t("person")}
-            </option>
-            <option value="organization">{t("organization")}</option>
-          </select>
-        </label>
-        <label for="profile-display-name">
-          {t("Display name")}
-          <input
-            id="profile-display-name"
-            name="displayName"
-            type="text"
-            required
-          />
-        </label>
-        <button type="submit" id="profile-create-submit">
-          {t("Create profile")}
-        </button>
-        <p
-          id="profile-create-error"
-          class="admin-create-error"
-          role="alert"
-          hidden
+  {canCreate && (
+    <form
+      id="profile-create-form"
+      class="admin-create-form fade-in-up"
+      novalidate
+    >
+      <p class="form-legend">{t("Create a profile")}</p>
+      <label for="profile-type">
+        {t("Type")}
+        <select id="profile-type" name="profileType">
+          <option value="person" selected>
+            {t("person")}
+          </option>
+          <option value="organization">{t("organization")}</option>
+        </select>
+      </label>
+      <label for="profile-display-name">
+        {t("Display name")}
+        <input
+          id="profile-display-name"
+          name="displayName"
+          type="text"
+          required
         />
-      </form>
-    )
-  }
+      </label>
+      <button type="submit" id="profile-create-submit">
+        {t("Create profile")}
+      </button>
+      <p
+        id="profile-create-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    </form>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="profiles-error">
-        {t("Profiles could not be loaded right now. Please try again later.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="profiles-error">
+      {t("Profiles could not be loaded right now. Please try again later.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <div class="data-table-scroll fade-in-up">
-        <table class="data-table data-table--stack" id="profiles-table">
-          <caption>
-            {tn("{count} profile", "{count} profiles", profiles.length, {
-              count: profiles.length
-            })}
-          </caption>
-          <thead>
+  {canRead && !loadError && (
+    <div class="data-table-scroll fade-in-up">
+      <table class="data-table data-table--stack" id="profiles-table">
+        <caption>
+          {tn("{count} profile", "{count} profiles", profiles.length, {
+            count: profiles.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Display name")}</th>
+            <th scope="col">{t("Type")}</th>
+            <th scope="col">{t("Status")}</th>
+            <th scope="col">{t("Verification")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {profiles.length === 0 ? (
             <tr>
-              <th scope="col">{t("Display name")}</th>
-              <th scope="col">{t("Type")}</th>
-              <th scope="col">{t("Status")}</th>
-              <th scope="col">{t("Verification")}</th>
+              <td class="data-table-empty" colspan="4">
+                <div class="empty-state">
+                  <span class="empty-state-icon" aria-hidden="true">
+                    ○
+                  </span>
+                  <span class="empty-state-title">{t("No profiles yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? "Create the first profile using the form above."
+                      : "Profiles created for this tenant will appear here."}
+                  </span>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {profiles.length === 0 ? (
+          ) : (
+            profiles.map((profile) => (
               <tr>
-                <td class="data-table-empty" colspan="4">
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ○
-                    </span>
-                    <span class="empty-state-title">
-                      {t("No profiles yet")}
-                    </span>
-                    <span class="empty-state-text">
-                      {canCreate
-                        ? "Create the first profile using the form above."
-                        : "Profiles created for this tenant will appear here."}
-                    </span>
-                  </div>
+                <td data-label="Display name">{profile.displayName}</td>
+                <td data-label="Type">
+                  <span class="cell-muted">{profile.profileType}</span>
+                </td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      profile.status === "active" ? "success" : "neutral"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {profile.status}
+                  </span>
+                </td>
+                <td data-label="Verification">
+                  <span class="cell-muted">{profile.verificationStatus}</span>
                 </td>
               </tr>
-            ) : (
-              profiles.map((profile) => (
-                <tr>
-                  <td data-label="Display name">{profile.displayName}</td>
-                  <td data-label="Type">
-                    <span class="cell-muted">{profile.profileType}</span>
-                  </td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={
-                        profile.status === "active" ? "success" : "neutral"
-                      }
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {profile.status}
-                    </span>
-                  </td>
-                  <td data-label="Verification">
-                    <span class="cell-muted">{profile.verificationStatus}</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
 
   <script>
     // The import is deliberate — it forces Astro to bundle this script to an

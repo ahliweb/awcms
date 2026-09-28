@@ -94,142 +94,132 @@ const reasons = [...SUPPRESSION_REASONS];
     "Addresses this tenant will not send to. A suppressed address receives nothing \u2014 including password resets \u2014 so an account can look broken when it is only unreachable. This is where to check, and where to undo it."
   )}
 >
-  {
-    !canRead && (
-      <p class="state-notice fade-in-up" id="email-suppression-denied">
-        {t("You do not have permission to view the suppression list.")}
-      </p>
-    )
-  }
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="email-suppression-denied">
+      {t("You do not have permission to view the suppression list.")}
+    </p>
+  )}
 
-  {
-    canRead && loadError && (
-      <p class="state-notice fade-in-up" id="email-suppression-load-error">
-        {t("Could not load the suppression list. Please try again.")}
-      </p>
-    )
-  }
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="email-suppression-load-error">
+      {t("Could not load the suppression list. Please try again.")}
+    </p>
+  )}
 
-  {
-    canRead && !loadError && (
-      <>
-        <p
-          id="email-suppression-action-error"
-          class="state-notice"
-          role="alert"
-          hidden
-        />
-        <p
-          id="email-suppression-notice"
-          class="state-notice"
-          role="status"
-          hidden
-        />
+  {canRead && !loadError && (
+    <>
+      <p
+        id="email-suppression-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+      />
+      <p
+        id="email-suppression-notice"
+        class="state-notice"
+        role="status"
+        hidden
+      />
 
-        {canCreate && (
-          <section
-            class="fade-in-up"
-            aria-labelledby="email-suppression-add-heading"
-          >
-            <h2 id="email-suppression-add-heading">
-              {t("Suppress an address \u2014 or check one")}
-            </h2>
-
-            <form id="add-suppression-form" class="admin-form">
-              <p class="page-description">
-                {t(
-                  'The list below shows masked addresses only, so it cannot be searched. Submitting an address that is already suppressed does not add a second entry \u2014 it tells you it is already there, which is how to answer "why is this person not getting our mail?".'
-                )}
-              </p>
-
-              <label for="add-suppression-recipient">
-                {t("Email address")}
-              </label>
-              <input
-                id="add-suppression-recipient"
-                name="recipient"
-                type="email"
-                required
-                autocomplete="off"
-                placeholder="somebody@example.com"
-              />
-
-              <label for="add-suppression-reason">{t("Reason")}</label>
-              <select id="add-suppression-reason" name="reason" required>
-                {reasons.map((reason) => (
-                  <option value={reason}>{reason}</option>
-                ))}
-              </select>
-
-              <button id="add-suppression-submit" type="submit">
-                {t("Suppress address")}
-              </button>
-            </form>
-          </section>
-        )}
-
+      {canCreate && (
         <section
           class="fade-in-up"
-          aria-labelledby="email-suppression-list-heading"
+          aria-labelledby="email-suppression-add-heading"
         >
-          <h2 id="email-suppression-list-heading">
-            {t("Suppressed addresses")}
+          <h2 id="email-suppression-add-heading">
+            {t("Suppress an address \u2014 or check one")}
           </h2>
 
-          {entries.length === 0 ? (
-            <div class="empty-state">
-              <p id="email-suppression-empty">
-                {t(
-                  "Nothing is suppressed. Every address this tenant sends to can receive mail."
-                )}
-              </p>
-            </div>
-          ) : (
-            <div class="data-table-scroll">
-              <table class="data-table data-table--stack">
-                <thead>
-                  <tr>
-                    <th scope="col">{t("Address")}</th>
-                    <th scope="col">{t("Reason")}</th>
-                    <th scope="col">{t("Added")}</th>
-                    {canDelete && <th scope="col">{t("Actions")}</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr>
-                      <th scope="row" data-label="Address">
-                        {entry.recipientMasked}
-                      </th>
-                      <td data-label="Reason">{entry.reason}</td>
-                      <td data-label="Added">{entry.createdAt.slice(0, 10)}</td>
-                      {canDelete && (
-                        <td data-label="Actions">
-                          <button
-                            type="button"
-                            class="js-remove-suppression"
-                            data-suppression-id={entry.id}
-                          >
-                            {t("Allow again")}
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <form id="add-suppression-form" class="admin-form">
+            <p class="page-description">
+              {t(
+                'The list below shows masked addresses only, so it cannot be searched. Submitting an address that is already suppressed does not add a second entry \u2014 it tells you it is already there, which is how to answer "why is this person not getting our mail?".'
+              )}
+            </p>
 
-          <p class="page-description">
-            {t(
-              "Newest 100. An address removed here can receive mail from the next send onwards; messages already skipped are not resent."
-            )}
-          </p>
+            <label for="add-suppression-recipient">{t("Email address")}</label>
+            <input
+              id="add-suppression-recipient"
+              name="recipient"
+              type="email"
+              required
+              autocomplete="off"
+              placeholder="somebody@example.com"
+            />
+
+            <label for="add-suppression-reason">{t("Reason")}</label>
+            <select id="add-suppression-reason" name="reason" required>
+              {reasons.map((reason) => (
+                <option value={reason}>{reason}</option>
+              ))}
+            </select>
+
+            <button id="add-suppression-submit" type="submit">
+              {t("Suppress address")}
+            </button>
+          </form>
         </section>
-      </>
-    )
-  }
+      )}
+
+      <section
+        class="fade-in-up"
+        aria-labelledby="email-suppression-list-heading"
+      >
+        <h2 id="email-suppression-list-heading">{t("Suppressed addresses")}</h2>
+
+        {entries.length === 0 ? (
+          <div class="empty-state">
+            <p id="email-suppression-empty">
+              {t(
+                "Nothing is suppressed. Every address this tenant sends to can receive mail."
+              )}
+            </p>
+          </div>
+        ) : (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Address")}</th>
+                  <th scope="col">{t("Reason")}</th>
+                  <th scope="col">{t("Added")}</th>
+                  {canDelete && <th scope="col">{t("Actions")}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr>
+                    <th scope="row" data-label="Address">
+                      {entry.recipientMasked}
+                    </th>
+                    <td data-label="Reason">{entry.reason}</td>
+                    <td data-label="Added">{entry.createdAt.slice(0, 10)}</td>
+                    {canDelete && (
+                      <td data-label="Actions">
+                        <button
+                          type="button"
+                          class="js-remove-suppression"
+                          data-suppression-id={entry.id}
+                        >
+                          {t("Allow again")}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p class="page-description">
+          {t(
+            "Newest 100. An address removed here can receive mail from the next send onwards; messages already skipped are not resent."
+          )}
+        </p>
+      </section>
+    </>
+  )}
 </AdminLayout>
 
 <script>

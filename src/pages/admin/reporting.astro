@@ -268,708 +268,685 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 ---
 
 <AdminLayout title={t("Reporting operations")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "Read-model health and delivery: the freshness of every registered projection, the rebuilds and reconciliations run against them, the email queue, and the scheduled exports built from them. The tenant activity, access & audit, sync health and module usage views live on the"
-      )
-    }<a href="/admin">{t("dashboard")}</a>.</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "Read-model health and delivery: the freshness of every registered projection, the rebuilds and reconciliations run against them, the email queue, and the scheduled exports built from them. The tenant activity, access & audit, sync health and module usage views live on the"
+    )}
+    <a href="/admin">{t("dashboard")}</a>.
+  </Fragment>
 
-  {
-    !canSeeAnything && (
-      <p class="state-notice fade-in-up" id="reporting-denied">
-        {t("You do not have permission to view reporting operations.")}
-      </p>
-    )
-  }
+  {!canSeeAnything && (
+    <p class="state-notice fade-in-up" id="reporting-denied">
+      {t("You do not have permission to view reporting operations.")}
+    </p>
+  )}
 
-  {
-    canSeeAnything && loadError && (
-      <p class="state-notice fade-in-up" id="reporting-error">
+  {canSeeAnything && loadError && (
+    <p class="state-notice fade-in-up" id="reporting-error">
+      {t(
+        "The reporting console could not be loaded right now. This is a problem reading it, not an empty console \u2014 please try again later."
+      )}
+    </p>
+  )}
+
+  {canSeeAnything && !loadError && (
+    <p
+      id="reporting-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canReadDashboard && !loadError && emailHealth && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="email-health-title"
+      id="reporting-email-health"
+    >
+      <h2 class="admin-section-title" id="email-health-title">
+        {t("Email queue health")}
+        <span
+          class="status-badge"
+          data-variant={emailHealth.isHealthy ? "success" : "warning"}
+        >
+          <span class="status-dot" aria-hidden="true" />
+          {emailHealth.isHealthy ? "healthy" : "needs attention"}
+        </span>
+      </h2>
+      <p class="page-description">
         {t(
-          "The reporting console could not be loaded right now. This is a problem reading it, not an empty console \u2014 please try again later."
+          "The fifth management reporting view. An idle queue is healthy \u2014 only failures and a retry backlog are not."
         )}
       </p>
-    )
-  }
 
-  {
-    canSeeAnything && !loadError && (
-      <p
-        id="reporting-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      />
-    )
-  }
-
-  {
-    canReadDashboard && !loadError && emailHealth && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="email-health-title"
-        id="reporting-email-health"
-      >
-        <h2 class="admin-section-title" id="email-health-title">
-          {t("Email queue health")}
-          <span
-            class="status-badge"
-            data-variant={emailHealth.isHealthy ? "success" : "warning"}
-          >
-            <span class="status-dot" aria-hidden="true" />
-            {emailHealth.isHealthy ? "healthy" : "needs attention"}
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Queued")}</span>
+          <span class="stat-value">{emailHealth.queuedCount}</span>
+          <span class="stat-hint">
+            {t("Oldest:")} {formatTimestamp(emailHealth.oldestQueuedAt)}
           </span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "The fifth management reporting view. An idle queue is healthy \u2014 only failures and a retry backlog are not."
-          )}
-        </p>
-
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Queued")}</span>
-            <span class="stat-value">{emailHealth.queuedCount}</span>
-            <span class="stat-hint">
-              {t("Oldest:")} {formatTimestamp(emailHealth.oldestQueuedAt)}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Awaiting retry")}</span>
-            <span class="stat-value">{emailHealth.retryWaitCount}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Failed")}</span>
-            <span class="stat-value">{emailHealth.failedCount}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Suppressed")}</span>
-            <span class="stat-value">{emailHealth.suppressedCount}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Sent (24h)")}</span>
-            <span class="stat-value">{emailHealth.sentLast24hCount}</span>
-            <span class="stat-hint">
-              {t("Last:")} {formatTimestamp(emailHealth.mostRecentSentAt)}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Dispatch")}</span>
-            <span class="stat-value stat-value--mono">
-              {emailHealth.emailEnabled
-                ? (emailHealth.provider ?? "enabled")
-                : "disabled"}
-            </span>
-            {/* Process env, not a per-tenant setting — see `fetchEmailHealthReport`. */}
-            <span class="stat-hint">{t("Deployment-wide setting")}</span>
-          </div>
         </div>
-      </section>
-    )
-  }
+        <div class="stat-card">
+          <span class="stat-label">{t("Awaiting retry")}</span>
+          <span class="stat-value">{emailHealth.retryWaitCount}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Failed")}</span>
+          <span class="stat-value">{emailHealth.failedCount}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Suppressed")}</span>
+          <span class="stat-value">{emailHealth.suppressedCount}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Sent (24h)")}</span>
+          <span class="stat-value">{emailHealth.sentLast24hCount}</span>
+          <span class="stat-hint">
+            {t("Last:")} {formatTimestamp(emailHealth.mostRecentSentAt)}
+          </span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Dispatch")}</span>
+          <span class="stat-value stat-value--mono">
+            {emailHealth.emailEnabled
+              ? (emailHealth.provider ?? "enabled")
+              : "disabled"}
+          </span>
+          {/* Process env, not a per-tenant setting — see `fetchEmailHealthReport`. */}
+          <span class="stat-hint">{t("Deployment-wide setting")}</span>
+        </div>
+      </div>
+    </section>
+  )}
 
-  {
-    canReadProjections && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="projections-title"
-        id="reporting-projections"
-      >
-        <h2 class="admin-section-title" id="projections-title">
-          {t("Projections")}
-          <span class="count-pill">{projections.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "Freshness is computed live from the last successful update, never read back from a stored column \u2014 a projection whose updater stopped running ages into {stale} on its own rather than staying frozen at {current}.",
-            { stale: "stale", current: "current" }
-          )}
-        </p>
+  {canReadProjections && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="projections-title"
+      id="reporting-projections"
+    >
+      <h2 class="admin-section-title" id="projections-title">
+        {t("Projections")}
+        <span class="count-pill">{projections.length}</span>
+      </h2>
+      <p class="page-description">
+        {t(
+          "Freshness is computed live from the last successful update, never read back from a stored column \u2014 a projection whose updater stopped running ages into {stale} on its own rather than staying frozen at {current}.",
+          { stale: "stale", current: "current" }
+        )}
+      </p>
 
-        {projections.length === 0 ? (
-          <div class="empty-state">
-            <span class="empty-state-icon" aria-hidden="true">
-              ◔
-            </span>
-            <span class="empty-state-title">{t("No projections visible")}</span>
-            <span class="empty-state-text">
-              {t(
-                "Projections are declared in code by the modules that own them. Any that exist require their own permission on top of this screen's, so this can also mean none of them is granted to you."
-              )}
-            </span>
-          </div>
-        ) : (
-          <div class="stagger-children">
-            {projections.map((projection) => {
-              const reconciliations =
-                reconciliationsByKey.get(projection.key) ?? [];
-              const latest = reconciliations[0] ?? null;
-              const isRebuilding = projection.freshness.status === "rebuilding";
+      {projections.length === 0 ? (
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ◔
+          </span>
+          <span class="empty-state-title">{t("No projections visible")}</span>
+          <span class="empty-state-text">
+            {t(
+              "Projections are declared in code by the modules that own them. Any that exist require their own permission on top of this screen's, so this can also mean none of them is granted to you."
+            )}
+          </span>
+        </div>
+      ) : (
+        <div class="stagger-children">
+          {projections.map((projection) => {
+            const reconciliations =
+              reconciliationsByKey.get(projection.key) ?? [];
+            const latest = reconciliations[0] ?? null;
+            const isRebuilding = projection.freshness.status === "rebuilding";
 
-              return (
-                <article
-                  class="admin-panel hover-lift"
-                  data-projection-key={projection.key}
-                >
-                  <h3>
-                    <span class="cell-code">{projection.key}</span>
+            return (
+              <article
+                class="admin-panel hover-lift"
+                data-projection-key={projection.key}
+              >
+                <h3>
+                  <span class="cell-code">{projection.key}</span>
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      FRESHNESS_VARIANT[projection.freshness.status] ??
+                      "neutral"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {projection.freshness.status}
+                  </span>
+                </h3>
+                <p class="page-description">{projection.description}</p>
+
+                <dl class="stat-grid">
+                  <div class="stat-card">
+                    <dt class="stat-label">{t("Owner")}</dt>
+                    <dd class="stat-value stat-value--mono">
+                      {projection.ownerModuleKey} v{projection.version}
+                    </dd>
+                  </div>
+                  <div class="stat-card">
+                    <dt class="stat-label">{t("Last success")}</dt>
+                    <dd class="stat-value stat-value--mono">
+                      {formatAge(projection.freshness.ageSeconds)}
+                    </dd>
+                    <span class="stat-hint">
+                      {formatTimestamp(projection.freshness.lastSuccessAt)}
+                    </span>
+                  </div>
+                  <div class="stat-card">
+                    <dt class="stat-label">{t("Consecutive failures")}</dt>
+                    <dd class="stat-value">
+                      {projection.freshness.consecutiveFailures}
+                    </dd>
+                  </div>
+                  {Object.entries(projection.metrics).map(
+                    ([metricKey, value]) => (
+                      <div class="stat-card">
+                        <dt class="stat-label">
+                          {projection.metricLabels[metricKey] ?? metricKey}
+                        </dt>
+                        <dd class="stat-value">{value}</dd>
+                      </div>
+                    )
+                  )}
+                </dl>
+
+                {projection.freshness.lastErrorMessage && (
+                  <p class="state-notice">
+                    {t("Last error:")}
+                    <span
+                      class="cell-code"
+                      set:text={projection.freshness.lastErrorMessage}
+                    />
+                  </p>
+                )}
+
+                {latest && (
+                  <details>
+                    <summary>
+                      {t("Reconciliation \u00b7")}{" "}
+                      {latest.mismatch
+                        ? "mismatch against source"
+                        : "matched source"}{" "}
+                      · {formatTimestamp(latest.executedAt)}
+                    </summary>
+                    <table class="data-table data-table--stack">
+                      <caption class="sr-only">
+                        {t("Most recent reconciliation of {projection}.", {
+                          projection: projection.key
+                        })}
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("Metric")}</th>
+                          <th scope="col">{t("Projection")}</th>
+                          <th scope="col">{t("Source")}</th>
+                          <th scope="col">{t("Match")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latest.details.map((detail) => (
+                          <tr>
+                            <td data-label="Metric">
+                              <span class="cell-code">{detail.metricKey}</span>
+                            </td>
+                            <td data-label="Projection">
+                              {detail.projectionTotal}
+                            </td>
+                            <td data-label="Source">{detail.sourceTotal}</td>
+                            <td data-label="Match">
+                              {detail.mismatch ? "differs" : "equal"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )}
+
+                <div class="row-actions">
+                  {projection.drillDownPath && (
+                    <a class="quick-link" href={projection.drillDownPath}>
+                      {t("Drill down")}
+                      <span class="quick-link-arrow" aria-hidden="true">
+                        →
+                      </span>
+                    </a>
+                  )}
+
+                  {canReconcile && (
+                    <button
+                      type="button"
+                      class="module-toggle projection-reconcile-btn"
+                      data-projection-key={projection.key}
+                    >
+                      {t("Reconcile")}
+                    </button>
+                  )}
+
+                  {canRebuild && isRebuilding && (
+                    <button
+                      type="button"
+                      class="btn-inline btn-inline--danger projection-rebuild-cancel-btn"
+                      data-projection-key={projection.key}
+                    >
+                      {t("Cancel rebuild")}
+                    </button>
+                  )}
+                </div>
+
+                {canRebuild && !isRebuilding && (
+                  <div class="admin-toolbar">
+                    <label for={`rebuild-reason-${projection.key}`}>
+                      {t("Rebuild reason")}
+                    </label>
+                    <input
+                      type="text"
+                      id={`rebuild-reason-${projection.key}`}
+                      class="projection-rebuild-reason"
+                      data-projection-key={projection.key}
+                      minlength={MIN_REASON_LENGTH}
+                      maxlength={MAX_REASON_LENGTH}
+                      autocomplete="off"
+                      placeholder="Why this rebuild is needed"
+                    />
+                    <button
+                      type="button"
+                      class="btn-inline projection-rebuild-btn"
+                      data-projection-key={projection.key}
+                    >
+                      {t("Rebuild")}
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  )}
+
+  {canReadProjections && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="rebuild-history-title"
+      id="reporting-rebuild-history"
+    >
+      <h2 class="admin-section-title" id="rebuild-history-title">
+        {t("Rebuild history")}
+        <span class="count-pill">{rebuildRuns.length}</span>
+      </h2>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Projection rebuild runs, newest first, capped at 100 rows.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Projection")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Rows")}</th>
+              <th scope="col">{t("Started")}</th>
+              <th scope="col">{t("Finished")}</th>
+              <th scope="col">{t("Reason")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rebuildRuns.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={6}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ↻
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No rebuilds yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Incremental updates keep a projection current without one; a rebuild is for recovering after a source or definition change."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              rebuildRuns.map((run) => (
+                <tr>
+                  <td data-label="Projection">
+                    <span class="cell-code">{run.projectionKey}</span>
+                  </td>
+                  <td data-label="Status">
                     <span
                       class="status-badge"
-                      data-variant={
-                        FRESHNESS_VARIANT[projection.freshness.status] ??
-                        "neutral"
-                      }
+                      data-variant={REBUILD_VARIANT[run.status]}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {projection.freshness.status}
+                      {run.status}
                     </span>
-                  </h3>
-                  <p class="page-description">{projection.description}</p>
-
-                  <dl class="stat-grid">
-                    <div class="stat-card">
-                      <dt class="stat-label">{t("Owner")}</dt>
-                      <dd class="stat-value stat-value--mono">
-                        {projection.ownerModuleKey} v{projection.version}
-                      </dd>
-                    </div>
-                    <div class="stat-card">
-                      <dt class="stat-label">{t("Last success")}</dt>
-                      <dd class="stat-value stat-value--mono">
-                        {formatAge(projection.freshness.ageSeconds)}
-                      </dd>
-                      <span class="stat-hint">
-                        {formatTimestamp(projection.freshness.lastSuccessAt)}
-                      </span>
-                    </div>
-                    <div class="stat-card">
-                      <dt class="stat-label">{t("Consecutive failures")}</dt>
-                      <dd class="stat-value">
-                        {projection.freshness.consecutiveFailures}
-                      </dd>
-                    </div>
-                    {Object.entries(projection.metrics).map(
-                      ([metricKey, value]) => (
-                        <div class="stat-card">
-                          <dt class="stat-label">
-                            {projection.metricLabels[metricKey] ?? metricKey}
-                          </dt>
-                          <dd class="stat-value">{value}</dd>
-                        </div>
-                      )
+                    {run.cancelRequested && run.status === "running" && (
+                      <span class="cell-muted">{t("\u00b7 cancelling")}</span>
                     )}
-                  </dl>
+                  </td>
+                  <td data-label="Rows">{run.rowsProcessed}</td>
+                  <td data-label="Started">
+                    <span class="cell-muted">
+                      {formatTimestamp(run.startedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Finished">
+                    <span class="cell-muted">
+                      {formatTimestamp(run.completedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Reason">
+                    <span set:text={run.reason ?? "—"} />
+                    {run.errorMessage && (
+                      <span class="cell-code" set:text={run.errorMessage} />
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 
-                  {projection.freshness.lastErrorMessage && (
-                    <p class="state-notice">
-                      {t("Last error:")}
-                      <span
-                        class="cell-code"
-                        set:text={projection.freshness.lastErrorMessage}
-                      />
-                    </p>
+  {canReadExports && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="export-configs-title"
+      id="reporting-export-configs"
+    >
+      <h2 class="admin-section-title" id="export-configs-title">
+        {t("Scheduled exports")}
+        <span class="count-pill">{exportConfigs.length}</span>
+      </h2>
+      <p class="page-description">
+        {t("Generated by")}
+        <code>{t("reporting:exports:dispatch")}</code>
+        {t(
+          ". Disabling a schedule retires it \u2014 there is no re-enable, so an interval change means creating a new schedule."
+        )}
+      </p>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Scheduled export configurations for this tenant.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Projection")}</th>
+              <th scope="col">{t("Format")}</th>
+              <th scope="col">{t("Interval")}</th>
+              <th scope="col">{t("State")}</th>
+              <th scope="col">{t("Created")}</th>
+              {canConfigureExports && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {exportConfigs.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={exportConfigColumns}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⇩
+                    </span>
+                    <span class="empty-state-title">
+                      {t("No scheduled exports")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t("A projection can still be exported on demand below.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              exportConfigs.map((config) => (
+                <tr>
+                  <td data-label="Projection">
+                    <span class="cell-code">{config.projectionKey}</span>
+                  </td>
+                  <td data-label="Format">
+                    <span class="cell-code">{config.format}</span>
+                  </td>
+                  <td data-label="Interval">
+                    {formatInterval(config.scheduleIntervalMinutes)}
+                  </td>
+                  <td data-label="State">
+                    <span
+                      class="status-badge"
+                      data-variant={config.enabled ? "success" : "neutral"}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {config.enabled ? "enabled" : "retired"}
+                    </span>
+                  </td>
+                  <td data-label="Created">
+                    <span class="cell-muted">
+                      {formatTimestamp(config.createdAt)}
+                    </span>
+                  </td>
+                  {canConfigureExports && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {config.enabled && (
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger export-disable-btn"
+                            data-export-id={config.id}
+                            data-export-label={config.projectionKey}
+                          >
+                            {t("Disable")}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                  {latest && (
-                    <details>
-                      <summary>
-                        {t("Reconciliation \u00b7")}{" "}
-                        {latest.mismatch
-                          ? "mismatch against source"
-                          : "matched source"}{" "}
-                        · {formatTimestamp(latest.executedAt)}
-                      </summary>
-                      <table class="data-table data-table--stack">
-                        <caption class="sr-only">
-                          {t("Most recent reconciliation of {projection}.", {
-                            projection: projection.key
-                          })}
-                        </caption>
-                        <thead>
-                          <tr>
-                            <th scope="col">{t("Metric")}</th>
-                            <th scope="col">{t("Projection")}</th>
-                            <th scope="col">{t("Source")}</th>
-                            <th scope="col">{t("Match")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {latest.details.map((detail) => (
-                            <tr>
-                              <td data-label="Metric">
-                                <span class="cell-code">
-                                  {detail.metricKey}
-                                </span>
-                              </td>
-                              <td data-label="Projection">
-                                {detail.projectionTotal}
-                              </td>
-                              <td data-label="Source">{detail.sourceTotal}</td>
-                              <td data-label="Match">
-                                {detail.mismatch ? "differs" : "equal"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </details>
-                  )}
+      {canConfigureExports && projectionKeys.length > 0 && (
+        <form id="export-create-form" class="admin-create-form">
+          <p class="form-legend">{t("Schedule a new export")}</p>
+          <p
+            id="export-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
 
-                  <div class="row-actions">
-                    {projection.drillDownPath && (
-                      <a class="quick-link" href={projection.drillDownPath}>
-                        {t("Drill down")}
+          <label for="export-projection-key">
+            {t("Projection")}
+            <select id="export-projection-key" name="projectionKey" required>
+              {projectionKeys.map((key) => (
+                <option value={key}>{key}</option>
+              ))}
+            </select>
+          </label>
+
+          <label for="export-format">
+            {t("Format")}
+            <select id="export-format" name="format" required>
+              <option value="csv">{t("csv")}</option>
+              <option value="json">{t("json")}</option>
+            </select>
+          </label>
+
+          <label for="export-interval">
+            {t("Interval (minutes)")}
+            {/* Bounds come from the same constants the endpoint validates
+                  against, so the browser can never accept what the server
+                  rejects. */}
+            <input
+              type="number"
+              id="export-interval"
+              name="scheduleIntervalMinutes"
+              required
+              step="1"
+              min={MIN_EXPORT_INTERVAL_MINUTES}
+              max={MAX_EXPORT_INTERVAL_MINUTES}
+              value={String(MIN_EXPORT_INTERVAL_MINUTES * 4)}
+            />
+          </label>
+
+          <button type="submit" id="export-create-submit">
+            {t("Create schedule")}
+          </button>
+        </form>
+      )}
+
+      {showExportActions && (
+        <form id="export-trigger-form" class="admin-create-form">
+          <p class="form-legend">{t("Export once, now")}</p>
+          <p
+            id="export-trigger-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="trigger-projection-key">
+            {t("Projection")}
+            <select id="trigger-projection-key" name="projectionKey" required>
+              {projectionKeys.map((key) => (
+                <option value={key}>{key}</option>
+              ))}
+            </select>
+          </label>
+
+          <label for="trigger-format">
+            {t("Format")}
+            <select id="trigger-format" name="format" required>
+              <option value="csv">{t("csv")}</option>
+              <option value="json">{t("json")}</option>
+            </select>
+          </label>
+
+          <button type="submit" id="export-trigger-submit">
+            {t("Generate export")}
+          </button>
+        </form>
+      )}
+    </section>
+  )}
+
+  {canReadExports && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="export-runs-title"
+      id="reporting-export-runs"
+    >
+      <h2 class="admin-section-title" id="export-runs-title">
+        {t("Export runs")}
+        <span class="count-pill">{exportRuns.length}</span>
+      </h2>
+      <p class="page-description">
+        {t(
+          "Each artifact is checksum-verified when downloaded, and an expired one is refused rather than served stale."
+        )}
+      </p>
+
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Export runs, newest first, capped at 100 rows.")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Projection")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Rows")}</th>
+              <th scope="col">{t("Created")}</th>
+              <th scope="col">{t("Expires")}</th>
+              <th scope="col">{t("Artifact")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {exportRuns.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={6}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌸
+                    </span>
+                    <span class="empty-state-title">{t("No export runs")}</span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Runs appear here once a schedule fires or an on-demand export is generated."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              exportRuns.map((run) => (
+                <tr>
+                  <td data-label="Projection">
+                    <span class="cell-code">{run.projectionKey}</span>
+                    <span class="cell-muted"> · {run.format}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={EXPORT_RUN_VARIANT[run.status]}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {run.status}
+                    </span>
+                    {run.errorMessage && (
+                      <span class="cell-code" set:text={run.errorMessage} />
+                    )}
+                  </td>
+                  <td data-label="Rows">{run.rowCount}</td>
+                  <td data-label="Created">
+                    <span class="cell-muted">
+                      {formatTimestamp(run.createdAt)}
+                    </span>
+                  </td>
+                  <td data-label="Expires">
+                    <span class="cell-muted">
+                      {formatTimestamp(run.expiresAt)}
+                    </span>
+                  </td>
+                  <td data-label="Artifact">
+                    {run.status === "completed" && !isExpired(run) ? (
+                      // Cookie auth rides along on a plain navigation, and
+                      // the endpoint re-checks RBAC/ABAC at download time —
+                      // a link here grants nothing a fetch would not.
+                      <a
+                        class="quick-link"
+                        href={`/api/v1/reports/exports/runs/${run.id}/download`}
+                      >
+                        {t("Download")}
                         <span class="quick-link-arrow" aria-hidden="true">
                           →
                         </span>
                       </a>
-                    )}
-
-                    {canReconcile && (
-                      <button
-                        type="button"
-                        class="module-toggle projection-reconcile-btn"
-                        data-projection-key={projection.key}
-                      >
-                        {t("Reconcile")}
-                      </button>
-                    )}
-
-                    {canRebuild && isRebuilding && (
-                      <button
-                        type="button"
-                        class="btn-inline btn-inline--danger projection-rebuild-cancel-btn"
-                        data-projection-key={projection.key}
-                      >
-                        {t("Cancel rebuild")}
-                      </button>
-                    )}
-                  </div>
-
-                  {canRebuild && !isRebuilding && (
-                    <div class="admin-toolbar">
-                      <label for={`rebuild-reason-${projection.key}`}>
-                        {t("Rebuild reason")}
-                      </label>
-                      <input
-                        type="text"
-                        id={`rebuild-reason-${projection.key}`}
-                        class="projection-rebuild-reason"
-                        data-projection-key={projection.key}
-                        minlength={MIN_REASON_LENGTH}
-                        maxlength={MAX_REASON_LENGTH}
-                        autocomplete="off"
-                        placeholder="Why this rebuild is needed"
-                      />
-                      <button
-                        type="button"
-                        class="btn-inline projection-rebuild-btn"
-                        data-projection-key={projection.key}
-                      >
-                        {t("Rebuild")}
-                      </button>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-    )
-  }
-
-  {
-    canReadProjections && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="rebuild-history-title"
-        id="reporting-rebuild-history"
-      >
-        <h2 class="admin-section-title" id="rebuild-history-title">
-          {t("Rebuild history")}
-          <span class="count-pill">{rebuildRuns.length}</span>
-        </h2>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Projection rebuild runs, newest first, capped at 100 rows.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Projection")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Rows")}</th>
-                <th scope="col">{t("Started")}</th>
-                <th scope="col">{t("Finished")}</th>
-                <th scope="col">{t("Reason")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rebuildRuns.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={6}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ↻
+                    ) : (
+                      <span class="cell-muted">
+                        {isExpired(run) ? "expired" : "unavailable"}
                       </span>
-                      <span class="empty-state-title">
-                        {t("No rebuilds yet")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Incremental updates keep a projection current without one; a rebuild is for recovering after a source or definition change."
-                        )}
-                      </span>
-                    </div>
+                    )}
                   </td>
                 </tr>
-              ) : (
-                rebuildRuns.map((run) => (
-                  <tr>
-                    <td data-label="Projection">
-                      <span class="cell-code">{run.projectionKey}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={REBUILD_VARIANT[run.status]}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {run.status}
-                      </span>
-                      {run.cancelRequested && run.status === "running" && (
-                        <span class="cell-muted">{t("\u00b7 cancelling")}</span>
-                      )}
-                    </td>
-                    <td data-label="Rows">{run.rowsProcessed}</td>
-                    <td data-label="Started">
-                      <span class="cell-muted">
-                        {formatTimestamp(run.startedAt)}
-                      </span>
-                    </td>
-                    <td data-label="Finished">
-                      <span class="cell-muted">
-                        {formatTimestamp(run.completedAt)}
-                      </span>
-                    </td>
-                    <td data-label="Reason">
-                      <span set:text={run.reason ?? "—"} />
-                      {run.errorMessage && (
-                        <span class="cell-code" set:text={run.errorMessage} />
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadExports && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="export-configs-title"
-        id="reporting-export-configs"
-      >
-        <h2 class="admin-section-title" id="export-configs-title">
-          {t("Scheduled exports")}
-          <span class="count-pill">{exportConfigs.length}</span>
-        </h2>
-        <p class="page-description">
-          {t("Generated by")}
-          <code>{t("reporting:exports:dispatch")}</code>
-          {t(
-            ". Disabling a schedule retires it \u2014 there is no re-enable, so an interval change means creating a new schedule."
-          )}
-        </p>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Scheduled export configurations for this tenant.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Projection")}</th>
-                <th scope="col">{t("Format")}</th>
-                <th scope="col">{t("Interval")}</th>
-                <th scope="col">{t("State")}</th>
-                <th scope="col">{t("Created")}</th>
-                {canConfigureExports && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {exportConfigs.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={exportConfigColumns}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⇩
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No scheduled exports")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "A projection can still be exported on demand below."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                exportConfigs.map((config) => (
-                  <tr>
-                    <td data-label="Projection">
-                      <span class="cell-code">{config.projectionKey}</span>
-                    </td>
-                    <td data-label="Format">
-                      <span class="cell-code">{config.format}</span>
-                    </td>
-                    <td data-label="Interval">
-                      {formatInterval(config.scheduleIntervalMinutes)}
-                    </td>
-                    <td data-label="State">
-                      <span
-                        class="status-badge"
-                        data-variant={config.enabled ? "success" : "neutral"}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {config.enabled ? "enabled" : "retired"}
-                      </span>
-                    </td>
-                    <td data-label="Created">
-                      <span class="cell-muted">
-                        {formatTimestamp(config.createdAt)}
-                      </span>
-                    </td>
-                    {canConfigureExports && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {config.enabled && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger export-disable-btn"
-                              data-export-id={config.id}
-                              data-export-label={config.projectionKey}
-                            >
-                              {t("Disable")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {canConfigureExports && projectionKeys.length > 0 && (
-          <form id="export-create-form" class="admin-create-form">
-            <p class="form-legend">{t("Schedule a new export")}</p>
-            <p
-              id="export-create-error"
-              class="admin-create-error"
-              role="alert"
-              hidden
-            />
-
-            <label for="export-projection-key">
-              {t("Projection")}
-              <select id="export-projection-key" name="projectionKey" required>
-                {projectionKeys.map((key) => (
-                  <option value={key}>{key}</option>
-                ))}
-              </select>
-            </label>
-
-            <label for="export-format">
-              {t("Format")}
-              <select id="export-format" name="format" required>
-                <option value="csv">{t("csv")}</option>
-                <option value="json">{t("json")}</option>
-              </select>
-            </label>
-
-            <label for="export-interval">
-              {t("Interval (minutes)")}
-              {/* Bounds come from the same constants the endpoint validates
-                  against, so the browser can never accept what the server
-                  rejects. */}
-              <input
-                type="number"
-                id="export-interval"
-                name="scheduleIntervalMinutes"
-                required
-                step="1"
-                min={MIN_EXPORT_INTERVAL_MINUTES}
-                max={MAX_EXPORT_INTERVAL_MINUTES}
-                value={String(MIN_EXPORT_INTERVAL_MINUTES * 4)}
-              />
-            </label>
-
-            <button type="submit" id="export-create-submit">
-              {t("Create schedule")}
-            </button>
-          </form>
-        )}
-
-        {showExportActions && (
-          <form id="export-trigger-form" class="admin-create-form">
-            <p class="form-legend">{t("Export once, now")}</p>
-            <p
-              id="export-trigger-error"
-              class="admin-create-error"
-              role="alert"
-              hidden
-            />
-
-            <label for="trigger-projection-key">
-              {t("Projection")}
-              <select id="trigger-projection-key" name="projectionKey" required>
-                {projectionKeys.map((key) => (
-                  <option value={key}>{key}</option>
-                ))}
-              </select>
-            </label>
-
-            <label for="trigger-format">
-              {t("Format")}
-              <select id="trigger-format" name="format" required>
-                <option value="csv">{t("csv")}</option>
-                <option value="json">{t("json")}</option>
-              </select>
-            </label>
-
-            <button type="submit" id="export-trigger-submit">
-              {t("Generate export")}
-            </button>
-          </form>
-        )}
-      </section>
-    )
-  }
-
-  {
-    canReadExports && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="export-runs-title"
-        id="reporting-export-runs"
-      >
-        <h2 class="admin-section-title" id="export-runs-title">
-          {t("Export runs")}
-          <span class="count-pill">{exportRuns.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "Each artifact is checksum-verified when downloaded, and an expired one is refused rather than served stale."
-          )}
-        </p>
-
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Export runs, newest first, capped at 100 rows.")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Projection")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Rows")}</th>
-                <th scope="col">{t("Created")}</th>
-                <th scope="col">{t("Expires")}</th>
-                <th scope="col">{t("Artifact")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exportRuns.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={6}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌸
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No export runs")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Runs appear here once a schedule fires or an on-demand export is generated."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                exportRuns.map((run) => (
-                  <tr>
-                    <td data-label="Projection">
-                      <span class="cell-code">{run.projectionKey}</span>
-                      <span class="cell-muted"> · {run.format}</span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={EXPORT_RUN_VARIANT[run.status]}
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {run.status}
-                      </span>
-                      {run.errorMessage && (
-                        <span class="cell-code" set:text={run.errorMessage} />
-                      )}
-                    </td>
-                    <td data-label="Rows">{run.rowCount}</td>
-                    <td data-label="Created">
-                      <span class="cell-muted">
-                        {formatTimestamp(run.createdAt)}
-                      </span>
-                    </td>
-                    <td data-label="Expires">
-                      <span class="cell-muted">
-                        {formatTimestamp(run.expiresAt)}
-                      </span>
-                    </td>
-                    <td data-label="Artifact">
-                      {run.status === "completed" && !isExpired(run) ? (
-                        // Cookie auth rides along on a plain navigation, and
-                        // the endpoint re-checks RBAC/ABAC at download time —
-                        // a link here grants nothing a fetch would not.
-                        <a
-                          class="quick-link"
-                          href={`/api/v1/reports/exports/runs/${run.id}/download`}
-                        >
-                          {t("Download")}
-                          <span class="quick-link-arrow" aria-hidden="true">
-                            →
-                          </span>
-                        </a>
-                      ) : (
-                        <span class="cell-muted">
-                          {isExpired(run) ? "expired" : "unavailable"}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

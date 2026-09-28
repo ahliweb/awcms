@@ -194,562 +194,534 @@ const hasTenantWideHold = holds.some(
 ---
 
 <AdminLayout title={t("Data lifecycle")}>
-  <Fragment slot="page-description"
-    >{
-      t(
-        "Retention, archive and purge for the high-volume tables each module declares \u2014 plus the legal holds that override them. Real archive and purge run only as the scheduled"
-      )
-    }<code>{t("data-lifecycle:archive-purge")}</code>{
-      t("job; this screen plans, records and holds, it never deletes.")
-    }</Fragment
-  >
+  <Fragment slot="page-description">
+    {t(
+      "Retention, archive and purge for the high-volume tables each module declares \u2014 plus the legal holds that override them. Real archive and purge run only as the scheduled"
+    )}
+    <code>{t("data-lifecycle:archive-purge")}</code>
+    {t("job; this screen plans, records and holds, it never deletes.")}
+  </Fragment>
 
-  {
-    !showAnything && (
-      <p class="state-notice fade-in-up" id="data-lifecycle-denied">
-        {t("You do not have permission to view the data lifecycle console.")}
-      </p>
-    )
-  }
+  {!showAnything && (
+    <p class="state-notice fade-in-up" id="data-lifecycle-denied">
+      {t("You do not have permission to view the data lifecycle console.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice fade-in-up" id="data-lifecycle-error">
-        {t(
-          "The data lifecycle console could not be loaded right now. Please try again later."
-        )}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice fade-in-up" id="data-lifecycle-error">
+      {t(
+        "The data lifecycle console could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
 
   <p
     id="data-lifecycle-action-error"
     class="admin-create-error"
     role="alert"
     hidden
-  >
-  </p>
+  ></p>
 
-  {
-    canReadHolds && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-summary">
-        <h2 class="admin-section-title">{t("Holds in force")}</h2>
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Active legal holds")}</span>
-            <span class="stat-value">{activeHoldCount}</span>
-            {hasTenantWideHold && (
-              <span class="stat-hint">
-                {t("One or more cover every table")}
-              </span>
-            )}
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Registered tables")}</span>
-            <span class="stat-value">{registryRows.length}</span>
-            <span class="stat-hint">
-              {t("{count} tenant-scoped", { count: tenantDescriptors.length })}
-            </span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Recorded runs")}</span>
-            <span class="stat-value">{canReadRuns ? runs.length : "—"}</span>
-            <span class="stat-hint">{t("Newest 100")}</span>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadRegistry && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-registry">
-        <h2 class="admin-section-title">
-          {t("Lifecycle registry")}
-          <span class="count-pill">{registryRows.length}</span>
-        </h2>
-        <p class="page-description">
-          {t("Declared by each owning module in its own")}
-          <code>{t("module.ts")}</code>
-          {t(", or \u2014 for a table owned by")}
-          <code>{t("src/lib/")}</code>
-          {t(
-            "infrastructure with no module to declare it \u2014 in the infrastructure registry (ADR-0076). Code, not tenant configuration. Nothing here reveals row contents or live counts."
+  {canReadHolds && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-summary">
+      <h2 class="admin-section-title">{t("Holds in force")}</h2>
+      <div class="stat-grid stagger-children">
+        <div class="stat-card">
+          <span class="stat-label">{t("Active legal holds")}</span>
+          <span class="stat-value">{activeHoldCount}</span>
+          {hasTenantWideHold && (
+            <span class="stat-hint">{t("One or more cover every table")}</span>
           )}
-        </p>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Every registered high-volume table descriptor")}
-            </caption>
-            <thead>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Registered tables")}</span>
+          <span class="stat-value">{registryRows.length}</span>
+          <span class="stat-hint">
+            {t("{count} tenant-scoped", { count: tenantDescriptors.length })}
+          </span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">{t("Recorded runs")}</span>
+          <span class="stat-value">{canReadRuns ? runs.length : "—"}</span>
+          <span class="stat-hint">{t("Newest 100")}</span>
+        </div>
+      </div>
+    </section>
+  )}
+
+  {canReadRegistry && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-registry">
+      <h2 class="admin-section-title">
+        {t("Lifecycle registry")}
+        <span class="count-pill">{registryRows.length}</span>
+      </h2>
+      <p class="page-description">
+        {t("Declared by each owning module in its own")}
+        <code>{t("module.ts")}</code>
+        {t(", or \u2014 for a table owned by")}
+        <code>{t("src/lib/")}</code>
+        {t(
+          "infrastructure with no module to declare it \u2014 in the infrastructure registry (ADR-0076). Code, not tenant configuration. Nothing here reveals row contents or live counts."
+        )}
+      </p>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Every registered high-volume table descriptor")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Descriptor")}</th>
+              <th scope="col">{t("Table")}</th>
+              <th scope="col">{t("Owner")}</th>
+              <th scope="col">{t("Scope")}</th>
+              <th scope="col">{t("Retention (days)")}</th>
+              <th scope="col">{t("Execution")}</th>
+              <th scope="col">{t("Archive")}</th>
+              <th scope="col">{t("Deletion")}</th>
+              <th scope="col">{t("Legal hold")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {registryRows.map(({ descriptor, owner, ownerKind }) => (
               <tr>
-                <th scope="col">{t("Descriptor")}</th>
-                <th scope="col">{t("Table")}</th>
-                <th scope="col">{t("Owner")}</th>
-                <th scope="col">{t("Scope")}</th>
-                <th scope="col">{t("Retention (days)")}</th>
-                <th scope="col">{t("Execution")}</th>
-                <th scope="col">{t("Archive")}</th>
-                <th scope="col">{t("Deletion")}</th>
-                <th scope="col">{t("Legal hold")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {registryRows.map(({ descriptor, owner, ownerKind }) => (
-                <tr>
-                  <td data-label="Descriptor">
-                    <span class="cell-code">{descriptor.key}</span>
-                  </td>
-                  <td data-label="Table">
-                    <span class="cell-code">{descriptor.tableName}</span>
-                  </td>
-                  <td data-label="Owner">
-                    <span class="cell-code">{owner}</span>
-                    {ownerKind === "infrastructure" && (
-                      <span class="cell-muted">{t("(infrastructure)")}</span>
-                    )}
-                  </td>
-                  <td data-label="Scope">{descriptor.scope}</td>
-                  <td data-label="Retention (days)">
-                    {descriptor.defaultRetentionDays}
-                    <span class="cell-muted">
-                      {" "}
-                      ({descriptor.retentionMinDays}–
-                      {descriptor.retentionMaxDays})
+                <td data-label="Descriptor">
+                  <span class="cell-code">{descriptor.key}</span>
+                </td>
+                <td data-label="Table">
+                  <span class="cell-code">{descriptor.tableName}</span>
+                </td>
+                <td data-label="Owner">
+                  <span class="cell-code">{owner}</span>
+                  {ownerKind === "infrastructure" && (
+                    <span class="cell-muted">{t("(infrastructure)")}</span>
+                  )}
+                </td>
+                <td data-label="Scope">{descriptor.scope}</td>
+                <td data-label="Retention (days)">
+                  {descriptor.defaultRetentionDays}
+                  <span class="cell-muted">
+                    {" "}
+                    ({descriptor.retentionMinDays}–{descriptor.retentionMaxDays}
+                    )
+                  </span>
+                </td>
+                <td data-label="Execution">{descriptor.executionMode}</td>
+                <td data-label="Archive">
+                  {descriptor.archive.archivable
+                    ? descriptor.archive.format
+                    : "no"}
+                </td>
+                <td data-label="Deletion">{descriptor.deletion.mode}</td>
+                <td data-label="Legal hold">
+                  {descriptor.legalHold.applicable ? (
+                    <span class="status-badge" data-variant="info">
+                      <span class="status-dot" aria-hidden="true" />
+                      {descriptor.legalHold.precedence}
                     </span>
-                  </td>
-                  <td data-label="Execution">{descriptor.executionMode}</td>
-                  <td data-label="Archive">
-                    {descriptor.archive.archivable
-                      ? descriptor.archive.format
-                      : "no"}
-                  </td>
-                  <td data-label="Deletion">{descriptor.deletion.mode}</td>
-                  <td data-label="Legal hold">
-                    {descriptor.legalHold.applicable ? (
-                      <span class="status-badge" data-variant="info">
-                        <span class="status-dot" aria-hidden="true" />
-                        {descriptor.legalHold.precedence}
-                      </span>
-                    ) : (
-                      <span class="cell-muted">{t("not applicable")}</span>
-                    )}
-                  </td>
-                </tr>
+                  ) : (
+                    <span class="cell-muted">{t("not applicable")}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canPlan && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-plan">
+      <h2 class="admin-section-title">{t("Dry-run plan")}</h2>
+      <p class="page-description">
+        {t(
+          "Counts what a purge WOULD do for one tenant-scoped table, right now. Read-only by construction: it writes nothing, not even a run record, and an active legal hold is applied before anything is reported purgeable."
+        )}
+      </p>
+      <form id="data-lifecycle-plan-form" class="admin-create-form">
+        <p
+          id="data-lifecycle-plan-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="plan-descriptor-key">
+          {t("Table")}
+          {canReadRegistry ? (
+            <select id="plan-descriptor-key" name="descriptorKey" required>
+              {tenantDescriptors.map((descriptor) => (
+                <option value={descriptor.key}>{descriptor.key}</option>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canPlan && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-plan">
-        <h2 class="admin-section-title">{t("Dry-run plan")}</h2>
-        <p class="page-description">
-          {t(
-            "Counts what a purge WOULD do for one tenant-scoped table, right now. Read-only by construction: it writes nothing, not even a run record, and an active legal hold is applied before anything is reported purgeable."
-          )}
-        </p>
-        <form id="data-lifecycle-plan-form" class="admin-create-form">
-          <p
-            id="data-lifecycle-plan-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
-          />
-
-          <label for="plan-descriptor-key">
-            {t("Table")}
-            {canReadRegistry ? (
-              <select id="plan-descriptor-key" name="descriptorKey" required>
-                {tenantDescriptors.map((descriptor) => (
-                  <option value={descriptor.key}>{descriptor.key}</option>
-                ))}
-              </select>
-            ) : (
-              /* Without `registry.read` the descriptor list is not this
+            </select>
+          ) : (
+            /* Without `registry.read` the descriptor list is not this
                  viewer's to see (it is what the registry endpoint gates), so
                  the picker degrades to free text and the server validates the
                  key — rather than this screen handing out the catalogue. */
-              <input
-                type="text"
-                id="plan-descriptor-key"
-                name="descriptorKey"
-                placeholder="module_key.table_shortname"
-                required
-              />
-            )}
-          </label>
-
-          <label for="plan-retention-override">
-            {t("Retention override (days, optional)")}
             <input
-              type="number"
-              id="plan-retention-override"
-              name="retentionDaysOverride"
-              min="0"
-              placeholder="Descriptor default"
+              type="text"
+              id="plan-descriptor-key"
+              name="descriptorKey"
+              placeholder="module_key.table_shortname"
+              required
             />
-          </label>
+          )}
+        </label>
 
-          <button
-            type="submit"
-            id="data-lifecycle-plan-submit"
-            class="module-toggle"
-          >
-            {t("Run plan")}
-          </button>
-        </form>
+        <label for="plan-retention-override">
+          {t("Retention override (days, optional)")}
+          <input
+            type="number"
+            id="plan-retention-override"
+            name="retentionDaysOverride"
+            min="0"
+            placeholder="Descriptor default"
+          />
+        </label>
 
-        <div id="data-lifecycle-plan-result" hidden>
-          <div class="stat-grid stagger-children">
-            <div class="stat-card">
-              <span class="stat-label">{t("Cutoff")}</span>
-              <span
-                class="stat-value stat-value--mono"
-                id="plan-result-cutoff"
-              />
-              <span class="stat-hint">
-                {t("UTC \u2014 rows older than this")}
-              </span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Eligible")}</span>
-              <span class="stat-value" id="plan-result-eligible" />
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Held")}</span>
-              <span class="stat-value" id="plan-result-held" />
-              <span class="stat-hint">{t("Withheld by a legal hold")}</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Already archived")}</span>
-              <span class="stat-value" id="plan-result-archived" />
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Purgeable")}</span>
-              <span class="stat-value" id="plan-result-purgeable" />
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Blocked")}</span>
-              <span class="stat-value" id="plan-result-blocked" />
-            </div>
+        <button
+          type="submit"
+          id="data-lifecycle-plan-submit"
+          class="module-toggle"
+        >
+          {t("Run plan")}
+        </button>
+      </form>
+
+      <div id="data-lifecycle-plan-result" hidden>
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Cutoff")}</span>
+            <span class="stat-value stat-value--mono" id="plan-result-cutoff" />
+            <span class="stat-hint">
+              {t("UTC \u2014 rows older than this")}
+            </span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Eligible")}</span>
+            <span class="stat-value" id="plan-result-eligible" />
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Held")}</span>
+            <span class="stat-value" id="plan-result-held" />
+            <span class="stat-hint">{t("Withheld by a legal hold")}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Already archived")}</span>
+            <span class="stat-value" id="plan-result-archived" />
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Purgeable")}</span>
+            <span class="stat-value" id="plan-result-purgeable" />
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Blocked")}</span>
+            <span class="stat-value" id="plan-result-blocked" />
           </div>
         </div>
-      </section>
-    )
-  }
+      </div>
+    </section>
+  )}
 
-  {
-    canCreateHold && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-create-hold">
-        <h2 class="admin-section-title">{t("Place a legal hold")}</h2>
-        <p class="page-description">
-          {t(
-            "A hold overrides ordinary retention and purge and cannot be bypassed by tenant policy. Leave the table unset for a tenant-wide hold that covers every registered table. Both the reason and the authority reference are recorded as the evidence that later justifies withholding this data."
+  {canCreateHold && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-create-hold">
+      <h2 class="admin-section-title">{t("Place a legal hold")}</h2>
+      <p class="page-description">
+        {t(
+          "A hold overrides ordinary retention and purge and cannot be bypassed by tenant policy. Leave the table unset for a tenant-wide hold that covers every registered table. Both the reason and the authority reference are recorded as the evidence that later justifies withholding this data."
+        )}
+      </p>
+      <form id="data-lifecycle-hold-form" class="admin-create-form">
+        <p
+          id="data-lifecycle-hold-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="hold-descriptor-key">
+          {t("Table (optional)")}
+          {canReadRegistry ? (
+            <select id="hold-descriptor-key" name="descriptorKey">
+              <option value="">{t("Every table (tenant-wide)")}</option>
+              {holdTargetKeys.map((key) => (
+                <option value={key}>{key}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              id="hold-descriptor-key"
+              name="descriptorKey"
+              placeholder="Leave empty for a tenant-wide hold"
+            />
           )}
-        </p>
-        <form id="data-lifecycle-hold-form" class="admin-create-form">
-          <p
-            id="data-lifecycle-hold-error"
-            class="admin-create-error"
-            role="alert"
-            hidden
+        </label>
+
+        <label for="hold-scope-description">
+          {t("Scope")}
+          <input
+            type="text"
+            id="hold-scope-description"
+            name="scopeDescription"
+            maxlength={MAX_TEXT_FIELD_LENGTH}
+            placeholder="What the hold covers, in words"
+            required
           />
+        </label>
 
-          <label for="hold-descriptor-key">
-            {t("Table (optional)")}
-            {canReadRegistry ? (
-              <select id="hold-descriptor-key" name="descriptorKey">
-                <option value="">{t("Every table (tenant-wide)")}</option>
-                {holdTargetKeys.map((key) => (
-                  <option value={key}>{key}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                id="hold-descriptor-key"
-                name="descriptorKey"
-                placeholder="Leave empty for a tenant-wide hold"
-              />
-            )}
-          </label>
+        <label for="hold-reason">
+          {t("Reason")}
+          <textarea
+            id="hold-reason"
+            name="reason"
+            rows="3"
+            minlength={MIN_REASON_LENGTH}
+            maxlength={MAX_TEXT_FIELD_LENGTH}
+            required
+          />
+        </label>
 
-          <label for="hold-scope-description">
-            {t("Scope")}
-            <input
-              type="text"
-              id="hold-scope-description"
-              name="scopeDescription"
-              maxlength={MAX_TEXT_FIELD_LENGTH}
-              placeholder="What the hold covers, in words"
-              required
-            />
-          </label>
+        <label for="hold-authority-reference">
+          {t("Authority reference")}
+          <input
+            type="text"
+            id="hold-authority-reference"
+            name="authorityReference"
+            maxlength={MAX_TEXT_FIELD_LENGTH}
+            placeholder="Court order or regulator reference number"
+            required
+          />
+        </label>
 
-          <label for="hold-reason">
-            {t("Reason")}
-            <textarea
-              id="hold-reason"
-              name="reason"
-              rows="3"
-              minlength={MIN_REASON_LENGTH}
-              maxlength={MAX_TEXT_FIELD_LENGTH}
-              required
-            />
-          </label>
+        <label for="hold-ends-at">
+          {t("Ends at (optional)")}
+          <input type="date" id="hold-ends-at" name="endsAt" />
+        </label>
 
-          <label for="hold-authority-reference">
-            {t("Authority reference")}
-            <input
-              type="text"
-              id="hold-authority-reference"
-              name="authorityReference"
-              maxlength={MAX_TEXT_FIELD_LENGTH}
-              placeholder="Court order or regulator reference number"
-              required
-            />
-          </label>
+        <button
+          type="submit"
+          id="data-lifecycle-hold-submit"
+          class="module-toggle"
+        >
+          {t("Place hold")}
+        </button>
+      </form>
+    </section>
+  )}
 
-          <label for="hold-ends-at">
-            {t("Ends at (optional)")}
-            <input type="date" id="hold-ends-at" name="endsAt" />
-          </label>
-
-          <button
-            type="submit"
-            id="data-lifecycle-hold-submit"
-            class="module-toggle"
-          >
-            {t("Place hold")}
-          </button>
-        </form>
-      </section>
-    )
-  }
-
-  {
-    canReadHolds && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-holds">
-        <h2 class="admin-section-title">
-          {t("Legal holds")}
-          <span class="count-pill">{holds.length}</span>
-        </h2>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("Legal holds for this tenant, newest first")}
-            </caption>
-            <thead>
+  {canReadHolds && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-holds">
+      <h2 class="admin-section-title">
+        {t("Legal holds")}
+        <span class="count-pill">{holds.length}</span>
+      </h2>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("Legal holds for this tenant, newest first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Table")}</th>
+              <th scope="col">{t("Scope")}</th>
+              <th scope="col">{t("Authority")}</th>
+              <th scope="col">{t("Started")}</th>
+              <th scope="col">{t("Ends")}</th>
+              <th scope="col">{t("Detail")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {holds.length === 0 && (
               <tr>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Table")}</th>
-                <th scope="col">{t("Scope")}</th>
-                <th scope="col">{t("Authority")}</th>
-                <th scope="col">{t("Started")}</th>
-                <th scope="col">{t("Ends")}</th>
-                <th scope="col">{t("Detail")}</th>
+                <td class="data-table-empty" colspan={7}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span class="empty-state-title">{t("No legal holds")}</span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Ordinary retention applies to every registered table."
+                      )}
+                    </span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {holds.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={7}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ✓
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No legal holds")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "Ordinary retention applies to every registered table."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {holds.map((hold) => (
-                <tr>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={
-                        hold.status === "active" ? "warning" : "neutral"
-                      }
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {hold.status}
-                    </span>
-                  </td>
-                  <td data-label="Table">
-                    {hold.descriptorKey ? (
-                      <span class="cell-code">{hold.descriptorKey}</span>
-                    ) : (
-                      <span class="cell-muted">{t("Every table")}</span>
-                    )}
-                  </td>
-                  <td data-label="Scope">{hold.scopeDescription}</td>
-                  <td data-label="Authority">{hold.authorityReference}</td>
-                  <td data-label="Started">
-                    <span class="cell-code">
-                      {formatTimestamp(hold.startsAt)}
-                    </span>
-                  </td>
-                  <td data-label="Ends">
-                    <span class="cell-code">
-                      {formatTimestamp(hold.endsAt)}
-                    </span>
-                  </td>
-                  <td data-label="Detail">
-                    {/* Reason and release reason are operator-authored text,
+            )}
+            {holds.map((hold) => (
+              <tr>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      hold.status === "active" ? "warning" : "neutral"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {hold.status}
+                  </span>
+                </td>
+                <td data-label="Table">
+                  {hold.descriptorKey ? (
+                    <span class="cell-code">{hold.descriptorKey}</span>
+                  ) : (
+                    <span class="cell-muted">{t("Every table")}</span>
+                  )}
+                </td>
+                <td data-label="Scope">{hold.scopeDescription}</td>
+                <td data-label="Authority">{hold.authorityReference}</td>
+                <td data-label="Started">
+                  <span class="cell-code">
+                    {formatTimestamp(hold.startsAt)}
+                  </span>
+                </td>
+                <td data-label="Ends">
+                  <span class="cell-code">{formatTimestamp(hold.endsAt)}</span>
+                </td>
+                <td data-label="Detail">
+                  {/* Reason and release reason are operator-authored text,
                         rendered as escaped TEXT inside `<details>` — never as
                         HTML — the same treatment the audit-trail viewer gives
                         its payloads. */}
-                    <details>
-                      <summary>{t("Reason")}</summary>
-                      <p>{hold.reason}</p>
-                      {hold.releaseReason && (
-                        <p>
-                          <strong>{t("Released:")}</strong> {hold.releaseReason}
-                        </p>
-                      )}
-                    </details>
+                  <details>
+                    <summary>{t("Reason")}</summary>
+                    <p>{hold.reason}</p>
+                    {hold.releaseReason && (
+                      <p>
+                        <strong>{t("Released:")}</strong> {hold.releaseReason}
+                      </p>
+                    )}
+                  </details>
 
-                    {canReleaseHold && hold.status === "active" && (
-                      <details class="hold-release">
-                        <summary>{t("Release")}</summary>
-                        <form
-                          class="admin-create-form"
-                          data-release-form
-                          data-hold-id={hold.id}
+                  {canReleaseHold && hold.status === "active" && (
+                    <details class="hold-release">
+                      <summary>{t("Release")}</summary>
+                      <form
+                        class="admin-create-form"
+                        data-release-form
+                        data-hold-id={hold.id}
+                      >
+                        <label for={`release-reason-${hold.id}`}>
+                          {t("Release reason")}
+                          <textarea
+                            id={`release-reason-${hold.id}`}
+                            name="releaseReason"
+                            rows="2"
+                            minlength={MIN_REASON_LENGTH}
+                            maxlength={MAX_TEXT_FIELD_LENGTH}
+                            required
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          class="btn-inline btn-inline--danger"
                         >
-                          <label for={`release-reason-${hold.id}`}>
-                            {t("Release reason")}
-                            <textarea
-                              id={`release-reason-${hold.id}`}
-                              name="releaseReason"
-                              rows="2"
-                              minlength={MIN_REASON_LENGTH}
-                              maxlength={MAX_TEXT_FIELD_LENGTH}
-                              required
-                            />
-                          </label>
-                          <button
-                            type="submit"
-                            class="btn-inline btn-inline--danger"
-                          >
-                            {t("Release hold")}
-                          </button>
-                        </form>
-                      </details>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
-
-  {
-    canReadRuns && (
-      <section class="admin-section fade-in-up" id="data-lifecycle-runs">
-        <h2 class="admin-section-title">
-          {t("Run history")}
-          <span class="count-pill">{runs.length}</span>
-        </h2>
-        <p class="page-description">
-          {t(
-            "Aggregate counts only \u2014 what the scheduled job planned, archived or purged, and when. This history is itself retention evidence."
-          )}
-        </p>
-        <div class="data-table-scroll">
-          <table class="data-table data-table--stack">
-            <caption class="sr-only">
-              {t("The most recent lifecycle runs, newest first")}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Finished")}</th>
-                <th scope="col">{t("Descriptor")}</th>
-                <th scope="col">{t("Type")}</th>
-                <th scope="col">{t("Status")}</th>
-                <th scope="col">{t("Eligible")}</th>
-                <th scope="col">{t("Held")}</th>
-                <th scope="col">{t("Archived")}</th>
-                <th scope="col">{t("Purged")}</th>
-                <th scope="col">{t("Errors")}</th>
+                          {t("Release hold")}
+                        </button>
+                      </form>
+                    </details>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {runs.length === 0 && (
-                <tr>
-                  <td class="data-table-empty" colspan={9}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ⌛
-                      </span>
-                      <span class="empty-state-title">
-                        {t("No runs recorded")}
-                      </span>
-                      <span class="empty-state-text">
-                        {t(
-                          "The archive/purge job has not run for this tenant yet."
-                        )}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {runs.map((run) => (
-                <tr>
-                  <td data-label="Finished">
-                    <span class="cell-code">
-                      {formatTimestamp(run.finishedAt)}
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canReadRuns && (
+    <section class="admin-section fade-in-up" id="data-lifecycle-runs">
+      <h2 class="admin-section-title">
+        {t("Run history")}
+        <span class="count-pill">{runs.length}</span>
+      </h2>
+      <p class="page-description">
+        {t(
+          "Aggregate counts only \u2014 what the scheduled job planned, archived or purged, and when. This history is itself retention evidence."
+        )}
+      </p>
+      <div class="data-table-scroll">
+        <table class="data-table data-table--stack">
+          <caption class="sr-only">
+            {t("The most recent lifecycle runs, newest first")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Finished")}</th>
+              <th scope="col">{t("Descriptor")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Eligible")}</th>
+              <th scope="col">{t("Held")}</th>
+              <th scope="col">{t("Archived")}</th>
+              <th scope="col">{t("Purged")}</th>
+              <th scope="col">{t("Errors")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.length === 0 && (
+              <tr>
+                <td class="data-table-empty" colspan={9}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌛
                     </span>
-                  </td>
-                  <td data-label="Descriptor">
-                    <span class="cell-code">{run.descriptorKey}</span>
-                  </td>
-                  <td data-label="Type">{run.runType}</td>
-                  <td data-label="Status">
-                    <span
-                      class="status-badge"
-                      data-variant={runStatusVariant(run.status)}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {run.status}
+                    <span class="empty-state-title">
+                      {t("No runs recorded")}
                     </span>
-                  </td>
-                  <td data-label="Eligible">{run.eligibleCount}</td>
-                  <td data-label="Held">{run.heldCount}</td>
-                  <td data-label="Archived">{run.archivedCount}</td>
-                  <td data-label="Purged">{run.purgedCount}</td>
-                  <td data-label="Errors">
-                    {run.errorCount > 0 ? (
-                      run.errorCount
-                    ) : (
-                      <span class="cell-muted">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )
-  }
+                    <span class="empty-state-text">
+                      {t(
+                        "The archive/purge job has not run for this tenant yet."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {runs.map((run) => (
+              <tr>
+                <td data-label="Finished">
+                  <span class="cell-code">
+                    {formatTimestamp(run.finishedAt)}
+                  </span>
+                </td>
+                <td data-label="Descriptor">
+                  <span class="cell-code">{run.descriptorKey}</span>
+                </td>
+                <td data-label="Type">{run.runType}</td>
+                <td data-label="Status">
+                  <span
+                    class="status-badge"
+                    data-variant={runStatusVariant(run.status)}
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {run.status}
+                  </span>
+                </td>
+                <td data-label="Eligible">{run.eligibleCount}</td>
+                <td data-label="Held">{run.heldCount}</td>
+                <td data-label="Archived">{run.archivedCount}</td>
+                <td data-label="Purged">{run.purgedCount}</td>
+                <td data-label="Errors">
+                  {run.errorCount > 0 ? (
+                    run.errorCount
+                  ) : (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

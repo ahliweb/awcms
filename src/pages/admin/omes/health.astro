@@ -147,250 +147,230 @@ function checkEntries(checks: unknown): [string, unknown][] {
   )}
 >
   <div class="omes-cc">
-    {
-      !canSeeAnything && (
-        <p class="state-notice fade-in-up" id="omes-health-denied">
-          {t("You do not have permission to view OMES health evidence.")}
-        </p>
-      )
-    }
+    {!canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-health-denied">
+        {t("You do not have permission to view OMES health evidence.")}
+      </p>
+    )}
 
-    {
-      canSeeAnything && loadError && (
-        <p class="state-notice fade-in-up" id="omes-health-error">
-          {t(
-            "OMES health evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
-          )}
-        </p>
-      )
-    }
+    {canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-health-error">
+        {t(
+          "OMES health evidence could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )}
 
-    {
-      canSeeAnything && !loadError && mode === "latest" && (
-        <section
-          class="admin-section fade-in-up"
-          aria-label="OMES health summary"
-        >
-          <div class="stat-grid stagger-children">
-            <div class="stat-card">
-              <span class="stat-label">{t("Servers with a snapshot")}</span>
-              <span class="stat-value">{snapshots.length}</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Stale snapshots")}</span>
-              <span class="stat-value">{staleCount}</span>
-              {staleCount > 0 && (
-                <span class="stat-hint">
-                  {t("No fresh health evidence within the staleness window")}
-                </span>
+    {canSeeAnything && !loadError && mode === "latest" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health summary"
+      >
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">{t("Servers with a snapshot")}</span>
+            <span class="stat-value">{snapshots.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">{t("Stale snapshots")}</span>
+            <span class="stat-value">{staleCount}</span>
+            {staleCount > 0 && (
+              <span class="stat-hint">
+                {t("No fresh health evidence within the staleness window")}
+              </span>
+            )}
+          </div>
+        </div>
+        <p class="page-description">
+          <a class="quick-link" href="/admin/omes/servers">
+            {t("View server enrollment & trust evidence")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </p>
+      </section>
+    )}
+
+    {canSeeAnything && !loadError && mode === "history" && (
+      <section
+        class="admin-section fade-in-up"
+        aria-label="OMES health history"
+      >
+        <p class="page-description">
+          {t("Snapshot history for server {serverId}.", {
+            serverId: serverIdFilter ?? ""
+          })}{" "}
+          <a class="quick-link" href="/admin/omes/health">
+            {t("Back to fleet-wide health")}
+            <span class="quick-link-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </p>
+      </section>
+    )}
+
+    {canSeeAnything && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="health-title"
+        id="omes-health-list"
+      >
+        <h2 class="admin-section-title" id="health-title">
+          {mode === "latest"
+            ? t("Latest health per server")
+            : t("Health history")}
+          <span class="count-pill">{snapshots.length}</span>
+        </h2>
+
+        {mode === "latest" && (
+          <form method="get" class="admin-create-form" id="health-filter-form">
+            <label for="filter-server">{t("View history for server ID")}</label>
+            <input id="filter-server" name="serverId" type="text" />
+            <button type="submit">{t("View history")}</button>
+          </form>
+        )}
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="omes-health-table">
+            <caption class="sr-only">
+              {t(
+                "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
               )}
-            </div>
-          </div>
-          <p class="page-description">
-            <a class="quick-link" href="/admin/omes/servers">
-              {t("View server enrollment & trust evidence")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </p>
-        </section>
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && mode === "history" && (
-        <section
-          class="admin-section fade-in-up"
-          aria-label="OMES health history"
-        >
-          <p class="page-description">
-            {t("Snapshot history for server {serverId}.", {
-              serverId: serverIdFilter ?? ""
-            })}{" "}
-            <a class="quick-link" href="/admin/omes/health">
-              {t("Back to fleet-wide health")}
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </p>
-        </section>
-      )
-    }
-
-    {
-      canSeeAnything && !loadError && (
-        <section
-          class="admin-section fade-in-up"
-          aria-labelledby="health-title"
-          id="omes-health-list"
-        >
-          <h2 class="admin-section-title" id="health-title">
-            {mode === "latest"
-              ? t("Latest health per server")
-              : t("Health history")}
-            <span class="count-pill">{snapshots.length}</span>
-          </h2>
-
-          {mode === "latest" && (
-            <form
-              method="get"
-              class="admin-create-form"
-              id="health-filter-form"
-            >
-              <label for="filter-server">
-                {t("View history for server ID")}
-              </label>
-              <input id="filter-server" name="serverId" type="text" />
-              <button type="submit">{t("View history")}</button>
-            </form>
-          )}
-
-          <div class="data-table-scroll">
-            <table class="data-table data-table--stack" id="omes-health-table">
-              <caption class="sr-only">
-                {t(
-                  "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
-                )}
-              </caption>
-              <thead>
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Server")}</th>
+                <th scope="col">{t("Overall status")}</th>
+                <th scope="col">{t("Captured")}</th>
+                <th scope="col">{t("Checks (source-attributed)")}</th>
+                {mode === "latest" && <th scope="col">{t("History")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.length === 0 ? (
                 <tr>
-                  <th scope="col">{t("Server")}</th>
-                  <th scope="col">{t("Overall status")}</th>
-                  <th scope="col">{t("Captured")}</th>
-                  <th scope="col">{t("Checks (source-attributed)")}</th>
-                  {mode === "latest" && <th scope="col">{t("History")}</th>}
+                  <td
+                    class="data-table-empty"
+                    colspan={mode === "latest" ? 5 : 4}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ♡
+                      </span>
+                      <span class="empty-state-title">
+                        {t("No health evidence")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "No server has reported a health snapshot yet, or none matches this filter."
+                        )}
+                      </span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {snapshots.length === 0 ? (
-                  <tr>
-                    <td
-                      class="data-table-empty"
-                      colspan={mode === "latest" ? 5 : 4}
-                    >
-                      <div class="empty-state">
-                        <span class="empty-state-icon" aria-hidden="true">
-                          ♡
-                        </span>
-                        <span class="empty-state-title">
-                          {t("No health evidence")}
-                        </span>
-                        <span class="empty-state-text">
-                          {t(
-                            "No server has reported a health snapshot yet, or none matches this filter."
-                          )}
-                        </span>
-                      </div>
+              ) : (
+                snapshots.map((snapshot) => (
+                  <tr data-health-row={snapshot.id}>
+                    <td data-label="Server">
+                      <span class="cell-code">{snapshot.serverId}</span>
                     </td>
-                  </tr>
-                ) : (
-                  snapshots.map((snapshot) => (
-                    <tr data-health-row={snapshot.id}>
-                      <td data-label="Server">
-                        <span class="cell-code">{snapshot.serverId}</span>
-                      </td>
-                      <td data-label="Overall status">
-                        <span
-                          class="status-badge"
-                          data-variant={
-                            STATUS_VARIANT[snapshot.overallStatus] ?? "neutral"
-                          }
-                        >
+                    <td data-label="Overall status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[snapshot.overallStatus] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {snapshot.overallStatus}
+                      </span>
+                      {snapshot.stale && (
+                        <span class="status-badge" data-variant="warning">
                           <span class="status-dot" aria-hidden="true" />
-                          {snapshot.overallStatus}
+                          {t("stale")}
                         </span>
-                        {snapshot.stale && (
-                          <span class="status-badge" data-variant="warning">
-                            <span class="status-dot" aria-hidden="true" />
-                            {t("stale")}
-                          </span>
-                        )}
-                      </td>
-                      <td data-label="Captured">
-                        <span class="cell-muted">{snapshot.capturedAt}</span>
-                      </td>
-                      <td data-label="Checks">
-                        {checkEntries(snapshot.checks).length === 0 ? (
-                          <span class="cell-muted">—</span>
-                        ) : (
-                          <details>
-                            <summary>
-                              {t("{count} check(s)", {
-                                count: checkEntries(snapshot.checks).length
-                              })}
-                            </summary>
-                            <ul class="evidence-list">
-                              {checkEntries(snapshot.checks).map(
-                                ([name, value]) => (
-                                  <li>
-                                    <span class="cell-code">{name}</span>
-                                    {": "}
-                                    <span class="cell-muted">
-                                      {checkStatus(value)}
-                                    </span>
-                                    {" · "}
-                                    <span
-                                      class="status-badge"
-                                      data-variant="neutral"
-                                    >
-                                      <span
-                                        class="status-dot"
-                                        aria-hidden="true"
-                                      />
-                                      {t("source: {source}", {
-                                        source: checkSource(value)
-                                      })}
-                                    </span>
-                                  </li>
-                                )
-                              )}
-                            </ul>
-                            <pre
-                              class="cell-code"
-                              set:text={JSON.stringify(
-                                snapshot.checks,
-                                null,
-                                2
-                              )}
-                            />
-                          </details>
-                        )}
-                      </td>
-                      {mode === "latest" && (
-                        <td data-label="History">
-                          <a
-                            class="quick-link"
-                            href={linkWith({
-                              serverId: snapshot.serverId,
-                              cursor: null
-                            })}
-                          >
-                            {t("View history")}
-                          </a>
-                        </td>
                       )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                    </td>
+                    <td data-label="Captured">
+                      <span class="cell-muted">{snapshot.capturedAt}</span>
+                    </td>
+                    <td data-label="Checks">
+                      {checkEntries(snapshot.checks).length === 0 ? (
+                        <span class="cell-muted">—</span>
+                      ) : (
+                        <details>
+                          <summary>
+                            {t("{count} check(s)", {
+                              count: checkEntries(snapshot.checks).length
+                            })}
+                          </summary>
+                          <ul class="evidence-list">
+                            {checkEntries(snapshot.checks).map(
+                              ([name, value]) => (
+                                <li>
+                                  <span class="cell-code">{name}</span>
+                                  {": "}
+                                  <span class="cell-muted">
+                                    {checkStatus(value)}
+                                  </span>
+                                  {" · "}
+                                  <span
+                                    class="status-badge"
+                                    data-variant="neutral"
+                                  >
+                                    <span
+                                      class="status-dot"
+                                      aria-hidden="true"
+                                    />
+                                    {t("source: {source}", {
+                                      source: checkSource(value)
+                                    })}
+                                  </span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                          <pre
+                            class="cell-code"
+                            set:text={JSON.stringify(snapshot.checks, null, 2)}
+                          />
+                        </details>
+                      )}
+                    </td>
+                    {mode === "latest" && (
+                      <td data-label="History">
+                        <a
+                          class="quick-link"
+                          href={linkWith({
+                            serverId: snapshot.serverId,
+                            cursor: null
+                          })}
+                        >
+                          {t("View history")}
+                        </a>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {nextCursor && (
-            <div class="admin-toolbar">
-              <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-                {t("Next page")}
-                <span class="quick-link-arrow" aria-hidden="true">
-                  →
-                </span>
-              </a>
-            </div>
-          )}
-        </section>
-      )
-    }
+        {nextCursor && (
+          <div class="admin-toolbar">
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              {t("Next page")}
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )}
   </div>
 </AdminLayout>
 

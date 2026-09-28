@@ -83,7 +83,9 @@ const host = Astro.url.host;
     <p class="auth-brand-panel-headline">{headline}</p>
     <p class="auth-brand-panel-sub">{subline}</p>
     <ul class="auth-brand-panel-chips">
-      {CAPABILITIES.map((capability) => <li>{capability}</li>)}
+      {CAPABILITIES.map((capability) => (
+        <li>{capability}</li>
+      ))}
     </ul>
   </div>
 

@@ -166,407 +166,395 @@ const hasFilter = branchFilter !== undefined;
     "Legislative and executive bodies that articles are filed against. Each one has a public landing page at its own slug."
   )}
 >
-  {
-    screen.state === "denied" && (
-      <p class="state-notice" id="institutions-denied">
-        {t("You do not have permission to view the institution registry.")}
-      </p>
-    )
-  }
+  {screen.state === "denied" && (
+    <p class="state-notice" id="institutions-denied">
+      {t("You do not have permission to view the institution registry.")}
+    </p>
+  )}
 
-  {
-    loadError && (
-      <p class="state-notice" id="institutions-error">
-        {t("Could not load institutions. Please try again.")}
-      </p>
-    )
-  }
+  {loadError && (
+    <p class="state-notice" id="institutions-error">
+      {t("Could not load institutions. Please try again.")}
+    </p>
+  )}
 
   <p class="form-error" id="institution-action-error" hidden></p>
 
-  {
-    canRead && !loadError && (
-      <form
-        method="get"
-        class="admin-toolbar fade-in-up"
-        id="institution-filter-form"
-      >
-        <label for="filter-branch">{t("Branch")}</label>
-        <select id="filter-branch" name="branch">
-          <option value="" selected={branchFilter === undefined}>
-            {t("All branches")}
+  {canRead && !loadError && (
+    <form
+      method="get"
+      class="admin-toolbar fade-in-up"
+      id="institution-filter-form"
+    >
+      <label for="filter-branch">{t("Branch")}</label>
+      <select id="filter-branch" name="branch">
+        <option value="" selected={branchFilter === undefined}>
+          {t("All branches")}
+        </option>
+        {INSTITUTION_BRANCHES.map((branch) => (
+          <option value={branch} selected={branchFilter === branch}>
+            {t(branch)}
           </option>
-          {INSTITUTION_BRANCHES.map((branch) => (
-            <option value={branch} selected={branchFilter === branch}>
-              {t(branch)}
-            </option>
-          ))}
-        </select>
+        ))}
+      </select>
 
-        <label for="filter-deleted">{t("Show")}</label>
-        <select id="filter-deleted" name="deleted">
-          <option value="" selected={!showDeleted}>
-            {t("Active")}
-          </option>
-          <option value="1" selected={showDeleted}>
-            {t("Deleted")}
-          </option>
-        </select>
+      <label for="filter-deleted">{t("Show")}</label>
+      <select id="filter-deleted" name="deleted">
+        <option value="" selected={!showDeleted}>
+          {t("Active")}
+        </option>
+        <option value="1" selected={showDeleted}>
+          {t("Deleted")}
+        </option>
+      </select>
 
-        <button type="submit">{t("Apply filter")}</button>
-      </form>
-    )
-  }
+      <button type="submit">{t("Apply filter")}</button>
+    </form>
+  )}
 
-  {
-    canRead && !loadError && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="institution-list-title"
-      >
-        <h2 class="admin-section-title" id="institution-list-title">
-          {showDeleted ? t("Deleted institutions") : t("Institutions")}
-          <span class="count-pill">{institutions.length}</span>
-        </h2>
+  {canRead && !loadError && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="institution-list-title"
+    >
+      <h2 class="admin-section-title" id="institution-list-title">
+        {showDeleted ? t("Deleted institutions") : t("Institutions")}
+        <span class="count-pill">{institutions.length}</span>
+      </h2>
 
-        {/* Bounded read, and the screen says so rather than implying the
+      {/* Bounded read, and the screen says so rather than implying the
             tenant has no more. `listInstitutions` is LIMIT 200. */}
-        {institutions.length === 200 && (
-          <p class="state-notice" id="institutions-truncated">
+      {institutions.length === 200 && (
+        <p class="state-notice" id="institutions-truncated">
+          {t(
+            "Showing the first 200 institutions by name. Filter by branch to narrow the list."
+          )}
+        </p>
+      )}
+
+      <div class="data-table-scroll">
+        <table
+          class="data-table data-table--stack"
+          id="blog-institutions-table"
+        >
+          <caption class="sr-only">{t("Institutions, by name.")}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Branch")}</th>
+              <th scope="col">{t("Region code")}</th>
+              <th scope="col">{t("SEO title")}</th>
+              <th scope="col">{t("Description")}</th>
+              <th scope="col">{t("Updated")}</th>
+              {showsRowActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {institutions.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={columnCount}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ▤
+                    </span>
+                    <span class="empty-state-title">
+                      {showDeleted
+                        ? "No deleted institutions"
+                        : hasFilter
+                          ? "No institutions in this branch"
+                          : "No institutions yet"}
+                    </span>
+                    <span class="empty-state-text">
+                      {showDeleted
+                        ? "Nothing to restore."
+                        : hasFilter
+                          ? "Clear the filter above to see every institution."
+                          : "Create one below to start filing articles against a body."}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              institutions.map((entry) => (
+                <tr data-institution-row={entry.id}>
+                  <td data-label="Name">
+                    <span set:text={entry.name} />
+                    <span class="cell-muted">
+                      {" "}
+                      · <span class="cell-code">{entry.slug}</span>
+                    </span>
+                  </td>
+                  <td data-label="Branch">
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        entry.branch === "legislative" ? "info" : "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {entry.branch}
+                    </span>
+                  </td>
+                  <td data-label="Region code">
+                    {entry.regionCode ? (
+                      <span class="cell-code" set:text={entry.regionCode} />
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  <td data-label="SEO title">
+                    {entry.seoTitle ? (
+                      <span set:text={entry.seoTitle} />
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  <td data-label="Description">
+                    {entry.description ? (
+                      <span set:text={entry.description} />
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                  <td data-label="Updated">
+                    <span class="cell-muted">
+                      {formatTimestamp(entry.updatedAt)}
+                    </span>
+                  </td>
+                  {showsRowActions && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {showDeleted ? (
+                          <>
+                            {canRestore && (
+                              <button
+                                type="button"
+                                class="btn-inline institution-restore-btn"
+                                data-institution-id={entry.id}
+                                data-institution-name={entry.name}
+                              >
+                                {t("Restore")}
+                              </button>
+                            )}
+                            {canPurge && (
+                              <button
+                                type="button"
+                                class="btn-inline institution-purge-btn"
+                                data-institution-id={entry.id}
+                                data-institution-name={entry.name}
+                              >
+                                {t("Purge")}
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {canUpdate && (
+                              <a
+                                class="quick-link"
+                                href={linkWith({ edit: entry.id })}
+                              >
+                                {t("Edit")}
+                                <span
+                                  class="quick-link-arrow"
+                                  aria-hidden="true"
+                                >
+                                  →
+                                </span>
+                              </a>
+                            )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                class="btn-inline institution-delete-btn"
+                                data-institution-id={entry.id}
+                                data-institution-name={entry.name}
+                              >
+                                {t("Delete")}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {editing && canUpdate && !showDeleted && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="institution-edit-title"
+    >
+      <h2 class="admin-section-title" id="institution-edit-title">
+        {t("Edit institution")}
+      </h2>
+
+      <p class="form-error" id="institution-edit-error" hidden />
+
+      <form id="institution-edit-form" class="admin-form">
+        <input type="hidden" id="edit-institution-id" value={editing.id} />
+
+        <div class="form-row">
+          <label for="edit-name">{t("Name")}</label>
+          <input
+            id="edit-name"
+            name="name"
+            type="text"
+            required
+            value={editing.name}
+          />
+        </div>
+
+        <div class="form-row">
+          <label for="edit-slug">{t("Slug")}</label>
+          <input
+            id="edit-slug"
+            name="slug"
+            type="text"
+            required
+            value={editing.slug}
+          />
+          <p class="form-hint">
             {t(
-              "Showing the first 200 institutions by name. Filter by branch to narrow the list."
+              "Changing this changes the public landing-page URL. Record a redirect for the old one."
             )}
           </p>
-        )}
-
-        <div class="data-table-scroll">
-          <table
-            class="data-table data-table--stack"
-            id="blog-institutions-table"
-          >
-            <caption class="sr-only">{t("Institutions, by name.")}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("Name")}</th>
-                <th scope="col">{t("Branch")}</th>
-                <th scope="col">{t("Region code")}</th>
-                <th scope="col">{t("SEO title")}</th>
-                <th scope="col">{t("Description")}</th>
-                <th scope="col">{t("Updated")}</th>
-                {showsRowActions && <th scope="col">{t("Actions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {institutions.length === 0 ? (
-                <tr>
-                  <td class="data-table-empty" colspan={columnCount}>
-                    <div class="empty-state">
-                      <span class="empty-state-icon" aria-hidden="true">
-                        ▤
-                      </span>
-                      <span class="empty-state-title">
-                        {showDeleted
-                          ? "No deleted institutions"
-                          : hasFilter
-                            ? "No institutions in this branch"
-                            : "No institutions yet"}
-                      </span>
-                      <span class="empty-state-text">
-                        {showDeleted
-                          ? "Nothing to restore."
-                          : hasFilter
-                            ? "Clear the filter above to see every institution."
-                            : "Create one below to start filing articles against a body."}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                institutions.map((entry) => (
-                  <tr data-institution-row={entry.id}>
-                    <td data-label="Name">
-                      <span set:text={entry.name} />
-                      <span class="cell-muted">
-                        {" "}
-                        · <span class="cell-code">{entry.slug}</span>
-                      </span>
-                    </td>
-                    <td data-label="Branch">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          entry.branch === "legislative" ? "info" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {entry.branch}
-                      </span>
-                    </td>
-                    <td data-label="Region code">
-                      {entry.regionCode ? (
-                        <span class="cell-code" set:text={entry.regionCode} />
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="SEO title">
-                      {entry.seoTitle ? (
-                        <span set:text={entry.seoTitle} />
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="Description">
-                      {entry.description ? (
-                        <span set:text={entry.description} />
-                      ) : (
-                        <span class="cell-muted">—</span>
-                      )}
-                    </td>
-                    <td data-label="Updated">
-                      <span class="cell-muted">
-                        {formatTimestamp(entry.updatedAt)}
-                      </span>
-                    </td>
-                    {showsRowActions && (
-                      <td data-label="Actions">
-                        <div class="row-actions">
-                          {showDeleted ? (
-                            <>
-                              {canRestore && (
-                                <button
-                                  type="button"
-                                  class="btn-inline institution-restore-btn"
-                                  data-institution-id={entry.id}
-                                  data-institution-name={entry.name}
-                                >
-                                  {t("Restore")}
-                                </button>
-                              )}
-                              {canPurge && (
-                                <button
-                                  type="button"
-                                  class="btn-inline institution-purge-btn"
-                                  data-institution-id={entry.id}
-                                  data-institution-name={entry.name}
-                                >
-                                  {t("Purge")}
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {canUpdate && (
-                                <a
-                                  class="quick-link"
-                                  href={linkWith({ edit: entry.id })}
-                                >
-                                  {t("Edit")}
-                                  <span
-                                    class="quick-link-arrow"
-                                    aria-hidden="true"
-                                  >
-                                    →
-                                  </span>
-                                </a>
-                              )}
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  class="btn-inline institution-delete-btn"
-                                  data-institution-id={entry.id}
-                                  data-institution-name={entry.name}
-                                >
-                                  {t("Delete")}
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
         </div>
-      </section>
-    )
-  }
 
-  {
-    editing && canUpdate && !showDeleted && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="institution-edit-title"
-      >
-        <h2 class="admin-section-title" id="institution-edit-title">
-          {t("Edit institution")}
-        </h2>
+        <div class="form-row">
+          <label for="edit-branch">{t("Branch")}</label>
+          <select id="edit-branch" name="branch" required>
+            {INSTITUTION_BRANCHES.map((branch) => (
+              <option value={branch} selected={editing.branch === branch}>
+                {t(branch)}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <p class="form-error" id="institution-edit-error" hidden />
+        <div class="form-row">
+          <label for="edit-region-code">{t("Region code")}</label>
+          <input
+            id="edit-region-code"
+            name="regionCode"
+            type="text"
+            value={editing.regionCode ?? ""}
+          />
+          <p class="form-hint">
+            {t(
+              "Dotted code from the national region master, e.g. 62 or 62.71. Leave blank if the body is not tied to one region."
+            )}
+          </p>
+        </div>
 
-        <form id="institution-edit-form" class="admin-form">
-          <input type="hidden" id="edit-institution-id" value={editing.id} />
+        <div class="form-row">
+          <label for="edit-description">{t("Description")}</label>
+          <input
+            id="edit-description"
+            name="description"
+            type="text"
+            value={editing.description ?? ""}
+          />
+        </div>
 
-          <div class="form-row">
-            <label for="edit-name">{t("Name")}</label>
-            <input
-              id="edit-name"
-              name="name"
-              type="text"
-              required
-              value={editing.name}
-            />
-          </div>
+        <div class="form-row">
+          <label for="edit-seo-title">{t("SEO title")}</label>
+          <input
+            id="edit-seo-title"
+            name="seoTitle"
+            type="text"
+            value={editing.seoTitle ?? ""}
+          />
+        </div>
 
-          <div class="form-row">
-            <label for="edit-slug">{t("Slug")}</label>
-            <input
-              id="edit-slug"
-              name="slug"
-              type="text"
-              required
-              value={editing.slug}
-            />
-            <p class="form-hint">
-              {t(
-                "Changing this changes the public landing-page URL. Record a redirect for the old one."
-              )}
-            </p>
-          </div>
+        <div class="form-row">
+          <label for="edit-seo-description">{t("SEO description")}</label>
+          <input
+            id="edit-seo-description"
+            name="seoDescription"
+            type="text"
+            value={editing.seoDescription ?? ""}
+          />
+        </div>
 
-          <div class="form-row">
-            <label for="edit-branch">{t("Branch")}</label>
-            <select id="edit-branch" name="branch" required>
-              {INSTITUTION_BRANCHES.map((branch) => (
-                <option value={branch} selected={editing.branch === branch}>
-                  {t(branch)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div class="form-actions">
+          <button type="submit">{t("Save institution")}</button>
+          <a class="btn-inline" href={linkWith({ edit: null })}>
+            {t("Cancel")}
+          </a>
+        </div>
+      </form>
+    </section>
+  )}
 
-          <div class="form-row">
-            <label for="edit-region-code">{t("Region code")}</label>
-            <input
-              id="edit-region-code"
-              name="regionCode"
-              type="text"
-              value={editing.regionCode ?? ""}
-            />
-            <p class="form-hint">
-              {t(
-                "Dotted code from the national region master, e.g. 62 or 62.71. Leave blank if the body is not tied to one region."
-              )}
-            </p>
-          </div>
+  {canCreate && !showDeleted && (
+    <section
+      class="admin-section fade-in-up"
+      aria-labelledby="institution-create-title"
+    >
+      <h2 class="admin-section-title" id="institution-create-title">
+        {t("Add institution")}
+      </h2>
 
-          <div class="form-row">
-            <label for="edit-description">{t("Description")}</label>
-            <input
-              id="edit-description"
-              name="description"
-              type="text"
-              value={editing.description ?? ""}
-            />
-          </div>
+      <p class="form-error" id="institution-create-error" hidden />
 
-          <div class="form-row">
-            <label for="edit-seo-title">{t("SEO title")}</label>
-            <input
-              id="edit-seo-title"
-              name="seoTitle"
-              type="text"
-              value={editing.seoTitle ?? ""}
-            />
-          </div>
+      <form id="institution-create-form" class="admin-form">
+        <div class="form-row">
+          <label for="create-name">{t("Name")}</label>
+          <input id="create-name" name="name" type="text" required />
+        </div>
 
-          <div class="form-row">
-            <label for="edit-seo-description">{t("SEO description")}</label>
-            <input
-              id="edit-seo-description"
-              name="seoDescription"
-              type="text"
-              value={editing.seoDescription ?? ""}
-            />
-          </div>
+        <div class="form-row">
+          <label for="create-slug">{t("Slug")}</label>
+          <input id="create-slug" name="slug" type="text" required />
+        </div>
 
-          <div class="form-actions">
-            <button type="submit">{t("Save institution")}</button>
-            <a class="btn-inline" href={linkWith({ edit: null })}>
-              {t("Cancel")}
-            </a>
-          </div>
-        </form>
-      </section>
-    )
-  }
+        <div class="form-row">
+          <label for="create-branch">{t("Branch")}</label>
+          <select id="create-branch" name="branch" required>
+            {INSTITUTION_BRANCHES.map((branch) => (
+              <option value={branch}>{t(branch)}</option>
+            ))}
+          </select>
+        </div>
 
-  {
-    canCreate && !showDeleted && (
-      <section
-        class="admin-section fade-in-up"
-        aria-labelledby="institution-create-title"
-      >
-        <h2 class="admin-section-title" id="institution-create-title">
-          {t("Add institution")}
-        </h2>
+        <div class="form-row">
+          <label for="create-region-code">{t("Region code")}</label>
+          <input id="create-region-code" name="regionCode" type="text" />
+        </div>
 
-        <p class="form-error" id="institution-create-error" hidden />
+        <div class="form-row">
+          <label for="create-description">{t("Description")}</label>
+          <input id="create-description" name="description" type="text" />
+        </div>
 
-        <form id="institution-create-form" class="admin-form">
-          <div class="form-row">
-            <label for="create-name">{t("Name")}</label>
-            <input id="create-name" name="name" type="text" required />
-          </div>
+        <div class="form-row">
+          <label for="create-seo-title">{t("SEO title")}</label>
+          <input id="create-seo-title" name="seoTitle" type="text" />
+        </div>
 
-          <div class="form-row">
-            <label for="create-slug">{t("Slug")}</label>
-            <input id="create-slug" name="slug" type="text" required />
-          </div>
+        <div class="form-row">
+          <label for="create-seo-description">{t("SEO description")}</label>
+          <input
+            id="create-seo-description"
+            name="seoDescription"
+            type="text"
+          />
+        </div>
 
-          <div class="form-row">
-            <label for="create-branch">{t("Branch")}</label>
-            <select id="create-branch" name="branch" required>
-              {INSTITUTION_BRANCHES.map((branch) => (
-                <option value={branch}>{t(branch)}</option>
-              ))}
-            </select>
-          </div>
-
-          <div class="form-row">
-            <label for="create-region-code">{t("Region code")}</label>
-            <input id="create-region-code" name="regionCode" type="text" />
-          </div>
-
-          <div class="form-row">
-            <label for="create-description">{t("Description")}</label>
-            <input id="create-description" name="description" type="text" />
-          </div>
-
-          <div class="form-row">
-            <label for="create-seo-title">{t("SEO title")}</label>
-            <input id="create-seo-title" name="seoTitle" type="text" />
-          </div>
-
-          <div class="form-row">
-            <label for="create-seo-description">{t("SEO description")}</label>
-            <input
-              id="create-seo-description"
-              name="seoDescription"
-              type="text"
-            />
-          </div>
-
-          <div class="form-actions">
-            <button type="submit">{t("Create institution")}</button>
-          </div>
-        </form>
-      </section>
-    )
-  }
+        <div class="form-actions">
+          <button type="submit">{t("Create institution")}</button>
+        </div>
+      </form>
+    </section>
+  )}
 </AdminLayout>
 
 <script>

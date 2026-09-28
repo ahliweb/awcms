@@ -93,7 +93,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         <div class="auth-card">
           <div class="auth-head">
             <div class="auth-brand">
-              <span class="auth-mark" aria-hidden="true">A</span>
+              <span class="auth-mark" aria-hidden="true">
+                A
+              </span>
               <span class="auth-wordmark">AWCMS</span>
             </div>
             <h1 class="auth-title">Sign in</h1>
@@ -105,61 +107,55 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
           <form id="login-form" class="auth-form" novalidate>
             <p id="login-error" class="auth-error" role="alert" hidden></p>
 
-            {
-              singleTenant && (
-                <div class="auth-tenant-context">
-                  <span class="auth-tenant-context-label">Signing in to</span>
-                  <span class="auth-tenant-context-name">
-                    {singleTenant.name}
-                  </span>
-                  <input
+            {singleTenant && (
+              <div class="auth-tenant-context">
+                <span class="auth-tenant-context-label">Signing in to</span>
+                <span class="auth-tenant-context-name">
+                  {singleTenant.name}
+                </span>
+                <input
+                  id="tenant-id"
+                  name="tenantId"
+                  type="hidden"
+                  value={singleTenant.id}
+                />
+              </div>
+            )}
+
+            {tenantPickerMode === "select" && (
+              <div class="auth-field">
+                <label for="tenant-id">Organization</label>
+                <div class="auth-select">
+                  <select
                     id="tenant-id"
                     name="tenantId"
-                    type="hidden"
-                    value={singleTenant.id}
-                  />
-                </div>
-              )
-            }
-
-            {
-              tenantPickerMode === "select" && (
-                <div class="auth-field">
-                  <label for="tenant-id">Organization</label>
-                  <div class="auth-select">
-                    <select
-                      id="tenant-id"
-                      name="tenantId"
-                      required
-                      autocomplete="organization"
-                    >
-                      <option value="" disabled selected>
-                        Choose your organization
-                      </option>
-                      {tenantOptions.map((tenant) => (
-                        <option value={tenant.id}>{tenant.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )
-            }
-
-            {
-              tenantPickerMode === "manual" && (
-                <div class="auth-field">
-                  <label for="tenant-id">Tenant ID</label>
-                  <input
-                    id="tenant-id"
-                    name="tenantId"
-                    type="text"
                     required
-                    autocomplete="off"
-                    spellcheck={false}
-                  />
+                    autocomplete="organization"
+                  >
+                    <option value="" disabled selected>
+                      Choose your organization
+                    </option>
+                    {tenantOptions.map((tenant) => (
+                      <option value={tenant.id}>{tenant.name}</option>
+                    ))}
+                  </select>
                 </div>
-              )
-            }
+              </div>
+            )}
+
+            {tenantPickerMode === "manual" && (
+              <div class="auth-field">
+                <label for="tenant-id">Tenant ID</label>
+                <input
+                  id="tenant-id"
+                  name="tenantId"
+                  type="text"
+                  required
+                  autocomplete="off"
+                  spellcheck={false}
+                />
+              </div>
+            )}
 
             <div class="auth-field">
               <label for="login-identifier">Login identifier</label>
@@ -195,15 +191,13 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
               </div>
             </div>
 
-            {
-              turnstileActive && turnstileSiteKey && (
-                <div
-                  class="cf-turnstile auth-turnstile"
-                  data-sitekey={turnstileSiteKey}
-                  data-action={LOGIN_TURNSTILE_ACTION}
-                />
-              )
-            }
+            {turnstileActive && turnstileSiteKey && (
+              <div
+                class="cf-turnstile auth-turnstile"
+                data-sitekey={turnstileSiteKey}
+                data-action={LOGIN_TURNSTILE_ACTION}
+              />
+            )}
 
             <button type="submit" id="login-submit" class="auth-submit">
               Sign in
@@ -219,16 +213,14 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       </div>
     </main>
 
-    {
-      turnstileActive && turnstileSiteKey && (
-        <script
-          is:inline
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-          async
-          defer
-        />
-      )
-    }
+    {turnstileActive && turnstileSiteKey && (
+      <script
+        is:inline
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        async
+        defer
+      />
+    )}
 
     <script>
       // The import is deliberate — it forces Astro to bundle this script to an
