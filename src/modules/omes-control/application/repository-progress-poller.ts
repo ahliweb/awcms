@@ -184,7 +184,8 @@ export type PollOneRepositoryOutcome =
 
 function classifyHttpFailure(
   status: number,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  now: Date
 ): { errorClass: RepositoryProgressErrorClass; retryAfterSeconds?: number } {
   if (status === 404) return { errorClass: "not_found" };
 
@@ -201,7 +202,7 @@ function classifyHttpFailure(
       const retryAfterSeconds = retryAfterHeader
         ? Number(retryAfterHeader)
         : resetHeader
-          ? Math.max(0, Number(resetHeader) - Math.floor(Date.now() / 1000))
+          ? Math.max(0, Number(resetHeader) - Math.floor(now.getTime() / 1000))
           : undefined;
       return {
         errorClass: "rate_limited",
@@ -232,6 +233,7 @@ async function fetchAllPages<TRaw, TMapped>(params: {
   previousItems: TMapped[];
   mapItem: (raw: TRaw) => TMapped | null;
   maxItems: number;
+  now: Date;
 }): Promise<
   | { ok: true; items: TMapped[]; etag: string | null; notModified: boolean }
   | {
@@ -259,7 +261,7 @@ async function fetchAllPages<TRaw, TMapped>(params: {
     if (result.status !== 200) {
       return {
         ok: false,
-        ...classifyHttpFailure(result.status, result.headers)
+        ...classifyHttpFailure(result.status, result.headers, params.now)
       };
     }
 
@@ -319,7 +321,8 @@ export async function pollOneRepository(
     previousEtag: input.previousMilestonesEtag,
     previousItems: input.previousMilestones,
     mapItem: mapGithubMilestone,
-    maxItems: REPOSITORY_PROGRESS_MAX_MILESTONES
+    maxItems: REPOSITORY_PROGRESS_MAX_MILESTONES,
+    now: input.now
   });
 
   if (!milestonesResult.ok) {
@@ -342,7 +345,8 @@ export async function pollOneRepository(
     previousEtag: input.previousIssuesEtag,
     previousItems: input.previousIssues,
     mapItem: (raw) => (isPullRequest(raw) ? null : mapGithubIssue(raw)),
-    maxItems: REPOSITORY_PROGRESS_MAX_ISSUES
+    maxItems: REPOSITORY_PROGRESS_MAX_ISSUES,
+    now: input.now
   });
 
   if (!issuesResult.ok) {

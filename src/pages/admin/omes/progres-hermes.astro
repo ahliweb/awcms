@@ -115,6 +115,27 @@ const progress: RepositoryProgressScreenState =
 const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 const currentConfig =
   screen.state === "allowed" ? screen.data.currentConfig : null;
+
+// The issues table stores only `milestoneNumber` (GitHub's own identifier,
+// stable across a milestone rename) — never the title, which can change.
+// Resolve it to the CURRENT title via this poll's own milestones list rather
+// than showing the bare number, falling back to "#<n>" when the milestone
+// isn't in that list (e.g. it was closed/deleted after this issue was
+// observed with it set).
+const milestoneByNumber = new Map(
+  (progress.state === "configured" ? progress.milestones : []).map(
+    (milestone) => [milestone.number, milestone]
+  )
+);
+
+function milestoneCellFor(
+  milestoneNumber: number | null
+): { label: string; href: string | null } | null {
+  if (milestoneNumber === null) return null;
+  const milestone = milestoneByNumber.get(milestoneNumber);
+  if (!milestone) return { label: `#${milestoneNumber}`, href: null };
+  return { label: milestone.title, href: milestone.htmlUrl || null };
+}
 ---
 
 <AdminLayout
@@ -199,7 +220,7 @@ const currentConfig =
             <button
               type="button"
               id="repo-progress-config-clear"
-              class="button-secondary"
+              class="btn btn-danger"
               disabled={!currentConfig}
             >
               {t("Clear configuration")}
@@ -399,9 +420,23 @@ const currentConfig =
                         </span>
                       </td>
                       <td data-label={t("Milestone")}>
-                        <span class="cell-muted">
-                          {issue.milestoneNumber ?? "—"}
-                        </span>
+                        {(() => {
+                          const cell = milestoneCellFor(issue.milestoneNumber);
+                          if (!cell) {
+                            return <span class="cell-muted">—</span>;
+                          }
+                          return cell.href ? (
+                            <a
+                              href={cell.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {cell.label}
+                            </a>
+                          ) : (
+                            <span class="cell-muted">{cell.label}</span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
