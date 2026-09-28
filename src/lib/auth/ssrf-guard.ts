@@ -508,8 +508,22 @@ export async function ssrfSafeFetch(
 
       // Manual redirect handling — re-validate the Location target through the
       // full guard so a 30x to an internal address is blocked exactly like a
-      // direct request to one.
-      if (response.status >= 300 && response.status < 400) {
+      // direct request to one. Only the statuses that are actually redirects
+      // requiring a Location header are followed here: 301/302/303/307/308.
+      // Every other 3xx (notably 304 Not Modified, which legitimately has no
+      // Location and is not a redirect at all; 300 Multiple Choices, which
+      // lets the client choose rather than mandating a single Location; and
+      // 305/306, which are deprecated/unused and were never meant to be
+      // auto-followed) falls through below and is returned to the caller as
+      // an ordinary completed response.
+      const isFollowableRedirect =
+        response.status === 301 ||
+        response.status === 302 ||
+        response.status === 303 ||
+        response.status === 307 ||
+        response.status === 308;
+
+      if (isFollowableRedirect) {
         const location = response.headers.get("location");
 
         if (!location) {
