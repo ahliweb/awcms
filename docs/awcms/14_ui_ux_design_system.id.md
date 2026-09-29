@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:50bde05193ea802f948b23ee13c5b3878b33b9a6672439f706352b88a71bebba -->
+<!-- i18n-source-hash: sha256:d18160b89d0d7023b3ddc462aba4cf577ba00fa08cc4eea4042791660069dc65 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 

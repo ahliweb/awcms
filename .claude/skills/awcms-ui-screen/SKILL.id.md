@@ -5,7 +5,7 @@ description: Implementasikan layar/komponen UI AWCMS sesuai design system. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:ea352512879bfb1c31035f4aa31f6dcf723598a001901dbb6c4d5d41960178b5 -->
+<!-- i18n-source-hash: sha256:3b6393262227c315e07dd759e9f15ee08077f71159018340e8bca448ad2aec55 -->
 
 # AWCMS — UI Screen / Component
 

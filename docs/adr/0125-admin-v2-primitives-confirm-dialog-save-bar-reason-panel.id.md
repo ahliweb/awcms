@@ -1,5 +1,7 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0125-admin-v2-primitives-confirm-dialog-save-bar-reason-panel.md)
 
+<!-- i18n-source-hash: sha256:5e2e35414e01b65b720fa5f62da17bbd7fb8c0a75052697ae4d39eea9c474693 -->
+
 # ADR-0125 — tiga primitif admin v2: dialog konfirmasi, save bar pengaturan, panel alasan
 
 - **Status:** Diterima
