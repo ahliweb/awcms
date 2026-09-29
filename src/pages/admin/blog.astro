@@ -1581,7 +1581,7 @@ const selectedPost = selectedPostId
       if (!postId) return;
 
       const confirmText = options.confirm?.(button) ?? null;
-      if (confirmText !== null && !await confirmAction(confirmText)) return;
+      if (confirmText !== null && !(await confirmAction(confirmText))) return;
 
       let body: unknown;
       if (options.body) {
@@ -1683,9 +1683,9 @@ const selectedPost = selectedPostId
     const title = button.dataset.postTitle ?? "this post";
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Delete "${title}"? It is soft-deleted — recoverable until it is purged.`
-      )
+      ))
     ) {
       return;
     }
@@ -1709,9 +1709,9 @@ const selectedPost = selectedPostId
     const number = button.dataset.revisionNumber ?? "?";
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Restore revision ${number}? The post's current content is replaced by this revision's, and the replacement is itself recorded as a new revision.`
-      )
+      ))
     ) {
       return;
     }

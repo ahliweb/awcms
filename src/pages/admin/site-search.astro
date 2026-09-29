@@ -594,9 +594,9 @@ const showIndexActions = canReconcile || canRebuild;
     // Destructive: a rebuild empties the index before refilling it, so the
     // public search surface is degraded until it finishes.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Rebuild the whole search index? Public search results will be incomplete until it finishes."
-      )
+      ))
     ) {
       return;
     }

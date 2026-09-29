@@ -96,21 +96,17 @@ const hasStatusSlot = Astro.slots.has("status");
   data-save-bar
   data-save-bar-form={formId}
 >
-  {
-    hasStatusSlot && (
-      <div class="save-bar-status">
-        <slot name="status" />
-      </div>
-    )
-  }
+  {hasStatusSlot && (
+    <div class="save-bar-status">
+      <slot name="status" />
+    </div>
+  )}
   <div class="save-bar-actions">
-    {
-      resetLabel !== undefined && (
-        <button type="reset" form={formId} class="save-bar-reset">
-          {resetLabel}
-        </button>
-      )
-    }
+    {resetLabel !== undefined && (
+      <button type="reset" form={formId} class="save-bar-reset">
+        {resetLabel}
+      </button>
+    )}
     <button type="submit" form={formId} class="save-bar-save">
       {saveLabel}
     </button>

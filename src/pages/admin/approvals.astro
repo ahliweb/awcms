@@ -930,9 +930,9 @@ const selectedTask = selectedInstanceId
     // An administrative override decides on someone else's behalf and is
     // recorded as such. Confirm before asking for the reason.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Force-${decision} this task? This overrides the assigned deciders and is recorded as an administrative override.`
-      )
+      ))
     ) {
       return;
     }
@@ -960,9 +960,9 @@ const selectedTask = selectedInstanceId
     if (!instanceId) return;
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Cancel this workflow instance? Its pending tasks are cancelled with it and it cannot be resumed."
-      )
+      ))
     ) {
       return;
     }
@@ -990,9 +990,9 @@ const selectedTask = selectedInstanceId
     if (!id) return;
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Revoke this delegation? The delegate stops being eligible immediately."
-      )
+      ))
     ) {
       return;
     }

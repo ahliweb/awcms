@@ -925,9 +925,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     // Destructive in the sense that matters: it changes what every visitor sees,
     // and the version it creates can never be edited afterwards.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Publish the saved draft? It becomes the live look immediately, and the published version is immutable."
-      )
+      ))
     ) {
       return;
     }
@@ -942,9 +942,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
 
   onAction("#theming-retire", async (button) => {
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Retire the live theme? The site falls back to the default theme until you publish or roll back."
-      )
+      ))
     ) {
       return;
     }
@@ -964,9 +964,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
       ? `version ${button.dataset.versionNumber}`
       : "this version";
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Roll the live theme back to ${label}? It becomes the live look immediately.`
-      )
+      ))
     ) {
       return;
     }

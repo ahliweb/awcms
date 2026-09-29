@@ -646,10 +646,10 @@ function formatWindow(placement: AdPlacementView): string {
 
     const name = button.dataset.adName ?? "this placement";
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Delete "${name}"? The slot goes back to showing its availability ` +
           `notice, and the image itself stays in the media library.`
-      )
+      ))
     ) {
       return;
     }

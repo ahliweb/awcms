@@ -496,9 +496,9 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
     if (!backupId) return;
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Restore server state from backup ${backupCode}? This is always destructive and requires an approved workflow decision before it can dispatch.`
-      )
+      ))
     ) {
       return;
     }

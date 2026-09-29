@@ -25,7 +25,9 @@ type Confirmer = (message: string) => Promise<boolean>;
  * refusing every confirmation is the safe failure mode for a gate that exists
  * to stop a destructive action: it never lets one through unconfirmed.
  */
-export function initConfirmDialog(dialogId: string = CONFIRM_DIALOG_ID): Confirmer {
+export function initConfirmDialog(
+  dialogId: string = CONFIRM_DIALOG_ID
+): Confirmer {
   const dialog = document.getElementById(dialogId);
   const message = document.getElementById(`${dialogId}-message`);
   const confirmButton = document.getElementById(`${dialogId}-confirm`);

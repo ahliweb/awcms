@@ -588,10 +588,10 @@ const hasFilter = branchFilter !== undefined;
     // soft and the article links are kept, so promising less would push
     // operators into rebuilding a registry they never actually lost.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Delete "${name}"? Its articles keep their link to it, and you can ` +
           `restore it from the Deleted view.`
-      )
+      ))
     ) {
       return;
     }
@@ -641,11 +641,11 @@ const hasFilter = branchFilter !== undefined;
     // says only "permanently delete" leaves an operator to discover afterwards
     // that the archive's classification went with it.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Permanently purge "${name}"? This cannot be undone: every article ` +
           `link to it is deleted too, and those articles lose this ` +
           `classification. Restore it instead if you are unsure.`
-      )
+      ))
     ) {
       return;
     }

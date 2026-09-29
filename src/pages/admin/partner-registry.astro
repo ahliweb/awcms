@@ -322,9 +322,9 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
       if (!partnerTenantId) return;
 
       if (
-        !await confirmAction(
+        !(await confirmAction(
           confirmFor(button.dataset.partnerCode ?? "this partner")
-        )
+        ))
       )
         return;
 

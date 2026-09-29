@@ -1316,9 +1316,9 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     // Platform-wide and immediate: every tenant's address forms change the
     // moment this commits.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Serve ${datasetCode} to every tenant? The current version is superseded immediately.`
-      )
+      ))
     ) {
       return;
     }
@@ -1332,9 +1332,9 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
   onAction("#idn-regions-rollback", async (button) => {
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Roll back to the previously served version? This affects every tenant."
-      )
+      ))
     ) {
       return;
     }

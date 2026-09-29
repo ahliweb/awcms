@@ -210,10 +210,9 @@ const canToggle = canEnable || canDisable;
                           <button
                             type="button"
                             class="module-toggle"
-                            data-reason-title={t(
-                              'Disable module "{name}"?',
-                              { name: module.name }
-                            )}
+                            data-reason-title={t('Disable module "{name}"?', {
+                              name: module.name
+                            })}
                             data-reason-description={t(
                               "This feature stops working for every user and visitor of this tenant until it is re-enabled. Its data is kept, not deleted."
                             )}

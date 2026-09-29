@@ -18,9 +18,7 @@ describe("resolveStatusText", () => {
   });
 
   test("returns the clean label when not dirty and one was given", () => {
-    expect(resolveStatusText(false, "Unsaved changes", "Saved")).toBe(
-      "Saved"
-    );
+    expect(resolveStatusText(false, "Unsaved changes", "Saved")).toBe("Saved");
   });
 
   test("returns null when the relevant label was not supplied", () => {

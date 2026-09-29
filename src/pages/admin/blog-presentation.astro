@@ -907,10 +907,10 @@ const editingWidget =
 
     const name = button.dataset.entityName ?? "this item";
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Delete "${name}"? This cannot be undone from the admin — there is ` +
           `no restore for blog presentation records.`
-      )
+      ))
     ) {
       return;
     }

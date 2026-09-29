@@ -607,8 +607,7 @@ const columnCount = canActOnAny ? 9 : 8;
                                 type="button"
                                 class="btn-inline media-delete-btn"
                                 data-reason-title={t("Delete {label}?", {
-                                  label:
-                                    item.originalFilename ?? item.objectKey
+                                  label: item.originalFilename ?? item.objectKey
                                 })}
                                 data-reason-description={t(
                                   "Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this."
@@ -616,7 +615,9 @@ const columnCount = canActOnAny ? 9 : 8;
                                 data-reason-action={`/api/v1/media/objects/${item.id}`}
                                 data-reason-method="DELETE"
                                 data-reason-label={t("Delete")}
-                                data-reason-max-length={MAX_DELETE_REASON_LENGTH}
+                                data-reason-max-length={
+                                  MAX_DELETE_REASON_LENGTH
+                                }
                                 data-reason-idempotent
                                 data-reason-danger
                               >
@@ -969,9 +970,9 @@ const columnCount = canActOnAny ? 9 : 8;
 
     // The one action on this screen that cannot be undone.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Purge ${label}? This removes its registry row permanently and cannot be undone. The stored file is removed later by the reconciliation job.`
-      )
+      ))
     ) {
       return;
     }

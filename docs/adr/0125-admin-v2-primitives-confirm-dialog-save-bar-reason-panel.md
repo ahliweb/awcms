@@ -78,7 +78,7 @@ new colours.
    JSON itself) and `data-reason-form` (writes the reason into a hidden field
    on an existing form and calls `requestSubmit()`). An
    `data-reason-idempotent` opt-in sends a fresh `Idempotency-Key` per panel
-   *open* (not per click — a failed retry inside the same open must reuse the
+   _open_ (not per click — a failed retry inside the same open must reuse the
    key). Added one field beyond LK's version: `data-reason-max-length`, which
    sets the textarea's native `maxlength` — needed because `/admin/media`'s
    delete reason has a server-enforced upper bound LK's two original

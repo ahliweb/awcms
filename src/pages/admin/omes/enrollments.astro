@@ -511,7 +511,7 @@ function linkWith(overrides: Record<string, string | null>): string {
     const serverRowId = button.dataset.serverId;
     const workerId = button.dataset.workerId;
     if (!serverRowId || !workerId) return;
-    if (!await confirmAction(`Revoke ${workerId}? Cannot be undone.`)) return;
+    if (!(await confirmAction(`Revoke ${workerId}? Cannot be undone.`))) return;
 
     await mutateAndReload(
       button,

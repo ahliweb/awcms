@@ -277,9 +277,7 @@ export function initReasonPanel(
     // Drawn HERE, once per open — not in the submit handler, which a retry
     // after a failed attempt re-enters without a fresh open.
     activeIdempotencyKey =
-      config.mode === "fetch" && config.idempotent
-        ? crypto.randomUUID()
-        : null;
+      config.mode === "fetch" && config.idempotent ? crypto.randomUUID() : null;
     elements!.title.textContent = config.title;
     // `removeAttribute` rather than `maxLength = -1`: an unset native
     // `maxlength` must be genuinely ABSENT, not a sentinel the browser could

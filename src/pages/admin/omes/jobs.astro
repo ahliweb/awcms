@@ -346,9 +346,9 @@ const columns = 7 + (showActions ? 1 : 0);
     if (!jobId) return;
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Approve this failed job for retry? It will be requeued for the OMES worker."
-      )
+      ))
     ) {
       return;
     }
@@ -369,7 +369,9 @@ const columns = 7 + (showActions ? 1 : 0);
     const jobId = button.dataset.jobId;
     if (!jobId) return;
 
-    if (!await confirmAction("Cancel this queued job? This cannot be undone.")) {
+    if (
+      !(await confirmAction("Cancel this queued job? This cannot be undone."))
+    ) {
       return;
     }
 

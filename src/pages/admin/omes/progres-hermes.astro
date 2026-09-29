@@ -476,9 +476,9 @@ function milestoneCellFor(
 
     clearButton?.addEventListener("click", async () => {
       if (
-        !await confirmAction(
+        !(await confirmAction(
           "Clear the configured repository? The current projection will be removed too."
-        )
+        ))
       ) {
         return;
       }

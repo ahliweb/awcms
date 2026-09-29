@@ -854,9 +854,9 @@ const hasTenantWideHold = holds.some(
     // Releasing ends the protection a hold exists to provide, and the action is
     // audited `critical` — confirm before it goes out.
     if (
-      !await confirmAction(
+      !(await confirmAction(
         "Release this legal hold? Ordinary retention and purge resume for what it covered."
-      )
+      ))
     ) {
       return;
     }

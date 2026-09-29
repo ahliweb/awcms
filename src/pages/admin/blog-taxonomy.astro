@@ -533,10 +533,10 @@ const hasFilter = typeFilter !== undefined;
     // that promised "recoverable" is exactly what made #351 hard to spot.
     const name = button.dataset.termName ?? "this term";
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Delete "${name}"? This cannot be undone from the admin — there is ` +
           `no restore for taxonomy terms. Posts keep their other terms.`
-      )
+      ))
     ) {
       return;
     }

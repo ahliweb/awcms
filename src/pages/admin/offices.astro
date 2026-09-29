@@ -428,7 +428,8 @@ const showActions = canUpdate || canDelete;
     const id = button.dataset.officeId;
     if (!id) return;
     const code = button.dataset.officeCode ?? "this office";
-    if (!await confirmAction(`Delete ${code}? It can be restored later.`)) return;
+    if (!(await confirmAction(`Delete ${code}? It can be restored later.`)))
+      return;
 
     await mutateAndReload(
       button,

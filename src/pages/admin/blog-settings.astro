@@ -264,7 +264,6 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 {settings.seoDefaultDescription ?? ""}
               </textarea>
           </label>
-
         </fieldset>
       </form>
 
@@ -386,9 +385,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
       // above `onSubmit`), so — unlike a page that reloads on success and
       // gets a clean form for free — the save bar's dirty indicator has to be
       // cleared explicitly here once the save actually lands.
-      document
-        .querySelector(SAVE_BAR_SELECTOR)
-        ?.classList.remove(DIRTY_CLASS);
+      document.querySelector(SAVE_BAR_SELECTOR)?.classList.remove(DIRTY_CLASS);
     } finally {
       unlock();
     }

@@ -81,7 +81,7 @@ LK, tanpa warna baru.
    mengirim `{ [field]: reason }` sebagai JSON sendiri) dan
    `data-reason-form` (menulis alasan ke field tersembunyi pada form yang
    ada dan memanggil `requestSubmit()`). Opsi `data-reason-idempotent`
-   mengirim `Idempotency-Key` baru per *pembukaan* panel (bukan per klik —
+   mengirim `Idempotency-Key` baru per _pembukaan_ panel (bukan per klik —
    percobaan ulang yang gagal dalam pembukaan yang sama harus memakai ulang
    kunci yang sama). Ditambahkan satu field di luar versi LK:
    `data-reason-max-length`, yang mengatur `maxlength` native textarea —

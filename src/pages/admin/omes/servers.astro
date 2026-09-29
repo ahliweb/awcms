@@ -513,9 +513,9 @@ const columns = 6 + (canDelete ? 1 : 0);
     const hostname = button.dataset.hostname ?? "this server";
 
     if (
-      !await confirmAction(
+      !(await confirmAction(
         `Decommission ${hostname}? It stops appearing as an active fleet member. Enrollment and audit history are kept.`
-      )
+      ))
     ) {
       return;
     }

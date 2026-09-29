@@ -142,14 +142,18 @@ const {
     </button>
   </div>
   <form method="dialog" class="reason-panel-body" data-reason-panel-form>
-    <p class="reason-panel-description" data-reason-panel-description hidden>
-    </p>
+    <p
+      class="reason-panel-description"
+      data-reason-panel-description
+      hidden
+    ></p>
     <div class="reason-panel-field">
       <div class="reason-panel-label">
         <span>
           {reasonLabel}
           <span class="reason-panel-required-marker" aria-hidden="true">
-            {" "}*
+            {" "}
+            *
           </span>
         </span>
         <span class="reason-panel-counter" data-reason-panel-counter></span>
@@ -160,14 +164,17 @@ const {
         rows="4"
         required
         aria-required="true"
-        data-reason-panel-textarea></textarea>
-      {
-        reasonHint !== undefined && (
-          <p class="reason-panel-hint">{reasonHint}</p>
-        )
-      }
-      <p class="reason-panel-error" role="alert" data-reason-panel-error hidden>
-      </p>
+        data-reason-panel-textarea
+      ></textarea>
+      {reasonHint !== undefined && (
+        <p class="reason-panel-hint">{reasonHint}</p>
+      )}
+      <p
+        class="reason-panel-error"
+        role="alert"
+        data-reason-panel-error
+        hidden
+      ></p>
     </div>
   </form>
   <div class="reason-panel-footer">

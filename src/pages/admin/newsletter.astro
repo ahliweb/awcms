@@ -283,10 +283,9 @@ const columnCount = canConfigure ? 6 : 5;
                           <button
                             type="button"
                             class="btn-inline btn-inline--danger newsletter-suppress-btn"
-                            data-reason-title={t(
-                              "Suppress {email}?",
-                              { email: item.email }
-                            )}
+                            data-reason-title={t("Suppress {email}?", {
+                              email: item.email
+                            })}
                             data-reason-description={t(
                               "Why is this address being suppressed? A suppressed address cannot be re-subscribed, including by the person who owns it."
                             )}
