@@ -284,6 +284,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const errorBox = messageBox("partner-registry-action-error");
 
@@ -321,9 +322,9 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
       if (!partnerTenantId) return;
 
       if (
-        !window.confirm(
+        !(await confirmAction(
           confirmFor(button.dataset.partnerCode ?? "this partner")
-        )
+        ))
       )
         return;
 

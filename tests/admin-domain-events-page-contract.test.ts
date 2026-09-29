@@ -171,30 +171,41 @@ describe("/admin/domain-events permission gates", () => {
 
     expect(page).toContain("/pause`");
     expect(page).toContain("/resume`");
-    expect(page).toContain("/api/v1/domain-events/deliveries/${id}/replay`");
+    // Pause and replay (Issue #854 part 3) carry their target URL on the
+    // opener button's `data-reason-action`, not inside a `sendJson()` call —
+    // `ReasonPanel` reads it and issues the fetch itself. `${delivery.id}`
+    // (not a locally destructured `id`) because this is a server-rendered
+    // template literal inside `deliveries.map(...)`.
+    expect(page).toContain(
+      "/api/v1/domain-events/deliveries/${delivery.id}/replay`"
+    );
   });
 
   test("replay carries an Idempotency-Key — pause and resume carry none", async () => {
     const page = await readFile(PAGE, "utf8");
 
-    // Exactly one, and it is on the replay call. Slicing from the URL scopes
-    // each assertion to its own request, so moving the header between them
-    // turns this red rather than shuffling a global count.
+    // Pause and replay no longer build their own request (Issue #854 part 3
+    // moved both into `ReasonPanel`'s declarative `data-reason-*` markup);
+    // only resume still calls `sendJson` directly with an inline header, so
+    // there is nothing left of the OLD `"Idempotency-Key": crypto.randomUUID()`
+    // shape to count.
+    expect(page.match(/"Idempotency-Key": crypto\.randomUUID\(\)/g)).toBeNull();
+
+    // Replay opts in via the presence-only `data-reason-idempotent`
+    // attribute, scoped to its own opener by slicing from its
+    // `data-reason-action`.
+    const replayButton = page.slice(
+      page.indexOf("/api/v1/domain-events/deliveries/${delivery.id}/replay`")
+    );
+    expect(replayButton.slice(0, replayButton.indexOf("</button>"))).toContain(
+      "data-reason-idempotent"
+    );
+
+    // Pause's opener carries no such attribute.
+    const pauseButton = page.slice(page.indexOf("/pause`"));
     expect(
-      page.match(/"Idempotency-Key": crypto\.randomUUID\(\)/g)
-    ).toHaveLength(1);
-
-    const replayCall = page.slice(
-      page.indexOf("/api/v1/domain-events/deliveries/${id}/replay`")
-    );
-    expect(replayCall.slice(0, replayCall.indexOf(");"))).toContain(
-      "Idempotency-Key"
-    );
-
-    const pauseCall = page.slice(page.indexOf("/pause`"));
-    expect(pauseCall.slice(0, pauseCall.indexOf(");"))).not.toContain(
-      "Idempotency-Key"
-    );
+      pauseButton.slice(0, pauseButton.indexOf("</button>"))
+    ).not.toContain("data-reason-idempotent");
 
     const resumeCall = page.slice(page.indexOf("/resume`"));
     expect(resumeCall.slice(0, resumeCall.indexOf(");"))).not.toContain(

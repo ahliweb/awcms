@@ -479,6 +479,7 @@ const columns = 6 + (canDelete ? 1 : 0);
     onSubmit,
     sendJson
   } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("omes-servers-action-error");
 
@@ -512,9 +513,9 @@ const columns = 6 + (canDelete ? 1 : 0);
     const hostname = button.dataset.hostname ?? "this server";
 
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Decommission ${hostname}? It stops appearing as an active fleet member. Enrollment and audit history are kept.`
-      )
+      ))
     ) {
       return;
     }

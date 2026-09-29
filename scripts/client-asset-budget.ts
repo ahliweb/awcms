@@ -683,8 +683,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 240,975 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #854 part 1** (ADR-0125's three admin v2
+ * primitives — `ConfirmDialog`, `SettingsSaveBar`, `ReasonPanel`). This is
+ * new admin vocabulary shared across every screen that adopts it (43
+ * `window.confirm()` sites and 9 `window.prompt()` sites converted), not
+ * per-screen duplication — the same distinction the docblock above draws for
+ * `.admin-stat-card`. Measured actual total:
+ *
+ * ```
+ * before (240,975 ceiling)   240,975 B
+ * + ConfirmDialog/SettingsSaveBar/ReasonPanel markup + CSS   247,880 B (measured actual total)
+ * ```
+ *
+ * 247,880 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 240_975;
+export const APP_BUDGET_BYTES = 247_880;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
@@ -745,8 +759,16 @@ export const PER_FILE_BUDGET_BYTES = 27_000;
  * duplication (see that constant's docblock for the full accounting).
  * Measured after the restyle: `_astro/AdminLayout.*.css` is 47,240 B. 52,000
  * is measured + ~10%, the same margin this constant's previous raise used.
+ *
+ * **Raised to 57,300 on 29 September 2026 (Issue #854 part 1)** for the same
+ * reason `APP_BUDGET_BYTES` was raised alongside it: `ConfirmDialog`,
+ * `SettingsSaveBar`, and `ReasonPanel` (ADR-0125) are three new shared
+ * `<dialog>`/save-bar components every admin screen can adopt, added to
+ * `admin.css` rather than duplicated per screen. Measured after the addition:
+ * `_astro/AdminLayout.*.css` is 52,089 B. 57,300 is measured + ~10%, the same
+ * margin this constant's previous raises used.
  */
-export const PER_FILE_CSS_BUDGET_BYTES = 52_000;
+export const PER_FILE_CSS_BUDGET_BYTES = 57_300;
 
 /**
  * ADR-0120 — the typeface, budgeted separately from everything else.

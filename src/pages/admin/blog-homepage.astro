@@ -685,6 +685,7 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("homepage-action-error");
   const formError = messageBox("homepage-form-error");
@@ -767,10 +768,10 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
 
     const key = button.dataset.sectionKey ?? "this section";
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Delete the "${key}" section? The articles it points at are untouched; ` +
           `only its place on the homepage goes away.`
-      )
+      ))
     ) {
       return;
     }

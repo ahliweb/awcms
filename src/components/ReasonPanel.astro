@@ -1,0 +1,189 @@
+---
+/**
+ * ReasonPanel — a `<dialog>` drawer with a REQUIRED reason textarea,
+ * replacing `window.prompt()` for an action whose endpoint records a reason
+ * (Issue #854 part 3, adapted from ahliweb/media-lenterakalteng's
+ * `ReasonPanel.astro`, itself from its ADR-0123/0124 v2 shell work).
+ *
+ * ## Render this ONCE per page
+ *
+ * Like `#confirm-dialog`, this is ONE shared `<dialog>` instance, reused by
+ * every opener button on the page — never one panel per row. Render it once
+ * (commonly right before `</AdminLayout>`), then import `initReasonPanel`
+ * from `../lib/ui/reason-panel-client` in the page's own `<script>` and call
+ * it once.
+ *
+ * ## Wiring an opener — ZERO per-button JavaScript
+ *
+ * Mark any `<button type="button">` with the `data-reason-*` attributes
+ * below. `initReasonPanel` finds every one of them (a delegated click
+ * listener, the same pattern as `onAction` in `admin-form-client.ts`) — no
+ * page-specific script is needed beyond the one `initReasonPanel()` call.
+ *
+ * | Attribute                 | Required | Default    | Meaning                                                                 |
+ * | -------------------------- | -------- | ---------- | ------------------------------------------------------------------------ |
+ * | `data-reason-title`       | yes      | —          | Panel heading.                                                          |
+ * | `data-reason-description` | no       | (none)     | Note shown above the textarea (e.g. what this action does).            |
+ * | `data-reason-action`      | one of this or `data-reason-form` | — | URL to send `{ [field]: reason }` to as JSON.                           |
+ * | `data-reason-method`      | no       | `POST`     | HTTP method for `data-reason-action`.                                  |
+ * | `data-reason-form`        | one of this or `data-reason-action` | — | `id` of an existing `<form>` on the page — the reason is written into a hidden field on it (named by `data-reason-field`) and the form is submitted normally. |
+ * | `data-reason-field`       | no       | `reason`   | JSON body key (fetch mode) or hidden input `name` (form mode).         |
+ * | `data-reason-min-length`  | no       | `1`        | Minimum trimmed characters before the submit button enables.           |
+ * | `data-reason-max-length`  | no       | (none)     | Maximum characters — sets the textarea's native `maxlength` once this opener's config is active, so the browser itself stops further typing. |
+ * | `data-reason-label`       | no       | panel's `defaultSubmitLabel` prop | This action's submit button text.                               |
+ * | `data-reason-danger`      | no       | absent     | Presence (any value) styles the submit button as destructive.          |
+ * | `data-reason-busy-label`  | no       | panel's `defaultBusyLabel` prop | Shown on the submit button while the request is in flight (fetch mode only). |
+ * | `data-reason-failure`     | no       | panel's `defaultFailureMessage` prop | Shown in the panel if the request fails (fetch mode only).      |
+ * | `data-reason-idempotent`  | no       | absent     | Fetch mode only. Presence (any value) sends an `Idempotency-Key: <uuid>` header alongside the JSON body — see `reason-panel-client.ts` for exactly when the key is (re)drawn. |
+ *
+ * ## Why `<dialog>`
+ *
+ * `showModal()` supplies the focus trap, the Escape handler, the page's
+ * inertness behind it, the `::backdrop`, and focus restoration to the
+ * opener — the same platform guarantees `ConfirmDialog` relies on.
+ *
+ * ## This is JavaScript-required, same as the `window.prompt()` it replaces
+ *
+ * Every opener this component replaces was already a
+ * `<button type="button">` bound through a delegated click listener with no
+ * `<form>` fallback — clicking it with JavaScript disabled already did
+ * nothing. Swapping the confirmation surface from `window.prompt()` (JS-only)
+ * to this dialog (also JS-only) is not a regression against that baseline, so
+ * this component does not attempt to also work with JavaScript disabled —
+ * unlike `SettingsSaveBar`, whose two buttons are the ONLY way some screens
+ * submit their form at all.
+ *
+ * ## Props
+ *
+ * | Prop                    | Type     | Required | Notes                                                          |
+ * | ------------------------ | -------- | -------- | ---------------------------------------------------------------|
+ * | `id`                    | `string` | no       | Dialog element id. Default `"admin-reason-panel"`.             |
+ * | `cancelLabel`           | `string` | yes      | Cancel button text.                                             |
+ * | `reasonLabel`           | `string` | yes      | Label above the textarea (e.g. `t("Reason")`).                 |
+ * | `reasonHint`            | `string` | no       | Hint under the textarea.                                        |
+ * | `defaultSubmitLabel`    | `string` | yes      | Fallback submit label when an opener omits `data-reason-label`.|
+ * | `defaultBusyLabel`      | `string` | no       | Fallback busy label. Default `"Please wait…"`.                 |
+ * | `defaultFailureMessage` | `string` | yes      | Fallback error text when an opener omits `data-reason-failure`.|
+ *
+ * ## Demo
+ *
+ * ```astro
+ * <ReasonPanel
+ *   cancelLabel={t("Cancel")}
+ *   reasonLabel={t("Reason")}
+ *   reasonHint={t("Recorded in the audit log.")}
+ *   defaultSubmitLabel={t("Confirm")}
+ *   defaultFailureMessage={t("Could not save this action. Please try again.")}
+ * />
+ *
+ * <button
+ *   type="button"
+ *   class="btn-danger"
+ *   data-reason-title={t('Disable module "{name}"', { name: mod.name })}
+ *   data-reason-action={`/api/v1/tenant/modules/${mod.key}/disable`}
+ *   data-reason-label={t("Disable")}
+ *   data-reason-danger
+ * >
+ *   {t("Disable")}
+ * </button>
+ * ```
+ */
+interface Props {
+  id?: string;
+  cancelLabel: string;
+  reasonLabel: string;
+  reasonHint?: string;
+  defaultSubmitLabel: string;
+  defaultBusyLabel?: string;
+  defaultFailureMessage: string;
+}
+
+const {
+  id = "admin-reason-panel",
+  cancelLabel,
+  reasonLabel,
+  reasonHint,
+  defaultSubmitLabel,
+  defaultBusyLabel = "Please wait…",
+  defaultFailureMessage
+} = Astro.props;
+---
+
+<dialog
+  id={id}
+  class="reason-panel"
+  aria-labelledby={`${id}-title`}
+  data-reason-panel
+  data-default-submit-label={defaultSubmitLabel}
+  data-default-busy-label={defaultBusyLabel}
+  data-default-failure-message={defaultFailureMessage}
+>
+  <div class="reason-panel-header">
+    <h2 class="reason-panel-title" id={`${id}-title`}></h2>
+    <button
+      type="button"
+      class="reason-panel-close"
+      data-reason-panel-close
+      aria-label={cancelLabel}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M6 6l12 12M18 6 6 18"></path>
+      </svg>
+    </button>
+  </div>
+  <form method="dialog" class="reason-panel-body" data-reason-panel-form>
+    <p
+      class="reason-panel-description"
+      data-reason-panel-description
+      hidden
+    ></p>
+    <div class="reason-panel-field">
+      <div class="reason-panel-label">
+        <span>
+          {reasonLabel}
+          <span class="reason-panel-required-marker" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        </span>
+        <span class="reason-panel-counter" data-reason-panel-counter></span>
+      </div>
+      <textarea
+        class="reason-panel-textarea"
+        id={`${id}-textarea`}
+        rows="4"
+        required
+        aria-required="true"
+        data-reason-panel-textarea
+      ></textarea>
+      {reasonHint !== undefined && (
+        <p class="reason-panel-hint">{reasonHint}</p>
+      )}
+      <p
+        class="reason-panel-error"
+        role="alert"
+        data-reason-panel-error
+        hidden
+      ></p>
+    </div>
+  </form>
+  <div class="reason-panel-footer">
+    <button type="button" class="btn-secondary" data-reason-panel-cancel>
+      {cancelLabel}
+    </button>
+    <span class="reason-panel-spacer"></span>
+    <button type="button" class="btn-primary" data-reason-panel-submit disabled>
+      {defaultSubmitLabel}
+    </button>
+  </div>
+</dialog>

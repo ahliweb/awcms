@@ -61,9 +61,14 @@ test.describe("admin offices edit/delete/restore (authenticated)", () => {
     );
 
     // Soft-delete: accept the confirm dialog → row leaves the active table and
-    // appears in the deleted-offices section.
-    page.once("dialog", (dialog) => dialog.accept());
+    // appears in the deleted-offices section. `window.confirm()` was replaced
+    // by the shared `ConfirmDialog` (Issue #854 part 1) — a real `<dialog>`
+    // `AdminLayout` renders once per page, so this clicks its Confirm button
+    // rather than intercepting a native `dialog` event.
     await renamedRow.locator(".office-delete-btn").click();
+    const confirmDialog = page.locator("#confirm-dialog");
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.locator("#confirm-dialog-confirm").click();
 
     const deletedTable = page.locator("#deleted-offices-table");
     await expect(deletedTable).toBeVisible();

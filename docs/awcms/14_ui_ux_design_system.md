@@ -139,7 +139,7 @@ The base components are planned to live in `src/components/ui`, used across pers
 | Input / NumberInput                       | label, hint, error; NumberInput for qty/price/journal amounts (mono)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Select / Combobox                         | Combobox supports account/product/vendor/employee search                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Checkbox / Radio / Switch                 | switch for consent & feature toggles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Dialog / Drawer                           | focus trapped, `Esc` closes — a native `<dialog>` opened with `showModal()`, which supplies the focus trap, Esc-to-close, inertness, the backdrop and focus restore without a line of script. The **command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) is the worked example in this repo; confirming destructive actions is still `window.confirm` and is the next thing to move. The admin sidebar itself (mobile drawer) is NOT a `<dialog>` — it stays a static `<nav>` on desktop, its focus trap written by hand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Dialog / Drawer                           | focus trapped, `Esc` closes — a native `<dialog>` opened with `showModal()`, which supplies the focus trap, Esc-to-close, inertness, the backdrop and focus restore without a line of script. The **command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) was the first worked example; `ConfirmDialog` and `ReasonPanel` (ADR-0125, §Confirm dialog / reason panel / settings save bar below) are the second and third, replacing `window.confirm()`/`window.prompt()` on every admin screen that fits their shape. The admin sidebar itself (mobile drawer) is NOT a `<dialog>` — it stays a static `<nav>` on desktop, its focus trap written by hand.                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Toast                                     | success/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Table / DataGrid                          | sorting, keyset pagination, sticky columns, row density — used for the journal entry, purchase order, stock adjustment and payroll run lists; scroll-container shell + accessible `<caption>` + standard empty row; row rendering (badges, forms, per-row buttons) remains the caller's responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Badge / StatusPill                        | colour-coded lifecycle status (draft/pending approval/posted/rejected/void/quarantine) — `success/warning/danger/info/neutral` variants. Since [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.md) the shipped `.status-badge` is a **tint** badge: `--color-X-soft` fill with `--color-X-on-soft` text. Use `-strong` + white text only where the badge is a solid fill. `.admin-status-pill` (added by PR #813, same tint spec, wider `data-tone` set) is a near-duplicate of `.status-badge` still awaiting screen-by-screen migration — see [`admin-ui-parity-matrix.md`](admin-ui-parity-matrix.md) §4                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -165,6 +165,56 @@ Importing from this module is mandatory rather than merely DRY: under `default-s
 ### Incremental migration of large screens (a pattern, not a status)
 
 When a large ERP admin screen (e.g. journal entry, a multi-line purchase order form) is implemented, follow the atomic-per-issue pattern proven in awcms-mini: build it directly out of the primitives above (`DataTable`, `StatusBadge`, `ActionBanner`, `FormField`, `ConfirmDialog`) instead of ad-hoc markup, and migrate old screens one at a time if any exist — do not do a full redesign all at once. The SSR-read-directly/mutation-through-the-API pattern (doc 15) is not changed by a markup/CSS/client-script migration.
+
+### Confirm dialog / reason panel / settings save bar (ADR-0125)
+
+Three admin v2 primitives, ported from `ahliweb/media-lenterakalteng`'s local
+build so every consumer of this template gets them (Issue #854 part 1 of 2 —
+a separate PR handles the raw-enum/`data-label` i18n sweep that is part 2).
+
+- **`ConfirmDialog`** (`src/components/ConfirmDialog.astro` +
+  `src/lib/ui/confirm-dialog-client.ts`) replaces `window.confirm()`. One
+  `<dialog id="confirm-dialog" role="alertdialog">`, rendered ONCE by
+  `AdminLayout.astro` — not per-page. A screen's own script converts a call
+  site in one line:
+
+  ```diff
+  - if (!window.confirm(message)) return;
+  + if (!(await confirmAction(message))) return;
+  ```
+
+  `confirmAction` (imported from `../../lib/ui/confirm-dialog-client`) lazily
+  finds and wires the layout's dialog on first call and caches the result, so
+  no setup call is needed. `showModal()` supplies the focus trap, Escape,
+  `::backdrop` and focus restoration.
+
+- **`SettingsSaveBar`** (`src/components/SettingsSaveBar.astro` +
+  `src/lib/ui/settings-save-bar-client.ts`) is a sticky bar for a screen with
+  exactly one settings `<form>`, rendered per-page right after that form's
+  closing tag. Its Save/Reset buttons use `type="submit"/"reset" form="<id>"`
+  and work with **no JavaScript at all** — `initSettingsSaveBars()` only adds
+  a dirty-state class toggle and an optional status-text swap. Adopted on
+  `/admin/site-profile`, `/admin/blog-settings`, and `/admin/theming`. Because
+  the submit button now lives OUTSIDE the `<form>` by design,
+  `admin-form-client.ts`'s `onSubmit()`/`submitContext()` gained a fallback
+  lookup (`button[type="submit"][form="<id>"]`) alongside its original
+  form-descendant query.
+
+- **`ReasonPanel`** (`src/components/ReasonPanel.astro` +
+  `src/lib/ui/reason-panel-client.ts`) replaces `window.prompt()` for an
+  action whose endpoint records a reason (module disable, newsletter
+  suppress, media object delete, and others — see ADR-0125 for the full
+  list, and for the sites deliberately left on `window.prompt()` because
+  they do not fit ReasonPanel's one-endpoint/one-required-field/reload- (or
+  existing-form-submit-) on-success shape). Declarative:
+  `data-reason-title`/`-action`/`-form`/`-field`/`-min-length`/`-max-length`/
+  `-label`/`-danger`/`-idempotent` on any opener `<button type="button">`,
+  wired by one `initReasonPanel()` call — no page-specific handler needed.
+
+All three use only existing tokens (`src/styles/tokens.css`) — the save bar's
+dark fill reuses `--color-sidebar-bg`/`--color-sidebar-surface` rather than a
+new colour, since it is the same "dark chrome on a light canvas" role as the
+topbar/sidebar.
 
 ## Information architecture (role-aware navigation)
 

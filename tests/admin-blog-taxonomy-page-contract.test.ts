@@ -172,9 +172,12 @@ describe("/admin/blog-taxonomy permission gates", () => {
   });
 
   test("the delete confirmation states the finality instead of promising recovery", async () => {
-    const page = expectCode(await read(PAGE), "window.confirm");
+    // Issue #854 part 1: `window.confirm()` was replaced by the shared
+    // `ConfirmDialog` (`confirmAction()`, `ADR-0125`) — this screen's own
+    // copy is unchanged, only the mechanism that shows it.
+    const page = expectCode(await read(PAGE), "confirmAction");
 
-    expect(page).toContain("window.confirm");
+    expect(page).toContain("confirmAction");
     expect(page).toContain("cannot be undone");
     // The #351 failure mode in one assertion: copy that tells the operator the
     // row is coming back, on a screen where it cannot.

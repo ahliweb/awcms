@@ -630,6 +630,7 @@ function formatWindow(placement: AdPlacementView): string {
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
   import { wireMediaPickers } from "../../lib/ui/media-picker-client";
 
   const actionError = messageBox("ad-action-error");
@@ -645,10 +646,10 @@ function formatWindow(placement: AdPlacementView): string {
 
     const name = button.dataset.adName ?? "this placement";
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Delete "${name}"? The slot goes back to showing its availability ` +
           `notice, and the image itself stays in the media library.`
-      )
+      ))
     ) {
       return;
     }

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:50bde05193ea802f948b23ee13c5b3878b33b9a6672439f706352b88a71bebba -->
+<!-- i18n-source-hash: sha256:d18160b89d0d7023b3ddc462aba4cf577ba00fa08cc4eea4042791660069dc65 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -141,7 +141,7 @@ Komponen dasar direncanakan di `src/components/ui`, dipakai lintas persona dan l
 | Input / NumberInput                       | label, hint, error; NumberInput untuk qty/harga/nominal jurnal (mono)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Select / Combobox                         | Combobox mendukung search akun/produk/vendor/karyawan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Checkbox / Radio / Switch                 | switch untuk consent & feature toggle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Dialog / Drawer                           | fokus terperangkap, `Esc` menutup — `<dialog>` native yang dibuka `showModal()`, yang memasok focus trap, Esc-to-close, inert-nya halaman, backdrop, dan pengembalian fokus tanpa satu baris script pun. **Command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) adalah contoh kerjanya di repo ini; konfirmasi aksi destruktif masih `window.confirm` dan itulah yang berikutnya perlu dipindahkan. Sidebar admin sendiri (drawer mobile) BUKAN `<dialog>` — tetap `<nav>` statis di desktop, focus trap-nya ditulis manual.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Dialog / Drawer                           | fokus terperangkap, `Esc` menutup — `<dialog>` native yang dibuka `showModal()`, yang memasok focus trap, Esc-to-close, inert-nya halaman, backdrop, dan pengembalian fokus tanpa satu baris script pun. **Command palette** (`src/lib/ui/admin-command-palette.ts`, ADR-0120) adalah contoh kerja pertama; `ConfirmDialog` dan `ReasonPanel` (ADR-0125, §Dialog konfirmasi / panel alasan / save bar pengaturan di bawah) adalah contoh kedua dan ketiga, menggantikan `window.confirm()`/`window.prompt()` di setiap layar admin yang cocok dengan bentuknya. Sidebar admin sendiri (drawer mobile) BUKAN `<dialog>` — tetap `<nav>` statis di desktop, focus trap-nya ditulis manual.                                                                                                                                                                                                                                                                                                                                                                                                |
 | Toast                                     | sukses/error/info; non-blocking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Table / DataGrid                          | sort, pagination keyset, kolom sticky, row density — dipakai untuk daftar entri jurnal, purchase order, stock adjustment, payroll run; shell scroll-container + `<caption>` aksesibel + empty-row standar; row rendering (badge, form, tombol per baris) tetap tanggung jawab pemanggil                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Badge / StatusPill                        | status lifecycle (draft/pending approval/posted/rejected/void/quarantine) berkode warna — varian `success/warning/danger/info/neutral`. Sejak [ADR-0120](../adr/0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md) `.status-badge` yang dikirim adalah badge **tint**: isian `--color-X-soft` dengan teks `--color-X-on-soft`. Pakai `-strong` + teks putih hanya bila badge-nya isian solid. `.admin-status-pill` (ditambahkan PR #813, spesifikasi tint sama, `data-tone` lebih lengkap) adalah duplikat nyaris identik `.status-badge` yang masih menunggu migrasi per-layar — lihat [`admin-ui-parity-matrix.md`](admin-ui-parity-matrix.md) §4                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -167,6 +167,60 @@ Import dari modul ini wajib, bukan sekadar DRY: di bawah `default-src 'self'` As
 ### Migrasi bertahap layar besar (pola, bukan status)
 
 Saat layar admin ERP besar (mis. entri jurnal, form purchase order multi-baris) diimplementasikan, ikuti pola atomic-per-issue yang terbukti di awcms-mini: bangun langsung dengan primitive di atas (`DataTable`, `StatusBadge`, `ActionBanner`, `FormField`, `ConfirmDialog`) alih-alih markup ad-hoc, dan migrasikan layar lama satu per satu bila ada — jangan redesign penuh sekaligus. Pola SSR-read-langsung/mutation-lewat-API (doc 15) tidak berubah oleh migrasi markup/CSS/script client.
+
+### Dialog konfirmasi / panel alasan / save bar pengaturan (ADR-0125)
+
+Tiga primitif admin v2, di-port dari build lokal `ahliweb/media-lenterakalteng`
+sehingga setiap konsumen template ini mendapatkannya (Issue #854 bagian 1 dari
+2 — PR terpisah menangani sapuan i18n raw-enum/`data-label` yang jadi bagian
+2).
+
+- **`ConfirmDialog`** (`src/components/ConfirmDialog.astro` +
+  `src/lib/ui/confirm-dialog-client.ts`) menggantikan `window.confirm()`.
+  Satu `<dialog id="confirm-dialog" role="alertdialog">`, dirender SEKALI
+  oleh `AdminLayout.astro` — bukan per halaman. Skrip layar mengonversi satu
+  titik panggil dalam satu baris:
+
+  ```diff
+  - if (!window.confirm(message)) return;
+  + if (!(await confirmAction(message))) return;
+  ```
+
+  `confirmAction` (diimpor dari `../../lib/ui/confirm-dialog-client`) secara
+  lazy menemukan dan menghubungkan dialog milik layout pada pemanggilan
+  pertama lalu meng-cache hasilnya, sehingga tidak perlu panggilan setup.
+  `showModal()` memasok focus trap, Escape, `::backdrop`, dan pengembalian
+  fokus.
+
+- **`SettingsSaveBar`** (`src/components/SettingsSaveBar.astro` +
+  `src/lib/ui/settings-save-bar-client.ts`) adalah bar sticky untuk layar
+  dengan tepat satu `<form>` pengaturan, dirender per halaman tepat setelah
+  tag penutup form itu. Tombol Save/Reset-nya memakai
+  `type="submit"/"reset" form="<id>"` dan bekerja **tanpa JavaScript sama
+  sekali** — `initSettingsSaveBars()` hanya menambah toggle kelas dirty-state
+  dan, opsional, penukaran teks status. Diadopsi di `/admin/site-profile`,
+  `/admin/blog-settings`, dan `/admin/theming`. Karena tombol submit kini
+  sengaja hidup DI LUAR `<form>`, `onSubmit()`/`submitContext()` di
+  `admin-form-client.ts` mendapat fallback pencarian
+  (`button[type="submit"][form="<id>"]`) di samping query keturunan-form
+  aslinya.
+
+- **`ReasonPanel`** (`src/components/ReasonPanel.astro` +
+  `src/lib/ui/reason-panel-client.ts`) menggantikan `window.prompt()` untuk
+  aksi yang endpoint-nya mencatat alasan (disable modul, suppress
+  newsletter, hapus objek media, dan lainnya — lihat ADR-0125 untuk daftar
+  lengkap, dan untuk titik yang sengaja dibiarkan sebagai `window.prompt()`
+  karena tidak cocok dengan bentuk satu-endpoint/satu-field-wajib/reload-
+  (atau submit-form-yang-ada-) saat-sukses milik ReasonPanel). Deklaratif:
+  `data-reason-title`/`-action`/`-form`/`-field`/`-min-length`/`-max-length`/
+  `-label`/`-danger`/`-idempotent` pada `<button type="button">` pembuka
+  mana pun, dihubungkan dengan satu panggilan `initReasonPanel()` — tidak
+  perlu handler khusus halaman.
+
+Ketiganya hanya memakai token yang sudah ada (`src/styles/tokens.css`) —
+fill gelap save bar memakai ulang
+`--color-sidebar-bg`/`--color-sidebar-surface` alih-alih warna baru, karena
+perannya sama seperti topbar/sidebar: "chrome gelap di atas kanvas terang".
 
 ## Information architecture (navigasi role-aware)
 

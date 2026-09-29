@@ -59,6 +59,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import SettingsSaveBar from "../../components/SettingsSaveBar.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { getTranslatorFor } from "../../lib/i18n";
@@ -263,12 +264,12 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 {settings.seoDefaultDescription ?? ""}
               </textarea>
           </label>
-
-          <button type="submit" id="blog-settings-save">
-            {t("Save")}
-          </button>
         </fieldset>
       </form>
+
+      {canConfigure && (
+        <SettingsSaveBar formId="blog-settings-form" saveLabel={t("Save")} />
+      )}
 
       {/* One msgid per SENTENCE, not one per fragment. This note used to be
              five `t()` calls interleaved with `<code>`/`<a>`, which asks a
@@ -305,9 +306,16 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import {
+    DIRTY_CLASS,
+    SAVE_BAR_SELECTOR,
+    initSettingsSaveBars
+  } from "../../lib/ui/settings-save-bar-client";
 
   const errorBox = messageBox("settings-error");
   const okBox = messageBox("settings-ok");
+
+  initSettingsSaveBars();
 
   /**
    * Translated strings the page rendered for us, with English fallbacks.
@@ -373,6 +381,11 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
       }
 
       okBox.show(message("saved", "Saved."));
+      // This screen confirms in place rather than reloading (see the comment
+      // above `onSubmit`), so — unlike a page that reloads on success and
+      // gets a clean form for free — the save bar's dirty indicator has to be
+      // cleared explicitly here once the save actually lands.
+      document.querySelector(SAVE_BAR_SELECTOR)?.classList.remove(DIRTY_CLASS);
     } finally {
       unlock();
     }

@@ -109,32 +109,61 @@ describe("/admin/business-scope gates on keys that really exist", () => {
     const page = await readFile(PAGE, "utf8");
 
     expect(page).toContain('"/api/v1/identity/business-scope/assignments"');
+    // Revoke assignment and revoke exception (Issue #854 part 3) carry their
+    // target URL on the opener button's `data-reason-action`, not inside a
+    // `sendJson()` call — `ReasonPanel` reads it and issues the fetch
+    // itself. `${assignment.id}`/`${exception.id}` (not a locally
+    // destructured `id`) because these are server-rendered template
+    // literals inside each row's own `.map(...)`.
     expect(page).toContain(
-      "/api/v1/identity/business-scope/assignments/${id}/revoke`"
+      "/api/v1/identity/business-scope/assignments/${assignment.id}/revoke`"
     );
     expect(page).toContain('"/api/v1/identity/business-scope/exceptions"');
     expect(page).toContain(
       "/api/v1/identity/business-scope/exceptions/${id}/${action}`"
     );
     expect(page).toContain(
-      "/api/v1/identity/business-scope/exceptions/${id}/revoke`"
+      "/api/v1/identity/business-scope/exceptions/${exception.id}/revoke`"
     );
   });
 
   test("every mutation carries a fresh Idempotency-Key", async () => {
     const page = await readFile(PAGE, "utf8");
 
-    // All six endpoints answer `IDEMPOTENCY_REQUIRED` without the header. The
-    // helper is counted at its CALL SITES, and the freshness property is held
-    // by the assertion above it — a helper that hoisted one key into a
-    // constant would turn this red.
+    // All six endpoints answer `IDEMPOTENCY_REQUIRED` without the header.
+    // Revoke assignment and revoke exception now opt in via the
+    // presence-only `data-reason-idempotent` attribute on their `ReasonPanel`
+    // opener (Issue #854 part 3) rather than an inline `idempotency()` call —
+    // the other four (assign, request an exception, decide one — approve and
+    // reject share a wiring function) still build their own request, so the
+    // helper is counted at exactly THEIR call sites.
     expect(page).toContain(
       'return { "Idempotency-Key": crypto.randomUUID() };'
     );
-    // One definition + five call sites: assign, revoke assignment, request an
-    // exception, decide one (approve and reject share a wiring function), and
-    // revoke one.
-    expect(page.match(/idempotency\(\)/g)).toHaveLength(6);
+    // One definition + three call sites (assign, request an exception,
+    // decide one).
+    expect(page.match(/idempotency\(\)/g)).toHaveLength(4);
+
+    const revokeAssignmentButton = page.slice(
+      page.indexOf(
+        "/api/v1/identity/business-scope/assignments/${assignment.id}/revoke`"
+      )
+    );
+    expect(
+      revokeAssignmentButton.slice(
+        0,
+        revokeAssignmentButton.indexOf("</button>")
+      )
+    ).toContain("data-reason-idempotent");
+
+    const revokeExceptionButton = page.slice(
+      page.indexOf(
+        "/api/v1/identity/business-scope/exceptions/${exception.id}/revoke`"
+      )
+    );
+    expect(
+      revokeExceptionButton.slice(0, revokeExceptionButton.indexOf("</button>"))
+    ).toContain("data-reason-idempotent");
   });
 });
 

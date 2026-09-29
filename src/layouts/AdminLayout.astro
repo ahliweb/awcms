@@ -75,6 +75,7 @@ import TenantBadge from "../components/TenantBadge.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import SyncIndicator from "../components/SyncIndicator.astro";
 import LanguageSwitcher from "../components/LanguageSwitcher.astro";
+import ConfirmDialog from "../components/ConfirmDialog.astro";
 import { getTranslatorFor } from "../lib/i18n";
 import { getDatabaseClient } from "../lib/database/client";
 import { withTenantOrThrow } from "../lib/database/tenant-context";
@@ -833,6 +834,13 @@ const accountInitials =
         </p>
       </dialog>
     )}
+
+    {/* Issue #854 part 1 — one shared confirm dialog for the whole page.
+        Always rendered (unlike the palette above, which is absent with no
+        nav entries): any admin screen may import `confirmAction` from
+        `../../lib/ui/confirm-dialog-client` and call it, so the dialog it
+        wires must exist unconditionally. See `ConfirmDialog.astro`. */}
+    <ConfirmDialog cancelLabel={t("Cancel")} confirmLabel={t("Confirm")} />
 
     <script>
       // The import forces Astro to bundle this to an EXTERNAL file — an

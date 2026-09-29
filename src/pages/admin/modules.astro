@@ -26,6 +26,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { fetchTenantModuleEntries } from "../../modules/module-management/application/tenant-module-lifecycle";
 import { getTranslatorFor } from "../../lib/i18n";
+import ReasonPanel from "../../components/ReasonPanel.astro";
 
 type ModuleRow = {
   moduleKey: string;
@@ -209,8 +210,15 @@ const canToggle = canEnable || canDisable;
                           <button
                             type="button"
                             class="module-toggle"
-                            data-module-key={module.moduleKey}
-                            data-action="disable"
+                            data-reason-title={t('Disable module "{name}"?', {
+                              name: module.name
+                            })}
+                            data-reason-description={t(
+                              "This feature stops working for every user and visitor of this tenant until it is re-enabled. Its data is kept, not deleted."
+                            )}
+                            data-reason-action={`/api/v1/tenant/modules/${encodeURIComponent(module.moduleKey)}/disable`}
+                            data-reason-label={t("Disable")}
+                            data-reason-danger
                           >
                             {t("Disable")}
                           </button>
@@ -239,6 +247,16 @@ const canToggle = canEnable || canDisable;
       </table>
     </div>
   )}
+
+  <ReasonPanel
+    cancelLabel={t("Cancel")}
+    reasonLabel={t("Reason")}
+    reasonHint={t("Recorded in the audit log.")}
+    defaultSubmitLabel={t("Confirm")}
+    defaultFailureMessage={t(
+      "Could not disable the module. It may have dependencies that block this change."
+    )}
+  />
 </AdminLayout>
 
 <script>
@@ -254,23 +272,18 @@ const canToggle = canEnable || canDisable;
     onAction,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
 
   const errorBox = messageBox("modules-toggle-error");
 
+  // Disabling is handled entirely by `ReasonPanel` above (its
+  // `data-reason-*` attributes carry the target URL and reason) — this
+  // delegated listener only remains for Enable, which takes no reason and no
+  // body.
   onAction("button.module-toggle", async (button) => {
     const moduleKey = button.dataset.moduleKey;
     const action = button.dataset.action;
-    if (!moduleKey || (action !== "enable" && action !== "disable")) return;
-
-    // The disable endpoint requires a non-empty `reason` (it is recorded in
-    // the audit event) — collect it before locking. Enable takes no body.
-    let body: Record<string, unknown> = {};
-    if (action === "disable") {
-      const reason = window.prompt(`Reason for disabling "${moduleKey}"?`);
-      // Cancelled or blank → abort without a request (endpoint would 400).
-      if (reason === null || reason.trim().length === 0) return;
-      body = { reason: reason.trim() };
-    }
+    if (!moduleKey || action !== "enable") return;
 
     await mutateAndReload(
       button,
@@ -278,11 +291,12 @@ const canToggle = canEnable || canDisable;
       () =>
         sendJson(
           "POST",
-          `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/${action}`,
-          body
+          `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/${action}`
         ),
       // Generic message only — never surface internal detail (Issue #540).
       `Could not ${action} the module. It may have dependencies that block this change.`
     );
   });
+
+  initReasonPanel();
 </script>

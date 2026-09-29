@@ -974,6 +974,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("reporting-action-error");
   const createError = messageBox("export-create-error");
@@ -1022,9 +1023,9 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
     if (!key) return;
 
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Cancel the running rebuild of ${key}? Its progress so far is kept, but the read model stays partial until a rebuild completes.`
-      )
+      ))
     ) {
       return;
     }
@@ -1069,9 +1070,9 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 
     // Retiring is not undoable from this screen — there is no re-enable.
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Disable the ${label} export schedule? It is retired, not paused — re-enabling means creating a new schedule.`
-      )
+      ))
     ) {
       return;
     }

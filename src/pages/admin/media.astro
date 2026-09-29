@@ -76,6 +76,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+import ReasonPanel from "../../components/ReasonPanel.astro";
 import { getTranslatorFor } from "../../lib/i18n";
 import { resolveNewsMediaR2Config } from "../../modules/media-library/domain/media-r2-config";
 import {
@@ -605,10 +606,20 @@ const columnCount = canActOnAny ? 9 : 8;
                               <button
                                 type="button"
                                 class="btn-inline media-delete-btn"
-                                data-media-id={item.id}
-                                data-media-label={
-                                  item.originalFilename ?? item.objectKey
+                                data-reason-title={t("Delete {label}?", {
+                                  label: item.originalFilename ?? item.objectKey
+                                })}
+                                data-reason-description={t(
+                                  "Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this."
+                                )}
+                                data-reason-action={`/api/v1/media/objects/${item.id}`}
+                                data-reason-method="DELETE"
+                                data-reason-label={t("Delete")}
+                                data-reason-max-length={
+                                  MAX_DELETE_REASON_LENGTH
                                 }
+                                data-reason-idempotent
+                                data-reason-danger
                               >
                                 {t("Delete")}
                               </button>
@@ -809,6 +820,16 @@ const columnCount = canActOnAny ? 9 : 8;
       </form>
     </section>
   )}
+
+  <ReasonPanel
+    cancelLabel={t("Cancel")}
+    reasonLabel={t("Reason")}
+    reasonHint={t("Recorded on the media object's audit row.")}
+    defaultSubmitLabel={t("Confirm")}
+    defaultFailureMessage={t(
+      "Could not delete the media object. Please try again."
+    )}
+  />
 </AdminLayout>
 
 <script>
@@ -823,7 +844,8 @@ const columnCount = canActOnAny ? 9 : 8;
     onAction,
     sendJson
   } from "../../lib/ui/admin-form-client";
-  import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
   import {
     describeUploadFailure,
     formatProgress,
@@ -914,46 +936,11 @@ const columnCount = canActOnAny ? 9 : 8;
     return { "Idempotency-Key": crypto.randomUUID() };
   }
 
-  onAction(".media-delete-btn", async (button) => {
-    const id = button.dataset.mediaId;
-    if (!id) return;
-    const label = button.dataset.mediaLabel ?? "this object";
-
-    // A reason is required by the endpoint and recorded on the audit row,
-    // which outlives the object. Prompt rather than send a placeholder:
-    // "deleted via admin" tells the next reader nothing.
-    const reason = window.prompt(
-      `Why are you deleting ${label}? Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this.`
-    );
-    if (reason === null) return;
-
-    if (reason.trim() === "") {
-      actionError.show("A reason is required to delete a media object.");
-      return;
-    }
-
-    if (reason.trim().length > MAX_DELETE_REASON_LENGTH) {
-      actionError.show(
-        `The reason must be at most ${MAX_DELETE_REASON_LENGTH} characters.`
-      );
-      return;
-    }
-
-    await mutateAndReload(
-      button,
-      actionError,
-      () =>
-        sendJson(
-          "DELETE",
-          `/api/v1/media/objects/${id}`,
-          { reason: reason.trim() },
-          idempotency()
-        ),
-      // Generic copy only — never surface internal detail.
-      "Could not delete the media object. Please try again.",
-      "Deleting…"
-    );
-  });
+  // Delete is entirely handled by `ReasonPanel` above (Issue #854 part 3) —
+  // its `data-reason-*` attributes on each button carry the target URL, the
+  // max length, and the `Idempotency-Key` opt-in, so no page-specific
+  // handler remains here.
+  initReasonPanel();
 
   onAction(".media-restore-btn", async (button) => {
     const id = button.dataset.mediaId;
@@ -983,9 +970,9 @@ const columnCount = canActOnAny ? 9 : 8;
 
     // The one action on this screen that cannot be undone.
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Purge ${label}? This removes its registry row permanently and cannot be undone. The stored file is removed later by the reconciliation job.`
-      )
+      ))
     ) {
       return;
     }

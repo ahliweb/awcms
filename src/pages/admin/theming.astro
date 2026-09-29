@@ -48,6 +48,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import SettingsSaveBar from "../../components/SettingsSaveBar.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import {
@@ -476,20 +477,18 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
         </p>
 
         <div class="admin-toolbar">
-          {canUpdate && (
-            <button
-              type="submit"
-              id="theming-draft-submit"
-              class="module-toggle"
-            >
-              {t("Save draft")}
-            </button>
-          )}
           <button type="button" id="theming-validate" class="btn-inline">
             {t("Validate")}
           </button>
         </div>
       </form>
+
+      {canUpdate && (
+        <SettingsSaveBar
+          formId="theming-draft-form"
+          saveLabel={t("Save draft")}
+        />
+      )}
 
       <div
         id="theming-validate-result"
@@ -664,9 +663,13 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     sendJson,
     sendJsonForData
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { initSettingsSaveBars } from "../../lib/ui/settings-save-bar-client";
 
   const actionError = messageBox("theming-action-error");
   const draftError = messageBox("theming-draft-error");
+
+  initSettingsSaveBars();
 
   /**
    * `validate` and `preview` are the two calls on this screen whose whole point
@@ -922,9 +925,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     // Destructive in the sense that matters: it changes what every visitor sees,
     // and the version it creates can never be edited afterwards.
     if (
-      !window.confirm(
+      !(await confirmAction(
         "Publish the saved draft? It becomes the live look immediately, and the published version is immutable."
-      )
+      ))
     ) {
       return;
     }
@@ -939,9 +942,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
 
   onAction("#theming-retire", async (button) => {
     if (
-      !window.confirm(
+      !(await confirmAction(
         "Retire the live theme? The site falls back to the default theme until you publish or roll back."
-      )
+      ))
     ) {
       return;
     }
@@ -961,9 +964,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
       ? `version ${button.dataset.versionNumber}`
       : "this version";
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Roll the live theme back to ${label}? It becomes the live look immediately.`
-      )
+      ))
     ) {
       return;
     }

@@ -433,6 +433,7 @@ const colCount = canConfigure ? 5 : 4;
     onSubmitAll,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("roles-action-error");
   const createError = messageBox("role-create-error");
@@ -548,7 +549,7 @@ const colCount = canConfigure ? 5 : 4;
     }
 
     if (button.dataset.roleAction === "delete") {
-      if (!window.confirm(`Soft-delete role "${code}"?`)) return;
+      if (!(await confirmAction(`Soft-delete role "${code}"?`))) return;
       const reason = (
         window.prompt("Reason for deleting (optional)?") ?? ""
       ).trim();
@@ -569,7 +570,7 @@ const colCount = canConfigure ? 5 : 4;
     }
 
     if (button.dataset.roleAction === "restore") {
-      if (!window.confirm(`Restore role "${code}"?`)) return;
+      if (!(await confirmAction(`Restore role "${code}"?`))) return;
 
       await mutateAndReload(
         button,
@@ -584,7 +585,8 @@ const colCount = canConfigure ? 5 : 4;
     if (button.dataset.roleAction === "revoke") {
       const permissionId = button.dataset.permissionId;
       if (!permissionId) return;
-      if (!window.confirm("Remove this permission from the role?")) return;
+      if (!(await confirmAction("Remove this permission from the role?")))
+        return;
 
       await mutateAndReload(
         button,

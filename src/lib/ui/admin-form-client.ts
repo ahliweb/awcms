@@ -335,10 +335,26 @@ export type SubmitContext = {
  * and ships it to every viewer of the page.
  */
 function submitContext(form: HTMLFormElement): SubmitContext {
+  // A form's submit button is USUALLY a descendant, but `SettingsSaveBar`
+  // (Issue #854 part 2) renders it outside the `<form>` and links it back
+  // with `form="<id>"` — the standard HTML mechanism for a submit control
+  // that is not nested inside the form it submits. Falling back to that
+  // lookup keeps `lockElement`'s busy-label/disable behaviour working for a
+  // form adopting the bar, without requiring every OTHER form on this screen
+  // to also have an id (the fallback only runs when the first query finds
+  // nothing).
+  const submit =
+    form.querySelector<HTMLButtonElement>('button[type="submit"]') ??
+    (form.id
+      ? document.querySelector<HTMLButtonElement>(
+          `button[type="submit"][form="${form.id}"]`
+        )
+      : null);
+
   return {
     form,
     data: new FormData(form),
-    submit: form.querySelector<HTMLButtonElement>('button[type="submit"]')
+    submit
   };
 }
 

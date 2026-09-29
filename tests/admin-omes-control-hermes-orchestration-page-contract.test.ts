@@ -352,9 +352,11 @@ describe("Progres Hermes: real, polled projection (ahliweb/omes#249, ADR-0030) �
     // Not the old, unstyled, invented class this screen shipped with.
     expect(source).not.toContain("button-secondary");
     // It already requires confirmation before the destructive DELETE —
-    // this screen's own `window.confirm`, the same pattern every other
-    // destructive admin action in this codebase uses.
-    expect(source).toContain("window.confirm");
+    // via the shared `ConfirmDialog` (`confirmAction()`, Issue #854 part 1,
+    // ADR-0125), the same pattern every other destructive admin action in
+    // this codebase now uses (this screen previously called
+    // `window.confirm()` directly).
+    expect(source).toContain("confirmAction");
   });
 
   test('"Use a GitHub token" is a real, normally-sized checkbox — not the `.admin-create-form input` text-field box model', async () => {

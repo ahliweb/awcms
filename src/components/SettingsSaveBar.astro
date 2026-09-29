@@ -1,0 +1,114 @@
+---
+/**
+ * SettingsSaveBar — a sticky bottom bar for a settings form (Issue #854
+ * part 2, adapted from ahliweb/media-lenterakalteng's `SettingsSaveBar.astro`,
+ * itself from its ADR-0123/0124 v2 shell work).
+ *
+ * ## What this component is
+ *
+ * A **presentation-only** wrapper around TWO plain HTML controls that already
+ * work with no JavaScript at all:
+ *
+ *   - `<button type="submit" form={formId}>` — the `form` attribute lets this
+ *     button submit `formId` even though it is not a descendant of that
+ *     `<form>` (this bar is rendered where the caller places it — typically
+ *     right after the form's closing tag — not nested inside the form's own
+ *     markup). A real HTML form submission, exactly like a submit button
+ *     written inside the form.
+ *   - `<button type="reset" form={formId}>` (only when `resetLabel` is
+ *     given) — same mechanism, native `reset` behaviour, no script.
+ *
+ * It introduces **no new endpoint**: whatever `formId` already submits to
+ * (an `onSubmit` handler in the page's own `<script>`, via
+ * `../lib/ui/admin-form-client`) is exactly what this bar triggers.
+ *
+ * ## Props
+ *
+ * | Prop         | Type      | Required | Notes                                                                |
+ * | ------------ | --------- | -------- | ---------------------------------------------------------------------|
+ * | `formId`     | `string`  | yes      | `id` of the `<form>` this bar's buttons submit/reset.                |
+ * | `saveLabel`  | `string`  | yes      | Primary button text — pass a translated string (`t("Save changes")`).|
+ * | `resetLabel` | `string`  | no       | Secondary button text. Omitted → no secondary button is rendered.    |
+ * | `ariaLabel`  | `string`  | no       | Landmark name. Pass a translated string; falls back to `"Save changes"`.|
+ *
+ * A named `status` slot carries the text beside the buttons — "Saved",
+ * "Unsaved changes", or nothing at all.
+ *
+ * ## Demo
+ *
+ * ```astro
+ * <form id="blog-settings-form" class="admin-form">
+ *   ...fields...
+ * </form>
+ *
+ * <SettingsSaveBar
+ *   formId="blog-settings-form"
+ *   saveLabel={t("Save changes")}
+ * >
+ *   <span slot="status" id="blog-settings-save-status">{t("Saved")}</span>
+ * </SettingsSaveBar>
+ * ```
+ *
+ * ## Always visible — a deliberate design choice
+ *
+ * This bar renders UNCONDITIONALLY, not just once a field has changed:
+ * hiding it until a script detects a change would mean a JavaScript-disabled
+ * operator never sees a Save control here at all, on a screen that relies on
+ * the bar as its only submit affordance. The optional client module (see
+ * `../lib/ui/settings-save-bar-client.ts`) adds only the dirty-vs-saved
+ * VISUAL distinction — toggling a class and the status text — without ever
+ * hiding the controls themselves.
+ *
+ * ## Accessibility
+ *
+ * - `role="region"` + `aria-label` makes the bar a landmark a screen-reader
+ *   user can jump to directly, separate from the form's own fields.
+ * - Native buttons carry the browser's own focus/activation semantics.
+ * - DOM order matters more than visual position for keyboard users: this bar
+ *   is rendered where the caller places it, so Tab reaches it in the same
+ *   order a sighted user would expect, and `position: sticky` never changes
+ *   tab order.
+ */
+interface Props {
+  formId: string;
+  saveLabel: string;
+  resetLabel?: string;
+  ariaLabel?: string;
+  /** Extra class names. */
+  class?: string;
+}
+
+const {
+  formId,
+  saveLabel,
+  resetLabel,
+  ariaLabel = "Save changes",
+  class: className
+} = Astro.props;
+
+const hasStatusSlot = Astro.slots.has("status");
+---
+
+<div
+  class:list={["save-bar", className]}
+  role="region"
+  aria-label={ariaLabel}
+  data-save-bar
+  data-save-bar-form={formId}
+>
+  {hasStatusSlot && (
+    <div class="save-bar-status">
+      <slot name="status" />
+    </div>
+  )}
+  <div class="save-bar-actions">
+    {resetLabel !== undefined && (
+      <button type="reset" form={formId} class="save-bar-reset">
+        {resetLabel}
+      </button>
+    )}
+    <button type="submit" form={formId} class="save-bar-save">
+      {saveLabel}
+    </button>
+  </div>
+</div>

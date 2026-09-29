@@ -1,0 +1,89 @@
+---
+/**
+ * ConfirmDialog — an accessible replacement for `window.confirm()` (Issue
+ * #854 part 1, adapted from `initConfirmDialog` in
+ * ahliweb/media-lenterakalteng's `admin-form-client.ts`).
+ *
+ * ## Render this ONCE per page
+ *
+ * `AdminLayout` renders exactly one `<dialog id="confirm-dialog">`, shared by
+ * every button on the page that needs a yes/no gate before a mutation. Do not
+ * render a second one on an individual admin screen — `confirmAction()` (see
+ * `../lib/ui/confirm-dialog-client.ts`) always wires the FIRST element with
+ * this id it finds.
+ *
+ * ## Why `<dialog>` instead of `window.confirm()`
+ *
+ * `window.confirm()` blocks the main thread, cannot be styled (so it cannot
+ * be theme-aware — it stays the OS chrome even in dark mode), and its exact
+ * wording and button order vary by browser. `showModal()` on a native
+ * `<dialog>` gives every property that matters instead:
+ *
+ *   - a real focus trap (Tab cannot leave the dialog while it is open)
+ *   - Escape closes it, handled by this component's own `cancel` listener so
+ *     Escape reliably means "cancel", not "confirm"
+ *   - focus returns to the button that opened it once the dialog closes —
+ *     native behaviour of `close()`, not something this component tracks
+ *   - `::backdrop` and page inertness behind it, both platform-provided
+ *   - it is themed by the same tokens (`tokens.css`) as the rest of the
+ *     admin shell, so it follows light/dark like everything else
+ *
+ * ## API
+ *
+ * `confirmAction(message: string): Promise<boolean>` — resolves `true` when
+ * the operator confirms, `false` on Cancel, Escape, or a backdrop dismissal.
+ * Because it returns a `Promise<boolean>`, a call site converts with a
+ * one-line change:
+ *
+ * ```diff
+ * - if (!window.confirm("Delete this row?")) return;
+ * + if (!(await confirmAction("Delete this row?"))) return;
+ * ```
+ *
+ * ## Accessibility
+ *
+ * `role="alertdialog"` (not the bare `role="dialog"` implied by `<dialog>`
+ * alone) — this box always interrupts to ask a yes/no question, which is
+ * exactly what `alertdialog` is for. `aria-labelledby` points at the message
+ * paragraph itself, since there is no separate heading: the message IS the
+ * question.
+ *
+ * ## Props
+ *
+ * | Prop           | Type     | Required | Notes                                                    |
+ * | -------------- | -------- | -------- | ---------------------------------------------------------|
+ * | `id`           | `string` | no       | Dialog element id. Default `"confirm-dialog"`.           |
+ * | `cancelLabel`  | `string` | yes      | Cancel button text — pass a translated string.           |
+ * | `confirmLabel` | `string` | yes      | Confirm button text — pass a translated string.          |
+ */
+interface Props {
+  id?: string;
+  cancelLabel: string;
+  confirmLabel: string;
+}
+
+const { id = "confirm-dialog", cancelLabel, confirmLabel } = Astro.props;
+---
+
+<dialog
+  id={id}
+  class="admin-palette confirm-dialog"
+  role="alertdialog"
+  aria-labelledby={`${id}-message`}
+>
+  <form method="dialog" class="confirm-dialog-body">
+    <p id={`${id}-message`} class="confirm-dialog-message"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn-secondary" id={`${id}-cancel`}>
+        {cancelLabel}
+      </button>
+      <button
+        type="button"
+        class="btn-danger btn-danger--solid"
+        id={`${id}-confirm`}
+      >
+        {confirmLabel}
+      </button>
+    </div>
+  </form>
+</dialog>

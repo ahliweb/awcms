@@ -2517,6 +2517,292 @@
   color: var(--color-text-muted);
 }
 
+/* ---- Confirm dialog (Issue #854 part 1) ----------------------------- */
+/*
+ * Replaces `window.confirm()` — see `ConfirmDialog.astro` and
+ * `confirm-dialog-client.ts`. Reuses `.admin-palette`'s dialog chrome (same
+ * `<dialog>`-with-`showModal()` box, same tokens) rather than a second copy of
+ * the surface/border/shadow rules, since both are the same kind of object: a
+ * centred modal on `::backdrop`.
+ */
+.confirm-dialog {
+  width: min(420px, 92vw);
+  margin: 22vh auto auto;
+}
+
+.confirm-dialog-body {
+  padding: var(--sp-5) var(--sp-4);
+}
+
+.confirm-dialog-message {
+  margin: 0 0 var(--sp-4);
+  color: var(--color-text);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 359.98px) {
+  .confirm-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-dialog-actions .btn-primary,
+  .confirm-dialog-actions .btn-secondary,
+  .confirm-dialog-actions .btn-danger {
+    width: 100%;
+  }
+}
+
+/* ---- Reason panel (Issue #854 part 3) ------------------------------- */
+/*
+ * Replaces `window.prompt()` for an action whose endpoint records a reason —
+ * see `ReasonPanel.astro` and `reason-panel-client.ts`. A right-hand drawer on
+ * a wide viewport, a full-width sheet on a narrow one.
+ */
+.reason-panel {
+  width: min(420px, 92vw);
+  max-width: none;
+  max-height: 100vh;
+  height: 100%;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.reason-panel::backdrop {
+  background: var(--color-overlay);
+}
+
+.reason-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.reason-panel-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.reason-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.reason-panel-close:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.reason-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+
+.reason-panel-description {
+  margin: 0 0 var(--sp-4);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.reason-panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.reason-panel-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.reason-panel-required-marker {
+  color: var(--color-danger);
+}
+
+.reason-panel-counter {
+  font-weight: var(--fw-normal);
+  color: var(--color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+.reason-panel-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  resize: vertical;
+}
+
+.reason-panel-textarea:focus-visible {
+  outline: 2px solid var(--color-primary-strong);
+  outline-offset: 1px;
+}
+
+.reason-panel-hint {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+.reason-panel-error {
+  margin: var(--sp-2) 0 0;
+  color: var(--color-danger-strong);
+  font-size: var(--fs-sm);
+}
+
+.reason-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.reason-panel-spacer {
+  flex: 1;
+}
+
+@media (max-width: 639.98px) {
+  .reason-panel {
+    width: 100%;
+  }
+}
+
+/* ---- Settings save bar (Issue #854 part 2) -------------------------- */
+/*
+ * A sticky bar pinned to the bottom of the viewport, submitting an existing
+ * `<form>` through `type="submit" form="…"` — see `SettingsSaveBar.astro`.
+ * Always rendered; the dark fill below is purely the "there is something to
+ * act on here" affordance, not a sign the controls are conditional. Reuses
+ * the sidebar's dark tokens rather than inventing a new fill, since both are
+ * the same "dark chrome on a light canvas" role in this shell.
+ */
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--color-sidebar-border);
+  background: var(--color-sidebar-bg);
+  color: var(--color-sidebar-text);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.save-bar-status {
+  font-size: var(--fs-sm);
+  color: var(--color-sidebar-text);
+}
+
+.save-bar.is-dirty .save-bar-status {
+  color: var(--color-sidebar-text-strong);
+  font-weight: var(--fw-semibold);
+}
+
+.save-bar-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+.save-bar-reset,
+.save-bar-save {
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.save-bar-reset {
+  background: transparent;
+  border-color: var(--color-sidebar-border);
+  color: var(--color-sidebar-text-strong);
+}
+
+.save-bar-reset:hover {
+  background: var(--color-sidebar-surface);
+}
+
+.save-bar-save {
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+}
+
+.save-bar-save:hover {
+  background: var(--color-primary-hover);
+}
+
+.save-bar-save:focus-visible,
+.save-bar-reset:focus-visible {
+  outline: 2px solid var(--color-sidebar-text-strong);
+  outline-offset: 2px;
+}
+
+@media (max-width: 359.98px) {
+  .save-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .save-bar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .save-bar-reset,
+  .save-bar-save {
+    flex: 1;
+  }
+}
+
 /* ---- Toolbar / filter strip ---------------------------------------- */
 /*
  * The row of search box, filter chips and right-aligned actions that sits above

@@ -1282,6 +1282,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const configError = messageBox("seo-config-form-error");
   const settingsError = messageBox("redirect-settings-error");
@@ -1502,7 +1503,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     const action = button.dataset.lifecycleAction;
     if (!id || !action) return;
     const confirmText = button.dataset.lifecycleConfirm;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirmAction(confirmText))) return;
 
     await mutateAndReload(
       button,
@@ -1591,9 +1592,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
 
   onAction("#redirect-purge-btn", async (button) => {
     if (
-      !window.confirm(
+      !(await confirmAction(
         "Purge this rule permanently? A purged rule cannot be restored."
-      )
+      ))
     ) {
       return;
     }
@@ -1634,9 +1635,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     if (!id) return;
     const path = button.dataset.observationPath ?? "this observation";
     if (
-      !window.confirm(
+      !(await confirmAction(
         `Dismiss ${path}? The record is deleted and will only return if the 404 recurs.`
-      )
+      ))
     ) {
       return;
     }
