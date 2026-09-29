@@ -16,8 +16,8 @@
  * strict `default-src 'self'` policy (tests/security-headers-csp.test.ts)
  * holds — nothing here weakens it.
  *
- * ACCESSIBILITY: the only local transitions are on `.admin-panel`/`.stat-card`
- * hover and the details/summary marker; all are decorative and stripped under
+ * ACCESSIBILITY: the only local transitions are on `.admin-panel` hover and
+ * the details/summary marker; all are decorative and stripped under
  * `@media (prefers-reduced-motion: reduce)` at the bottom. Entrance motion is
  * delegated entirely to `motion.css` (already reduced-motion guarded). Touch
  * targets in tables are bumped to >=44px on small screens.
@@ -119,101 +119,8 @@
 }
 
 /* ==================================================================== */
-/* Stat cards (dashboard)                                                */
+/* Quick-link tiles (dashboard shortcuts).                              */
 /* ==================================================================== */
-.stat-grid {
-  display: grid;
-  gap: var(--sp-4);
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 640px) {
-  .stat-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-}
-
-/*
- * ADR-0120 — the stat card is INVERTED: value first, label under it.
- *
- * It used to read label-then-value, which is how a form field reads. A stat
- * card is scanned, not read: the eye wants the number, and the word is what
- * explains the number it already found. The design reference makes the same
- * choice, and it is why the value can carry the large type while the label
- * stays at body size.
- *
- * `.stat-head` is an optional first row for an icon tile (`.admin-tile`) and a
- * delta, so a screen can add either without a second card class.
- */
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  padding: var(--sp-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-}
-
-.stat-card .stat-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-
-.stat-card .stat-delta {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  color: var(--color-text-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-card .stat-delta[data-tone="success"] {
-  color: var(--color-success-on-soft);
-}
-
-.stat-card .stat-delta[data-tone="danger"] {
-  color: var(--color-danger-on-soft);
-}
-
-/* `order` puts the value above the label without either needing to move in the
-   markup — so a screen keeps writing label-then-value (which is the sensible
-   reading order for a screen reader) while the eye gets value-then-label. */
-.stat-card .stat-label {
-  order: 2;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-normal);
-  color: var(--color-text-muted);
-}
-
-.stat-card .stat-value {
-  order: 1;
-  margin-top: 0;
-  font-size: 29px;
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-  word-break: break-word;
-}
-
-.stat-card .stat-value.stat-value--mono {
-  font-family: var(--font-mono);
-  font-size: var(--fs-lg);
-  letter-spacing: 0;
-}
-
-.stat-card .stat-hint {
-  order: 3;
-  margin-top: 0;
-  font-size: var(--fs-xs);
-  color: var(--color-text-faint);
-}
-
-/* Quick-link tiles (dashboard shortcuts). */
 .quick-links {
   display: grid;
   gap: var(--sp-3);
@@ -305,34 +212,6 @@
 .empty-state .empty-state-text {
   max-width: 44ch;
   font-size: var(--fs-sm);
-}
-
-/* ==================================================================== */
-/* Status badge — additive variants (composes admin.css .status-badge)   */
-/* ==================================================================== */
-/* ADR-0120 — tinted, matching the variants in `admin.css`. Both files must
-   agree: they style the SAME element, and a solid `info` beside a tinted
-   `success` in one table is the drift this pairing exists to avoid. */
-.status-badge[data-variant="info"] {
-  background: var(--color-info-soft);
-  color: var(--color-info-on-soft);
-}
-
-.status-badge[data-variant="danger"] {
-  background: var(--color-danger-soft);
-  color: var(--color-danger-on-soft);
-}
-
-/*
- * The dot is now laid out by the flex rule in `admin.css` (`gap`), so the
- * `margin-right` + `vertical-align` pair here would double the spacing and
- * push it off the text baseline. Only the size differs from that rule, and it
- * is set to match: 5px, because at 6px the dot reads as a bullet rather than
- * as a status light.
- */
-.status-badge .status-dot {
-  width: 5px;
-  height: 5px;
 }
 
 /* ==================================================================== */

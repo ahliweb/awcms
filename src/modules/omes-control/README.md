@@ -129,7 +129,7 @@ Issue ahliweb/omes#200 shipped the first five screens (Overview, Servers, Deploy
 - **Backups** (`backups.read`, `backups.restore`) — artifact metadata (recovery class from the manifest, sha256 checksum, size, a computed `fresh` flag) and the manifest itself, escaped, never raw backup contents. Restore is the one mutation: always destructive, excluded from the safe-operation allowlist, and routed through the SAME `workflow-approval` engine as `stop`/`rollback` — this screen never runs a second approval decision, only submits and links the resulting `workflowInstanceId` into `/admin/approvals`.
 - **Audit** (`audit.read`) — TWO separate, source-labelled sections, never merged: canonical control-plane actor/action events (`awcms_audit_events` via `listAuditEvents`, narrowed to `moduleKey: "omes_control"`) and the remote OMES execution/reconciliation projection (`awcms_omes_audit_projections` via `fetchAuditProjections`). `logging.audit_trail.read`'s own `/admin/audit-trail` remains the cross-module view of the first table; this screen is a narrower, OMES-scoped read of the same data, not a second writer.
 - **Enrollments** (`enrollments.manage`) — issues and revokes worker enrollment tokens, closing the gap #201 deliberately left open. Adds no new write path: both actions call the SAME `POST /api/v1/omes/servers/{id}/enrollment-challenges` and `.../revoke` endpoints #198 shipped, unmodified by this issue. The read side is a new fleet-wide query, `application/enrollment-directory.ts`'s `fetchEnrollments` — `fetchServerDetail` (Servers) only ever looked at one server's enrollments at a time. The issued token is shown exactly once, rendered via the shared `messageBox` helper's `textContent`-only `show()` (never `innerHTML`), never written to `localStorage`/`sessionStorage`, never logged, and disappears the moment the page is left or reloaded. See that screen's own header comment for the full show-once-modal-vs-clipboard-button-vs-download tradeoff analysis, including why a copy-to-clipboard button was drafted and then removed (it pushed this single screen over the repo's client asset budget) in favor of the plain in-page reveal `machine-credentials.astro` already established.
-- **AI privacy** (`ai_privacy.read`, `ai_privacy.approve`) — issue ahliweb/omes#232, the tenth screen. Two sections, never merged: a posture-evidence table (`evidenceFreshness`/`effectiveStatus` always shown, stale/unknown evidence rendered with an explicit badge, never a healthy one) and an egress owner-approval request table. The approve/deny form never offers a control for a RESTRICTED classification resolving to a `cloud_sanitized` destination — UI hiding here is a courtesy on top of the three independent server-side/database refusals described above, never the enforcement boundary itself. This screen introduces no new CSS of its own — it reuses the SAME `styles/admin-screens.css` classes (`data-table`, `status-badge`, `admin-section`, …) every other `omes_control` screen already uses, plus the `.omes-cc` scoped design system (`styles/omes-control-center.css`, ahliweb/omes#246) every other `/admin/omes/*` screen now wraps its content in. It does not edit either shared stylesheet.
+- **AI privacy** (`ai_privacy.read`, `ai_privacy.approve`) — issue ahliweb/omes#232, the tenth screen. Two sections, never merged: a posture-evidence table (`evidenceFreshness`/`effectiveStatus` always shown, stale/unknown evidence rendered with an explicit badge, never a healthy one) and an egress owner-approval request table. The approve/deny form never offers a control for a RESTRICTED classification resolving to a `cloud_sanitized` destination — UI hiding here is a courtesy on top of the three independent server-side/database refusals described above, never the enforcement boundary itself. This screen introduces no new CSS of its own — it reuses the SAME `styles/admin.css`/`styles/admin-screens.css` classes (`data-table`, `admin-status-pill`, `admin-section`, …) every other `omes_control` screen already uses, plus the `.omes-cc` scoped design system (`styles/omes-control-center.css`, ahliweb/omes#246) every other `/admin/omes/*` screen now wraps its content in. It does not edit either shared stylesheet.
 - **Orkestrasi langsung / live orchestration** (`hermes_orchestration.read`) — issue ahliweb/omes#246 part 2, the eleventh screen. Renders the live Hermes manager → agent → subagent tree (depth computed by BFS from the declared root, with a client-side depth filter — pure DOM show/hide, no extra request) plus an activity stream that polls `GET /api/v1/omes/hermes-orchestration/events` every 8 seconds and re-renders from the server's current, authoritative list (never patches in place), tolerating a missed tick or transport interruption by leaving the last-known list rendered rather than clearing it.
 - **Hermes** (`hermes_orchestration.read`) — issue ahliweb/omes#246 part 2, the twelfth screen. A summary of the tenant's currently active (or, absent one, most recently reported) Hermes delegated task: session, goal, status, started-at, step count, and a bounded recent log. Planner/step-budget render as an explicit "not reported" state — see the Hermes orchestration section above for why.
 - **Progres Hermes / Hermes progress** (`hermes_orchestration.read`; configuration form gated by the NEW `repository_progress.configure`) — issue ahliweb/omes#246 part 2, the thirteenth screen; issue ahliweb/omes#249 (ADR-0030) replaces its former "not implemented yet" empty state with a real projection. Renders one of four explicit states — unconfigured, configured-awaiting-first-poll, configured-fresh, configured-stale/error (last successful data retained, never discarded) — plus milestones with accessible `<progress>` bars and an issues table (number/title/state/kind/milestone, each linking out to GitHub). See the Repository progress section above.
@@ -148,9 +148,11 @@ class each of the 9 pages adds around its own `<AdminLayout>` slot content,
 never a change to `AdminLayout.astro`, `tokens.css`, or any shared component.
 
 **How it composes rather than replaces.** Every component class the 9 screens
-already used — `.stat-card`, `.status-badge`, `.data-table`, `.admin-panel`,
+use — `.admin-stat-card`, `.admin-status-pill`, `.data-table`, `.admin-panel`,
 `.quick-link`, `.empty-state`, `.btn*` (all from `admin.css`/
-`admin-screens.css`) — is reused unmodified. `.omes-cc` overrides the SAME
+`admin-screens.css`) — is reused unmodified (the legacy `.stat-card`/
+`.status-badge` classes these replace were retired repo-wide by Issue #866).
+`.omes-cc` overrides the SAME
 custom properties those files already consume (`--color-bg`, `--color-surface`,
 `--color-text*`, the `--color-primary`/`-success`/`-warning`/`-danger`/`-info`
 families, `--color-border*`), scoped under `.omes-cc` so no other admin screen
@@ -204,11 +206,12 @@ same 9 screens:
 
 1. **Multi-value tiles.** The overview screen's 4 breakdown tiles (server
    health distribution, job state summary, backup freshness, deployment
-   drift) rendered every part through the same 32px mono `.stat-value` style
-   as a genuine single-number KPI, wrapping onto 2-3 lines at 1440px and worse
-   below it. They now render as `.omes-stat-breakdown`, a compact wrapping
-   list of value+label chips at body text size. Every other `.stat-value` on
-   all 9 screens is a single number and is unaffected.
+   drift) rendered every part through the same 32px mono `.admin-stat-card-
+value` style as a genuine single-number KPI, wrapping onto 2-3 lines at
+   1440px and worse below it. They now render as `.omes-stat-breakdown`, a
+   compact wrapping list of value+label chips at body text size. Every other
+   `.admin-stat-card-value` on all 9 screens is a single number and is
+   unaffected.
 2. **Form controls.** The 8 filter/create forms (register-a-server, and every
    list screen's filter bar) used a bare `.admin-toolbar` with sibling
    `<label>`/`<input>` markup — no card, no input/select styling, the native

@@ -804,6 +804,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 250,566 is the measured value with no added margin.
+ *
+ * **Lowered for Issue #866** (wave 7 of #858, the final sweep): the last
+ * `.stat-card`/`.stat-grid`/`.stat-label`/`.stat-value`/`.stat-hint`/
+ * `.stat-head`/`.stat-delta` and `.status-badge`/`.status-dot` consumers
+ * (data-lifecycle.astro, site-search.astro, idn-regions.astro, tenants.astro,
+ * sync.astro, push-notifications.astro, domain-events.astro,
+ * omes/health.astro, reporting.astro) migrated onto `.admin-stat-card`/
+ * `.admin-status-pill`, which let the legacy rule blocks be DELETED from
+ * `admin.css`/`admin-screens.css` (and the `.stat-card` half of the dual
+ * selector list in `omes-control-center.css`) — this is the first wave that
+ * shrinks the budget rather than growing it, because retiring a whole legacy
+ * component family removes CSS with no replacement cost (the migrated
+ * markup reuses primitives `admin.css` already shipped). Measured actual
+ * total, landing on top of #872 above:
+ *
+ * ```
+ * before (250,566 ceiling)   250,566 B
+ * - legacy .stat-card/.stat-grid/.status-badge rule blocks retired   PLACEHOLDER B (measured actual total)
+ * ```
+ *
+ * PLACEHOLDER is the measured value with no added margin.
  */
 export const APP_BUDGET_BYTES = 250_566;
 
@@ -874,8 +895,16 @@ export const PER_FILE_BUDGET_BYTES = 27_000;
  * `admin.css` rather than duplicated per screen. Measured after the addition:
  * `_astro/AdminLayout.*.css` is 52,089 B. 57,300 is measured + ~10%, the same
  * margin this constant's previous raises used.
+ *
+ * **Lowered to 56,800 for Issue #866** (wave 7 of #858, the final sweep):
+ * retiring the legacy `.stat-card`/`.stat-grid`/`.status-badge`/`.status-dot`
+ * rule blocks from `admin.css`/`admin-screens.css` (see `APP_BUDGET_BYTES`'s
+ * own docblock for the consumer list) shrinks the bundled `AdminLayout.*.css`
+ * chunk. Measured after the retirement: `_astro/AdminLayout.*.css` is
+ * 51,594 B. 56,800 is measured + ~10%, the same margin this constant's
+ * previous raises used.
  */
-export const PER_FILE_CSS_BUDGET_BYTES = 57_300;
+export const PER_FILE_CSS_BUDGET_BYTES = 56_800;
 
 /**
  * ADR-0120 — the typeface, budgeted separately from everything else.

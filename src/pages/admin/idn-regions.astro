@@ -500,36 +500,40 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {canReadDatasets && (
     <section class="admin-section fade-in-up" id="idn-regions-summary">
       <h2 class="admin-section-title">{t("Currently served")}</h2>
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Active version")}</span>
-          <span class="stat-value stat-value--mono">
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Active version")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
             {activeDataset ? activeDataset.datasetCode : "none"}
           </span>
           {activeDataset && (
-            <span class="stat-hint">
+            <span class="admin-stat-card-caption">
               {t("since {timestamp} UTC", {
                 timestamp: formatTimestamp(activeDataset.activatedAt)
               })}
             </span>
           )}
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Regions in this version")}</span>
-          <span class="stat-value">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">
+            {t("Regions in this version")}
+          </span>
+          <span class="admin-stat-card-value">
             {activeDataset
               ? numberFormatter.format(activeDataset.rowCount)
               : "—"}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Imported versions")}</span>
-          <span class="stat-value">{datasets.length}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Imported versions")}</span>
+          <span class="admin-stat-card-value">{datasets.length}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Deployment")}</span>
-          <span class="stat-value stat-value--mono">{tenancyMode}</span>
-          <span class="stat-hint">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Deployment")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
+            {tenancyMode}
+          </span>
+          <span class="admin-stat-card-caption">
             {tenancyMode === "single"
               ? "one active tenant"
               : "serving more than one tenant"}

@@ -1348,61 +1348,6 @@
 }
 
 /* ==================================================================== */
-/* Status badge                                                         */
-/* ==================================================================== */
-/*
- * ADR-0120 — status badges are TINTED now, not solid.
- *
- * Solid fills were chosen so white text would clear 4.5:1, and they did. The
- * cost only shows at list scale: a table of forty rows with a solid green,
- * amber or red pill in every one reads as a warning panel, and the pill — the
- * least important thing in the row — is the loudest. The tinted pair
- * (`--color-X` on `--color-X-soft`, both measured >=4.5:1 in `tokens.css`) says
- * the same thing at the weight the information deserves.
- *
- * `--color-warning` was the worst of the old set and not only aesthetically:
- * `warning` used `--color-text` on `--color-warning`, which in the DARK theme
- * put near-black text on amber inside an otherwise dark row.
- */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-}
-
-/* The leading dot repeats the status in a second channel, so the badge does not
-   rely on hue alone (WCAG 1.4.1 Use of Colour). */
-.status-badge .status-dot {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: var(--radius-full);
-  background: currentcolor;
-}
-
-.status-badge[data-variant="success"] {
-  background: var(--color-success-soft);
-  color: var(--color-success-on-soft);
-}
-
-.status-badge[data-variant="neutral"] {
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
-}
-
-.status-badge[data-variant="warning"] {
-  background: var(--color-warning-soft);
-  color: var(--color-warning-on-soft);
-}
-
-/* ==================================================================== */
 /* Create form (admin write actions)                                    */
 /* ==================================================================== */
 .admin-create-form {
@@ -3479,9 +3424,9 @@
    Usage: an inline state readout with a semantic tone, built strictly from
    the `-soft`/`-on-soft` token pairs `tokens.css` already measures for AA —
    never a new literal colour. `data-tone="primary"` and `"neutral"` extend
-   `.status-badge`'s variant set (which this stays alongside rather than
-   replaces — see that block above) to the two tones the restyle's primitives
-   need beyond status semantics (an informational/brand pill, a quiet one). */
+   the legacy `.status-badge`'s variant set (retired repo-wide, Issue #866)
+   to the two tones the restyle's primitives need beyond status semantics
+   (an informational/brand pill, a quiet one). */
 .admin-status-pill {
   display: inline-flex;
   align-items: center;

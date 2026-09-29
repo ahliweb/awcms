@@ -4,9 +4,9 @@
  *
  * SCOPE: every rule here is written under the `.omes-cc` class, which each of
  * the 9 OMES screens wraps around its own `<AdminLayout>` slot content (see
- * those files). It never redefines a bare `--color-*`/`.stat-card`/etc. rule
- * at `:root` or without the `.omes-cc` prefix, so it changes nothing for the
- * other ~48 admin screens — the redesign's own scope requirement
+ * those files). It never redefines a bare `--color-*`/`.admin-stat-card`/etc.
+ * rule at `:root` or without the `.omes-cc` prefix, so it changes nothing for
+ * the other ~48 admin screens — the redesign's own scope requirement
  * (ahliweb/omes#246: "scope it to the OMES screens ... the rest of the AWCMS
  * admin keeps its own design, untouched").
  *
@@ -14,21 +14,15 @@
  * and `admin-screens.css` already consume (`--color-bg`, `--color-surface`,
  * `--color-text*`, `--color-primary`/`-success`/`-warning`/`-danger`/`-info`
  * families, `--color-border*`, `--shadow-*`). Every existing component class
- * those two files already define — `.stat-card`/`.admin-stat-card`,
- * `.status-badge`/`.admin-status-pill`, `.data-table`, `.admin-panel`,
- * `.quick-link`, `.empty-state`, `.btn*` — is REUSED as-is; this file
- * supplies no competing component CSS for anything that already exists, per
- * docs/ui-ux-design-system.md §7.4 ("reuse existing admin components ...
- * rather than introducing an unvetted third-party CSS/JS framework"). This
- * is also why `.admin-status-pill[data-tone]` needed NO new rule here when
- * Issue #865 (wave 6) migrated `.status-badge` to it across 11 of these
- * screens: both classes consume the same `--color-*-soft`/`-on-soft` custom
- * properties this file already overrides, so the dark palette carried over
- * automatically — including the `danger`/`info` tones several screens used
- * on `.status-badge` without a defined variant (admin.css's `.status-badge`
- * only ever styled `success`/`neutral`/`warning`; those sites rendered with
- * the undifferentiated default fill before this migration, and now get the
- * tone they always asked for). The only NEW component here is
+ * those two files already define — `.admin-stat-card`, `.admin-status-pill`,
+ * `.data-table`, `.admin-panel`, `.quick-link`, `.empty-state`, `.btn*` — is
+ * REUSED as-is; this file supplies no competing component CSS for anything
+ * that already exists, per docs/ui-ux-design-system.md §7.4 ("reuse existing
+ * admin components ... rather than introducing an unvetted third-party
+ * CSS/JS framework"). The legacy `.stat-card`/`.status-badge` classes these
+ * primitives replaced (Issue #866, wave 7) never had a competing rule here
+ * either — every one of the 9 OMES screens now renders `.admin-stat-card`/
+ * `.admin-status-pill` only. The only NEW component here is
  * `.omes-lifecycle`, the Bootstrap → Check → Diff → Apply → Verify →
  * Rollback strip on the overview screen, which has no existing equivalent to
  * reuse.
@@ -200,33 +194,25 @@
 }
 
 /*
- * KPI numbers read as telemetry, not prose — monospace, tabular. Selector
- * list covers both the legacy `.stat-card` (only `omes/health.astro` still
- * renders it — wave 4, §7 of docs/awcms/admin-ui-parity-matrix.md, out of
- * scope for #865) and `.admin-stat-card` (`omes/index.astro`, migrated by
- * Issue #860 wave 2; the other 11 OMES screens with a KPI tile, migrated by
- * Issue #865 wave 6) so the declaration body is written once, not duplicated
- * per class family. Once `omes/health.astro` migrates, the `.stat-card`
- * half of every selector pair in this file can be dropped.
+ * KPI numbers read as telemetry, not prose — monospace, tabular. All 9 OMES
+ * screens render `.admin-stat-card` only now (Issue #866, wave 7 retired the
+ * legacy `.stat-card` this rule used to also match on `omes/health.astro`).
  */
-.omes-cc .stat-card .stat-value,
 .omes-cc .admin-stat-card .admin-stat-card-value {
   font-family: var(--font-mono);
 }
 
 /*
  * Status dot on a KPI tile — a small filled circle before the label, coloured
- * by `data-tone`. Reuses the `.status-badge .status-dot` sizing convention
- * (admin-screens.css) rather than inventing a second dot rule.
+ * by `data-tone`. Reuses the `.admin-status-pill .admin-status-pill-dot`
+ * sizing convention (admin.css) rather than inventing a second dot rule.
  */
-.omes-cc .stat-card .stat-label,
 .omes-cc .admin-stat-card .admin-stat-card-label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
 
-.omes-cc .stat-card .stat-label::before,
 .omes-cc .admin-stat-card .admin-stat-card-label::before {
   content: "";
   display: inline-block;
@@ -237,37 +223,33 @@
   flex-shrink: 0;
 }
 
-.omes-cc .stat-card[data-tone="success"] .stat-label::before,
 .omes-cc .admin-stat-card[data-tone="success"] .admin-stat-card-label::before {
   background: var(--color-success);
 }
 
-.omes-cc .stat-card[data-tone="warning"] .stat-label::before,
 .omes-cc .admin-stat-card[data-tone="warning"] .admin-stat-card-label::before {
   background: var(--color-warning);
 }
 
-.omes-cc .stat-card[data-tone="danger"] .stat-label::before,
 .omes-cc .admin-stat-card[data-tone="danger"] .admin-stat-card-label::before {
   background: var(--color-danger);
 }
 
-.omes-cc .stat-card[data-tone="info"] .stat-label::before,
 .omes-cc .admin-stat-card[data-tone="info"] .admin-stat-card-label::before {
   background: var(--color-info);
 }
 
 /* ==================================================================== */
-/* Multi-value tiles — a `.stat-card` whose "value" is actually several   */
-/* labelled parts (defect #1, ahliweb/omes#246 part 1b)                   */
+/* Multi-value tiles — an `.admin-stat-card` whose "value" is actually    */
+/* several labelled parts (defect #1, ahliweb/omes#246 part 1b)           */
 /* ==================================================================== */
 /* Defect #1: the 4 overview breakdown tiles (server health distribution, job
    state summary, backup freshness, deployment drift) used to concatenate
-   every part into one string rendered through `.stat-value`'s 32px mono
-   style, wrapping onto 2-3 lines at 1440 and worse below it. This is the
-   compact alternative: small value+label chips, used ONLY where a tile's
-   value is genuinely composite. Every other `.stat-value` on all 9 screens
-   is one number and is unaffected. */
+   every part into one string rendered through `.admin-stat-card-value`'s
+   32px mono style, wrapping onto 2-3 lines at 1440 and worse below it. This
+   is the compact alternative: small value+label chips, used ONLY where a
+   tile's value is genuinely composite. Every other `.admin-stat-card-value`
+   on all 9 screens is one number and is unaffected. */
 .omes-cc .omes-stat-breakdown {
   order: 1;
   display: flex;

@@ -296,28 +296,36 @@ const messageColumns = canCancel ? 8 : 7;
           </span>
         </h2>
 
-        <div class="stat-grid stagger-children">
+        <div class="admin-stat-card-grid stagger-children">
           {PUSH_MESSAGE_STATUSES.map((status) => (
-            <div class="stat-card">
-              <span class="stat-label">{status.replace("_", " ")}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">
+                {status.replace("_", " ")}
+              </span>
               {/* `data-push-count` is what the SSE stream updates in place —
                     the server render stays the source of the FIRST value, so
                     the panel is correct before any script runs and correct
                     again if the stream never connects. */}
-              <span class="stat-value" data-push-count={status}>
+              <span class="admin-stat-card-value" data-push-count={status}>
                 {summary?.countsByStatus[status] ?? 0}
               </span>
             </div>
           ))}
-          <div class="stat-card">
-            <span class="stat-label">{t("Active devices")}</span>
-            <span class="stat-value" data-push-count="activeSubscriptions">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Active devices")}</span>
+            <span
+              class="admin-stat-card-value"
+              data-push-count="activeSubscriptions"
+            >
               {summary?.activeSubscriptions ?? 0}
             </span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Disabled devices")}</span>
-            <span class="stat-value" data-push-count="disabledSubscriptions">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Disabled devices")}</span>
+            <span
+              class="admin-stat-card-value"
+              data-push-count="disabledSubscriptions"
+            >
               {summary?.disabledSubscriptions ?? 0}
             </span>
           </div>

@@ -216,7 +216,7 @@ const canConfigureExports =
 const canTriggerExport =
   screen.state === "allowed" && screen.data.canTriggerExport;
 
-/** Freshness status -> `status-badge` variant. `rebuilding` is progress, not a fault. */
+/** Freshness status -> `admin-status-pill` tone. `rebuilding` is progress, not a fault. */
 const FRESHNESS_VARIANT: Record<string, string> = {
   current: "success",
   delayed: "warning",
@@ -338,10 +338,10 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
       <h2 class="admin-section-title" id="email-health-title">
         {t("Email queue health")}
         <span
-          class="status-badge"
-          data-variant={emailHealth.isHealthy ? "success" : "warning"}
+          class="admin-status-pill"
+          data-tone={emailHealth.isHealthy ? "success" : "warning"}
         >
-          <span class="status-dot" aria-hidden="true" />
+          <span class="admin-status-pill-dot" aria-hidden="true" />
           {emailHealth.isHealthy ? "healthy" : "needs attention"}
         </span>
       </h2>
@@ -445,14 +445,14 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                 <h3>
                   <span class="cell-code">{projection.key}</span>
                   <span
-                    class="status-badge"
-                    data-variant={
+                    class="admin-status-pill"
+                    data-tone={
                       FRESHNESS_VARIANT[projection.freshness.status] ??
                       "neutral"
                     }
                     data-freshness={projection.freshness.status}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {freshnessLabel(projection.freshness.status)}
                   </span>
                 </h3>
@@ -756,10 +756,10 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                   </td>
                   <td data-label={t("State")}>
                     <span
-                      class="status-badge"
-                      data-variant={config.enabled ? "success" : "neutral"}
+                      class="admin-status-pill"
+                      data-tone={config.enabled ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {config.enabled ? "enabled" : "retired"}
                     </span>
                   </td>
@@ -933,10 +933,10 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                   </td>
                   <td data-label={t("Status")} data-status={run.status}>
                     <span
-                      class="status-badge"
-                      data-variant={EXPORT_RUN_VARIANT[run.status]}
+                      class="admin-status-pill"
+                      data-tone={EXPORT_RUN_VARIANT[run.status]}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {EXPORT_RUN_STATUS_LABEL[run.status]}
                     </span>
                     {run.errorMessage && (

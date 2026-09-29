@@ -280,28 +280,32 @@ const queueColumns = canRetryQueue ? 7 : 6;
 
   {canSeeAnything && !loadError && (
     <section class="admin-section fade-in-up" aria-label="Sync summary">
-      <div class="stat-grid stagger-children">
+      <div class="admin-stat-card-grid stagger-children">
         {canReadNodes && (
-          <div class="stat-card">
-            <span class="stat-label">{t("Active nodes")}</span>
-            <span class="stat-value">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Active nodes")}</span>
+            <span class="admin-stat-card-value">
               {activeNodeCount}/{nodes.length}
             </span>
           </div>
         )}
         {canReadConflicts && (
-          <div class="stat-card">
-            <span class="stat-label">{t("Open conflicts")}</span>
-            <span class="stat-value">{openConflictCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Open conflicts")}</span>
+            <span class="admin-stat-card-value">{openConflictCount}</span>
             {openConflictCount > 0 && (
-              <span class="stat-hint">{t("Each needs a human decision")}</span>
+              <span class="admin-stat-card-caption">
+                {t("Each needs a human decision")}
+              </span>
             )}
           </div>
         )}
         {canReadQueue && (
-          <div class="stat-card">
-            <span class="stat-label">{t("Failed objects (this page)")}</span>
-            <span class="stat-value">{failedQueueCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Failed objects (this page)")}
+            </span>
+            <span class="admin-stat-card-value">{failedQueueCount}</span>
           </div>
         )}
       </div>

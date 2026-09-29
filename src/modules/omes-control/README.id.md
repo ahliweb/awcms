@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:a1eef93738f8c733b066811b1add27d6c1e2d5a947256c8bdcada9ff8ed6dfda -->
+<!-- i18n-source-hash: sha256:8247f1976add9f99d78fdf8c46fac4946f0537b7799eec36488fe671b6ede96d -->
 
 # `omes_control`
 
@@ -131,7 +131,7 @@ Issue ahliweb/omes#200 mengirimkan lima layar pertama (Overview, Servers, Deploy
 - **Backups** (`backups.read`, `backups.restore`) — metadata artefak (kelas pemulihan dari manifest, checksum sha256, ukuran, flag `fresh` terhitung) dan manifest itu sendiri, di-escape, tidak pernah konten backup mentah. Restore adalah satu-satunya mutasi: selalu destruktif, dikecualikan dari allowlist operasi aman, dan melalui mesin `workflow-approval` yang SAMA seperti `stop`/`rollback` — layar ini tidak pernah menjalankan keputusan persetujuan kedua, hanya mengajukan dan menautkan `workflowInstanceId` hasilnya ke `/admin/approvals`.
 - **Audit** (`audit.read`) — DUA bagian terpisah berlabel sumber, tidak pernah digabung: peristiwa aktor/aksi control-plane kanonis (`awcms_audit_events` via `listAuditEvents`, dipersempit ke `moduleKey: "omes_control"`) dan proyeksi eksekusi/rekonsiliasi OMES jarak jauh (`awcms_omes_audit_projections` via `fetchAuditProjections`). `/admin/audit-trail` milik `logging.audit_trail.read` tetap menjadi tampilan lintas-modul dari tabel pertama; layar ini adalah pembacaan yang lebih sempit dan bercakupan OMES dari data yang sama, bukan penulis kedua.
 - **Enrollments** (`enrollments.manage`) — menerbitkan dan mencabut token enrollment worker, menutup celah yang sengaja dibiarkan terbuka oleh #201. Tidak menambah jalur tulis baru — kedua aksi memanggil endpoint `POST /api/v1/omes/servers/{id}/enrollment-challenges` dan `.../revoke` yang SAMA yang sudah dikirim oleh #198, tidak diubah oleh issue ini. Sisi baca adalah kueri baru lintas-armada, `application/enrollment-directory.ts`'s `fetchEnrollments` — `fetchServerDetail` (Servers) hanya pernah melihat enrollment satu server pada satu waktu. Token yang diterbitkan ditampilkan tepat satu kali, dirender via `show()` milik helper `messageBox` bersama yang hanya memakai `textContent` (tidak pernah `innerHTML`), tidak pernah ditulis ke `localStorage`/`sessionStorage`, tidak pernah dicatat log, dan hilang begitu halaman ditinggalkan atau dimuat ulang. Lihat komentar header layar itu sendiri untuk analisis trade-off lengkap modal-sekali-tampil vs tombol-clipboard vs unduh, termasuk mengapa tombol salin-ke-clipboard sempat dibuat lalu dihapus (mendorong layar tunggal ini melampaui anggaran aset klien repo) demi reveal dalam-halaman biasa yang sudah mapan di `machine-credentials.astro`.
-- **AI privacy** (`ai_privacy.read`, `ai_privacy.approve`) — issue ahliweb/omes#232, layar kesepuluh. Dua bagian, tidak pernah digabung: tabel evidence postur (`evidenceFreshness`/`effectiveStatus` selalu ditampilkan, evidence usang/tidak diketahui dirender dengan lencana eksplisit, tidak pernah lencana sehat) dan tabel permintaan persetujuan pemilik untuk egress. Form approve/deny tidak pernah menawarkan kontrol untuk klasifikasi RESTRICTED yang mengarah ke tujuan `cloud_sanitized` — penyembunyian UI di sini hanyalah kesopanan di atas tiga penolakan independen server-side/database yang dijelaskan di atas, bukan batas penegakan itu sendiri. Layar ini tidak memperkenalkan CSS baru miliknya sendiri — ia memakai ulang kelas `styles/admin-screens.css` yang SAMA yang sudah dipakai setiap layar `omes_control` lain (`data-table`, `status-badge`, `admin-section`, …), plus sistem desain terlingkup `.omes-cc` (`styles/omes-control-center.css`, ahliweb/omes#246) yang kini dibungkus oleh setiap layar `/admin/omes/*` lain. Ia tidak mengedit salah satu stylesheet bersama itu.
+- **AI privacy** (`ai_privacy.read`, `ai_privacy.approve`) — issue ahliweb/omes#232, layar kesepuluh. Dua bagian, tidak pernah digabung: tabel evidence postur (`evidenceFreshness`/`effectiveStatus` selalu ditampilkan, evidence usang/tidak diketahui dirender dengan lencana eksplisit, tidak pernah lencana sehat) dan tabel permintaan persetujuan pemilik untuk egress. Form approve/deny tidak pernah menawarkan kontrol untuk klasifikasi RESTRICTED yang mengarah ke tujuan `cloud_sanitized` — penyembunyian UI di sini hanyalah kesopanan di atas tiga penolakan independen server-side/database yang dijelaskan di atas, bukan batas penegakan itu sendiri. Layar ini tidak memperkenalkan CSS baru miliknya sendiri — ia memakai ulang kelas `styles/admin.css`/`styles/admin-screens.css` yang SAMA yang sudah dipakai setiap layar `omes_control` lain (`data-table`, `admin-status-pill`, `admin-section`, …), plus sistem desain terlingkup `.omes-cc` (`styles/omes-control-center.css`, ahliweb/omes#246) yang kini dibungkus oleh setiap layar `/admin/omes/*` lain. Ia tidak mengedit salah satu stylesheet bersama itu.
 - **Orkestrasi langsung** (`hermes_orchestration.read`) — issue ahliweb/omes#246 bagian 2, layar kesebelas. Merender pohon manajer → agen → subagent Hermes secara langsung (kedalaman dihitung BFS dari root yang dideklarasikan, dengan filter kedalaman sisi-klien — sekadar tampil/sembunyi DOM, tanpa permintaan tambahan) plus aliran aktivitas yang melakukan polling `GET /api/v1/omes/hermes-orchestration/events` setiap 8 detik dan merender ulang dari daftar otoritatif terkini server (tidak pernah menambal di tempat), mentolerir satu tick yang terlewat atau gangguan transport dengan membiarkan daftar terakhir-diketahui tetap dirender alih-alih mengosongkannya.
 - **Hermes** (`hermes_orchestration.read`) — issue ahliweb/omes#246 bagian 2, layar kedua belas. Ringkasan tugas delegasi Hermes yang sedang aktif milik tenant (atau, jika tak ada, yang terakhir dilaporkan): sesi, tujuan, status, waktu mulai, jumlah langkah, dan log terbaru terbatas. Planner/anggaran-langkah dirender sebagai status eksplisit "tidak dilaporkan" — lihat bagian orkestrasi Hermes di atas untuk alasannya.
 - **Progres Hermes** (`hermes_orchestration.read`; formulir konfigurasi digerbangi izin BARU `repository_progress.configure`) — issue ahliweb/omes#246 bagian 2, layar ketiga belas; issue ahliweb/omes#249 (ADR-0030) mengganti status kosong "belum diimplementasikan" sebelumnya dengan proyeksi nyata. Merender salah satu dari empat status eksplisit — belum dikonfigurasi, dikonfigurasi-menunggu-poll-pertama, dikonfigurasi-segar, dikonfigurasi-usang/error (data sukses terakhir tetap dipertahankan, tak pernah dibuang) — beserta milestone dengan bar `<progress>` yang aksesibel dan tabel issue (nomor/judul/status/kind/milestone, masing-masing menaut ke GitHub). Lihat bagian Progres repositori di atas.
@@ -150,10 +150,12 @@ ditambahkan masing-masing dari 9 halaman di sekitar konten slot
 `<AdminLayout>`-nya sendiri, bukan pernah perubahan pada `AdminLayout.astro`,
 `tokens.css`, atau komponen bersama mana pun.
 
-**Bagaimana ia menyusun, bukan mengganti.** Setiap class komponen yang sudah
-dipakai 9 layar itu — `.stat-card`, `.status-badge`, `.data-table`,
+**Bagaimana ia menyusun, bukan mengganti.** Setiap class komponen yang
+dipakai 9 layar itu — `.admin-stat-card`, `.admin-status-pill`, `.data-table`,
 `.admin-panel`, `.quick-link`, `.empty-state`, `.btn*` (semua dari
-`admin.css`/`admin-screens.css`) — dipakai ulang tanpa perubahan. `.omes-cc`
+`admin.css`/`admin-screens.css`) — dipakai ulang tanpa perubahan (class lama
+`.stat-card`/`.status-badge` yang digantikannya sudah dipensiunkan di seluruh
+repo oleh Issue #866). `.omes-cc`
 meng-override custom property YANG SAMA yang sudah dikonsumsi berkas-berkas
 itu (`--color-bg`, `--color-surface`, `--color-text*`, keluarga
 `--color-primary`/`-success`/`-warning`/`-danger`/`-info`, `--color-border*`),
@@ -210,12 +212,12 @@ dalam satu PR di 9 layar yang sama:
 
 1. **Tile bernilai-jamak.** 4 tile ringkasan di layar overview (distribusi
    kesehatan server, ringkasan status job, kesegaran backup, drift deployment)
-   me-render setiap bagian lewat gaya `.stat-value` mono 32px yang sama
-   seperti KPI satu-angka sungguhan, melipat jadi 2-3 baris pada 1440px dan
-   lebih buruk di bawahnya. Kini keduanya di-render sebagai
+   me-render setiap bagian lewat gaya `.admin-stat-card-value` mono 32px yang
+   sama seperti KPI satu-angka sungguhan, melipat jadi 2-3 baris pada 1440px
+   dan lebih buruk di bawahnya. Kini keduanya di-render sebagai
    `.omes-stat-breakdown`, daftar chip nilai+label yang melipat dan ringkas
-   pada ukuran teks isi. `.stat-value` lain mana pun di 9 layar tetap satu
-   angka dan tidak terpengaruh.
+   pada ukuran teks isi. `.admin-stat-card-value` lain mana pun di 9 layar
+   tetap satu angka dan tidak terpengaruh.
 2. **Kontrol form.** 8 form filter/create (daftarkan-server, dan bilah filter
    tiap layar daftar) memakai `.admin-toolbar` polos dengan markup sibling
    `<label>`/`<input>` — tanpa kartu, tanpa gaya input/select, popup

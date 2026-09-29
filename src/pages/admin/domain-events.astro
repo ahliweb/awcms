@@ -258,25 +258,25 @@ const deliveryColumns = canReplay ? 7 : 6;
         <span class="count-pill">{consumers.length}</span>
       </h2>
 
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Pending deliveries")}</span>
-          <span class="stat-value">{pendingTotal}</span>
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Pending deliveries")}</span>
+          <span class="admin-stat-card-value">{pendingTotal}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Dead-lettered")}</span>
-          <span class="stat-value">{deadLetterTotal}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Dead-lettered")}</span>
+          <span class="admin-stat-card-value">{deadLetterTotal}</span>
           {deadLetterTotal > 0 && (
-            <span class="stat-hint">
+            <span class="admin-stat-card-caption">
               {t("Replay below once the cause is fixed")}
             </span>
           )}
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Paused consumers")}</span>
-          <span class="stat-value">{pausedCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Paused consumers")}</span>
+          <span class="admin-stat-card-value">{pausedCount}</span>
           {pausedCount > 0 && (
-            <span class="stat-hint">
+            <span class="admin-stat-card-caption">
               {t("A paused consumer accrues backlog")}
             </span>
           )}
