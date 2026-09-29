@@ -697,9 +697,9 @@
   position: absolute;
   inset-inline: 0;
   bottom: 0;
-  padding: var(--space-1, 0.25rem);
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  padding: var(--sp-1);
+  background: var(--color-media-scrim);
+  color: var(--color-on-media-scrim);
   font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;

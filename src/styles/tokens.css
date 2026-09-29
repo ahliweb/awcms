@@ -225,6 +225,17 @@
   --color-overlay: rgba(15, 23, 42, 0.45);
 
   /*
+   * Caption scrim over arbitrary image content (media-picker tiles, Issue
+   * #872). Deliberately THEME-INDEPENDENT and not `--color-overlay`: the
+   * pixels underneath are unknown, so the scrim must stay dark enough for
+   * white text over a pure-white image (0.65 black over #fff ≈ #595959,
+   * ~7:1 against #fff) in light and dark mode alike. Not redefined in the
+   * dark block on purpose.
+   */
+  --color-media-scrim: rgba(0, 0, 0, 0.65);
+  --color-on-media-scrim: #fff;
+
+  /*
    * ADR-0120 — tint `-soft` untuk empat status lain, melengkapi
    * `--color-primary-soft` yang sudah ada. Ini latar chip status, ikon tile,
    * dan blok callout: warna status pada intensitas rendah dengan teks status

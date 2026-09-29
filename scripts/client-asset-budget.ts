@@ -800,11 +800,12 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  * before (250,423 ceiling)   250,423 B
  * + .media-option-caption - duplicate grid/box CSS + aria-pressed tracking   250,480 B (measured actual total)
+ * + --color-media-scrim / --color-on-media-scrim tokens (caption scrim, tokens not literals)   250,566 B (measured actual total)
  * ```
  *
- * 250,480 is the measured value with no added margin.
+ * 250,566 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 250_480;
+export const APP_BUDGET_BYTES = 250_566;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
