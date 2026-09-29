@@ -782,8 +782,30 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 250,423 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #872** (follow-up to wave 5 / #864): the shared
+ * media picker (`src/lib/ui/media-picker-client.ts`, consumed by
+ * `blog.astro`/`blog-ads.astro`/`site-profile.astro`) adopts
+ * `.admin-media-grid`/`.admin-media-grid-tile` (`admin.css`, unchanged) for
+ * its thumbnail grid. `admin-screens.css` first SHRINKS — the bespoke grid
+ * layout (`display: grid`/`grid-template-columns` on `.media-picker-panel`)
+ * and the box/colour styling `.media-option` used to duplicate are removed,
+ * since the primitive now supplies both — but the picker still needs a
+ * `.media-option-caption` overlay (the tile's `<img>` fills it edge-to-edge,
+ * leaving no room for a below-image label) and `wireMediaPickers` gained the
+ * `aria-pressed`/`data-selected` tracking the issue requires so the current
+ * choice is exposed to AT rather than by tile colour alone. Net growth after
+ * that reduction. Measured actual total:
+ *
+ * ```
+ * before (250,423 ceiling)   250,423 B
+ * + .media-option-caption - duplicate grid/box CSS + aria-pressed tracking   250,480 B (measured actual total)
+ * + --color-media-scrim / --color-on-media-scrim tokens (caption scrim, tokens not literals)   250,566 B (measured actual total)
+ * ```
+ *
+ * 250,566 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 250_423;
+export const APP_BUDGET_BYTES = 250_566;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
