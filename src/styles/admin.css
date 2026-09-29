@@ -1938,14 +1938,16 @@
 }
 
 .kpi-grid,
-.dashboard-grid {
+.dashboard-grid,
+.admin-stat-card-grid {
   display: grid;
   gap: var(--sp-4);
   grid-template-columns: 1fr;
 }
 
 @media (min-width: 640px) {
-  .kpi-grid {
+  .kpi-grid,
+  .admin-stat-card-grid {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
   .dashboard-grid {
@@ -3111,6 +3113,71 @@
 .admin-stat-card-caption {
   font-size: var(--fs-2xs);
   color: var(--color-text-faint);
+}
+
+/*
+ * `.admin-stat-card-grid` — the responsive grid wrapper for a row of
+ * `.admin-stat-card`s, ported from the legacy `.stat-grid`
+ * (admin-screens.css) — is defined above alongside `.kpi-grid`/
+ * `.dashboard-grid`: same "1 column, then auto-fit(minmax(200px, 1fr))"
+ * shape, so it shares that declaration instead of repeating it.
+ */
+
+/*
+ * Optional monospace value modifier — an identifier or code-like value (a
+ * tenant id, a provider name) reads better in the mono family than the
+ * numeric-tabular default. Ported from the legacy `.stat-value--mono`.
+ */
+.admin-stat-card-value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  letter-spacing: 0;
+}
+
+/*
+ * Optional icon-head row — pairs an `.admin-tile` (existing icon-tile
+ * primitive, above) with an optional `.admin-stat-card-delta`. Ported from
+ * the legacy `.stat-head`/`.stat-delta` pair (admin-screens.css) so a
+ * migrated screen keeps its icon+trend affordance without a second card
+ * system (decision recorded in docs/awcms/admin-ui-parity-matrix.md §4/§7
+ * wave 2).
+ */
+.admin-stat-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+/*
+ * Signed delta ("+12%" / "-4%"). The sign is never carried by colour alone —
+ * this class only supplies the colour half of that pairing; the CONSUMER is
+ * required to (1) write the leading "+"/"-"/"±" character into the value's
+ * own text (never inferred from `data-tone` by CSS content), and (2) pair a
+ * visually-hidden translated word ("increase"/"decrease"/"no change") for
+ * assistive tech that skips generated content. Plain (non-soft)
+ * success/danger text on the card's plain surface — the role tokens.css
+ * tunes `--color-success`/`--color-danger` for (see the "status colours
+ * used as TEXT on a plain surface" entries in
+ * scripts/design-token-contrast-check.ts), not the `-on-soft` family, which
+ * is tuned for a `-soft` tinted background only.
+ */
+.admin-stat-card-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-stat-card-delta[data-tone="positive"] {
+  color: var(--color-success);
+}
+
+.admin-stat-card-delta[data-tone="negative"] {
+  color: var(--color-danger);
 }
 
 /* ---- Status pill -------------------------------------------------------

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:d2dd413ee606458a1dc122586c726486dcb4bb2db868ea0d9739b8026af3977f -->
+<!-- i18n-source-hash: sha256:f3b25fcd9f9de338ffa4a5256f904e1a651640990a71568ec014c156813d208d -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -269,16 +269,42 @@ layarnya sendiri jika teks baru yang bisa diterjemahkan diperkenalkan
 (migrasi label status-pill/segmented memakai ulang string `t()` yang sudah
 ada dan seharusnya tidak memperkenalkan yang baru).
 
-### Gelombang 2 — Dashboard / reporting / analytics
+### Gelombang 2 — Dashboard / reporting / analytics — **SELESAI** ([Issue #860](https://github.com/ahliweb/awcms/issues/860))
 
 - **Berkas:** `src/pages/admin/index.astro`, `src/pages/admin/analytics.astro`,
-  `src/pages/admin/reporting.astro`, `src/pages/admin/omes/index.astro`
-- **Bersama:** `src/styles/admin-screens.css` (hapus/alias family
-  `.stat-card` saat 4 layar ini bermigrasi darinya — koordinasi dengan
-  gelombang 3/6, yang menyentuh berkas sama untuk alasan sama di 14 layar
-  lagi)
-- **Keputusan diperlukan sebelum mulai:** port `.stat-head`/`.stat-delta`
-  ke `.admin-stat-card`, atau hilangkan afordansi delta/ikon (§4)
+  `src/pages/admin/reporting.astro` (hanya bagian stat-card, sesuai cakupan
+  gelombang ini sendiri — evaluasi TL "Rebuild history" tetap di gelombang
+  4), `src/pages/admin/omes/index.astro` — keempatnya sudah bermigrasi ke
+  `.admin-stat-card`/`.admin-stat-card-grid`/`.admin-stat-card-label`/
+  `.admin-stat-card-value`/`.admin-stat-card-caption`.
+- **Bersama:** `src/styles/admin-screens.css` tidak disentuh — family
+  `.stat-card`/`.stat-grid`-nya tetap didefinisikan untuk ~14 layar yang
+  belum bermigrasi di gelombang 3/6, persis seperti yang diminta bagian ini
+  semula. `.admin-stat-card-grid` di `src/styles/admin.css` dilipat ke
+  deklarasi `.kpi-grid`/`.dashboard-grid` yang sudah ada (bentuk breakpoint
+  sama) alih-alih aturan berdiri sendiri baru, untuk menjaga biaya
+  asset-budget. `src/styles/omes-control-center.css` mendapat perluasan
+  daftar selector (bukan blok duplikat) pada aturan telemetry/dot
+  `.stat-card`-nya yang sudah ada, mencakup `.admin-stat-card` juga,
+  sehingga 8 layar OMES lain (masih di `.stat-card`, gelombang 6) tetap
+  mempertahankan gayanya.
+- **Keputusan diambil:** memport `.stat-head`/`.stat-delta` ke
+  `.admin-stat-card` sebagai `.admin-stat-card-head` (baris ikon,
+  berpasangan dengan `.admin-tile` yang sudah ada) dan
+  `.admin-stat-card-delta[data-tone="positive"\|"negative"]` (§4) — hanya
+  warna di `admin.css` (tanpa glyph `::before`, untuk menahan kenaikan
+  asset-budget gelombang ini pada kebutuhan nyata 4 layar); komentar
+  dokumentasi modifier itu sendiri mewajibkan konsumennya menulis karakter
+  awalan "+"/"-"/"±" ke teks nilai dan memasangkan kata tersembunyi-visual,
+  sehingga "tidak disampaikan lewat warna saja" (§Aturan yang berlaku di
+  seluruh dokumen) dipenuhi oleh kontrak konsumen, bukan pseudo-element
+  CSS. Belum ada konsumen nyata untuk kedua modifier ini — tidak satu pun
+  dari empat layar yang bermigrasi menghitung delta tren atau ikon KPI hari
+  ini (data nyata saja, §Aturan yang berlaku di seluruh dokumen) — jadi
+  keduanya menunggu layar mana pun di masa depan yang membutuhkannya.
+  `APP_BUDGET_BYTES` milik `build:asset-budget:check` dinaikkan dari 239.956
+  menjadi 240.975 (total terukur aktual, tanpa margin tambahan — lihat
+  komentar ledger `scripts/client-asset-budget.ts` sendiri).
 
 ### Gelombang 3 — List-management: normalisasi status/filter/bulk
 

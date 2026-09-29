@@ -320,42 +320,50 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         )}
       </p>
 
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Queued")}</span>
-          <span class="stat-value">{emailHealth.queuedCount}</span>
-          <span class="stat-hint">
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Queued")}</span>
+          <span class="admin-stat-card-value">{emailHealth.queuedCount}</span>
+          <span class="admin-stat-card-caption">
             {t("Oldest:")} {formatTimestamp(emailHealth.oldestQueuedAt)}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Awaiting retry")}</span>
-          <span class="stat-value">{emailHealth.retryWaitCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Awaiting retry")}</span>
+          <span class="admin-stat-card-value">
+            {emailHealth.retryWaitCount}
+          </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Failed")}</span>
-          <span class="stat-value">{emailHealth.failedCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Failed")}</span>
+          <span class="admin-stat-card-value">{emailHealth.failedCount}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Suppressed")}</span>
-          <span class="stat-value">{emailHealth.suppressedCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Suppressed")}</span>
+          <span class="admin-stat-card-value">
+            {emailHealth.suppressedCount}
+          </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Sent (24h)")}</span>
-          <span class="stat-value">{emailHealth.sentLast24hCount}</span>
-          <span class="stat-hint">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Sent (24h)")}</span>
+          <span class="admin-stat-card-value">
+            {emailHealth.sentLast24hCount}
+          </span>
+          <span class="admin-stat-card-caption">
             {t("Last:")} {formatTimestamp(emailHealth.mostRecentSentAt)}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Dispatch")}</span>
-          <span class="stat-value stat-value--mono">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Dispatch")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
             {emailHealth.emailEnabled
               ? (emailHealth.provider ?? "enabled")
               : "disabled"}
           </span>
           {/* Process env, not a per-tenant setting — see `fetchEmailHealthReport`. */}
-          <span class="stat-hint">{t("Deployment-wide setting")}</span>
+          <span class="admin-stat-card-caption">
+            {t("Deployment-wide setting")}
+          </span>
         </div>
       </div>
     </section>
@@ -418,35 +426,37 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                 </h3>
                 <p class="page-description">{projection.description}</p>
 
-                <dl class="stat-grid">
-                  <div class="stat-card">
-                    <dt class="stat-label">{t("Owner")}</dt>
-                    <dd class="stat-value stat-value--mono">
+                <dl class="admin-stat-card-grid">
+                  <div class="admin-stat-card">
+                    <dt class="admin-stat-card-label">{t("Owner")}</dt>
+                    <dd class="admin-stat-card-value admin-stat-card-value--mono">
                       {projection.ownerModuleKey} v{projection.version}
                     </dd>
                   </div>
-                  <div class="stat-card">
-                    <dt class="stat-label">{t("Last success")}</dt>
-                    <dd class="stat-value stat-value--mono">
+                  <div class="admin-stat-card">
+                    <dt class="admin-stat-card-label">{t("Last success")}</dt>
+                    <dd class="admin-stat-card-value admin-stat-card-value--mono">
                       {formatAge(projection.freshness.ageSeconds)}
                     </dd>
-                    <span class="stat-hint">
+                    <span class="admin-stat-card-caption">
                       {formatTimestamp(projection.freshness.lastSuccessAt)}
                     </span>
                   </div>
-                  <div class="stat-card">
-                    <dt class="stat-label">{t("Consecutive failures")}</dt>
-                    <dd class="stat-value">
+                  <div class="admin-stat-card">
+                    <dt class="admin-stat-card-label">
+                      {t("Consecutive failures")}
+                    </dt>
+                    <dd class="admin-stat-card-value">
                       {projection.freshness.consecutiveFailures}
                     </dd>
                   </div>
                   {Object.entries(projection.metrics).map(
                     ([metricKey, value]) => (
-                      <div class="stat-card">
-                        <dt class="stat-label">
+                      <div class="admin-stat-card">
+                        <dt class="admin-stat-card-label">
                           {projection.metricLabels[metricKey] ?? metricKey}
                         </dt>
-                        <dd class="stat-value">{value}</dd>
+                        <dd class="admin-stat-card-value">{value}</dd>
                       </div>
                     )
                   )}

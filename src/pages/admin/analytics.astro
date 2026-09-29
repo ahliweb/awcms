@@ -227,22 +227,30 @@ const sessionCells = sessions.map((s) =>
           <h2 class="admin-section-title" id="realtime-title">
             {t("Online now")}
           </h2>
-          <div class="stat-grid">
-            <div class="stat-card">
-              <span class="stat-label">{t("Humans online")}</span>
-              <span class="stat-value">{realtime.onlineHumanCount}</span>
+          <div class="admin-stat-card-grid">
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Humans online")}</span>
+              <span class="admin-stat-card-value">
+                {realtime.onlineHumanCount}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Admin")}</span>
-              <span class="stat-value">{realtime.onlineAdminCount}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Admin")}</span>
+              <span class="admin-stat-card-value">
+                {realtime.onlineAdminCount}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Public")}</span>
-              <span class="stat-value">{realtime.onlinePublicCount}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Public")}</span>
+              <span class="admin-stat-card-value">
+                {realtime.onlinePublicCount}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("API")}</span>
-              <span class="stat-value">{realtime.onlineApiCount}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("API")}</span>
+              <span class="admin-stat-card-value">
+                {realtime.onlineApiCount}
+              </span>
             </div>
           </div>
         </section>
@@ -264,26 +272,40 @@ const sessionCells = sessions.map((s) =>
           <button type="submit">{t("Apply")}</button>
         </form>
         {summary && (
-          <div class="stat-grid">
-            <div class="stat-card">
-              <span class="stat-label">{t("Human unique visitors")}</span>
-              <span class="stat-value">{summary.humanUniqueVisitors}</span>
+          <div class="admin-stat-card-grid">
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">
+                {t("Human unique visitors")}
+              </span>
+              <span class="admin-stat-card-value">
+                {summary.humanUniqueVisitors}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Human pageviews")}</span>
-              <span class="stat-value">{summary.humanPageviews}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Human pageviews")}</span>
+              <span class="admin-stat-card-value">
+                {summary.humanPageviews}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Bot pageviews")}</span>
-              <span class="stat-value">{summary.botPageviews}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Bot pageviews")}</span>
+              <span class="admin-stat-card-value">{summary.botPageviews}</span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Public unique visitors")}</span>
-              <span class="stat-value">{summary.publicUniqueVisitors}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">
+                {t("Public unique visitors")}
+              </span>
+              <span class="admin-stat-card-value">
+                {summary.publicUniqueVisitors}
+              </span>
             </div>
-            <div class="stat-card">
-              <span class="stat-label">{t("Admin unique users")}</span>
-              <span class="stat-value">{summary.adminUniqueUsers}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">
+                {t("Admin unique users")}
+              </span>
+              <span class="admin-stat-card-value">
+                {summary.adminUniqueUsers}
+              </span>
             </div>
           </div>
         )}
@@ -426,10 +448,10 @@ const sessionCells = sessions.map((s) =>
           <h2 class="admin-section-title" id="security-title">
             {t("Bot traffic")}
           </h2>
-          <div class="stat-grid">
-            <div class="stat-card">
-              <span class="stat-label">{t("Bot pageviews")}</span>
-              <span class="stat-value">{security.botPageviews}</span>
+          <div class="admin-stat-card-grid">
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Bot pageviews")}</span>
+              <span class="admin-stat-card-value">{security.botPageviews}</span>
             </div>
           </div>
           <div class="data-table-scroll">

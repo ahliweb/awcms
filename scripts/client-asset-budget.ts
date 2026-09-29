@@ -656,8 +656,35 @@ export const READER_BUDGET_BYTES = 24_000;
  * var(--color-danger)` shorthand — needed whole, not just `border-color`, to
  * out-rank `.admin-create-form button`'s own `border: none` — cost 4 B more
  * than first measured).
+ *
+ * **Raised again for Issue #860** (wave 2 of the admin-shell parity work,
+ * `docs/awcms/admin-ui-parity-matrix.md` §7): `.admin-stat-card` gains
+ * optional `-grid`/`-value--mono`/`-head`/`-delta` modifiers in `admin.css`
+ * — the decision the matrix's own §4 flagged as "a real design decision for
+ * wave 2" was to port the legacy `.stat-head`/`.stat-delta` icon+trend
+ * affordance rather than drop it, so a screen reaching for the shared
+ * primitive keeps the same capability the per-repo `.stat-card` duplicate
+ * already had. `omes-control-center.css` gained a parallel (not renamed)
+ * block so its other 8 not-yet-migrated screens keep their existing
+ * `.stat-card` styling untouched. Both the grid wrapper and the icon-head
+ * row were folded into EXISTING declarations (`.kpi-grid`/`.dashboard-grid`,
+ * `.admin-tile`) rather than repeated, and the signed-delta modifier ships
+ * colour only — no `::before` glyph — leaving the non-colour half of "not
+ * conveyed by colour alone" to the consumer's own text content, precisely
+ * to keep this raise as small as the four migrated screens' actual need.
+ * This is temporary, self-limiting growth: `admin-screens.css`'s `.stat-card`
+ * family (admittedly still shipped for the 14 screens still on it) is what
+ * waves 3/6 delete once every screen has migrated, at which point this
+ * budget has room to come back down. Measured actual total:
+ *
+ * ```
+ * before (239,956 ceiling)   239,956 B
+ * + .admin-stat-card grid/mono/head/delta modifiers   240,975 B (measured actual total)
+ * ```
+ *
+ * 240,975 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 239_956;
+export const APP_BUDGET_BYTES = 240_975;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -189,8 +189,15 @@
   }
 }
 
-/* KPI numbers read as telemetry, not prose — monospace, tabular. */
-.omes-cc .stat-card .stat-value {
+/*
+ * KPI numbers read as telemetry, not prose — monospace, tabular. Selector
+ * list covers both the legacy `.stat-card` (7 screens not yet migrated, wave
+ * 6, §7 of docs/awcms/admin-ui-parity-matrix.md) and `.admin-stat-card`
+ * (`omes/index.astro`, migrated by Issue #860 wave 2) so the declaration body
+ * is written once, not duplicated per class family.
+ */
+.omes-cc .stat-card .stat-value,
+.omes-cc .admin-stat-card .admin-stat-card-value {
   font-family: var(--font-mono);
 }
 
@@ -199,13 +206,15 @@
  * by `data-tone`. Reuses the `.status-badge .status-dot` sizing convention
  * (admin-screens.css) rather than inventing a second dot rule.
  */
-.omes-cc .stat-card .stat-label {
+.omes-cc .stat-card .stat-label,
+.omes-cc .admin-stat-card .admin-stat-card-label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
 
-.omes-cc .stat-card .stat-label::before {
+.omes-cc .stat-card .stat-label::before,
+.omes-cc .admin-stat-card .admin-stat-card-label::before {
   content: "";
   display: inline-block;
   width: 7px;
@@ -215,19 +224,23 @@
   flex-shrink: 0;
 }
 
-.omes-cc .stat-card[data-tone="success"] .stat-label::before {
+.omes-cc .stat-card[data-tone="success"] .stat-label::before,
+.omes-cc .admin-stat-card[data-tone="success"] .admin-stat-card-label::before {
   background: var(--color-success);
 }
 
-.omes-cc .stat-card[data-tone="warning"] .stat-label::before {
+.omes-cc .stat-card[data-tone="warning"] .stat-label::before,
+.omes-cc .admin-stat-card[data-tone="warning"] .admin-stat-card-label::before {
   background: var(--color-warning);
 }
 
-.omes-cc .stat-card[data-tone="danger"] .stat-label::before {
+.omes-cc .stat-card[data-tone="danger"] .stat-label::before,
+.omes-cc .admin-stat-card[data-tone="danger"] .admin-stat-card-label::before {
   background: var(--color-danger);
 }
 
-.omes-cc .stat-card[data-tone="info"] .stat-label::before {
+.omes-cc .stat-card[data-tone="info"] .stat-label::before,
+.omes-cc .admin-stat-card[data-tone="info"] .admin-stat-card-label::before {
   background: var(--color-info);
 }
 
