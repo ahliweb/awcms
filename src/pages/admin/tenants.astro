@@ -163,6 +163,17 @@ function statusVariant(status: string): string {
   if (status === "suspended") return "danger";
   return "neutral";
 }
+
+/** `awcms_tenants.status` (sql/002) — one screen only. */
+const TENANT_STATUS_LABEL: Record<"active" | "inactive" | "suspended", string> =
+  {
+    active: t("Active"),
+    inactive: t("Inactive"),
+    suspended: t("Suspended")
+  };
+function tenantStatusLabel(value: string): string {
+  return (TENANT_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
 ---
 
 <AdminLayout
@@ -354,7 +365,7 @@ function statusVariant(status: string): string {
             )}
             {tenants.map((tenant) => (
               <tr>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{tenant.tenantCode}</span>
                   {tenant.tenantCode === platformTenantCode && (
                     <span class="status-badge" data-variant="info">
@@ -363,17 +374,17 @@ function statusVariant(status: string): string {
                     </span>
                   )}
                 </td>
-                <td data-label="Name">{tenant.tenantName}</td>
-                <td data-label="Status">
+                <td data-label={t("Name")}>{tenant.tenantName}</td>
+                <td data-label={t("Status")} data-status={tenant.status}>
                   <span
                     class="status-badge"
                     data-variant={statusVariant(tenant.status)}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {tenant.status}
+                    {tenantStatusLabel(tenant.status)}
                   </span>
                 </td>
-                <td data-label="Created">
+                <td data-label={t("Created")}>
                   <span class="cell-code">
                     {formatTimestamp(tenant.createdAt)}
                   </span>

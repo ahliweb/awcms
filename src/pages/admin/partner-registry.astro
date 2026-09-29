@@ -48,9 +48,22 @@ import {
   listPartners,
   type PartnerSummary
 } from "../../modules/identity-access/application/partner-registry-store";
+import {
+  isPartnerStatus,
+  type PartnerStatus
+} from "../../modules/identity-access/domain/partner-suspension";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
+
+/** `PartnerStatus` — one screen only. */
+const PARTNER_STATUS_LABEL: Record<PartnerStatus, string> = {
+  active: t("Active"),
+  suspended: t("Suspended")
+};
+function partnerStatusLabel(value: string): string {
+  return isPartnerStatus(value) ? PARTNER_STATUS_LABEL[value] : value;
+}
 
 const screen = await loadAdminScreen({
   ssr,
@@ -220,19 +233,23 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
               <tbody>
                 {partners.map((partner) => (
                   <tr>
-                    <th scope="row" data-label="Partner code">
+                    <th scope="row" data-label={t("Partner code")}>
                       {partner.partnerCode}
                     </th>
-                    <td data-label="Display name">{partner.displayName}</td>
-                    <td data-label="Tenant">
+                    <td data-label={t("Display name")}>
+                      {partner.displayName}
+                    </td>
+                    <td data-label={t("Tenant")}>
                       {partner.tenantName} ({partner.tenantCode})
                     </td>
-                    <td data-label="Status">{partner.status}</td>
-                    <td data-label="Registered">
+                    <td data-label={t("Status")} data-status={partner.status}>
+                      {partnerStatusLabel(partner.status)}
+                    </td>
+                    <td data-label={t("Registered")}>
                       {partner.registeredAt.toISOString().slice(0, 10)}
                     </td>
                     {(canSuspend || canReinstate) && (
-                      <td data-label="Reach">
+                      <td data-label={t("Reach")}>
                         {partner.status === "active" && canSuspend && (
                           <button
                             type="button"

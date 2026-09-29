@@ -199,6 +199,27 @@ const QUEUE_VARIANT: Record<string, string> = {
   failed: "danger"
 };
 
+/**
+ * `awcms_sync_nodes.status`, `awcms_sync_conflicts.status`, and
+ * `awcms_object_sync_queue.status` (sql/010-012) — three different columns,
+ * only used on this one screen, so one local map covers all three rather than
+ * three near-identical ones (their value sets don't overlap, so a stray key
+ * can never resolve to the wrong domain's label).
+ */
+const SYNC_STATUS_LABEL: Record<string, string> = {
+  active: t("Active"),
+  inactive: t("Inactive"),
+  open: t("Open"),
+  resolved: t("Resolved"),
+  pending: t("Pending"),
+  sending: t("Sending"),
+  sent: t("Sent"),
+  failed: t("Failed")
+};
+function syncStatusLabel(value: string): string {
+  return SYNC_STATUS_LABEL[value] ?? value;
+}
+
 function formatTimestamp(value: string | null): string {
   return value ?? "—";
 }
@@ -336,11 +357,11 @@ const queueColumns = canRetryQueue ? 7 : 6;
             ) : (
               nodes.map((node) => (
                 <tr data-node-row={node.nodeId}>
-                  <td data-label="Node">
+                  <td data-label={t("Node")}>
                     <span class="cell-code">{node.nodeCode}</span>
                     <span class="cell-muted"> · {node.nodeName}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={node.status}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -348,22 +369,24 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {node.status}
+                      {syncStatusLabel(node.status)}
                     </span>
                   </td>
-                  <td data-label="Last push">
+                  <td data-label={t("Last push")}>
                     <span class="cell-muted">
                       {formatTimestamp(node.lastPushedAt)}
                     </span>
                   </td>
-                  <td data-label="Last pull">
+                  <td data-label={t("Last pull")}>
                     <span class="cell-muted">
                       {formatTimestamp(node.lastPulledAt)}
                     </span>
                   </td>
-                  <td data-label="Pull sequence">{node.lastPullSequence}</td>
+                  <td data-label={t("Pull sequence")}>
+                    {node.lastPullSequence}
+                  </td>
                   {canUpdateNodes && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <button
                           type="button"
@@ -452,14 +475,14 @@ const queueColumns = canRetryQueue ? 7 : 6;
             ) : (
               conflicts.map((conflict) => (
                 <tr data-conflict-row={conflict.id}>
-                  <td data-label="Aggregate">
+                  <td data-label={t("Aggregate")}>
                     <span class="cell-code">{conflict.aggregateType}</span>
                     <span class="cell-muted"> · {conflict.aggregateId}</span>
                   </td>
-                  <td data-label="Type">
+                  <td data-label={t("Type")}>
                     <span class="cell-code">{conflict.conflictType}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={conflict.status}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -467,10 +490,10 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {conflict.status}
+                      {syncStatusLabel(conflict.status)}
                     </span>
                   </td>
-                  <td data-label="Resolution">
+                  <td data-label={t("Resolution")}>
                     <span class="cell-code">{conflict.resolution ?? "—"}</span>
                     {conflict.resolutionNote && (
                       <span
@@ -479,10 +502,10 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       />
                     )}
                   </td>
-                  <td data-label="Raised">
+                  <td data-label={t("Raised")}>
                     <span class="cell-muted">{conflict.createdAt}</span>
                   </td>
-                  <td data-label="Payload">
+                  <td data-label={t("Payload")}>
                     <details>
                       <summary>{t("Payload")}</summary>
                       {/* `set:text` rather than a child expression: <pre>
@@ -501,7 +524,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                     </details>
                   </td>
                   {canResolveConflicts && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       {conflict.status === "open" ? (
                         <div class="row-actions">
                           {RESOLUTION_OPTIONS.map((resolution) => (
@@ -589,32 +612,32 @@ const queueColumns = canRetryQueue ? 7 : 6;
             ) : (
               queue.map((entry) => (
                 <tr data-queue-row={entry.objectQueueId}>
-                  <td data-label="Object">
+                  <td data-label={t("Object")}>
                     <span class="cell-code">{entry.objectKey}</span>
                     <span class="cell-muted">
                       {" "}
                       · {formatBytes(entry.byteSize)}
                     </span>
                   </td>
-                  <td data-label="Node">
+                  <td data-label={t("Node")}>
                     <span class="cell-code">{entry.nodeCode}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={entry.status}>
                     <span
                       class="status-badge"
                       data-variant={QUEUE_VARIANT[entry.status] ?? "neutral"}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {entry.status}
+                      {syncStatusLabel(entry.status)}
                     </span>
                   </td>
-                  <td data-label="Retries">{entry.retryCount}</td>
-                  <td data-label="Next retry">
+                  <td data-label={t("Retries")}>{entry.retryCount}</td>
+                  <td data-label={t("Next retry")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.nextRetryAt)}
                     </span>
                   </td>
-                  <td data-label="Last error">
+                  <td data-label={t("Last error")}>
                     {/* Escaped via `set:text`, never parsed. */}
                     <span
                       class="cell-muted"
@@ -622,7 +645,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                     />
                   </td>
                   {canRetryQueue && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {entry.status === "failed" ? (
                           <button

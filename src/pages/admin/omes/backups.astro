@@ -45,6 +45,7 @@ import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
 import { getTranslatorFor } from "../../../lib/i18n";
+import { omesOperationStatusLabel } from "../../../lib/i18n/labels/omes-operation";
 import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
 import {
   fetchBackups,
@@ -72,6 +73,17 @@ const STATUS_VARIANT: Record<string, string> = {
   verified: "success",
   failed: "danger"
 };
+
+/** `awcms_omes_backups.status` (sql/154) — one screen only. */
+const BACKUP_STATUS_LABEL: Record<string, string> = {
+  completed: t("Completed"),
+  in_progress: t("In progress"),
+  verified: t("Verified"),
+  failed: t("Failed")
+};
+function backupStatusLabel(value: string): string {
+  return BACKUP_STATUS_LABEL[value] ?? value;
+}
 
 const statusRaw = readParam("status");
 const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
@@ -251,7 +263,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
             </option>
             {STATUS_OPTIONS.map((value) => (
               <option value={value} selected={statusFilter === value}>
-                {value}
+                {backupStatusLabel(value)}
               </option>
             ))}
           </select>
@@ -295,14 +307,14 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
               ) : (
                 backups.map((backup) => (
                   <tr data-backup-row={backup.id}>
-                    <td data-label="Backup">
+                    <td data-label={t("Backup")}>
                       <span class="cell-code">{backup.backupId}</span>
                       <span class="cell-muted">
                         {" "}
                         · {t("Server")}: {backup.serverId}
                       </span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("Status")} data-status={backup.status}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -310,7 +322,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {backup.status}
+                        {backupStatusLabel(backup.status)}
                       </span>
                       {!backup.fresh && (
                         <span class="status-badge" data-variant="warning">
@@ -319,27 +331,27 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                         </span>
                       )}
                     </td>
-                    <td data-label="Recovery class">
+                    <td data-label={t("Recovery class")}>
                       <span class="cell-muted">
                         {recoveryClass(backup.manifest)}
                       </span>
                     </td>
-                    <td data-label="Size">
+                    <td data-label={t("Size")}>
                       <span class="cell-muted">
                         {formatSize(backup.sizeBytes)}
                       </span>
                     </td>
-                    <td data-label="Checksum">
+                    <td data-label={t("Checksum (SHA-256)")}>
                       {backup.checksumSha256 ? (
                         <span class="cell-code">{backup.checksumSha256}</span>
                       ) : (
                         <span class="cell-muted">—</span>
                       )}
                     </td>
-                    <td data-label="Captured">
+                    <td data-label={t("Captured")}>
                       <span class="cell-muted">{backup.capturedAt}</span>
                     </td>
-                    <td data-label="Manifest">
+                    <td data-label={t("Manifest")}>
                       <details>
                         <summary>{t("View manifest")}</summary>
                         <pre
@@ -349,7 +361,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                       </details>
                     </td>
                     {canRestore && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         <button
                           type="button"
                           class="btn-inline btn-inline--danger backup-restore-btn"
@@ -432,14 +444,14 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
               ) : (
                 restoreRequests.map((request) => (
                   <tr data-restore-request-row={request.id}>
-                    <td data-label="Request">
+                    <td data-label={t("Request")}>
                       <span class="cell-code">{request.requestId}</span>
                       <span class="cell-muted">
                         {" "}
                         · {t("Server")}: {request.serverId}
                       </span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("Status")} data-status={request.status}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -453,13 +465,13 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {request.status}
+                        {omesOperationStatusLabel(t, request.status)}
                       </span>
                     </td>
-                    <td data-label="Requested">
+                    <td data-label={t("Requested")}>
                       <span class="cell-muted">{request.createdAt}</span>
                     </td>
-                    <td data-label="Approval">
+                    <td data-label={t("Approval")}>
                       {request.workflowInstanceId ? (
                         <a class="quick-link" href={approvalsLink(request)}>
                           {t("View in Approvals")}

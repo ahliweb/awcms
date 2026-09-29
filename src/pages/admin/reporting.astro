@@ -225,6 +225,18 @@ const FRESHNESS_VARIANT: Record<string, string> = {
   failed: "danger"
 };
 
+/** Projection freshness `status` — one screen only. */
+const FRESHNESS_LABEL: Record<string, string> = {
+  current: t("Current"),
+  delayed: t("Delayed"),
+  stale: t("Stale"),
+  rebuilding: t("Rebuilding"),
+  failed: t("Failed")
+};
+function freshnessLabel(value: string): string {
+  return FRESHNESS_LABEL[value] ?? value;
+}
+
 const REBUILD_VARIANT: Record<RebuildRunRow["status"], string> = {
   running: "info",
   completed: "success",
@@ -232,9 +244,23 @@ const REBUILD_VARIANT: Record<RebuildRunRow["status"], string> = {
   cancelled: "neutral"
 };
 
+/** `RebuildRunRow["status"]` — one screen only. */
+const REBUILD_STATUS_LABEL: Record<RebuildRunRow["status"], string> = {
+  running: t("Running"),
+  completed: t("Completed"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled")
+};
+
 const EXPORT_RUN_VARIANT: Record<ExportRunRow["status"], string> = {
   completed: "success",
   failed: "danger"
+};
+
+/** `ExportRunRow["status"]` — one screen only. */
+const EXPORT_RUN_STATUS_LABEL: Record<ExportRunRow["status"], string> = {
+  completed: t("Completed"),
+  failed: t("Failed")
 };
 
 function formatTimestamp(value: Date | string | null): string {
@@ -419,9 +445,10 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       FRESHNESS_VARIANT[projection.freshness.status] ??
                       "neutral"
                     }
+                    data-freshness={projection.freshness.status}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {projection.freshness.status}
+                    {freshnessLabel(projection.freshness.status)}
                   </span>
                 </h3>
                 <p class="page-description">{projection.description}</p>
@@ -498,14 +525,16 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       <tbody>
                         {latest.details.map((detail) => (
                           <tr>
-                            <td data-label="Metric">
+                            <td data-label={t("Metric")}>
                               <span class="cell-code">{detail.metricKey}</span>
                             </td>
-                            <td data-label="Projection">
+                            <td data-label={t("Projection")}>
                               {detail.projectionTotal}
                             </td>
-                            <td data-label="Source">{detail.sourceTotal}</td>
-                            <td data-label="Match">
+                            <td data-label={t("Source")}>
+                              {detail.sourceTotal}
+                            </td>
+                            <td data-label={t("Match")}>
                               {detail.mismatch ? "differs" : "equal"}
                             </td>
                           </tr>
@@ -626,33 +655,33 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             ) : (
               rebuildRuns.map((run) => (
                 <tr>
-                  <td data-label="Projection">
+                  <td data-label={t("Projection")}>
                     <span class="cell-code">{run.projectionKey}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={run.status}>
                     <span
                       class="status-badge"
                       data-variant={REBUILD_VARIANT[run.status]}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {run.status}
+                      {REBUILD_STATUS_LABEL[run.status]}
                     </span>
                     {run.cancelRequested && run.status === "running" && (
                       <span class="cell-muted">{t("\u00b7 cancelling")}</span>
                     )}
                   </td>
-                  <td data-label="Rows">{run.rowsProcessed}</td>
-                  <td data-label="Started">
+                  <td data-label={t("Rows")}>{run.rowsProcessed}</td>
+                  <td data-label={t("Started")}>
                     <span class="cell-muted">
                       {formatTimestamp(run.startedAt)}
                     </span>
                   </td>
-                  <td data-label="Finished">
+                  <td data-label={t("Finished")}>
                     <span class="cell-muted">
                       {formatTimestamp(run.completedAt)}
                     </span>
                   </td>
-                  <td data-label="Reason">
+                  <td data-label={t("Reason")}>
                     <span set:text={run.reason ?? "—"} />
                     {run.errorMessage && (
                       <span class="cell-code" set:text={run.errorMessage} />
@@ -720,16 +749,16 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             ) : (
               exportConfigs.map((config) => (
                 <tr>
-                  <td data-label="Projection">
+                  <td data-label={t("Projection")}>
                     <span class="cell-code">{config.projectionKey}</span>
                   </td>
-                  <td data-label="Format">
+                  <td data-label={t("Format")}>
                     <span class="cell-code">{config.format}</span>
                   </td>
-                  <td data-label="Interval">
+                  <td data-label={t("Interval")}>
                     {formatInterval(config.scheduleIntervalMinutes)}
                   </td>
-                  <td data-label="State">
+                  <td data-label={t("State")}>
                     <span
                       class="status-badge"
                       data-variant={config.enabled ? "success" : "neutral"}
@@ -738,13 +767,13 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       {config.enabled ? "enabled" : "retired"}
                     </span>
                   </td>
-                  <td data-label="Created">
+                  <td data-label={t("Created")}>
                     <span class="cell-muted">
                       {formatTimestamp(config.createdAt)}
                     </span>
                   </td>
                   {canConfigureExports && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {config.enabled && (
                           <button
@@ -902,34 +931,34 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             ) : (
               exportRuns.map((run) => (
                 <tr>
-                  <td data-label="Projection">
+                  <td data-label={t("Projection")}>
                     <span class="cell-code">{run.projectionKey}</span>
                     <span class="cell-muted"> · {run.format}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={run.status}>
                     <span
                       class="status-badge"
                       data-variant={EXPORT_RUN_VARIANT[run.status]}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {run.status}
+                      {EXPORT_RUN_STATUS_LABEL[run.status]}
                     </span>
                     {run.errorMessage && (
                       <span class="cell-code" set:text={run.errorMessage} />
                     )}
                   </td>
-                  <td data-label="Rows">{run.rowCount}</td>
-                  <td data-label="Created">
+                  <td data-label={t("Rows")}>{run.rowCount}</td>
+                  <td data-label={t("Created")}>
                     <span class="cell-muted">
                       {formatTimestamp(run.createdAt)}
                     </span>
                   </td>
-                  <td data-label="Expires">
+                  <td data-label={t("Expires")}>
                     <span class="cell-muted">
                       {formatTimestamp(run.expiresAt)}
                     </span>
                   </td>
-                  <td data-label="Artifact">
+                  <td data-label={t("Artifact")}>
                     {run.status === "completed" && !isExpired(run) ? (
                       // Cookie auth rides along on a plain navigation, and
                       // the endpoint re-checks RBAC/ABAC at download time —

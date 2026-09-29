@@ -697,8 +697,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 247,880 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #861** (no raw enums, #854 item 4). The only
+ * growth is `omes/orkestrasi-langsung.astro`'s polling client, which
+ * re-renders node/event state badges from a JSON fetch and must show the
+ * same translated label as the SSR rows. It reads the labels from a
+ * server-serialised `data-state-labels` attribute rather than shipping a
+ * catalogue copy, so the cost is one small parser. Measured actual total:
+ *
+ * ```
+ * before (247,880 ceiling)   247,880 B
+ * + orkestrasi-langsung translated state labels   248,045 B (measured actual total)
+ * ```
+ *
+ * 248,045 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 247_880;
+export const APP_BUDGET_BYTES = 248_045;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

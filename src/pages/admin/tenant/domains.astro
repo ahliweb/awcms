@@ -102,6 +102,17 @@ function statusVariant(status: string): string {
   if (status === "suspended") return "warning";
   return "neutral";
 }
+
+/** `awcms_tenant_domains.status` (sql/046) — one screen only. */
+const DOMAIN_STATUS_LABEL: Record<string, string> = {
+  pending_verification: t("Pending verification"),
+  active: t("Active"),
+  suspended: t("Suspended"),
+  failed: t("Failed")
+};
+function domainStatusLabel(value: string): string {
+  return DOMAIN_STATUS_LABEL[value] ?? value;
+}
 ---
 
 <AdminLayout
@@ -221,7 +232,7 @@ function statusVariant(status: string): string {
           ) : (
             domains.map((domain) => (
               <tr data-domain-row={domain.id}>
-                <td data-label="Hostname" class="stacked-block">
+                <td data-label={t("Hostname")} class="stacked-block">
                   <span class="cell-code">{domain.hostname}</span>
                   {domain.status !== "active" &&
                     domain.verificationRecordName &&
@@ -238,24 +249,26 @@ function statusVariant(status: string): string {
                       </p>
                     )}
                 </td>
-                <td data-label="Type">
+                <td data-label={t("Type")}>
                   <span class="cell-muted">{domain.domainType}</span>
                 </td>
-                <td data-label="Route mode">
+                <td data-label={t("Route mode")}>
                   <span class="cell-muted">{domain.routeMode}</span>
                 </td>
-                <td data-label="Status">
+                <td data-label={t("Status")} data-status={domain.status}>
                   <span
                     class="status-badge"
                     data-variant={statusVariant(domain.status)}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {domain.status}
+                    {domainStatusLabel(domain.status)}
                   </span>
                 </td>
-                <td data-label="Primary">{domain.isPrimary ? "Yes" : "—"}</td>
+                <td data-label={t("Primary")}>
+                  {domain.isPrimary ? "Yes" : "—"}
+                </td>
                 {showActions && (
-                  <td data-label="Actions" class="stacked-block">
+                  <td data-label={t("Actions")} class="stacked-block">
                     <div class="row-actions">
                       {canVerify &&
                         (domain.status === "pending_verification" ||

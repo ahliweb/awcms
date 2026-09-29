@@ -184,6 +184,16 @@ const DELIVERY_VARIANT: Record<string, string> = {
   dead_letter: "danger"
 };
 
+/** Delivery status — one screen only. */
+const DELIVERY_STATUS_LABEL: Record<string, string> = {
+  pending: t("Pending"),
+  delivered: t("Delivered"),
+  dead_letter: t("Dead letter")
+};
+function deliveryStatusLabel(value: string): string {
+  return DELIVERY_STATUS_LABEL[value] ?? value;
+}
+
 function formatTimestamp(value: Date | string | null): string {
   if (value === null) return "—";
   return typeof value === "string" ? value : value.toISOString();
@@ -308,16 +318,16 @@ const deliveryColumns = canReplay ? 7 : 6;
             ) : (
               consumers.map((consumer) => (
                 <tr data-consumer-row={consumer.name}>
-                  <td data-label="Consumer">
+                  <td data-label={t("Consumer")}>
                     <span class="cell-code">{consumer.name}</span>
                     <span class="cell-muted"> · {consumer.description}</span>
                   </td>
-                  <td data-label="Events">
+                  <td data-label={t("Events")}>
                     <span class="cell-code">
                       {consumer.eventTypes.join(", ")}
                     </span>
                   </td>
-                  <td data-label="State">
+                  <td data-label={t("State")}>
                     <span
                       class="status-badge"
                       data-variant={consumer.isPaused ? "warning" : "success"}
@@ -335,10 +345,12 @@ const deliveryColumns = canReplay ? 7 : 6;
                       </span>
                     )}
                   </td>
-                  <td data-label="Pending">{consumer.pendingCount}</td>
-                  <td data-label="Dead-lettered">{consumer.deadLetterCount}</td>
+                  <td data-label={t("Pending")}>{consumer.pendingCount}</td>
+                  <td data-label={t("Dead-lettered")}>
+                    {consumer.deadLetterCount}
+                  </td>
                   {canManageConsumers && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {consumer.isPaused ? (
                           <button
@@ -480,14 +492,14 @@ const deliveryColumns = canReplay ? 7 : 6;
             ) : (
               deliveries.map((delivery) => (
                 <tr data-delivery-row={delivery.id}>
-                  <td data-label="Event">
+                  <td data-label={t("Event")}>
                     <span class="cell-code">{delivery.eventType}</span>
                     <span class="cell-muted"> v{delivery.eventVersion}</span>
                   </td>
-                  <td data-label="Consumer">
+                  <td data-label={t("Consumer")}>
                     <span class="cell-code">{delivery.consumerName}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={delivery.status}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -495,21 +507,21 @@ const deliveryColumns = canReplay ? 7 : 6;
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {delivery.status}
+                      {deliveryStatusLabel(delivery.status)}
                     </span>
                     {delivery.replayOfDeliveryId && (
                       <span class="cell-muted">{t("\u00b7 replay")}</span>
                     )}
                   </td>
-                  <td data-label="Attempts">
+                  <td data-label={t("Attempts")}>
                     {delivery.attemptCount}/{delivery.maxAttempts}
                   </td>
-                  <td data-label="Next attempt">
+                  <td data-label={t("Next attempt")}>
                     <span class="cell-muted">
                       {formatTimestamp(delivery.nextAttemptAt)}
                     </span>
                   </td>
-                  <td data-label="Last error">
+                  <td data-label={t("Last error")}>
                     {/* Already redacted at write time by
                           `sanitizeErrorForLog`/`redactSecretsInText`; rendered
                           via `set:text` so it is escaped, never parsed. */}
@@ -534,7 +546,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                     )}
                   </td>
                   {canReplay && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {delivery.status === "dead_letter" ? (
                           <button
@@ -615,26 +627,26 @@ const deliveryColumns = canReplay ? 7 : 6;
             ) : (
               events.map((event) => (
                 <tr>
-                  <td data-label="Seq">
+                  <td data-label={t("Seq")}>
                     <span class="cell-code">{event.eventSequence}</span>
                   </td>
-                  <td data-label="Type">
+                  <td data-label={t("Type")}>
                     <span class="cell-code">{event.eventType}</span>
                     <span class="cell-muted"> v{event.eventVersion}</span>
                   </td>
-                  <td data-label="Aggregate">
+                  <td data-label={t("Aggregate")}>
                     <span class="cell-code">{event.aggregateType}</span>
                     <span class="cell-muted"> · {event.aggregateId}</span>
                   </td>
-                  <td data-label="Producer">
+                  <td data-label={t("Producer")}>
                     <span class="cell-code">{event.producerModule}</span>
                   </td>
-                  <td data-label="Occurred">
+                  <td data-label={t("Occurred")}>
                     <span class="cell-muted">
                       {formatTimestamp(event.occurredAt)}
                     </span>
                   </td>
-                  <td data-label="Payload">
+                  <td data-label={t("Payload")}>
                     <details>
                       <summary>{t("Payload")}</summary>
                       {/* `set:text` rather than a child expression: <pre>

@@ -5688,3 +5688,248 @@ msgstr "Dicatat dalam log audit."
 
 msgid "Could not disable the module. It may have dependencies that block this change."
 msgstr "Tidak dapat menonaktifkan modul. Mungkin ada dependensi yang menghalangi perubahan ini."
+
+#. Admin enum/status labels (Issue #861, item 4 of #854)
+msgid "#"
+msgstr "#"
+
+msgid "Abandoned"
+msgstr "Ditinggalkan"
+
+msgid "Accepted"
+msgstr "Diterima"
+
+msgid "active"
+msgstr "aktif"
+
+msgid "Approved"
+msgstr "Disetujui"
+
+msgid "Attached"
+msgstr "Terlampir"
+
+msgid "Bounced"
+msgstr "Terpental"
+
+msgid "Cancelled"
+msgstr "Dibatalkan"
+
+msgid "Closed"
+msgstr "Ditutup"
+
+msgid "Complained"
+msgstr "Dikomplain"
+
+msgid "Critical"
+msgstr "Kritis"
+
+msgid "Current"
+msgstr "Terkini"
+
+msgid "Dark"
+msgstr "Gelap"
+
+msgid "Dead letter"
+msgstr "Pesan gagal permanen"
+
+msgid "Decommissioned"
+msgstr "Dinonaktifkan permanen"
+
+msgid "Degraded"
+msgstr "Menurun"
+
+msgid "Delayed"
+msgstr "Tertunda"
+
+msgid "Delivered"
+msgstr "Terkirim"
+
+msgid "Denied"
+msgstr "Ditolak"
+
+msgid "Disclosed"
+msgstr "Diungkapkan"
+
+msgid "Dispatched"
+msgstr "Dikirim"
+
+msgid "Draft"
+msgstr "Draf"
+
+msgid "Erasure"
+msgstr "Penghapusan"
+
+msgid "Expired"
+msgstr "Kedaluwarsa"
+
+msgid "Export"
+msgstr "Ekspor"
+
+msgid "Failure"
+msgstr "Gagal"
+
+msgid "FCM"
+msgstr "FCM"
+
+msgid "Head office"
+msgstr "Kantor pusat"
+
+msgid "High"
+msgstr "Tinggi"
+
+msgid "inactive"
+msgstr "tidak aktif"
+
+msgid "Inactive"
+msgstr "Tidak aktif"
+
+msgid "Info"
+msgstr "Info"
+
+msgid "In progress"
+msgstr "Sedang berlangsung"
+
+msgid "In review"
+msgstr "Sedang ditinjau"
+
+msgid "Interrupted"
+msgstr "Terhenti"
+
+msgid "IP"
+msgstr "IP"
+
+msgid "Leased"
+msgstr "Disewa"
+
+msgid "Light"
+msgstr "Terang"
+
+msgid "Low"
+msgstr "Rendah"
+
+msgid "Maintenance"
+msgstr "Pemeliharaan"
+
+msgid "Manual"
+msgstr "Manual"
+
+msgid "Medium"
+msgstr "Sedang"
+
+msgid "Merged"
+msgstr "Digabungkan"
+
+msgid "Offline"
+msgstr "Offline"
+
+msgid "Online"
+msgstr "Online"
+
+msgid "Open"
+msgstr "Terbuka"
+
+msgid "Organization"
+msgstr "Organisasi"
+
+msgid "Orphaned"
+msgstr "Tak bertuan"
+
+msgid "Partial"
+msgstr "Sebagian"
+
+msgid "Pending approval"
+msgstr "Menunggu persetujuan"
+
+msgid "Pending upload"
+msgstr "Menunggu unggah"
+
+msgid "Pending verification"
+msgstr "Menunggu verifikasi"
+
+msgid "Person"
+msgstr "Perorangan"
+
+msgid "Private"
+msgstr "Privat"
+
+msgid "Rebuilding"
+msgstr "Membangun ulang"
+
+msgid "Reindex"
+msgstr "Indeks ulang"
+
+msgid "Rejected"
+msgstr "Ditolak"
+
+msgid "Released"
+msgstr "Dilepas"
+
+msgid "Resolved"
+msgstr "Terselesaikan"
+
+msgid "Retry wait"
+msgstr "Menunggu coba ulang"
+
+msgid "Running"
+msgstr "Berjalan"
+
+msgid "Scheduled"
+msgstr "Terjadwal"
+
+msgid "Sending"
+msgstr "Mengirim"
+
+msgid "Sent"
+msgstr "Terkirim"
+
+msgid "Skipped"
+msgstr "Dilewati"
+
+msgid "Starting"
+msgstr "Memulai"
+
+msgid "Store"
+msgstr "Toko"
+
+msgid "Succeeded"
+msgstr "Berhasil"
+
+msgid "Success"
+msgstr "Berhasil"
+
+msgid "Superseded"
+msgstr "Digantikan"
+
+msgid "Suspended"
+msgstr "Ditangguhkan"
+
+msgid "Unknown"
+msgstr "Tidak diketahui"
+
+msgid "Unlisted"
+msgstr "Tidak terdaftar"
+
+msgid "Unsubscribed"
+msgstr "Berhenti berlangganan"
+
+msgid "Unverified"
+msgstr "Belum diverifikasi"
+
+msgid "Uploaded"
+msgstr "Diunggah"
+
+msgid "Validated"
+msgstr "Tervalidasi"
+
+msgid "Verified"
+msgstr "Terverifikasi"
+
+msgid "Warehouse"
+msgstr "Gudang"
+
+msgid "Warning"
+msgstr "Peringatan"
+
+msgid "Web Push"
+msgstr "Web Push"
+

@@ -166,6 +166,10 @@ import {
   type PortableTextBlock
 } from "../../modules/blog-content/domain/portable-text";
 import { getTranslatorFor } from "../../lib/i18n";
+import {
+  blogContentStatusLabel,
+  blogContentVisibilityLabel
+} from "../../lib/i18n/labels/blog-content";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
@@ -545,7 +549,7 @@ const selectedPost = selectedPostId
             ) : (
               posts.map((post) => (
                 <tr data-post-row={post.id}>
-                  <td data-label="Title">
+                  <td data-label={t("Title")}>
                     <span set:text={post.title} />
                     <span class="cell-muted">
                       {" "}
@@ -553,30 +557,35 @@ const selectedPost = selectedPostId
                       {post.locale}
                     </span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={post.status}>
                     <span
                       class="status-badge"
                       data-variant={STATUS_VARIANT[post.status] ?? "neutral"}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {post.status}
+                      {blogContentStatusLabel(t, post.status)}
                     </span>
                   </td>
-                  <td data-label="Visibility">
-                    <span class="cell-code">{post.visibility}</span>
+                  <td
+                    data-label={t("Visibility")}
+                    data-visibility={post.visibility}
+                  >
+                    <span class="cell-code">
+                      {blogContentVisibilityLabel(t, post.visibility)}
+                    </span>
                   </td>
-                  <td data-label="Published">
+                  <td data-label={t("Published")}>
                     <span class="cell-muted">
                       {formatTimestamp(post.publishedAt)}
                     </span>
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(post.updatedAt)}
                     </span>
                   </td>
                   {showsRowActions && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {canReadRevisions && (
                           <a
@@ -763,7 +772,7 @@ const selectedPost = selectedPostId
           </caption>
           <thead>
             <tr>
-              <th scope="col">#</th>
+              <th scope="col">{t("#")}</th>
               <th scope="col">{t("Title at revision")}</th>
               <th scope="col">{t("Status")}</th>
               <th scope="col">{t("Note")}</th>
@@ -794,26 +803,28 @@ const selectedPost = selectedPostId
             ) : (
               revisions.map((revision) => (
                 <tr>
-                  <td data-label="#">{revision.revisionNumber}</td>
-                  <td data-label="Title at revision">
+                  <td data-label={t("#")}>{revision.revisionNumber}</td>
+                  <td data-label={t("Title at revision")}>
                     <span set:text={revision.title} />
                   </td>
-                  <td data-label="Status">
-                    <span class="cell-code">{revision.status}</span>
+                  <td data-label={t("Status")} data-status={revision.status}>
+                    <span class="cell-code">
+                      {blogContentStatusLabel(t, revision.status)}
+                    </span>
                   </td>
-                  <td data-label="Note">
+                  <td data-label={t("Note")}>
                     <span
                       class="cell-muted"
                       set:text={revision.changeNote ?? "—"}
                     />
                   </td>
-                  <td data-label="Created">
+                  <td data-label={t("Created")}>
                     <span class="cell-muted">
                       {formatTimestamp(revision.createdAt)}
                     </span>
                   </td>
                   {canRestoreRevisions && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <button
                           type="button"

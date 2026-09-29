@@ -148,6 +148,24 @@ function runStatusVariant(runStatus: string): string {
   return "neutral";
 }
 
+/** `awcms_search_index_runs.run_type`/`.status` (sql/064) — one screen only. */
+const RUN_TYPE_LABEL: Record<string, string> = {
+  rebuild: t("Rebuild"),
+  reconcile: t("Reconcile"),
+  reindex: t("Reindex")
+};
+function runTypeLabel(value: string): string {
+  return RUN_TYPE_LABEL[value] ?? value;
+}
+const RUN_STATUS_LABEL: Record<string, string> = {
+  running: t("Running"),
+  succeeded: t("Succeeded"),
+  failed: t("Failed")
+};
+function runStatusLabel(value: string): string {
+  return RUN_STATUS_LABEL[value] ?? value;
+}
+
 const resourceTypesValue =
   settings?.enabledResourceTypes === null ||
   settings?.enabledResourceTypes === undefined
@@ -232,10 +250,10 @@ const showIndexActions = canReconcile || canRebuild;
             <tbody>
               {status.byResourceType.map((row) => (
                 <tr>
-                  <td data-label="Resource type">
+                  <td data-label={t("Resource type")}>
                     <span class="cell-code">{row.resourceType}</span>
                   </td>
-                  <td data-label="Documents">{row.count}</td>
+                  <td data-label={t("Documents")}>{row.count}</td>
                 </tr>
               ))}
             </tbody>
@@ -433,25 +451,27 @@ const showIndexActions = canReconcile || canRebuild;
             )}
             {recentRuns.map((run) => (
               <tr>
-                <td data-label="Started">
+                <td data-label={t("Started")}>
                   <span class="cell-code">
                     {formatTimestamp(run.startedAt)}
                   </span>
                 </td>
-                <td data-label="Type">{run.runType}</td>
-                <td data-label="Status">
+                <td data-label={t("Type")} data-run-type={run.runType}>
+                  {runTypeLabel(run.runType)}
+                </td>
+                <td data-label={t("Status")} data-status={run.status}>
                   <span
                     class="status-badge"
                     data-variant={runStatusVariant(run.status)}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {run.status}
+                    {runStatusLabel(run.status)}
                   </span>
                 </td>
-                <td data-label="Indexed">{run.documentsIndexed}</td>
-                <td data-label="Updated">{run.documentsUpdated}</td>
-                <td data-label="Removed">{run.documentsRemoved}</td>
-                <td data-label="Failures">
+                <td data-label={t("Indexed")}>{run.documentsIndexed}</td>
+                <td data-label={t("Updated")}>{run.documentsUpdated}</td>
+                <td data-label={t("Removed")}>{run.documentsRemoved}</td>
+                <td data-label={t("Failures")}>
                   {run.failureCount > 0 ? (
                     run.failureCount
                   ) : (
@@ -507,21 +527,21 @@ const showIndexActions = canReconcile || canRebuild;
             )}
             {failures.map((item) => (
               <tr>
-                <td data-label="Source">
+                <td data-label={t("Source")}>
                   <span class="cell-code">{item.sourceKey}</span>
                 </td>
-                <td data-label="Resource">
+                <td data-label={t("Resource")}>
                   <span class="cell-code">{item.resourceId}</span>
                 </td>
-                <td data-label="Locale">{item.locale}</td>
-                <td data-label="Error">
+                <td data-label={t("Locale")}>{item.locale}</td>
+                <td data-label={t("Error")}>
                   <span class="status-badge" data-variant="danger">
                     <span class="status-dot" aria-hidden="true" />
                     {item.errorClass}
                   </span>
                 </td>
-                <td data-label="Seen">{item.occurrenceCount}</td>
-                <td data-label="Last seen">
+                <td data-label={t("Seen")}>{item.occurrenceCount}</td>
+                <td data-label={t("Last seen")}>
                   <span class="cell-code">
                     {formatTimestamp(item.lastSeenAt)}
                   </span>

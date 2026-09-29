@@ -99,6 +99,7 @@ import {
 } from "../../modules/blog-content/domain/content-validation";
 import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
 import { getTranslatorFor } from "../../lib/i18n";
+import { blogContentStatusLabel } from "../../lib/i18n/labels/blog-content";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
@@ -426,7 +427,7 @@ const editingBodyText = editingPage
             ) : (
               pages.map((entry) => (
                 <tr data-page-row={entry.id}>
-                  <td data-label="Title">
+                  <td data-label={t("Title")}>
                     <span set:text={entry.title} />
                     <span class="cell-muted">
                       {" "}
@@ -441,28 +442,28 @@ const editingBodyText = editingPage
                       </span>
                     )}
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={entry.status}>
                     <span
                       class="status-badge"
                       data-variant={STATUS_VARIANT[entry.status] ?? "neutral"}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {entry.status}
+                      {blogContentStatusLabel(t, entry.status)}
                     </span>
                   </td>
-                  <td data-label="Type">
+                  <td data-label={t("Type")}>
                     <span class="cell-code">{entry.pageType}</span>
                   </td>
-                  <td data-label="Menu order">
+                  <td data-label={t("Menu order")}>
                     <span class="cell-muted">{entry.menuOrder}</span>
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.updatedAt)}
                     </span>
                   </td>
                   {showsRowActions && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {canUpdate && !showsBin && (
                           <a

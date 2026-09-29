@@ -166,11 +166,11 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           ) : (
             templates.map((template) => (
               <tr>
-                <td data-label="Key">
+                <td data-label={t("Key")}>
                   <span class="cell-code">{template.templateKey}</span>
                 </td>
-                <td data-label="Name">{template.name}</td>
-                <td data-label="Active">
+                <td data-label={t("Name")}>{template.name}</td>
+                <td data-label={t("Active")}>
                   <span
                     class="status-badge"
                     data-variant={template.isActive ? "success" : "neutral"}

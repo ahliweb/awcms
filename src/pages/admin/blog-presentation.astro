@@ -82,6 +82,16 @@ import { getTranslatorFor } from "../../lib/i18n";
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+/** `BlogThemeMode` — one screen only. */
+const THEME_MODE_LABEL: Record<"light" | "dark" | "system", string> = {
+  light: t("Light"),
+  dark: t("Dark"),
+  system: t("System")
+};
+function themeModeLabel(value: string): string {
+  return (THEME_MODE_LABEL as Record<string, string>)[value] ?? value;
+}
+
 type Section = "templates" | "menus" | "widgets" | "theme";
 
 function readParam(name: string): string {
@@ -354,21 +364,21 @@ const editingWidget =
             ) : (
               templates.map((entry) => (
                 <tr data-template-row={entry.id}>
-                  <td data-label="Name">
+                  <td data-label={t("Name")}>
                     <span set:text={entry.name} />
                     <span class="cell-muted">
                       {" "}
                       · <span class="cell-code">{entry.key}</span>
                     </span>
                   </td>
-                  <td data-label="Layout">
+                  <td data-label={t("Layout")}>
                     <span class="cell-muted">
                       {entry.layoutJson.columns} column
                       {entry.layoutJson.columns === 1 ? "" : "s"} · sidebar{" "}
                       {entry.layoutJson.sidebarPosition}
                     </span>
                   </td>
-                  <td data-label="Active">
+                  <td data-label={t("Active")}>
                     <span
                       class="status-badge"
                       data-variant={entry.isActive ? "success" : "neutral"}
@@ -377,13 +387,13 @@ const editingWidget =
                       {entry.isActive ? "active" : "inactive"}
                     </span>
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.updatedAt)}
                     </span>
                   </td>
                   {canConfigureTemplates && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <a
                           class="quick-link"
@@ -551,20 +561,20 @@ const editingWidget =
             ) : (
               menus.map((entry) => (
                 <tr data-menu-row={entry.id}>
-                  <td data-label="Name">
+                  <td data-label={t("Name")}>
                     <span set:text={entry.name} />
                     <span class="cell-muted">
                       {" "}
                       · <span class="cell-code">{entry.key}</span>
                     </span>
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.updatedAt)}
                     </span>
                   </td>
                   {canConfigureMenus && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <a
                           class="quick-link"
@@ -700,16 +710,16 @@ const editingWidget =
             ) : (
               widgets.map((entry) => (
                 <tr data-widget-row={entry.id}>
-                  <td data-label="Title">
+                  <td data-label={t("Title")}>
                     <span set:text={entry.title} />
                   </td>
-                  <td data-label="Position">
+                  <td data-label={t("Position")}>
                     <span class="cell-code">{entry.position}</span>
                   </td>
-                  <td data-label="Order">
+                  <td data-label={t("Order")}>
                     <span class="cell-muted">{entry.sortOrder}</span>
                   </td>
-                  <td data-label="Active">
+                  <td data-label={t("Active")}>
                     <span
                       class="status-badge"
                       data-variant={entry.isActive ? "success" : "neutral"}
@@ -719,7 +729,7 @@ const editingWidget =
                     </span>
                   </td>
                   {canConfigureWidgets && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <a
                           class="quick-link"
@@ -839,7 +849,10 @@ const editingWidget =
 
       <p class="page-description" id="theme-source">
         {t("Current mode is")}
-        <strong class="cell-code">{theme.mode}</strong>,{" "}
+        <strong class="cell-code" data-theme-mode={theme.mode}>
+          {themeModeLabel(theme.mode)}
+        </strong>
+        ,{" "}
         {theme.isOverride
           ? "set as a blog-specific override."
           : "inherited from the tenant default."}
@@ -862,7 +875,7 @@ const editingWidget =
             <select id="theme-mode" name="mode">
               {BLOG_THEME_MODES.map((value) => (
                 <option value={value} selected={theme.mode === value}>
-                  {value}
+                  {themeModeLabel(value)}
                 </option>
               ))}
             </select>

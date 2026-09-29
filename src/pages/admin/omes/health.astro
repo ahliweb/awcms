@@ -273,10 +273,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
               ) : (
                 snapshots.map((snapshot) => (
                   <tr data-health-row={snapshot.id}>
-                    <td data-label="Server">
+                    <td data-label={t("Server")}>
                       <span class="cell-code">{snapshot.serverId}</span>
                     </td>
-                    <td data-label="Overall status">
+                    <td data-label={t("Overall status")}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -293,10 +293,10 @@ function checkEntries(checks: unknown): [string, unknown][] {
                         </span>
                       )}
                     </td>
-                    <td data-label="Captured">
+                    <td data-label={t("Captured")}>
                       <span class="cell-muted">{snapshot.capturedAt}</span>
                     </td>
-                    <td data-label="Checks">
+                    <td data-label={t("Checks (source-attributed)")}>
                       {checkEntries(snapshot.checks).length === 0 ? (
                         <span class="cell-muted">—</span>
                       ) : (
@@ -340,7 +340,7 @@ function checkEntries(checks: unknown): [string, unknown][] {
                       )}
                     </td>
                     {mode === "latest" && (
-                      <td data-label="History">
+                      <td data-label={t("History")}>
                         <a
                           class="quick-link"
                           href={linkWith({

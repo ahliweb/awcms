@@ -45,11 +45,25 @@ import {
 } from "../../modules/newsletter/application/subscriber-directory";
 import {
   NEWSLETTER_SUBSCRIBER_STATUSES,
+  isNewsletterSubscriberStatus,
   type NewsletterSubscriberStatus
 } from "../../modules/newsletter/domain/subscriber-status";
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
+
+/** `NewsletterSubscriberStatus` — one screen only. */
+const SUBSCRIBER_STATUS_LABEL: Record<NewsletterSubscriberStatus, string> = {
+  pending: t("Pending"),
+  active: t("Active"),
+  unsubscribed: t("Unsubscribed"),
+  suppressed: t("Suppressed")
+};
+function subscriberStatusLabel(value: string): string {
+  return isNewsletterSubscriberStatus(value)
+    ? SUBSCRIBER_STATUS_LABEL[value]
+    : value;
+}
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -242,24 +256,24 @@ const columnCount = canConfigure ? 6 : 5;
                 <tr>
                   {/* `set:text`, never parsed — an address is caller-supplied
                         and reaches this table verbatim. */}
-                  <td data-label="Address">
+                  <td data-label={t("Address")}>
                     <span class="cell-strong" set:text={item.email} />
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={item.status}>
                     <span
                       class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {item.status}
+                      {subscriberStatusLabel(item.status)}
                     </span>
                   </td>
-                  <td data-label="Source" set:text={item.source} />
-                  <td data-label="Consent">
+                  <td data-label={t("Source")} set:text={item.source} />
+                  <td data-label={t("Consent")}>
                     <span class="cell-muted">
                       {formatTimestamp(item.consentAt)}
                     </span>
                   </td>
-                  <td data-label="Ended">
+                  <td data-label={t("Ended")}>
                     {item.suppressedAt ? (
                       <>
                         <span class="cell-muted">
@@ -277,7 +291,7 @@ const columnCount = canConfigure ? 6 : 5;
                     )}
                   </td>
                   {canConfigure && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {item.status !== "suppressed" && (
                           <button

@@ -27,6 +27,7 @@ import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
 import { getTranslatorFor } from "../../../lib/i18n";
+import { omesOperationStatusLabel } from "../../../lib/i18n/labels/omes-operation";
 import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
 import {
   OMES_OPERATION_CODES,
@@ -243,7 +244,7 @@ function approvalsLink(request: OperationRequestSummary): string {
             </option>
             {STATUS_OPTIONS.map((value) => (
               <option value={value} selected={statusFilter === value}>
-                {value}
+                {omesOperationStatusLabel(t, value)}
               </option>
             ))}
           </select>
@@ -289,17 +290,17 @@ function approvalsLink(request: OperationRequestSummary): string {
               ) : (
                 operationRequests.map((request) => (
                   <tr data-operation-row={request.id}>
-                    <td data-label="Request">
+                    <td data-label={t("Request")}>
                       <span class="cell-code">{request.requestId}</span>
                       <span class="cell-muted">
                         {" "}
                         · {t("Server")}: {request.serverId}
                       </span>
                     </td>
-                    <td data-label="Operation">
+                    <td data-label={t("Operation")}>
                       <span class="cell-code">{request.operation}</span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("Status")} data-status={request.status}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -307,13 +308,13 @@ function approvalsLink(request: OperationRequestSummary): string {
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {request.status}
+                        {omesOperationStatusLabel(t, request.status)}
                       </span>
                     </td>
-                    <td data-label="Requested">
+                    <td data-label={t("Requested")}>
                       <span class="cell-muted">{request.createdAt}</span>
                     </td>
-                    <td data-label="Approval">
+                    <td data-label={t("Approval")}>
                       {request.workflowInstanceId ? (
                         <a class="quick-link" href={approvalsLink(request)}>
                           {t("View in Approvals")}

@@ -25,6 +25,34 @@ type PartyRow = {
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
+/** `awcms_profiles` CHECK constraints (sql/003) — one-off, this screen only. */
+const PROFILE_TYPE_LABEL: Record<"person" | "organization", string> = {
+  person: t("Person"),
+  organization: t("Organization")
+};
+const PROFILE_STATUS_LABEL: Record<"active" | "inactive" | "merged", string> = {
+  active: t("Active"),
+  inactive: t("Inactive"),
+  merged: t("Merged")
+};
+const VERIFICATION_STATUS_LABEL: Record<
+  "unverified" | "pending" | "verified",
+  string
+> = {
+  unverified: t("Unverified"),
+  pending: t("Pending"),
+  verified: t("Verified")
+};
+function profileTypeLabel(value: string): string {
+  return (PROFILE_TYPE_LABEL as Record<string, string>)[value] ?? value;
+}
+function profileStatusLabel(value: string): string {
+  return (PROFILE_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+function verificationStatusLabel(value: string): string {
+  return (VERIFICATION_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
 // R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
 // same transaction. `canCreate` is decided the same way, so a tenant's ABAC
 // `deny` hides the form instead of only refusing the POST behind it.
@@ -150,11 +178,16 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           ) : (
             profiles.map((profile) => (
               <tr>
-                <td data-label="Display name">{profile.displayName}</td>
-                <td data-label="Type">
-                  <span class="cell-muted">{profile.profileType}</span>
+                <td data-label={t("Display name")}>{profile.displayName}</td>
+                <td
+                  data-label={t("Type")}
+                  data-profile-type={profile.profileType}
+                >
+                  <span class="cell-muted">
+                    {profileTypeLabel(profile.profileType)}
+                  </span>
                 </td>
-                <td data-label="Status">
+                <td data-label={t("Status")} data-status={profile.status}>
                   <span
                     class="status-badge"
                     data-variant={
@@ -162,11 +195,16 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
                     }
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {profile.status}
+                    {profileStatusLabel(profile.status)}
                   </span>
                 </td>
-                <td data-label="Verification">
-                  <span class="cell-muted">{profile.verificationStatus}</span>
+                <td
+                  data-label={t("Verification")}
+                  data-verification-status={profile.verificationStatus}
+                >
+                  <span class="cell-muted">
+                    {verificationStatusLabel(profile.verificationStatus)}
+                  </span>
                 </td>
               </tr>
             ))

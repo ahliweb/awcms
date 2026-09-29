@@ -249,11 +249,11 @@ const colCount = canConfigure ? 5 : 4;
           ) : (
             rows.map(({ role, granted, availableCount }) => (
               <tr>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{role.roleCode}</span>
                 </td>
-                <td data-label="Name">{role.roleName}</td>
-                <td data-label="System">
+                <td data-label={t("Name")}>{role.roleName}</td>
+                <td data-label={t("System")}>
                   <span
                     class="status-badge"
                     data-variant={role.isSystem ? "warning" : "neutral"}
@@ -261,11 +261,11 @@ const colCount = canConfigure ? 5 : 4;
                     {role.isSystem ? "system" : "custom"}
                   </span>
                 </td>
-                <td data-label="Permissions">
+                <td data-label={t("Permissions")}>
                   <span class="cell-muted">{role.permissionCount}</span>
                 </td>
                 {canConfigure && (
-                  <td data-label="Actions" class="stacked-block">
+                  <td data-label={t("Actions")} class="stacked-block">
                     <div class="row-actions">
                       <button
                         type="button"
@@ -391,11 +391,11 @@ const colCount = canConfigure ? 5 : 4;
           <tbody>
             {deletedRoles.map((role) => (
               <tr>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{role.roleCode}</span>
                 </td>
-                <td data-label="Name">{role.roleName}</td>
-                <td data-label="Actions" class="stacked-block">
+                <td data-label={t("Name")}>{role.roleName}</td>
+                <td data-label={t("Actions")} class="stacked-block">
                   <div class="row-actions">
                     <button
                       type="button"

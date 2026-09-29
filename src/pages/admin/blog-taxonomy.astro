@@ -273,14 +273,14 @@ const hasFilter = typeFilter !== undefined;
             ) : (
               terms.map((entry) => (
                 <tr data-term-row={entry.id}>
-                  <td data-label="Name">
+                  <td data-label={t("Name")}>
                     <span set:text={entry.name} />
                     <span class="cell-muted">
                       {" "}
                       · <span class="cell-code">{entry.slug}</span>
                     </span>
                   </td>
-                  <td data-label="Type">
+                  <td data-label={t("Type")}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -291,27 +291,27 @@ const hasFilter = typeFilter !== undefined;
                       {entry.taxonomyType}
                     </span>
                   </td>
-                  <td data-label="Parent">
+                  <td data-label={t("Parent")}>
                     {entry.parentId ? (
                       <span set:text={nameById.get(entry.parentId) ?? "—"} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Description">
+                  <td data-label={t("Description")}>
                     {entry.description ? (
                       <span set:text={entry.description} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.updatedAt)}
                     </span>
                   </td>
                   {showsRowActions && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <a
                           class="quick-link"

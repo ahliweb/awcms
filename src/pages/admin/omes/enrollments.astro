@@ -96,6 +96,7 @@ import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
 import { getTranslatorFor } from "../../../lib/i18n";
+import { omesEnrollmentStatusLabel } from "../../../lib/i18n/labels/omes-enrollment";
 import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
 import { fetchServers } from "../../../modules/omes-control/application/server-directory";
 import {
@@ -264,19 +265,19 @@ function linkWith(overrides: Record<string, string | null>): string {
               <tbody>
                 {eligibleServers.map((server) => (
                   <tr>
-                    <td data-label="Hostname">
+                    <td data-label={t("Hostname")}>
                       <span class="cell-code">{server.hostname}</span>
                     </td>
-                    <td data-label="Platform">
+                    <td data-label={t("Platform")}>
                       <span class="cell-muted">
                         {server.osName ?? "—"} {server.osVersion ?? ""} ·{" "}
                         {server.arch ?? "—"}
                       </span>
                     </td>
-                    <td data-label="Registered">
+                    <td data-label={t("Registered")}>
                       <span class="cell-muted">{server.createdAt}</span>
                     </td>
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <button
                         type="button"
                         class="btn-inline js-issue-tok"
@@ -366,13 +367,16 @@ function linkWith(overrides: Record<string, string | null>): string {
               ) : (
                 enrollments.map((enrollment) => (
                   <tr data-enrollment-row={enrollment.id}>
-                    <td data-label="Server">
+                    <td data-label={t("Server")}>
                       <span class="cell-code">{enrollment.hostname}</span>
                     </td>
-                    <td data-label="Worker">
+                    <td data-label={t("Worker")}>
                       <span class="cell-code">{enrollment.workerId}</span>
                     </td>
-                    <td data-label="Status">
+                    <td
+                      data-label={t("Status")}
+                      data-status={enrollment.status}
+                    >
                       <span
                         class="status-badge"
                         data-variant={
@@ -380,10 +384,10 @@ function linkWith(overrides: Record<string, string | null>): string {
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {enrollment.status}
+                        {omesEnrollmentStatusLabel(t, enrollment.status)}
                       </span>
                     </td>
-                    <td data-label="Fingerprint">
+                    <td data-label={t("Public key fingerprint (SHA-256)")}>
                       {enrollment.publicKeyFingerprint ? (
                         <span class="cell-code">
                           {enrollment.publicKeyFingerprint}
@@ -392,22 +396,22 @@ function linkWith(overrides: Record<string, string | null>): string {
                         <span class="cell-muted">{t("not yet presented")}</span>
                       )}
                     </td>
-                    <td data-label="Challenge expires">
+                    <td data-label={t("Challenge expires")}>
                       <span class="cell-muted">
                         {formatTimestamp(enrollment.challengeExpiresAt)}
                       </span>
                     </td>
-                    <td data-label="Enrolled">
+                    <td data-label={t("Enrolled")}>
                       <span class="cell-muted">
                         {formatTimestamp(enrollment.enrolledAt)}
                       </span>
                     </td>
-                    <td data-label="Revoked">
+                    <td data-label={t("Revoked")}>
                       <span class="cell-muted">
                         {formatTimestamp(enrollment.revokedAt)}
                       </span>
                     </td>
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       {REVOCABLE_STATUSES.has(enrollment.status) ? (
                         <button
                           type="button"

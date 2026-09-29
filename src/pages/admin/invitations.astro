@@ -50,6 +50,17 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+/** `awcms_invitations.status` (sql/106) — one screen only. */
+const INVITATION_STATUS_LABEL: Record<string, string> = {
+  pending: t("Pending"),
+  accepted: t("Accepted"),
+  revoked: t("Revoked"),
+  expired: t("Expired")
+};
+function invitationStatusLabel(value: string): string {
+  return INVITATION_STATUS_LABEL[value] ?? value;
+}
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -263,24 +274,29 @@ function isPending(invitation: InvitationView): boolean {
               <tbody>
                 {invitations.map((invitation) => (
                   <tr>
-                    <th scope="row" data-label="Address">
+                    <th scope="row" data-label={t("Address")}>
                       {invitation.loginIdentifierMasked}
                     </th>
-                    <td data-label="Name">{invitation.displayName}</td>
-                    <td data-label="Roles">
+                    <td data-label={t("Name")}>{invitation.displayName}</td>
+                    <td data-label={t("Roles")}>
                       {invitation.roleCodes.length === 0 ? (
                         <span class="cell-muted">{t("none")}</span>
                       ) : (
                         invitation.roleCodes.join(", ")
                       )}
                     </td>
-                    <td data-label="Status">{invitation.status}</td>
-                    <td data-label="Expires">
+                    <td
+                      data-label={t("Status")}
+                      data-status={invitation.status}
+                    >
+                      {invitationStatusLabel(invitation.status)}
+                    </td>
+                    <td data-label={t("Expires")}>
                       {invitation.expiresAt.slice(0, 10)}
                     </td>
-                    <td data-label="Resent">{invitation.resendCount}</td>
+                    <td data-label={t("Resent")}>{invitation.resendCount}</td>
                     {(canCreate || canRevoke) && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         {isPending(invitation) ? (
                           <>
                             {canCreate && (

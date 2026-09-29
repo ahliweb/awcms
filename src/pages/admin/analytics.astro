@@ -499,13 +499,13 @@ const sessionCells = sessions.map((s) =>
                   <th scope="col">{t("Area")}</th>
                   <th scope="col">{t("Path")}</th>
                   <th scope="col">{t("Browser")}</th>
-                  <th scope="col">OS</th>
+                  <th scope="col">{t("OS")}</th>
                   <th scope="col">{t("Device")}</th>
                   <th scope="col">{t("Type")}</th>
                   <th scope="col">{t("Country")}</th>
                   {canRawDetail && (
                     <>
-                      <th scope="col">IP</th>
+                      <th scope="col">{t("IP")}</th>
                       <th scope="col">{t("IP hash")}</th>
                       <th scope="col">{t("UA hash")}</th>
                       <th scope="col">{t("Login")}</th>
@@ -526,31 +526,31 @@ const sessionCells = sessions.map((s) =>
                 ) : (
                   sessionCells.map((cells) => (
                     <tr>
-                      <td data-label="Area">{cells.area}</td>
-                      <td data-label="Path">
+                      <td data-label={t("Area")}>{cells.area}</td>
+                      <td data-label={t("Path")}>
                         <span class="cell-code">{cells.currentPath}</span>
                       </td>
-                      <td data-label="Browser">{cells.browser}</td>
-                      <td data-label="OS">{cells.os}</td>
-                      <td data-label="Device">{cells.device}</td>
-                      <td data-label="Type">{cells.visitorType}</td>
-                      <td data-label="Country">{cells.country}</td>
+                      <td data-label={t("Browser")}>{cells.browser}</td>
+                      <td data-label={t("OS")}>{cells.os}</td>
+                      <td data-label={t("Device")}>{cells.device}</td>
+                      <td data-label={t("Type")}>{cells.visitorType}</td>
+                      <td data-label={t("Country")}>{cells.country}</td>
                       {canRawDetail && cells.raw && (
                         <>
-                          <td data-label="IP">
+                          <td data-label={t("IP")}>
                             <span class="cell-muted">
                               {displayOrPlaceholder(cells.raw.ipAddress)}
                             </span>
                           </td>
-                          <td data-label="IP hash">
+                          <td data-label={t("IP hash")}>
                             <span class="cell-muted">{cells.raw.ipHash}</span>
                           </td>
-                          <td data-label="UA hash">
+                          <td data-label={t("UA hash")}>
                             <span class="cell-muted">
                               {cells.raw.userAgentHash}
                             </span>
                           </td>
-                          <td data-label="Login">
+                          <td data-label={t("Login")}>
                             <span class="cell-muted">
                               {cells.raw.loginIdentifier}
                             </span>

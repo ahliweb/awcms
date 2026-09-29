@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:d18160b89d0d7023b3ddc462aba4cf577ba00fa08cc4eea4042791660069dc65 -->
+<!-- i18n-source-hash: sha256:3d46608ff68ca49293cf68b80eb03eae5c77bc95ed49cf6fb619eee4316eb171 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -451,6 +451,74 @@ Katalognya **dirawat tangan dan diverifikasi mesin** — kebalikan dari pipeline
 Menyatukan keduanya akan menghasilkan gerbang yang hijau sementara semua jawabannya salah; header kedua skrip itu menjelaskannya panjang lebar.
 
 Yang sengaja **tidak** dipindai gerbang cakupan: atribut. `aria-label="Close"` sama butuhnya diterjemahkan, tetapi `class="admin-card"` terlihat identik bagi pemindai, dan gerbang yang melaporkan nama kelas melatih pembacanya untuk mengabaikannya. Jadi layar yang lolos masih bisa punya `placeholder` atau `aria-label` yang belum diterjemahkan — periksa itu dengan tangan.
+
+### Tidak ada enum mentah, dan `data-label` diterjemahkan (Issue #861, item 4 dari #854)
+
+Nilai enum/status tertutup (`request.status`, `post.visibility`, opsi
+`<select>` yang dibangun dari himpunan nilai literal) **tidak pernah**
+dirender sebagai teks mentah — `<td>{request.status}</td>` terbaca sebagai
+fallback tak-diterjemahkan di setiap locale non-Inggris, karena nilai DB
+(`pending_approval`) bukan prosa Inggris yang bisa diterjemahkan `t()`.
+Render label terjemahan lewat `t()`, dan simpan nilai mentah di atribut
+`data-*` (`data-status={request.status}`) supaya test/CSS/JS tetap punya
+hook stabil yang tidak berubah mengikuti locale:
+
+```astro
+<td data-label={t("Status")} data-status={request.status}>
+  {REQUEST_STATUS_LABEL[request.status]}
+</td>
+```
+
+**Tempat peta label hidup** adalah keputusan yang dibuat sekali, bukan per
+layar:
+
+- Enum yang **sama dirender di 2+ layar admin** mendapat **satu helper
+  bersama**, ditempatkan di modul pemiliknya atau di
+  `src/lib/i18n/labels/<domain>.ts` (mis. `src/lib/i18n/labels/blog-content.ts`
+  untuk `BlogContentStatus`, dipakai bersama `blog.astro` dan
+  `blog-pages.astro`; `audit-severity.ts` untuk severity
+  `info`/`warning`/`critical` yang dipakai bersama `audit-trail.astro` dan
+  `omes/audit.astro`). Berbagi di sini bukan sekadar DRY — ini yang mencegah
+  label kedua layar melenceng satu sama lain seperti helper warna badge
+  `STATUS_VARIANT`/`severityVariant`-nya yang sudah lebih dulu melenceng
+  menjadi duplikat.
+- Enum **satu-off** (dirender di tepat satu layar) mendapat **peta lokal di
+  titik render**, di frontmatter halaman itu.
+- Bagaimanapun, petanya adalah `Record<Enum, string>` TypeScript **ekshaustif
+  atas tipe enum** — anggota enum baru gagal typecheck sampai diberi label,
+  jaminan yang tidak pernah dimiliki peta warna badge bergaya
+  `STATUS_VARIANT`. Ketika kolom dasarnya adalah `text` polos tanpa union TS
+  yang di-export (kebanyakan kolom status repo ini lebih tua dari itu),
+  deklarasikan union-nya secara lokal di modul/helper label alih-alih
+  melebar ke `Record<string, string>` — lihat
+  `src/lib/i18n/labels/audit-severity.ts` dan
+  `src/lib/i18n/labels/omes-enrollment.ts` untuk polanya.
+- **Nilai tak dikenal wajib jatuh-balik ke nilai mentah** — tidak pernah
+  crash, tidak pernah kosong. Peta label dibaca dengan `??`/type guard, tidak
+  diindeks tanpa cek.
+- `<script>` klien yang me-render ulang teks status ke DOM setelah fetch
+  (mis. activity stream yang polling) butuh label terjemahan yang SAMA
+  dengan render SSR-nya (lihat `src/pages/admin/omes/orkestrasi-langsung.astro`
+  dengan atribut `data-state-labels`-nya), bukan membiarkan salinan hasil
+  render klien tak diterjemahkan sementara salinan SSR-nya diterjemahkan.
+
+**`data-label` pada tabel stacked** (`.data-table--stack td::before { content:
+attr(data-label); }` milik `admin.css`, yang menampilkan nama kolom di ponsel)
+mengikuti aturan yang sama: tidak pernah string Inggris literal, selalu
+`data-label={t("…")}` memakai kembali msgid persis dari `<th>` kolom itu —
+tidak perlu msgid baru ketika header-nya sudah diterjemahkan. Ini berlaku
+untuk sel `<td>` dan `<th>` secara spesifik (mekanisme yang benar-benar
+diimplementasikan CSS-nya); `data-label` juga muncul, tak terkait, pada
+beberapa `<button>` media-picker sebagai atribut generik "id elemen yang
+diperbarui" yang dikonsumsi `src/lib/ui/media-picker-client.ts` — itu atribut
+berbeda yang kebetulan sama nama, bukan label tampilan, dan di luar cakupan
+aturan ini.
+
+`tests/admin-i18n-labels.test.ts` menggerbangi kedua babak: ia gagal pada
+`data-label="…"` literal apa pun pada `<td`/`<th` di `src/pages/admin/**`, dan
+ia mematok ekshaustivitas helper label bersama (setiap nilai enum yang
+dikenal harus diterjemahkan menjauh dari bentuk mentahnya; nilai tak dikenal
+harus jatuh-balik ke situ).
 
 **Bentuk jamak sudah diimplementasikan**, bukan ditunda: `tn()` plus tabel `PLURAL_FORM_COUNT` di `src/lib/i18n/locales.ts`. Bahasa Indonesia mendeklarasikan `nplurals=1` karena tidak berinfleksi untuk jumlah; ekspresi `plural=` di header `.po` dibaca untuk **DIVERIFIKASI, tidak pernah dievaluasi**.
 

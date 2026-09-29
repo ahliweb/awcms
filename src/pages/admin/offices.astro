@@ -43,6 +43,25 @@ type OfficeRow = {
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
+/** `awcms_offices.office_type`/`.status` (sql/002) — one screen only. */
+const OFFICE_TYPE_LABEL: Record<string, string> = {
+  head_office: t("Head office"),
+  branch: t("Branch"),
+  store: t("Store"),
+  warehouse: t("Warehouse"),
+  other: t("Other")
+};
+function officeTypeLabel(value: string): string {
+  return OFFICE_TYPE_LABEL[value] ?? value;
+}
+const OFFICE_STATUS_LABEL: Record<"active" | "inactive", string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+function officeStatusLabel(value: string): string {
+  return (OFFICE_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const OFFICE_STATUS_OPTIONS = ["active", "inactive"];
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
@@ -160,11 +179,11 @@ const showActions = canUpdate || canDelete;
 
       <label for="office-type">{t("Office type")}</label>
       <select id="office-type" name="officeType">
-        <option value="head_office">{t("head_office")}</option>
-        <option value="branch">{t("branch")}</option>
-        <option value="store">{t("store")}</option>
-        <option value="warehouse">{t("warehouse")}</option>
-        <option value="other">{t("other")}</option>
+        <option value="head_office">{officeTypeLabel("head_office")}</option>
+        <option value="branch">{officeTypeLabel("branch")}</option>
+        <option value="store">{officeTypeLabel("store")}</option>
+        <option value="warehouse">{officeTypeLabel("warehouse")}</option>
+        <option value="other">{officeTypeLabel("other")}</option>
       </select>
 
       <button type="submit" id="office-create-submit">
@@ -219,10 +238,13 @@ const showActions = canUpdate || canDelete;
           ) : (
             offices.map((office) => (
               <tr data-office-row={office.id}>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{office.officeCode}</span>
                 </td>
-                <td data-label="Name" class={canUpdate ? "stacked-block" : ""}>
+                <td
+                  data-label={t("Name")}
+                  class={canUpdate ? "stacked-block" : ""}
+                >
                   {canUpdate ? (
                     <input
                       class="office-name-input"
@@ -235,11 +257,14 @@ const showActions = canUpdate || canDelete;
                     office.officeName
                   )}
                 </td>
-                <td data-label="Type">
-                  <span class="cell-muted">{office.officeType}</span>
+                <td data-label={t("Type")} data-office-type={office.officeType}>
+                  <span class="cell-muted">
+                    {officeTypeLabel(office.officeType)}
+                  </span>
                 </td>
                 <td
-                  data-label="Status"
+                  data-label={t("Status")}
+                  data-status={office.status}
                   class={canUpdate ? "stacked-block" : ""}
                 >
                   {canUpdate ? (
@@ -253,7 +278,7 @@ const showActions = canUpdate || canDelete;
                           value={value}
                           selected={office.status === value}
                         >
-                          {value}
+                          {officeStatusLabel(value)}
                         </option>
                       ))}
                     </select>
@@ -265,12 +290,12 @@ const showActions = canUpdate || canDelete;
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {office.status}
+                      {officeStatusLabel(office.status)}
                     </span>
                   )}
                 </td>
                 {showActions && (
-                  <td data-label="Actions" class="stacked-block">
+                  <td data-label={t("Actions")} class="stacked-block">
                     <div class="row-actions">
                       {canUpdate && (
                         <button
@@ -329,14 +354,16 @@ const showActions = canUpdate || canDelete;
           <tbody>
             {deletedOffices.map((office) => (
               <tr data-deleted-office-row={office.id}>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{office.officeCode}</span>
                 </td>
-                <td data-label="Name">{office.officeName}</td>
-                <td data-label="Type">
-                  <span class="cell-muted">{office.officeType}</span>
+                <td data-label={t("Name")}>{office.officeName}</td>
+                <td data-label={t("Type")} data-office-type={office.officeType}>
+                  <span class="cell-muted">
+                    {officeTypeLabel(office.officeType)}
+                  </span>
                 </td>
-                <td data-label="Actions" class="stacked-block">
+                <td data-label={t("Actions")} class="stacked-block">
                   <div class="row-actions">
                     <button
                       type="button"

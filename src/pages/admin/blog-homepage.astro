@@ -249,24 +249,24 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
             ) : (
               sections.map((section) => (
                 <tr data-section-row={section.id}>
-                  <td data-label="Order">{section.sortOrder}</td>
-                  <td data-label="Key">
+                  <td data-label={t("Order")}>{section.sortOrder}</td>
+                  <td data-label={t("Key")}>
                     <span class="cell-code" set:text={section.sectionKey} />
                   </td>
-                  <td data-label="Type">
+                  <td data-label={t("Type")}>
                     <span class="status-badge" data-variant="neutral">
                       <span class="status-dot" aria-hidden="true" />
                       {section.sectionType}
                     </span>
                   </td>
-                  <td data-label="Title">
+                  <td data-label={t("Title")}>
                     {section.title ? (
                       <span set:text={section.title} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Enabled">
+                  <td data-label={t("Enabled")}>
                     <span
                       class="status-badge"
                       data-variant={section.isEnabled ? "success" : "neutral"}
@@ -275,11 +275,11 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
                       {section.isEnabled ? t("Enabled") : t("Disabled")}
                     </span>
                   </td>
-                  <td data-label="Schedule">
+                  <td data-label={t("Schedule")}>
                     <span class="cell-muted">{formatWindow(section)}</span>
                   </td>
                   {canConfigure && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <a
                           class="quick-link"
@@ -649,13 +649,13 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
             ) : (
               eligiblePosts.map((post) => (
                 <tr>
-                  <td data-label="Title">
+                  <td data-label={t("Title")}>
                     <span set:text={post.title} />
                   </td>
-                  <td data-label="Slug">
+                  <td data-label={t("Slug")}>
                     <span class="cell-code" set:text={post.slug} />
                   </td>
-                  <td data-label="Id">
+                  <td data-label={t("Id")}>
                     <span class="cell-code" set:text={post.id} />
                   </td>
                 </tr>

@@ -265,6 +265,17 @@ function redirectStateVariant(state: string): string {
   return "neutral";
 }
 
+/** `awcms_seo_redirects.state` (sql/060) — one screen only. */
+const REDIRECT_STATE_LABEL: Record<"active" | "inactive" | "archived", string> =
+  {
+    active: t("Active"),
+    inactive: t("Inactive"),
+    archived: t("Archived")
+  };
+function redirectStateLabel(value: string): string {
+  return (REDIRECT_STATE_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
 ---
 
@@ -308,38 +319,38 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           </thead>
           <tbody>
             <tr>
-              <td data-label="Setting">{t("Site name")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Site name")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.siteName ?? <span class="cell-muted">—</span>}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Default meta description")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Default meta description")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.defaultMetaDescription ?? (
                   <span class="cell-muted">—</span>
                 )}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Twitter site handle")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Twitter site handle")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.twitterSiteHandle ?? (
                   <span class="cell-muted">—</span>
                 )}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Organization name")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Organization name")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.organizationName ?? (
                   <span class="cell-muted">—</span>
                 )}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Site-wide noindex")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Site-wide noindex")}</td>
+              <td data-label={t("Value")}>
                 <span
                   class="status-badge"
                   data-variant={
@@ -352,24 +363,24 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Sitemap served")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Sitemap served")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.sitemapEnabled ? "Yes" : "No"}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Feeds served")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Feeds served")}</td>
+              <td data-label={t("Value")}>
                 {seoConfig.feedsEnabled ? "Yes" : "No"}
               </td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Feed item limit")}</td>
-              <td data-label="Value">{seoConfig.feedItemLimit}</td>
+              <td data-label={t("Setting")}>{t("Feed item limit")}</td>
+              <td data-label={t("Value")}>{seoConfig.feedItemLimit}</td>
             </tr>
             <tr>
-              <td data-label="Setting">{t("Included resource types")}</td>
-              <td data-label="Value">
+              <td data-label={t("Setting")}>{t("Included resource types")}</td>
+              <td data-label={t("Value")}>
                 {includedTypesValue === "" ? (
                   <span class="cell-muted">{t("all eligible types")}</span>
                 ) : (
@@ -582,16 +593,16 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           </thead>
           <tbody>
             <tr>
-              <td data-label="Policy">{t("URL-change capture")}</td>
-              <td data-label="Value">
+              <td data-label={t("Policy")}>{t("URL-change capture")}</td>
+              <td data-label={t("Value")}>
                 <span class="cell-code">
                   {redirectSettings.urlChangeAutoPolicy}
                 </span>
               </td>
             </tr>
             <tr>
-              <td data-label="Policy">{t("Legacy /blog redirect")}</td>
-              <td data-label="Value">
+              <td data-label={t("Policy")}>{t("Legacy /blog redirect")}</td>
+              <td data-label={t("Value")}>
                 {redirectSettings.legacyBlogRedirectEnabled
                   ? "enabled"
                   : "disabled"}
@@ -768,7 +779,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
         <select id="redirect-state" name="state">
           {ALLOWED_REDIRECT_STATES.map((value) => (
             <option value={value} selected={value === "active"}>
-              {value}
+              {redirectStateLabel(value)}
             </option>
           ))}
         </select>
@@ -875,14 +886,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                   data-redirect-reason={rule.reason ?? ""}
                   data-redirect-state={rule.state}
                 >
-                  <td data-label="Source">
+                  <td data-label={t("Source")}>
                     <span class="cell-code">{rule.normalizedSourcePath}</span>
                     {rule.domainScopeHost && (
                       <span class="cell-muted"> @{rule.domainScopeHost}</span>
                     )}
                   </td>
                   <td
-                    data-label="Target"
+                    data-label={t("Target")}
                     class={canUpdateRedirect ? "stacked-block" : ""}
                   >
                     {canUpdateRedirect ? (
@@ -897,7 +908,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                     )}
                   </td>
                   <td
-                    data-label="Code"
+                    data-label={t("Code")}
                     class={canUpdateRedirect ? "stacked-block" : ""}
                   >
                     {canUpdateRedirect ? (
@@ -918,17 +929,17 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                       rule.statusCode
                     )}
                   </td>
-                  <td data-label="State">
+                  <td data-label={t("State")}>
                     <span
                       class="status-badge"
                       data-variant={redirectStateVariant(rule.state)}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {rule.state}
+                      {redirectStateLabel(rule.state)}
                     </span>
                   </td>
                   <td
-                    data-label="Query"
+                    data-label={t("Query")}
                     class={canUpdateRedirect ? "stacked-block" : ""}
                   >
                     {canUpdateRedirect ? (
@@ -949,11 +960,11 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                       "no"
                     )}
                   </td>
-                  <td data-label="Hits">
+                  <td data-label={t("Hits")}>
                     <span class="cell-muted">{rule.hitCount}</span>
                   </td>
                   {showRedirectActions && (
-                    <td data-label="Actions" class="stacked-block">
+                    <td data-label={t("Actions")} class="stacked-block">
                       <div class="row-actions">
                         {canUpdateRedirect && (
                           <button
@@ -1190,21 +1201,21 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             ) : (
               observations.map((row) => (
                 <tr data-observation-row={row.id}>
-                  <td data-label="Path">
+                  <td data-label={t("Path")}>
                     <span class="cell-code">{row.normalizedPath}</span>
                   </td>
-                  <td data-label="Referrer">
+                  <td data-label={t("Referrer")}>
                     {row.referrerDomain ? (
                       <span class="cell-muted">{row.referrerDomain}</span>
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Hits">{row.hitCount}</td>
-                  <td data-label="Last seen">
+                  <td data-label={t("Hits")}>{row.hitCount}</td>
+                  <td data-label={t("Last seen")}>
                     <span class="cell-muted">{row.lastSeenAt}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")}>
                     <span
                       class="status-badge"
                       data-variant={row.resolvedAt ? "success" : "warning"}
@@ -1214,7 +1225,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                     </span>
                   </td>
                   {showNotFoundActions && (
-                    <td data-label="Actions" class="stacked-block">
+                    <td data-label={t("Actions")} class="stacked-block">
                       <div class="row-actions">
                         <input
                           type="text"
