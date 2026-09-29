@@ -128,16 +128,18 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
         class="admin-section fade-in-up"
         aria-label="OMES deployment summary"
       >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Deployments (this page)")}</span>
-            <span class="stat-value">{deployments.length}</span>
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Deployments (this page)")}
+            </span>
+            <span class="admin-stat-card-value">{deployments.length}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
               {t("Stale or unreconciled (this page)")}
             </span>
-            <span class="stat-value">{staleCount}</span>
+            <span class="admin-stat-card-value">{staleCount}</span>
           </div>
         </div>
         {canOperate && (
@@ -244,18 +246,24 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                     </td>
                     <td data-label={t("Reconciliation")}>
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           STATUS_VARIANT[deployment.reconciliationStatus] ??
                           "neutral"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {deployment.reconciliationStatus}
                       </span>
                       {deployment.stale && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
+                        <span class="admin-status-pill" data-tone="warning">
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
                           {t("stale")}
                         </span>
                       )}

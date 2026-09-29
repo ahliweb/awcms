@@ -217,16 +217,20 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
         class="admin-section fade-in-up"
         aria-label="OMES backup summary"
       >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Backups (this page)")}</span>
-            <span class="stat-value">{backups.length}</span>
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Backups (this page)")}
+            </span>
+            <span class="admin-stat-card-value">{backups.length}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Not fresh (this page)")}</span>
-            <span class="stat-value">{staleCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Not fresh (this page)")}
+            </span>
+            <span class="admin-stat-card-value">{staleCount}</span>
             {staleCount > 0 && (
-              <span class="stat-hint">
+              <span class="admin-stat-card-caption">
                 {t(
                   "Older than the 24h freshness window, or its capture failed"
                 )}
@@ -316,17 +320,21 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                     </td>
                     <td data-label={t("Status")} data-status={backup.status}>
                       <span
-                        class="status-badge"
-                        data-variant={
-                          STATUS_VARIANT[backup.status] ?? "neutral"
-                        }
+                        class="admin-status-pill"
+                        data-tone={STATUS_VARIANT[backup.status] ?? "neutral"}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {backupStatusLabel(backup.status)}
                       </span>
                       {!backup.fresh && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
+                        <span class="admin-status-pill" data-tone="warning">
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
                           {t("not fresh")}
                         </span>
                       )}
@@ -453,8 +461,8 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                     </td>
                     <td data-label={t("Status")} data-status={request.status}>
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           request.status === "approved" ||
                           request.status === "completed"
                             ? "success"
@@ -464,7 +472,10 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
                               : "info"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {omesOperationStatusLabel(t, request.status)}
                       </span>
                     </td>

@@ -281,19 +281,17 @@ function milestoneCellFor(
           {progress.observedAt ? (
             <span data-freshness={progress.freshness}>
               <span
-                class="status-badge"
-                data-variant={
-                  progress.freshness === "stale" ? "danger" : "info"
-                }
+                class="admin-status-pill"
+                data-tone={progress.freshness === "stale" ? "danger" : "info"}
               >
-                <span class="status-dot" aria-hidden="true" />
+                <span class="admin-status-pill-dot" aria-hidden="true" />
                 {progress.freshness === "stale" ? t("Stale") : t("Fresh")}
               </span>{" "}
               {t("Observed")}: {progress.observedAt}
             </span>
           ) : (
-            <span class="status-badge" data-variant="info">
-              <span class="status-dot" aria-hidden="true" />
+            <span class="admin-status-pill" data-tone="info">
+              <span class="admin-status-pill-dot" aria-hidden="true" />
               {t("Awaiting first poll")}
             </span>
           )}
@@ -301,11 +299,11 @@ function milestoneCellFor(
             <>
               {" · "}
               <span
-                class="status-badge"
-                data-variant="danger"
+                class="admin-status-pill"
+                data-tone="danger"
                 id="repo-progress-error-badge"
               >
-                <span class="status-dot" aria-hidden="true" />
+                <span class="admin-status-pill-dot" aria-hidden="true" />
                 {t("Last poll failed")}
               </span>
               {progress.lastErrorClass && (
@@ -400,12 +398,13 @@ function milestoneCellFor(
                     <td data-label={t("Title")}>{issue.title}</td>
                     <td data-label={t("Status")} data-state={issue.state}>
                       <span
-                        class="status-badge"
-                        data-variant={
-                          issue.state === "closed" ? "info" : "danger"
-                        }
+                        class="admin-status-pill"
+                        data-tone={issue.state === "closed" ? "info" : "danger"}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {STATE_LABELS[issue.state]}
                       </span>
                     </td>

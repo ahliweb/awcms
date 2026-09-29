@@ -144,8 +144,8 @@ const rootNode = current?.nodes.find(
               <dt>{t("Status")}</dt>
               <dd data-historical={rootNode.isHistorical ? "true" : "false"}>
                 <span
-                  class="status-badge"
-                  data-variant={
+                  class="admin-status-pill"
+                  data-tone={
                     rootNode.isHistorical
                       ? "neutral"
                       : current.isActive
@@ -153,7 +153,7 @@ const rootNode = current?.nodes.find(
                         : "info"
                   }
                 >
-                  <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
                   {rootNode.isHistorical
                     ? t("last reported: {state}", {
                         state: rootNode.effectiveState

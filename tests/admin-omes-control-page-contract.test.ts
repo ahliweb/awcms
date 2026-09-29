@@ -286,10 +286,14 @@ describe("OMES admin screens never mutate directly", () => {
 });
 
 describe("stale/offline evidence renders explicitly, never as healthy", () => {
-  test("the servers screen has its own stale badge and staleness copy, distinct from the base status badge", async () => {
+  // #865 (wave 6): servers.astro and deployments.astro migrated their
+  // `.status-badge` markup to the shared `.admin-status-pill` primitive
+  // (`data-variant` -> `data-tone`) — see docs/awcms/admin-ui-parity-matrix.md
+  // §7 wave 6.
+  test("the servers screen has its own stale badge and staleness copy, distinct from the base status pill", async () => {
     const page = await readFile(PAGES.servers, "utf8");
     expect(page).toContain("server.stale &&");
-    expect(page).toContain('data-variant="warning"');
+    expect(page).toContain('data-tone="warning"');
     expect(page).toContain('{t("stale")}');
     expect(page).toContain("No heartbeat within the staleness window");
   });
@@ -297,7 +301,7 @@ describe("stale/offline evidence renders explicitly, never as healthy", () => {
   test("the deployments screen has its own stale badge, independent of reconciliation status", async () => {
     const page = await readFile(PAGES.deployments, "utf8");
     expect(page).toContain("deployment.stale &&");
-    expect(page).toContain('data-variant="warning"');
+    expect(page).toContain('data-tone="warning"');
     expect(page).toContain('{t("stale")}');
   });
 

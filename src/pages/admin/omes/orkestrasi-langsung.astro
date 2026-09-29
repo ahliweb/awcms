@@ -215,10 +215,10 @@ function formatTimestamp(value: string | null): string {
                 <span class="cell-code">{tree.sessionId}</span>
                 <span class="cell-muted">{tree.serverId}</span>
                 <span
-                  class="status-badge"
-                  data-variant={FRESHNESS_VARIANT[tree.freshness] ?? "neutral"}
+                  class="admin-status-pill"
+                  data-tone={FRESHNESS_VARIANT[tree.freshness] ?? "neutral"}
                 >
-                  <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
                   {tree.freshness}
                 </span>
                 <span class="cell-muted">
@@ -238,14 +238,14 @@ function formatTimestamp(value: string | null): string {
                     data-historical={node.isHistorical ? "true" : "false"}
                   >
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         node.isHistorical
                           ? "neutral"
                           : (STATE_VARIANT[node.effectiveState] ?? "neutral")
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {node.isHistorical
                         ? t("last reported: {state}", {
                             state: stateLabel(node.effectiveState)
@@ -311,14 +311,14 @@ function formatTimestamp(value: string | null): string {
                 data-historical={event.isHistorical ? "true" : "false"}
               >
                 <span
-                  class="status-badge"
-                  data-variant={
+                  class="admin-status-pill"
+                  data-tone={
                     event.isHistorical
                       ? "neutral"
                       : (STATE_VARIANT[event.effectiveState] ?? "neutral")
                   }
                 >
-                  <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
                   {event.isHistorical
                     ? t("last reported: {state}", {
                         state: stateLabel(event.effectiveState)
@@ -436,7 +436,7 @@ function formatTimestamp(value: string | null): string {
           ? historicalLabel(stateLabel(event.effectiveState))
           : stateLabel(event.effectiveState);
         return `<li data-event-id="${escapeHtml(event.id)}" data-historical="${event.isHistorical ? "true" : "false"}">
-          <span class="status-badge"${variant ? ` data-variant="${variant}"` : ""}><span class="status-dot" aria-hidden="true"></span>${escapeHtml(label)}</span>
+          <span class="admin-status-pill"${variant ? ` data-tone="${variant}"` : ""}><span class="admin-status-pill-dot" aria-hidden="true"></span>${escapeHtml(label)}</span>
           <span class="cell-code">${escapeHtml(event.subagentId)}</span>
           <span class="cell-muted">${escapeHtml(event.effectiveEventType)}</span>
           <span class="cell-muted">${escapeHtml(event.eventTimestamp)}</span>

@@ -161,14 +161,14 @@ const columns = 7 + (showActions ? 1 : 0);
 
     {canSeeAnything && !loadError && (
       <section class="admin-section fade-in-up" aria-label="OMES job summary">
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Jobs (this page)")}</span>
-            <span class="stat-value">{jobs.length}</span>
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Jobs (this page)")}</span>
+            <span class="admin-stat-card-value">{jobs.length}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Failed (this page)")}</span>
-            <span class="stat-value">{failedCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Failed (this page)")}</span>
+            <span class="admin-stat-card-value">{failedCount}</span>
           </div>
         </div>
       </section>
@@ -256,10 +256,13 @@ const columns = 7 + (showActions ? 1 : 0);
                     </td>
                     <td data-label={t("State")} data-state={job.state}>
                       <span
-                        class="status-badge"
-                        data-variant={STATE_VARIANT[job.state] ?? "neutral"}
+                        class="admin-status-pill"
+                        data-tone={STATE_VARIANT[job.state] ?? "neutral"}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {jobStateLabel(job.state)}
                       </span>
                     </td>

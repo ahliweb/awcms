@@ -345,18 +345,37 @@ sets but the same shared CSS:
   primitive lands first, coordinate there instead of here
 - **Shared:** none
 
-### Wave 6 — OMES-specific admin surfaces
+### Wave 6 — OMES-specific admin surfaces — **DONE** ([Issue #865](https://github.com/ahliweb/awcms/issues/865))
 
 - **Files:** `src/pages/admin/omes/ai-privacy.astro`, `omes/arsitektur.astro`
   (status-pill only, no stat-card — §6.3), `omes/audit.astro`,
   `omes/backups.astro`, `omes/deployments.astro`, `omes/enrollments.astro`,
   `omes/hermes.astro`, `omes/jobs.astro`, `omes/operations.astro`,
   `omes/orkestrasi-langsung.astro`, `omes/progres-hermes.astro`,
-  `omes/servers.astro`
-- **Shared:** `src/styles/omes-control-center.css` (verify no OMES-only
-  bespoke status/stat class duplicates the primitives before this wave adds
-  more — not audited in this document, since it is outside
-  `src/pages/admin/**/*.astro` proper; flagged for wave 6's own scoping)
+  `omes/servers.astro` — all migrated onto `.admin-status-pill`/
+  `.admin-status-pill-dot` (`data-variant` -> `data-tone`), and the four with
+  a KPI tile (`backups`, `deployments`, `jobs`, `servers`) also onto
+  `.admin-stat-card`/`.admin-stat-card-grid`. `orkestrasi-langsung.astro`'s
+  polling client script (activity-stream re-render) migrated in lockstep so
+  its client-rendered badges match the SSR rows.
+- **Shared:** `src/styles/omes-control-center.css` audited — it needed no new
+  CSS. It already carried the dual `.stat-card`/`.admin-stat-card` selector
+  list from Issue #860 (wave 2), and it never redeclared `.status-badge`/
+  `.admin-status-pill` itself: both classes consume the same
+  `--color-*-soft`/`-on-soft` custom properties the file already overrides
+  for the OMES dark palette, so the tone cascade (including `danger`/`info`,
+  which bare `.status-badge` never defined — see below) carried over
+  automatically. Only `omes/health.astro` (wave 4, out of scope for #865)
+  still needs the file's `.stat-card` half of each selector pair.
+- **Decision made:** migrating uncovered a latent styling bug rather than
+  introducing one — several of these screens passed `data-variant="danger"`/
+  `"info"` to `.status-badge`, which only ever defined `success`/`neutral`/
+  `warning`; those badges silently rendered with the undifferentiated
+  default fill. `.admin-status-pill` defines all five tones, so they now
+  render as intended, with no markup logic changed. `build:asset-budget:check`'s
+  `APP_BUDGET_BYTES` was raised from 248,045 to 248,058 (measured actual
+  total — the only growth is `orkestrasi-langsung.astro`'s client script
+  template literal, whose class names got longer).
 
 ### Wave 7 (issue's numbering) — final sweep
 

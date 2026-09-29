@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:d474a362d6ee7b999613b557b8e21fcab62c279ccc851c172cbebcfab79683ac -->
+<!-- i18n-source-hash: sha256:01fca2e778f8b4f2696187ffe6df68dfd936d3d9e159ac79ad11c419cc314e42 -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -362,19 +362,39 @@ tapi CSS bersama yang sama:
   sana bukan di sini
 - **Bersama:** tidak ada
 
-### Gelombang 6 — Permukaan admin khusus OMES
+### Gelombang 6 — Permukaan admin khusus OMES — **SELESAI** ([Issue #865](https://github.com/ahliweb/awcms/issues/865))
 
 - **Berkas:** `src/pages/admin/omes/ai-privacy.astro`, `omes/arsitektur.astro`
   (hanya status-pill, tanpa stat-card — §6.3), `omes/audit.astro`,
   `omes/backups.astro`, `omes/deployments.astro`, `omes/enrollments.astro`,
   `omes/hermes.astro`, `omes/jobs.astro`, `omes/operations.astro`,
   `omes/orkestrasi-langsung.astro`, `omes/progres-hermes.astro`,
-  `omes/servers.astro`
-- **Bersama:** `src/styles/omes-control-center.css` (verifikasi tidak ada
-  kelas status/stat bespoke khusus-OMES yang menduplikasi primitif sebelum
-  gelombang ini menambah lagi — tidak diaudit di dokumen ini, karena di
-  luar `src/pages/admin/**/*.astro` yang sesungguhnya; ditandai untuk
-  scoping gelombang 6 sendiri)
+  `omes/servers.astro` — semuanya dimigrasikan ke `.admin-status-pill`/
+  `.admin-status-pill-dot` (`data-variant` -> `data-tone`), dan empat yang
+  punya tile KPI (`backups`, `deployments`, `jobs`, `servers`) juga ke
+  `.admin-stat-card`/`.admin-stat-card-grid`. Client script polling
+  `orkestrasi-langsung.astro` (render-ulang activity-stream) dimigrasikan
+  serentak agar badge yang dirender client cocok dengan baris SSR.
+- **Bersama:** `src/styles/omes-control-center.css` diaudit — tidak
+  memerlukan CSS baru. Berkas ini sudah membawa daftar selector ganda
+  `.stat-card`/`.admin-stat-card` dari Issue #860 (gelombang 2), dan tidak
+  pernah mendeklarasikan ulang `.status-badge`/`.admin-status-pill` sendiri:
+  kedua kelas itu memakai custom property `--color-*-soft`/`-on-soft` yang
+  sama yang sudah di-override berkas ini untuk palet gelap OMES, sehingga
+  cascade tone (termasuk `danger`/`info`, yang tidak pernah didefinisikan
+  `.status-badge` polos — lihat di bawah) ikut terbawa otomatis. Hanya
+  `omes/health.astro` (gelombang 4, di luar cakupan #865) yang masih butuh
+  separuh `.stat-card` dari tiap pasangan selector berkas ini.
+- **Keputusan yang diambil:** migrasi ini justru menyingkap bug styling
+  laten, bukan memperkenalkannya — beberapa layar ini mengirim
+  `data-variant="danger"`/`"info"` ke `.status-badge`, yang hanya pernah
+  mendefinisikan `success`/`neutral`/`warning`; badge itu diam-diam
+  merender dengan fill default yang tak terbedakan. `.admin-status-pill`
+  mendefinisikan kelima tone, jadi sekarang badge itu merender sesuai
+  maksudnya, tanpa perubahan logika markup. `build:asset-budget:check`'s
+  `APP_BUDGET_BYTES` dinaikkan dari 248.045 menjadi 248.058 (total aktual
+  terukur — satu-satunya pertumbuhan adalah literal template client script
+  `orkestrasi-langsung.astro`, yang nama kelasnya jadi lebih panjang).
 
 ### Gelombang 7 (penomoran issue) — sapuan akhir
 
