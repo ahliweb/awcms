@@ -277,9 +277,18 @@ describe("/admin/media behaviour", () => {
     expect(page).toContain('"Idempotency-Key": crypto.randomUUID()');
     expect(page).not.toContain("idempotent: false");
 
-    // Four call sites plus the helper declaration — delete, restore, purge,
-    // and Issue #615's rights PATCH.
-    expect([...page.matchAll(/(?<!function )idempotency\(\)/g)].length).toBe(4);
+    // Delete (Issue #854 part 3) now opts in via the presence-only
+    // `data-reason-idempotent` attribute on its `ReasonPanel` opener, so it
+    // no longer calls the inline `idempotency()` helper — three call sites
+    // remain: restore, purge, and Issue #615's rights PATCH.
+    expect([...page.matchAll(/(?<!function )idempotency\(\)/g)].length).toBe(3);
+
+    const deleteButton = page.slice(
+      page.indexOf("data-reason-action={`/api/v1/media/objects/${item.id}`}")
+    );
+    expect(deleteButton.slice(0, deleteButton.indexOf("</button>"))).toContain(
+      "data-reason-idempotent"
+    );
   });
 
   test("no <img> renders registry bytes", async () => {

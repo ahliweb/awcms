@@ -26,6 +26,12 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// The ONE `stripComments` (finding D2, 17 August 2026 audit round) — see
+// `tests/source-text-stripping.test.ts` for why a per-file copy is a
+// regression: a naive block-comment regex eats code whenever `/*` appears
+// inside a string literal (a route glob is enough).
+import { stripComments } from "../scripts/lib/source-text";
+
 const ROOTS = ["src/pages/admin", "src/lib/ui"];
 
 function collectSourceFiles(directory: string, into: string[] = []): string[] {
@@ -41,15 +47,6 @@ function collectSourceFiles(directory: string, into: string[] = []): string[] {
   }
 
   return into;
-}
-
-/** Block AND line comments stripped, so a docblock naming the pattern in
- * prose (as this very file's header does) cannot fool the scanner — the same
- * lesson `admin-stacked-table-hidden-rows.test.ts` records for `hidden`. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
 const CONFIRM_CALL = /\bwindow\.confirm\s*\(/;
