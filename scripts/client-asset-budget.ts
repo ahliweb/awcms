@@ -711,8 +711,28 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 248,045 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #865** (Wave 6, admin-ui-parity-matrix.md §7): the
+ * 12 OMES screens migrated their `.status-badge`/`.stat-card` markup onto
+ * `.admin-status-pill`/`.admin-stat-card`. This did NOT add a new CSS rule —
+ * `omes-control-center.css` already carried the dual `.stat-card`/
+ * `.admin-stat-card` selector list from Issue #860 (wave 2), and never
+ * redeclared `.status-badge`/`.admin-status-pill` itself (both classes
+ * consume the same `--color-*-soft` custom properties the file already
+ * overrides), so the only real growth is `orkestrasi-langsung.astro`'s
+ * client-rendered activity-stream template literal: its badge markup's class
+ * names got longer (`status-badge` -> `admin-status-pill`, `status-dot` ->
+ * `admin-status-pill-dot`), offset slightly by `data-variant` -> `data-tone`
+ * being three characters shorter. Measured actual total:
+ *
+ * ```
+ * before (248,045 ceiling)   248,045 B
+ * + admin-status-pill/admin-stat-card class rename (12 OMES screens)   248,058 B (measured actual total)
+ * ```
+ *
+ * 248,058 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_045;
+export const APP_BUDGET_BYTES = 248_058;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

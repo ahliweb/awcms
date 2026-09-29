@@ -378,12 +378,15 @@ function linkWith(overrides: Record<string, string | null>): string {
                       data-status={enrollment.status}
                     >
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           STATUS_VARIANT[enrollment.status] ?? "neutral"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {omesEnrollmentStatusLabel(t, enrollment.status)}
                       </span>
                     </td>

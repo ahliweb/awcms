@@ -14,14 +14,24 @@
  * and `admin-screens.css` already consume (`--color-bg`, `--color-surface`,
  * `--color-text*`, `--color-primary`/`-success`/`-warning`/`-danger`/`-info`
  * families, `--color-border*`, `--shadow-*`). Every existing component class
- * those two files already define — `.stat-card`, `.status-badge`,
- * `.data-table`, `.admin-panel`, `.quick-link`, `.empty-state`, `.btn*` — is
- * REUSED as-is; this file supplies no competing component CSS for anything
- * that already exists, per docs/ui-ux-design-system.md §7.4 ("reuse existing
- * admin components ... rather than introducing an unvetted third-party
- * CSS/JS framework"). The only NEW component here is `.omes-lifecycle`, the
- * Bootstrap → Check → Diff → Apply → Verify → Rollback strip on the overview
- * screen, which has no existing equivalent to reuse.
+ * those two files already define — `.stat-card`/`.admin-stat-card`,
+ * `.status-badge`/`.admin-status-pill`, `.data-table`, `.admin-panel`,
+ * `.quick-link`, `.empty-state`, `.btn*` — is REUSED as-is; this file
+ * supplies no competing component CSS for anything that already exists, per
+ * docs/ui-ux-design-system.md §7.4 ("reuse existing admin components ...
+ * rather than introducing an unvetted third-party CSS/JS framework"). This
+ * is also why `.admin-status-pill[data-tone]` needed NO new rule here when
+ * Issue #865 (wave 6) migrated `.status-badge` to it across 11 of these
+ * screens: both classes consume the same `--color-*-soft`/`-on-soft` custom
+ * properties this file already overrides, so the dark palette carried over
+ * automatically — including the `danger`/`info` tones several screens used
+ * on `.status-badge` without a defined variant (admin.css's `.status-badge`
+ * only ever styled `success`/`neutral`/`warning`; those sites rendered with
+ * the undifferentiated default fill before this migration, and now get the
+ * tone they always asked for). The only NEW component here is
+ * `.omes-lifecycle`, the Bootstrap → Check → Diff → Apply → Verify →
+ * Rollback strip on the overview screen, which has no existing equivalent to
+ * reuse.
  *
  * TYPEFACE: Public Sans + JetBrains Mono are already self-hosted for the
  * WHOLE admin by `tokens.css` (ADR-0120, `@font-face` + `--font-sans`/
@@ -191,10 +201,13 @@
 
 /*
  * KPI numbers read as telemetry, not prose — monospace, tabular. Selector
- * list covers both the legacy `.stat-card` (7 screens not yet migrated, wave
- * 6, §7 of docs/awcms/admin-ui-parity-matrix.md) and `.admin-stat-card`
- * (`omes/index.astro`, migrated by Issue #860 wave 2) so the declaration body
- * is written once, not duplicated per class family.
+ * list covers both the legacy `.stat-card` (only `omes/health.astro` still
+ * renders it — wave 4, §7 of docs/awcms/admin-ui-parity-matrix.md, out of
+ * scope for #865) and `.admin-stat-card` (`omes/index.astro`, migrated by
+ * Issue #860 wave 2; the other 11 OMES screens with a KPI tile, migrated by
+ * Issue #865 wave 6) so the declaration body is written once, not duplicated
+ * per class family. Once `omes/health.astro` migrates, the `.stat-card`
+ * half of every selector pair in this file can be dropped.
  */
 .omes-cc .stat-card .stat-value,
 .omes-cc .admin-stat-card .admin-stat-card-value {

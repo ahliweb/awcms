@@ -178,16 +178,18 @@ const columns = 6 + (canDelete ? 1 : 0);
         class="admin-section fade-in-up"
         aria-label="OMES server summary"
       >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Servers (this page)")}</span>
-            <span class="stat-value">{servers.length}</span>
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Servers (this page)")}
+            </span>
+            <span class="admin-stat-card-value">{servers.length}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Stale (this page)")}</span>
-            <span class="stat-value">{staleCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Stale (this page)")}</span>
+            <span class="admin-stat-card-value">{staleCount}</span>
             {staleCount > 0 && (
-              <span class="stat-hint">
+              <span class="admin-stat-card-caption">
                 {t("No heartbeat within the staleness window")}
               </span>
             )}
@@ -317,17 +319,21 @@ const columns = 6 + (canDelete ? 1 : 0);
                     </td>
                     <td data-label={t("Status")} data-status={server.status}>
                       <span
-                        class="status-badge"
-                        data-variant={
-                          STATUS_VARIANT[server.status] ?? "neutral"
-                        }
+                        class="admin-status-pill"
+                        data-tone={STATUS_VARIANT[server.status] ?? "neutral"}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {serverStatusLabel(server.status)}
                       </span>
                       {server.stale && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
+                        <span class="admin-status-pill" data-tone="warning">
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
                           {t("stale")}
                         </span>
                       )}
@@ -440,14 +446,17 @@ const columns = 6 + (canDelete ? 1 : 0);
                           data-status={enrollment.status}
                         >
                           <span
-                            class="status-badge"
-                            data-variant={
+                            class="admin-status-pill"
+                            data-tone={
                               enrollment.status === "active"
                                 ? "success"
                                 : "neutral"
                             }
                           >
-                            <span class="status-dot" aria-hidden="true" />
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
                             {omesEnrollmentStatusLabel(t, enrollment.status)}
                           </span>
                         </td>

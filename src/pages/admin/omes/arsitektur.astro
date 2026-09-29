@@ -172,12 +172,12 @@ const totalCapabilities =
                     {lane.plane.name}
                   </span>
                   <span
-                    class="status-badge"
-                    data-variant={
+                    class="admin-status-pill"
+                    data-tone={
                       STATUS_VARIANT[lane.plane.executionSemantics] ?? "neutral"
                     }
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {lane.plane.executionSemantics}
                   </span>
                   <span class="count-pill">{lane.capabilities.length}</span>
@@ -201,13 +201,16 @@ const totalCapabilities =
                             {capability.name}
                           </span>
                           <span
-                            class="status-badge"
-                            data-variant={
+                            class="admin-status-pill"
+                            data-tone={
                               STATUS_VARIANT[capability.implementationStatus] ??
                               "neutral"
                             }
                           >
-                            <span class="status-dot" aria-hidden="true" />
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
                             {capability.implementationStatus}
                           </span>
                         </div>

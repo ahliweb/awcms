@@ -226,10 +226,13 @@ function severityVariant(severity: string): string {
                       data-severity={event.severity}
                     >
                       <span
-                        class="status-badge"
-                        data-variant={severityVariant(event.severity)}
+                        class="admin-status-pill"
+                        data-tone={severityVariant(event.severity)}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {auditSeverityLabel(t, event.severity)}
                       </span>
                     </td>

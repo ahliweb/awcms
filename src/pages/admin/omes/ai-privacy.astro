@@ -204,10 +204,10 @@ function formatTimestamp(value: string | null): string {
         <h2 class="admin-section-title" id="posture-title">
           {t("AI privacy posture")}
           <span
-            class="status-badge"
-            data-variant={fleetHealthy ? "success" : "danger"}
+            class="admin-status-pill"
+            data-tone={fleetHealthy ? "success" : "danger"}
           >
-            <span class="status-dot" aria-hidden="true" />
+            <span class="admin-status-pill-dot" aria-hidden="true" />
             {fleetHealthy ? t("Fleet healthy") : t("Attention needed")}
           </span>
         </h2>
@@ -269,23 +269,29 @@ function formatTimestamp(value: string | null): string {
                     </td>
                     <td data-label={t("Status")}>
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           STATUS_VARIANT[row.effectiveStatus] ?? "neutral"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {row.effectiveStatus}
                       </span>
                     </td>
                     <td data-label={t("Evidence")}>
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           FRESHNESS_VARIANT[row.evidenceFreshness] ?? "neutral"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {row.evidenceFreshness}
                       </span>
                     </td>
@@ -411,8 +417,8 @@ function formatTimestamp(value: string | null): string {
                       data-decision={approval.decision}
                     >
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           approval.decision === "approved"
                             ? "success"
                             : approval.decision === "denied"
@@ -420,7 +426,10 @@ function formatTimestamp(value: string | null): string {
                               : "info"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {decisionLabel(approval.decision)}
                       </span>
                     </td>
