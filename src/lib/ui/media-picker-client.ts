@@ -150,6 +150,24 @@ export function describePickableMedia(item: PickableMediaObject): string {
  * Driven entirely by `data-target` (the hidden input to fill) and `data-label`
  * (the element describing the current choice), so a caller adds markup rather
  * than code.
+ *
+ * ## `.admin-media-grid` (Issue #872)
+ *
+ * The thumbnail grid this renders is the one real `.admin-media-grid`
+ * consumer described in doc 14's `MediaGrid` row: each `.media-picker-panel`
+ * carries `admin-media-grid` in its static markup (`blog.astro`,
+ * `blog-ads.astro`, `site-profile.astro` — `blog-homepage.astro` mentions
+ * this picker only in a doc comment explaining why it does NOT use it; it
+ * has no `.media-choice`/`.media-picker-panel` markup to migrate), and every
+ * option this function creates is a real
+ * `.admin-media-grid-tile[data-selected]` — an `aria-pressed` toggle button,
+ * never colour alone, marks the tile matching the field's current value when
+ * the panel is reopened. The tile's `<img>` fills it edge-to-edge per the
+ * primitive's contract, so the human-readable label (alt text, then caption,
+ * then filename — `describePickableMedia`) moves to a `.media-option-caption`
+ * overlay rather than a below-image line, and doubles as the button's
+ * accessible name via the caption text node itself (no separate `aria-label`
+ * needed — the caption *is* the name).
  */
 export function wireMediaPickers(
   /** Shown after clearing. Differs per surface ("No image attached." vs a favicon). */
@@ -193,29 +211,50 @@ export function wireMediaPickers(
 
       panel.replaceChildren();
 
+      // The field this button fills may already hold a choice (reopening the
+      // panel to change it) — read it once so the matching tile can render
+      // `[data-selected]`/`aria-pressed="true"` from the first paint rather
+      // than only after the next click.
+      const targetField = document.getElementById(button.dataset.target ?? "");
+      const currentId =
+        targetField instanceof HTMLInputElement ? targetField.value : "";
+
       for (const item of result.items) {
+        const isSelected = currentId !== "" && item.id === currentId;
+
         const option = document.createElement("button");
         option.type = "button";
-        option.className = "media-option";
+        option.className = "media-option admin-media-grid-tile";
+        option.dataset.selected = String(isSelected);
+        // The selected state is exposed to AT via `aria-pressed`, never by
+        // the tile's border/outline colour alone (WCAG 1.4.1).
+        option.setAttribute("aria-pressed", String(isSelected));
 
         const thumb = document.createElement("img");
         thumb.src = item.publicUrl;
         thumb.alt = "";
         thumb.loading = "lazy";
-        thumb.className = "media-option-thumb";
 
-        const label = document.createElement("span");
+        const caption = document.createElement("span");
+        caption.className = "media-option-caption";
         // `textContent`, never `innerHTML`: alt text and filenames arrive from
-        // whoever uploaded the file.
-        label.textContent = describePickableMedia(item);
+        // whoever uploaded the file. This is also the button's accessible
+        // name — a visible text node, not a separate `aria-label`.
+        caption.textContent = describePickableMedia(item);
 
-        option.append(thumb, label);
+        option.append(thumb, caption);
         option.addEventListener("click", () => {
           const target = document.getElementById(button.dataset.target ?? "");
           const labelEl = document.getElementById(button.dataset.label ?? "");
 
           if (target instanceof HTMLInputElement) target.value = item.id;
           if (labelEl) labelEl.textContent = describePickableMedia(item);
+
+          for (const el of panel.children) {
+            const picked = el === option;
+            (el as HTMLElement).dataset.selected = String(picked);
+            el.setAttribute("aria-pressed", String(picked));
+          }
 
           panel.hidden = true;
         });

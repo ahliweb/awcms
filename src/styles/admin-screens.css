@@ -645,6 +645,16 @@
  * The panel is a plain grid of buttons rather than a `<dialog>`: it opens
  * inline under the control that owns it, so the form's own scroll position is
  * kept and nothing has to restore focus across a modal boundary.
+ *
+ * Issue #872: the grid itself is the shared `.admin-media-grid` primitive
+ * (`src/styles/admin.css`) — the panel carries that class in its static
+ * markup, and `.media-option` is always paired with `.admin-media-grid-tile`
+ * (`src/lib/ui/media-picker-client.ts`). What stays HERE is only what the
+ * primitive does not define: the panel's own bordered/scrollable chrome, the
+ * button-element resets `.admin-media-grid-tile` has no opinion on, and the
+ * caption overlay this picker needs because its tile's `<img>` fills the tile
+ * edge-to-edge (doc 14's `MediaGrid` row) and so has no room for a label
+ * beneath it.
  */
 .media-choice-actions {
   display: flex;
@@ -653,9 +663,6 @@
 }
 
 .media-picker-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: var(--space-2, 0.5rem);
   margin-top: var(--space-2, 0.5rem);
   max-height: 22rem;
   overflow-y: auto;
@@ -672,14 +679,7 @@
 }
 
 .media-option {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1, 0.25rem);
-  align-items: stretch;
-  padding: var(--space-1, 0.25rem);
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border, #d4d4d8);
-  border-radius: var(--radius-sm, 0.25rem);
+  padding: 0;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -691,12 +691,19 @@
   border-color: var(--color-primary, #2563eb);
 }
 
-.media-option-thumb {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: var(--radius-sm, 0.25rem);
-  background: var(--color-surface-muted, #f4f4f5);
+/* Overlaid on the tile's `<img>`, never conveyed by tile colour/outline
+   alone — this text node is also the button's accessible name. */
+.media-option-caption {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: var(--space-1, 0.25rem);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Term picker (Issue #595) — four vocabularies, kept visually separate so
