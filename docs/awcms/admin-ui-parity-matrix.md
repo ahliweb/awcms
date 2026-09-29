@@ -321,17 +321,40 @@ sets but the same shared CSS:
   once 3a+3b+3c land, or keep both indefinitely as an alias — a decision for
   whoever lands the last of these three sub-packages, not this audit)
 
-### Wave 4 — Detail/timeline/two-pane flows
+### Wave 4 — Detail/timeline/two-pane flows — **DONE** ([Issue #863](https://github.com/ahliweb/awcms/issues/863))
 
 - **Files:** `src/pages/admin/approvals.astro`, `src/pages/admin/business-scope.astro`,
   `src/pages/admin/data-lifecycle.astro`, `src/pages/admin/omes/health.astro`,
-  `src/pages/admin/reporting.astro` (history section only — coordinate with
-  wave 2, which also touches this file for its stat cards)
-- **Decision needed before starting:** whether `approvals.astro`'s
-  drill-in-by-query-param instance history becomes an `.admin-two-pane` split
-  view (a real UX/routing change, not just a class swap) or stays a
-  timeline-only migration; this audit deliberately does not pre-decide it
-  (§6.4)
+  `src/pages/admin/reporting.astro` (history section only — coordinated with
+  wave 2, which touched this file for its stat cards)
+- **Decision made:** `approvals.astro` keeps its drill-in-by-query-param
+  instance history (`?instance=<id>`) — **no** `.admin-two-pane` routing
+  change. The audit deliberately left this open (§6.4); the issue itself
+  pre-decided it before work started.
+- **Landed:** every ordered event/history section identified in §6.4 —
+  approval instance history, business-scope conflict history, data-lifecycle
+  legal-hold history AND run history, OMES health snapshot history
+  (`?serverId=…` mode only — the tenant-wide "latest per server" table is one
+  row per server, not a history, and stays a `.data-table`), and reporting's
+  projection rebuild history — now renders as a real `<ol class="admin-
+timeline">` of `<li class="admin-timeline-item">`, with a genuine `<time
+datetime>` per item (never colour/position alone). Every status this issue
+  touched on these five screens (task/delegation status, business-scope
+  assignment/exception status, SoD conflict flag, legal-hold/run status, OMES
+  overall/stale/check-source status, rebuild status) moved from the legacy
+  `.status-badge` onto `.admin-status-pill`, keeping each cell's `data-status`
+  (or equivalent) raw-value hook for tests/CSS/JS. `reporting.astro`'s other
+  sections (email queue health, projection freshness, scheduled-export runs)
+  were left on `.status-badge` — out of this issue's file-ownership scope,
+  same reasoning as wave 2's stat-card scoping.
+- **Shared:** `src/styles/admin.css` gained a small `.admin-timeline { list-
+style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
+  (the pre-existing primitive only styled `-item`/`-label`/`-meta`, so a bare
+  `<ol>` would otherwise show a browser bullet/number ahead of the
+  primitive's own `::before` dot). `build:asset-budget:check`'s
+  `APP_BUDGET_BYTES` was raised from 248,045 to 248,096 (measured actual
+  total, no added margin — see `scripts/client-asset-budget.ts`'s own ledger
+  comment).
 - **Shared:** none beyond `reporting.astro` overlap with wave 2, noted above
 
 ### Wave 5 — Settings/toggle/media patterns — **DONE** ([Issue #864](https://github.com/ahliweb/awcms/issues/864))

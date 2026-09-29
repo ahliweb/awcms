@@ -175,7 +175,7 @@ function formatTimestamp(value: Date | string | null): string {
   return parsed.toISOString().replace("T", " ").slice(0, 16);
 }
 
-/** Run status -> the shared `.status-badge` variant vocabulary. */
+/** Run status -> the shared `.admin-status-pill[data-tone]` vocabulary. */
 function runStatusVariant(status: string): string {
   if (status === "completed") return "success";
   if (status === "failed") return "danger";
@@ -345,8 +345,8 @@ const hasTenantWideHold = holds.some(
                 <td data-label={t("Deletion")}>{descriptor.deletion.mode}</td>
                 <td data-label={t("Legal hold")}>
                   {descriptor.legalHold.applicable ? (
-                    <span class="status-badge" data-variant="info">
-                      <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill" data-tone="info">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {descriptor.legalHold.precedence}
                     </span>
                   ) : (
@@ -548,119 +548,96 @@ const hasTenantWideHold = holds.some(
         {t("Legal holds")}
         <span class="count-pill">{holds.length}</span>
       </h2>
-      <div class="data-table-scroll">
-        <table class="data-table data-table--stack">
-          <caption class="sr-only">
-            {t("Legal holds for this tenant, newest first")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("Status")}</th>
-              <th scope="col">{t("Table")}</th>
-              <th scope="col">{t("Scope")}</th>
-              <th scope="col">{t("Authority")}</th>
-              <th scope="col">{t("Started")}</th>
-              <th scope="col">{t("Ends")}</th>
-              <th scope="col">{t("Detail")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {holds.length === 0 && (
-              <tr>
-                <td class="data-table-empty" colspan={7}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ✓
-                    </span>
-                    <span class="empty-state-title">{t("No legal holds")}</span>
-                    <span class="empty-state-text">
-                      {t(
-                        "Ordinary retention applies to every registered table."
-                      )}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            )}
-            {holds.map((hold) => (
-              <tr>
-                <td data-label={t("Status")} data-status={hold.status}>
-                  <span
-                    class="status-badge"
-                    data-variant={
-                      hold.status === "active" ? "warning" : "neutral"
-                    }
-                  >
-                    <span class="status-dot" aria-hidden="true" />
-                    {holdStatusLabel(hold.status)}
-                  </span>
-                </td>
-                <td data-label={t("Table")}>
-                  {hold.descriptorKey ? (
-                    <span class="cell-code">{hold.descriptorKey}</span>
-                  ) : (
-                    <span class="cell-muted">{t("Every table")}</span>
-                  )}
-                </td>
-                <td data-label={t("Scope")}>{hold.scopeDescription}</td>
-                <td data-label={t("Authority")}>{hold.authorityReference}</td>
-                <td data-label={t("Started")}>
-                  <span class="cell-code">
-                    {formatTimestamp(hold.startsAt)}
-                  </span>
-                </td>
-                <td data-label={t("Ends")}>
-                  <span class="cell-code">{formatTimestamp(hold.endsAt)}</span>
-                </td>
-                <td data-label={t("Detail")}>
-                  {/* Reason and release reason are operator-authored text,
-                        rendered as escaped TEXT inside `<details>` — never as
-                        HTML — the same treatment the audit-trail viewer gives
-                        its payloads. */}
-                  <details>
-                    <summary>{t("Reason")}</summary>
-                    <p>{hold.reason}</p>
-                    {hold.releaseReason && (
-                      <p>
-                        <strong>{t("Released:")}</strong> {hold.releaseReason}
-                      </p>
-                    )}
-                  </details>
+      {holds.length === 0 ? (
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ✓
+          </span>
+          <span class="empty-state-title">{t("No legal holds")}</span>
+          <span class="empty-state-text">
+            {t("Ordinary retention applies to every registered table.")}
+          </span>
+        </div>
+      ) : (
+        <ol class="admin-timeline" aria-label={t("Legal holds, newest first")}>
+          {holds.map((hold) => (
+            <li class="admin-timeline-item">
+              <div class="admin-timeline-label">
+                <span
+                  class="admin-status-pill"
+                  data-tone={hold.status === "active" ? "warning" : "neutral"}
+                  data-status={hold.status}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {holdStatusLabel(hold.status)}
+                </span>
+                {hold.descriptorKey ? (
+                  <span class="cell-code">{hold.descriptorKey}</span>
+                ) : (
+                  <span class="cell-muted">{t("Every table")}</span>
+                )}
+              </div>
+              <div class="admin-timeline-meta">
+                <time datetime={hold.startsAt.toISOString()}>
+                  {formatTimestamp(hold.startsAt)}
+                </time>
+                {" → "}
+                {hold.endsAt ? (
+                  <time datetime={hold.endsAt.toISOString()}>
+                    {formatTimestamp(hold.endsAt)}
+                  </time>
+                ) : (
+                  t("open-ended")
+                )}
+                {" · "}
+                {hold.scopeDescription}
+                {" · "}
+                {hold.authorityReference}
+              </div>
 
-                  {canReleaseHold && hold.status === "active" && (
-                    <details class="hold-release">
-                      <summary>{t("Release")}</summary>
-                      <form
-                        class="admin-create-form"
-                        data-release-form
-                        data-hold-id={hold.id}
-                      >
-                        <label for={`release-reason-${hold.id}`}>
-                          {t("Release reason")}
-                          <textarea
-                            id={`release-reason-${hold.id}`}
-                            name="releaseReason"
-                            rows="2"
-                            minlength={MIN_REASON_LENGTH}
-                            maxlength={MAX_TEXT_FIELD_LENGTH}
-                            required
-                          />
-                        </label>
-                        <button
-                          type="submit"
-                          class="btn-inline btn-inline--danger"
-                        >
-                          {t("Release hold")}
-                        </button>
-                      </form>
-                    </details>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              {/* Reason and release reason are operator-authored text,
+                    rendered as escaped TEXT inside `<details>` — never as
+                    HTML — the same treatment the audit-trail viewer gives
+                    its payloads. */}
+              <details>
+                <summary>{t("Reason")}</summary>
+                <p>{hold.reason}</p>
+                {hold.releaseReason && (
+                  <p>
+                    <strong>{t("Released:")}</strong> {hold.releaseReason}
+                  </p>
+                )}
+              </details>
+
+              {canReleaseHold && hold.status === "active" && (
+                <details class="hold-release">
+                  <summary>{t("Release")}</summary>
+                  <form
+                    class="admin-create-form"
+                    data-release-form
+                    data-hold-id={hold.id}
+                  >
+                    <label for={`release-reason-${hold.id}`}>
+                      {t("Release reason")}
+                      <textarea
+                        id={`release-reason-${hold.id}`}
+                        name="releaseReason"
+                        rows="2"
+                        minlength={MIN_REASON_LENGTH}
+                        maxlength={MAX_TEXT_FIELD_LENGTH}
+                        required
+                      />
+                    </label>
+                    <button type="submit" class="btn-inline btn-inline--danger">
+                      {t("Release hold")}
+                    </button>
+                  </form>
+                </details>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   )}
 
@@ -675,82 +652,60 @@ const hasTenantWideHold = holds.some(
           "Aggregate counts only \u2014 what the scheduled job planned, archived or purged, and when. This history is itself retention evidence."
         )}
       </p>
-      <div class="data-table-scroll">
-        <table class="data-table data-table--stack">
-          <caption class="sr-only">
-            {t("The most recent lifecycle runs, newest first")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("Finished")}</th>
-              <th scope="col">{t("Descriptor")}</th>
-              <th scope="col">{t("Type")}</th>
-              <th scope="col">{t("Status")}</th>
-              <th scope="col">{t("Eligible")}</th>
-              <th scope="col">{t("Held")}</th>
-              <th scope="col">{t("Archived")}</th>
-              <th scope="col">{t("Purged")}</th>
-              <th scope="col">{t("Errors")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.length === 0 && (
-              <tr>
-                <td class="data-table-empty" colspan={9}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ⌛
-                    </span>
-                    <span class="empty-state-title">
-                      {t("No runs recorded")}
-                    </span>
-                    <span class="empty-state-text">
-                      {t(
-                        "The archive/purge job has not run for this tenant yet."
-                      )}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            )}
-            {runs.map((run) => (
-              <tr>
-                <td data-label={t("Finished")}>
-                  <span class="cell-code">
-                    {formatTimestamp(run.finishedAt)}
-                  </span>
-                </td>
-                <td data-label={t("Descriptor")}>
-                  <span class="cell-code">{run.descriptorKey}</span>
-                </td>
-                <td data-label={t("Type")} data-run-type={run.runType}>
+      {runs.length === 0 ? (
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ⌛
+          </span>
+          <span class="empty-state-title">{t("No runs recorded")}</span>
+          <span class="empty-state-text">
+            {t("The archive/purge job has not run for this tenant yet.")}
+          </span>
+        </div>
+      ) : (
+        <ol
+          class="admin-timeline"
+          aria-label={t("The most recent lifecycle runs, newest first")}
+        >
+          {runs.map((run) => (
+            <li class="admin-timeline-item">
+              <div class="admin-timeline-label">
+                <span class="cell-code">{run.descriptorKey}</span>
+                <span
+                  class="admin-status-pill"
+                  data-tone={runStatusVariant(run.status)}
+                  data-status={run.status}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {runStatusLabel(run.status)}
+                </span>
+                <span class="cell-muted" data-run-type={run.runType}>
                   {runTypeLabel(run.runType)}
-                </td>
-                <td data-label={t("Status")} data-status={run.status}>
-                  <span
-                    class="status-badge"
-                    data-variant={runStatusVariant(run.status)}
-                  >
-                    <span class="status-dot" aria-hidden="true" />
-                    {runStatusLabel(run.status)}
-                  </span>
-                </td>
-                <td data-label={t("Eligible")}>{run.eligibleCount}</td>
-                <td data-label={t("Held")}>{run.heldCount}</td>
-                <td data-label={t("Archived")}>{run.archivedCount}</td>
-                <td data-label={t("Purged")}>{run.purgedCount}</td>
-                <td data-label={t("Errors")}>
-                  {run.errorCount > 0 ? (
-                    run.errorCount
-                  ) : (
-                    <span class="cell-muted">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </span>
+              </div>
+              <div class="admin-timeline-meta">
+                <time datetime={run.finishedAt.toISOString()}>
+                  {formatTimestamp(run.finishedAt)}
+                </time>
+                {" · "}
+                {t("Eligible")}: {run.eligibleCount}
+                {" · "}
+                {t("Held")}: {run.heldCount}
+                {" · "}
+                {t("Archived")}: {run.archivedCount}
+                {" · "}
+                {t("Purged")}: {run.purgedCount}
+                {run.errorCount > 0 && (
+                  <>
+                    {" · "}
+                    {t("Errors")}: {run.errorCount}
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   )}
 </AdminLayout>

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:754f5d736ca5302b34ba1a2d6bc0ce6ff9c90ae5591fe7b771eff1fa36b1c5f3 -->
+<!-- i18n-source-hash: sha256:a064316c42ca600e9f86cc9b511dda444fc685db357f532173b7fe4dee548cf0 -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -336,19 +336,42 @@ tapi CSS bersama yang sama:
   waktu sebagai alias — keputusan untuk siapa pun yang mendaratkan terakhir
   dari ketiga sub-paket ini, bukan audit ini)
 
-### Gelombang 4 — Alur detail/timeline/two-pane
+### Gelombang 4 — Alur detail/timeline/two-pane — **SELESAI** ([Issue #863](https://github.com/ahliweb/awcms/issues/863))
 
 - **Berkas:** `src/pages/admin/approvals.astro`, `src/pages/admin/business-scope.astro`,
   `src/pages/admin/data-lifecycle.astro`, `src/pages/admin/omes/health.astro`,
-  `src/pages/admin/reporting.astro` (hanya section history — koordinasi
-  dengan gelombang 2, yang juga menyentuh berkas ini untuk stat card-nya)
-- **Keputusan diperlukan sebelum mulai:** apakah instance history
-  drill-in-by-query-param `approvals.astro` menjadi split view
-  `.admin-two-pane` (perubahan UX/routing nyata, bukan sekadar swap kelas)
-  atau tetap migrasi timeline-saja; audit ini sengaja tidak memutuskan-duluan
-  (§6.4)
-- **Bersama:** tidak ada di luar overlap `reporting.astro` dengan gelombang
-  2, sudah ditandai di atas
+  `src/pages/admin/reporting.astro` (hanya section history — dikoordinasikan
+  dengan gelombang 2, yang menyentuh berkas ini untuk stat card-nya)
+- **Keputusan yang dibuat:** `approvals.astro` tetap memakai
+  drill-in-by-query-param instance history-nya (`?instance=<id>`) — **tidak
+  ada** perubahan routing `.admin-two-pane`. Audit ini sengaja membiarkan hal
+  ini terbuka (§6.4); issue-nya sendiri yang memutuskan sebelum pekerjaan
+  dimulai.
+- **Yang mendarat:** setiap section ordered event/history yang teridentifikasi
+  di §6.4 — instance history approval, conflict history business-scope,
+  legal-hold history DAN run history data-lifecycle, snapshot history OMES
+  health (hanya mode `?serverId=…` — tabel "terbaru per server" tenant-wide
+  adalah satu baris per server, bukan history, dan tetap `.data-table`), dan
+  rebuild history projection reporting — kini dirender sebagai `<ol
+class="admin-timeline">` sungguhan berisi `<li class="admin-timeline-
+item">`, dengan `<time datetime>` asli per item (tidak pernah hanya
+  warna/posisi). Setiap status yang disentuh issue ini di lima layar tersebut
+  (status task/delegation, status assignment/exception business-scope, flag
+  konflik SoD, status legal-hold/run, status overall/stale/check-source OMES,
+  status rebuild) berpindah dari `.status-badge` lama ke `.admin-status-pill`,
+  tetap mempertahankan hook nilai mentah `data-status` (atau setara) tiap sel
+  untuk test/CSS/JS. Section lain `reporting.astro` (kesehatan antrean email,
+  freshness projection, run scheduled-export) tetap di `.status-badge` — di
+  luar cakupan kepemilikan berkas issue ini, alasan yang sama dengan
+  cakupan stat-card gelombang 2.
+- **Bersama:** `src/styles/admin.css` mendapat reset kecil `.admin-timeline {
+list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
+  (primitive yang sudah ada sebelumnya hanya men-styling `-item`/`-label`/
+  `-meta`, jadi `<ol>` polos akan menampilkan bullet/nomor bawaan browser di
+  depan dot `::before` milik primitive itu sendiri). `APP_BUDGET_BYTES` milik
+  `build:asset-budget:check` dinaikkan dari 248.045 menjadi 248.096 (nilai
+  terukur aktual, tanpa margin tambahan — lihat catatan ledger
+  `scripts/client-asset-budget.ts` sendiri).
 
 ### Gelombang 5 — Pola settings/toggle/media — **SELESAI** ([Issue #864](https://github.com/ahliweb/awcms/issues/864))
 

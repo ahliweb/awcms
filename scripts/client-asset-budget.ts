@@ -750,8 +750,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 248,346 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #863** (wave 4 of the admin-ui-parity-matrix —
+ * approvals/business-scope/data-lifecycle/omes-health/reporting adopt
+ * `.admin-timeline`). The only growth is the primitive's own list-style reset
+ * (`.admin-timeline { list-style: none; margin: 0; padding: 0; }`) added to
+ * `admin.css` — one small rule shared by every admin page, not per-screen
+ * duplication. Measured actual total:
+ *
+ * ```
+ * before (248,346 ceiling)   248,346 B
+ * + .admin-timeline list-style reset   248,397 B (measured actual total)
+ * ```
+ *
+ * 248,397 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_346;
+export const APP_BUDGET_BYTES = 248_397;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

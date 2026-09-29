@@ -5938,3 +5938,21 @@ msgstr "Web Push"
 msgid "no policy matched"
 msgstr "tidak ada kebijakan yang cocok"
 
+
+msgid "Legal holds, newest first"
+msgstr "Penahanan hukum, terbaru lebih dulu"
+
+msgid "open-ended"
+msgstr "tanpa batas akhir"
+
+msgid "No conflict"
+msgstr "Tidak ada konflik"
+
+msgid "Subject:"
+msgstr "Subjek:"
+
+msgid "Trigger:"
+msgstr "Pemicu:"
+
+msgid "Resolved via:"
+msgstr "Diselesaikan lewat:"

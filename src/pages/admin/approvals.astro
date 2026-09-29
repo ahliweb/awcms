@@ -267,6 +267,11 @@ function formatTimestamp(value: Date | string | null): string {
   return typeof value === "string" ? value : value.toISOString();
 }
 
+/** `<time datetime>` needs a real ISO string, never the "—" placeholder. */
+function isoTimestamp(value: Date | string): string {
+  return typeof value === "string" ? value : value.toISOString();
+}
+
 /** Rebuilds the current query string with one key replaced — keeps filters across paging. */
 function linkWith(overrides: Record<string, string | null>): string {
   const params = new URLSearchParams(Astro.url.search);
@@ -460,20 +465,23 @@ const selectedTask = selectedInstanceId
                       {formatTimestamp(task.dueAt)}
                     </span>
                     {task.overdue && (
-                      <span class="status-badge" data-variant="warning">
-                        <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill" data-tone="warning">
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {t("overdue")}
                       </span>
                     )}
                   </td>
                   <td data-label={t("Status")} data-status={task.status}>
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         STATUS_VARIANT[task.status as TaskStatus] ?? "neutral"
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {TASK_STATUS_LABEL[task.status as TaskStatus] ??
                         task.status}
                     </span>
@@ -589,79 +597,57 @@ const selectedTask = selectedInstanceId
         )}
       </div>
 
-      <div class="data-table-scroll">
-        <table class="data-table data-table--stack">
-          <caption class="sr-only">
-            {t("Decisions and audit events for this workflow instance.")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("When")}</th>
-              <th scope="col">{t("Kind")}</th>
-              <th scope="col">{t("Action")}</th>
-              <th scope="col">{t("Actor")}</th>
-              <th scope="col">{t("Detail")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={5}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ⌸
-                    </span>
-                    <span class="empty-state-title">{t("No history")}</span>
-                    <span class="empty-state-text">
-                      {t(
-                        "Nothing has been decided or recorded against this instance yet \u2014 or the id does not name one."
-                      )}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              history.map((entry) => (
-                <tr>
-                  <td data-label={t("When")}>
-                    <span class="cell-muted">
-                      {formatTimestamp(entry.createdAt)}
-                    </span>
-                  </td>
-                  <td data-label={t("Kind")} data-kind={entry.kind}>
-                    <span class="cell-code">
-                      {historyKindLabel(entry.kind)}
-                    </span>
-                  </td>
-                  <td data-label={t("Action")}>
-                    <span class="cell-code">{entry.action}</span>
-                  </td>
-                  <td data-label={t("Actor")}>
-                    <span class="cell-muted">
-                      {entry.actorTenantUserId ?? "—"}
-                    </span>
-                  </td>
-                  <td data-label={t("Detail")}>
-                    {/* `set:text` rather than a child expression: <pre>
-                          preserves whitespace and prettier reindents .astro
-                          children, so an expression written between the tags
-                          comes back wrapped in template indentation that <pre>
-                          then renders. `set:text` escapes and sets the content
-                          directly. */}
-                    <details>
-                      <summary>{t("Detail")}</summary>
-                      <pre
-                        class="cell-code"
-                        set:text={JSON.stringify(entry.detail, null, 2)}
-                      />
-                    </details>
-                  </td>
-                </tr>
-              ))
+      {history.length === 0 ? (
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ⌸
+          </span>
+          <span class="empty-state-title">{t("No history")}</span>
+          <span class="empty-state-text">
+            {t(
+              "Nothing has been decided or recorded against this instance yet \u2014 or the id does not name one."
             )}
-          </tbody>
-        </table>
-      </div>
+          </span>
+        </div>
+      ) : (
+        <ol class="admin-timeline">
+          {history.map((entry) => (
+            <li class="admin-timeline-item">
+              <div class="admin-timeline-label">
+                <span class="cell-code">{entry.action}</span>
+                <span
+                  class="admin-status-pill"
+                  data-tone="neutral"
+                  data-kind={entry.kind}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {historyKindLabel(entry.kind)}
+                </span>
+              </div>
+              <div class="admin-timeline-meta">
+                <time datetime={isoTimestamp(entry.createdAt)}>
+                  {formatTimestamp(entry.createdAt)}
+                </time>
+                {" \u00b7 "}
+                {entry.actorTenantUserId ?? "—"}
+              </div>
+              {/* `set:text` rather than a child expression: <pre>
+                    preserves whitespace and prettier reindents .astro
+                    children, so an expression written between the tags
+                    comes back wrapped in template indentation that <pre>
+                    then renders. `set:text` escapes and sets the content
+                    directly. */}
+              <details>
+                <summary>{t("Detail")}</summary>
+                <pre
+                  class="cell-code"
+                  set:text={JSON.stringify(entry.detail, null, 2)}
+                />
+              </details>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   )}
 
@@ -743,12 +729,12 @@ const selectedTask = selectedInstanceId
                   </td>
                   <td data-label={t("Status")} data-status={row.status}>
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         row.status === "active" ? "success" : "neutral"
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {delegationStatusLabel(row.status)}
                     </span>
                   </td>
