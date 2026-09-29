@@ -178,27 +178,22 @@ function formatTimestamp(value: string): string {
       {/* A real mutually-exclusive filter, not a JS tab panel: each option is a
           plain `<a href>` to a server-rendered page, so the filter works with
           no JavaScript at all and the current status stays in the URL query
-          exactly as before (`?status=<value>`, default `pending`). `role="tab"`
-          on a navigating link (not a JS-driven panel switch) is the same
-          pattern used for a real page's tab strip elsewhere on the web — see
-          the ARIA Authoring Practices' "manual activation" tab pattern, which
-          allows Enter/click to navigate rather than only swap a panel. */}
-      <div
-        class="admin-segmented"
-        role="tablist"
-        aria-label={t("Filter by status")}
-      >
+          exactly as before (`?status=<value>`, default `pending`). Because the
+          options NAVIGATE, this is a `<nav>` of links marked with
+          `aria-current="page"` — not `role="tablist"`/`role="tab"`, which
+          would promise arrow-key roving focus and a tab panel that a set of
+          page links does not have. */}
+      <nav class="admin-segmented" aria-label={t("Filter by status")}>
         {STATUS_TABS.map((tab) => (
           <a
             class="admin-segmented-option"
-            role="tab"
-            aria-selected={tab === activeStatus ? "true" : "false"}
+            aria-current={tab === activeStatus ? "page" : undefined}
             href={`/admin/comments?status=${tab}`}
           >
             {STATUS_META[tab].label}
           </a>
         ))}
-      </div>
+      </nav>
 
       {loadFailed && (
         <div class="state-notice state-notice--error" role="alert">

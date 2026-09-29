@@ -145,6 +145,17 @@ describe("admin-status-pill-wave3 (#862): list-screen status migration", () => {
       expect(source).toMatch(/<a\s+class="admin-segmented-option"/);
     });
 
+    test("navigating filter links are a <nav> with aria-current, never tablist/tab roles", async () => {
+      const source = await readFile("src/pages/admin/comments.astro", "utf8");
+      // Strip JSX comments so the rationale comment itself does not match.
+      const markup = source.replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+
+      expect(markup).toMatch(/<nav\s+class="admin-segmented"\s+aria-label=/);
+      expect(markup).toContain('aria-current={tab === activeStatus ? "page"');
+      expect(markup).not.toContain('role="tablist"');
+      expect(markup).not.toContain('role="tab"');
+    });
+
     test("uses .admin-bulk-bar over the EXISTING bulk-moderate endpoint, never a new one", async () => {
       const source = await readFile("src/pages/admin/comments.astro", "utf8");
 

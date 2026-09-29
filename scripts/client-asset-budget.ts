@@ -778,11 +778,12 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  * before (248,397 ceiling)   248,397 B
  * + admin-bulk-bar-client.ts + .cell-select + .admin-segmented flex-wrap   250,380 B (measured actual total)
+ * + .admin-segmented-option[aria-current="page"] selector (nav, not tablist)   250,423 B (measured actual total)
  * ```
  *
- * 250,380 is the measured value with no added margin.
+ * 250,423 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 250_380;
+export const APP_BUDGET_BYTES = 250_423;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

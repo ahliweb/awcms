@@ -871,7 +871,8 @@
   transform: rotate(0deg);
 }
 
-.admin-sidebar-group:not([open]) > .admin-sidebar-group-label
+.admin-sidebar-group:not([open])
+  > .admin-sidebar-group-label
   .admin-sidebar-caret {
   transform: rotate(-90deg);
 }
@@ -3573,7 +3574,8 @@
   color: var(--color-text);
 }
 
-.admin-segmented-option[aria-selected="true"] {
+.admin-segmented-option[aria-selected="true"],
+.admin-segmented-option[aria-current="page"] {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-xs);
