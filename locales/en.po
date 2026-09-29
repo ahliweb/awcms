@@ -5968,3 +5968,36 @@ msgstr ""
 
 msgid "Resolved via:"
 msgstr ""
+msgid "Awaiting redemption"
+msgstr ""
+
+msgid "Filter by status"
+msgstr ""
+
+msgid "{count} selected"
+msgstr ""
+
+msgid "Approve {count} selected comments?"
+msgstr ""
+
+msgid "Select all comments"
+msgstr ""
+
+msgid "Select comment from {author}"
+msgstr ""
+
+msgid "The bulk action failed."
+msgstr ""
+
+msgid "Bulk decision applied."
+msgstr ""
+
+msgid "Reason code for this decision:"
+msgstr ""
+
+msgid "A reason code is required to reject or mark spam."
+msgstr ""
+
+msgid "Anonymous"
+msgstr ""
+

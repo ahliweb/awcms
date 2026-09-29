@@ -368,8 +368,8 @@ function tenantStatusLabel(value: string): string {
                 <td data-label={t("Code")}>
                   <span class="cell-code">{tenant.tenantCode}</span>
                   {tenant.tenantCode === platformTenantCode && (
-                    <span class="status-badge" data-variant="info">
-                      <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill" data-tone="info">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {t("platform")}
                     </span>
                   )}
@@ -377,10 +377,10 @@ function tenantStatusLabel(value: string): string {
                 <td data-label={t("Name")}>{tenant.tenantName}</td>
                 <td data-label={t("Status")} data-status={tenant.status}>
                   <span
-                    class="status-badge"
-                    data-variant={statusVariant(tenant.status)}
+                    class="admin-status-pill"
+                    data-tone={statusVariant(tenant.status)}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {tenantStatusLabel(tenant.status)}
                   </span>
                 </td>

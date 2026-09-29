@@ -212,12 +212,10 @@ const canUpdate = canConfigure;
                 </td>
                 <td data-label={t("Effect")} data-effect={policy.effect}>
                   <span
-                    class="status-badge"
-                    data-variant={
-                      policy.effect === "allow" ? "success" : "danger"
-                    }
+                    class="admin-status-pill"
+                    data-tone={policy.effect === "allow" ? "success" : "danger"}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {effectLabel(policy.effect)}
                   </span>
                 </td>
@@ -229,8 +227,8 @@ const canUpdate = canConfigure;
                   data-active={policy.isActive ? "active" : "inactive"}
                 >
                   <span
-                    class="status-badge"
-                    data-variant={policy.isActive ? "success" : "neutral"}
+                    class="admin-status-pill"
+                    data-tone={policy.isActive ? "success" : "neutral"}
                   >
                     {policy.isActive ? t("active") : t("inactive")}
                   </span>

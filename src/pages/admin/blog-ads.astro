@@ -218,8 +218,11 @@ function formatWindow(placement: AdPlacementView): string {
                         {slot.preset.maxItems}
                       </span>
                       {!slot.renderedHere && (
-                        <span class="status-badge" data-variant="warning">
-                          <span class="status-dot" aria-hidden="true" />
+                        <span class="admin-status-pill" data-tone="warning">
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
                           {t("Not rendered here")}
                         </span>
                       )}
@@ -228,8 +231,11 @@ function formatWindow(placement: AdPlacementView): string {
                       <span set:text={placement.name} />
                     </td>
                     <td data-label={t("Rotation")}>
-                      <span class="status-badge" data-variant="neutral">
-                        <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill" data-tone="neutral">
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {placement.rotationMode}
                       </span>
                       <span class="cell-muted">
@@ -258,12 +264,13 @@ function formatWindow(placement: AdPlacementView): string {
                     </td>
                     <td data-label={t("Active")}>
                       <span
-                        class="status-badge"
-                        data-variant={
-                          placement.isActive ? "success" : "neutral"
-                        }
+                        class="admin-status-pill"
+                        data-tone={placement.isActive ? "success" : "neutral"}
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {placement.isActive ? t("Active") : t("Paused")}
                       </span>
                     </td>

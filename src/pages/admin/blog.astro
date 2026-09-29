@@ -559,10 +559,10 @@ const selectedPost = selectedPostId
                   </td>
                   <td data-label={t("Status")} data-status={post.status}>
                     <span
-                      class="status-badge"
-                      data-variant={STATUS_VARIANT[post.status] ?? "neutral"}
+                      class="admin-status-pill"
+                      data-tone={STATUS_VARIANT[post.status] ?? "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {blogContentStatusLabel(t, post.status)}
                     </span>
                   </td>

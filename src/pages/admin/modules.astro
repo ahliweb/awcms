@@ -185,18 +185,16 @@ const canToggle = canEnable || canDisable;
                   </td>
                   <td data-label={t("Enabled")}>
                     <span
-                      class="status-badge"
-                      data-variant={
-                        module.tenantEnabled ? "success" : "neutral"
-                      }
+                      class="admin-status-pill"
+                      data-tone={module.tenantEnabled ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {module.tenantEnabled ? "enabled" : "disabled"}
                     </span>
                   </td>
                   <td data-label={t("Core")}>
                     {module.isCore ? (
-                      <span class="status-badge" data-variant="info">
+                      <span class="admin-status-pill" data-tone="info">
                         {t("core")}
                       </span>
                     ) : (

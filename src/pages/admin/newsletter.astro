@@ -261,9 +261,10 @@ const columnCount = canConfigure ? 6 : 5;
                   </td>
                   <td data-label={t("Status")} data-status={item.status}>
                     <span
-                      class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                      class="admin-status-pill"
+                      data-tone={STATUS_VARIANT[item.status] ?? "info"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {subscriberStatusLabel(item.status)}
                     </span>
                   </td>

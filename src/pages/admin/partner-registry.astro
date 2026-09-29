@@ -65,6 +65,15 @@ function partnerStatusLabel(value: string): string {
   return isPartnerStatus(value) ? PARTNER_STATUS_LABEL[value] : value;
 }
 
+/** `.admin-status-pill[data-tone]` for the same status vocabulary above. */
+const PARTNER_STATUS_TONE: Record<PartnerStatus, string> = {
+  active: "success",
+  suspended: "danger"
+};
+function partnerStatusTone(value: string): string {
+  return isPartnerStatus(value) ? PARTNER_STATUS_TONE[value] : "neutral";
+}
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -243,7 +252,16 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
                       {partner.tenantName} ({partner.tenantCode})
                     </td>
                     <td data-label={t("Status")} data-status={partner.status}>
-                      {partnerStatusLabel(partner.status)}
+                      <span
+                        class="admin-status-pill"
+                        data-tone={partnerStatusTone(partner.status)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {partnerStatusLabel(partner.status)}
+                      </span>
                     </td>
                     <td data-label={t("Registered")}>
                       {partner.registeredAt.toISOString().slice(0, 10)}

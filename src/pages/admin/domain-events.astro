@@ -329,10 +329,10 @@ const deliveryColumns = canReplay ? 7 : 6;
                   </td>
                   <td data-label={t("State")}>
                     <span
-                      class="status-badge"
-                      data-variant={consumer.isPaused ? "warning" : "success"}
+                      class="admin-status-pill"
+                      data-tone={consumer.isPaused ? "warning" : "success"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {consumer.isPaused ? "paused" : "running"}
                     </span>
                     {consumer.isPaused && (
@@ -501,12 +501,10 @@ const deliveryColumns = canReplay ? 7 : 6;
                   </td>
                   <td data-label={t("Status")} data-status={delivery.status}>
                     <span
-                      class="status-badge"
-                      data-variant={
-                        DELIVERY_VARIANT[delivery.status] ?? "neutral"
-                      }
+                      class="admin-status-pill"
+                      data-tone={DELIVERY_VARIANT[delivery.status] ?? "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {deliveryStatusLabel(delivery.status)}
                     </span>
                     {delivery.replayOfDeliveryId && (

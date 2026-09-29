@@ -140,7 +140,7 @@ function formatTimestamp(value: string | null): string {
   return parsed.toISOString().replace("T", " ").slice(0, 16);
 }
 
-/** Run status -> the shared `.status-badge` variant vocabulary. */
+/** Run status -> the shared `.admin-status-pill` variant vocabulary. */
 function runStatusVariant(runStatus: string): string {
   if (runStatus === "succeeded" || runStatus === "completed") return "success";
   if (runStatus === "failed") return "danger";
@@ -461,10 +461,10 @@ const showIndexActions = canReconcile || canRebuild;
                 </td>
                 <td data-label={t("Status")} data-status={run.status}>
                   <span
-                    class="status-badge"
-                    data-variant={runStatusVariant(run.status)}
+                    class="admin-status-pill"
+                    data-tone={runStatusVariant(run.status)}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {runStatusLabel(run.status)}
                   </span>
                 </td>
@@ -535,8 +535,8 @@ const showIndexActions = canReconcile || canRebuild;
                 </td>
                 <td data-label={t("Locale")}>{item.locale}</td>
                 <td data-label={t("Error")}>
-                  <span class="status-badge" data-variant="danger">
-                    <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill" data-tone="danger">
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {item.errorClass}
                   </span>
                 </td>

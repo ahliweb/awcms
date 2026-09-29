@@ -363,12 +363,12 @@ const queueColumns = canRetryQueue ? 7 : 6;
                   </td>
                   <td data-label={t("Status")} data-status={node.status}>
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         node.status === "active" ? "success" : "neutral"
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {syncStatusLabel(node.status)}
                     </span>
                   </td>
@@ -484,12 +484,12 @@ const queueColumns = canRetryQueue ? 7 : 6;
                   </td>
                   <td data-label={t("Status")} data-status={conflict.status}>
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         conflict.status === "open" ? "warning" : "success"
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {syncStatusLabel(conflict.status)}
                     </span>
                   </td>
@@ -624,10 +624,10 @@ const queueColumns = canRetryQueue ? 7 : 6;
                   </td>
                   <td data-label={t("Status")} data-status={entry.status}>
                     <span
-                      class="status-badge"
-                      data-variant={QUEUE_VARIANT[entry.status] ?? "neutral"}
+                      class="admin-status-pill"
+                      data-tone={QUEUE_VARIANT[entry.status] ?? "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {syncStatusLabel(entry.status)}
                     </span>
                   </td>

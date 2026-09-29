@@ -40,17 +40,32 @@ import { getTranslatorFor } from "../../lib/i18n";
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
-const STATUS_TABS: readonly { value: CommentStatus; label: string }[] = [
-  { value: "pending", label: "Pending" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "spam", label: "Spam" },
-  { value: "deleted", label: "Deleted" }
+/**
+ * `.admin-status-pill[data-tone]` tone + the translated label for each
+ * `CommentStatus` (Issue #862, wave 3 of #858) — `Record` is exhaustive over
+ * the union, so a sixth stored status fails typecheck here until it is given
+ * both. Shared between the segmented filter tabs and the per-row status
+ * column below: one vocabulary, not two.
+ */
+const STATUS_META: Record<CommentStatus, { label: string; tone: string }> = {
+  pending: { label: t("Pending"), tone: "warning" },
+  approved: { label: t("Approved"), tone: "success" },
+  rejected: { label: t("Rejected"), tone: "danger" },
+  spam: { label: t("Spam"), tone: "danger" },
+  deleted: { label: t("Deleted"), tone: "neutral" }
+};
+
+const STATUS_TABS: readonly CommentStatus[] = [
+  "pending",
+  "approved",
+  "rejected",
+  "spam",
+  "deleted"
 ];
 
 const requestedStatus = Astro.url.searchParams.get("status");
 const activeStatus: CommentStatus = STATUS_TABS.some(
-  (tab) => tab.value === requestedStatus
+  (tab) => tab === requestedStatus
 )
   ? (requestedStatus as CommentStatus)
   : "pending";
@@ -120,6 +135,15 @@ const canReject = screen.state === "allowed" && screen.data.canReject;
 const canArchive = screen.state === "allowed" && screen.data.canArchive;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 
+// `.admin-bulk-bar` calls the same `bulk-moderate` endpoint the moderation
+// queue always had (§5 of docs/awcms/admin-ui-parity-matrix.md) — it only
+// supports approve/reject/spam, never archive/restore, so the bulk bar mirrors
+// that vocabulary rather than the row Actions column's full five. Gated on the
+// SAME permission predicates as the row-level buttons above (mirrors
+// `commerce.astro`'s predicate-parity pattern per the matrix) — the UI check is
+// a rendering convenience only; the endpoint re-checks on every call.
+const canBulkModerate = canApprove || canReject;
+
 function formatTimestamp(value: string): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
@@ -151,13 +175,22 @@ function formatTimestamp(value: string): string {
 
   {canRead && (
     <>
-      <nav class="filter-bar" aria-label="Filter by status">
+      {/* A real mutually-exclusive filter, not a JS tab panel: each option is a
+          plain `<a href>` to a server-rendered page, so the filter works with
+          no JavaScript at all and the current status stays in the URL query
+          exactly as before (`?status=<value>`, default `pending`). Because the
+          options NAVIGATE, this is a `<nav>` of links marked with
+          `aria-current="page"` — not `role="tablist"`/`role="tab"`, which
+          would promise arrow-key roving focus and a tab panel that a set of
+          page links does not have. */}
+      <nav class="admin-segmented" aria-label={t("Filter by status")}>
         {STATUS_TABS.map((tab) => (
           <a
-            href={`/admin/comments?status=${tab.value}`}
-            aria-current={tab.value === activeStatus ? "page" : undefined}
+            class="admin-segmented-option"
+            aria-current={tab === activeStatus ? "page" : undefined}
+            href={`/admin/comments?status=${tab}`}
           >
-            {tab.label}
+            {STATUS_META[tab].label}
           </a>
         ))}
       </nav>
@@ -182,6 +215,45 @@ function formatTimestamp(value: string): string {
         </div>
       )}
 
+      {!loadFailed && items.length > 0 && canBulkModerate && (
+        <div
+          class="admin-bulk-bar"
+          data-bulk-bar
+          hidden
+          data-count-template={t("{count} selected")}
+          data-confirm-approve={t("Approve {count} selected comments?")}
+          data-prompt-reason={t("Reason code for this decision:")}
+          data-reason-required={t(
+            "A reason code is required to reject or mark spam."
+          )}
+          data-failure={t("The bulk action failed.")}
+          data-applied={t("Bulk decision applied.")}
+        >
+          <span
+            class="admin-bulk-bar-count"
+            data-bulk-bar-count
+            aria-live="polite"
+          />
+          <span class="admin-bulk-bar-actions">
+            {canApprove && (
+              <button type="button" data-bulk-action="approve">
+                {t("Approve")}
+              </button>
+            )}
+            {canReject && (
+              <button type="button" data-bulk-action="reject">
+                {t("Reject")}
+              </button>
+            )}
+            {canReject && (
+              <button type="button" data-bulk-action="spam">
+                {t("Spam")}
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
       {!loadFailed && items.length > 0 && (
         <div class="table-scroll">
           <table class="data-table" data-comments-queue>
@@ -192,9 +264,19 @@ function formatTimestamp(value: string): string {
             </caption>
             <thead>
               <tr>
+                {canBulkModerate && (
+                  <th scope="col" class="cell-select">
+                    <input
+                      type="checkbox"
+                      data-select-all
+                      aria-label={t("Select all comments")}
+                    />
+                  </th>
+                )}
                 <th scope="col">{t("Comment")}</th>
                 <th scope="col">{t("Author")}</th>
                 <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Status")}</th>
                 <th scope="col">{t("Reports")}</th>
                 <th scope="col">{t("Submitted")}</th>
                 <th scope="col">{t("Actions")}</th>
@@ -203,6 +285,19 @@ function formatTimestamp(value: string): string {
             <tbody>
               {items.map((item) => (
                 <tr data-comment-id={item.id}>
+                  {canBulkModerate && (
+                    <td class="cell-select">
+                      <input
+                        type="checkbox"
+                        class="js-row-select"
+                        data-row-select
+                        value={item.id}
+                        aria-label={t("Select comment from {author}", {
+                          author: item.authorDisplayName ?? t("Anonymous")
+                        })}
+                      />
+                    </td>
+                  )}
                   <td class="cell-body">{item.bodyText}</td>
                   <td>
                     <span>{item.authorDisplayName ?? "Anonymous"}</span>
@@ -217,6 +312,15 @@ function formatTimestamp(value: string): string {
                   </td>
                   <td>
                     <a href={item.resourceUrl}>{item.resourceType}</a>
+                  </td>
+                  <td data-label={t("Status")} data-status={item.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={STATUS_META[item.status].tone}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {STATUS_META[item.status].label}
+                    </span>
                   </td>
                   <td>{item.reportCount}</td>
                   <td>
@@ -270,8 +374,15 @@ function formatTimestamp(value: string): string {
   import {
     lockElement,
     onAction,
-    sendJson
+    sendJson,
+    sendJsonForData
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import {
+    computeBulkBarState,
+    fillCount,
+    isBulkDecision
+  } from "../../lib/ui/admin-bulk-bar-client";
 
   const banner = document.querySelector<HTMLElement>("[data-queue-banner]");
 
@@ -347,5 +458,128 @@ function formatTimestamp(value: string): string {
         : "The action failed.",
       true
     );
+  });
+
+  /**
+   * `.admin-bulk-bar` wiring — a progressive enhancement over the same
+   * `bulk-moderate` endpoint the queue's own single-row actions already call
+   * (Issue #862). Every string this shows the operator is read from a
+   * `data-*` attribute the server rendered translated (client scripts cannot
+   * translate — `../../lib/i18n`'s catalog is a server-only module), never a
+   * literal here.
+   */
+  const bulkBar = document.querySelector<HTMLElement>("[data-bulk-bar]");
+  const bulkBarCount = document.querySelector<HTMLElement>(
+    "[data-bulk-bar-count]"
+  );
+  const selectAll =
+    document.querySelector<HTMLInputElement>("[data-select-all]");
+
+  function rowCheckboxes(): HTMLInputElement[] {
+    return Array.from(
+      document.querySelectorAll<HTMLInputElement>("[data-row-select]")
+    );
+  }
+
+  function updateBulkBar(): void {
+    if (!bulkBar || !bulkBarCount) return;
+    const boxes = rowCheckboxes();
+    const selectedCount = boxes.filter((box) => box.checked).length;
+    const state = computeBulkBarState(
+      boxes.length,
+      selectedCount,
+      bulkBar.dataset.countTemplate ?? "{count}"
+    );
+
+    bulkBar.hidden = state.hidden;
+    bulkBarCount.textContent = state.countText;
+
+    if (selectAll) {
+      selectAll.checked = state.selectAllChecked;
+      selectAll.indeterminate = state.selectAllIndeterminate;
+    }
+  }
+
+  // Delegated: works for every row checkbox and the header's select-all alike,
+  // with no per-row listener to attach as the table renders.
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    if (target.matches("[data-row-select]")) {
+      updateBulkBar();
+      return;
+    }
+
+    if (target.matches("[data-select-all]")) {
+      for (const box of rowCheckboxes()) box.checked = target.checked;
+      updateBulkBar();
+    }
+  });
+
+  onAction("[data-bulk-bar] button[data-bulk-action]", async (button) => {
+    if (!bulkBar) return;
+    const action = button.dataset.bulkAction;
+    if (!isBulkDecision(action)) return;
+
+    const ids = rowCheckboxes()
+      .filter((box) => box.checked)
+      .map((box) => box.value);
+    if (ids.length === 0) return;
+
+    let reasonCode: string | null = null;
+    if (action === "reject" || action === "spam") {
+      const entered = window.prompt(
+        bulkBar.dataset.promptReason ?? "Reason code for this decision:"
+      );
+      reasonCode = entered && entered.trim() ? entered.trim() : null;
+      if (!reasonCode) {
+        showBanner(
+          bulkBar.dataset.reasonRequired ??
+            "A reason code is required to reject or mark spam.",
+          true
+        );
+        return;
+      }
+    } else {
+      const confirmed = await confirmAction(
+        fillCount(
+          bulkBar.dataset.confirmApprove ??
+            "Approve {count} selected comments?",
+          ids.length
+        )
+      );
+      if (!confirmed) return;
+    }
+
+    const unlock = lockElement(button, "…");
+    const idempotencyKey = crypto.randomUUID();
+
+    const result = await sendJsonForData<{
+      applied: { commentId: string }[];
+      appliedCount: number;
+      skipped: { commentId: string; reason: string }[];
+    }>(
+      "POST",
+      "/api/v1/comments/admin/bulk-moderate",
+      { decision: action, commentIds: ids, reasonCode },
+      { "Idempotency-Key": idempotencyKey }
+    );
+
+    unlock();
+
+    if (!result.ok || !result.data) {
+      showBanner(bulkBar.dataset.failure ?? "The bulk action failed.", true);
+      return;
+    }
+
+    for (const entry of result.data.applied) {
+      document
+        .querySelector<HTMLElement>(`tr[data-comment-id="${entry.commentId}"]`)
+        ?.remove();
+    }
+
+    showBanner(bulkBar.dataset.applied ?? "Bulk decision applied.", false);
+    updateBulkBar();
   });
 </script>

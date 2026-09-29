@@ -266,10 +266,10 @@ const columnCount = canDelete ? 7 : 6;
                   </td>
                   <td data-label={t("Status")} data-status={draft.status}>
                     <span
-                      class="status-badge"
-                      data-variant={STATUS_VARIANT[draft.status]}
+                      class="admin-status-pill"
+                      data-tone={STATUS_VARIANT[draft.status]}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {STATUS_LABEL[draft.status]}
                     </span>
                   </td>

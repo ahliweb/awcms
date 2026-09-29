@@ -871,7 +871,8 @@
   transform: rotate(0deg);
 }
 
-.admin-sidebar-group:not([open]) > .admin-sidebar-group-label
+.admin-sidebar-group:not([open])
+  > .admin-sidebar-group-label
   .admin-sidebar-caret {
   transform: rotate(-90deg);
 }
@@ -2212,6 +2213,14 @@
   max-width: 42ch;
 }
 
+/* Row-selection checkbox column for `.admin-bulk-bar` consumers (Issue #862) —
+   narrow and centred so it does not steal width from the real columns. */
+.cell-select {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .cell-strong {
   font-weight: var(--fw-semibold);
 }
@@ -3527,6 +3536,14 @@
    as a native segmented control, built from tokens already in this file. */
 .admin-segmented {
   display: inline-flex;
+  /* `flex-wrap` (Issue #862): a 5-option track (comments.astro's status
+     filter) does not fit a 360px viewport at its natural width, and an
+     `inline-flex` row with no wrap pushes the overflow past the page edge
+     instead of shrinking — `tests/e2e/responsive-360.e2e.ts` caught this on
+     the real primitive, not a hypothetical. Wrapping to a second line keeps
+     every option reachable with no horizontal scroll, at any option count. */
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 2px;
   padding: 3px;
@@ -3557,7 +3574,8 @@
   color: var(--color-text);
 }
 
-.admin-segmented-option[aria-selected="true"] {
+.admin-segmented-option[aria-selected="true"],
+.admin-segmented-option[aria-current="page"] {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-xs);
