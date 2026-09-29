@@ -5,7 +5,7 @@ description: Implementasikan layar/komponen UI AWCMS sesuai design system. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:0f355a9276156b2ff7ce05711097f2b6af929809e6dd86408436c8730680ddfa -->
+<!-- i18n-source-hash: sha256:3895e6792059db3159bb65086445fad747f69b00b8c6ffe164ca5e4eccb57d15 -->
 
 # AWCMS — UI Screen / Component
 
@@ -32,6 +32,7 @@ Ikuti **`docs/awcms/14_ui_ux_design_system.md`** (token, komponen, layout, layar
    - **Grid thumbnail sungguhan** — `.admin-media-grid` berisi `.admin-media-grid-tile[data-selected]`, masing-masing dengan `<img>` sungguhan. Jangan pernah menambahkan `<img>` ke data-table hanya demi memakai class ini (registri objek `/admin/media` sengaja tidak merender thumbnail — keputusan keamanan, bukan kelalaian).
 
    Aturan pemakaian lengkap per-primitif, layar tempat masing-masing mendarat, dan catatan pensiunnya ada di `docs/awcms/14_ui_ux_design_system.md` §Component library dan `docs/awcms/admin-ui-parity-matrix.md` (baca sebelum menambah layar BARU dengan salah satu dari enam bentuk ini — jangan menurunkan ulang keputusannya dari nol).
+
 4. **State pattern wajib** — loading (skeleton), empty (+CTA), error (`<p class="state-notice" role="status|alert">` — bedakan "akses ditolak" dari "gagal sementara, coba lagi", pesan aman ter-i18n dari error code doc 05), success/submitting.
 5. **Island seperlunya** — halaman SSR; interaktivitas hanya di island (POS, form, chat). Data awal via SSR, mutation via API client.
 6. **Form/mutation client-side** — lewat `src/lib/ui/admin-form-client.ts`. **Baca daftar ekspornya sebelum menulis kodenya** (`grep -n "^export" src/lib/ui/admin-form-client.ts`): perangkaiannya `onSubmit`/`onSubmitAll`/`onAction`/`mutateAndReload`, permintaannya `sendJson`/`sendJsonRequest`/`sendJsonForData`, umpan baliknya `lockElement` + `messageBox`, dan pembaca field-nya `field`/`inputValue`/`blankToNull`/`checkboxChecked`/`integerValue`/`localDateTimeToInstant`. Revisi terdahulu skill ini menyuruh memakai `postJson`, yang **sudah dihapus 22 Agustus 2026** (PROJECT_STATE D12 — nol pemanggil, dan docblock yang mengklaim sebaliknya), serta memperingatkan soal `showBanner`/`submitJson`, yang memang tidak pernah ada. Itulah sebabnya instruksinya "grep ekspornya", bukan "pakai nama-nama ini". `lockElement` mencegah double-submit (disable tombol + label busy selama request, kembali ke semula termasuk saat gagal); `sendJson` mengembalikan `{ ok, errorCode }` narrow yang tidak pernah throw. **Import dari modul ini wajib, bukan sekadar DRY**: CSP repo ini `default-src 'self'` tanpa `'unsafe-inline'` (`astro.config.mjs`/security-headers middleware) — Astro meng-hoist `<script>` tanpa import menjadi inline (diblokir CSP), sedangkan script yang meng-import dari `admin-form-client.ts` dibundle jadi file eksternal `/_astro/*.js` yang diizinkan `'self'`; tanpa import ini, script halaman admin bisa "diam-diam mati" karena diblokir CSP tanpa error yang jelas. Jangan duplikasi implementasi ini per halaman, dan jangan `fetch` mentah.

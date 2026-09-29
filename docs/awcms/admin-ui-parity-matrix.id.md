@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:b23b7674cd6dda9ec4f39db317416209da0155919eebe06d6e967fec39b9c6b7 -->
+<!-- i18n-source-hash: sha256:13d2c6782e72cf2d4ee8f06ddde0489ac487d5fbca69a63c22a9a6a4a2de4d4f -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -234,10 +234,10 @@ Kolom SG/BB tiap baris lain sengaja kosong, bukan terlewat.
 
 ### 6.6 Media
 
-| Layar                                                                                                 | Primitif   | Klas.                                                                 | Perubahan diperlukan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.astro`                                                                                         | SC, SP (bukan MG — lihat di bawah) | **partially adopt** | `.admin-stat-card`/`.admin-status-pill` mendarat (gelombang 5, Issue #864); `.admin-media-grid` TIDAK — tabel objek `media.astro` sengaja tidak merender thumbnail (keputusan keamanan yang terdokumentasi di header berkas itu sendiri), sehingga framing "adopsi media unggulan" baris ini semula mengasumsikan markup yang tidak dimiliki layar ini. |
-| `src/lib/ui/media-picker-client.ts` (dikonsumsi `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG         | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | Konsumen `.admin-media-grid` nyata yang dimiliki kedua repo — grid thumbnail-nya adalah target migrasi langsung. `blog-homepage.astro`, konsumen keempat yang disebut issue, tidak punya markup pemilih untuk dimigrasikan (diverifikasi lewat grep). Kontrak publik pemilih, seleksi keyboard, nama aksesibel dan alt text dipertahankan persis sama; ini mendarat sebagai perubahan markup/kelas ditambah indikator `aria-pressed` pilihan-saat-ini yang aditif, bukan perubahan atas perilaku yang sudah ada. |
+| Layar                                                                                                 | Primitif                           | Klas.                                                                 | Perubahan diperlukan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.astro`                                                                                         | SC, SP (bukan MG — lihat di bawah) | **partially adopt**                                                   | `.admin-stat-card`/`.admin-status-pill` mendarat (gelombang 5, Issue #864); `.admin-media-grid` TIDAK — tabel objek `media.astro` sengaja tidak merender thumbnail (keputusan keamanan yang terdokumentasi di header berkas itu sendiri), sehingga framing "adopsi media unggulan" baris ini semula mengasumsikan markup yang tidak dimiliki layar ini.                                                                                                                                                          |
+| `src/lib/ui/media-picker-client.ts` (dikonsumsi `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG                                 | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | Konsumen `.admin-media-grid` nyata yang dimiliki kedua repo — grid thumbnail-nya adalah target migrasi langsung. `blog-homepage.astro`, konsumen keempat yang disebut issue, tidak punya markup pemilih untuk dimigrasikan (diverifikasi lewat grep). Kontrak publik pemilih, seleksi keyboard, nama aksesibel dan alt text dipertahankan persis sama; ini mendarat sebagai perubahan markup/kelas ditambah indikator `aria-pressed` pilihan-saat-ini yang aditif, bukan perubahan atas perilaku yang sudah ada. |
 
 ---
 
@@ -553,11 +553,13 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   terdefinisi ("#866 retires it") dibalik menjadi memastikan absennya.
 - **Anggaran aset menyusut** — gelombang pertama epik ini yang menyusutkan
   anggaran, bukan menaikkannya, karena mempensiunkan seluruh keluarga
-  komponen legacy menghapus CSS tanpa biaya pengganti.
-  `scripts/client-asset-budget.ts`'s `APP_BUDGET_BYTES` diturunkan dari
-  250.423 menjadi 247.890 dan `PER_FILE_CSS_BUDGET_BYTES` dari 57.300
-  menjadi 56.800 (keduanya nilai aktual terukur — lihat komentar ledger
-  berkas itu sendiri).
+  komponen legacy menghapus CSS tanpa biaya pengganti. Mendarat di atas
+  [Issue #872](https://github.com/ahliweb/awcms/issues/872) (yang menaikkan
+  `APP_BUDGET_BYTES` ke 250.566 untuk adopsi `.admin-media-grid` picker
+  media bersama), `scripts/client-asset-budget.ts`'s `APP_BUDGET_BYTES`
+  diturunkan dari 250.566 menjadi 248.033 dan `PER_FILE_CSS_BUDGET_BYTES`
+  dari 57.300 menjadi 56.800 (keduanya nilai aktual terukur — lihat komentar
+  ledger berkas itu sendiri).
 - **Sapuan responsive/E2E:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,
   tanpa scroll menyamping) dan `tests/e2e/admin-screens-render.e2e.ts`
   (setiap layar admin merender) dijalankan ulang terhadap Postgres 18.4
@@ -598,10 +600,10 @@ pertanyaan terbuka yang disengaja. Ketiganya kini terselesaikan:
 - [`docs/awcms/14_ui_ux_design_system.md`](14_ui_ux_design_system.md) §
   Component library mendokumentasikan `.admin-status-pill`/`.admin-stat-card`
   dan aturan komposisi lain yang ditetapkan epik ini (segmented sebagai nav
-  + aria-current, bulk bar hanya di atas endpoint bulk yang sudah ada,
-  timeline sebagai `<ol>`+`<time>`) sebagai kosakata admin SAAT INI —
-  kelas legacy `.status-badge`/`.stat-card` yang dulu juga
-  didokumentasikannya dipensiunkan Issue #866 (gelombang 7) dan tidak lagi
-  ada di `src/styles/`.
+  - aria-current, bulk bar hanya di atas endpoint bulk yang sudah ada,
+    timeline sebagai `<ol>`+`<time>`) sebagai kosakata admin SAAT INI —
+    kelas legacy `.status-badge`/`.stat-card` yang dulu juga
+    didokumentasikannya dipensiunkan Issue #866 (gelombang 7) dan tidak lagi
+    ada di `src/styles/`.
 - [`docs/awcms/README.md`](README.md) mendaftar dokumen ini di tabel indeks,
   di sebelah `family-compatibility.md`.

@@ -227,10 +227,10 @@ column is intentionally absent, not omitted by oversight.
 
 ### 6.6 Media
 
-| Screen                                                                                                 | Primitive(s) | Class.                                                                | Required change                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.astro`                                                                                          | SC, SP (not MG — see below) | **partially adopt** | `.admin-stat-card`/`.admin-status-pill` landed (wave 5, Issue #864); `.admin-media-grid` did NOT — `media.astro`'s object table deliberately renders no thumbnail (security decision documented in the file's own header), so this row's original "flagship media adoption" framing assumed markup the screen does not have. |
-| `src/lib/ui/media-picker-client.ts` (consumed by `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG           | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | The real `.admin-media-grid` consumer either repo has — its thumbnail grid was the direct migration target. `blog-homepage.astro`, the issue's fourth listed consumer, has no picker markup to migrate (verified by grep). The picker's public contract, keyboard selection, accessible names and alt text are preserved exactly; this landed as a markup/class change plus an additive `aria-pressed` current-selection indicator, not a change to any existing behavior. |
+| Screen                                                                                                 | Primitive(s)                | Class.                                                                | Required change                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.astro`                                                                                          | SC, SP (not MG — see below) | **partially adopt**                                                   | `.admin-stat-card`/`.admin-status-pill` landed (wave 5, Issue #864); `.admin-media-grid` did NOT — `media.astro`'s object table deliberately renders no thumbnail (security decision documented in the file's own header), so this row's original "flagship media adoption" framing assumed markup the screen does not have.                                                                                                                                               |
+| `src/lib/ui/media-picker-client.ts` (consumed by `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG                          | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | The real `.admin-media-grid` consumer either repo has — its thumbnail grid was the direct migration target. `blog-homepage.astro`, the issue's fourth listed consumer, has no picker markup to migrate (verified by grep). The picker's public contract, keyboard selection, accessible names and alt text are preserved exactly; this landed as a markup/class change plus an additive `aria-pressed` current-selection indicator, not a change to any existing behavior. |
 
 ---
 
@@ -492,7 +492,7 @@ style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
   onto `.admin-stat-card`/`.admin-stat-card-grid`/`.admin-stat-card-label`/
   `.admin-stat-card-value`/`.admin-stat-card-caption`. `newsletter.astro` was
   verified already migrated (wave 3) — nothing left on this file. `omes/
-  index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
+index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
   cross-reference, corrected to `.admin-stat-card-value` (no markup change
   needed — it already rendered the primitive since wave 2).
 - **Files migrated (last `.status-badge`/`.status-dot` consumer):**
@@ -528,8 +528,10 @@ style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
   flipped to pin its absence.
 - **Asset budget shrank** — the first wave of this epic to shrink it rather
   than grow it, since retiring a whole legacy component family removes CSS
-  with no replacement cost. `scripts/client-asset-budget.ts`'s
-  `APP_BUDGET_BYTES` was lowered from 250,423 to 247,890 and
+  with no replacement cost. Landing on top of [Issue #872](https://github.com/ahliweb/awcms/issues/872) (which raised
+  `APP_BUDGET_BYTES` to 250,566 for the shared media picker's
+  `.admin-media-grid` adoption), `scripts/client-asset-budget.ts`'s
+  `APP_BUDGET_BYTES` was lowered from 250,566 to 248,033 and
   `PER_FILE_CSS_BUDGET_BYTES` from 57,300 to 56,800 (both measured actual
   values — see that file's own ledger comments).
 - **Responsive/E2E sweep:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,

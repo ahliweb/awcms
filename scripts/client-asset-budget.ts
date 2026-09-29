@@ -821,12 +821,12 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * ```
  * before (250,566 ceiling)   250,566 B
- * - legacy .stat-card/.stat-grid/.status-badge rule blocks retired   PLACEHOLDER B (measured actual total)
+ * - legacy .stat-card/.stat-grid/.status-badge rule blocks retired   248,033 B (measured actual total)
  * ```
  *
- * PLACEHOLDER is the measured value with no added margin.
+ * 248,033 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 250_566;
+export const APP_BUDGET_BYTES = 248_033;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
