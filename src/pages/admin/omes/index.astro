@@ -140,13 +140,13 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
 
     {canSeeAnything && !loadError && (
       <section class="admin-section fade-in-up" aria-label="OMES fleet summary">
-        <div class="stat-grid stagger-children">
+        <div class="admin-stat-card-grid stagger-children">
           {readServers && (
-            <div class="stat-card">
-              <span class="stat-label">{t("Enrolled servers")}</span>
-              <span class="stat-value">{overview.serverCount}</span>
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{t("Enrolled servers")}</span>
+              <span class="admin-stat-card-value">{overview.serverCount}</span>
               {overview.staleServerCount > 0 && (
-                <span class="stat-hint">
+                <span class="admin-stat-card-caption">
                   {t("{count} stale (no recent heartbeat)").replace(
                     "{count}",
                     String(overview.staleServerCount)
@@ -156,10 +156,14 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
             </div>
           )}
           {readServers && (
-            <div class="stat-card" data-variant="breakdown">
-              <span class="stat-label">{t("Server health distribution")}</span>
+            <div class="admin-stat-card" data-variant="breakdown">
+              <span class="admin-stat-card-label">
+                {t("Server health distribution")}
+              </span>
               {toBreakdown(overview.serverHealthDistribution).length === 0 ? (
-                <span class="stat-hint">{t("No servers enrolled")}</span>
+                <span class="admin-stat-card-caption">
+                  {t("No servers enrolled")}
+                </span>
               ) : (
                 <ul class="omes-stat-breakdown">
                   {toBreakdown(overview.serverHealthDistribution).map(
@@ -179,10 +183,14 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
             </div>
           )}
           {readJobs && (
-            <div class="stat-card" data-variant="breakdown">
-              <span class="stat-label">{t("Job state summary")}</span>
+            <div class="admin-stat-card" data-variant="breakdown">
+              <span class="admin-stat-card-label">
+                {t("Job state summary")}
+              </span>
               {toBreakdown(overview.jobStateCounts).length === 0 ? (
-                <span class="stat-hint">{t("No jobs recorded")}</span>
+                <span class="admin-stat-card-caption">
+                  {t("No jobs recorded")}
+                </span>
               ) : (
                 <ul class="omes-stat-breakdown">
                   {toBreakdown(overview.jobStateCounts).map((entry) => (
@@ -200,8 +208,8 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
             </div>
           )}
           {readBackups && (
-            <div class="stat-card" data-variant="breakdown">
-              <span class="stat-label">{t("Backup freshness")}</span>
+            <div class="admin-stat-card" data-variant="breakdown">
+              <span class="admin-stat-card-label">{t("Backup freshness")}</span>
               <ul class="omes-stat-breakdown">
                 <li class="omes-stat-breakdown-item">
                   <span class="omes-stat-breakdown-value">
@@ -225,11 +233,13 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
             </div>
           )}
           {readDeployments && (
-            <div class="stat-card" data-variant="breakdown">
-              <span class="stat-label">{t("Deployment drift")}</span>
+            <div class="admin-stat-card" data-variant="breakdown">
+              <span class="admin-stat-card-label">{t("Deployment drift")}</span>
               {toBreakdown(overview.driftSummary.reconciliationStatusCounts)
                 .length === 0 ? (
-                <span class="stat-hint">{t("No deployments recorded")}</span>
+                <span class="admin-stat-card-caption">
+                  {t("No deployments recorded")}
+                </span>
               ) : (
                 <ul class="omes-stat-breakdown">
                   {toBreakdown(
@@ -247,7 +257,7 @@ function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
                 </ul>
               )}
               {overview.driftSummary.staleDeploymentCount > 0 && (
-                <span class="stat-hint">
+                <span class="admin-stat-card-caption">
                   {t("{count} deployment(s) stale or unreconciled").replace(
                     "{count}",
                     String(overview.driftSummary.staleDeploymentCount)

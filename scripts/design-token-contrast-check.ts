@@ -215,7 +215,14 @@ const PAIRS: readonly Pair[] = [
     fg: "color-danger",
     bg: "color-surface",
     min: AA_NORMAL,
-    renderedBy: "admin.css .btn-danger (outlined), .admin-error"
+    renderedBy:
+      "admin.css .btn-danger (outlined), .admin-error, .admin-stat-card-delta[data-tone='negative']"
+  },
+  {
+    fg: "color-success",
+    bg: "color-surface",
+    min: AA_NORMAL,
+    renderedBy: "admin.css .admin-stat-card-delta[data-tone='positive']"
   },
 
   // ---- Non-text contrast (1.4.11): control boundaries --------------------

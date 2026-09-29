@@ -259,15 +259,39 @@ package's markup change touches its own screen's locale strings only if new
 translatable text is introduced (status-pill/segmented label migrations
 reuse existing `t()` strings and should introduce none).
 
-### Wave 2 — Dashboards / reporting / analytics
+### Wave 2 — Dashboards / reporting / analytics — **DONE** ([Issue #860](https://github.com/ahliweb/awcms/issues/860))
 
 - **Files:** `src/pages/admin/index.astro`, `src/pages/admin/analytics.astro`,
-  `src/pages/admin/reporting.astro`, `src/pages/admin/omes/index.astro`
-- **Shared:** `src/styles/admin-screens.css` (remove/alias the `.stat-card`
-  family as these 4 screens migrate off it — coordinate with wave 3/6, which
-  touch the same file for the same reason on 14 more screens)
-- **Decision needed before starting:** port `.stat-head`/`.stat-delta` into
-  `.admin-stat-card`, or drop the delta/icon affordance (§4)
+  `src/pages/admin/reporting.astro` (stat-card section only, per this wave's
+  own scope — the "Rebuild history" TL evaluation stays wave 4),
+  `src/pages/admin/omes/index.astro` — all four migrated onto
+  `.admin-stat-card`/`.admin-stat-card-grid`/`.admin-stat-card-label`/
+  `.admin-stat-card-value`/`.admin-stat-card-caption`.
+- **Shared:** `src/styles/admin-screens.css` left untouched — its
+  `.stat-card`/`.stat-grid` family stays defined for the ~14 screens waves
+  3/6 have not migrated yet, exactly as this section originally required.
+  `src/styles/admin.css`'s `.admin-stat-card-grid` was folded into the
+  existing `.kpi-grid`/`.dashboard-grid` declaration (same breakpoint
+  shape) instead of a new standalone rule, to keep the asset-budget cost
+  down. `src/styles/omes-control-center.css` gained a selector-list
+  extension (not a duplicate block) onto its existing `.stat-card`
+  telemetry/dot rules, covering `.admin-stat-card` too, so the other 8
+  OMES screens (still on `.stat-card`, wave 6) keep their styling.
+- **Decision made:** ported `.stat-head`/`.stat-delta` into
+  `.admin-stat-card` as `.admin-stat-card-head` (icon row, pairs with the
+  existing `.admin-tile`) and `.admin-stat-card-delta[data-tone="positive"\|"negative"]`
+  (§4) — colour-only in `admin.css` (no `::before` glyph, to hold the
+  asset-budget raise this wave needed to the actual 4-screen need); the
+  modifier's own doc comment requires its consumer to write the leading
+  "+"/"-"/"±" character into the value text and pair a visually-hidden
+  word, so "not conveyed by colour alone" (§Rules applied throughout) is
+  met by the consumer contract rather than a CSS pseudo-element. Neither
+  modifier has a real consumer yet — none of the four migrated screens
+  computes a trend delta or KPI icon today (real data only, §Rules applied
+  throughout) — so both wait for whichever future screen needs them.
+  `build:asset-budget:check`'s `APP_BUDGET_BYTES` was raised from 239,956
+  to 240,975 (measured actual total, no added margin — see
+  `scripts/client-asset-budget.ts`'s own ledger comment).
 
 ### Wave 3 — List-management: status/filter/bulk normalization
 

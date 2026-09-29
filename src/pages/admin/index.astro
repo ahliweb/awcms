@@ -364,25 +364,30 @@ const ICON_MODULES =
 
   <section class="admin-section" aria-label={t("Session")}>
     <h2 class="admin-section-title">{t("Your session")}</h2>
-    <ul class="stat-grid">
-      <li class="stat-card">
-        <div class="stat-label">{t("Tenant")}</div>
-        <div class="stat-value stat-value--mono" id="dashboard-tenant-id">
+    <ul class="admin-stat-card-grid">
+      <li class="admin-stat-card">
+        <div class="admin-stat-card-label">{t("Tenant")}</div>
+        <div
+          class="admin-stat-card-value admin-stat-card-value--mono"
+          id="dashboard-tenant-id"
+        >
           {ssr.tenantId}
         </div>
-        <div class="stat-hint">{t("Active tenant context")}</div>
+        <div class="admin-stat-card-caption">{t("Active tenant context")}</div>
       </li>
-      <li class="stat-card">
-        <div class="stat-label">{t("Roles")}</div>
-        <div class="stat-value">{roleCount}</div>
-        <div class="stat-hint">{roleSummary}</div>
+      <li class="admin-stat-card">
+        <div class="admin-stat-card-label">{t("Roles")}</div>
+        <div class="admin-stat-card-value">{roleCount}</div>
+        <div class="admin-stat-card-caption">{roleSummary}</div>
       </li>
-      <li class="stat-card">
-        <div class="stat-label">{t("Granted permissions")}</div>
-        <div class="stat-value" id="dashboard-permission-count">
+      <li class="admin-stat-card">
+        <div class="admin-stat-card-label">{t("Granted permissions")}</div>
+        <div class="admin-stat-card-value" id="dashboard-permission-count">
           {permissionCount}
         </div>
-        <div class="stat-hint">{t("Across all assigned roles")}</div>
+        <div class="admin-stat-card-caption">
+          {t("Across all assigned roles")}
+        </div>
       </li>
     </ul>
   </section>
