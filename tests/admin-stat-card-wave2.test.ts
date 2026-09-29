@@ -18,10 +18,10 @@
  *      audit (§4) flags, and this issue's job is to remove it for these four
  *      files specifically.
  *   3. The legacy `.stat-card`/`.stat-grid`/`.stat-head`/`.stat-delta`
- *      declarations THEMSELVES are still defined in
- *      `src/styles/admin-screens.css` — the issue explicitly keeps them for
- *      the other ~14 screens that have not migrated yet (waves 3/6), so this
- *      change must not delete that CSS.
+ *      declarations were retired from `src/styles/admin-screens.css` once
+ *      Issue #866 (wave 7) migrated the last consumers — this test now pins
+ *      their ABSENCE rather than their presence (see
+ *      tests/admin-legacy-classes-retired.test.ts for the repo-wide gate).
  *   4. `.admin-stat-card`'s new optional modifiers (icon-head row and signed
  *      delta, ported from the legacy `.stat-head`/`.stat-delta` pair per the
  *      matrix's wave 2 decision) are defined in `src/styles/admin.css`, and
@@ -78,13 +78,13 @@ describe("admin-stat-card-wave2 (#860): dashboard/reporting/analytics migration"
     }
   }
 
-  test("legacy .stat-card/.stat-grid/.stat-head/.stat-delta stay defined in admin-screens.css for the un-migrated screens", async () => {
+  test("legacy .stat-card/.stat-grid/.stat-head/.stat-delta are retired from admin-screens.css (#866, wave 7)", async () => {
     const css = await readFile("src/styles/admin-screens.css", "utf8");
 
-    expect(css).toContain(".stat-card {");
-    expect(css).toContain(".stat-grid {");
-    expect(css).toContain(".stat-card .stat-head {");
-    expect(css).toContain(".stat-card .stat-delta {");
+    expect(css).not.toContain(".stat-card {");
+    expect(css).not.toContain(".stat-grid {");
+    expect(css).not.toContain(".stat-card .stat-head {");
+    expect(css).not.toContain(".stat-card .stat-delta {");
   });
 
   test(".admin-stat-card gains an optional icon-head row and a signed-delta modifier in admin.css", async () => {

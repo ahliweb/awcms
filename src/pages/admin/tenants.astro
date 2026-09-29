@@ -222,26 +222,28 @@ function tenantStatusLabel(value: string): string {
   {canRead && (
     <section class="admin-section fade-in-up" id="tenants-summary">
       <h2 class="admin-section-title">{t("Deployment")}</h2>
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Tenancy mode")}</span>
-          <span class="stat-value stat-value--mono">{tenancyMode}</span>
-          <span class="stat-hint">
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Tenancy mode")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
+            {tenancyMode}
+          </span>
+          <span class="admin-stat-card-caption">
             {tenancyMode === "single"
               ? "one active tenant — provisioning a second flips this"
               : "derived from the active-tenant count, never configured"}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Tenants listed")}</span>
-          <span class="stat-value">{tenants.length}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Tenants listed")}</span>
+          <span class="admin-stat-card-value">{tenants.length}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Platform tenant")}</span>
-          <span class="stat-value stat-value--mono">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Platform tenant")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
             {platformTenantCode ?? "—"}
           </span>
-          <span class="stat-hint">
+          <span class="admin-stat-card-caption">
             {t("holds platform-scoped permissions")}
           </span>
         </div>

@@ -109,8 +109,8 @@ type BreakdownEntry = { label: string; value: number };
  * `Object.entries(counts)` shaped as label/value pairs for
  * `.omes-stat-breakdown` — the compact chip list a multi-part tile (defect
  * #1, ahliweb/omes#246 part 1b) renders instead of stuffing every part into
- * one giant `.stat-value` string that wraps onto 3 lines at 1440 and worse
- * below it.
+ * one giant `.admin-stat-card-value` string that wraps onto 3 lines at 1440
+ * and worse below it.
  */
 function toBreakdown(counts: Record<string, number>): BreakdownEntry[] {
   return Object.entries(counts).map(([label, value]) => ({ label, value }));

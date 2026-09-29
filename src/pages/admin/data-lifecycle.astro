@@ -255,25 +255,29 @@ const hasTenantWideHold = holds.some(
   {canReadHolds && (
     <section class="admin-section fade-in-up" id="data-lifecycle-summary">
       <h2 class="admin-section-title">{t("Holds in force")}</h2>
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Active legal holds")}</span>
-          <span class="stat-value">{activeHoldCount}</span>
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Active legal holds")}</span>
+          <span class="admin-stat-card-value">{activeHoldCount}</span>
           {hasTenantWideHold && (
-            <span class="stat-hint">{t("One or more cover every table")}</span>
+            <span class="admin-stat-card-caption">
+              {t("One or more cover every table")}
+            </span>
           )}
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Registered tables")}</span>
-          <span class="stat-value">{registryRows.length}</span>
-          <span class="stat-hint">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Registered tables")}</span>
+          <span class="admin-stat-card-value">{registryRows.length}</span>
+          <span class="admin-stat-card-caption">
             {t("{count} tenant-scoped", { count: tenantDescriptors.length })}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Recorded runs")}</span>
-          <span class="stat-value">{canReadRuns ? runs.length : "—"}</span>
-          <span class="stat-hint">{t("Newest 100")}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Recorded runs")}</span>
+          <span class="admin-stat-card-value">
+            {canReadRuns ? runs.length : "—"}
+          </span>
+          <span class="admin-stat-card-caption">{t("Newest 100")}</span>
         </div>
       </div>
     </section>
@@ -421,34 +425,39 @@ const hasTenantWideHold = holds.some(
       </form>
 
       <div id="data-lifecycle-plan-result" hidden>
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Cutoff")}</span>
-            <span class="stat-value stat-value--mono" id="plan-result-cutoff" />
-            <span class="stat-hint">
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Cutoff")}</span>
+            <span
+              class="admin-stat-card-value admin-stat-card-value--mono"
+              id="plan-result-cutoff"
+            />
+            <span class="admin-stat-card-caption">
               {t("UTC \u2014 rows older than this")}
             </span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Eligible")}</span>
-            <span class="stat-value" id="plan-result-eligible" />
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Eligible")}</span>
+            <span class="admin-stat-card-value" id="plan-result-eligible" />
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Held")}</span>
-            <span class="stat-value" id="plan-result-held" />
-            <span class="stat-hint">{t("Withheld by a legal hold")}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Held")}</span>
+            <span class="admin-stat-card-value" id="plan-result-held" />
+            <span class="admin-stat-card-caption">
+              {t("Withheld by a legal hold")}
+            </span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Already archived")}</span>
-            <span class="stat-value" id="plan-result-archived" />
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Already archived")}</span>
+            <span class="admin-stat-card-value" id="plan-result-archived" />
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Purgeable")}</span>
-            <span class="stat-value" id="plan-result-purgeable" />
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Purgeable")}</span>
+            <span class="admin-stat-card-value" id="plan-result-purgeable" />
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Blocked")}</span>
-            <span class="stat-value" id="plan-result-blocked" />
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Blocked")}</span>
+            <span class="admin-stat-card-value" id="plan-result-blocked" />
           </div>
         </div>
       </div>

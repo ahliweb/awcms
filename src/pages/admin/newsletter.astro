@@ -171,13 +171,13 @@ const columnCount = canConfigure ? 6 : 5;
 
   {canRead && !loadError && (
     <section class="admin-section fade-in-up" aria-label="Subscriber summary">
-      <div class="stat-grid stagger-children">
+      <div class="admin-stat-card-grid stagger-children">
         {NEWSLETTER_SUBSCRIBER_STATUSES.map((status) => (
-          <div class="stat-card">
-            <span class="stat-label">{status}</span>
-            <span class="stat-value">{counts[status] ?? 0}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{status}</span>
+            <span class="admin-stat-card-value">{counts[status] ?? 0}</span>
             {status === "pending" && (
-              <span class="stat-hint">
+              <span class="admin-stat-card-caption">
                 {t(
                   "Submitted and never confirmed. A number that only grows usually means this tenant has no active confirmation email template."
                 )}

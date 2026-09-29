@@ -166,16 +166,18 @@ function checkEntries(checks: unknown): [string, unknown][] {
         class="admin-section fade-in-up"
         aria-label="OMES health summary"
       >
-        <div class="stat-grid stagger-children">
-          <div class="stat-card">
-            <span class="stat-label">{t("Servers with a snapshot")}</span>
-            <span class="stat-value">{snapshots.length}</span>
+        <div class="admin-stat-card-grid stagger-children">
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">
+              {t("Servers with a snapshot")}
+            </span>
+            <span class="admin-stat-card-value">{snapshots.length}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">{t("Stale snapshots")}</span>
-            <span class="stat-value">{staleCount}</span>
+          <div class="admin-stat-card">
+            <span class="admin-stat-card-label">{t("Stale snapshots")}</span>
+            <span class="admin-stat-card-value">{staleCount}</span>
             {staleCount > 0 && (
-              <span class="stat-hint">
+              <span class="admin-stat-card-caption">
                 {t("No fresh health evidence within the staleness window")}
               </span>
             )}

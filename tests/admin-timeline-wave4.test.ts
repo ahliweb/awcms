@@ -26,11 +26,11 @@
  *      `-meta`) is defined in `src/styles/admin.css` with a list-style reset —
  *      a bare `<ol>` would otherwise show a browser bullet/number ahead of
  *      the primitive's own `::before` dot.
- *   6. The legacy `.status-badge` declaration itself stays defined in
- *      `src/styles/admin-screens.css` — this issue does not retire it
- *      (#866 does), and `reporting.astro` keeps using it outside the
- *      rebuild-history section (email queue health, projection freshness,
- *      scheduled-export runs — out of this issue's file-ownership scope).
+ *   6. The legacy `.status-badge` declaration and its remaining
+ *      `reporting.astro` sections (email queue health, projection freshness,
+ *      scheduled-export runs) were migrated to `.admin-status-pill` and the
+ *      class retired from `src/styles/admin-screens.css`/`admin.css` by
+ *      Issue #866 (wave 7) — this test now pins that final state.
  */
 import { readFile } from "node:fs/promises";
 
@@ -81,10 +81,11 @@ describe("admin-timeline-wave4 (#863): history-flow screens adopt .admin-timelin
     expect(source).toContain('readParam("instance")');
   });
 
-  test("reporting.astro keeps the legacy .status-badge OUTSIDE the rebuild-history section (wave 4 touches that section only)", async () => {
+  test("reporting.astro uses .admin-status-pill everywhere, including outside the rebuild-history section (#866, wave 7)", async () => {
     const source = await readFile("src/pages/admin/reporting.astro", "utf8");
 
-    expect(source).toContain('class="status-badge"');
+    expect(source).not.toContain('class="status-badge"');
+    expect(source).toContain('class="admin-status-pill"');
     expect(source).toContain("reporting-rebuild-history");
     // The rebuild-history <section> itself no longer opens a <table>.
     const sectionStart = source.indexOf('id="reporting-rebuild-history"');
@@ -113,13 +114,11 @@ describe("admin-timeline-wave4 (#863): history-flow screens adopt .admin-timelin
     expect(timelineBlock).toMatch(/list-style:\s*none/);
   });
 
-  test("legacy .status-badge stays defined for the un-migrated screens (#866 retires it, not this issue)", async () => {
+  test("legacy .status-badge is retired from both stylesheets (#866, wave 7)", async () => {
     const baseCss = await readFile("src/styles/admin.css", "utf8");
     const screensCss = await readFile("src/styles/admin-screens.css", "utf8");
 
-    expect(baseCss).toContain(".status-badge {");
-    // admin-screens.css only adds variant/size overrides on top of the base
-    // declaration above — both files must keep agreeing on the same element.
-    expect(screensCss).toContain('.status-badge[data-variant="info"]');
+    expect(baseCss).not.toContain(".status-badge {");
+    expect(screensCss).not.toContain('.status-badge[data-variant="info"]');
   });
 });

@@ -2,9 +2,10 @@
 
 # AWCMS ↔ awcms-one admin UI/UX parity matrix
 
-> Audit for [Issue #858](https://github.com/ahliweb/awcms/issues/858), Wave 1
-> (inventory + parity matrix, docs only). Waves 2–6 recompose screens on top
-> of this matrix; none of that code work is in this change.
+> Audit for [Issue #858](https://github.com/ahliweb/awcms/issues/858). Wave 1
+> was the inventory + parity matrix (docs only). Waves 2–7 recomposed screens
+> on top of this matrix and are all **DONE** (§7) — this document now
+> describes the FINAL state, not a plan.
 
 ## 1. Purpose and method
 
@@ -226,17 +227,20 @@ column is intentionally absent, not omitted by oversight.
 
 ### 6.6 Media
 
-| Screen                                                                                                 | Primitive(s) | Class.                                                                | Required change                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.astro`                                                                                          | MG, SC, SP   | **adopt**                                                             | 4 `.stat-card` sites → SC; 2 `.status-badge` sites → SP. `.admin-filter-form` is a `<select>`, not tabs — no change for SG. `.admin-media-grid` (MG) was **not** landed here (Issue #864): the object table deliberately renders no `<img>`, a documented security decision — see doc 14's `MediaGrid` row.                                                                                                                                                                             |
-| `src/lib/ui/media-picker-client.ts` (consumed by `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG           | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | The real `.admin-media-grid` consumer either repo has — its thumbnail grid was the direct migration target. `blog-homepage.astro`, the issue's fourth listed consumer, has no picker markup to migrate (verified by grep). Must preserve the picker's public contract, keyboard selection, accessible names and alt text exactly (issue requirement); this is a markup/class change plus an additive `aria-pressed` current-selection indicator, not a change to any existing behavior. |
+| Screen                                                                                                 | Primitive(s)                | Class.                                                                | Required change                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.astro`                                                                                          | SC, SP (not MG — see below) | **partially adopt**                                                   | `.admin-stat-card`/`.admin-status-pill` landed (wave 5, Issue #864); `.admin-media-grid` did NOT — `media.astro`'s object table deliberately renders no thumbnail (security decision documented in the file's own header), so this row's original "flagship media adoption" framing assumed markup the screen does not have.                                                                                                                                               |
+| `src/lib/ui/media-picker-client.ts` (consumed by `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG                          | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | The real `.admin-media-grid` consumer either repo has — its thumbnail grid was the direct migration target. `blog-homepage.astro`, the issue's fourth listed consumer, has no picker markup to migrate (verified by grep). The picker's public contract, keyboard selection, accessible names and alt text are preserved exactly; this landed as a markup/class change plus an additive `aria-pressed` current-selection indicator, not a change to any existing behavior. |
 
 ---
 
-**Totals:** 63 screens audited. **Adopt: 5** (`comments.astro`,
-`omes/health.astro`, `approvals.astro`, `media.astro`, `index.astro`).
-**Partially adopt: 52** (SP-only normalization is the dominant pattern; a
-handful also carry SC and/or a TL evaluation). **No change: 6**
+**Totals (Wave 1 audit-time classification — final per-screen outcome is
+§7):** 63 screens audited. **Adopt: 4** (`comments.astro`,
+`omes/health.astro`, `approvals.astro`, `index.astro`). **Partially adopt:
+53** (SP-only normalization is the dominant pattern; a handful also carry SC
+and/or a TL evaluation — `media.astro` moved here from "adopt" once wave 5
+confirmed it has no `.admin-media-grid`-shaped markup, §6.6). **No change:
+6**
 (`blog-settings.astro`, `site-profile.astro`, `sidebar-menu.astro`,
 `modules/[moduleKey].astro`, plus `omes/arsitektur.astro` and every
 `.module-toggle`-only site's toggle column specifically — the _toggle_
@@ -466,8 +470,9 @@ style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
   `--color-*-soft`/`-on-soft` custom properties the file already overrides
   for the OMES dark palette, so the tone cascade (including `danger`/`info`,
   which bare `.status-badge` never defined — see below) carried over
-  automatically. Only `omes/health.astro` (wave 4, out of scope for #865)
-  still needs the file's `.stat-card` half of each selector pair.
+  automatically. `omes/health.astro` (wave 4, out of scope for #865) kept
+  needing the file's `.stat-card` half of each selector pair until Issue
+  #866 (wave 7) migrated it — see that section.
 - **Decision made:** migrating uncovered a latent styling bug rather than
   introducing one — several of these screens passed `data-variant="danger"`/
   `"info"` to `.status-badge`, which only ever defined `success`/`neutral`/
@@ -478,32 +483,98 @@ style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
   total — the only growth is `orkestrasi-langsung.astro`'s client script
   template literal, whose class names got longer).
 
-### Wave 7 (issue's numbering) — final sweep
+### Wave 7 — Final sweep, legacy class retirement, docs — **DONE** ([Issue #866](https://github.com/ahliweb/awcms/issues/866))
 
-Not a file package — accessibility/responsive/i18n/performance/documentation
-sweep across every screen changed in waves 2–6, plus the `doc 14` update
-this audit intentionally defers (§8).
+- **Files migrated (last `.stat-card`/`.stat-grid`/`.stat-label`/
+  `.stat-value`/`.stat-hint` consumers):** `src/pages/admin/data-lifecycle.astro`,
+  `site-search.astro`, `idn-regions.astro`, `tenants.astro`, `sync.astro`,
+  `push-notifications.astro`, `domain-events.astro`, `omes/health.astro` — all
+  onto `.admin-stat-card`/`.admin-stat-card-grid`/`.admin-stat-card-label`/
+  `.admin-stat-card-value`/`.admin-stat-card-caption`. `newsletter.astro` was
+  verified already migrated (wave 3) — nothing left on this file. `omes/
+index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
+  cross-reference, corrected to `.admin-stat-card-value` (no markup change
+  needed — it already rendered the primitive since wave 2).
+- **Files migrated (last `.status-badge`/`.status-dot` consumer):**
+  `src/pages/admin/reporting.astro`'s four remaining sections (email queue
+  health, projection freshness, scheduled-export configuration, scheduled-
+  export runs) — the only screen wave 3/4 had deliberately left on the
+  legacy pill (both waves' own file-ownership scoping, noted above). Moved
+  onto `.admin-status-pill`/`.admin-status-pill-dot` with `data-variant` ->
+  `data-tone`.
+  `src/layouts/AdminLayout.astro` was checked and confirmed to never have
+  been a consumer of either family (`.admin-sidebar-status-dot` is an
+  unrelated, pre-existing class name).
+- **Legacy CSS retired:** the `.stat-card`/`.stat-grid`/`.stat-head`/
+  `.stat-delta`/`.stat-label`/`.stat-value`/`.stat-hint` rule blocks were
+  deleted from `src/styles/admin-screens.css`, and the `.status-badge`/
+  `.status-dot` rule blocks were deleted from `src/styles/admin.css` (base
+  declaration) and `src/styles/admin-screens.css` (tinted `info`/`danger`
+  variant additions). `src/styles/omes-control-center.css`'s dual selector
+  lists (`.stat-card X, .admin-stat-card X { … }`, wave 2's Shared note
+  above) dropped their `.stat-card` half now that every OMES screen renders
+  `.admin-stat-card` only.
+- **Regression gate added:** `tests/admin-legacy-classes-retired.test.ts`
+  walks every `.astro`/`.ts`/`.tsx`/`.css` file under `src/` and fails if any
+  of the nine retired class tokens reappears as a real consumer (class
+  attribute, `classList`/`querySelector` string literal, or CSS selector) —
+  comments (including this document's own historical narration and the
+  "ported from the legacy `.stat-grid`" provenance notes left in
+  `admin.css`) are stripped first via the shared `scripts/lib/source-text.ts`
+  `stripComments`, so history is never mistaken for a live consumer. The
+  three wave-specific tests (`admin-stat-card-wave2.test.ts`,
+  `admin-status-pill-wave3.test.ts`, `admin-timeline-wave4.test.ts`) that
+  used to pin the legacy CSS as still-defined ("#866 retires it") were
+  flipped to pin its absence.
+- **Asset budget shrank** — the first wave of this epic to shrink it rather
+  than grow it, since retiring a whole legacy component family removes CSS
+  with no replacement cost. Landing on top of [Issue #872](https://github.com/ahliweb/awcms/issues/872) (which raised
+  `APP_BUDGET_BYTES` to 250,566 for the shared media picker's
+  `.admin-media-grid` adoption), `scripts/client-asset-budget.ts`'s
+  `APP_BUDGET_BYTES` was lowered from 250,566 to 248,033 and
+  `PER_FILE_CSS_BUDGET_BYTES` from 57,300 to 56,800 (both measured actual
+  values — see that file's own ledger comments).
+- **Responsive/E2E sweep:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,
+  no sideways scroll) and `tests/e2e/admin-screens-render.e2e.ts` (every
+  admin screen renders) re-run against a fresh Postgres 18.4 + full
+  migration + seeded tenant — both green, plus the full `bun run test:e2e`
+  suite (33 passed, 8 skipped for env-gated specs unrelated to this issue —
+  `admin-deny-path`/`admin-read-only-access` need a second seeded user,
+  `cwv-lab` needs `E2E_CWV_LAB=1`). This repo has no `@axe-core/playwright`
+  harness under `tests/e2e/` at the time of this issue — the acceptance
+  criterion's accessibility smoke is `responsive-360`/`admin-screens-render`
+  plus the manual composition rules in doc 14, not a dedicated axe spec.
+- **Docs:** this document (all waves marked DONE, §6.6 corrected below),
+  `docs/awcms/14_ui_ux_design_system.md`, and the `awcms-ui-screen` skill —
+  all updated to state the composition rules as fact, not as a pending
+  decision. `docs/PROJECT_STATE.md` §4 does not track epic #858 as a
+  recommendation round (it was opened and worked as a GitHub issue chain,
+  not a §4 round), so no entry was added there.
 
-## 8. What this document does not do
+## 8. What Wave 1 did not do (historical — resolved by later waves)
 
-- It does not change any `.astro`, `.ts`, or `.css` file — Wave 1 is docs
-  only, per the issue and to avoid conflicting with the concurrent #854
-  client-script work.
-- It does not resolve the `.stat-card` vs `.admin-stat-card` delta/head
-  affordance question (§4, wave 2) or the `approvals.astro` two-pane
-  question (§6.4, wave 4) — both are real design decisions for the wave that
-  implements them, not something an audit should pre-decide.
-- It does not update `docs/awcms/14_ui_ux_design_system.md` with new
-  reusable composition rules, because no composition rule has been
-  _established_ yet — only surveyed. A short cross-reference link is added
-  instead (§9); the issue's acceptance criterion for a doc-14 update applies
-  once wave 2+ actually establishes a rule.
+At the end of Wave 1 (docs-only audit), this section recorded three
+deliberately open questions. All three are now resolved:
+
+- Wave 1 itself changed no `.astro`/`.ts`/`.css` file — waves 2–7 did, per
+  the packages in §7, all now **DONE**.
+- The `.stat-card` vs `.admin-stat-card` delta/head affordance question (§4)
+  was resolved by wave 2: ported as `.admin-stat-card-head`/
+  `.admin-stat-card-delta`. The `approvals.astro` two-pane question (§6.4)
+  was resolved by wave 4: kept the query-param drill-in, no
+  `.admin-two-pane` routing change.
+- `docs/awcms/14_ui_ux_design_system.md` now states the composition rules
+  this epic established as fact (§9) — the rules are no longer merely
+  surveyed.
 
 ## 9. Documentation links
 
 - [`docs/awcms/14_ui_ux_design_system.md`](14_ui_ux_design_system.md) §
-  Component library carries a pointer to this matrix next to its existing
-  `.status-badge` row, so a reader hits the consolidation note (§4) before
-  reaching for the older class.
+  Component library documents `.admin-status-pill`/`.admin-stat-card` and
+  the other composition rules this epic established (segmented as nav +
+  aria-current, bulk bar only over existing bulk endpoints, timeline as
+  `<ol>`+`<time>`) as the CURRENT admin vocabulary — the legacy
+  `.status-badge`/`.stat-card` classes it used to also document were
+  retired by Issue #866 (wave 7) and no longer exist in `src/styles/`.
 - [`docs/awcms/README.md`](README.md) lists this document in the index
   table, next to `family-compatibility.md`.

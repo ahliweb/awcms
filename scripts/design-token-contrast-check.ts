@@ -109,7 +109,7 @@ const PAIRS: readonly Pair[] = [
     fg: "color-text-muted",
     bg: "color-surface-2",
     min: AA_NORMAL,
-    renderedBy: "admin.css .badge, .status-badge[data-variant='neutral']"
+    renderedBy: "admin.css .badge, .admin-status-pill[data-tone='neutral']"
   },
   {
     fg: "color-text-muted",
@@ -163,7 +163,8 @@ const PAIRS: readonly Pair[] = [
     fg: "color-primary-contrast",
     bg: "color-info-strong",
     min: AA_NORMAL,
-    renderedBy: "StatusBadge info variant (the PR #720 finding)"
+    renderedBy:
+      "admin.css .admin-status-pill[data-tone='info'] (the PR #720 finding)"
   },
 
   // ---- Tinted status pairs: the `-on-soft` family -------------------------
@@ -178,27 +179,27 @@ const PAIRS: readonly Pair[] = [
     fg: "color-success-on-soft",
     bg: "color-success-soft",
     min: AA_NORMAL,
-    renderedBy: "admin.css .status-badge[data-variant='success']"
+    renderedBy: "admin.css .admin-status-pill[data-tone='success']"
   },
   {
     fg: "color-warning-on-soft",
     bg: "color-warning-soft",
     min: AA_NORMAL,
     renderedBy:
-      "admin.css .status-badge[data-variant='warning'], .admin-sync-pill"
+      "admin.css .admin-status-pill[data-tone='warning'], .admin-sync-pill"
   },
   {
     fg: "color-danger-on-soft",
     bg: "color-danger-soft",
     min: AA_NORMAL,
     renderedBy:
-      "admin.css .status-badge[data-variant='danger'], .admin-sidebar-count"
+      "admin.css .admin-status-pill[data-tone='danger'], .admin-sidebar-count"
   },
   {
     fg: "color-info-on-soft",
     bg: "color-info-soft",
     min: AA_NORMAL,
-    renderedBy: "admin-screens.css .status-badge[data-variant='info']"
+    renderedBy: "admin.css .admin-status-pill[data-tone='info']"
   },
 
   // ---- Status colours used as TEXT/BORDER on a plain surface --------------

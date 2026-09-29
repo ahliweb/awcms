@@ -205,32 +205,34 @@ const showIndexActions = canReconcile || canRebuild;
   {canReadIndex && status && (
     <section class="admin-section fade-in-up" id="site-search-status">
       <h2 class="admin-section-title">{t("Index status")}</h2>
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("Documents indexed")}</span>
-          <span class="stat-value">{status.documentCount}</span>
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Documents indexed")}</span>
+          <span class="admin-stat-card-value">{status.documentCount}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Last indexed")}</span>
-          <span class="stat-value stat-value--mono">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Last indexed")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
             {formatTimestamp(status.latestIndexedAt)}
           </span>
-          <span class="stat-hint">{t("UTC")}</span>
+          <span class="admin-stat-card-caption">{t("UTC")}</span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Open failures")}</span>
-          <span class="stat-value">{status.openFailureCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Open failures")}</span>
+          <span class="admin-stat-card-value">{status.openFailureCount}</span>
           {status.openFailureCount > 0 && (
-            <span class="stat-hint">{t("See diagnostics below")}</span>
+            <span class="admin-stat-card-caption">
+              {t("See diagnostics below")}
+            </span>
           )}
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Last run")}</span>
-          <span class="stat-value stat-value--mono">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("Last run")}</span>
+          <span class="admin-stat-card-value admin-stat-card-value--mono">
             {status.lastRun ? status.lastRun.runType : "—"}
           </span>
           {status.lastRun && (
-            <span class="stat-hint">
+            <span class="admin-stat-card-caption">
               {formatTimestamp(status.lastRun.startedAt)}
             </span>
           )}

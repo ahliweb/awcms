@@ -15,10 +15,11 @@
  *      tokens anymore — a partial migration that leaves both systems mixed
  *      on one screen is exactly the "two competing central definitions"
  *      duplication the parity matrix audit (§4) flags.
- *   3. The legacy `.status-badge`/`.status-dot` declarations THEMSELVES stay
- *      defined in `src/styles/admin.css` — waves 4/6 have not migrated their
- *      screens yet, so this change must not delete that CSS (#866 retires it
- *      once every wave lands).
+ *   3. The legacy `.status-badge`/`.status-dot` declarations were retired
+ *      from `src/styles/admin.css` once Issue #866 (wave 7) migrated the
+ *      last consumers — this test now pins their ABSENCE rather than their
+ *      presence (see tests/admin-legacy-classes-retired.test.ts for the
+ *      repo-wide gate).
  *   4. `comments.astro` specifically: no `.filter-bar` status-tab nav left,
  *      `.admin-segmented`/`.admin-segmented-option` present, and
  *      `.admin-bulk-bar` wired to row checkboxes + the `bulk-moderate`
@@ -114,11 +115,11 @@ describe("admin-status-pill-wave3 (#862): list-screen status migration", () => {
     });
   }
 
-  test("legacy .status-badge/.status-dot stay defined in admin.css for the un-migrated waves (#866 retires them)", async () => {
+  test("legacy .status-badge/.status-dot are retired from admin.css (#866, wave 7)", async () => {
     const css = await readFile("src/styles/admin.css", "utf8");
 
-    expect(css).toContain(".status-badge {");
-    expect(css).toContain(".status-badge .status-dot {");
+    expect(css).not.toContain(".status-badge {");
+    expect(css).not.toContain(".status-badge .status-dot {");
   });
 
   test(".admin-status-pill/.admin-status-pill-dot stay defined in admin.css", async () => {

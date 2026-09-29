@@ -1,13 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:b23b7674cd6dda9ec4f39db317416209da0155919eebe06d6e967fec39b9c6b7 -->
+<!-- i18n-source-hash: sha256:13d2c6782e72cf2d4ee8f06ddde0489ac487d5fbca69a63c22a9a6a4a2de4d4f -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
-> Audit untuk [Issue #858](https://github.com/ahliweb/awcms/issues/858),
-> Gelombang 1 (inventori + matriks paritas, docs only). Gelombang 2–6
-> merekomposisi layar di atas matriks ini; tidak ada pekerjaan kode itu di
-> perubahan ini.
+> Audit untuk [Issue #858](https://github.com/ahliweb/awcms/issues/858).
+> Gelombang 1 adalah inventori + matriks paritas (docs only). Gelombang 2–7
+> telah merekomposisi layar di atas matriks ini dan semuanya **SELESAI**
+> (§7) — dokumen ini kini mendeskripsikan state AKHIR, bukan rencana.
 
 ## 1. Tujuan dan metode
 
@@ -234,17 +234,20 @@ Kolom SG/BB tiap baris lain sengaja kosong, bukan terlewat.
 
 ### 6.6 Media
 
-| Layar                                                                                                 | Primitif   | Klas.                                                                 | Perubahan diperlukan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.astro`                                                                                         | MG, SC, SP | **adopt**                                                             | 4 situs `.stat-card` → SC; 2 situs `.status-badge` → SP. `.admin-filter-form` adalah `<select>`, bukan tab — no change untuk SG. `.admin-media-grid` (MG) TIDAK mendarat di sini (Issue #864): tabel objeknya dengan sengaja tidak merender `<img>`, sebuah keputusan keamanan terdokumentasi — lihat baris `MediaGrid` doc 14.                                                                                                                                                                                            |
-| `src/lib/ui/media-picker-client.ts` (dikonsumsi `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG         | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | Konsumen `.admin-media-grid` nyata yang dimiliki kedua repo — grid thumbnail-nya adalah target migrasi langsung. `blog-homepage.astro`, konsumen keempat yang disebut issue, tidak punya markup pemilih untuk dimigrasikan (diverifikasi lewat grep). Harus mempertahankan kontrak publik pemilih, seleksi keyboard, nama aksesibel dan alt text persis sama (persyaratan issue); ini perubahan markup/kelas ditambah indikator `aria-pressed` pilihan-saat-ini yang aditif, bukan perubahan atas perilaku yang sudah ada. |
+| Layar                                                                                                 | Primitif                           | Klas.                                                                 | Perubahan diperlukan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.astro`                                                                                         | SC, SP (bukan MG — lihat di bawah) | **partially adopt**                                                   | `.admin-stat-card`/`.admin-status-pill` mendarat (gelombang 5, Issue #864); `.admin-media-grid` TIDAK — tabel objek `media.astro` sengaja tidak merender thumbnail (keputusan keamanan yang terdokumentasi di header berkas itu sendiri), sehingga framing "adopsi media unggulan" baris ini semula mengasumsikan markup yang tidak dimiliki layar ini.                                                                                                                                                          |
+| `src/lib/ui/media-picker-client.ts` (dikonsumsi `blog.astro`, `blog-ads.astro`, `site-profile.astro`) | MG                                 | **adopt** ([Issue #872](https://github.com/ahliweb/awcms/issues/872)) | Konsumen `.admin-media-grid` nyata yang dimiliki kedua repo — grid thumbnail-nya adalah target migrasi langsung. `blog-homepage.astro`, konsumen keempat yang disebut issue, tidak punya markup pemilih untuk dimigrasikan (diverifikasi lewat grep). Kontrak publik pemilih, seleksi keyboard, nama aksesibel dan alt text dipertahankan persis sama; ini mendarat sebagai perubahan markup/kelas ditambah indikator `aria-pressed` pilihan-saat-ini yang aditif, bukan perubahan atas perilaku yang sudah ada. |
 
 ---
 
-**Total:** 63 layar diaudit. **Adopt: 5** (`comments.astro`,
-`omes/health.astro`, `approvals.astro`, `media.astro`, `index.astro`).
-**Partially adopt: 52** (normalisasi hanya-SP adalah pola dominan; segelintir
-juga membawa SC dan/atau evaluasi TL). **No change: 6**
+**Total (klasifikasi saat audit Gelombang 1 — hasil akhir per-layar ada di
+§7):** 63 layar diaudit. **Adopt: 4** (`comments.astro`, `omes/health.astro`,
+`approvals.astro`, `index.astro`). **Partially adopt: 53** (normalisasi
+hanya-SP adalah pola dominan; segelintir juga membawa SC dan/atau evaluasi
+TL — `media.astro` pindah ke sini dari "adopt" setelah gelombang 5
+mengonfirmasi ia tidak punya markup ber-bentuk `.admin-media-grid`, §6.6).
+**No change: 6**
 (`blog-settings.astro`, `site-profile.astro`, `sidebar-menu.astro`,
 `modules/[moduleKey].astro`, plus `omes/arsitektur.astro` dan kolom _toggle_
 setiap situs `.module-toggle`-saja secara spesifik — klasifikasi _toggle_
@@ -489,9 +492,10 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   kedua kelas itu memakai custom property `--color-*-soft`/`-on-soft` yang
   sama yang sudah di-override berkas ini untuk palet gelap OMES, sehingga
   cascade tone (termasuk `danger`/`info`, yang tidak pernah didefinisikan
-  `.status-badge` polos — lihat di bawah) ikut terbawa otomatis. Hanya
-  `omes/health.astro` (gelombang 4, di luar cakupan #865) yang masih butuh
-  separuh `.stat-card` dari tiap pasangan selector berkas ini.
+  `.status-badge` polos — lihat di bawah) ikut terbawa otomatis.
+  `omes/health.astro` (gelombang 4, di luar cakupan #865) tetap butuh separuh
+  `.stat-card` dari tiap pasangan selector berkas ini sampai Issue #866
+  (gelombang 7) memigrasikannya — lihat bagian itu.
 - **Keputusan yang diambil:** migrasi ini justru menyingkap bug styling
   laten, bukan memperkenalkannya — beberapa layar ini mengirim
   `data-variant="danger"`/`"info"` ke `.status-badge`, yang hanya pernah
@@ -503,33 +507,103 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   terukur — satu-satunya pertumbuhan adalah literal template client script
   `orkestrasi-langsung.astro`, yang nama kelasnya jadi lebih panjang).
 
-### Gelombang 7 (penomoran issue) — sapuan akhir
+### Gelombang 7 — Sapuan akhir, pensiun kelas legacy, docs — **SELESAI** ([Issue #866](https://github.com/ahliweb/awcms/issues/866))
 
-Bukan paket berkas — sapuan aksesibilitas/responsive/i18n/performa/
-dokumentasi di seluruh layar yang berubah di gelombang 2–6, plus update
-`doc 14` yang sengaja ditunda audit ini (§8).
+- **Berkas dimigrasikan (konsumen `.stat-card`/`.stat-grid`/`.stat-label`/
+  `.stat-value`/`.stat-hint` terakhir):** `src/pages/admin/data-lifecycle.astro`,
+  `site-search.astro`, `idn-regions.astro`, `tenants.astro`, `sync.astro`,
+  `push-notifications.astro`, `domain-events.astro`, `omes/health.astro` —
+  semuanya ke `.admin-stat-card`/`.admin-stat-card-grid`/
+  `.admin-stat-card-label`/`.admin-stat-card-value`/`.admin-stat-card-caption`.
+  `newsletter.astro` diverifikasi sudah dimigrasikan (gelombang 3) — tidak
+  ada yang tersisa di berkas ini. Satu hit `.stat-value` tersisa di
+  `omes/index.astro` adalah rujukan-silang komentar dokumentasi basi,
+  dikoreksi ke `.admin-stat-card-value` (tidak perlu perubahan markup — ia
+  sudah merender primitif itu sejak gelombang 2).
+- **Berkas dimigrasikan (konsumen `.status-badge`/`.status-dot` terakhir):**
+  empat bagian tersisa `src/pages/admin/reporting.astro` (kesehatan antrean
+  email, kesegaran proyeksi, konfigurasi ekspor terjadwal, run ekspor
+  terjadwal) — satu-satunya layar yang sengaja ditinggalkan gelombang 3/4
+  pada pill legacy (cakupan kepemilikan berkas kedua gelombang itu sendiri,
+  dicatat di atas). Dipindah ke `.admin-status-pill`/`.admin-status-pill-dot`
+  dengan `data-variant` -> `data-tone`.
+  `src/layouts/AdminLayout.astro` diperiksa dan dikonfirmasi tidak pernah
+  menjadi konsumen kedua keluarga kelas ini (`.admin-sidebar-status-dot`
+  adalah nama kelas tak-berkaitan yang sudah ada sebelumnya).
+- **CSS legacy dipensiunkan:** blok aturan `.stat-card`/`.stat-grid`/
+  `.stat-head`/`.stat-delta`/`.stat-label`/`.stat-value`/`.stat-hint`
+  dihapus dari `src/styles/admin-screens.css`, dan blok aturan
+  `.status-badge`/`.status-dot` dihapus dari `src/styles/admin.css`
+  (deklarasi dasar) dan `src/styles/admin-screens.css` (tambahan varian
+  tinted `info`/`danger`). Daftar selector ganda `src/styles/omes-control-center.css`
+  (`.stat-card X, .admin-stat-card X { … }`, catatan Bersama gelombang 2 di
+  atas) melepas separuh `.stat-card`-nya sekarang setiap layar OMES
+  merender `.admin-stat-card` saja.
+- **Gerbang regresi ditambahkan:** `tests/admin-legacy-classes-retired.test.ts`
+  menyusuri setiap berkas `.astro`/`.ts`/`.tsx`/`.css` di bawah `src/` dan
+  gagal bila salah satu dari sembilan token kelas yang dipensiunkan muncul
+  lagi sebagai konsumen nyata (atribut class, literal string
+  `classList`/`querySelector`, atau selector CSS) — komentar (termasuk
+  narasi historis dokumen ini sendiri dan catatan provenance "ported from
+  the legacy `.stat-grid`" yang tertinggal di `admin.css`) dilucuti lebih
+  dulu lewat `stripComments` bersama `scripts/lib/source-text.ts`, sehingga
+  sejarah tak pernah keliru dianggap konsumen hidup. Ketiga test khusus
+  gelombang (`admin-stat-card-wave2.test.ts`, `admin-status-pill-wave3.test.ts`,
+  `admin-timeline-wave4.test.ts`) yang dulu memastikan CSS legacy tetap
+  terdefinisi ("#866 retires it") dibalik menjadi memastikan absennya.
+- **Anggaran aset menyusut** — gelombang pertama epik ini yang menyusutkan
+  anggaran, bukan menaikkannya, karena mempensiunkan seluruh keluarga
+  komponen legacy menghapus CSS tanpa biaya pengganti. Mendarat di atas
+  [Issue #872](https://github.com/ahliweb/awcms/issues/872) (yang menaikkan
+  `APP_BUDGET_BYTES` ke 250.566 untuk adopsi `.admin-media-grid` picker
+  media bersama), `scripts/client-asset-budget.ts`'s `APP_BUDGET_BYTES`
+  diturunkan dari 250.566 menjadi 248.033 dan `PER_FILE_CSS_BUDGET_BYTES`
+  dari 57.300 menjadi 56.800 (keduanya nilai aktual terukur — lihat komentar
+  ledger berkas itu sendiri).
+- **Sapuan responsive/E2E:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,
+  tanpa scroll menyamping) dan `tests/e2e/admin-screens-render.e2e.ts`
+  (setiap layar admin merender) dijalankan ulang terhadap Postgres 18.4
+  segar + migrasi penuh + tenant yang di-seed — keduanya hijau, plus suite
+  penuh `bun run test:e2e` (33 lulus, 8 dilewati untuk spec yang digerbangi
+  env di luar cakupan issue ini — `admin-deny-path`/`admin-read-only-access`
+  butuh pengguna kedua yang di-seed, `cwv-lab` butuh `E2E_CWV_LAB=1`). Repo
+  ini tidak punya harness `@axe-core/playwright` di bawah `tests/e2e/` pada
+  saat issue ini — kriteria akseptansi smoke aksesibilitasnya adalah
+  `responsive-360`/`admin-screens-render` plus aturan komposisi manual di
+  doc 14, bukan spec axe khusus.
+- **Docs:** dokumen ini (semua gelombang ditandai SELESAI, §6.6 dikoreksi
+  di bawah), `docs/awcms/14_ui_ux_design_system.md`, dan skill
+  `awcms-ui-screen` — semuanya dimutakhirkan untuk menyatakan aturan
+  komposisi sebagai fakta, bukan keputusan tertunda. `docs/PROJECT_STATE.md`
+  §4 tidak melacak epik #858 sebagai putaran rekomendasi (ia dibuka dan
+  dikerjakan sebagai rantai issue GitHub, bukan putaran §4), sehingga tidak
+  ada entri ditambahkan di sana.
 
-## 8. Apa yang TIDAK dilakukan dokumen ini
+## 8. Apa yang TIDAK dilakukan Gelombang 1 (historis — diselesaikan gelombang berikutnya)
 
-- Tidak mengubah satu pun berkas `.astro`, `.ts`, atau `.css` — Gelombang 1
-  adalah docs only, sesuai issue dan untuk menghindari konflik dengan
-  pekerjaan client-script #854 yang berjalan bersamaan.
-- Tidak menyelesaikan pertanyaan afordansi delta/head `.stat-card` vs
-  `.admin-stat-card` (§4, gelombang 2) atau pertanyaan two-pane
-  `approvals.astro` (§6.4, gelombang 4) — keduanya adalah keputusan desain
-  nyata untuk gelombang yang mengimplementasikannya, bukan sesuatu yang
-  harus diputuskan-duluan audit.
-- Tidak memutakhirkan `docs/awcms/14_ui_ux_design_system.md` dengan aturan
-  komposisi reusable baru, karena belum ada aturan komposisi yang
-  _ditetapkan_ — baru disurvei. Tautan referensi-silang singkat ditambahkan
-  sebagai gantinya (§9); kriteria akseptansi issue untuk update doc-14
-  berlaku begitu gelombang 2+ benar-benar menetapkan sebuah aturan.
+Pada akhir Gelombang 1 (audit docs-only), bagian ini mencatat tiga
+pertanyaan terbuka yang disengaja. Ketiganya kini terselesaikan:
+
+- Gelombang 1 sendiri tidak mengubah berkas `.astro`/`.ts`/`.css` mana pun —
+  gelombang 2–7 mengubahnya, sesuai paket di §7, semuanya kini **SELESAI**.
+- Pertanyaan afordansi delta/head `.stat-card` vs `.admin-stat-card` (§4)
+  diselesaikan gelombang 2: di-port sebagai `.admin-stat-card-head`/
+  `.admin-stat-card-delta`. Pertanyaan two-pane `approvals.astro` (§6.4)
+  diselesaikan gelombang 4: mempertahankan drill-in query-param, tanpa
+  perubahan routing `.admin-two-pane`.
+- `docs/awcms/14_ui_ux_design_system.md` kini menyatakan aturan komposisi
+  yang ditetapkan epik ini sebagai fakta (§9) — aturan itu tidak lagi
+  sekadar disurvei.
 
 ## 9. Tautan dokumentasi
 
 - [`docs/awcms/14_ui_ux_design_system.md`](14_ui_ux_design_system.md) §
-  Component library membawa penunjuk ke matriks ini di sebelah baris
-  `.status-badge` yang sudah ada, sehingga pembaca menemukan catatan
-  konsolidasi (§4) sebelum meraih kelas yang lebih lama.
+  Component library mendokumentasikan `.admin-status-pill`/`.admin-stat-card`
+  dan aturan komposisi lain yang ditetapkan epik ini (segmented sebagai nav
+  - aria-current, bulk bar hanya di atas endpoint bulk yang sudah ada,
+    timeline sebagai `<ol>`+`<time>`) sebagai kosakata admin SAAT INI —
+    kelas legacy `.status-badge`/`.stat-card` yang dulu juga
+    didokumentasikannya dipensiunkan Issue #866 (gelombang 7) dan tidak lagi
+    ada di `src/styles/`.
 - [`docs/awcms/README.md`](README.md) mendaftar dokumen ini di tabel indeks,
   di sebelah `family-compatibility.md`.
