@@ -5950,3 +5950,21 @@ msgstr ""
 msgid "no policy matched"
 msgstr ""
 
+
+msgid "Legal holds, newest first"
+msgstr ""
+
+msgid "open-ended"
+msgstr ""
+
+msgid "No conflict"
+msgstr ""
+
+msgid "Subject:"
+msgstr ""
+
+msgid "Trigger:"
+msgstr ""
+
+msgid "Resolved via:"
+msgstr ""

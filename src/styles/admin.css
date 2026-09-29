@@ -3688,7 +3688,18 @@
    each item's own left border (so it draws between consecutive dots without a
    separate marker column); the dot is a `::before` pseudo-element, and the
    last item's border is transparent rather than removed, so its dot keeps the
-   same left offset. */
+   same left offset.
+
+   `.admin-timeline` itself is a semantic `<ol>` (Issue #863) — a real ordered
+   list, not a styling-only wrapper, so assistive tech reports "N items" and
+   their position. The list-style/margin/padding reset below only removes the
+   browser's default marker and indent; nothing here undoes the semantics. */
+.admin-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .admin-timeline-item {
   position: relative;
   padding: 0 0 var(--sp-4) 20px;

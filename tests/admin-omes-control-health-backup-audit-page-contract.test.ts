@@ -190,7 +190,11 @@ describe("stale/missing health evidence renders explicitly, never as healthy", (
   test("the health screen has its own stale badge, distinct from the base overallStatus badge", async () => {
     const page = await readFile(PAGES.health, "utf8");
     expect(page).toContain("snapshot.stale &&");
-    expect(page).toContain('data-variant="warning"');
+    // Issue #863 migrated this screen's badges from the legacy
+    // `.status-badge[data-variant]` onto the shared `.admin-status-pill
+    // [data-tone]` primitive — same "look up the tone separately from the
+    // staleness badge" shape, new class/attribute names.
+    expect(page).toContain('data-tone="warning"');
     expect(page).toContain('{t("stale")}');
     // The base status badge's variant is looked up separately from the
     // staleness badge, so a stale-but-"healthy" snapshot cannot render a

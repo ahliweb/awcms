@@ -91,6 +91,17 @@ function assignmentStatusLabel(value: string): string {
   return (ASSIGNMENT_STATUS_LABEL as Record<string, string>)[value] ?? value;
 }
 
+/** `.admin-status-pill[data-tone]` for `BusinessScopeAssignmentRow["status"]`. */
+const ASSIGNMENT_STATUS_TONE: Record<"active" | "expired" | "revoked", string> =
+  {
+    active: "success",
+    expired: "neutral",
+    revoked: "danger"
+  };
+function assignmentStatusTone(value: string): string {
+  return (ASSIGNMENT_STATUS_TONE as Record<string, string>)[value] ?? "neutral";
+}
+
 /** `SoDConflictExceptionRow["status"]` — one screen only. */
 const EXCEPTION_STATUS_LABEL: Record<
   "pending" | "approved" | "rejected" | "expired" | "revoked",
@@ -104,6 +115,21 @@ const EXCEPTION_STATUS_LABEL: Record<
 };
 function exceptionStatusLabel(value: string): string {
   return (EXCEPTION_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `.admin-status-pill[data-tone]` for `SoDConflictExceptionRow["status"]` (decided rows only — "pending" never reaches this table). */
+const EXCEPTION_STATUS_TONE: Record<
+  "pending" | "approved" | "rejected" | "expired" | "revoked",
+  string
+> = {
+  pending: "info",
+  approved: "success",
+  rejected: "danger",
+  expired: "neutral",
+  revoked: "neutral"
+};
+function exceptionStatusTone(value: string): string {
+  return (EXCEPTION_STATUS_TONE as Record<string, string>)[value] ?? "neutral";
 }
 
 /** `VALID_SEVERITIES` (SoD rule registry) — one screen only. */
@@ -522,7 +548,16 @@ const decidedColumns = canRevokeException ? 7 : 6;
                         data-label={t("Status")}
                         data-status={assignment.status}
                       >
-                        {assignmentStatusLabel(assignment.status)}
+                        <span
+                          class="admin-status-pill"
+                          data-tone={assignmentStatusTone(assignment.status)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {assignmentStatusLabel(assignment.status)}
+                        </span>
                       </td>
                       <td data-label={t("Granted by")}>
                         <span class="cell-code">
@@ -685,7 +720,16 @@ const decidedColumns = canRevokeException ? 7 : 6;
                         data-label={t("Status")}
                         data-status={exception.status}
                       >
-                        {exceptionStatusLabel(exception.status)}
+                        <span
+                          class="admin-status-pill"
+                          data-tone={exceptionStatusTone(exception.status)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {exceptionStatusLabel(exception.status)}
+                        </span>
                       </td>
                       <td data-label={t("Window")}>
                         {day(exception.effectiveFrom)} →{" "}
@@ -855,53 +899,52 @@ const decidedColumns = canRevokeException ? 7 : 6;
             </div>
           ) : (
             <>
-              <div class="data-table-scroll">
-                <table class="data-table data-table--stack">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("When")}</th>
-                      <th scope="col">{t("Rule")}</th>
-                      <th scope="col">{t("Subject")}</th>
-                      <th scope="col">{t("Trigger")}</th>
-                      <th scope="col">{t("Conflict")}</th>
-                      <th scope="col">{t("Resolved via")}</th>
-                      <th scope="col">{t("Reason")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {conflicts.map((evaluation) => (
-                      <tr>
-                        <th scope="row" data-label={t("When")}>
-                          {evaluation.occurredAt
-                            .toISOString()
-                            .replace("T", " ")
-                            .slice(0, 16)}
-                        </th>
-                        <td data-label={t("Rule")}>
-                          <span class="cell-code">{evaluation.ruleKey}</span>
-                        </td>
-                        <td data-label={t("Subject")}>
-                          <span class="cell-code">
-                            {evaluation.subjectTenantUserId ?? "—"}
-                          </span>
-                        </td>
-                        <td data-label={t("Trigger")}>
-                          {evaluation.triggerContext}
-                        </td>
-                        <td data-label={t("Conflict")}>
-                          {evaluation.conflictDetected ? "yes" : "no"}
-                        </td>
-                        <td data-label={t("Resolved via")}>
-                          {evaluation.resolvedVia}
-                        </td>
-                        <td data-label={t("Reason")}>
-                          {evaluation.decisionReason}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ol class="admin-timeline">
+                {conflicts.map((evaluation) => (
+                  <li class="admin-timeline-item">
+                    <div class="admin-timeline-label">
+                      <span class="cell-code">{evaluation.ruleKey}</span>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          evaluation.conflictDetected ? "danger" : "success"
+                        }
+                        data-conflict-detected={String(
+                          evaluation.conflictDetected
+                        )}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {evaluation.conflictDetected
+                          ? t("Conflict")
+                          : t("No conflict")}
+                      </span>
+                    </div>
+                    <div class="admin-timeline-meta">
+                      <time datetime={evaluation.occurredAt.toISOString()}>
+                        {evaluation.occurredAt
+                          .toISOString()
+                          .replace("T", " ")
+                          .slice(0, 16)}
+                      </time>
+                      {" · "}
+                      {t("Subject:")}{" "}
+                      <span class="cell-code">
+                        {evaluation.subjectTenantUserId ?? "—"}
+                      </span>
+                      {" · "}
+                      {t("Trigger:")} {evaluation.triggerContext}
+                      {" · "}
+                      {t("Resolved via:")} {evaluation.resolvedVia}
+                    </div>
+                    {evaluation.decisionReason && (
+                      <p class="cell-muted">{evaluation.decisionReason}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
 
               {nextConflictCursor && (
                 <div class="admin-toolbar">

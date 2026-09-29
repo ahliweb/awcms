@@ -268,6 +268,11 @@ function formatTimestamp(value: Date | string | null): string {
   return typeof value === "string" ? value : value.toISOString();
 }
 
+/** `<time datetime>` needs a real ISO string, never the "—" placeholder. */
+function isoTimestamp(value: Date | string): string {
+  return typeof value === "string" ? value : value.toISOString();
+}
+
 /** Seconds since the last successful update, rendered for a human. */
 function formatAge(ageSeconds: number | null): string {
   if (ageSeconds === null) return "never updated";
@@ -618,81 +623,72 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         <span class="count-pill">{rebuildRuns.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
-        <table class="data-table data-table--stack">
-          <caption class="sr-only">
-            {t("Projection rebuild runs, newest first, capped at 100 rows.")}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("Projection")}</th>
-              <th scope="col">{t("Status")}</th>
-              <th scope="col">{t("Rows")}</th>
-              <th scope="col">{t("Started")}</th>
-              <th scope="col">{t("Finished")}</th>
-              <th scope="col">{t("Reason")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rebuildRuns.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={6}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ↻
-                    </span>
-                    <span class="empty-state-title">
-                      {t("No rebuilds yet")}
-                    </span>
-                    <span class="empty-state-text">
-                      {t(
-                        "Incremental updates keep a projection current without one; a rebuild is for recovering after a source or definition change."
-                      )}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              rebuildRuns.map((run) => (
-                <tr>
-                  <td data-label={t("Projection")}>
-                    <span class="cell-code">{run.projectionKey}</span>
-                  </td>
-                  <td data-label={t("Status")} data-status={run.status}>
-                    <span
-                      class="status-badge"
-                      data-variant={REBUILD_VARIANT[run.status]}
-                    >
-                      <span class="status-dot" aria-hidden="true" />
-                      {REBUILD_STATUS_LABEL[run.status]}
-                    </span>
-                    {run.cancelRequested && run.status === "running" && (
-                      <span class="cell-muted">{t("\u00b7 cancelling")}</span>
-                    )}
-                  </td>
-                  <td data-label={t("Rows")}>{run.rowsProcessed}</td>
-                  <td data-label={t("Started")}>
-                    <span class="cell-muted">
-                      {formatTimestamp(run.startedAt)}
-                    </span>
-                  </td>
-                  <td data-label={t("Finished")}>
-                    <span class="cell-muted">
-                      {formatTimestamp(run.completedAt)}
-                    </span>
-                  </td>
-                  <td data-label={t("Reason")}>
-                    <span set:text={run.reason ?? "—"} />
-                    {run.errorMessage && (
-                      <span class="cell-code" set:text={run.errorMessage} />
-                    )}
-                  </td>
-                </tr>
-              ))
+      {rebuildRuns.length === 0 ? (
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ↻
+          </span>
+          <span class="empty-state-title">{t("No rebuilds yet")}</span>
+          <span class="empty-state-text">
+            {t(
+              "Incremental updates keep a projection current without one; a rebuild is for recovering after a source or definition change."
             )}
-          </tbody>
-        </table>
-      </div>
+          </span>
+        </div>
+      ) : (
+        <ol
+          class="admin-timeline"
+          aria-label={t(
+            "Projection rebuild runs, newest first, capped at 100 rows."
+          )}
+        >
+          {rebuildRuns.map((run) => (
+            <li class="admin-timeline-item">
+              <div class="admin-timeline-label">
+                <span class="cell-code">{run.projectionKey}</span>
+                <span
+                  class="admin-status-pill"
+                  data-tone={REBUILD_VARIANT[run.status]}
+                  data-status={run.status}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {REBUILD_STATUS_LABEL[run.status]}
+                </span>
+                {run.cancelRequested && run.status === "running" && (
+                  <span class="cell-muted">{t("\u00b7 cancelling")}</span>
+                )}
+              </div>
+              <div class="admin-timeline-meta">
+                <time datetime={isoTimestamp(run.startedAt)}>
+                  {formatTimestamp(run.startedAt)}
+                </time>
+                {run.completedAt && (
+                  <>
+                    {" \u2192 "}
+                    <time datetime={isoTimestamp(run.completedAt)}>
+                      {formatTimestamp(run.completedAt)}
+                    </time>
+                  </>
+                )}
+                {" \u00b7 "}
+                {t("Rows")}: {run.rowsProcessed}
+                {run.reason && (
+                  <>
+                    {" \u00b7 "}
+                    <span set:text={run.reason} />
+                  </>
+                )}
+                {run.errorMessage && (
+                  <>
+                    {" \u00b7 "}
+                    <span class="cell-code" set:text={run.errorMessage} />
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   )}
 
