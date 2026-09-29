@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:01fca2e778f8b4f2696187ffe6df68dfd936d3d9e159ac79ad11c419cc314e42 -->
+<!-- i18n-source-hash: sha256:754f5d736ca5302b34ba1a2d6bc0ce6ff9c90ae5591fe7b771eff1fa36b1c5f3 -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -350,7 +350,7 @@ tapi CSS bersama yang sama:
 - **Bersama:** tidak ada di luar overlap `reporting.astro` dengan gelombang
   2, sudah ditandai di atas
 
-### Gelombang 5 — Pola settings/toggle/media
+### Gelombang 5 — Pola settings/toggle/media — **SELESAI** ([Issue #864](https://github.com/ahliweb/awcms/issues/864))
 
 - **Berkas:** `src/pages/admin/account.astro` (hanya status-pill, tanpa
   toggle — §6.5), `src/pages/admin/media.astro` (media-grid + stat-card +
@@ -361,6 +361,28 @@ tapi CSS bersama yang sama:
   bila primitif dialog-konfirmasi #854 mendarat lebih dulu, koordinasi di
   sana bukan di sini
 - **Bersama:** tidak ada
+- **Keputusan yang dibuat:** `account.astro` dan `access-policies.astro`
+  mendarat persis sesuai cakupan — `.admin-status-pill` pada badge
+  SSO-tersambung, badge sesi-saat-ini, pill status dua-faktor baru, dan
+  vonis Allow/Deny simulator (dibangun di sisi klien dari atribut
+  `data-verdict-*` yang sudah diterjemahkan pada form, karena markup itu
+  hidup di `<script>`, bukan Astro SSR). `media.astro` **tidak** mendarat
+  sepertiga "media-grid" dari baris cakupannya sendiri di atas: tabel
+  objeknya dengan sengaja tidak merender `<img>` (terdokumentasi di header
+  berkas itu sendiri, terkait keputusan keamanan — menampilkan ulang gambar
+  yang melanggar kebijakan kepada operator yang sedang menghapusnya adalah
+  hasil yang salah), sehingga framing "adopsi media unggulan" §6.6
+  mengasumsikan markup yang tidak dimiliki layar ini. `.admin-stat-card` dan
+  `.admin-status-pill` mendarat di sana sebagai penukaran class sungguhan;
+  `.admin-media-grid` tetap tidak diadopsi di sini — lihat baris
+  `MediaGrid` doc 14 untuk aturan pemakaian yang ditetapkan dari ini.
+  Satu-satunya markup berbentuk `.admin-media-grid` sungguhan di repo ini
+  adalah pemilih bersama (`src/lib/ui/media-picker-client.ts` +
+  `.media-picker-panel`/`.media-option`), dikonsumsi oleh `blog.astro`,
+  `blog-ads.astro`, `blog-homepage.astro` dan `site-profile.astro` — keempatnya
+  di luar kepemilikan berkas issue ini dan sedang dikerjakan pihak lain pada
+  saat itu. Memigrasikannya adalah tindak lanjut yang dicakup bersama skrip
+  itu dan keempat konsumennya.
 
 ### Gelombang 6 — Permukaan admin khusus OMES — **SELESAI** ([Issue #865](https://github.com/ahliweb/awcms/issues/865))
 

@@ -5945,3 +5945,8 @@ msgstr ""
 msgid "Web Push"
 msgstr ""
 
+#. Access-policy simulator verdict pill (Issue #864) — fallback when the
+#. decision had no matched policy to name.
+msgid "no policy matched"
+msgstr ""
+

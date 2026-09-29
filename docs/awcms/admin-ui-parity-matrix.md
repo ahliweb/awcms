@@ -334,7 +334,7 @@ sets but the same shared CSS:
   (§6.4)
 - **Shared:** none beyond `reporting.astro` overlap with wave 2, noted above
 
-### Wave 5 — Settings/toggle/media patterns
+### Wave 5 — Settings/toggle/media patterns — **DONE** ([Issue #864](https://github.com/ahliweb/awcms/issues/864))
 
 - **Files:** `src/pages/admin/account.astro` (status-pill only, no toggle —
   §6.5), `src/pages/admin/media.astro` (media-grid + stat-card + status-pill,
@@ -344,6 +344,26 @@ sets but the same shared CSS:
   (16 files, §4) — none is a `.admin-toggle` candidate; if #854's confirm-dialog
   primitive lands first, coordinate there instead of here
 - **Shared:** none
+- **Decision made:** `account.astro` and `access-policies.astro` landed
+  exactly as scoped — `.admin-status-pill` on the SSO-connected badge, the
+  current-session badge, a new two-factor state pill, and the simulator's
+  Allow/Deny verdict (built client-side from translated `data-verdict-*`
+  attributes on the form, since that markup lives in a `<script>`, not SSR
+  Astro). `media.astro` did **not** land the "media-grid" third of its own
+  scope line above: its object table deliberately renders no `<img>`
+  (documented in the file's own header, tied to a security decision —
+  showing a policy-violating image once more to the person removing it is
+  the wrong outcome), so §6.6's "flagship media adoption" framing assumed
+  markup this screen does not have. `.admin-stat-card` and
+  `.admin-status-pill` landed on it as real class swaps; `.admin-media-grid`
+  stays unadopted here — see doc 14's `MediaGrid` row for the usage rule
+  this established. The one real `.admin-media-grid`-shaped markup in the
+  repo is the shared picker (`src/lib/ui/media-picker-client.ts` +
+  `.media-picker-panel`/`.media-option`), consumed by `blog.astro`,
+  `blog-ads.astro`, `blog-homepage.astro` and `site-profile.astro` — all four
+  outside this issue's file ownership and mid-flight under other work at the
+  time. Migrating it is a follow-up scoped to that script and its four
+  consumers together.
 
 ### Wave 6 — OMES-specific admin surfaces — **DONE** ([Issue #865](https://github.com/ahliweb/awcms/issues/865))
 

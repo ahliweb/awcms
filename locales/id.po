@@ -5933,3 +5933,8 @@ msgstr "Peringatan"
 msgid "Web Push"
 msgstr "Web Push"
 
+#. Access-policy simulator verdict pill (Issue #864) — fallback when the
+#. decision had no matched policy to name.
+msgid "no policy matched"
+msgstr "tidak ada kebijakan yang cocok"
+

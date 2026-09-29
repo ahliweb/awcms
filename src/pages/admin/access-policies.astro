@@ -175,7 +175,12 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
         )}
       </p>
 
-      <form id="policy-simulate-form">
+      <form
+        id="policy-simulate-form"
+        data-verdict-allow={t("Allow")}
+        data-verdict-deny={t("Deny")}
+        data-verdict-no-policy={t("no policy matched")}
+      >
         <p id="simulate-error" class="admin-create-error" role="alert" hidden />
 
         <label for="simulate-roles">{t("Role codes (comma-separated)")}</label>
@@ -253,7 +258,7 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
 
   const simulateError = messageBox("simulate-error");
 
-  onSubmit("policy-simulate-form", async ({ data, submit }) => {
+  onSubmit("policy-simulate-form", async ({ data, submit, form }) => {
     const result = document.getElementById("simulate-result");
     const roles = field(data, "roles")
       .split(",")
@@ -298,10 +303,25 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
 
       if (result) {
         // The matched policy is the useful half: "deny" alone does not say
-        // whether a rule refused or nothing allowed.
-        result.textContent = `${decision.allowed ? "Allow" : "Deny"} — ${
-          decision.matchedPolicy ?? "no policy matched"
-        }`;
+        // whether a rule refused or nothing allowed. The verdict itself is an
+        // `.admin-status-pill` (Issue #864) — tone carries allow/deny at a
+        // glance, and the label text still says so for anyone who cannot see
+        // colour.
+        const pill = document.createElement("span");
+        pill.className = "admin-status-pill";
+        pill.dataset.tone = decision.allowed ? "success" : "danger";
+        pill.innerHTML =
+          '<span class="admin-status-pill-dot" aria-hidden="true"></span>';
+        pill.append(
+          decision.allowed
+            ? (form.dataset.verdictAllow ?? "Allow")
+            : (form.dataset.verdictDeny ?? "Deny")
+        );
+
+        result.replaceChildren(
+          pill,
+          ` — ${decision.matchedPolicy ?? form.dataset.verdictNoPolicy ?? "no policy matched"}`
+        );
         result.hidden = false;
       }
     } finally {
