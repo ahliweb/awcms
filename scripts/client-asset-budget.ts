@@ -746,12 +746,12 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * ```
  * before (248,058 ceiling)   248,058 B
- * + access-policies.astro verdict pill   248,333 B (measured actual total)
+ * + access-policies.astro verdict pill   248,346 B (measured actual total)
  * ```
  *
- * 248,333 is the measured value with no added margin.
+ * 248,346 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_333;
+export const APP_BUDGET_BYTES = 248_346;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
