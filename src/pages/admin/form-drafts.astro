@@ -77,6 +77,14 @@ const STATUS_VARIANT: Record<DraftStatus, string> = {
   expired: "warning"
 };
 
+/** `DraftStatus` — one screen only. */
+const STATUS_LABEL: Record<DraftStatus, string> = {
+  draft: t("Draft"),
+  submitted: t("Submitted"),
+  abandoned: t("Abandoned"),
+  expired: t("Expired")
+};
+
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's, not `ssr.permissions.has()`. `canDelete` is
 // decided the same way rather than from the raw grant set, so a tenant's ABAC
@@ -170,7 +178,7 @@ const columnCount = canDelete ? 7 : 6;
         </option>
         {STATUS_OPTIONS.map((value) => (
           <option value={value} selected={statusFilter === value}>
-            {value}
+            {STATUS_LABEL[value]}
           </option>
         ))}
       </select>
@@ -241,31 +249,31 @@ const columnCount = canDelete ? 7 : 6;
             ) : (
               drafts.map((draft) => (
                 <tr data-draft-row={draft.id}>
-                  <td data-label="Module">
+                  <td data-label={t("Module")}>
                     <span class="cell-code">{draft.moduleKey}</span>
                   </td>
-                  <td data-label="Wizard">
+                  <td data-label={t("Wizard")}>
                     <span class="cell-code">{draft.wizardKey}</span>
                   </td>
-                  <td data-label="Resource">
+                  <td data-label={t("Resource")}>
                     <span class="cell-code">{draft.resourceType}</span>
                     {draft.resourceId && (
                       <span class="cell-muted"> · {draft.resourceId}</span>
                     )}
                   </td>
-                  <td data-label="Step">
+                  <td data-label={t("Step")}>
                     <span class="cell-code">{draft.currentStep}</span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={draft.status}>
                     <span
                       class="status-badge"
                       data-variant={STATUS_VARIANT[draft.status]}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {draft.status}
+                      {STATUS_LABEL[draft.status]}
                     </span>
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">{draft.updatedAt}</span>
                     {/* Read-only payload inspection. Collapsed by default so
                           a wide list stays scannable, and never editable —
@@ -290,7 +298,7 @@ const columnCount = canDelete ? 7 : 6;
                     </details>
                   </td>
                   {canDelete && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         <button
                           type="button"

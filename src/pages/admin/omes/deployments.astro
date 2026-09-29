@@ -235,14 +235,14 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
               ) : (
                 deployments.map((deployment) => (
                   <tr data-deployment-row={deployment.id}>
-                    <td data-label="Deployment">
+                    <td data-label={t("Deployment")}>
                       <span class="cell-code">{deployment.deploymentId}</span>
                       <span class="cell-muted">
                         {" "}
                         · {t("Server")}: {deployment.serverId}
                       </span>
                     </td>
-                    <td data-label="Reconciliation">
+                    <td data-label={t("Reconciliation")}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -260,12 +260,12 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                         </span>
                       )}
                     </td>
-                    <td data-label="Last reconciled">
+                    <td data-label={t("Last reconciled")}>
                       <span class="cell-muted">
                         {deployment.lastReconciledAt ?? t("never")}
                       </span>
                     </td>
-                    <td data-label="Desired state">
+                    <td data-label={t("Desired state")}>
                       <details>
                         <summary>{t("View desired state")}</summary>
                         <pre
@@ -278,7 +278,7 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                         />
                       </details>
                     </td>
-                    <td data-label="Observed state">
+                    <td data-label={t("Observed state")}>
                       <details>
                         <summary>{t("View observed state")}</summary>
                         <pre
@@ -291,7 +291,7 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
                         />
                       </details>
                     </td>
-                    <td data-label="Error evidence">
+                    <td data-label={t("Error evidence")}>
                       {deployment.errorEvidence ? (
                         <details open>
                           <summary>{t("View error evidence")}</summary>

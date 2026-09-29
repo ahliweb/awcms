@@ -43,6 +43,37 @@ Fusing them would produce a gate that is green while every answer it gives is wr
 
 What the coverage gate deliberately does **not** scan: attributes. `aria-label="Close"` needs translating just as much, but `class="admin-card"` looks identical to the scanner, and a gate that reports class names trains its readers to ignore it. So a passing screen may still have an untranslated `placeholder`, `aria-label` or `title` — check those by hand.
 
+## Closed enums/status values, and `data-label`, are never raw text (Issue #861)
+
+`<td>{request.status}</td>` is not a translation gap — `t()` cannot translate
+it even if wrapped, because the DB value (`pending_approval`) is not English
+prose. Render a translated label instead, and keep the raw value in a
+`data-*` attribute so tests/CSS/JS keep a stable hook:
+
+```astro
+<td data-label={t("Status")} data-status={request.status}>
+  {REQUEST_STATUS_LABEL[request.status]}
+</td>
+```
+
+The label map is a `Record<Enum, string>` **exhaustive over the enum type**
+(a new member fails typecheck until labelled), reused across screens via a
+shared helper (`src/lib/i18n/labels/<domain>.ts`, or co-located in the
+owning module) when the **same** enum is rendered on 2+ screens — a one-off
+enum gets a local map at the render site instead. An unrecognised value
+falls back to the raw string, never a crash or a blank cell. See
+`docs/awcms/14_ui_ux_design_system.md` §"No raw enums, and `data-label` is
+translated" for the full rule and worked examples
+(`src/lib/i18n/labels/blog-content.ts`, `audit-severity.ts`,
+`omes-enrollment.ts`, `omes-operation.ts`).
+
+The same rule covers `admin.css`'s stacked-table `data-label` (`.data-table--stack
+td::before { content: attr(data-label); }`, shown on phones): never a
+literal English string, always `data-label={t("…")}` reusing the column
+`<th>`'s exact msgid. `tests/admin-i18n-labels.test.ts` gates both halves —
+literal `data-label="…"` on any admin `<td`/`<th`, and the shared helpers'
+exhaustiveness.
+
 ## Plural forms ARE implemented
 
 `tn("1 file", "%d files", count)` — with `PLURAL_FORM_COUNT` and `PLURAL_SELECTOR` in `src/lib/i18n/locales.ts`. Indonesian declares `nplurals=1` because it does not inflect for number ("satu berkas" / "dua berkas"). The `plural=` expression in a `.po` header is **read to be verified, never evaluated** — `i18n:catalog:check` asserts it agrees with the code's table rather than running it.

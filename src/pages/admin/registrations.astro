@@ -153,15 +153,15 @@ const columnCount = canApprove || canReject ? 4 : 3;
             <tbody>
               {requests.map((entry) => (
                 <tr>
-                  <th scope="row" data-label="Name">
+                  <th scope="row" data-label={t("Name")}>
                     {entry.displayName}
                   </th>
-                  <td data-label="Email">
+                  <td data-label={t("Email")}>
                     <code class="cell-code">{entry.loginIdentifierMasked}</code>
                   </td>
-                  <td data-label="Requested">{entry.requestedAt}</td>
+                  <td data-label={t("Requested")}>{entry.requestedAt}</td>
                   {columnCount === 4 && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       {canApprove && roles.length > 0 && (
                         <select
                           id={`role-${entry.id}`}

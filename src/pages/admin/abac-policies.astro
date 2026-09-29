@@ -32,6 +32,15 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
+/** `AbacPolicyRow["effect"]` — one screen only. */
+const EFFECT_LABEL: Record<"allow" | "deny", string> = {
+  allow: t("Allow"),
+  deny: t("Deny")
+};
+function effectLabel(value: string): string {
+  return (EFFECT_LABEL as Record<string, string>)[value] ?? value;
+}
+
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. Note what that closes HERE in particular: this
 // is the screen a tenant authors its ABAC policies on, and until now the
@@ -198,10 +207,10 @@ const canUpdate = canConfigure;
           ) : (
             policies.map((policy) => (
               <tr>
-                <td data-label="Code">
+                <td data-label={t("Code")}>
                   <span class="cell-code">{policy.policyCode}</span>
                 </td>
-                <td data-label="Effect">
+                <td data-label={t("Effect")} data-effect={policy.effect}>
                   <span
                     class="status-badge"
                     data-variant={
@@ -209,22 +218,25 @@ const canUpdate = canConfigure;
                     }
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {policy.effect}
+                    {effectLabel(policy.effect)}
                   </span>
                 </td>
-                <td data-label="Description">
+                <td data-label={t("Description")}>
                   {policy.description ?? <span class="cell-muted">—</span>}
                 </td>
-                <td data-label="Active">
+                <td
+                  data-label={t("Active")}
+                  data-active={policy.isActive ? "active" : "inactive"}
+                >
                   <span
                     class="status-badge"
                     data-variant={policy.isActive ? "success" : "neutral"}
                   >
-                    {policy.isActive ? "active" : "inactive"}
+                    {policy.isActive ? t("active") : t("inactive")}
                   </span>
                 </td>
                 {canUpdate && (
-                  <td data-label="Actions" class="stacked-block">
+                  <td data-label={t("Actions")} class="stacked-block">
                     <div class="row-actions">
                       <button
                         type="button"

@@ -230,8 +230,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           </thead>
           <tbody>
             <tr>
-              <td data-label="What">{t("Live theme")}</td>
-              <td data-label="Value">
+              <td data-label={t("What")}>{t("Live theme")}</td>
+              <td data-label={t("Value")}>
                 {state?.activeThemeKey ? (
                   <span class="status-badge" data-variant="success">
                     <span class="status-dot" aria-hidden="true" />
@@ -246,8 +246,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
               </td>
             </tr>
             <tr>
-              <td data-label="What">{t("Live version")}</td>
-              <td data-label="Value">
+              <td data-label={t("What")}>{t("Live version")}</td>
+              <td data-label={t("Value")}>
                 {state?.activeVersionId ? (
                   <span class="cell-code">{state.activeVersionId}</span>
                 ) : (
@@ -256,8 +256,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
               </td>
             </tr>
             <tr>
-              <td data-label="What">{t("Saved draft")}</td>
-              <td data-label="Value">
+              <td data-label={t("What")}>{t("Saved draft")}</td>
+              <td data-label={t("Value")}>
                 {draft ? (
                   <span class="status-badge" data-variant="info">
                     <span class="status-dot" aria-hidden="true" />
@@ -589,21 +589,23 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
             )}
             {versions.map((version) => (
               <tr>
-                <td data-label="Version">{version.versionNumber ?? "—"}</td>
-                <td data-label="Theme">
+                <td data-label={t("Version")}>
+                  {version.versionNumber ?? "—"}
+                </td>
+                <td data-label={t("Theme")}>
                   <span class="cell-code">{version.themeKey}</span>
                 </td>
-                <td data-label="Config hash">
+                <td data-label={t("Config hash")}>
                   <span class="cell-code">
                     {version.configHash.slice(0, 12)}
                   </span>
                 </td>
-                <td data-label="Published">
+                <td data-label={t("Published")}>
                   <span class="cell-code">
                     {formatTimestamp(version.publishedAt)}
                   </span>
                 </td>
-                <td data-label="Status">
+                <td data-label={t("Status")}>
                   {state?.activeVersionId === version.id ? (
                     <span class="status-badge" data-variant="success">
                       <span class="status-dot" aria-hidden="true" />
@@ -617,7 +619,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                   )}
                 </td>
                 {canRollback && (
-                  <td data-label="Actions">
+                  <td data-label={t("Actions")}>
                     <div class="row-actions">
                       {state?.activeVersionId === version.id ? (
                         <span class="cell-muted">{t("already live")}</span>

@@ -32,6 +32,7 @@ import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
 import { getTranslatorFor } from "../../../lib/i18n";
+import { auditSeverityLabel } from "../../../lib/i18n/labels/audit-severity";
 import { OMES_GUARDS } from "../../../modules/omes-control/domain/permissions";
 import {
   listAuditEvents,
@@ -215,29 +216,32 @@ function severityVariant(severity: string): string {
               ) : (
                 controlPlaneEvents.map((event) => (
                   <tr>
-                    <td data-label="When (UTC)">
+                    <td data-label={t("When (UTC)")}>
                       <span class="cell-code">
                         {formatTimestamp(event.createdAt)}
                       </span>
                     </td>
-                    <td data-label="Severity">
+                    <td
+                      data-label={t("Severity")}
+                      data-severity={event.severity}
+                    >
                       <span
                         class="status-badge"
                         data-variant={severityVariant(event.severity)}
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {event.severity}
+                        {auditSeverityLabel(t, event.severity)}
                       </span>
                     </td>
-                    <td data-label="Actor">
+                    <td data-label={t("Actor")}>
                       <span class="cell-muted">
                         {event.actorTenantUserId ?? "—"}
                       </span>
                     </td>
-                    <td data-label="Action">
+                    <td data-label={t("Action")}>
                       <span class="cell-code">{event.action}</span>
                     </td>
-                    <td data-label="Resource">
+                    <td data-label={t("Resource")}>
                       <span class="cell-code">{event.resourceType}</span>
                       {event.resourceId !== null && (
                         <>
@@ -246,8 +250,8 @@ function severityVariant(severity: string): string {
                         </>
                       )}
                     </td>
-                    <td data-label="Message">{event.message}</td>
-                    <td data-label="Detail" class="stacked-block">
+                    <td data-label={t("Message")}>{event.message}</td>
+                    <td data-label={t("Detail")} class="stacked-block">
                       {event.attributes === null &&
                       event.correlationId === null ? (
                         <span class="cell-muted">—</span>
@@ -376,19 +380,19 @@ function severityVariant(severity: string): string {
               ) : (
                 projections.map((projection) => (
                   <tr data-projection-row={projection.id}>
-                    <td data-label="Recorded">
+                    <td data-label={t("Recorded")}>
                       <span class="cell-muted">{projection.recordedAt}</span>
                     </td>
-                    <td data-label="Server">
+                    <td data-label={t("Server")}>
                       <span class="cell-code">{projection.serverId}</span>
                     </td>
-                    <td data-label="Event type">
+                    <td data-label={t("Event type")}>
                       <span class="cell-code">{projection.eventType}</span>
                     </td>
-                    <td data-label="Source event">
+                    <td data-label={t("Source event")}>
                       <span class="cell-muted">{projection.sourceEventId}</span>
                     </td>
-                    <td data-label="Evidence">
+                    <td data-label={t("Evidence")}>
                       <details>
                         <summary>{t("View evidence")}</summary>
                         <pre

@@ -451,6 +451,20 @@ function statusVariant(status: string): string {
   return "neutral";
 }
 
+/** `DatasetStatus` — one screen only. */
+const DATASET_STATUS_LABEL: Record<
+  "validated" | "active" | "superseded" | "rejected",
+  string
+> = {
+  validated: t("Validated"),
+  active: t("Active"),
+  superseded: t("Superseded"),
+  rejected: t("Rejected")
+};
+function datasetStatusLabel(value: string): string {
+  return (DATASET_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const numberFormatter = new Intl.NumberFormat("en-US");
 ---
 
@@ -620,32 +634,32 @@ const numberFormatter = new Intl.NumberFormat("en-US");
             )}
             {datasets.map((dataset) => (
               <tr>
-                <td data-label="Version">
+                <td data-label={t("Version")}>
                   <span class="cell-code">{dataset.datasetCode}</span>
                 </td>
-                <td data-label="Status">
+                <td data-label={t("Status")} data-status={dataset.status}>
                   <span
                     class="status-badge"
                     data-variant={statusVariant(dataset.status)}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {dataset.status}
+                    {datasetStatusLabel(dataset.status)}
                   </span>
                 </td>
-                <td data-label="Regions">
+                <td data-label={t("Regions")}>
                   {numberFormatter.format(dataset.rowCount)}
                 </td>
-                <td data-label="Imported">
+                <td data-label={t("Imported")}>
                   <span class="cell-code">
                     {formatTimestamp(dataset.createdAt)}
                   </span>
                 </td>
-                <td data-label="Activated">
+                <td data-label={t("Activated")}>
                   <span class="cell-code">
                     {formatTimestamp(dataset.activatedAt)}
                   </span>
                 </td>
-                <td data-label="Provenance">
+                <td data-label={t("Provenance")}>
                   {/* Operator-facing evidence, rendered as escaped TEXT
                         inside `<details>` — never as HTML. */}
                   <details>
@@ -682,7 +696,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                     </p>
                   )}
                 </td>
-                <td data-label="Compare">
+                <td data-label={t("Compare")}>
                   {/* Issue #766 — reachable from the row about to be
                         activated, so the comparison is in front of the
                         operator at the moment of the decision. `compareFrom`
@@ -709,7 +723,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                   )}
                 </td>
                 {canActivate && (
-                  <td data-label="Action">
+                  <td data-label={t("Action")}>
                     {dataset.status === "validated" ? (
                       <button
                         type="button"
@@ -756,7 +770,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                 value={dataset.datasetCode}
                 selected={dataset.datasetCode === compareFromCode}
               >
-                {dataset.datasetCode} ({dataset.status})
+                {dataset.datasetCode} ({datasetStatusLabel(dataset.status)})
               </option>
             ))}
           </select>
@@ -770,7 +784,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                 value={dataset.datasetCode}
                 selected={dataset.datasetCode === compareToCode}
               >
-                {dataset.datasetCode} ({dataset.status})
+                {dataset.datasetCode} ({datasetStatusLabel(dataset.status)})
               </option>
             ))}
           </select>
@@ -828,14 +842,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
             <tbody>
               {compare.tierRows.map((row) => (
                 <tr>
-                  <td data-label="Tier">{regionTierLabel(row.level)}</td>
+                  <td data-label={t("Tier")}>{regionTierLabel(row.level)}</td>
                   <td data-label={compare!.fromCode}>
                     {numberFormatter.format(row.fromCount)}
                   </td>
                   <td data-label={compare!.toCode}>
                     {numberFormatter.format(row.toCount)}
                   </td>
-                  <td data-label="Delta">
+                  <td data-label={t("Delta")}>
                     {row.delta === 0 ? (
                       <span class="cell-muted">0</span>
                     ) : (
@@ -920,14 +934,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                   )}
                   {page.items.map((item) => (
                     <tr>
-                      <td data-label="Code">
+                      <td data-label={t("Code")}>
                         <span class="cell-code">{item.code}</span>
                       </td>
-                      <td data-label="Name">
+                      <td data-label={t("Name")}>
                         {kind === "added" ? item.newName : item.oldName}
                       </td>
                       {kind === "renamed" && (
-                        <td data-label="New name">{item.newName}</td>
+                        <td data-label={t("New name")}>{item.newName}</td>
                       )}
                     </tr>
                   ))}
@@ -1144,17 +1158,19 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                 )}
                 {regionItems.map((region) => (
                   <tr>
-                    <td data-label="Code">
+                    <td data-label={t("Code")}>
                       <span class="cell-code">{region.code}</span>
                     </td>
-                    <td data-label="Name">
+                    <td data-label={t("Name")}>
                       {region.name}
                       {region.localTerm && (
                         <span class="cell-muted"> ({region.localTerm})</span>
                       )}
                     </td>
-                    <td data-label="Tier">{regionTierLabel(region.level)}</td>
-                    <td data-label="Action">
+                    <td data-label={t("Tier")}>
+                      {regionTierLabel(region.level)}
+                    </td>
+                    <td data-label={t("Action")}>
                       {region.level < 4 && (
                         <a
                           class="btn-inline"

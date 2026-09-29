@@ -167,7 +167,7 @@ const canToggle = canEnable || canDisable;
               const showEnable = !module.tenantEnabled && canEnable;
               return (
                 <tr>
-                  <td data-label="Key">
+                  <td data-label={t("Key")}>
                     {canReadSettings ? (
                       <a
                         class="cell-code"
@@ -179,11 +179,11 @@ const canToggle = canEnable || canDisable;
                       <span class="cell-code">{module.moduleKey}</span>
                     )}
                   </td>
-                  <td data-label="Name">{module.name}</td>
-                  <td data-label="Version">
+                  <td data-label={t("Name")}>{module.name}</td>
+                  <td data-label={t("Version")}>
                     <span class="cell-muted">{module.version}</span>
                   </td>
-                  <td data-label="Enabled">
+                  <td data-label={t("Enabled")}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -194,7 +194,7 @@ const canToggle = canEnable || canDisable;
                       {module.tenantEnabled ? "enabled" : "disabled"}
                     </span>
                   </td>
-                  <td data-label="Core">
+                  <td data-label={t("Core")}>
                     {module.isCore ? (
                       <span class="status-badge" data-variant="info">
                         {t("core")}
@@ -204,7 +204,7 @@ const canToggle = canEnable || canDisable;
                     )}
                   </td>
                   {canToggle && (
-                    <td data-label="Actions" class="stacked-block">
+                    <td data-label={t("Actions")} class="stacked-block">
                       <div class="row-actions">
                         {showDisable && (
                           <button

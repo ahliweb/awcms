@@ -57,6 +57,19 @@ const STATE_VARIANT: Record<string, string> = {
   cancelled: "neutral"
 };
 
+/** `awcms_omes_jobs.state` — one screen only. */
+const JOB_STATE_LABEL: Record<string, string> = {
+  queued: t("Queued"),
+  leased: t("Leased"),
+  running: t("Running"),
+  completed: t("Completed"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled")
+};
+function jobStateLabel(value: string): string {
+  return JOB_STATE_LABEL[value] ?? value;
+}
+
 const stateRaw = readParam("state");
 const stateFilter = (STATE_OPTIONS as readonly string[]).includes(stateRaw)
   ? (stateRaw as (typeof STATE_OPTIONS)[number])
@@ -187,7 +200,7 @@ const columns = 7 + (showActions ? 1 : 0);
             </option>
             {STATE_OPTIONS.map((value) => (
               <option value={value} selected={stateFilter === value}>
-                {value}
+                {jobStateLabel(value)}
               </option>
             ))}
           </select>
@@ -231,39 +244,39 @@ const columns = 7 + (showActions ? 1 : 0);
               ) : (
                 jobs.map((job) => (
                   <tr data-job-row={job.id}>
-                    <td data-label="Job">
+                    <td data-label={t("Job")}>
                       <span class="cell-code">{job.jobId}</span>
                       <span class="cell-muted">
                         {" "}
                         · {t("Server")}: {job.serverId}
                       </span>
                     </td>
-                    <td data-label="Operation">
+                    <td data-label={t("Operation")}>
                       <span class="cell-code">{job.operation}</span>
                     </td>
-                    <td data-label="State">
+                    <td data-label={t("State")} data-state={job.state}>
                       <span
                         class="status-badge"
                         data-variant={STATE_VARIANT[job.state] ?? "neutral"}
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {job.state}
+                        {jobStateLabel(job.state)}
                       </span>
                     </td>
-                    <td data-label="Correlation">
+                    <td data-label={t("Correlation")}>
                       <span class="cell-code">
                         {job.operationRequestId ?? "—"}
                       </span>
                     </td>
-                    <td data-label="Lease">
+                    <td data-label={t("Lease")}>
                       <span class="cell-muted">
                         {job.leasedBy
                           ? `${job.leasedBy} · ${job.leasedUntil ?? "—"}`
                           : "—"}
                       </span>
                     </td>
-                    <td data-label="Retries">{job.retryCount}</td>
-                    <td data-label="Evidence">
+                    <td data-label={t("Retries")}>{job.retryCount}</td>
+                    <td data-label={t("Evidence")}>
                       <details>
                         <summary>{t("View evidence")}</summary>
                         <pre
@@ -281,7 +294,7 @@ const columns = 7 + (showActions ? 1 : 0);
                       </details>
                     </td>
                     {showActions && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         <div class="row-actions">
                           {canApprove && job.state === "failed" && (
                             <button

@@ -46,6 +46,20 @@ import { getTranslatorFor } from "../../lib/i18n";
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+/** `SuppressionReason` — one screen only. */
+const REASON_LABEL: Record<
+  "bounced" | "complained" | "manual" | "unsubscribed",
+  string
+> = {
+  bounced: t("Bounced"),
+  complained: t("Complained"),
+  manual: t("Manual"),
+  unsubscribed: t("Unsubscribed")
+};
+function reasonLabel(value: string): string {
+  return (REASON_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -150,7 +164,7 @@ const reasons = [...SUPPRESSION_REASONS];
             <label for="add-suppression-reason">{t("Reason")}</label>
             <select id="add-suppression-reason" name="reason" required>
               {reasons.map((reason) => (
-                <option value={reason}>{reason}</option>
+                <option value={reason}>{reasonLabel(reason)}</option>
               ))}
             </select>
 
@@ -189,13 +203,17 @@ const reasons = [...SUPPRESSION_REASONS];
               <tbody>
                 {entries.map((entry) => (
                   <tr>
-                    <th scope="row" data-label="Address">
+                    <th scope="row" data-label={t("Address")}>
                       {entry.recipientMasked}
                     </th>
-                    <td data-label="Reason">{entry.reason}</td>
-                    <td data-label="Added">{entry.createdAt.slice(0, 10)}</td>
+                    <td data-label={t("Reason")} data-reason={entry.reason}>
+                      {reasonLabel(entry.reason)}
+                    </td>
+                    <td data-label={t("Added")}>
+                      {entry.createdAt.slice(0, 10)}
+                    </td>
                     {canDelete && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         <button
                           type="button"
                           class="js-remove-suppression"

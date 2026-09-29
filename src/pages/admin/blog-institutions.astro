@@ -277,14 +277,14 @@ const hasFilter = branchFilter !== undefined;
             ) : (
               institutions.map((entry) => (
                 <tr data-institution-row={entry.id}>
-                  <td data-label="Name">
+                  <td data-label={t("Name")}>
                     <span set:text={entry.name} />
                     <span class="cell-muted">
                       {" "}
                       · <span class="cell-code">{entry.slug}</span>
                     </span>
                   </td>
-                  <td data-label="Branch">
+                  <td data-label={t("Branch")}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -295,34 +295,34 @@ const hasFilter = branchFilter !== undefined;
                       {entry.branch}
                     </span>
                   </td>
-                  <td data-label="Region code">
+                  <td data-label={t("Region code")}>
                     {entry.regionCode ? (
                       <span class="cell-code" set:text={entry.regionCode} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="SEO title">
+                  <td data-label={t("SEO title")}>
                     {entry.seoTitle ? (
                       <span set:text={entry.seoTitle} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Description">
+                  <td data-label={t("Description")}>
                     {entry.description ? (
                       <span set:text={entry.description} />
                     ) : (
                       <span class="cell-muted">—</span>
                     )}
                   </td>
-                  <td data-label="Updated">
+                  <td data-label={t("Updated")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.updatedAt)}
                     </span>
                   </td>
                   {showsRowActions && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {showDeleted ? (
                           <>

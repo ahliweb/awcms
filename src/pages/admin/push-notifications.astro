@@ -142,6 +142,32 @@ const STATUS_VARIANT: Record<string, string> = {
   cancelled: "muted"
 };
 
+/** `PushMessageStatus` — one screen only. */
+const MESSAGE_STATUS_LABEL: Record<PushMessageStatus, string> = {
+  queued: t("Queued"),
+  retry_wait: t("Retry wait"),
+  sending: t("Sending"),
+  sent: t("Sent"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled")
+};
+
+/** `PushDeliveryAttempt["outcome"]` / `PushSubscriptionRow["status"]` — one screen only. */
+const OUTCOME_LABEL: Record<"success" | "failure", string> = {
+  success: t("Success"),
+  failure: t("Failure")
+};
+const SUBSCRIPTION_STATUS_LABEL: Record<"active" | "disabled", string> = {
+  active: t("Active"),
+  disabled: t("Disabled")
+};
+
+/** `transport` ("web_push" | "fcm") — one screen only. */
+const TRANSPORT_LABEL: Record<"web_push" | "fcm", string> = {
+  web_push: t("Web Push"),
+  fcm: t("FCM")
+};
+
 function formatTimestamp(value: Date | string | null): string {
   if (value === null) return "—";
   return typeof value === "string" ? value : value.toISOString();
@@ -363,11 +389,11 @@ const messageColumns = canCancel ? 8 : 7;
                   <td>
                     <code>{message.category}</code>
                   </td>
-                  <td>
+                  <td data-status={message.status}>
                     <span
                       class={`status-pill status-${STATUS_VARIANT[message.status] ?? "muted"}`}
                     >
-                      {message.status}
+                      {MESSAGE_STATUS_LABEL[message.status]}
                     </span>
                   </td>
                   <td>{message.title}</td>
@@ -437,11 +463,11 @@ const messageColumns = canCancel ? 8 : 7;
                 <tr>
                   <td>{formatTimestamp(attempt.createdAt)}</td>
                   <td>{attempt.attemptNo}</td>
-                  <td>
+                  <td data-outcome={attempt.outcome}>
                     <span
                       class={`status-pill status-${attempt.outcome === "success" ? "success" : "danger"}`}
                     >
-                      {attempt.outcome}
+                      {OUTCOME_LABEL[attempt.outcome]}
                     </span>
                   </td>
                   <td>{attempt.providerName}</td>
@@ -492,12 +518,14 @@ const messageColumns = canCancel ? 8 : 7;
                   <td>
                     <code>{subscription.endpointMasked}</code>
                   </td>
-                  <td>{subscription.transport}</td>
-                  <td>
+                  <td data-transport={subscription.transport}>
+                    {TRANSPORT_LABEL[subscription.transport]}
+                  </td>
+                  <td data-status={subscription.status}>
                     <span
                       class={`status-pill status-${subscription.status === "active" ? "success" : "muted"}`}
                     >
-                      {subscription.status}
+                      {SUBSCRIPTION_STATUS_LABEL[subscription.status]}
                     </span>
                   </td>
                   <td>{subscription.disabledReason ?? "—"}</td>

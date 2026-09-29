@@ -56,6 +56,16 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+/** `awcms_omes_ai_egress_approvals.decision` (sql/160) — one screen only. */
+const DECISION_LABEL: Record<"pending" | "approved" | "denied", string> = {
+  pending: t("Pending"),
+  approved: t("Approved"),
+  denied: t("Denied")
+};
+function decisionLabel(value: string): string {
+  return (DECISION_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const STATUS_VARIANT: Record<string, string> = {
   PASS: "success",
   WARN: "info",
@@ -248,16 +258,16 @@ function formatTimestamp(value: string | null): string {
               ) : (
                 posture.map((row) => (
                   <tr data-posture-row={row.id}>
-                    <td data-label="Server">
+                    <td data-label={t("Server")}>
                       <span class="cell-code">{row.serverId}</span>
                     </td>
-                    <td data-label="Authority">
+                    <td data-label={t("Authority")}>
                       <span class="cell-muted">{row.authority}</span>
                     </td>
-                    <td data-label="Destination class">
+                    <td data-label={t("Destination class")}>
                       <span class="cell-muted">{row.destinationClass}</span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("Status")}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -268,7 +278,7 @@ function formatTimestamp(value: string | null): string {
                         {row.effectiveStatus}
                       </span>
                     </td>
-                    <td data-label="Evidence">
+                    <td data-label={t("Evidence")}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -279,12 +289,12 @@ function formatTimestamp(value: string | null): string {
                         {row.evidenceFreshness}
                       </span>
                     </td>
-                    <td data-label="Last verified">
+                    <td data-label={t("Last verified")}>
                       <span class="cell-muted">
                         {formatTimestamp(row.lastVerifiedAt)}
                       </span>
                     </td>
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       {canApprovePermission && canRenderApprove(row) ? (
                         <>
                           <button
@@ -387,16 +397,19 @@ function formatTimestamp(value: string | null): string {
               ) : (
                 approvals.map((approval) => (
                   <tr data-approval-row={approval.id}>
-                    <td data-label="Server">
+                    <td data-label={t("Server")}>
                       <span class="cell-code">{approval.serverId}</span>
                     </td>
-                    <td data-label="Classification">
+                    <td data-label={t("Classification")}>
                       <span class="cell-muted">{approval.classification}</span>
                     </td>
-                    <td data-label="Destination">
+                    <td data-label={t("Destination")}>
                       <span class="cell-muted">{approval.destination}</span>
                     </td>
-                    <td data-label="Decision">
+                    <td
+                      data-label={t("Decision")}
+                      data-decision={approval.decision}
+                    >
                       <span
                         class="status-badge"
                         data-variant={
@@ -408,10 +421,10 @@ function formatTimestamp(value: string | null): string {
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {approval.decision}
+                        {decisionLabel(approval.decision)}
                       </span>
                     </td>
-                    <td data-label="Decided">
+                    <td data-label={t("Decided")}>
                       <span class="cell-muted">
                         {formatTimestamp(approval.decidedAt)}
                       </span>

@@ -38,6 +38,7 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { getTranslatorFor } from "../../lib/i18n";
+import { auditSeverityLabel } from "../../lib/i18n/labels/audit-severity";
 import {
   listAuditEvents,
   type AuditEventRecord
@@ -248,27 +249,27 @@ function severityVariant(severity: string): string {
               )}
               {events.map((event) => (
                 <tr>
-                  <td data-label="When (UTC)">
+                  <td data-label={t("When (UTC)")}>
                     <span class="cell-code">
                       {formatTimestamp(event.createdAt)}
                     </span>
                   </td>
-                  <td data-label="Severity">
+                  <td data-label={t("Severity")} data-severity={event.severity}>
                     <span
                       class="status-badge"
                       data-variant={severityVariant(event.severity)}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {event.severity}
+                      {auditSeverityLabel(t, event.severity)}
                     </span>
                   </td>
-                  <td data-label="Module">
+                  <td data-label={t("Module")}>
                     <span class="cell-code">{event.moduleKey}</span>
                   </td>
-                  <td data-label="Action">
+                  <td data-label={t("Action")}>
                     <span class="cell-code">{event.action}</span>
                   </td>
-                  <td data-label="Resource">
+                  <td data-label={t("Resource")}>
                     <span class="cell-code">{event.resourceType}</span>
                     {event.resourceId !== null && (
                       <>
@@ -277,8 +278,8 @@ function severityVariant(severity: string): string {
                       </>
                     )}
                   </td>
-                  <td data-label="Message">{event.message}</td>
-                  <td data-label="Detail" class="stacked-block">
+                  <td data-label={t("Message")}>{event.message}</td>
+                  <td data-label={t("Detail")} class="stacked-block">
                     {event.attributes === null &&
                     event.correlationId === null ? (
                       <span class="cell-muted">—</span>

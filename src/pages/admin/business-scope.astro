@@ -78,6 +78,45 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
 
+/** `BusinessScopeAssignmentRow["status"]` — one screen only. */
+const ASSIGNMENT_STATUS_LABEL: Record<
+  "active" | "expired" | "revoked",
+  string
+> = {
+  active: t("Active"),
+  expired: t("Expired"),
+  revoked: t("Revoked")
+};
+function assignmentStatusLabel(value: string): string {
+  return (ASSIGNMENT_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `SoDConflictExceptionRow["status"]` — one screen only. */
+const EXCEPTION_STATUS_LABEL: Record<
+  "pending" | "approved" | "rejected" | "expired" | "revoked",
+  string
+> = {
+  pending: t("Pending"),
+  approved: t("Approved"),
+  rejected: t("Rejected"),
+  expired: t("Expired"),
+  revoked: t("Revoked")
+};
+function exceptionStatusLabel(value: string): string {
+  return (EXCEPTION_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `VALID_SEVERITIES` (SoD rule registry) — one screen only. */
+const SOD_SEVERITY_LABEL: Record<string, string> = {
+  low: t("Low"),
+  medium: t("Medium"),
+  high: t("High"),
+  critical: t("Critical")
+};
+function sodSeverityLabel(value: string): string {
+  return SOD_SEVERITY_LABEL[value] ?? value;
+}
+
 const CONFLICT_PAGE_SIZE = 50;
 
 /** Mirrors the endpoint's own `status` whitelist — a hand-edited query string must not 400 the page. */
@@ -355,30 +394,30 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <tbody>
                   {pending.map((exception) => (
                     <tr>
-                      <th scope="row" data-label="Rule">
+                      <th scope="row" data-label={t("Rule")}>
                         <span class="cell-code">{exception.ruleKey}</span>
                       </th>
-                      <td data-label="Subject">
+                      <td data-label={t("Subject")}>
                         <span class="cell-code">
                           {exception.subjectTenantUserId}
                         </span>
                       </td>
-                      <td data-label="Scope">
+                      <td data-label={t("Scope")}>
                         {scopeLabel(exception.scopeType, exception.scopeId)}
                       </td>
-                      <td data-label="Justification">
+                      <td data-label={t("Justification")}>
                         {exception.justification}
                       </td>
-                      <td data-label="Requested by">
+                      <td data-label={t("Requested by")}>
                         <span class="cell-code">
                           {exception.requestedByTenantUserId}
                         </span>
                       </td>
-                      <td data-label="Window">
+                      <td data-label={t("Window")}>
                         {day(exception.effectiveFrom)} →{" "}
                         {day(exception.effectiveTo)}
                       </td>
-                      <td data-label="Decision">
+                      <td data-label={t("Decision")}>
                         <div class="row-actions">
                           {callerMayApprove(exception) && (
                             <button
@@ -462,31 +501,36 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <tbody>
                   {assignments.map((assignment) => (
                     <tr>
-                      <th scope="row" data-label="Subject">
+                      <th scope="row" data-label={t("Subject")}>
                         <span class="cell-code">{assignment.tenantUserId}</span>
                       </th>
-                      <td data-label="Role">
+                      <td data-label={t("Role")}>
                         <span class="cell-code">
                           {assignment.roleId ?? "every role"}
                         </span>
                       </td>
-                      <td data-label="Scope">
+                      <td data-label={t("Scope")}>
                         {scopeLabel(assignment.scopeType, assignment.scopeId)}
                       </td>
-                      <td data-label="Window">
+                      <td data-label={t("Window")}>
                         {day(assignment.effectiveFrom)} →{" "}
                         {assignment.effectiveTo
                           ? day(assignment.effectiveTo)
                           : "open-ended"}
                       </td>
-                      <td data-label="Status">{assignment.status}</td>
-                      <td data-label="Granted by">
+                      <td
+                        data-label={t("Status")}
+                        data-status={assignment.status}
+                      >
+                        {assignmentStatusLabel(assignment.status)}
+                      </td>
+                      <td data-label={t("Granted by")}>
                         <span class="cell-code">
                           {assignment.grantedByTenantUserId ?? "—"}
                         </span>
                       </td>
                       {canRevokeAssignment && (
-                        <td data-label="Actions">
+                        <td data-label={t("Actions")}>
                           {assignment.status === "active" && (
                             <button
                               type="button"
@@ -626,29 +670,34 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <tbody>
                   {decided.map((exception) => (
                     <tr>
-                      <th scope="row" data-label="Rule">
+                      <th scope="row" data-label={t("Rule")}>
                         <span class="cell-code">{exception.ruleKey}</span>
                       </th>
-                      <td data-label="Subject">
+                      <td data-label={t("Subject")}>
                         <span class="cell-code">
                           {exception.subjectTenantUserId}
                         </span>
                       </td>
-                      <td data-label="Scope">
+                      <td data-label={t("Scope")}>
                         {scopeLabel(exception.scopeType, exception.scopeId)}
                       </td>
-                      <td data-label="Status">{exception.status}</td>
-                      <td data-label="Window">
+                      <td
+                        data-label={t("Status")}
+                        data-status={exception.status}
+                      >
+                        {exceptionStatusLabel(exception.status)}
+                      </td>
+                      <td data-label={t("Window")}>
                         {day(exception.effectiveFrom)} →{" "}
                         {day(exception.effectiveTo)}
                       </td>
-                      <td data-label="Approved by">
+                      <td data-label={t("Approved by")}>
                         <span class="cell-code">
                           {exception.approvedByTenantUserId ?? "—"}
                         </span>
                       </td>
                       {canRevokeException && (
-                        <td data-label="Actions">
+                        <td data-label={t("Actions")}>
                           {exception.status === "approved" && (
                             <button
                               type="button"
@@ -701,7 +750,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                           rule.exceptionPolicy.maxDurationDays ?? ""
                         )}
                       >
-                        {rule.ruleKey} ({rule.severity})
+                        {rule.ruleKey} ({sodSeverityLabel(rule.severity)})
                       </option>
                     ))}
                   </select>
@@ -822,30 +871,32 @@ const decidedColumns = canRevokeException ? 7 : 6;
                   <tbody>
                     {conflicts.map((evaluation) => (
                       <tr>
-                        <th scope="row" data-label="When">
+                        <th scope="row" data-label={t("When")}>
                           {evaluation.occurredAt
                             .toISOString()
                             .replace("T", " ")
                             .slice(0, 16)}
                         </th>
-                        <td data-label="Rule">
+                        <td data-label={t("Rule")}>
                           <span class="cell-code">{evaluation.ruleKey}</span>
                         </td>
-                        <td data-label="Subject">
+                        <td data-label={t("Subject")}>
                           <span class="cell-code">
                             {evaluation.subjectTenantUserId ?? "—"}
                           </span>
                         </td>
-                        <td data-label="Trigger">
+                        <td data-label={t("Trigger")}>
                           {evaluation.triggerContext}
                         </td>
-                        <td data-label="Conflict">
+                        <td data-label={t("Conflict")}>
                           {evaluation.conflictDetected ? "yes" : "no"}
                         </td>
-                        <td data-label="Resolved via">
+                        <td data-label={t("Resolved via")}>
                           {evaluation.resolvedVia}
                         </td>
-                        <td data-label="Reason">{evaluation.decisionReason}</td>
+                        <td data-label={t("Reason")}>
+                          {evaluation.decisionReason}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

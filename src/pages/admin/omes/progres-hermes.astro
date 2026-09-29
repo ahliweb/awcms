@@ -86,6 +86,12 @@ const KIND_LABELS: Record<string, string> = {
   other: t("Other")
 };
 
+/** GitHub issue `state` — one screen only. */
+const STATE_LABELS: Record<"open" | "closed", string> = {
+  open: t("Open"),
+  closed: t("Closed")
+};
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -372,7 +378,7 @@ function milestoneCellFor(
             >
               <thead>
                 <tr>
-                  <th scope="col">#</th>
+                  <th scope="col">{t("#")}</th>
                   <th scope="col">{t("Title")}</th>
                   <th scope="col">{t("Status")}</th>
                   <th scope="col">{t("Kind")}</th>
@@ -382,7 +388,7 @@ function milestoneCellFor(
               <tbody>
                 {progress.issues.map((issue) => (
                   <tr>
-                    <td data-label="#">
+                    <td data-label={t("#")}>
                       <a
                         href={issue.htmlUrl}
                         target="_blank"
@@ -392,7 +398,7 @@ function milestoneCellFor(
                       </a>
                     </td>
                     <td data-label={t("Title")}>{issue.title}</td>
-                    <td data-label={t("Status")}>
+                    <td data-label={t("Status")} data-state={issue.state}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -400,7 +406,7 @@ function milestoneCellFor(
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {issue.state}
+                        {STATE_LABELS[issue.state]}
                       </span>
                     </td>
                     <td data-label={t("Kind")}>

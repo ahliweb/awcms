@@ -183,6 +183,35 @@ function runStatusVariant(status: string): string {
   return "neutral";
 }
 
+/** `awcms_data_lifecycle_runs.status` (sql/055) — one screen only. */
+const RUN_STATUS_LABEL: Record<"completed" | "partial" | "failed", string> = {
+  completed: t("Completed"),
+  partial: t("Partial"),
+  failed: t("Failed")
+};
+function runStatusLabel(value: string): string {
+  return (RUN_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `LifecycleRunType` — one screen only. */
+const RUN_TYPE_LABEL: Record<"dry_run" | "archive" | "purge", string> = {
+  dry_run: t("Dry run"),
+  archive: t("Archive"),
+  purge: t("Purge")
+};
+function runTypeLabel(value: string): string {
+  return (RUN_TYPE_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `awcms_legal_holds.status` — one screen only. */
+const HOLD_STATUS_LABEL: Record<"active" | "released", string> = {
+  active: t("Active"),
+  released: t("Released")
+};
+function holdStatusLabel(value: string): string {
+  return (HOLD_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
 const activeHoldCount = holds.filter((hold) => hold.status === "active").length;
 
 // A tenant-wide hold (`descriptorKey === null`) blocks purge for EVERY
@@ -286,20 +315,20 @@ const hasTenantWideHold = holds.some(
           <tbody>
             {registryRows.map(({ descriptor, owner, ownerKind }) => (
               <tr>
-                <td data-label="Descriptor">
+                <td data-label={t("Descriptor")}>
                   <span class="cell-code">{descriptor.key}</span>
                 </td>
-                <td data-label="Table">
+                <td data-label={t("Table")}>
                   <span class="cell-code">{descriptor.tableName}</span>
                 </td>
-                <td data-label="Owner">
+                <td data-label={t("Owner")}>
                   <span class="cell-code">{owner}</span>
                   {ownerKind === "infrastructure" && (
                     <span class="cell-muted">{t("(infrastructure)")}</span>
                   )}
                 </td>
-                <td data-label="Scope">{descriptor.scope}</td>
-                <td data-label="Retention (days)">
+                <td data-label={t("Scope")}>{descriptor.scope}</td>
+                <td data-label={t("Retention (days)")}>
                   {descriptor.defaultRetentionDays}
                   <span class="cell-muted">
                     {" "}
@@ -307,14 +336,14 @@ const hasTenantWideHold = holds.some(
                     )
                   </span>
                 </td>
-                <td data-label="Execution">{descriptor.executionMode}</td>
-                <td data-label="Archive">
+                <td data-label={t("Execution")}>{descriptor.executionMode}</td>
+                <td data-label={t("Archive")}>
                   {descriptor.archive.archivable
                     ? descriptor.archive.format
                     : "no"}
                 </td>
-                <td data-label="Deletion">{descriptor.deletion.mode}</td>
-                <td data-label="Legal hold">
+                <td data-label={t("Deletion")}>{descriptor.deletion.mode}</td>
+                <td data-label={t("Legal hold")}>
                   {descriptor.legalHold.applicable ? (
                     <span class="status-badge" data-variant="info">
                       <span class="status-dot" aria-hidden="true" />
@@ -555,7 +584,7 @@ const hasTenantWideHold = holds.some(
             )}
             {holds.map((hold) => (
               <tr>
-                <td data-label="Status">
+                <td data-label={t("Status")} data-status={hold.status}>
                   <span
                     class="status-badge"
                     data-variant={
@@ -563,27 +592,27 @@ const hasTenantWideHold = holds.some(
                     }
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {hold.status}
+                    {holdStatusLabel(hold.status)}
                   </span>
                 </td>
-                <td data-label="Table">
+                <td data-label={t("Table")}>
                   {hold.descriptorKey ? (
                     <span class="cell-code">{hold.descriptorKey}</span>
                   ) : (
                     <span class="cell-muted">{t("Every table")}</span>
                   )}
                 </td>
-                <td data-label="Scope">{hold.scopeDescription}</td>
-                <td data-label="Authority">{hold.authorityReference}</td>
-                <td data-label="Started">
+                <td data-label={t("Scope")}>{hold.scopeDescription}</td>
+                <td data-label={t("Authority")}>{hold.authorityReference}</td>
+                <td data-label={t("Started")}>
                   <span class="cell-code">
                     {formatTimestamp(hold.startsAt)}
                   </span>
                 </td>
-                <td data-label="Ends">
+                <td data-label={t("Ends")}>
                   <span class="cell-code">{formatTimestamp(hold.endsAt)}</span>
                 </td>
-                <td data-label="Detail">
+                <td data-label={t("Detail")}>
                   {/* Reason and release reason are operator-authored text,
                         rendered as escaped TEXT inside `<details>` — never as
                         HTML — the same treatment the audit-trail viewer gives
@@ -686,29 +715,31 @@ const hasTenantWideHold = holds.some(
             )}
             {runs.map((run) => (
               <tr>
-                <td data-label="Finished">
+                <td data-label={t("Finished")}>
                   <span class="cell-code">
                     {formatTimestamp(run.finishedAt)}
                   </span>
                 </td>
-                <td data-label="Descriptor">
+                <td data-label={t("Descriptor")}>
                   <span class="cell-code">{run.descriptorKey}</span>
                 </td>
-                <td data-label="Type">{run.runType}</td>
-                <td data-label="Status">
+                <td data-label={t("Type")} data-run-type={run.runType}>
+                  {runTypeLabel(run.runType)}
+                </td>
+                <td data-label={t("Status")} data-status={run.status}>
                   <span
                     class="status-badge"
                     data-variant={runStatusVariant(run.status)}
                   >
                     <span class="status-dot" aria-hidden="true" />
-                    {run.status}
+                    {runStatusLabel(run.status)}
                   </span>
                 </td>
-                <td data-label="Eligible">{run.eligibleCount}</td>
-                <td data-label="Held">{run.heldCount}</td>
-                <td data-label="Archived">{run.archivedCount}</td>
-                <td data-label="Purged">{run.purgedCount}</td>
-                <td data-label="Errors">
+                <td data-label={t("Eligible")}>{run.eligibleCount}</td>
+                <td data-label={t("Held")}>{run.heldCount}</td>
+                <td data-label={t("Archived")}>{run.archivedCount}</td>
+                <td data-label={t("Purged")}>{run.purgedCount}</td>
+                <td data-label={t("Errors")}>
                   {run.errorCount > 0 ? (
                     run.errorCount
                   ) : (

@@ -197,17 +197,17 @@ const maxExpiry = new Date(
               <tbody>
                 {engagements.map((entry) => (
                   <tr>
-                    <th scope="row" data-label="Partner">
+                    <th scope="row" data-label={t("Partner")}>
                       {entry.partnerTenantName}
                     </th>
-                    <td data-label="Tenant id">
+                    <td data-label={t("Tenant id")}>
                       <code class="cell-code">{entry.partnerTenantId}</code>
                     </td>
-                    <td data-label="Engaged">
+                    <td data-label={t("Engaged")}>
                       {entry.engagedAt.toISOString().slice(0, 10)}
                     </td>
                     {canConfigure && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         <button
                           type="button"
                           class="js-sever-engagement"
@@ -307,17 +307,17 @@ const maxExpiry = new Date(
               <tbody>
                 {grants.map((grant) => (
                   <tr>
-                    <th scope="row" data-label="Partner">
+                    <th scope="row" data-label={t("Partner")}>
                       {partnerNames.get(grant.partnerTenantId) ??
                         grant.partnerTenantId}
                     </th>
-                    <td data-label="Why">{grant.purpose}</td>
-                    <td data-label="Until">
+                    <td data-label={t("Why")}>{grant.purpose}</td>
+                    <td data-label={t("Until")}>
                       {grant.expiresAt.toISOString().slice(0, 10)}
                     </td>
-                    <td data-label="State">{grantState(grant)}</td>
+                    <td data-label={t("State")}>{grantState(grant)}</td>
                     {canAssign && (
-                      <td data-label="Actions">
+                      <td data-label={t("Actions")}>
                         {isLive(grant) ? (
                           <button
                             type="button"

@@ -36,8 +36,30 @@ import {
   type SubjectRequestRow
 } from "../../modules/data-lifecycle/application/subject-request-service";
 
+type SubjectRequestType = SubjectRequestRow["requestType"];
+type SubjectRequestStatus = SubjectRequestRow["status"];
+
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * `requestType`/`status` are rendered raw only on this one screen, so their
+ * label maps stay local rather than moving to a shared helper (design
+ * decision on #861: shared helpers are for enums rendered on 2+ screens).
+ * Both `Record`s are keyed by the full union, so a new member of either type
+ * fails typecheck here until it is given a label.
+ */
+const REQUEST_TYPE_LABEL: Record<SubjectRequestType, string> = {
+  export: t("Export"),
+  erasure: t("Erasure")
+};
+
+const REQUEST_STATUS_LABEL: Record<SubjectRequestStatus, string> = {
+  disclosed: t("Disclosed"),
+  pending_approval: t("Pending approval"),
+  rejected: t("Rejected"),
+  completed: t("Completed")
+};
 
 const screen = await loadAdminScreen({
   ssr,
@@ -240,10 +262,12 @@ const pending = requests.filter(
             <tbody>
               {pending.map((request) => (
                 <tr data-request-id={request.id}>
-                  <td>{request.subjectTenantUserId}</td>
-                  <td>{request.requestedBy}</td>
-                  <td>{request.requestedAt}</td>
-                  <td>{request.reason}</td>
+                  <td data-label={t("Subject")}>
+                    {request.subjectTenantUserId}
+                  </td>
+                  <td data-label={t("Requested by")}>{request.requestedBy}</td>
+                  <td data-label={t("Requested at")}>{request.requestedAt}</td>
+                  <td data-label={t("Ground")}>{request.reason}</td>
                   {canDecide && (
                     <td>
                       <button
@@ -303,12 +327,23 @@ const pending = requests.filter(
             <tbody>
               {requests.map((request) => (
                 <tr>
-                  <td>{request.requestType}</td>
-                  <td>{request.subjectTenantUserId}</td>
-                  <td>{request.status}</td>
-                  <td>{request.requestedBy}</td>
-                  <td>{request.decidedBy ?? "—"}</td>
-                  <td>{request.rowsAffected ?? "—"}</td>
+                  <td
+                    data-label={t("Type")}
+                    data-request-type={request.requestType}
+                  >
+                    {REQUEST_TYPE_LABEL[request.requestType]}
+                  </td>
+                  <td data-label={t("Subject")}>
+                    {request.subjectTenantUserId}
+                  </td>
+                  <td data-label={t("Status")} data-status={request.status}>
+                    {REQUEST_STATUS_LABEL[request.status]}
+                  </td>
+                  <td data-label={t("Requested by")}>{request.requestedBy}</td>
+                  <td data-label={t("Decided by")}>
+                    {request.decidedBy ?? "—"}
+                  </td>
+                  <td data-label={t("Rows")}>{request.rowsAffected ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

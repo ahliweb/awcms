@@ -31,6 +31,15 @@ import {
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
+/** Tenant user `status` — one screen only. */
+const USER_STATUS_LABEL: Record<"active" | "inactive", string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+function userStatusLabel(value: string): string {
+  return (USER_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. This screen lists who holds what in the tenant,
 // so a `deny` a tenant wrote about `access_control` now applies to READING the
@@ -163,12 +172,12 @@ const showActions =
               users.map((user) => (
                 <>
                   <tr>
-                    <td data-label="Login identifier">
+                    <td data-label={t("Login identifier")}>
                       <span class="cell-code">
                         {user.loginIdentifierMasked}
                       </span>
                     </td>
-                    <td data-label="Status">
+                    <td data-label={t("Status")} data-status={user.status}>
                       <span
                         class="status-badge"
                         data-variant={
@@ -176,10 +185,10 @@ const showActions =
                         }
                       >
                         <span class="status-dot" aria-hidden="true" />
-                        {user.status}
+                        {userStatusLabel(user.status)}
                       </span>
                     </td>
-                    <td data-label="Roles" class="stacked-block">
+                    <td data-label={t("Roles")} class="stacked-block">
                       {user.roles.length === 0 ? (
                         <span class="cell-muted">—</span>
                       ) : (
@@ -204,7 +213,7 @@ const showActions =
                       )}
                     </td>
                     {showActions && (
-                      <td data-label="Actions" class="stacked-block">
+                      <td data-label={t("Actions")} class="stacked-block">
                         <div class="row-actions">
                           {canConfigure && (
                             <button

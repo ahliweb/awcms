@@ -5700,3 +5700,248 @@ msgstr ""
 
 msgid "Could not disable the module. It may have dependencies that block this change."
 msgstr ""
+
+#. Admin enum/status labels (Issue #861, item 4 of #854)
+msgid "#"
+msgstr ""
+
+msgid "Abandoned"
+msgstr ""
+
+msgid "Accepted"
+msgstr ""
+
+msgid "active"
+msgstr ""
+
+msgid "Approved"
+msgstr ""
+
+msgid "Attached"
+msgstr ""
+
+msgid "Bounced"
+msgstr ""
+
+msgid "Cancelled"
+msgstr ""
+
+msgid "Closed"
+msgstr ""
+
+msgid "Complained"
+msgstr ""
+
+msgid "Critical"
+msgstr ""
+
+msgid "Current"
+msgstr ""
+
+msgid "Dark"
+msgstr ""
+
+msgid "Dead letter"
+msgstr ""
+
+msgid "Decommissioned"
+msgstr ""
+
+msgid "Degraded"
+msgstr ""
+
+msgid "Delayed"
+msgstr ""
+
+msgid "Delivered"
+msgstr ""
+
+msgid "Denied"
+msgstr ""
+
+msgid "Disclosed"
+msgstr ""
+
+msgid "Dispatched"
+msgstr ""
+
+msgid "Draft"
+msgstr ""
+
+msgid "Erasure"
+msgstr ""
+
+msgid "Expired"
+msgstr ""
+
+msgid "Export"
+msgstr ""
+
+msgid "Failure"
+msgstr ""
+
+msgid "FCM"
+msgstr ""
+
+msgid "Head office"
+msgstr ""
+
+msgid "High"
+msgstr ""
+
+msgid "inactive"
+msgstr ""
+
+msgid "Inactive"
+msgstr ""
+
+msgid "Info"
+msgstr ""
+
+msgid "In progress"
+msgstr ""
+
+msgid "In review"
+msgstr ""
+
+msgid "Interrupted"
+msgstr ""
+
+msgid "IP"
+msgstr ""
+
+msgid "Leased"
+msgstr ""
+
+msgid "Light"
+msgstr ""
+
+msgid "Low"
+msgstr ""
+
+msgid "Maintenance"
+msgstr ""
+
+msgid "Manual"
+msgstr ""
+
+msgid "Medium"
+msgstr ""
+
+msgid "Merged"
+msgstr ""
+
+msgid "Offline"
+msgstr ""
+
+msgid "Online"
+msgstr ""
+
+msgid "Open"
+msgstr ""
+
+msgid "Organization"
+msgstr ""
+
+msgid "Orphaned"
+msgstr ""
+
+msgid "Partial"
+msgstr ""
+
+msgid "Pending approval"
+msgstr ""
+
+msgid "Pending upload"
+msgstr ""
+
+msgid "Pending verification"
+msgstr ""
+
+msgid "Person"
+msgstr ""
+
+msgid "Private"
+msgstr ""
+
+msgid "Rebuilding"
+msgstr ""
+
+msgid "Reindex"
+msgstr ""
+
+msgid "Rejected"
+msgstr ""
+
+msgid "Released"
+msgstr ""
+
+msgid "Resolved"
+msgstr ""
+
+msgid "Retry wait"
+msgstr ""
+
+msgid "Running"
+msgstr ""
+
+msgid "Scheduled"
+msgstr ""
+
+msgid "Sending"
+msgstr ""
+
+msgid "Sent"
+msgstr ""
+
+msgid "Skipped"
+msgstr ""
+
+msgid "Starting"
+msgstr ""
+
+msgid "Store"
+msgstr ""
+
+msgid "Succeeded"
+msgstr ""
+
+msgid "Success"
+msgstr ""
+
+msgid "Superseded"
+msgstr ""
+
+msgid "Suspended"
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Unlisted"
+msgstr ""
+
+msgid "Unsubscribed"
+msgstr ""
+
+msgid "Unverified"
+msgstr ""
+
+msgid "Uploaded"
+msgstr ""
+
+msgid "Validated"
+msgstr ""
+
+msgid "Verified"
+msgstr ""
+
+msgid "Warehouse"
+msgstr ""
+
+msgid "Warning"
+msgstr ""
+
+msgid "Web Push"
+msgstr ""
+

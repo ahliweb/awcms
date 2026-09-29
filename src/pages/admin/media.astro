@@ -297,6 +297,20 @@ const STATUS_VARIANT: Record<string, string> = {
   failed: "danger"
 };
 
+/** `NewsMediaObjectStatus` — one screen only. */
+const MEDIA_STATUS_LABEL: Record<string, string> = {
+  pending_upload: t("Pending upload"),
+  uploaded: t("Uploaded"),
+  verified: t("Verified"),
+  attached: t("Attached"),
+  orphaned: t("Orphaned"),
+  deleted: t("Deleted"),
+  failed: t("Failed")
+};
+function mediaStatusLabel(value: string): string {
+  return MEDIA_STATUS_LABEL[value] ?? value;
+}
+
 function formatBytes(bytes: number | null): string {
   if (bytes === null) return "—";
   if (bytes < 1024) return `${bytes} B`;
@@ -529,7 +543,7 @@ const columnCount = canActOnAny ? 9 : 8;
             ) : (
               objects.map((item) => (
                 <tr>
-                  <td data-label="Object">
+                  <td data-label={t("Object")}>
                     {/* `set:text`, never parsed: a filename is caller-supplied
                           and reaches this table verbatim. No image tag either — see
                           this file's header. */}
@@ -539,23 +553,23 @@ const columnCount = canActOnAny ? 9 : 8;
                     />
                     <span class="cell-muted" set:text={item.objectKey} />
                   </td>
-                  <td data-label="Type" set:text={item.mimeType} />
-                  <td data-label="Size">{formatBytes(item.sizeBytes)}</td>
-                  <td data-label="Dimensions">{formatDimensions(item)}</td>
-                  <td data-label="Status">
+                  <td data-label={t("Type")} set:text={item.mimeType} />
+                  <td data-label={t("Size")}>{formatBytes(item.sizeBytes)}</td>
+                  <td data-label={t("Dimensions")}>{formatDimensions(item)}</td>
+                  <td data-label={t("Status")} data-status={item.status}>
                     <span
                       class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {item.status}
+                      {mediaStatusLabel(item.status)}
                     </span>
                   </td>
-                  <td data-label="Created">
+                  <td data-label={t("Created")}>
                     <span class="cell-muted">
                       {formatTimestamp(item.createdAt)}
                     </span>
                   </td>
-                  <td data-label="Deleted">
+                  <td data-label={t("Deleted")}>
                     {item.deletedAt === null ? (
                       <span class="cell-muted">—</span>
                     ) : (
@@ -570,7 +584,7 @@ const columnCount = canActOnAny ? 9 : 8;
                       </>
                     )}
                   </td>
-                  <td data-label="Rights">
+                  <td data-label={t("Rights")}>
                     {/* `set:text` for both — a credit line is caller-supplied
                           and reaches this table verbatim. */}
                     {item.creditLine ? (
@@ -586,7 +600,7 @@ const columnCount = canActOnAny ? 9 : 8;
                     </span>
                   </td>
                   {canActOnAny && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {/* Issue #615 — a link, not a button: the editor is
                               server-rendered from `?rights=<id>`, so the URL of

@@ -93,6 +93,31 @@ const STATUS_VARIANT: Record<TaskStatus, string> = {
   cancelled: "neutral"
 };
 
+const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  pending: t("Pending"),
+  completed: t("Completed"),
+  skipped: t("Skipped"),
+  cancelled: t("Cancelled")
+};
+
+/** `WorkflowDelegationRow["status"]` — a different, unrelated enum on this same screen. */
+const DELEGATION_STATUS_LABEL: Record<"active" | "revoked", string> = {
+  active: t("Active"),
+  revoked: t("Revoked")
+};
+function delegationStatusLabel(value: string): string {
+  return (DELEGATION_STATUS_LABEL as Record<string, string>)[value] ?? value;
+}
+
+/** `WorkflowHistoryEntry["kind"]` — one screen only. */
+const HISTORY_KIND_LABEL: Record<"decision" | "audit", string> = {
+  decision: t("Decision"),
+  audit: t("Audit")
+};
+function historyKindLabel(value: string): string {
+  return (HISTORY_KIND_LABEL as Record<string, string>)[value] ?? value;
+}
+
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
 }
@@ -306,7 +331,7 @@ const selectedTask = selectedInstanceId
       <select id="filter-status" name="status">
         {STATUS_OPTIONS.map((value) => (
           <option value={value} selected={statusFilter === value}>
-            {value}
+            {TASK_STATUS_LABEL[value]}
           </option>
         ))}
       </select>
@@ -404,11 +429,11 @@ const selectedTask = selectedInstanceId
             ) : (
               tasks.map((task) => (
                 <tr data-task-row={task.id}>
-                  <td data-label="Workflow">
+                  <td data-label={t("Workflow")}>
                     <span class="cell-code">{task.workflowKey}</span>
                     <span class="cell-muted"> · {task.workflowName}</span>
                   </td>
-                  <td data-label="Resource">
+                  <td data-label={t("Resource")}>
                     <span class="cell-code">{task.resourceType}</span>
                     <span class="cell-muted"> · {task.resourceId}</span>
                     <a
@@ -424,13 +449,13 @@ const selectedTask = selectedInstanceId
                       </span>
                     </a>
                   </td>
-                  <td data-label="Node">
+                  <td data-label={t("Node")}>
                     <span class="cell-code">{task.nodeId}</span>
                   </td>
-                  <td data-label="Quorum">
+                  <td data-label={t("Quorum")}>
                     <span class="cell-code">{task.quorumRule}</span>
                   </td>
-                  <td data-label="Due">
+                  <td data-label={t("Due")}>
                     <span class="cell-muted">
                       {formatTimestamp(task.dueAt)}
                     </span>
@@ -441,7 +466,7 @@ const selectedTask = selectedInstanceId
                       </span>
                     )}
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={task.status}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -449,11 +474,12 @@ const selectedTask = selectedInstanceId
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {task.status}
+                      {TASK_STATUS_LABEL[task.status as TaskStatus] ??
+                        task.status}
                     </span>
                   </td>
                   {(canDecide || showRecovery) && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       {task.status === "pending" ? (
                         <div class="row-actions">
                           {canDecide && (
@@ -597,23 +623,25 @@ const selectedTask = selectedInstanceId
             ) : (
               history.map((entry) => (
                 <tr>
-                  <td data-label="When">
+                  <td data-label={t("When")}>
                     <span class="cell-muted">
                       {formatTimestamp(entry.createdAt)}
                     </span>
                   </td>
-                  <td data-label="Kind">
-                    <span class="cell-code">{entry.kind}</span>
+                  <td data-label={t("Kind")} data-kind={entry.kind}>
+                    <span class="cell-code">
+                      {historyKindLabel(entry.kind)}
+                    </span>
                   </td>
-                  <td data-label="Action">
+                  <td data-label={t("Action")}>
                     <span class="cell-code">{entry.action}</span>
                   </td>
-                  <td data-label="Actor">
+                  <td data-label={t("Actor")}>
                     <span class="cell-muted">
                       {entry.actorTenantUserId ?? "—"}
                     </span>
                   </td>
-                  <td data-label="Detail">
+                  <td data-label={t("Detail")}>
                     {/* `set:text` rather than a child expression: <pre>
                           preserves whitespace and prettier reindents .astro
                           children, so an expression written between the tags
@@ -664,7 +692,7 @@ const selectedTask = selectedInstanceId
               <th scope="col">{t("Delegate")}</th>
               <th scope="col">{t("Scope")}</th>
               <th scope="col">{t("From")}</th>
-              <th scope="col">To</th>
+              <th scope="col">{t("To")}</th>
               <th scope="col">{t("Status")}</th>
               {canRevokeDelegation && <th scope="col">{t("Actions")}</th>}
             </tr>
@@ -689,31 +717,31 @@ const selectedTask = selectedInstanceId
             ) : (
               delegations.map((row) => (
                 <tr>
-                  <td data-label="Delegator">
+                  <td data-label={t("Delegator")}>
                     <span class="cell-code">
                       {row.delegator_tenant_user_id}
                     </span>
                   </td>
-                  <td data-label="Delegate">
+                  <td data-label={t("Delegate")}>
                     <span class="cell-code">{row.delegate_tenant_user_id}</span>
                   </td>
-                  <td data-label="Scope">
+                  <td data-label={t("Scope")}>
                     <span class="cell-muted">
                       {row.workflow_key ?? "any workflow"} ·{" "}
                       {row.resource_type ?? "any resource"}
                     </span>
                   </td>
-                  <td data-label="From">
+                  <td data-label={t("From")}>
                     <span class="cell-muted">
                       {formatTimestamp(row.effective_from)}
                     </span>
                   </td>
-                  <td data-label="To">
+                  <td data-label={t("To")}>
                     <span class="cell-muted">
                       {formatTimestamp(row.effective_to)}
                     </span>
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t("Status")} data-status={row.status}>
                     <span
                       class="status-badge"
                       data-variant={
@@ -721,11 +749,11 @@ const selectedTask = selectedInstanceId
                       }
                     >
                       <span class="status-dot" aria-hidden="true" />
-                      {row.status}
+                      {delegationStatusLabel(row.status)}
                     </span>
                   </td>
                   {canRevokeDelegation && (
-                    <td data-label="Actions">
+                    <td data-label={t("Actions")}>
                       <div class="row-actions">
                         {row.status === "active" && (
                           <button

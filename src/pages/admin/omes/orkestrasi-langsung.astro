@@ -87,6 +87,26 @@ const STATE_VARIANT: Record<string, string> = {
   UNKNOWN: "danger"
 };
 
+/**
+ * The orchestration node/event `effectiveState` — one screen only. Also
+ * serialised into `data-state-labels` below for the polling client script
+ * (`renderActivity`), which re-renders this same badge from a JSON fetch and
+ * must show the same translated text rather than the raw enum.
+ */
+const STATE_LABEL: Record<string, string> = {
+  RUNNING: t("Running"),
+  STARTING: t("Starting"),
+  PENDING: t("Pending"),
+  SUCCEEDED: t("Succeeded"),
+  FAILED: t("Failed"),
+  INTERRUPTED: t("Interrupted"),
+  CANCELLED: t("Cancelled"),
+  UNKNOWN: t("Unknown")
+};
+function stateLabel(value: string): string {
+  return STATE_LABEL[value] ?? value;
+}
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -228,9 +248,9 @@ function formatTimestamp(value: string | null): string {
                       <span class="status-dot" aria-hidden="true" />
                       {node.isHistorical
                         ? t("last reported: {state}", {
-                            state: node.effectiveState
+                            state: stateLabel(node.effectiveState)
                           })
-                        : node.effectiveState}
+                        : stateLabel(node.effectiveState)}
                     </span>
                     <span class="cell-code">{node.subagentId}</span>
                     {node.role && <span class="cell-muted">{node.role}</span>}
@@ -276,6 +296,7 @@ function formatTimestamp(value: string | null): string {
           class="omes-orchestration-activity-list"
           data-empty-label={t("No orchestration activity yet")}
           data-last-reported-label={t("last reported: {state}")}
+          data-state-labels={JSON.stringify(STATE_LABEL)}
         >
           {events.length === 0 ? (
             <li class="empty-state">
@@ -300,9 +321,9 @@ function formatTimestamp(value: string | null): string {
                   <span class="status-dot" aria-hidden="true" />
                   {event.isHistorical
                     ? t("last reported: {state}", {
-                        state: event.effectiveState
+                        state: stateLabel(event.effectiveState)
                       })
-                    : event.effectiveState}
+                    : stateLabel(event.effectiveState)}
                 </span>
                 <span class="cell-code">{event.subagentId}</span>
                 <span class="cell-muted">{event.effectiveEventType}</span>
@@ -373,6 +394,27 @@ function formatTimestamp(value: string | null): string {
     document.getElementById("omes-orkestrasi-activity-list")?.dataset
       .lastReportedLabel ?? "last reported: {state}";
 
+  // Translated `effectiveState` labels, serialised server-side from the same
+  // `STATE_LABEL` map the SSR rows use (Issue #861) — parsed once so a
+  // malformed/missing attribute falls back to the raw state rather than
+  // throwing.
+  const STATE_LABELS: Record<string, string> = (() => {
+    const raw = activityList?.dataset.stateLabels;
+    if (!raw) return {};
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object"
+        ? (parsed as Record<string, string>)
+        : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  function stateLabel(state: string): string {
+    return STATE_LABELS[state] ?? state;
+  }
+
   function historicalLabel(state: string): string {
     return LAST_REPORTED_LABEL.replace("{state}", state);
   }
@@ -391,8 +433,8 @@ function formatTimestamp(value: string | null): string {
       .map((event) => {
         const variant = event.isHistorical ? "neutral" : undefined;
         const label = event.isHistorical
-          ? historicalLabel(event.effectiveState)
-          : event.effectiveState;
+          ? historicalLabel(stateLabel(event.effectiveState))
+          : stateLabel(event.effectiveState);
         return `<li data-event-id="${escapeHtml(event.id)}" data-historical="${event.isHistorical ? "true" : "false"}">
           <span class="status-badge"${variant ? ` data-variant="${variant}"` : ""}><span class="status-dot" aria-hidden="true"></span>${escapeHtml(label)}</span>
           <span class="cell-code">${escapeHtml(event.subagentId)}</span>

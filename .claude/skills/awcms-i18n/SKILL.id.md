@@ -5,7 +5,7 @@ description: Tambah/ubah string UI atau konten multi-bahasa AWCMS yang benar. Gu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:b6126789cca44590666480d9ad41f8322fb1e7f2f23cb4c0ac822299953bd841 -->
+<!-- i18n-source-hash: sha256:b5ec46db31e4aa1f713686f8158b0c5143ee20bf992c81bb04257514011baecd -->
 
 # AWCMS — i18n (String UI & Konten Multi-bahasa)
 
@@ -44,6 +44,37 @@ Pakai `tx("konteks", "Order")` bila satu kata Inggris yang sama butuh dua terjem
 Menyatukan keduanya akan menghasilkan gerbang yang hijau sementara semua jawabannya salah; header kedua skrip itu menjelaskannya panjang lebar. **Jangan menaikkan ledger mana pun** — begitulah utang terjemahan menjadi permanen.
 
 Yang sengaja **tidak** dipindai gerbang cakupan: atribut. `aria-label="Close"` sama butuhnya diterjemahkan, tetapi `class="admin-card"` terlihat identik bagi pemindai, dan gerbang yang melaporkan nama kelas melatih pembacanya untuk mengabaikannya. Jadi layar yang lolos masih bisa punya `placeholder`, `aria-label`, atau `title` yang belum diterjemahkan — periksa itu dengan tangan.
+
+## Enum/status tertutup, dan `data-label`, tidak pernah teks mentah (Issue #861)
+
+`<td>{request.status}</td>` bukan celah terjemahan — `t()` tidak bisa
+menerjemahkannya sekalipun dibungkus, karena nilai DB (`pending_approval`)
+bukan prosa Inggris. Render label terjemahan, dan simpan nilai mentah di
+atribut `data-*` supaya test/CSS/JS tetap punya hook stabil:
+
+```astro
+<td data-label={t("Status")} data-status={request.status}>
+  {REQUEST_STATUS_LABEL[request.status]}
+</td>
+```
+
+Peta labelnya adalah `Record<Enum, string>` **ekshaustif atas tipe enum**
+(anggota baru gagal typecheck sampai diberi label), dipakai bersama lintas
+layar lewat helper bersama (`src/lib/i18n/labels/<domain>.ts`, atau
+ditempatkan di modul pemiliknya) ketika enum yang SAMA dirender di 2+ layar
+— enum satu-off mendapat peta lokal di titik render. Nilai tak dikenal
+jatuh-balik ke string mentah, tidak pernah crash atau sel kosong. Lihat
+`docs/awcms/14_ui_ux_design_system.md` §"No raw enums, and `data-label` is
+translated" untuk aturan lengkap dan contoh kerjanya
+(`src/lib/i18n/labels/blog-content.ts`, `audit-severity.ts`,
+`omes-enrollment.ts`, `omes-operation.ts`).
+
+Aturan yang sama berlaku untuk `data-label` tabel stacked milik `admin.css`
+(`.data-table--stack td::before { content: attr(data-label); }`, tampil di
+ponsel): tidak pernah string Inggris literal, selalu `data-label={t("…")}`
+memakai kembali msgid persis dari `<th>` kolom itu.
+`tests/admin-i18n-labels.test.ts` menggerbangi kedua babak — `data-label="…"`
+literal pada `<td`/`<th` admin mana pun, dan ekshaustivitas helper bersama.
 
 ## Bentuk jamak SUDAH diimplementasikan
 

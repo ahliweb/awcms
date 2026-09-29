@@ -446,6 +446,70 @@ Fusing the two would produce a gate that is green while every answer it gives is
 
 What the coverage gate deliberately does **not** scan: attributes. `aria-label="Close"` needs translating just as much, but `class="admin-card"` looks identical to the scanner, and a gate that reports class names trains its readers to ignore it. So a screen that passes may still have an untranslated `placeholder` or `aria-label` — check those by hand.
 
+### No raw enums, and `data-label` is translated (Issue #861, item 4 of #854)
+
+A closed enum/status value (`request.status`, `post.visibility`, a `<select>`
+option built from the literal value set) is **never** rendered as raw text —
+`<td>{request.status}</td>` reads as an untranslated fallback in every
+non-English locale, because the DB value (`pending_approval`) is not English
+prose `t()` can translate. Render a translated label via `t()` instead, and
+keep the raw value in a `data-*` attribute (`data-status={request.status}`)
+so tests/CSS/JS keep a stable hook that does not change with the locale:
+
+```astro
+<td data-label={t("Status")} data-status={request.status}>
+  {REQUEST_STATUS_LABEL[request.status]}
+</td>
+```
+
+**Where the label map lives** is a decision made once, not per screen:
+
+- The **same enum rendered on 2+ admin screens** gets **one shared helper**,
+  co-located in the owning module or under `src/lib/i18n/labels/<domain>.ts`
+  (e.g. `src/lib/i18n/labels/blog-content.ts` for `BlogContentStatus`, shared
+  by `blog.astro` and `blog-pages.astro`; `audit-severity.ts` for the
+  `info`/`warning`/`critical` severity shared by `audit-trail.astro` and
+  `omes/audit.astro`). Sharing here is not merely DRY — it is what stops the
+  two screens' labels drifting apart the way their pre-existing
+  `STATUS_VARIANT`/`severityVariant` badge-colour helpers had already
+  drifted into duplicates.
+- A **one-off enum** (rendered on exactly one screen) gets a **local map at
+  the render site**, in the page's frontmatter.
+- Either way, the map is a TypeScript `Record<Enum, string>` **exhaustive
+  over the enum type** — a new enum member fails typecheck until it is given
+  a label, the same guarantee `STATUS_VARIANT`-style badge-colour maps never
+  had. Where the underlying column is a plain `text` with no exported TS
+  union (most of this repo's status columns predate one), declare the union
+  locally in the label module/helper instead of widening to `Record<string,
+string>` — see `src/lib/i18n/labels/audit-severity.ts` and
+  `src/lib/i18n/labels/omes-enrollment.ts` for the pattern.
+- **Unknown values must fall back to the raw value** — never crash, never
+  render blank. A label map is read with `??`/a type guard, not indexed
+  unchecked.
+- A client `<script>` that re-renders status text into the DOM after a fetch
+  (e.g. a polling activity stream) needs the SAME translated labels as the
+  SSR render — pass them down as a `data-*` JSON attribute the same way
+  `AdminLayout`'s own script receives translated strings (see
+  `src/pages/admin/omes/orkestrasi-langsung.astro`'s `data-state-labels`),
+  rather than leaving the client-rendered copy untranslated while the SSR
+  copy is not.
+
+**`data-label` on a stacked table** (`admin.css`'s `.data-table--stack td::before
+{ content: attr(data-label); }`, which shows the column name on phones)
+follows the same rule: never a literal English string, always
+`data-label={t("…")}` reusing the exact msgid of that column's `<th>` — no new
+msgid is needed where the header is already translated. This applies to `<td>`
+and `<th>` cells specifically (the mechanism the CSS actually implements);
+`data-label` also appears, unrelated, on a few media-picker `<button>`s as a
+generic "id of the element to update" attribute consumed by
+`src/lib/ui/media-picker-client.ts` — that is a different, coincidentally
+same-named attribute, not a display label, and is out of scope for this rule.
+
+`tests/admin-i18n-labels.test.ts` gates both halves: it fails on any literal
+`data-label="…"` on a `<td`/`<th` in `src/pages/admin/**`, and it pins the
+shared label helpers' exhaustiveness (every known enum value must translate
+away from its raw form; an unrecognised value must fall back to it).
+
 **Plural forms are implemented**, not deferred: `tn()` plus a `PLURAL_FORM_COUNT` table in `src/lib/i18n/locales.ts`. Indonesian declares `nplurals=1` because it does not inflect for number; the `plural=` expression in a `.po` header is read to be **verified, never evaluated**.
 
 ```mermaid
