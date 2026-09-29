@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:9625f0c2177a030d3978a07d4ecec20eb111d594ace8ac7798d365e4864f2a2e -->
+<!-- i18n-source-hash: sha256:64fba587d44fe9bb2de1d2315ff72cc00d101bdeac5be09a99e19bbc71575753 -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -213,26 +213,87 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
   sudah dijalankan dan lulus terhadap dev server + Postgres sungguhan
   sebagai bagian dari penambahan skill ini.
 
+## Smoke aksesibilitas (`@axe-core/playwright`, Issue #877)
+
+`@axe-core/playwright` **kini devDependency repo ini**
+(`bun add -d @axe-core/playwright`) — paragraf di bagian ini yang dulu
+menyatakan sebaliknya sudah dikoreksi setelah harness-nya sungguhan dikirim.
+`tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1 A+AA)
+terhadap delapan rute admin representatif — `/admin`, `/admin/comments`,
+`/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
+`/admin/omes/jobs`, `/admin/site-profile` — dalam tema terang MAUPUN gelap
+(lewat mekanisme sungguhan `localStorage["awcms_theme"]` yang dibaca
+`theme-init-script.ts`, bukan override CSS atau emulasi
+`prefers-color-scheme`), pada 360px dan desktop, dan gagal pada pelanggaran
+`critical`/`serious` apa pun. Ia juga membuka `ConfirmDialog` ADR-0125
+(tombol hapus `/admin/offices` — baris head office ter-seed selalu ada) dan
+`ReasonPanel` (tombol nonaktifkan `/admin/modules` — modul non-core aktif
+secara default), memindai masing-masing saat terbuka, lalu MEMBATALKAN —
+tidak pernah mengonfirmasi/mengirim — sehingga tidak ada yang termutasi lewat
+aplikasi. Itulah yang membuatnya READ_WAVE bukan WRITE_WAVE (lihat
+`support/e2e-waves.ts`).
+
+**Ia berjalan di bawah `test.use({ reducedMotion: "reduce" })`, dan itu
+load-bearing, bukan kebetulan.** Animasi masuk `.fade-in-up` milik
+`src/styles/motion.css` (240ms, berlaku pada setiap `.admin-section`)
+benar-benar menurunkan `opacity` leluhurnya saat berjalan, dan axe menyampel
+warna PIKSEL TERENDER alih-alih mempercayai computed style — pemindaian di
+tengah animasi melaporkan penurunan kontras sesaat yang nyata (terukur saat
+mendiagnosis spec ini: leluhur pada `opacity: 0.617` di tengah fade mengubah
+pasangan token 5,19:1 menjadi 3,11:1 sesaat). `reducedMotion: "reduce"`
+memakai mode WCAG 2.3.3 yang SUDAH diimplementasikan aplikasi sendiri
+alih-alih `waitForTimeout` ad hoc — setiap pemindaian berjalan terhadap
+keadaan mapan yang sama yang selalu dilihat pengguna reduced-motion, dan
+larinya tetap cepat serta deterministik terlepas dari kecepatan mesin.
+
+**Dijalankan sungguhan saat spec ini ditulis**, ia menemukan empat cacat
+`critical`/`serious` yang sudah terlanjur dikirim dan tidak terlihat oleh
+`bun run design:token-contrast:check` (pemeriksaan registry CSS murni, perlu
+tapi tak cukup — lihat header skrip itu sendiri), karena tak satu pun dari
+keempatnya adalah NILAI token yang salah:
+
+1. Wordmark `.admin-brand` kehilangan nama aksesibelnya di bawah 768px —
+   `admin.css` menyembunyikan `.admin-brand-text` dengan `display: none`
+   pada lebar ponsel, dan `display: none` menghapus elemen dari komputasi
+   nama aksesibel persis sebagaimana dari tata letak (`link-name`, serious).
+   Diperbaiki dengan `aria-label="AWCMS"` pada link itu sendiri, tak
+   bergantung pada anak mana yang tampak.
+2. Label alasan `ReasonPanel` yang berupa `<span>` polos tanpa asosiasi
+   programatik ke `<textarea>`-nya (`label`, critical). Diperbaiki dengan
+   menjadikannya `<label for>` sungguhan.
+3. `.reason-panel { display: flex }` yang berlaku TANPA SYARAT alih-alih
+   di-scope ke `.reason-panel[open]`. Perilaku "tersembunyi saat tertutup"
+   milik `<dialog>` native hidup di cascade origin user-agent, yang kalah
+   dari aturan APA PUN di author-origin dengan spesifisitas sama atau lebih
+   rendah terlepas dari `!important` — sehingga panel tetap bertata letak
+   dan tampil di layar (`isVisible()` Playwright melaporkan `true`) bahkan
+   setelah `.close()` menghapus atribut `open`-nya. Kelas bug yang sama
+   dengan `[hidden]` kalah dari aturan `display` — catatan memori
+   `html-hidden-loses-to-display-rule` menggeneralisasi melampaui `[hidden]`
+   secara spesifik.
+4. `.admin-logout` memakai `--color-text-muted` yang theme-aware pada latar
+   sidebar yang selalu gelap alih-alih `--color-sidebar-text`
+   (`color-contrast`, serious, terukur 3,07:1 terhadap ambang 4,5:1 untuk
+   teks berukuran normal — `--color-text-muted` disetel untuk permukaan kartu
+   admin terang/gelap, bukan keluarga permukaan sidebar yang selalu gelap
+   sendiri).
+
+Lihat `docs/awcms/admin-ui-parity-matrix.md` §7 dan komentar ledger
+`scripts/client-asset-budget.ts` sendiri (`APP_BUDGET_BYTES` dinaikkan
+248.033 → 248.055) untuk pencatatan lengkapnya.
+
 ## Status
 
-**Bagian ini dulu menyebut spec yang TIDAK ADA di repo ini**
-(`admin-responsive-nav.e2e.ts`, `admin-a11y-smoke.e2e.ts`, devDependency
-`@axe-core/playwright`, profil gate `/admin/analytics` dan `/admin/security`).
-Semuanya warisan `awcms-mini` saat skill ini di-port. Tak satu pun ada di sini,
-dan `@axe-core/playwright` bukan dependency repo ini. Dikoreksi 24 Agu 2026 —
-skill yang menggambarkan repo LAIN lebih buruk daripada tak ada skill, karena
-agen MENGIKUTINYA alih-alih melihat sendiri.
-
-Yang benar-benar ada (17 berkas spec di `tests/e2e/`):
+Yang benar-benar ada (18 berkas spec di `tests/e2e/`):
 
 - **Gelombang baca** — `login.e2e.ts` (alur login itu sendiri),
   `not-found.e2e.ts`, `cwv-lab.e2e.ts` (ber-env-gate `E2E_CWV_LAB`),
-  `admin-offices.e2e.ts`, dan tiga sapuan se-armada yang menemukan sendiri
-  targetnya dari `src/pages/admin/**.astro`: `admin-screens-render.e2e.ts`
-  (setiap layar merender untuk owner), `admin-deny-path.e2e.ts` (setiap layar
-  ber-gate MENOLAK pengguna tanpa permission), `admin-read-only-access.e2e.ts`
-  (operator read-only tenant — pemeriksaan platform-scope ADR-0053 saat
-  runtime).
+  `admin-offices.e2e.ts`, `a11y-axe.e2e.ts` (lihat di atas), dan tiga sapuan
+  se-armada yang menemukan sendiri targetnya dari `src/pages/admin/**.astro`:
+  `admin-screens-render.e2e.ts` (setiap layar merender untuk owner),
+  `admin-deny-path.e2e.ts` (setiap layar ber-gate MENOLAK pengguna tanpa
+  permission), `admin-read-only-access.e2e.ts` (operator read-only tenant —
+  pemeriksaan platform-scope ADR-0053 saat runtime).
 - **Gelombang tulis** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
   `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, spec CRUD
   `admin-*-create` / `admin-offices-edit`, `api-body-auth-boundary.e2e.ts`

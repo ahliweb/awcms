@@ -414,7 +414,18 @@ const accountInitials =
             <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
             <span class="sr-only">{t("Toggle navigation menu")}</span>
           </label>
-          <a href="/admin" class="admin-brand">
+          {/* ahliweb/awcms#877 — `aria-label` is load-bearing, not
+              decoration. The comment this replaced claimed the link kept its
+              accessible name at phone widths "because the text is hidden
+              with `display: none` only on the SPAN" — that claim was wrong:
+              `display: none` removes an element from the accessible-name
+              computation exactly as much as it removes it from the visual
+              layout, and `.admin-brand-mark` is `aria-hidden`. Below 768px
+              (`admin.css`'s `.admin-brand-text { display: none }`) the link
+              had NO accessible name at all (axe: "Links must have
+              discernible text", serious). `aria-label` fixes the name
+              unconditionally, independent of which child is visible. */}
+          <a href="/admin" class="admin-brand" aria-label="AWCMS">
             {/* ADR-0120 — a letterform tile, not an image file: it costs no
                 request on a page that renders for every `/admin/*` hit, it
                 inherits the theme, and it cannot 404. */}
@@ -424,10 +435,12 @@ const accountInitials =
             {/* Wrapped so the wordmark can be hidden at phone widths while the
                 mark stays. A bare text node cannot be targeted by CSS, and the
                 topbar is a fixed-height row that must fit — see the phone-width
-                block in admin.css. The link keeps its full accessible name
-                either way, because the text is hidden with `display: none`
-                only on the SPAN, and the mark carries `aria-hidden`. */}
-            <span class="admin-brand-text">AWCMS</span>
+                block in admin.css. Purely visual now: the link's accessible
+                name comes from `aria-label` above, so this span is also
+                `aria-hidden` to avoid announcing "AWCMS" twice. */}
+            <span class="admin-brand-text" aria-hidden="true">
+              AWCMS
+            </span>
           </a>
         </div>
 

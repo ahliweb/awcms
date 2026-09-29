@@ -149,13 +149,18 @@ const {
     ></p>
     <div class="reason-panel-field">
       <div class="reason-panel-label">
-        <span>
+        {/* ahliweb/awcms#877 — this used to be a plain `<span>`: visually a
+            label, but with no programmatic association to the textarea below
+            it (axe: "Form elements must have labels", critical). A real
+            `<label for>` fixes both the accessible name AND click-to-focus,
+            which a `<span>` never had either. */}
+        <label for={`${id}-textarea`}>
           {reasonLabel}
           <span class="reason-panel-required-marker" aria-hidden="true">
             {" "}
             *
           </span>
-        </span>
+        </label>
         <span class="reason-panel-counter" data-reason-panel-counter></span>
       </div>
       <textarea

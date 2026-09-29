@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:fec508eb11b30c088c1368e5513e291938625b3f977f9e19207767d8820a7d57 -->
+<!-- i18n-source-hash: sha256:10c84506e03916f0e8dada178d0904786e6beaea95f512736152571f7f09b81f -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -215,6 +215,24 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > `postgres:18.4`, `db:migrate`, lalu men-seed satu tenant+owner lewat
 > `POST /api/v1/setup/initialize` (bootstrap sungguhan) dan mengoperkan
 > kredensialnya ke spec via env.
+
+> **Smoke aksesibilitas otomatis (`@axe-core/playwright`, Issue #877).**
+> `tests/e2e/a11y-axe.e2e.ts` menjalankan `AxeBuilder` (tag WCAG 2.0/2.1
+> A+AA) terhadap rute admin representatif — `/admin`, `/admin/comments`,
+> `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
+> `/admin/omes/jobs`, `/admin/site-profile` — dalam tema terang MAUPUN gelap
+> (mekanisme sungguhan aplikasi `localStorage["awcms_theme"]`, bukan override
+> CSS), pada 360px dan desktop, plus `ConfirmDialog`/`ReasonPanel` ADR-0125
+> dibuka lalu dibatalkan. Ia gagal pada pelanggaran `critical`/`serious` apa
+> pun dan diklasifikasikan READ_WAVE (`tests/e2e/support/e2e-waves.ts`) —
+> setiap dialog yang dibukanya dibatalkan, tidak pernah dikirim, sehingga
+> tidak memutasi apa pun lewat aplikasi. Dijalankan sungguhan saat
+> menambahkannya, ia menemukan dan repo ini memperbaiki empat cacat yang
+> sudah terlanjur dikirim (lihat skill `awcms-browser-test` dan
+> `docs/awcms/admin-ui-parity-matrix.md` §7 untuk daftarnya). Lihat komentar
+> header spec itu sendiri untuk alasan ia berjalan di bawah `reducedMotion:
+"reduce"` — animasi masuk `.fade-in-up` benar-benar menurunkan kontras
+> terender di tengah transisi, yang bukan yang ingin diukur smoke ini.
 
 > **Runner test.** Runner = **`bun test`** (`bun:test`), berkas di
 > `tests/`. Daftar target di bawah bersifat **target rencana modul ERP**,

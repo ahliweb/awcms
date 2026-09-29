@@ -206,25 +206,82 @@ Ordering inside the run is not `fullyParallel` alone — see convention 7.
   already run and passing against a dev server + a real Postgres
   as part of adding this skill.
 
+## Accessibility smoke (`@axe-core/playwright`, Issue #877)
+
+`@axe-core/playwright` **is now a devDependency of this repo**
+(`bun add -d @axe-core/playwright`) — the paragraph that used to live in this
+section claiming otherwise was corrected once the harness actually shipped.
+`tests/e2e/a11y-axe.e2e.ts` runs `AxeBuilder` (WCAG 2.0/2.1 A+AA tags) against
+eight representative admin routes — `/admin`, `/admin/comments`,
+`/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`,
+`/admin/omes/jobs`, `/admin/site-profile` — in light AND dark theme (via the
+real `localStorage["awcms_theme"]` mechanism `theme-init-script.ts` reads, not
+a CSS override or `prefers-color-scheme` emulation), at 360px and desktop, and
+fails on any `critical`/`serious` violation. It also opens the ADR-0125
+`ConfirmDialog` (`/admin/offices`' delete button — the seeded head office row
+always exists) and `ReasonPanel` (`/admin/modules`' disable button — a
+non-core module is enabled by default), scans each while open, then
+CANCELS — never confirms/submits — so nothing is mutated through the app.
+That is what makes it READ_WAVE rather than WRITE_WAVE (see
+`support/e2e-waves.ts`).
+
+**It runs under `test.use({ reducedMotion: "reduce" })`, and that is load-
+bearing, not incidental.** `src/styles/motion.css`'s `.fade-in-up` entrance
+animation (240ms, applied to every `.admin-section`) genuinely lowers
+`opacity` on its ancestor while it plays, and axe samples RENDERED pixel
+colour rather than trusting computed style — a scan mid-animation reports a
+real but transient contrast dip (measured while diagnosing this spec: an
+ancestor at `opacity: 0.617` mid-fade turned a 5.19:1 token pair into 3.11:1
+briefly). `reducedMotion: "reduce"` uses the app's own already-implemented
+WCAG 2.3.3 mode rather than an ad hoc `waitForTimeout` — every scan runs
+against the same settled state a reduced-motion user always sees, and the run
+stays fast and deterministic regardless of machine speed.
+
+**Run for real while this spec was written**, it found four shipped
+`critical`/`serious` defects `bun run design:token-contrast:check` (a
+pure-CSS registry check, necessary but not sufficient — see that script's own
+header) could not see, because none of them was a wrong token VALUE:
+
+1. `.admin-brand`'s wordmark losing its accessible name below 768px —
+   `admin.css` hides `.admin-brand-text` with `display: none` at phone
+   widths, and `display: none` removes an element from the accessible-name
+   computation exactly as much as from the layout (`link-name`, serious).
+   Fixed with `aria-label="AWCMS"` on the link itself, independent of which
+   child is visible.
+2. `ReasonPanel`'s reason label being a bare `<span>` with no programmatic
+   association to its `<textarea>` (`label`, critical). Fixed by making it a
+   real `<label for>`.
+3. `.reason-panel { display: flex }` applying UNCONDITIONALLY rather than
+   scoped to `.reason-panel[open]`. A native `<dialog>`'s "hidden while
+   closed" behaviour lives in the user-agent cascade origin, which loses to
+   ANY author-origin rule of equal or lower specificity regardless of
+   `!important` — so the panel stayed visually laid out and on-screen
+   (Playwright's `isVisible()` reported `true`) even after `.close()` cleared
+   its `open` attribute. The same class of bug as `[hidden]` losing to a
+   `display` rule — the memory note `html-hidden-loses-to-display-rule`
+   generalises past `[hidden]` specifically.
+4. `.admin-logout` using the theme-aware `--color-text-muted` on the
+   always-dark sidebar background instead of `--color-sidebar-text`
+   (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor for
+   normal-size text — `--color-text-muted` is tuned for the light/dark admin
+   card surfaces, not the sidebar's own always-dark surface family).
+
+See `docs/awcms/admin-ui-parity-matrix.md` §7 and
+`scripts/client-asset-budget.ts`'s own ledger comment (`APP_BUDGET_BYTES`
+raised 248,033 → 248,055) for the full accounting.
+
 ## Status
 
-**This section previously described specs that do not exist in this repo**
-(`admin-responsive-nav.e2e.ts`, `admin-a11y-smoke.e2e.ts`, a
-`@axe-core/playwright` devDependency, `/admin/analytics` and `/admin/security`
-gate profiles). They were inherited from `awcms-mini` when the skill was ported.
-None of them is here, and `@axe-core/playwright` is not a dependency of this
-repo. Corrected on 2026-08-24 — a skill that describes the wrong repo is worse
-than no skill, because an agent follows it instead of looking.
-
-What actually exists (17 spec files under `tests/e2e/`):
+What exists (18 spec files under `tests/e2e/`):
 
 - **Read wave** — `login.e2e.ts` (the login flow itself), `not-found.e2e.ts`,
-  `cwv-lab.e2e.ts` (env-gated on `E2E_CWV_LAB`), `admin-offices.e2e.ts`, and
-  three whole-fleet sweeps that discover their own targets from
-  `src/pages/admin/**.astro`: `admin-screens-render.e2e.ts` (every screen
-  renders for the owner), `admin-deny-path.e2e.ts` (every gated screen refuses
-  a user holding nothing), `admin-read-only-access.e2e.ts` (a tenant read-only
-  operator — the ADR-0053 platform-scope check at run time).
+  `cwv-lab.e2e.ts` (env-gated on `E2E_CWV_LAB`), `admin-offices.e2e.ts`,
+  `a11y-axe.e2e.ts` (see above), and three whole-fleet sweeps that discover
+  their own targets from `src/pages/admin/**.astro`:
+  `admin-screens-render.e2e.ts` (every screen renders for the owner),
+  `admin-deny-path.e2e.ts` (every gated screen refuses a user holding
+  nothing), `admin-read-only-access.e2e.ts` (a tenant read-only operator —
+  the ADR-0053 platform-scope check at run time).
 - **Write wave** — `admin-roles.e2e.ts`, `admin-users.e2e.ts`,
   `admin-abac-policies.e2e.ts`, `admin-modules-toggle.e2e.ts`, the
   `admin-*-create` / `admin-offices-edit` CRUD specs, and

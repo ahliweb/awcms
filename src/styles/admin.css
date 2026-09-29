@@ -549,7 +549,16 @@
   min-height: 36px;
   padding: var(--sp-2) 10px;
   background: transparent;
-  color: var(--color-text-muted);
+  /* ahliweb/awcms#877 — this was `--color-text-muted`, a THEME-AWARE token
+     tuned against the light/dark admin surfaces. `.admin-logout` sits in the
+     sidebar nav list, an always-dark surface independent of `data-theme`
+     (see tokens.css's "Sidebar tokens" block), and `--color-text-muted` on
+     `--color-sidebar-bg` measures 3.07:1 (axe: color-contrast, serious;
+     4.5:1 required for normal-size text). `--color-sidebar-text` is the
+     token this same file already uses for every other sidebar nav label
+     (`.admin-nav-link`/`.admin-nav-group-label` etc.) and clears the bar
+     against both sidebar surfaces per its own tokens.css docblock. */
+  color: var(--color-sidebar-text);
   border: 0;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -2532,6 +2541,22 @@
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-lg);
+}
+
+/*
+ * ahliweb/awcms#877 — `display: flex` used to apply to `.reason-panel`
+ * unconditionally, in the AUTHOR cascade origin. A native `<dialog>`'s
+ * "hidden while closed" behaviour (`dialog:not([open]) { display: none }`)
+ * lives in the USER-AGENT origin, which loses to any author rule of equal or
+ * lower specificity regardless of `!important` — so this panel stayed
+ * visually laid out and on-screen (Playwright's `isVisible()` reported
+ * `true`, `getBoundingClientRect()` non-empty) even after `.close()` cleared
+ * its `open` attribute and removed it from the top layer. Scoping to
+ * `[open]` is the fix, the same class of bug as `[hidden]` losing to a
+ * `display` rule elsewhere in this file — an author `display` declaration
+ * must be conditioned on the same state the native hidden behaviour is.
+ */
+.reason-panel[open] {
   display: flex;
   flex-direction: column;
 }

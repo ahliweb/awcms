@@ -540,10 +540,35 @@ index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
   migration + seeded tenant — both green, plus the full `bun run test:e2e`
   suite (33 passed, 8 skipped for env-gated specs unrelated to this issue —
   `admin-deny-path`/`admin-read-only-access` need a second seeded user,
-  `cwv-lab` needs `E2E_CWV_LAB=1`). This repo has no `@axe-core/playwright`
-  harness under `tests/e2e/` at the time of this issue — the acceptance
-  criterion's accessibility smoke is `responsive-360`/`admin-screens-render`
+  `cwv-lab` needs `E2E_CWV_LAB=1`). At the time of this issue this repo had
+  no `@axe-core/playwright` harness under `tests/e2e/` — the acceptance
+  criterion's accessibility smoke was `responsive-360`/`admin-screens-render`
   plus the manual composition rules in doc 14, not a dedicated axe spec.
+  **Closed by [Issue #877](https://github.com/ahliweb/awcms/issues/877):**
+  `tests/e2e/a11y-axe.e2e.ts` now runs `@axe-core/playwright` (WCAG 2.0/2.1
+  A+AA tags) against the eight representative routes this epic changed —
+  `/admin`, `/admin/comments`, `/admin/users`, `/admin/approvals`,
+  `/admin/media`, `/admin/omes`, `/admin/omes/jobs`, `/admin/site-profile` —
+  in light AND dark theme, at 360px and desktop, plus the ADR-0125
+  `ConfirmDialog`/`ReasonPanel` opened (then cancelled). Run for real against
+  a fresh Postgres 18.4 + full migration + seeded tenant while fixing this
+  issue, it found and this repo fixed four real `critical`/`serious`
+  violations this epic's own waves had shipped: `.admin-brand`'s wordmark
+  losing its accessible name below 768px (`display: none` removes an element
+  from the accessible-name computation, not just the layout — `link-name`,
+  serious), `ReasonPanel`'s reason `<label>` never being a real `<label
+for>` (`label`, critical), `.reason-panel { display: flex }` applying
+  unconditionally instead of scoped to `[open]` (author-origin CSS beats the
+  user-agent's `dialog:not([open]) { display: none }` regardless of
+  `!important`, so a cancelled panel stayed laid out and on-screen after
+  `.close()`), and `.admin-logout` using the theme-aware `--color-text-muted`
+  on the always-dark sidebar background instead of `--color-sidebar-text`
+  (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor). See
+  `tests/e2e/a11y-axe.e2e.ts`'s own header comment for why the sweep also
+  runs under `reducedMotion: "reduce"` — `.fade-in-up`'s 240ms entrance
+  animation genuinely lowers rendered contrast mid-transition, which axe
+  samples as pixel colour rather than trusting computed style, and that
+  transient dip is not this criterion's subject.
 - **Docs:** this document (all waves marked DONE, §6.6 corrected below),
   `docs/awcms/14_ui_ux_design_system.md`, and the `awcms-ui-screen` skill —
   all updated to state the composition rules as fact, not as a pending

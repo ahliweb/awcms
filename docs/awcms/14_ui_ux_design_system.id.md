@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:5e25c8dafd932fabde309a79649c23cc1eb3587ac8b34936d2080e733b65a0a5 -->
+<!-- i18n-source-hash: sha256:addf9306f41286f99ecb167f6132e83dca08ece4f3156970e8a5a0c864eb2078 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -419,6 +419,7 @@ stateDiagram-v2
 - Jangan mengandalkan warna saja untuk status (tambah ikon/teks).
 - Toggle show/hide password: `aria-pressed` + `aria-label` yang mengikuti state, di-wire via `addEventListener` (bukan `onclick` inline — CSP `default-src 'self'`). Contoh: `login.astro` `#password-toggle`.
 - Kontrol kustom yang menyembunyikan native (mis. `<select>` bergaya): gambar afordansi (caret) via CSS `::after`, bukan `data:` URI; native `<select>` tetap dipakai agar keyboard + a11y bawaan tetap ada.
+- **Penegakan otomatis (Issue #877).** `bun run design:token-contrast:check` mengukur token yang dideklarasikan oleh sebuah aturan terdaftar sebagai yang dirender — perlu tapi tak cukup: pasangan yang tak terdaftar, animasi di tengah transisi, atau aturan component-scoped yang menaungi pasangan token tak terlihat oleh pemeriksaan CSS murni. `tests/e2e/a11y-axe.e2e.ts` menutup celah itu dengan `@axe-core/playwright` terhadap browser sungguhan yang dirender: rute admin representatif, dalam tema terang dan gelap, pada 360px dan desktop, plus `ConfirmDialog`/`ReasonPanel` ADR-0125 dibuka, gagal pada pelanggaran WCAG 2.0/2.1 A+AA `critical`/`serious` apa pun. Ia READ_WAVE (`tests/e2e/support/e2e-waves.ts`) dan berjalan di job `e2e-smoke` CI berdampingan dengan `responsive-360.e2e.ts`/`admin-screens-render.e2e.ts`. Ditulis terhadap markup gelombang 1–7 sungguhan, ia menemukan dan repo ini memperbaiki empat cacat `critical`/`serious` yang tak terlihat oleh registry token-contrast: wordmark `.admin-brand` kehilangan nama aksesibelnya di bawah 768px (`display: none` menghapus elemen dari komputasi nama aksesibel, bukan cuma tata letak), label alasan `ReasonPanel` yang berupa `<span>` polos tanpa asosiasi programatik ke textarea-nya, `.reason-panel { display: flex }` yang berlaku tanpa syarat alih-alih di-scope ke `[open]` (CSS asal-penulis mengalahkan `dialog:not([open]) { display: none }` bawaan user-agent terlepas dari `!important`, sehingga panel yang tertutup tetap tampil di layar), dan `.admin-logout` memakai token theme-aware pada latar sidebar yang selalu gelap alih-alih `--color-sidebar-text`. Lihat komentar header spec itu untuk detail penuh, termasuk alasan ia berjalan di bawah `reducedMotion: "reduce"` (penurunan kontras sesaat yang genuine selama animasi masuk `.fade-in-up` bukan subjek smoke ini).
 
 ## Internationalization (i18n)
 
