@@ -127,7 +127,7 @@ function formatTimestamp(value: Date): string {
   return value.toISOString().replace("T", " ").slice(0, 19);
 }
 
-/** Audit severity -> the shared `.status-badge` variant vocabulary. */
+/** Audit severity -> the shared `.admin-status-pill` variant vocabulary. */
 function severityVariant(severity: string): string {
   if (severity === "critical") return "danger";
   if (severity === "warning") return "warning";
@@ -256,10 +256,10 @@ function severityVariant(severity: string): string {
                   </td>
                   <td data-label={t("Severity")} data-severity={event.severity}>
                     <span
-                      class="status-badge"
-                      data-variant={severityVariant(event.severity)}
+                      class="admin-status-pill"
+                      data-tone={severityVariant(event.severity)}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {auditSeverityLabel(t, event.severity)}
                     </span>
                   </td>

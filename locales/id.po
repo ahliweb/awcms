@@ -5956,3 +5956,36 @@ msgstr "Pemicu:"
 
 msgid "Resolved via:"
 msgstr "Diselesaikan lewat:"
+msgid "Awaiting redemption"
+msgstr "Menunggu penukaran"
+
+msgid "Filter by status"
+msgstr "Saring berdasarkan status"
+
+msgid "{count} selected"
+msgstr "{count} dipilih"
+
+msgid "Approve {count} selected comments?"
+msgstr "Setujui {count} komentar yang dipilih?"
+
+msgid "Select all comments"
+msgstr "Pilih semua komentar"
+
+msgid "Select comment from {author}"
+msgstr "Pilih komentar dari {author}"
+
+msgid "The bulk action failed."
+msgstr "Tindakan massal gagal."
+
+msgid "Bulk decision applied."
+msgstr "Keputusan massal diterapkan."
+
+msgid "Reason code for this decision:"
+msgstr "Kode alasan untuk keputusan ini:"
+
+msgid "A reason code is required to reject or mark spam."
+msgstr "Kode alasan diperlukan untuk menolak atau menandai spam."
+
+msgid "Anonymous"
+msgstr "Anonim"
+

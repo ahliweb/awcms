@@ -380,10 +380,10 @@ const editingWidget =
                   </td>
                   <td data-label={t("Active")}>
                     <span
-                      class="status-badge"
-                      data-variant={entry.isActive ? "success" : "neutral"}
+                      class="admin-status-pill"
+                      data-tone={entry.isActive ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {entry.isActive ? "active" : "inactive"}
                     </span>
                   </td>
@@ -721,10 +721,10 @@ const editingWidget =
                   </td>
                   <td data-label={t("Active")}>
                     <span
-                      class="status-badge"
-                      data-variant={entry.isActive ? "success" : "neutral"}
+                      class="admin-status-pill"
+                      data-tone={entry.isActive ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {entry.isActive ? "active" : "inactive"}
                     </span>
                   </td>

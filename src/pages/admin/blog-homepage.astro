@@ -254,8 +254,8 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
                     <span class="cell-code" set:text={section.sectionKey} />
                   </td>
                   <td data-label={t("Type")}>
-                    <span class="status-badge" data-variant="neutral">
-                      <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill" data-tone="neutral">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {section.sectionType}
                     </span>
                   </td>
@@ -268,10 +268,10 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
                   </td>
                   <td data-label={t("Enabled")}>
                     <span
-                      class="status-badge"
-                      data-variant={section.isEnabled ? "success" : "neutral"}
+                      class="admin-status-pill"
+                      data-tone={section.isEnabled ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {section.isEnabled ? t("Enabled") : t("Disabled")}
                     </span>
                   </td>

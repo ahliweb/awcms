@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:a064316c42ca600e9f86cc9b511dda444fc685db357f532173b7fe4dee548cf0 -->
+<!-- i18n-source-hash: sha256:b015a84dd72e872b6da79db5cf1dbc300ac79e10891b2689fcbc3cfd9c493830 -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -306,7 +306,7 @@ ada dan seharusnya tidak memperkenalkan yang baru).
   menjadi 240.975 (total terukur aktual, tanpa margin tambahan — lihat
   komentar ledger `scripts/client-asset-budget.ts` sendiri).
 
-### Gelombang 3 — List-management: normalisasi status/filter/bulk
+### Gelombang 3 — List-management: normalisasi status/filter/bulk — **SELESAI** ([Issue #862](https://github.com/ahliweb/awcms/issues/862))
 
 Dipecah jadi dua sub-paket aman-serial karena menyentuh set berkas berbeda
 tapi CSS bersama yang sama:
@@ -335,6 +335,28 @@ tapi CSS bersama yang sama:
   `.status-dot` setelah 3a+3b+3c mendarat, atau simpan keduanya tanpa batas
   waktu sebagai alias — keputusan untuk siapa pun yang mendaratkan terakhir
   dari ketiga sub-paket ini, bukan audit ini)
+
+**Mendarat.** Ketiga sub-paket mendarat bersama di Issue #862: `comments.astro`
+(3a), sapuan status-pill 26 berkas (3b — jumlah berkas di atas kurang tercatat 3;
+pola template-literal `status-badge status-badge--${variant}` di `newsletter.astro`
+butuh sunting khusus bentuknya, sisanya adalah find-and-replace mekanis), dan
+pembacaan 3c. Dari pembacaan 3c: `invitations.astro`, `machine-credentials.astro`,
+`partner-registry.astro`, `subject-requests.astro`, dan kolom state delegated-grant
+milik `partners.astro` memang membawa status per-baris nyata dan mengadopsi
+`.admin-status-pill`; `email-suppression.astro` (sebuah KODE alasan, bukan status
+siklus hidup), `registrations.astro` dan `user-groups.astro` (tanpa konsep status
+sama sekali) dikonfirmasi tidak ada yang perlu dimigrasikan dan tetap tak
+tersentuh, sesuai aturan "jangan pernah memaksakan primitif pada layar yang tidak
+cocok dengannya". `src/styles/admin.css` tetap mendefinisikan `.status-badge`/
+`.status-dot` — **belum** dipensiunkan oleh issue ini; #866 melacak pensiun
+akhirnya setelah setiap gelombang mendarat. `APP_BUDGET_BYTES`
+(`scripts/client-asset-budget.ts`) dinaikkan sebesar pertumbuhan terukur
+(tercatat di ledger berkas itu) untuk modul baru `src/lib/ui/admin-bulk-bar-client.ts`,
+satu aturan CSS kecil `.cell-select`, dan perbaikan `flex-wrap` pada `.admin-segmented`
+sendiri — `tests/e2e/responsive-360.e2e.ts` menangkap trek 5-opsi primitif bersama itu
+meluap di 360px (konsumen nyata pertamanya), sehingga perbaikannya mendarat di
+primitifnya, bukan tambalan per-layar. Sapuan status-pill sendiri tidak menambah CSS,
+karena `.admin-status-pill` sudah diterbitkan, belum dipakai, sejak PR #813.
 
 ### Gelombang 4 — Alur detail/timeline/two-pane — **SELESAI** ([Issue #863](https://github.com/ahliweb/awcms/issues/863))
 

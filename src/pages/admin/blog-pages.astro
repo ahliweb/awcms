@@ -444,10 +444,10 @@ const editingBodyText = editingPage
                   </td>
                   <td data-label={t("Status")} data-status={entry.status}>
                     <span
-                      class="status-badge"
-                      data-variant={STATUS_VARIANT[entry.status] ?? "neutral"}
+                      class="admin-status-pill"
+                      data-tone={STATUS_VARIANT[entry.status] ?? "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {blogContentStatusLabel(t, entry.status)}
                     </span>
                   </td>

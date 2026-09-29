@@ -255,8 +255,8 @@ const colCount = canConfigure ? 5 : 4;
                 <td data-label={t("Name")}>{role.roleName}</td>
                 <td data-label={t("System")}>
                   <span
-                    class="status-badge"
-                    data-variant={role.isSystem ? "warning" : "neutral"}
+                    class="admin-status-pill"
+                    data-tone={role.isSystem ? "warning" : "neutral"}
                   >
                     {role.isSystem ? "system" : "custom"}
                   </span>

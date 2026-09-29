@@ -282,12 +282,12 @@ const hasFilter = typeFilter !== undefined;
                   </td>
                   <td data-label={t("Type")}>
                     <span
-                      class="status-badge"
-                      data-variant={
+                      class="admin-status-pill"
+                      data-tone={
                         entry.taxonomyType === "category" ? "info" : "neutral"
                       }
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {entry.taxonomyType}
                     </span>
                   </td>

@@ -639,10 +639,10 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                 </td>
                 <td data-label={t("Status")} data-status={dataset.status}>
                   <span
-                    class="status-badge"
-                    data-variant={statusVariant(dataset.status)}
+                    class="admin-status-pill"
+                    data-tone={statusVariant(dataset.status)}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {datasetStatusLabel(dataset.status)}
                   </span>
                 </td>

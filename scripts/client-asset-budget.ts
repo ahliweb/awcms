@@ -764,8 +764,25 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 248,397 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #862** (wave 3 of #858: comments.astro's
+ * `.admin-segmented`/`.admin-bulk-bar` adoption, plus the `.admin-status-pill`
+ * sweep across 31 list-management screens). The growth is the new
+ * `src/lib/ui/admin-bulk-bar-client.ts` module (comments.astro's bulk-select
+ * wiring), the one small `.cell-select` rule added to `admin.css`, and a
+ * `flex-wrap` fix to `.admin-segmented` itself (360px overflow fix, caught by
+ * `tests/e2e/responsive-360.e2e.ts` against the primitive's first real
+ * 5-option consumer) — the `.admin-status-pill` sweep itself adds no CSS (the
+ * primitive was already shipped, unused, by PR #813). Measured actual total:
+ *
+ * ```
+ * before (248,397 ceiling)   248,397 B
+ * + admin-bulk-bar-client.ts + .cell-select + .admin-segmented flex-wrap   250,380 B (measured actual total)
+ * ```
+ *
+ * 250,380 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_397;
+export const APP_BUDGET_BYTES = 250_380;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

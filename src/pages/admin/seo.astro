@@ -352,12 +352,12 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
               <td data-label={t("Setting")}>{t("Site-wide noindex")}</td>
               <td data-label={t("Value")}>
                 <span
-                  class="status-badge"
-                  data-variant={
+                  class="admin-status-pill"
+                  data-tone={
                     seoConfig.defaultRobotsNoindex ? "danger" : "success"
                   }
                 >
-                  <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
                   {seoConfig.defaultRobotsNoindex ? "noindex" : "indexable"}
                 </span>
               </td>
@@ -931,10 +931,10 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                   </td>
                   <td data-label={t("State")}>
                     <span
-                      class="status-badge"
-                      data-variant={redirectStateVariant(rule.state)}
+                      class="admin-status-pill"
+                      data-tone={redirectStateVariant(rule.state)}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {redirectStateLabel(rule.state)}
                     </span>
                   </td>
@@ -1217,10 +1217,10 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                   </td>
                   <td data-label={t("Status")}>
                     <span
-                      class="status-badge"
-                      data-variant={row.resolvedAt ? "success" : "warning"}
+                      class="admin-status-pill"
+                      data-tone={row.resolvedAt ? "success" : "warning"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {row.resolvedAt ? "resolved" : "open"}
                     </span>
                   </td>

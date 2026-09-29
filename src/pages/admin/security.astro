@@ -268,10 +268,10 @@ const mfaContradiction =
                   </th>
                   <td data-label={t("State")}>
                     <span
-                      class="status-badge"
-                      data-variant={row.state === "on" ? "success" : "neutral"}
+                      class="admin-status-pill"
+                      data-tone={row.state === "on" ? "success" : "neutral"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {row.value}
                     </span>
                   </td>
@@ -515,12 +515,13 @@ const mfaContradiction =
                       </td>
                       <td data-label={t("State")}>
                         <span
-                          class="status-badge"
-                          data-variant={
-                            provider.enabled ? "success" : "neutral"
-                          }
+                          class="admin-status-pill"
+                          data-tone={provider.enabled ? "success" : "neutral"}
                         >
-                          <span class="status-dot" aria-hidden="true" />
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
                           {provider.enabled ? "Enabled" : "Disabled"}
                         </span>
                       </td>

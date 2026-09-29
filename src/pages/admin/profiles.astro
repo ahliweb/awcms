@@ -189,12 +189,12 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
                 </td>
                 <td data-label={t("Status")} data-status={profile.status}>
                   <span
-                    class="status-badge"
-                    data-variant={
+                    class="admin-status-pill"
+                    data-tone={
                       profile.status === "active" ? "success" : "neutral"
                     }
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {profileStatusLabel(profile.status)}
                   </span>
                 </td>

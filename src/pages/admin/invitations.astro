@@ -61,6 +61,17 @@ function invitationStatusLabel(value: string): string {
   return INVITATION_STATUS_LABEL[value] ?? value;
 }
 
+/** `.admin-status-pill[data-tone]` for the same status vocabulary above. */
+const INVITATION_STATUS_TONE: Record<string, string> = {
+  pending: "warning",
+  accepted: "success",
+  revoked: "danger",
+  expired: "neutral"
+};
+function invitationStatusTone(value: string): string {
+  return INVITATION_STATUS_TONE[value] ?? "neutral";
+}
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -289,7 +300,16 @@ function isPending(invitation: InvitationView): boolean {
                       data-label={t("Status")}
                       data-status={invitation.status}
                     >
-                      {invitationStatusLabel(invitation.status)}
+                      <span
+                        class="admin-status-pill"
+                        data-tone={invitationStatusTone(invitation.status)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {invitationStatusLabel(invitation.status)}
+                      </span>
                     </td>
                     <td data-label={t("Expires")}>
                       {invitation.expiresAt.slice(0, 10)}

@@ -61,6 +61,14 @@ const REQUEST_STATUS_LABEL: Record<SubjectRequestStatus, string> = {
   completed: t("Completed")
 };
 
+/** `.admin-status-pill[data-tone]` for the same status vocabulary above. */
+const REQUEST_STATUS_TONE: Record<SubjectRequestStatus, string> = {
+  disclosed: "success",
+  pending_approval: "warning",
+  rejected: "danger",
+  completed: "success"
+};
+
 const screen = await loadAdminScreen({
   ssr,
   workClass: "interactive",
@@ -337,7 +345,13 @@ const pending = requests.filter(
                     {request.subjectTenantUserId}
                   </td>
                   <td data-label={t("Status")} data-status={request.status}>
-                    {REQUEST_STATUS_LABEL[request.status]}
+                    <span
+                      class="admin-status-pill"
+                      data-tone={REQUEST_STATUS_TONE[request.status]}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {REQUEST_STATUS_LABEL[request.status]}
+                    </span>
                   </td>
                   <td data-label={t("Requested by")}>{request.requestedBy}</td>
                   <td data-label={t("Decided by")}>

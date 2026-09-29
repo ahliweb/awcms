@@ -293,7 +293,7 @@ reuse existing `t()` strings and should introduce none).
   to 240,975 (measured actual total, no added margin — see
   `scripts/client-asset-budget.ts`'s own ledger comment).
 
-### Wave 3 — List-management: status/filter/bulk normalization
+### Wave 3 — List-management: status/filter/bulk normalization — **DONE** ([Issue #862](https://github.com/ahliweb/awcms/issues/862))
 
 Split into two serial-safe sub-packages because they touch different file
 sets but the same shared CSS:
@@ -320,6 +320,27 @@ sets but the same shared CSS:
 - **Shared:** `src/styles/admin.css` (retire `.status-badge`/`.status-dot`
   once 3a+3b+3c land, or keep both indefinitely as an alias — a decision for
   whoever lands the last of these three sub-packages, not this audit)
+
+**Landed.** All three sub-packages shipped together in Issue #862: `comments.astro`
+(3a), the 26-file status-pill sweep (3b — the file count above underlisted it by 3;
+`newsletter.astro`'s `status-badge status-badge--${variant}` template-literal pattern
+needed a shape-specific edit, everything else was a mechanical find-and-replace), and
+the 3c reads. Of the 3c reads: `invitations.astro`, `machine-credentials.astro`,
+`partner-registry.astro`, `subject-requests.astro` and `partners.astro`'s delegated-grant
+state column did carry a real per-row status and adopted `.admin-status-pill`;
+`email-suppression.astro` (a reason CODE, not a lifecycle status),
+`registrations.astro` and `user-groups.astro` (no status concept at all) were
+confirmed to have nothing to migrate and stay untouched, per the "never force a
+primitive onto a screen that does not fit it" rule. `src/styles/admin.css` keeps
+`.status-badge`/`.status-dot` defined — **not** retired by this issue; #866 tracks
+the final retirement once every wave has landed. `APP_BUDGET_BYTES`
+(`scripts/client-asset-budget.ts`) was raised by the measured growth (ledgered
+there) for the new `src/lib/ui/admin-bulk-bar-client.ts`
+module, one small `.cell-select` CSS rule, and a `flex-wrap` fix to `.admin-segmented`
+itself — `tests/e2e/responsive-360.e2e.ts` caught the shared primitive's 5-option
+track overflowing at 360px (its first real consumer), so the fix landed in the
+primitive, not a per-screen workaround. The status-pill sweep itself added no CSS,
+since `.admin-status-pill` already shipped, unused, with PR #813.
 
 ### Wave 4 — Detail/timeline/two-pane flows — **DONE** ([Issue #863](https://github.com/ahliweb/awcms/issues/863))
 

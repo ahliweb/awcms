@@ -106,12 +106,29 @@ const partnerNames = new Map(
   engagements.map((entry) => [entry.partnerTenantId, entry.partnerTenantName])
 );
 
+type GrantState = "revoked" | "expired" | "active" | "awaiting_redemption";
+
 /** Live, expired, revoked — computed here so the table says it in one word. */
-function grantState(grant: DelegatedGrantSummary): string {
-  if (grant.revokedAt) return "Revoked";
-  if (grant.expiresAt.getTime() <= Date.now()) return "Expired";
-  return grant.redeemedAt ? "Active" : "Awaiting redemption";
+function grantStateCode(grant: DelegatedGrantSummary): GrantState {
+  if (grant.revokedAt) return "revoked";
+  if (grant.expiresAt.getTime() <= Date.now()) return "expired";
+  return grant.redeemedAt ? "active" : "awaiting_redemption";
 }
+
+const GRANT_STATE_LABEL: Record<GrantState, string> = {
+  revoked: t("Revoked"),
+  expired: t("Expired"),
+  active: t("Active"),
+  awaiting_redemption: t("Awaiting redemption")
+};
+
+/** `.admin-status-pill[data-tone]` for the state vocabulary above. */
+const GRANT_STATE_TONE: Record<GrantState, string> = {
+  revoked: "danger",
+  expired: "neutral",
+  active: "success",
+  awaiting_redemption: "warning"
+};
 
 function isLive(grant: DelegatedGrantSummary): boolean {
   return !grant.revokedAt && grant.expiresAt.getTime() > Date.now();
@@ -315,7 +332,21 @@ const maxExpiry = new Date(
                     <td data-label={t("Until")}>
                       {grant.expiresAt.toISOString().slice(0, 10)}
                     </td>
-                    <td data-label={t("State")}>{grantState(grant)}</td>
+                    <td
+                      data-label={t("State")}
+                      data-state={grantStateCode(grant)}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={GRANT_STATE_TONE[grantStateCode(grant)]}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {GRANT_STATE_LABEL[grantStateCode(grant)]}
+                      </span>
+                    </td>
                     {canAssign && (
                       <td data-label={t("Actions")}>
                         {isLive(grant) ? (

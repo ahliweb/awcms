@@ -233,13 +233,13 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
               <td data-label={t("What")}>{t("Live theme")}</td>
               <td data-label={t("Value")}>
                 {state?.activeThemeKey ? (
-                  <span class="status-badge" data-variant="success">
-                    <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill" data-tone="success">
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {activeThemeName ?? state.activeThemeKey}
                   </span>
                 ) : (
-                  <span class="status-badge" data-variant="neutral">
-                    <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill" data-tone="neutral">
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {t("none \u2014 falling back to the default theme")}
                   </span>
                 )}
@@ -259,8 +259,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
               <td data-label={t("What")}>{t("Saved draft")}</td>
               <td data-label={t("Value")}>
                 {draft ? (
-                  <span class="status-badge" data-variant="info">
-                    <span class="status-dot" aria-hidden="true" />
+                  <span class="admin-status-pill" data-tone="info">
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {draft.themeKey}
                   </span>
                 ) : (
@@ -607,13 +607,13 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                 </td>
                 <td data-label={t("Status")}>
                   {state?.activeVersionId === version.id ? (
-                    <span class="status-badge" data-variant="success">
-                      <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill" data-tone="success">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {t("live")}
                     </span>
                   ) : (
-                    <span class="status-badge" data-variant="neutral">
-                      <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill" data-tone="neutral">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {t("published")}
                     </span>
                   )}

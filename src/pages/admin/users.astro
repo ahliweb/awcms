@@ -179,12 +179,15 @@ const showActions =
                     </td>
                     <td data-label={t("Status")} data-status={user.status}>
                       <span
-                        class="status-badge"
-                        data-variant={
+                        class="admin-status-pill"
+                        data-tone={
                           user.status === "active" ? "success" : "neutral"
                         }
                       >
-                        <span class="status-dot" aria-hidden="true" />
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
                         {userStatusLabel(user.status)}
                       </span>
                     </td>

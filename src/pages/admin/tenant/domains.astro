@@ -257,10 +257,10 @@ function domainStatusLabel(value: string): string {
                 </td>
                 <td data-label={t("Status")} data-status={domain.status}>
                   <span
-                    class="status-badge"
-                    data-variant={statusVariant(domain.status)}
+                    class="admin-status-pill"
+                    data-tone={statusVariant(domain.status)}
                   >
-                    <span class="status-dot" aria-hidden="true" />
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {domainStatusLabel(domain.status)}
                   </span>
                 </td>
