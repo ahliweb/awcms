@@ -571,6 +571,7 @@ const hasFilter = branchFilter !== undefined;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("institution-action-error");
   const editError = messageBox("institution-edit-error");
@@ -587,7 +588,7 @@ const hasFilter = branchFilter !== undefined;
     // soft and the article links are kept, so promising less would push
     // operators into rebuilding a registry they never actually lost.
     if (
-      !window.confirm(
+      !await confirmAction(
         `Delete "${name}"? Its articles keep their link to it, and you can ` +
           `restore it from the Deleted view.`
       )
@@ -640,7 +641,7 @@ const hasFilter = branchFilter !== undefined;
     // says only "permanently delete" leaves an operator to discover afterwards
     // that the archive's classification went with it.
     if (
-      !window.confirm(
+      !await confirmAction(
         `Permanently purge "${name}"? This cannot be undone: every article ` +
           `link to it is deleted too, and those articles lose this ` +
           `classification. Restore it instead if you are unsure.`

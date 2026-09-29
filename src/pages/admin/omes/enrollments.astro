@@ -455,6 +455,7 @@ function linkWith(overrides: Record<string, string | null>): string {
     onAction,
     sendJsonForData
   } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("omes-enroll-err");
   const tokenBox = messageBox("enroll-token-msg");
@@ -510,7 +511,7 @@ function linkWith(overrides: Record<string, string | null>): string {
     const serverRowId = button.dataset.serverId;
     const workerId = button.dataset.workerId;
     if (!serverRowId || !workerId) return;
-    if (!window.confirm(`Revoke ${workerId}? Cannot be undone.`)) return;
+    if (!await confirmAction(`Revoke ${workerId}? Cannot be undone.`)) return;
 
     await mutateAndReload(
       button,

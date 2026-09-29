@@ -506,6 +506,7 @@ const hasFilter = typeFilter !== undefined;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
   // Pure module — no database, no config, no `Bun.SQL` — so importing the
   // vocabulary itself is safe in a browser bundle, and it is what stops this
   // screen from drifting the next time the enum widens. The literal `"tag"`
@@ -532,7 +533,7 @@ const hasFilter = typeFilter !== undefined;
     // that promised "recoverable" is exactly what made #351 hard to spot.
     const name = button.dataset.termName ?? "this term";
     if (
-      !window.confirm(
+      !await confirmAction(
         `Delete "${name}"? This cannot be undone from the admin — there is ` +
           `no restore for taxonomy terms. Posts keep their other terms.`
       )

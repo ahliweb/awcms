@@ -17,6 +17,7 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
+import ReasonPanel from "../../../components/ReasonPanel.astro";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
 import { getTranslatorFor } from "../../../lib/i18n";
@@ -282,8 +283,16 @@ function statusVariant(status: string): string {
                         <button
                           type="button"
                           class="module-toggle domain-delete-btn"
-                          data-domain-id={domain.id}
-                          data-domain-host={domain.hostname}
+                          data-reason-title={t("Delete {host}?", {
+                            host: domain.hostname
+                          })}
+                          data-reason-description={t(
+                            "The hostname becomes reusable by any tenant once deleted."
+                          )}
+                          data-reason-action={`/api/v1/tenant/domains/${domain.id}`}
+                          data-reason-method="DELETE"
+                          data-reason-label={t("Delete")}
+                          data-reason-danger
                         >
                           {t("Delete")}
                         </button>
@@ -298,6 +307,16 @@ function statusVariant(status: string): string {
       </table>
     </div>
   )}
+
+  <ReasonPanel
+    cancelLabel={t("Cancel")}
+    reasonLabel={t("Reason")}
+    reasonHint={t("Recorded on the domain's audit row.")}
+    defaultSubmitLabel={t("Confirm")}
+    defaultFailureMessage={t(
+      "Could not delete the domain. Please try again."
+    )}
+  />
 </AdminLayout>
 
 <script>
@@ -312,6 +331,7 @@ function statusVariant(status: string): string {
     onSubmit,
     sendJson
   } from "../../../lib/ui/admin-form-client";
+  import { initReasonPanel } from "../../../lib/ui/reason-panel-client";
 
   const createError = messageBox("domain-create-error");
   const actionError = messageBox("domain-action-error");
@@ -386,25 +406,8 @@ function statusVariant(status: string): string {
     );
   });
 
-  // Delete: reason-required soft delete after an explicit confirm.
-  onAction(".domain-delete-btn", async (button) => {
-    const id = button.dataset.domainId;
-    if (!id) return;
-    const host = button.dataset.domainHost ?? "this domain";
-    const reason = window.prompt(
-      `Delete ${host}? Enter a reason (the hostname becomes reusable):`
-    );
-    if (reason === null || reason.trim().length === 0) return;
-
-    await mutateAndReload(
-      button,
-      actionError,
-      () =>
-        sendJson("DELETE", `/api/v1/tenant/domains/${id}`, {
-          reason: reason.trim()
-        }),
-      "Could not delete the domain. Please try again.",
-      "Deleting…"
-    );
-  });
+  // Delete is entirely handled by `ReasonPanel` above (Issue #854 part 3) —
+  // its `data-reason-*` attributes on the button carry the target URL, so no
+  // page-specific handler remains here.
+  initReasonPanel();
 </script>

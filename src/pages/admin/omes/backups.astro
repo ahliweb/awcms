@@ -486,6 +486,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
     onAction,
     sendJson
   } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("omes-backups-action-error");
 
@@ -495,7 +496,7 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
     if (!backupId) return;
 
     if (
-      !window.confirm(
+      !await confirmAction(
         `Restore server state from backup ${backupCode}? This is always destructive and requires an approved workflow decision before it can dispatch.`
       )
     ) {

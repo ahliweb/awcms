@@ -808,6 +808,7 @@ const editingBodyText = editingPage
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
   import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
   import {
     buildContentJsonFromBodyText,
@@ -856,7 +857,7 @@ const editingBodyText = editingPage
       if (!pageId) return;
 
       const confirmText = options.confirm?.(button) ?? null;
-      if (confirmText !== null && !window.confirm(confirmText)) return;
+      if (confirmText !== null && !await confirmAction(confirmText)) return;
 
       await mutateAndReload(
         button,
@@ -917,7 +918,7 @@ const editingBodyText = editingPage
     const title = button.dataset.pageTitle ?? "this page";
 
     if (
-      !window.confirm(
+      !await confirmAction(
         `Delete "${title}"? It is soft-deleted — recoverable from "View deleted pages" until it is purged.`
       )
     ) {

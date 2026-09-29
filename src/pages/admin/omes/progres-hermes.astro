@@ -446,6 +446,7 @@ function milestoneCellFor(
       onSubmit,
       sendJson
     } from "../../../lib/ui/admin-form-client";
+    import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
 
     const configErrorBox = messageBox("repo-progress-config-error");
 
@@ -475,7 +476,7 @@ function milestoneCellFor(
 
     clearButton?.addEventListener("click", async () => {
       if (
-        !window.confirm(
+        !await confirmAction(
           "Clear the configured repository? The current projection will be removed too."
         )
       ) {

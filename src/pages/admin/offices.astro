@@ -372,6 +372,7 @@ const showActions = canUpdate || canDelete;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const createError = messageBox("office-create-error");
 
@@ -427,7 +428,7 @@ const showActions = canUpdate || canDelete;
     const id = button.dataset.officeId;
     if (!id) return;
     const code = button.dataset.officeCode ?? "this office";
-    if (!window.confirm(`Delete ${code}? It can be restored later.`)) return;
+    if (!await confirmAction(`Delete ${code}? It can be restored later.`)) return;
 
     await mutateAndReload(
       button,

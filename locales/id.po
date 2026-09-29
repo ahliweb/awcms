@@ -5612,3 +5612,79 @@ msgstr "Dokumentasi"
 
 msgid "Other"
 msgstr "Lainnya"
+
+#. Admin v2 primitives (Issue #854 part 1) — ConfirmDialog / SettingsSaveBar / ReasonPanel
+msgid "Confirm"
+msgstr "Konfirmasi"
+
+msgid "Delete {host}?"
+msgstr "Hapus {host}?"
+
+msgid "The hostname becomes reusable by any tenant once deleted."
+msgstr "Nama host menjadi bisa dipakai ulang oleh tenant mana pun setelah dihapus."
+
+msgid "Recorded on the domain's audit row."
+msgstr "Dicatat pada baris audit domain."
+
+msgid "Could not delete the domain. Please try again."
+msgstr "Tidak dapat menghapus domain. Silakan coba lagi."
+
+msgid "Delete {label}?"
+msgstr "Hapus {label}?"
+
+msgid "Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this."
+msgstr "Setiap referensi ke sana langsung berhenti ter-resolve — halaman yang diterbitkan yang menunjuk ke sana kehilangan gambarnya. Restore membatalkan ini."
+
+msgid "Recorded on the media object's audit row."
+msgstr "Dicatat pada baris audit objek media."
+
+msgid "Could not delete the media object. Please try again."
+msgstr "Tidak dapat menghapus objek media. Silakan coba lagi."
+
+msgid "Pause {name}?"
+msgstr "Jeda {name}?"
+
+msgid "Its events keep being recorded and keep accruing as backlog — pausing stops delivery, not production."
+msgstr "Event-nya tetap dicatat dan terus menumpuk sebagai backlog — menjeda menghentikan pengiriman, bukan produksi."
+
+msgid "Replay this delivery?"
+msgstr "Putar ulang pengiriman ini?"
+
+msgid "Recorded in the audit trail."
+msgstr "Dicatat dalam jejak audit."
+
+msgid "Could not complete this action. Please try again."
+msgstr "Tidak dapat menyelesaikan aksi ini. Silakan coba lagi."
+
+msgid "Revoke this assignment?"
+msgstr "Cabut assignment ini?"
+
+msgid "Revoke this exception?"
+msgstr "Cabut exception ini?"
+
+msgid "The override stops applying at the next decision."
+msgstr "Override berhenti berlaku pada keputusan berikutnya."
+
+msgid "Suppress {email}?"
+msgstr "Tangguhkan {email}?"
+
+msgid "Why is this address being suppressed? A suppressed address cannot be re-subscribed, including by the person who owns it."
+msgstr "Mengapa alamat ini ditangguhkan? Alamat yang ditangguhkan tidak dapat berlangganan ulang, termasuk oleh pemiliknya sendiri."
+
+msgid "Recorded on the subscriber's audit row."
+msgstr "Dicatat pada baris audit subscriber."
+
+msgid "Could not suppress the subscriber. Please try again."
+msgstr "Tidak dapat menangguhkan subscriber. Silakan coba lagi."
+
+msgid "Disable module \"{name}\"?"
+msgstr "Nonaktifkan modul \"{name}\"?"
+
+msgid "This feature stops working for every user and visitor of this tenant until it is re-enabled. Its data is kept, not deleted."
+msgstr "Fitur ini berhenti bekerja untuk setiap pengguna dan pengunjung tenant ini hingga diaktifkan kembali. Datanya tetap disimpan, tidak dihapus."
+
+msgid "Recorded in the audit log."
+msgstr "Dicatat dalam log audit."
+
+msgid "Could not disable the module. It may have dependencies that block this change."
+msgstr "Tidak dapat menonaktifkan modul. Mungkin ada dependensi yang menghalangi perubahan ini."

@@ -52,6 +52,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import ReasonPanel from "../../components/ReasonPanel.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import {
@@ -490,7 +491,12 @@ const decidedColumns = canRevokeException ? 7 : 6;
                             <button
                               type="button"
                               class="btn-inline btn-inline--danger js-revoke-assignment"
-                              data-assignment-id={assignment.id}
+                              data-reason-title={t("Revoke this assignment?")}
+                              data-reason-action={`/api/v1/identity/business-scope/assignments/${assignment.id}/revoke`}
+                              data-reason-field="revokeReason"
+                              data-reason-label={t("Revoke")}
+                              data-reason-idempotent
+                              data-reason-danger
                             >
                               {t("Revoke")}
                             </button>
@@ -647,7 +653,15 @@ const decidedColumns = canRevokeException ? 7 : 6;
                             <button
                               type="button"
                               class="btn-inline btn-inline--danger js-revoke-exception"
-                              data-exception-id={exception.id}
+                              data-reason-title={t("Revoke this exception?")}
+                              data-reason-description={t(
+                                "The override stops applying at the next decision."
+                              )}
+                              data-reason-action={`/api/v1/identity/business-scope/exceptions/${exception.id}/revoke`}
+                              data-reason-field="revokeReason"
+                              data-reason-label={t("Revoke")}
+                              data-reason-idempotent
+                              data-reason-danger
                             >
                               {t("Revoke")}
                             </button>
@@ -861,6 +875,16 @@ const decidedColumns = canRevokeException ? 7 : 6;
       )}
     </>
   )}
+
+  <ReasonPanel
+    cancelLabel={t("Cancel")}
+    reasonLabel={t("Reason")}
+    reasonHint={t("Recorded in the audit trail.")}
+    defaultSubmitLabel={t("Confirm")}
+    defaultFailureMessage={t(
+      "Could not complete this action. Please try again."
+    )}
+  />
 </AdminLayout>
 
 <script>
@@ -876,6 +900,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
 
   const actionError = messageBox("business-scope-action-error");
 
@@ -950,29 +975,11 @@ const decidedColumns = canRevokeException ? 7 : 6;
     );
   });
 
-  onAction(".js-revoke-assignment", async (button) => {
-    const id = button.dataset.assignmentId;
-    if (!id) return;
-
-    const reason = window.prompt(
-      "Why is this assignment being revoked? (recorded in the audit trail)"
-    );
-    if (reason === null || reason.trim() === "") return;
-
-    await mutateAndReload(
-      button,
-      actionError,
-      () =>
-        sendJson(
-          "POST",
-          `/api/v1/identity/business-scope/assignments/${id}/revoke`,
-          { revokeReason: reason.trim() },
-          idempotency()
-        ),
-      "Could not revoke the assignment. Please try again.",
-      "Revoking…"
-    );
-  });
+  // Assignment revoke and exception revoke are entirely handled by
+  // `ReasonPanel` above (Issue #854 part 3) — their `data-reason-*`
+  // attributes carry the target URL and the `Idempotency-Key` opt-in, so no
+  // page-specific handler remains for either.
+  initReasonPanel();
 
   onSubmit("request-exception-form", async ({ data, submit }) => {
     const until = endOfDay(field(data, "effectiveTo"));
@@ -1050,35 +1057,5 @@ const decidedColumns = canRevokeException ? 7 : 6;
     "Could not reject the request. Please try again."
   );
 
-  onAction(".js-revoke-exception", async (button) => {
-    const id = button.dataset.exceptionId;
-    if (!id) return;
 
-    if (
-      !window.confirm(
-        "Revoke this exception? The override stops applying at the next decision."
-      )
-    ) {
-      return;
-    }
-
-    const reason = window.prompt(
-      "Why is this override being ended early? (recorded in the audit trail)"
-    );
-    if (reason === null || reason.trim() === "") return;
-
-    await mutateAndReload(
-      button,
-      actionError,
-      () =>
-        sendJson(
-          "POST",
-          `/api/v1/identity/business-scope/exceptions/${id}/revoke`,
-          { revokeReason: reason.trim() },
-          idempotency()
-        ),
-      "Could not revoke the exception. Please try again.",
-      "Revoking…"
-    );
-  });
 </script>

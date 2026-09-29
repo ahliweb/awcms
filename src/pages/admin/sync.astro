@@ -673,6 +673,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
     onAction,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("sync-action-error");
 
@@ -684,7 +685,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
 
     if (
       nextStatus === "inactive" &&
-      !window.confirm(
+      !await confirmAction(
         `Deactivate ${code}? It stops syncing immediately. Its queued objects and past conflicts are kept.`
       )
     ) {
@@ -715,7 +716,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
     // Resolving is a decision about which version of the data wins, and it
     // cannot be undone from this screen — confirm, then capture why.
     if (
-      !window.confirm(
+      !await confirmAction(
         `Resolve this conflict as "${resolution}"? This decides which version of the data stands and cannot be undone here.`
       )
     ) {

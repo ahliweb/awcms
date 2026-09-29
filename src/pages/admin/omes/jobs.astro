@@ -337,6 +337,7 @@ const columns = 7 + (showActions ? 1 : 0);
     onAction,
     sendJson
   } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("omes-jobs-action-error");
 
@@ -345,7 +346,7 @@ const columns = 7 + (showActions ? 1 : 0);
     if (!jobId) return;
 
     if (
-      !window.confirm(
+      !await confirmAction(
         "Approve this failed job for retry? It will be requeued for the OMES worker."
       )
     ) {
@@ -368,7 +369,7 @@ const columns = 7 + (showActions ? 1 : 0);
     const jobId = button.dataset.jobId;
     if (!jobId) return;
 
-    if (!window.confirm("Cancel this queued job? This cannot be undone.")) {
+    if (!await confirmAction("Cancel this queued job? This cannot be undone.")) {
       return;
     }
 

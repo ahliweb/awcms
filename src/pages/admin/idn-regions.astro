@@ -1263,6 +1263,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     onAction,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("idn-regions-action-error");
 
@@ -1315,7 +1316,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     // Platform-wide and immediate: every tenant's address forms change the
     // moment this commits.
     if (
-      !window.confirm(
+      !await confirmAction(
         `Serve ${datasetCode} to every tenant? The current version is superseded immediately.`
       )
     ) {
@@ -1331,7 +1332,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
   onAction("#idn-regions-rollback", async (button) => {
     if (
-      !window.confirm(
+      !await confirmAction(
         "Roll back to the previously served version? This affects every tenant."
       )
     ) {

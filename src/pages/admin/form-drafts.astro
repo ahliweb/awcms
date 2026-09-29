@@ -326,6 +326,7 @@ const columnCount = canDelete ? 7 : 6;
     onAction,
     sendJson
   } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("draft-action-error");
 
@@ -336,7 +337,7 @@ const columnCount = canDelete ? 7 : 6;
 
     // Destructive and not undoable from this screen — confirm first.
     if (
-      !window.confirm(
+      !await confirmAction(
         `Delete the ${label} draft? Any progress it holds is discarded.`
       )
     ) {

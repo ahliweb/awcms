@@ -28,6 +28,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import SettingsSaveBar from "../../components/SettingsSaveBar.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { getTranslatorFor } from "../../lib/i18n";
@@ -278,12 +279,14 @@ const profile: SiteProfileView | null =
           </button>
         </fieldset>
 
-        {canUpdate && (
-          <button type="submit" id="site-profile-submit">
-            {t("Save site profile")}
-          </button>
-        )}
       </form>
+
+      {canUpdate && (
+        <SettingsSaveBar
+          formId="site-profile-form"
+          saveLabel={t("Save site profile")}
+        />
+      )}
     </>
   )}
 </AdminLayout>
@@ -295,10 +298,12 @@ const profile: SiteProfileView | null =
   import { field, messageBox, onSubmit } from "../../lib/ui/admin-form-client";
   import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
   import { wireMediaPickers } from "../../lib/ui/media-picker-client";
+  import { initSettingsSaveBars } from "../../lib/ui/settings-save-bar-client";
 
   const formError = messageBox("site-profile-error");
 
   wireMediaPickers("Nothing attached.");
+  initSettingsSaveBars();
 
   /**
    * Social links are a repeating row, built in the DOM rather than posted as

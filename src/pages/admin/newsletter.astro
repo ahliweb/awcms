@@ -32,6 +32,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import ReasonPanel from "../../components/ReasonPanel.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
@@ -282,7 +283,16 @@ const columnCount = canConfigure ? 6 : 5;
                           <button
                             type="button"
                             class="btn-inline btn-inline--danger newsletter-suppress-btn"
-                            data-subscriber-id={item.id}
+                            data-reason-title={t(
+                              "Suppress {email}?",
+                              { email: item.email }
+                            )}
+                            data-reason-description={t(
+                              "Why is this address being suppressed? A suppressed address cannot be re-subscribed, including by the person who owns it."
+                            )}
+                            data-reason-action={`/api/v1/newsletter/subscribers/${item.id}/suppress`}
+                            data-reason-label={t("Suppress")}
+                            data-reason-danger
                           >
                             {t("Suppress")}
                           </button>
@@ -312,6 +322,16 @@ const columnCount = canConfigure ? 6 : 5;
       </p>
     </section>
   )}
+
+  <ReasonPanel
+    cancelLabel={t("Cancel")}
+    reasonLabel={t("Reason")}
+    reasonHint={t("Recorded on the subscriber's audit row.")}
+    defaultSubmitLabel={t("Confirm")}
+    defaultFailureMessage={t(
+      "Could not suppress the subscriber. Please try again."
+    )}
+  />
 </AdminLayout>
 
 <script>
@@ -319,42 +339,10 @@ const columnCount = canConfigure ? 6 : 5;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'` with
   // no `'unsafe-inline'` — an inlined script is blocked and the page's behaviour
   // dies silently. Importing forces an external `/_astro/*.js`.
-  import {
-    messageBox,
-    mutateAndReload,
-    onAction,
-    sendJson
-  } from "../../lib/ui/admin-form-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
 
-  const actionError = messageBox("newsletter-action-error");
-
-  onAction(".newsletter-suppress-btn", async (button) => {
-    const id = button.dataset.subscriberId;
-    if (!id) return;
-
-    // A reason is required by the endpoint and recorded on the audit row, which
-    // outlives the subscriber. Suppression is the one state a person cannot
-    // leave by re-subscribing, so it is the one somebody will later ask about.
-    const reason = window.prompt(
-      "Why is this address being suppressed? A suppressed address cannot be re-subscribed, including by the person who owns it."
-    );
-    if (reason === null) return;
-
-    if (reason.trim() === "") {
-      actionError.show("A reason is required to suppress a subscriber.");
-      return;
-    }
-
-    await mutateAndReload(
-      button,
-      actionError,
-      () =>
-        sendJson("POST", `/api/v1/newsletter/subscribers/${id}/suppress`, {
-          reason: reason.trim()
-        }),
-      // Generic copy only — never surface internal detail.
-      "Could not suppress the subscriber. Please try again.",
-      "Suppressing…"
-    );
-  });
+  // Suppress is entirely handled by `ReasonPanel` above — its
+  // `data-reason-*` attributes on each button carry the target URL, the
+  // description and the danger styling, so no page-specific handler remains.
+  initReasonPanel();
 </script>
