@@ -1883,6 +1883,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "module.ts": ["module.ts"],
   "never": ["tidak pernah"],
   "no draft saved yet": ["belum ada draf tersimpan"],
+  "no policy matched": ["tidak ada kebijakan yang cocok"],
   "no roles": ["tanpa peran"],
   "noindex (hide the whole site from crawlers)": ["noindex (sembunyikan seluruh situs dari crawler)"],
   "none": ["tidak ada"],

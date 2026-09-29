@@ -69,6 +69,25 @@
  * UX-only; `authorizeInTransaction` in the routes is the authority. Pinned by
  * `tests/admin-media-page-contract.test.ts`, which also asserts that the three
  * absences above stay absences rather than quietly becoming gaps.
+ *
+ * ## Issue #864 — `.admin-media-grid` was NOT adopted on this table
+ *
+ * The parity matrix (`docs/awcms/admin-ui-parity-matrix.md` §6.6) names this
+ * screen the "flagship media adoption" for `.admin-media-grid`, but that
+ * primitive is a grid of square `<img>` tiles, and this table renders no
+ * `<img>` at all — deliberately, per "No preview `<img>`" above. Retrofitting
+ * one to force the grid would reverse that decision, not restyle it, which
+ * the matrix's own rule ("never force a primitive onto a screen that does not
+ * fit it") rules out. The counters below use `.admin-stat-card` and the two
+ * status columns use `.admin-status-pill`; both are real, direct class swaps.
+ * The one real `.admin-media-grid`-shaped markup reachable from THIS module
+ * is the shared picker (`src/lib/ui/media-picker-client.ts`,
+ * `.media-picker-panel`/`.media-option` in `src/styles/admin-screens.css`),
+ * rendered on `blog.astro`/`blog-ads.astro`/`blog-homepage.astro`/
+ * `site-profile.astro` — all four outside this issue's file ownership and
+ * mid-flight under other Wave 3/5 work at the time of this change. Migrating
+ * it belongs in a follow-up scoped to that script and its four consumers
+ * together, not smuggled into this screen's own PR.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
@@ -311,6 +330,17 @@ function mediaStatusLabel(value: string): string {
   return MEDIA_STATUS_LABEL[value] ?? value;
 }
 
+/** `MediaRightsVerificationStatus` — same "no raw enum in markup" rule as
+ * `MEDIA_STATUS_LABEL` above, for the rights pill in the same table. */
+const RIGHTS_STATUS_LABEL: Record<string, string> = {
+  unverified: t("Unverified"),
+  verified: t("Verified"),
+  rejected: t("Rejected")
+};
+function rightsStatusLabel(value: string): string {
+  return RIGHTS_STATUS_LABEL[value] ?? value;
+}
+
 function formatBytes(bytes: number | null): string {
   if (bytes === null) return "—";
   if (bytes < 1024) return `${bytes} B`;
@@ -419,26 +449,30 @@ const columnCount = canActOnAny ? 9 : 8;
 
   {canRead && !loadError && (
     <section class="admin-section fade-in-up" aria-label="Media summary">
-      <div class="stat-grid stagger-children">
-        <div class="stat-card">
-          <span class="stat-label">{t("On this page")}</span>
-          <span class="stat-value">{objects.length}</span>
-          <span class="stat-hint">
+      <div class="admin-stat-card-grid stagger-children">
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">{t("On this page")}</span>
+          <span class="admin-stat-card-value">{objects.length}</span>
+          <span class="admin-stat-card-caption">
             {t("{count} per page", { count: MEDIA_OBJECT_LIST_LIMIT })}
           </span>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Not publicly referenceable")}</span>
-          <span class="stat-value">{unsafeCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">
+            {t("Not publicly referenceable")}
+          </span>
+          <span class="admin-stat-card-value">{unsafeCount}</span>
           {unsafeCount > 0 && (
-            <span class="stat-hint">
+            <span class="admin-stat-card-caption">
               {t("Only verified and attached objects resolve")}
             </span>
           )}
         </div>
-        <div class="stat-card">
-          <span class="stat-label">{t("Soft-deleted (this page)")}</span>
-          <span class="stat-value">{deletedCount}</span>
+        <div class="admin-stat-card">
+          <span class="admin-stat-card-label">
+            {t("Soft-deleted (this page)")}
+          </span>
+          <span class="admin-stat-card-value">{deletedCount}</span>
         </div>
       </div>
     </section>
@@ -558,9 +592,10 @@ const columnCount = canActOnAny ? 9 : 8;
                   <td data-label={t("Dimensions")}>{formatDimensions(item)}</td>
                   <td data-label={t("Status")} data-status={item.status}>
                     <span
-                      class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                      class="admin-status-pill"
+                      data-tone={STATUS_VARIANT[item.status] ?? "info"}
                     >
-                      <span class="status-dot" aria-hidden="true" />
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
                       {mediaStatusLabel(item.status)}
                     </span>
                   </td>
@@ -593,10 +628,14 @@ const columnCount = canActOnAny ? 9 : 8;
                       <span class="cell-muted">{t("No credit recorded")}</span>
                     )}
                     <span
-                      class={`status-badge status-badge--${RIGHTS_VARIANT[item.rightsVerificationStatus] ?? "info"}`}
+                      class="admin-status-pill"
+                      data-tone={
+                        RIGHTS_VARIANT[item.rightsVerificationStatus] ?? "info"
+                      }
                     >
-                      <span class="status-dot" aria-hidden="true" />
-                      {t("Rights")}: {item.rightsVerificationStatus}
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {t("Rights")}:{" "}
+                      {rightsStatusLabel(item.rightsVerificationStatus)}
                     </span>
                   </td>
                   {canActOnAny && (

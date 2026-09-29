@@ -731,8 +731,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 248,058 is the measured value with no added margin.
+ *
+ * **Raised again for Issue #864** (media/settings admin-primitives wave —
+ * `docs/awcms/admin-ui-parity-matrix.md` §7 Wave 5). `media.astro` and
+ * `account.astro` only swap existing markup onto classes `admin.css` already
+ * defines (`.admin-stat-card`, `.admin-status-pill`), so neither adds a byte
+ * here. The growth is `access-policies.astro`'s simulator: its verdict was
+ * plain `textContent`, and is now an `.admin-status-pill` built client-side
+ * (tone carries allow/deny, matching the table's `Allow`/`Deny` column) with
+ * its "Allow"/"Deny"/"no policy matched" labels read from translated
+ * `data-verdict-*` attributes rather than shipping a catalogue copy — the
+ * same pattern `orkestrasi-langsung.astro`'s raise above already paid for.
+ * Measured actual total:
+ *
+ * ```
+ * before (248,058 ceiling)   248,058 B
+ * + access-policies.astro verdict pill   248,333 B (measured actual total)
+ * ```
+ *
+ * 248,333 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_058;
+export const APP_BUDGET_BYTES = 248_333;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

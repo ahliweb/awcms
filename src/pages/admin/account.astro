@@ -514,7 +514,16 @@ const themeOptions = [
   </section>
 
   <section class="admin-card fade-in-up" aria-labelledby="account-mfa-heading">
-    <h2 id="account-mfa-heading">{t("Two-factor authentication")}</h2>
+    <h2 id="account-mfa-heading">
+      {t("Two-factor authentication")}{" "}
+      <span
+        class="admin-status-pill"
+        data-tone={mfaEnabled ? "success" : "neutral"}
+      >
+        <span class="admin-status-pill-dot" aria-hidden="true" />
+        {mfaEnabled ? t("Enabled") : t("Disabled")}
+      </span>
+    </h2>
 
     {mfaEnabled ? (
       <>
@@ -644,7 +653,8 @@ const themeOptions = [
                 )
               ) : (
                 <>
-                  <span class="badge">
+                  <span class="admin-status-pill" data-tone="success">
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
                     {t("Connected {linked}", {
                       linked: formatDate(
                         locale,
@@ -706,7 +716,10 @@ const themeOptions = [
                 <td>
                   {session.userAgentSummary ?? t("Unknown device")}
                   {session.current && (
-                    <span class="badge badge-current">{t("This device")}</span>
+                    <span class="admin-status-pill" data-tone="primary">
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {t("This device")}
+                    </span>
                   )}
                 </td>
                 <td>
