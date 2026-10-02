@@ -198,7 +198,9 @@
     "js-yaml": "^4.3.2",
     "read-yaml-file": "^2.1.0",
     "smol-toml": "^1.7.1",
-    "svgo": "^4.1.0"
+    "svgo": "^4.1.0",
+    "devalue": "^5.9.4",
+    "undici": "^8.10.2"
   },
   "dependencies": {
     "@astrojs/node": "^11.1.6",
