@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/mission-control-scene-view.schema.json",
+  "title": "mission-control-scene-view",
+  "description": "The thin, READ-ONLY compositional projection behind the AWCMS 3D Mission Control workspace (issue #264, parent epic #263, ADR-0031). It is NOT an authority and NOT a second copy of any record: every node is a REFERENCE (source_kind + opaque source_id) to a record that an existing authority already owns (OMES host/deployment/job/health/backup evidence, Hermes orchestration observations per ADR-0028, the architecture registry per #247, the GitHub repository-progress projection per ADR-0030, the AI-privacy posture per ADR-0029, or an AWCMS workflow approval), plus a small bounded label/state/freshness/detail-route envelope. The mapping from node kind to authority, source contract, allowed fields, detail route, candidate actions and replay evidence lives in contracts/control-center/v1/mission-control-source-map.json, and visual_state MUST equal the deterministic function of (kind, source_state, freshness) that map defines (OMES guard MC8 checks every checked-in fixture). It carries no layout coordinates, no mission/task lifecycle, no authorization decision, no action availability, and no raw log/prompt/transcript/tool payload - additionalProperties=false at every object level makes that structural (registry guard C1 also forbids any command/cmd/shell/script/exec/argv property key). Server-side RBAC/ABAC/RLS decides what a viewer may see BEFORE this shape is produced; this schema describes only the wire shape.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_map_version",
+    "tenant_id",
+    "generated_at",
+    "mode",
+    "as_of",
+    "sources",
+    "nodes",
+    "relations",
+    "truncated"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "This contract's own version. A consumer MUST reject an unknown major version (fail closed).",
+      "enum": ["1.0.0"]
+    },
+    "source_map_version": {
+      "type": "string",
+      "description": "The mission-control-source-map.json version whose state map produced visual_state. A consumer MUST reject a source-map version it does not have vendored.",
+      "enum": ["1.0.0"]
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "The single tenant this composition was authorized and assembled for. Every node and relation belongs to this tenant; a composition never spans tenants.",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "When the composing system (AWCMS) assembled this view.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "mode": {
+      "type": "string",
+      "description": "live = the latest retained observation of every source; historical = the state each source's retained evidence proves at as_of (issue #266). A historical view MUST be rendered so it cannot be mistaken for live state, and exposes no actions.",
+      "enum": ["live", "historical"]
+    },
+    "as_of": {
+      "type": "string",
+      "description": "The instant this view describes. Equals generated_at in live mode; the replay cursor in historical mode.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "sources": {
+      "type": "array",
+      "description": "One entry per source the composition consulted, so a viewer can see which authority is behind each zone and whether it was reachable. A source that could not be read is reported here as unavailable - its nodes are then absent or carry freshness unknown, never silently replaced by a healthy empty state.",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["source_kind", "authority", "status", "observed_at"],
+        "additionalProperties": false,
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "description": "Key into mission-control-source-map.json 'sources'.",
+            "enum": [
+              "omes_server_inventory",
+              "omes_deployment_view",
+              "omes_job_status",
+              "omes_health_readiness",
+              "omes_backup_status",
+              "hermes_orchestration_tree",
+              "omes_architecture_capabilities_view",
+              "github_repository_progress_view",
+              "omes_ai_privacy_posture_view",
+              "awcms_workflow_approval"
+            ]
+          },
+          "authority": {
+            "type": "string",
+            "enum": ["omes", "hermes", "awcms", "provider"]
+          },
+          "status": {
+            "type": "string",
+            "description": "available = read successfully and fresh; stale = read, but its newest observation is older than the source's freshness budget; unavailable = could not be read (error, not configured, or permission-limited to nothing).",
+            "enum": ["available", "stale", "unavailable"]
+          },
+          "observed_at": {
+            "type": ["string", "null"],
+            "description": "The newest observation timestamp the source supplied, or null when unavailable/never observed.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Scene objects. Each is a reference to exactly one record owned by the source named in the source map for its kind.",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "node_id",
+          "kind",
+          "source_id",
+          "label",
+          "source_state",
+          "visual_state",
+          "freshness",
+          "observed_at",
+          "detail_route"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "An opaque handle unique WITHIN this response, used only by relations. Consumers MUST NOT parse it or treat it as a cross-system identifier.",
+            "pattern": "^n[0-9]{1,6}$"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Key into mission-control-source-map.json 'kinds'.",
+            "enum": [
+              "server",
+              "deployment",
+              "job",
+              "health_report",
+              "backup",
+              "hermes_subagent",
+              "architecture_plane",
+              "capability",
+              "repository_milestone",
+              "ai_privacy_posture",
+              "approval_item"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "description": "The source authority's own opaque identifier for the referenced record (e.g. a server_id, job id, Hermes subagent_id, capability_id, milestone number). Echoed verbatim; never synthesized from other fields.",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "label": {
+            "type": "string",
+            "description": "Bounded display label taken from an allowed field of the source record. UNTRUSTED: consumers MUST output-encode it and MUST NOT inject it as HTML.",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "source_state": {
+            "type": "string",
+            "description": "The source record's own state value, echoed verbatim from the field the source map names (e.g. RUNNING, succeeded, degraded, PASS, staged). 'not_reported' when the source does not report one.",
+            "pattern": "^[A-Za-z_]{1,32}$"
+          },
+          "visual_state": {
+            "type": "string",
+            "description": "Deterministic presentation class = source-map state_map[kind][source_state] adjusted by freshness (unknown -> unknown; stale -> stale unless the mapped class is failed or warning). Never inferred from animation.",
+            "enum": [
+              "ok",
+              "in_progress",
+              "pending",
+              "warning",
+              "failed",
+              "cancelled",
+              "informational",
+              "stale",
+              "unknown"
+            ]
+          },
+          "freshness": {
+            "type": "string",
+            "enum": ["live", "stale", "unknown"]
+          },
+          "observed_at": {
+            "type": ["string", "null"],
+            "description": "When the source last observed this record; null when it never has.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "detail_route": {
+            "type": "string",
+            "description": "The canonical EXISTING 2D surface for this record (source map 'detail_route' for the kind, optionally with a bounded query selecting the record). Never a new 3D-only page.",
+            "pattern": "^/admin/[a-z0-9/_-]{1,96}(\\?[A-Za-z0-9_.:=&-]{1,160})?$"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Optional bounded, already-sanitized summary from an allowed source field (e.g. a Hermes node's summary). UNTRUSTED; output-encode. Never a prompt, transcript, reasoning trace, or tool argument/result.",
+            "maxLength": 280
+          }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "description": "Observable links between nodes. Each relation must be backed by a field in a source record (named in the source map's relation vocabulary); a relation never implies authority or causality the source does not prove.",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "relation"],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "pattern": "^n[0-9]{1,6}$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^n[0-9]{1,6}$"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "hosts",
+              "targets",
+              "delegates_to",
+              "observed_on",
+              "describes",
+              "protects",
+              "member_of",
+              "awaits_decision_for"
+            ]
+          }
+        }
+      }
+    },
+    "truncated": {
+      "type": "object",
+      "description": "Whether the bounded node/relation limits dropped anything. A truncated view MUST say so visibly rather than imply the scene is complete.",
+      "required": ["nodes", "relations"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "integer",
+          "description": "Number of nodes omitted by the size bound (0 when complete).",
+          "minimum": 0
+        },
+        "relations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "evidence_gaps": {
+      "type": "array",
+      "description": "Historical mode only (issue #266): intervals where a source retained no evidence. A gap is shown as a gap, never interpolated into a state.",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["source_kind", "from", "to", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,64}$"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "not_retained",
+              "retention_expired",
+              "source_unavailable",
+              "before_first_observation"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

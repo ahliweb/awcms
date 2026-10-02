@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "window": {
+    "from": "2026-10-02T07:00:00Z",
+    "to": "2026-10-02T08:00:00Z"
+  },
+  "events": [
+    {
+      "at": "2026-10-02T07:10:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-invalid-01",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-test",
+      "parent_source_id": null,
+      "source_state": "PENDING",
+      "visual_state": "pending",
+      "provenance": "observed",
+      "prompt": "This is a forbidden field"
+    }
+  ],
+  "evidence_gaps": [],
+  "next_cursor": null
+}

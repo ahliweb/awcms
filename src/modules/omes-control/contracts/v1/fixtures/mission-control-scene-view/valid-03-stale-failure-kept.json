@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "mode": "live",
+  "as_of": "2026-10-02T08:00:00Z",
+  "sources": [
+    {
+      "source_kind": "omes_server_inventory",
+      "authority": "omes",
+      "status": "stale",
+      "observed_at": "2026-10-02T06:30:00Z"
+    },
+    {
+      "source_kind": "omes_job_status",
+      "authority": "omes",
+      "status": "stale",
+      "observed_at": "2026-10-02T06:00:00Z"
+    },
+    {
+      "source_kind": "omes_deployment_view",
+      "authority": "omes",
+      "status": "unavailable",
+      "observed_at": null
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "n1",
+      "kind": "server",
+      "source_id": "srv-demo-04",
+      "label": "recovery-server",
+      "source_state": "online",
+      "visual_state": "stale",
+      "freshness": "stale",
+      "observed_at": "2026-10-02T06:30:00Z",
+      "detail_route": "/admin/omes/servers"
+    },
+    {
+      "node_id": "n2",
+      "kind": "job",
+      "source_id": "job-demo-03",
+      "label": "operation.rollback",
+      "source_state": "failed",
+      "visual_state": "failed",
+      "freshness": "stale",
+      "observed_at": "2026-10-02T06:00:00Z",
+      "detail_route": "/admin/omes/jobs"
+    }
+  ],
+  "relations": [],
+  "truncated": {
+    "nodes": 12,
+    "relations": 0
+  }
+}

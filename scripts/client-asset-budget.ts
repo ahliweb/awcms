@@ -825,8 +825,32 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 248,033 is the measured value with no added margin.
+ *
+ * **Raised for ahliweb/omes#265** (3D Mission Control, epic ahliweb/omes#263,
+ * OMES ADR-0031): one new screen, `/admin/omes/mission-control`, whose
+ * spatial view needs a WebGL2 renderer. This is new feature code, not the
+ * Issue #552 shape — it reuses `admin-form-client.ts` (`messageBox`) and the
+ * existing colour tokens rather than copying either, and nothing is
+ * duplicated per screen. The renderer is deliberately hand-written instead
+ * of adopting three.js: a three.js build is hundreds of KB minified, which
+ * would break `PER_FILE_BUDGET_BYTES` outright and need a raise roughly
+ * twenty times this one (OMES ADR-0031 records the comparison). Both new JS
+ * chunks are route-split — only this screen downloads them — and
+ * `scene-gl.*.js` is additionally a lazy `import()`, so the accessible object
+ * list works even when that chunk or WebGL2 is unavailable. Measured actual
+ * total, on top of #866 above:
+ *
+ * ```
+ * before (248,033 ceiling)   248,033 B
+ * + mission-control page script (controller, layout, vocab)   15,488 B
+ * + scene-gl.*.js (lazy WebGL2 renderer + math)                9,651 B
+ * + omes-control-center.css Mission Control rules              2,457 B
+ *                                                            275,629 B (measured actual total)
+ * ```
+ *
+ * 275,629 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_033;
+export const APP_BUDGET_BYTES = 275_629;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

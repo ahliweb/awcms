@@ -43,7 +43,7 @@ describe("omes_control module descriptor", () => {
     expect(mod?.dependencies).toEqual(["tenant_admin", "identity_access"]);
   });
 
-  test("declares navigation for all fourteen screens ahliweb/omes#200, #201, #233, #232, and #246 (parts 2 and 3) landed", () => {
+  test("declares navigation for all fifteen screens ahliweb/omes#200, #201, #233, #232, #246 (parts 2 and 3), and #265 landed", () => {
     // Was `toBeUndefined()` while the physical pages were staged work
     // (ahliweb/omes#196/#197/#198) — matching the push_delivery (ADR-0074)
     // precedent that a descriptor must not declare a path with no page
@@ -52,7 +52,7 @@ describe("omes_control module descriptor", () => {
     // health, backups, and audit; #233 added the ninth, enrollments; #232
     // added the tenth, AI privacy; #246 part 2 adds live orchestration,
     // Hermes, and Hermes progress; #246 part 3 adds the fourteenth,
-    // Arsitektur (architecture).
+    // Arsitektur (architecture); #265 adds the fifteenth, Mission Control.
     const nav = omesControlModule.navigation ?? [];
     expect(nav.map((entry) => entry.path).sort()).toEqual(
       [
@@ -69,7 +69,8 @@ describe("omes_control module descriptor", () => {
         "/admin/omes/orkestrasi-langsung",
         "/admin/omes/hermes",
         "/admin/omes/progres-hermes",
-        "/admin/omes/arsitektur"
+        "/admin/omes/arsitektur",
+        "/admin/omes/mission-control"
       ].sort()
     );
 

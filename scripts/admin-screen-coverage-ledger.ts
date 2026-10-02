@@ -106,9 +106,11 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "visitor_analytics.settings.read",
   "visitor_analytics.settings.update",
 
-  // omes_control (13) — ADR-0122 / Issue ahliweb/omes#196. Schema, RLS, permissions,
+  // omes_control (12) — ADR-0122 / Issue ahliweb/omes#196. Schema, RLS, permissions,
   // and domain descriptors admitted in this foundation PR. The Control Center admin screens
-  // (/admin/omes/*: servers, deployments, worker jobs, backups) land in subsequent issues.
+  // (/admin/omes/*: servers, deployments, worker jobs, backups) land in subsequent issues. `servers.read` left this ledger when
+  // `/admin/omes/mission-control` (ahliweb/omes#265) became the first screen to claim it as a LITERAL
+  // triple (the other OMES screens use `OMES_GUARDS.*`, which the scanner does not resolve).
   "omes_control.audit.read",
   "omes_control.backups.read",
   "omes_control.backups.restore",
@@ -120,6 +122,5 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "omes_control.jobs.cancel",
   "omes_control.jobs.read",
   "omes_control.servers.delete",
-  "omes_control.servers.read",
   "omes_control.servers.register"
 ];

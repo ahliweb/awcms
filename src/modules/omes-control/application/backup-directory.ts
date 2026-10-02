@@ -39,7 +39,7 @@ type BackupRow = {
 export const BACKUP_LIST_LIMIT = 100;
 
 /** A backup older than this is no longer considered "fresh" for restore/DR planning purposes. */
-const BACKUP_FRESHNESS_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+export const BACKUP_FRESHNESS_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 function toSummary(row: BackupRow, now: Date): BackupSnapshotSummary {
   return {

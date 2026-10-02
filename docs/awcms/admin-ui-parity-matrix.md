@@ -197,6 +197,7 @@ column is intentionally absent, not omitted by oversight.
 | `omes/enrollments.astro`         | SP                | partially adopt | 1 `.status-badge` site → SP.                                                                                                                                                                                                                                                                     |
 | `omes/health.astro`              | SC, SP, TL        | **adopt**       | 3 `.stat-card` sites → SC; 3 `.status-badge` sites → SP; strongest TL signal in the inventory outside `approvals.astro` — the `mode: "history"` view (`fetchHealthHistory`, reached via each row's "View history" link) is exactly the ordered snapshot-history shape `.admin-timeline` targets. |
 | `omes/hermes.astro`              | SP                | partially adopt | 1 `.status-badge` site → SP.                                                                                                                                                                                                                                                                     |
+| `omes/mission-control.astro`     | SP                | partially adopt | Multiple `.admin-status-pill` sites for object status; 3D scene is decorative (`.omes-mc-canvas`, `aria-hidden`), canonical view is the accessible object list below it. No `.stat-card` tiles or other primitives needed.                                                                       |
 | `omes/index.astro`               | see §6.1          | —               | —                                                                                                                                                                                                                                                                                                |
 | `omes/jobs.astro`                | SC, SP            | partially adopt | 3 `.stat-card` sites → SC; 1 `.status-badge` site → SP.                                                                                                                                                                                                                                          |
 | `omes/operations.astro`          | SP                | partially adopt | 1 `.status-badge` site → SP.                                                                                                                                                                                                                                                                     |
@@ -482,6 +483,8 @@ style: none; margin: 0; padding: 0; }` reset for the `<ol>` wrapper itself
   `APP_BUDGET_BYTES` was raised from 248,045 to 248,058 (measured actual
   total — the only growth is `orkestrasi-langsung.astro`'s client script
   template literal, whose class names got longer).
+
+- **Later addition:** `omes/mission-control.astro` (ahliweb/omes#265) was added after wave 6 completion and uses `.admin-status-pill` (SP) on the same design-system primitives, no new CSS required.
 
 ### Wave 7 — Final sweep, legacy class retirement, docs — **DONE** ([Issue #866](https://github.com/ahliweb/awcms/issues/866))
 

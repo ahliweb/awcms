@@ -5989,3 +5989,187 @@ msgstr "Kode alasan diperlukan untuk menolak atau menandai spam."
 msgid "Anonymous"
 msgstr "Anonim"
 
+
+#. Mission Control 3D workspace (ahliweb/omes#265, ADR-0031)
+msgid "OMES Mission Control"
+msgstr "Mission Control OMES"
+
+msgid "Health report"
+msgstr "Laporan kesehatan"
+
+msgid "Hermes subagent"
+msgstr "Subagent Hermes"
+
+msgid "Architecture plane"
+msgstr "Bidang arsitektur"
+
+msgid "Capability"
+msgstr "Kapabilitas"
+
+msgid "Repository milestone"
+msgstr "Milestone repositori"
+
+msgid "Approval item"
+msgstr "Item persetujuan"
+
+msgid "Agents"
+msgstr "Agen"
+
+msgid "Infrastructure"
+msgstr "Infrastruktur"
+
+msgid "Governance"
+msgstr "Tata kelola"
+
+msgid "AI privacy"
+msgstr "Privasi AI"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Informational"
+msgstr "Informasional"
+
+msgid "Live"
+msgstr "Langsung"
+
+msgid "Server inventory"
+msgstr "Inventaris server"
+
+msgid "Deployment view"
+msgstr "Tampilan deployment"
+
+msgid "Job status"
+msgstr "Status job"
+
+msgid "Health readiness"
+msgstr "Kesiapan kesehatan"
+
+msgid "Backup status"
+msgstr "Status backup"
+
+msgid "Hermes orchestration"
+msgstr "Orkestrasi Hermes"
+
+msgid "Architecture view"
+msgstr "Tampilan arsitektur"
+
+msgid "Repository progress"
+msgstr "Progres repositori"
+
+msgid "Workflow approvals"
+msgstr "Persetujuan alur kerja"
+
+msgid "Available"
+msgstr "Tersedia"
+
+msgid "Unavailable"
+msgstr "Tidak tersedia"
+
+msgid "OMES"
+msgstr "OMES"
+
+msgid "AWCMS"
+msgstr "AWCMS"
+
+msgid "Open details"
+msgstr "Buka detail"
+
+msgid "Open details for {name}"
+msgstr "Buka detail untuk {name}"
+
+msgid "Observed {time}"
+msgstr "Diamati {time}"
+
+msgid "Not observed"
+msgstr "Belum diamati"
+
+msgid "As of {time}"
+msgstr "Per {time}"
+
+msgid "{shown} of {total} objects shown"
+msgstr "{shown} dari {total} objek ditampilkan"
+
+msgid "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list."
+msgstr "{count} objek tidak ditampilkan agar tampilan ini tetap terbatas. Gunakan layar kanonis untuk daftar lengkapnya."
+
+msgid "Could not refresh the scene — showing the last known state, which may be out of date."
+msgstr "Tidak dapat menyegarkan adegan — menampilkan keadaan terakhir yang diketahui, yang mungkin sudah usang."
+
+msgid "The 3D view is unavailable in this browser. The object list below shows the same information."
+msgstr "Tampilan 3D tidak tersedia di peramban ini. Daftar objek di bawah menampilkan informasi yang sama."
+
+msgid "Mission Control"
+msgstr "Mission Control"
+
+msgid "A read-only 3D view of OMES, Hermes and approval state, composed from the existing screens. The object list is the full, accessible equivalent."
+msgstr "Tampilan 3D baca saja untuk status OMES, Hermes, dan persetujuan, disusun dari layar yang sudah ada. Daftar objek adalah padanan lengkap yang dapat diakses."
+
+msgid "You do not have permission to view Mission Control."
+msgstr "Anda tidak memiliki izin untuk melihat Mission Control."
+
+msgid "Mission Control could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Mission Control tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Additional workspace — the canonical details stay on the existing OMES screens. Every object links back to its screen."
+msgstr "Ruang kerja tambahan — detail kanonis tetap berada di layar OMES yang sudah ada. Setiap objek tertaut kembali ke layarnya."
+
+msgid "Live view"
+msgstr "Tampilan langsung"
+
+msgid "Historical view"
+msgstr "Tampilan historis"
+
+msgid "Sources"
+msgstr "Sumber"
+
+msgid "Mission Control filters"
+msgstr "Filter Mission Control"
+
+msgid "Zone"
+msgstr "Zona"
+
+msgid "All zones"
+msgstr "Semua zona"
+
+msgid "All states"
+msgstr "Semua status"
+
+msgid "Reset view"
+msgstr "Atur ulang tampilan"
+
+msgid "Objects by zone"
+msgstr "Objek menurut zona"
+
+msgid "No objects to show"
+msgstr "Tidak ada objek untuk ditampilkan"
+
+msgid "An empty scene is not a healthy scene — check the source status above. Sources you cannot read are omitted."
+msgstr "Adegan kosong bukan berarti adegan yang sehat — periksa status sumber di atas. Sumber yang tidak dapat Anda baca dihilangkan."
+
+msgid "Selected object"
+msgstr "Objek terpilih"
+
+msgid "Select an object from the list or the scene to see its details."
+msgstr "Pilih objek dari daftar atau adegan untuk melihat detailnya."
+
+msgid "Source status"
+msgstr "Status sumber"
+
+msgid "Source id"
+msgstr "ID sumber"
+
+msgid "Source state"
+msgstr "Keadaan sumber"
+
+msgid "Visual state"
+msgstr "Status visual"
+
+msgid "Freshness"
+msgstr "Kesegaran"
+
+msgid "Observed at"
+msgstr "Diamati pada"
+
+msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
+msgstr "Seret untuk memutar dan gulir untuk memperbesar tampilan 3D. Papan ketik: tombol panah berpindah di daftar, Enter memilih objek, Escape membatalkan pilihan, 0 mengatur ulang tampilan."

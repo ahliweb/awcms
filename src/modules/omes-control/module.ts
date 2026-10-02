@@ -224,6 +224,18 @@ export const omesControlModule = defineModule({
       path: "/admin/omes/arsitektur",
       order: 103,
       requiredPermission: "omes_control.architecture.read"
+    },
+    // Issue ahliweb/omes#265 (epic #263, ADR-0031): the 3D Mission Control
+    // workspace — ONE additional page that composes a read-only scene from the
+    // existing authorities' records. No new permission: the page and its scene
+    // API are guarded by `servers.read` (the Overview's permission), and each
+    // source is included only when the viewer can also read it
+    // (`mission-control-directory.ts`).
+    {
+      labelKey: "admin.layout.nav_omes_mission_control",
+      path: "/admin/omes/mission-control",
+      order: 104,
+      requiredPermission: "omes_control.servers.read"
     }
   ],
   permissions: [

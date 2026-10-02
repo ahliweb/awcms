@@ -141,7 +141,15 @@ const SIMPLE_CASES: SimpleCase[] = [
     method: "POST",
     guard: "OMES_GUARDS.backups.restore"
   },
-  { file: "audit/index.ts", method: "GET", guard: "OMES_GUARDS.audit.read" }
+  { file: "audit/index.ts", method: "GET", guard: "OMES_GUARDS.audit.read" },
+  // Issue ahliweb/omes#265 / ADR-0031 — Mission Control adds NO permission:
+  // the scene route reuses the Overview's `servers.read`, and the composer
+  // gates each source on its own read permission on top of it.
+  {
+    file: "mission-control/scene.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
+  }
 ];
 
 describe("OMES Control Center route -> permission binding (static)", () => {
