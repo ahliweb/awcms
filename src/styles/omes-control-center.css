@@ -564,6 +564,161 @@
   opacity: 0.72;
 }
 
+/*
+ * 3D Mission Control (Issue ahliweb/omes#265). The server-rendered object list
+ * is canonical; the canvas is a decorative mirror. Narrow screens stack the
+ * list FIRST, then the HUD and canvas; it still works at 200% zoom because the
+ * two-column grid only starts at a wide viewport. No inline styles anywhere —
+ * the CSP has no `style-src 'unsafe-inline'`. The reduced-motion rule below
+ * already covers this screen; the renderer itself reads the same media query
+ * and stops pulsing / flies instantly.
+ */
+.omes-cc .omes-mc-layout {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .omes-cc .omes-mc-layout {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+  .omes-cc .omes-mc-side {
+    position: sticky;
+    top: var(--sp-4);
+  }
+}
+
+.omes-cc .omes-mc-filters {
+  flex-wrap: wrap;
+}
+
+.omes-cc .omes-mc-badges,
+.omes-cc .omes-mc-sources,
+.omes-cc .omes-mc-items,
+.omes-cc .omes-mc-hud-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.omes-cc .omes-mc-items {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.omes-cc .omes-mc-source,
+.omes-cc .omes-mc-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-size: var(--fs-sm);
+}
+
+/* `[hidden]` must beat the `display` rules above and in `.admin-filter-bar`. */
+.omes-cc .omes-mc [hidden] {
+  display: none;
+}
+
+.omes-cc .omes-mc-zone-title {
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.omes-cc .omes-mc-obj {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 36px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.omes-cc .omes-mc-obj:hover {
+  background: var(--color-surface-hover);
+}
+
+.omes-cc .omes-mc-obj:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Selected is a bar + border + `aria-pressed`, not colour alone. */
+.omes-cc .omes-mc-obj[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.omes-cc .omes-mc .cell-muted,
+.omes-cc .omes-mc-kind,
+.omes-cc .omes-mc-hud-fields dt {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.omes-cc .omes-mc-label {
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-hud {
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.omes-cc .omes-mc-hud-label {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-hud-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: start;
+}
+
+.omes-cc .omes-mc-hud-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-stage {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+
+.omes-cc .omes-mc-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(260px, 52vh, 520px);
+  touch-action: none;
+  cursor: grab;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .omes-cc * {
     animation-duration: 0.001ms !important;

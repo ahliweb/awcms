@@ -6001,3 +6001,187 @@ msgstr ""
 msgid "Anonymous"
 msgstr ""
 
+
+#. Mission Control 3D workspace (ahliweb/omes#265, ADR-0031)
+msgid "OMES Mission Control"
+msgstr ""
+
+msgid "Health report"
+msgstr ""
+
+msgid "Hermes subagent"
+msgstr ""
+
+msgid "Architecture plane"
+msgstr ""
+
+msgid "Capability"
+msgstr ""
+
+msgid "Repository milestone"
+msgstr ""
+
+msgid "Approval item"
+msgstr ""
+
+msgid "Agents"
+msgstr ""
+
+msgid "Infrastructure"
+msgstr ""
+
+msgid "Governance"
+msgstr ""
+
+msgid "AI privacy"
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Informational"
+msgstr ""
+
+msgid "Live"
+msgstr ""
+
+msgid "Server inventory"
+msgstr ""
+
+msgid "Deployment view"
+msgstr ""
+
+msgid "Job status"
+msgstr ""
+
+msgid "Health readiness"
+msgstr ""
+
+msgid "Backup status"
+msgstr ""
+
+msgid "Hermes orchestration"
+msgstr ""
+
+msgid "Architecture view"
+msgstr ""
+
+msgid "Repository progress"
+msgstr ""
+
+msgid "Workflow approvals"
+msgstr ""
+
+msgid "Available"
+msgstr ""
+
+msgid "Unavailable"
+msgstr ""
+
+msgid "OMES"
+msgstr ""
+
+msgid "AWCMS"
+msgstr ""
+
+msgid "Open details"
+msgstr ""
+
+msgid "Open details for {name}"
+msgstr ""
+
+msgid "Observed {time}"
+msgstr ""
+
+msgid "Not observed"
+msgstr ""
+
+msgid "As of {time}"
+msgstr ""
+
+msgid "{shown} of {total} objects shown"
+msgstr ""
+
+msgid "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list."
+msgstr ""
+
+msgid "Could not refresh the scene — showing the last known state, which may be out of date."
+msgstr ""
+
+msgid "The 3D view is unavailable in this browser. The object list below shows the same information."
+msgstr ""
+
+msgid "Mission Control"
+msgstr ""
+
+msgid "A read-only 3D view of OMES, Hermes and approval state, composed from the existing screens. The object list is the full, accessible equivalent."
+msgstr ""
+
+msgid "You do not have permission to view Mission Control."
+msgstr ""
+
+msgid "Mission Control could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "Additional workspace — the canonical details stay on the existing OMES screens. Every object links back to its screen."
+msgstr ""
+
+msgid "Live view"
+msgstr ""
+
+msgid "Historical view"
+msgstr ""
+
+msgid "Sources"
+msgstr ""
+
+msgid "Mission Control filters"
+msgstr ""
+
+msgid "Zone"
+msgstr ""
+
+msgid "All zones"
+msgstr ""
+
+msgid "All states"
+msgstr ""
+
+msgid "Reset view"
+msgstr ""
+
+msgid "Objects by zone"
+msgstr ""
+
+msgid "No objects to show"
+msgstr ""
+
+msgid "An empty scene is not a healthy scene — check the source status above. Sources you cannot read are omitted."
+msgstr ""
+
+msgid "Selected object"
+msgstr ""
+
+msgid "Select an object from the list or the scene to see its details."
+msgstr ""
+
+msgid "Source status"
+msgstr ""
+
+msgid "Source id"
+msgstr ""
+
+msgid "Source state"
+msgstr ""
+
+msgid "Visual state"
+msgstr ""
+
+msgid "Freshness"
+msgstr ""
+
+msgid "Observed at"
+msgstr ""
+
+msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
+msgstr ""

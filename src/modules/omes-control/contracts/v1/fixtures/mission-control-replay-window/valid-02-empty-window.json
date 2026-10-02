@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "window": {
+    "from": "2026-09-15T00:00:00Z",
+    "to": "2026-09-16T00:00:00Z"
+  },
+  "events": [],
+  "evidence_gaps": [
+    {
+      "source_kind": "omes_job_status",
+      "from": "2026-09-15T00:00:00Z",
+      "to": "2026-09-16T00:00:00Z",
+      "reason": "before_first_observation"
+    }
+  ],
+  "next_cursor": null
+}

@@ -9741,6 +9741,21 @@ Gated by omes_control.jobs.cancel. Only a queued job may be cancelled — a leas
 | 404    | Resource not found.                                                                                                         | [`ApiError`](#standard-error-envelope) |
 | 409    | Job is not queued (JOB_NOT_CANCELLABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/omes/mission-control/scene` — Read the 3D Mission Control scene (ahliweb/omes#265)
+
+- **operationId**: `omesReadMissionControlScene`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by omes_control.servers.read, which only admits the viewer to the workspace; each source is then included only if the viewer also holds that source's own read permission (omes_control.deployments.read, jobs.read, backups.read, hermes_orchestration.read, architecture.read, ai_privacy.read, workflow.approval.read). A source the viewer may not read is reported with status "unavailable" and contributes no nodes. Returns the vendored mission-control-scene-view v1 shape (ADR-0031): a read-only, tenant-scoped, bounded (at most 500 nodes and 1000 relations; omitted counts are reported in "truncated") composition of references to records that existing screens own. It is a derived projection with no new permission, table, or action. An invalid composition fails closed with 500 MISSION_CONTROL_SCENE_INVALID.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant's current scene. | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/omes/operations` — List submitted operation requests
 
 - **operationId**: `omesListOperations`

@@ -48,7 +48,7 @@ export type DeploymentListPage = {
 export const DEPLOYMENT_LIST_LIMIT = 100;
 
 /** A converged deployment whose last reconciliation is older than this is flagged stale (independent of `reconciliation_status`, which reflects the last run's own outcome, not its age). */
-const STALE_RECONCILIATION_THRESHOLD_MS = 30 * 60 * 1000;
+export const STALE_RECONCILIATION_THRESHOLD_MS = 30 * 60 * 1000;
 
 function isReconciliationStale(
   status: string,

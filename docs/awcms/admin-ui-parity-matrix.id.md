@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:13d2c6782e72cf2d4ee8f06ddde0489ac487d5fbca69a63c22a9a6a4a2de4d4f -->
+<!-- i18n-source-hash: sha256:503790cdd251588aa6d6a85d0292db63f50054e2e0703401a3d971dc26155042 -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -204,6 +204,7 @@ Kolom SG/BB tiap baris lain sengaja kosong, bukan terlewat.
 | `omes/enrollments.astro`         | SP                | partially adopt | 1 situs `.status-badge` → SP.                                                                                                                                                                                                                                                                          |
 | `omes/health.astro`              | SC, SP, TL        | **adopt**       | 3 situs `.stat-card` → SC; 3 situs `.status-badge` → SP; sinyal TL terkuat dalam inventori di luar `approvals.astro` — tampilan `mode: "history"` (`fetchHealthHistory`, dicapai lewat tautan "View history" tiap baris) adalah persis bentuk history snapshot terurut yang disasar `.admin-timeline`. |
 | `omes/hermes.astro`              | SP                | partially adopt | 1 situs `.status-badge` → SP.                                                                                                                                                                                                                                                                          |
+| `omes/mission-control.astro`     | SP                | partially adopt | Beberapa situs `.admin-status-pill` untuk status objek; adegan 3D bersifat dekoratif (`.omes-mc-canvas`, `aria-hidden`), tampilan kanonis adalah daftar objek yang aksesibel di bawahnya. Tidak ada tile `.stat-card` atau primitif lain yang dibutuhkan.                                              |
 | `omes/index.astro`               | lihat §6.1        | —               | —                                                                                                                                                                                                                                                                                                      |
 | `omes/jobs.astro`                | SC, SP            | partially adopt | 3 situs `.stat-card` → SC; 1 situs `.status-badge` → SP.                                                                                                                                                                                                                                               |
 | `omes/operations.astro`          | SP                | partially adopt | 1 situs `.status-badge` → SP.                                                                                                                                                                                                                                                                          |

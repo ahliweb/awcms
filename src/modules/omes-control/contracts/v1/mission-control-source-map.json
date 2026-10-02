@@ -1,0 +1,455 @@
+{
+  "source_map_version": "1.0.0",
+  "issue": "https://github.com/ahliweb/omes/issues/264",
+  "adr_reference": "ADR-0031",
+  "description": "Anti-redundancy source map for the AWCMS 3D Mission Control workspace (epic #263). Every scene object kind maps to exactly ONE existing authority, source contract/record, opaque identifier field, freshness rule, allowed display fields, canonical 2D detail route, candidate EXISTING actions, and replay evidence basis. Mission Control is a derived presentation/read-model composition (ADR-0031): this map is not a registry of new capabilities, not an authorization policy, and not a new mission/task lifecycle. An object kind, state value, relation, action, or source absent from this map is unsupported and MUST fail closed (render unknown / unavailable, offer no action). OMES guard MC1-MC9 (lib/omes/py/architecture/mission_control.py) keeps this file consistent with the contracts it references.",
+  "workspace": {
+    "route": "/admin/omes/mission-control",
+    "implementation_repository": "ahliweb/awcms",
+    "replaces_screens": [],
+    "description": "One additional integrated workspace inside the existing AWCMS AdminLayout. It replaces none of the canonical screens below; every object links back to one of them."
+  },
+  "canonical_screens": [
+    { "route": "/admin/omes", "name": "Overview", "issue": 200 },
+    { "route": "/admin/omes/servers", "name": "Servers", "issue": 200 },
+    { "route": "/admin/omes/deployments", "name": "Deployments", "issue": 200 },
+    { "route": "/admin/omes/operations", "name": "Operations", "issue": 200 },
+    { "route": "/admin/omes/jobs", "name": "Jobs", "issue": 200 },
+    { "route": "/admin/omes/health", "name": "Health", "issue": 201 },
+    { "route": "/admin/omes/backups", "name": "Backups and recovery", "issue": 201 },
+    { "route": "/admin/omes/audit", "name": "Audit", "issue": 201 },
+    { "route": "/admin/omes/enrollments", "name": "Enrollments", "issue": 233 },
+    { "route": "/admin/omes/ai-privacy", "name": "AI Privacy", "issue": 232 },
+    { "route": "/admin/omes/orkestrasi-langsung", "name": "Live Orchestration", "issue": 246 },
+    { "route": "/admin/omes/hermes", "name": "Hermes", "issue": 246 },
+    { "route": "/admin/omes/progres-hermes", "name": "Hermes Repository Progress", "issue": 249 },
+    { "route": "/admin/omes/arsitektur", "name": "Architecture", "issue": 246 },
+    { "route": "/admin/approvals", "name": "Workflow approvals inbox (AWCMS workflow-approval module, not OMES-specific)", "issue": null }
+  ],
+  "visual_states": {
+    "ok": "Explicitly proven succeeded/healthy/converged by a live source.",
+    "in_progress": "Explicitly reported as starting/running/in progress by a live source.",
+    "pending": "Explicitly reported as queued/pending/awaiting a decision by a live source.",
+    "warning": "Explicitly reported as degraded/drifted/interrupted/attention-needed.",
+    "failed": "Explicitly reported as failed/unhealthy/rejected.",
+    "cancelled": "Explicitly reported as cancelled.",
+    "informational": "A record with no health semantics (capability, plane, milestone, decommissioned/maintenance server).",
+    "stale": "The source's newest observation is older than its freshness budget; never shown as ok.",
+    "unknown": "No observation, an UNKNOWN/unrecognised state value, or a source that could not be read."
+  },
+  "freshness_rule": {
+    "description": "visual_state = state_map[kind][source_state] (unknown when the value is absent from the map), then: freshness 'unknown' -> 'unknown'; freshness 'stale' -> keep 'failed' or 'warning' (a last-known problem never disappears), otherwise 'stale' (a last-known success is never shown as current). Animation never changes visual_state.",
+    "unknown": "unknown",
+    "stale_keeps": ["failed", "warning"],
+    "stale_otherwise": "stale",
+    "unmapped_state": "unknown"
+  },
+  "sources": {
+    "omes_server_inventory": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_servers row reconciled from OMES enrollment and worker heartbeat (#195, #192)",
+      "contracts": ["server-registration.response", "worker-heartbeat.request"],
+      "freshness": { "basis": "last worker heartbeat (AWCMS STALE_HEARTBEAT_THRESHOLD_MS)", "stale_after_seconds": 300 },
+      "read_permission": "omes_control.servers.read"
+    },
+    "omes_deployment_view": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_deployments desired vs observed state (#91)",
+      "contracts": ["deployment-view"],
+      "freshness": { "basis": "last_reconciled_at (AWCMS STALE_RECONCILIATION_THRESHOLD_MS)", "stale_after_seconds": 1800 },
+      "read_permission": "omes_control.deployments.read"
+    },
+    "omes_job_status": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_jobs plus awcms_omes_worker_results (#90, #192)",
+      "contracts": ["job-status.response", "worker-result.request"],
+      "freshness": { "basis": "a non-terminal job takes the freshness of its target server heartbeat (AWCMS STALE_HEARTBEAT_THRESHOLD_MS); terminal states are final evidence and never go stale", "stale_after_seconds": 300 },
+      "read_permission": "omes_control.jobs.read"
+    },
+    "omes_health_readiness": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_health_snapshots (latest per server) (#79)",
+      "contracts": ["health-readiness.response"],
+      "freshness": { "basis": "latest snapshot captured_at; AWCMS defines no health staleness rule, so this Mission Control budget is new and documented in ADR-0031", "stale_after_seconds": 1800 },
+      "read_permission": "omes_control.servers.read"
+    },
+    "omes_backup_status": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_backup_snapshots (#82)",
+      "contracts": ["backup-status.response"],
+      "freshness": { "basis": "backup captured_at (AWCMS BACKUP_FRESHNESS_THRESHOLD_MS)", "stale_after_seconds": 86400 },
+      "read_permission": "omes_control.backups.read"
+    },
+    "hermes_orchestration_tree": {
+      "authority": "hermes",
+      "record": "AWCMS awcms_omes_hermes_orchestration_trees/events produced from the supported Hermes observer (#183, ADR-0028)",
+      "contracts": ["hermes-orchestration-tree", "hermes-orchestration-event"],
+      "freshness": { "basis": "AWCMS classifyOrchestrationFreshness (DEFAULT_TREE_FRESHNESS_WINDOW_SECONDS)", "stale_after_seconds": 120 },
+      "read_permission": "omes_control.hermes_orchestration.read"
+    },
+    "omes_architecture_capabilities_view": {
+      "authority": "omes",
+      "record": "Pinned architecture-capabilities-view snapshot vendored into AWCMS (#246 part 3, #247)",
+      "contracts": ["architecture-capabilities-view"],
+      "freshness": { "basis": "pinned OMES release snapshot; never stale, but never live host evidence either", "stale_after_seconds": null },
+      "read_permission": "omes_control.architecture.read"
+    },
+    "github_repository_progress_view": {
+      "authority": "provider",
+      "record": "AWCMS awcms_omes_repository_progress observation polled from GitHub (#249, ADR-0030)",
+      "contracts": ["repository-progress-view"],
+      "freshness": { "basis": "observed_at against the 15-minute poll interval x REPOSITORY_PROGRESS_STALE_GRACE_MULTIPLIER (2)", "stale_after_seconds": 1800 },
+      "read_permission": "omes_control.hermes_orchestration.read"
+    },
+    "omes_ai_privacy_posture_view": {
+      "authority": "omes",
+      "record": "AWCMS awcms_omes_ai_privacy_posture (#217, #232, ADR-0029)",
+      "contracts": ["ai-privacy-posture-view"],
+      "freshness": { "basis": "evidence_freshness field", "stale_after_seconds": null },
+      "read_permission": "omes_control.ai_privacy.read"
+    },
+    "awcms_workflow_approval": {
+      "authority": "awcms",
+      "record": "AWCMS workflow-approval instance/task rows for OMES workflow keys (omes_control.destructive_operation); no OMES contract - AWCMS is the approval authority",
+      "contracts": [],
+      "freshness": { "basis": "workflow instance updated_at; read on every request", "stale_after_seconds": null },
+      "read_permission": "workflow.approval.read"
+    }
+  },
+  "kinds": {
+    "server": {
+      "zone": "infrastructure",
+      "source": "omes_server_inventory",
+      "source_id_field": "server_id",
+      "label_field": "hostname",
+      "summary_field": null,
+      "state_field": "status",
+      "allowed_fields": ["server_id", "hostname", "status", "os_name", "os_version", "arch", "last_heartbeat_at"],
+      "detail_route": "/admin/omes/servers",
+      "interaction": "shortcut_to_existing_actions",
+      "candidate_actions": ["open_details", "operation.status", "operation.preflight"],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "worker-heartbeat.request", "path": ["properties", "status"] }
+      ],
+      "projection_state_values": ["offline", "online", "degraded", "maintenance", "decommissioned"],
+      "state_map": {
+        "online": "ok",
+        "healthy": "ok",
+        "degraded": "warning",
+        "maintenance": "informational",
+        "decommissioned": "informational",
+        "offline": "unknown"
+      }
+    },
+    "deployment": {
+      "zone": "infrastructure",
+      "source": "omes_deployment_view",
+      "source_id_field": "deployment_id",
+      "label_field": "deployment_id",
+      "summary_field": null,
+      "state_field": "reconciliation_status",
+      "allowed_fields": ["deployment_id", "server_id", "reconciliation_status", "desired_state.status", "observed_state.status", "last_reconciled_at"],
+      "detail_route": "/admin/omes/deployments",
+      "interaction": "shortcut_to_existing_actions",
+      "candidate_actions": [
+        "open_details",
+        "operation.status",
+        "operation.preflight",
+        "operation.start",
+        "operation.stop",
+        "operation.restart",
+        "operation.update",
+        "operation.backup",
+        "operation.rollback"
+      ],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "deployment-view", "path": ["properties", "observed_state", "properties", "status"] }
+      ],
+      "projection_state_values": ["pending", "in_progress", "converged", "drifted", "failed"],
+      "state_map": {
+        "converged": "ok",
+        "running": "ok",
+        "pending": "pending",
+        "in_progress": "in_progress",
+        "updating": "in_progress",
+        "drifted": "warning",
+        "degraded": "warning",
+        "stopped": "informational",
+        "absent": "informational",
+        "failed": "failed",
+        "unknown": "unknown"
+      }
+    },
+    "job": {
+      "zone": "operations",
+      "source": "omes_job_status",
+      "source_id_field": "job_id",
+      "label_field": "operation",
+      "summary_field": null,
+      "state_field": "state",
+      "allowed_fields": ["job_id", "operation", "state", "server_id", "deployment_id", "correlation_id", "created_at", "updated_at"],
+      "detail_route": "/admin/omes/jobs",
+      "interaction": "shortcut_to_existing_actions",
+      "candidate_actions": ["open_details", "job.cancel", "job.requeue"],
+      "replay_basis": "terminal_transitions",
+      "contract_state_enums": [
+        { "contract": "job-status.response", "path": ["properties", "state"] }
+      ],
+      "projection_state_values": ["queued", "leased", "running", "completed", "failed", "cancelled"],
+      "state_map": {
+        "queued": "pending",
+        "approved": "pending",
+        "leased": "in_progress",
+        "running": "in_progress",
+        "completed": "ok",
+        "succeeded": "ok",
+        "failed": "failed",
+        "expired": "failed",
+        "rolled_back": "warning",
+        "cancelled": "cancelled"
+      }
+    },
+    "health_report": {
+      "zone": "infrastructure",
+      "source": "omes_health_readiness",
+      "source_id_field": "server_id",
+      "label_field": "server_id",
+      "summary_field": null,
+      "state_field": "overall_status",
+      "allowed_fields": ["server_id", "overall_status", "captured_at"],
+      "detail_route": "/admin/omes/health",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "snapshot_series",
+      "contract_state_enums": [
+        { "contract": "health-readiness.response", "path": ["properties", "layers", "additionalProperties", "properties", "status"] }
+      ],
+      "projection_state_values": ["healthy", "degraded", "unhealthy"],
+      "state_map": {
+        "healthy": "ok",
+        "pass": "ok",
+        "degraded": "warning",
+        "unhealthy": "failed",
+        "fail": "failed",
+        "not_applicable": "informational"
+      }
+    },
+    "backup": {
+      "zone": "infrastructure",
+      "source": "omes_backup_status",
+      "source_id_field": "backup_id",
+      "label_field": "backup_id",
+      "summary_field": null,
+      "state_field": "status",
+      "allowed_fields": ["backup_id", "server_id", "status", "created_at"],
+      "detail_route": "/admin/omes/backups",
+      "interaction": "shortcut_to_existing_actions",
+      "candidate_actions": ["open_details", "backup.restore"],
+      "replay_basis": "snapshot_series",
+      "contract_state_enums": [
+        { "contract": "backup-status.response", "path": ["properties", "state"] }
+      ],
+      "projection_state_values": ["completed", "in_progress", "verified", "failed"],
+      "state_map": {
+        "verified": "ok",
+        "completed": "ok",
+        "pending": "pending",
+        "running": "in_progress",
+        "in_progress": "in_progress",
+        "failed": "failed"
+      }
+    },
+    "hermes_subagent": {
+      "zone": "agents",
+      "source": "hermes_orchestration_tree",
+      "source_id_field": "subagent_id",
+      "label_field": "role",
+      "summary_field": "summary",
+      "state_field": "state",
+      "allowed_fields": ["subagent_id", "parent_subagent_id", "role", "goal", "state", "started_at", "completed_at", "step_count", "active_tool", "summary"],
+      "detail_route": "/admin/omes/orkestrasi-langsung",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "event_log",
+      "contract_state_enums": [
+        { "contract": "hermes-orchestration-tree", "path": ["properties", "nodes", "items", "properties", "state"] },
+        { "contract": "hermes-orchestration-event", "path": ["properties", "state"] }
+      ],
+      "projection_state_values": ["PENDING", "STARTING", "RUNNING", "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED", "UNKNOWN"],
+      "state_map": {
+        "PENDING": "pending",
+        "STARTING": "in_progress",
+        "RUNNING": "in_progress",
+        "SUCCEEDED": "ok",
+        "FAILED": "failed",
+        "INTERRUPTED": "warning",
+        "CANCELLED": "cancelled",
+        "UNKNOWN": "unknown"
+      }
+    },
+    "architecture_plane": {
+      "zone": "architecture",
+      "source": "omes_architecture_capabilities_view",
+      "source_id_field": "id",
+      "label_field": "name",
+      "summary_field": null,
+      "state_field": "execution_semantics",
+      "allowed_fields": ["id", "name", "execution_semantics"],
+      "detail_route": "/admin/omes/arsitektur",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "architecture-capabilities-view", "path": ["properties", "planes", "items", "properties", "execution_semantics"] }
+      ],
+      "projection_state_values": [],
+      "state_map": {
+        "probabilistic": "informational",
+        "deterministic": "informational",
+        "observational": "informational",
+        "external_authority": "informational"
+      }
+    },
+    "capability": {
+      "zone": "architecture",
+      "source": "omes_architecture_capabilities_view",
+      "source_id_field": "id",
+      "label_field": "name",
+      "summary_field": null,
+      "state_field": "implementation_status",
+      "allowed_fields": ["id", "name", "plane", "authority", "execution_semantics", "implementation_status"],
+      "detail_route": "/admin/omes/arsitektur",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "architecture-capabilities-view", "path": ["properties", "capabilities", "items", "properties", "implementation_status"] }
+      ],
+      "projection_state_values": [],
+      "state_map": {
+        "implemented": "informational",
+        "delegated_upstream": "informational",
+        "staged": "informational",
+        "optional_external": "informational",
+        "logical_boundary": "informational"
+      }
+    },
+    "repository_milestone": {
+      "zone": "repository",
+      "source": "github_repository_progress_view",
+      "source_id_field": "number",
+      "label_field": "title",
+      "summary_field": null,
+      "state_field": "state",
+      "allowed_fields": ["number", "title", "state", "open_issues", "closed_issues", "due_on", "html_url"],
+      "detail_route": "/admin/omes/progres-hermes",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "repository-progress-view", "path": ["properties", "milestones", "items", "properties", "state"] }
+      ],
+      "projection_state_values": [],
+      "state_map": {
+        "open": "informational",
+        "closed": "informational"
+      }
+    },
+    "ai_privacy_posture": {
+      "zone": "ai_privacy",
+      "source": "omes_ai_privacy_posture_view",
+      "source_id_field": "server_id",
+      "label_field": "server_id",
+      "summary_field": null,
+      "state_field": "status",
+      "allowed_fields": ["server_id", "status", "evidence_freshness", "classification_mode", "destination_class"],
+      "detail_route": "/admin/omes/ai-privacy",
+      "interaction": "read_only",
+      "candidate_actions": ["open_details"],
+      "replay_basis": "current_only",
+      "contract_state_enums": [
+        { "contract": "ai-privacy-posture-view", "path": ["properties", "status"] }
+      ],
+      "projection_state_values": ["PASS", "FAIL", "WARN", "BLOCKED"],
+      "state_map": {
+        "PASS": "ok",
+        "WARN": "warning",
+        "BLOCKED": "warning",
+        "FAIL": "failed"
+      }
+    },
+    "approval_item": {
+      "zone": "governance",
+      "source": "awcms_workflow_approval",
+      "source_id_field": "workflow_instance_id",
+      "label_field": "operation",
+      "summary_field": null,
+      "state_field": "status",
+      "allowed_fields": ["workflow_instance_id", "workflow_key", "status", "operation", "created_at"],
+      "detail_route": "/admin/approvals",
+      "interaction": "shortcut_to_existing_actions",
+      "candidate_actions": ["open_details", "approval.open_in_inbox"],
+      "replay_basis": "terminal_transitions",
+      "contract_state_enums": [],
+      "projection_state_values": ["pending", "approved", "rejected", "cancelled"],
+      "state_map": {
+        "pending": "pending",
+        "approved": "ok",
+        "rejected": "failed",
+        "cancelled": "cancelled"
+      }
+    }
+  },
+  "relations": {
+    "hosts": { "from": ["server"], "to": ["deployment"], "evidence": "deployment.server_id" },
+    "targets": { "from": ["job"], "to": ["server", "deployment"], "evidence": "job.server_id / job.deployment_id" },
+    "delegates_to": { "from": ["hermes_subagent"], "to": ["hermes_subagent"], "evidence": "hermes-orchestration-tree node.parent_subagent_id (opaque Hermes correlation identifier)" },
+    "observed_on": { "from": ["hermes_subagent", "ai_privacy_posture"], "to": ["server"], "evidence": "hermes-orchestration-tree.server_id / ai-privacy-posture-view.server_id" },
+    "describes": { "from": ["health_report"], "to": ["server"], "evidence": "health snapshot server_id" },
+    "protects": { "from": ["backup"], "to": ["server"], "evidence": "backup snapshot server_id" },
+    "member_of": { "from": ["capability"], "to": ["architecture_plane"], "evidence": "architecture-capabilities-view capability.plane" },
+    "awaits_decision_for": { "from": ["approval_item"], "to": ["job", "deployment", "backup"], "evidence": "operation request workflow_instance_id and target" }
+  },
+  "actions": {
+    "open_details": { "mutating": false, "existing_path": "GET <detail_route>", "permission": "the source read_permission" },
+    "operation.status": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=status)", "permission": "omes_control.deployments.read", "approval": "none" },
+    "operation.preflight": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=preflight)", "permission": "omes_control.deployments.read", "approval": "none" },
+    "operation.start": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=start)", "permission": "omes_control.deployments.operate", "approval": "none" },
+    "operation.stop": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=stop)", "permission": "omes_control.deployments.operate", "approval": "workflow:omes_control.destructive_operation" },
+    "operation.restart": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=restart)", "permission": "omes_control.deployments.operate", "approval": "none" },
+    "operation.update": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=update)", "permission": "omes_control.deployments.operate", "approval": "none" },
+    "operation.backup": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=backup)", "permission": "omes_control.deployments.operate", "approval": "none" },
+    "operation.rollback": { "mutating": true, "existing_path": "POST /api/v1/omes/operations (operation=rollback)", "permission": "omes_control.backups.rollback", "approval": "workflow:omes_control.destructive_operation" },
+    "job.cancel": { "mutating": true, "existing_path": "POST /api/v1/omes/jobs/{id}/cancel", "permission": "omes_control.jobs.cancel", "approval": "none" },
+    "job.requeue": { "mutating": true, "existing_path": "POST /api/v1/omes/jobs/{id}/approve", "permission": "omes_control.jobs.approve", "approval": "none" },
+    "backup.restore": { "mutating": true, "existing_path": "POST /api/v1/omes/backups/{id}/restore", "permission": "omes_control.backups.restore", "approval": "workflow:omes_control.destructive_operation" },
+    "approval.open_in_inbox": { "mutating": false, "existing_path": "GET /admin/approvals?workflowKey=omes_control.destructive_operation&instance={id}", "permission": "workflow.approval.read", "approval": "decisions are made only in the canonical workflow inbox" }
+  },
+  "replay_bases": {
+    "event_log": "Every retained transition is an event (deduplicated by source key); replay steps through them.",
+    "snapshot_series": "Periodic retained snapshots; the state between two snapshots is the earlier snapshot's, labelled as last known.",
+    "terminal_transitions": "Only creation and terminal transitions are retained; intermediate steps are an explicit evidence gap.",
+    "current_only": "Only the current state is retained; in historical mode the object is shown with an evidence gap, never back-dated."
+  },
+  "forbidden_field_terms": [
+    "prompt",
+    "transcript",
+    "reasoning",
+    "chain_of_thought",
+    "tool_args",
+    "tool_arguments",
+    "tool_result",
+    "raw",
+    "payload",
+    "command",
+    "shell",
+    "argv",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "private_key"
+  ]
+}

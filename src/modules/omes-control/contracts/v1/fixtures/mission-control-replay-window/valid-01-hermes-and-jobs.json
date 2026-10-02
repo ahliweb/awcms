@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "window": {
+    "from": "2026-10-02T07:00:00Z",
+    "to": "2026-10-02T08:00:00Z"
+  },
+  "events": [
+    {
+      "at": "2026-10-02T07:10:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-root-pending",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-root-02",
+      "parent_source_id": null,
+      "source_state": "PENDING",
+      "visual_state": "pending",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-001"
+    },
+    {
+      "at": "2026-10-02T07:15:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-root-running",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-root-02",
+      "parent_source_id": null,
+      "source_state": "RUNNING",
+      "visual_state": "in_progress",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-001"
+    },
+    {
+      "at": "2026-10-02T07:20:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-child-pending",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-child-worker",
+      "parent_source_id": "subagent-root-02",
+      "source_state": "PENDING",
+      "visual_state": "pending",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-002"
+    },
+    {
+      "at": "2026-10-02T07:25:00Z",
+      "evidence_kind": "job_record",
+      "evidence_id": "job-rec-001",
+      "kind": "job",
+      "source_id": "job-demo-04",
+      "parent_source_id": null,
+      "source_state": "queued",
+      "visual_state": "pending",
+      "provenance": "observed",
+      "correlation_id": "corr-job-001"
+    },
+    {
+      "at": "2026-10-02T07:30:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-child-running",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-child-worker",
+      "parent_source_id": "subagent-root-02",
+      "source_state": "RUNNING",
+      "visual_state": "in_progress",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-002"
+    },
+    {
+      "at": "2026-10-02T07:35:00Z",
+      "evidence_kind": "health_snapshot",
+      "evidence_id": "health-snap-001",
+      "kind": "health_report",
+      "source_id": "srv-demo-01",
+      "parent_source_id": null,
+      "source_state": "healthy",
+      "visual_state": "ok",
+      "provenance": "observed",
+      "correlation_id": null
+    },
+    {
+      "at": "2026-10-02T07:45:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-child-succeeded",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-child-worker",
+      "parent_source_id": "subagent-root-02",
+      "source_state": "SUCCEEDED",
+      "visual_state": "ok",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-002"
+    },
+    {
+      "at": "2026-10-02T07:50:00Z",
+      "evidence_kind": "worker_result",
+      "evidence_id": "worker-res-001",
+      "kind": "job",
+      "source_id": "job-demo-04",
+      "parent_source_id": null,
+      "source_state": "completed",
+      "visual_state": "ok",
+      "provenance": "late_arrival",
+      "correlation_id": "corr-job-001"
+    },
+    {
+      "at": "2026-10-02T07:55:00Z",
+      "evidence_kind": "hermes_event",
+      "evidence_id": "evt-h1-root-succeeded",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-root-02",
+      "parent_source_id": null,
+      "source_state": "SUCCEEDED",
+      "visual_state": "ok",
+      "provenance": "observed",
+      "correlation_id": "corr-h1-001"
+    }
+  ],
+  "evidence_gaps": [
+    {
+      "source_kind": "omes_deployment_view",
+      "from": "2026-10-02T07:00:00Z",
+      "to": "2026-10-02T08:00:00Z",
+      "reason": "not_retained"
+    }
+  ],
+  "next_cursor": "c2"
+}

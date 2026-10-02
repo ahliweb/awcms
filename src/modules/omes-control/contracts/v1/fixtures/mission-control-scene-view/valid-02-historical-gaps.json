@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "mode": "historical",
+  "as_of": "2026-10-01T14:00:00Z",
+  "sources": [
+    {
+      "source_kind": "omes_server_inventory",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-01T14:00:00Z"
+    },
+    {
+      "source_kind": "hermes_orchestration_tree",
+      "authority": "hermes",
+      "status": "available",
+      "observed_at": "2026-10-01T14:00:00Z"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "n1",
+      "kind": "server",
+      "source_id": "srv-demo-03",
+      "label": "prod-backup",
+      "source_state": "online",
+      "visual_state": "unknown",
+      "freshness": "unknown",
+      "observed_at": null,
+      "detail_route": "/admin/omes/servers"
+    },
+    {
+      "node_id": "n2",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-hist-01",
+      "label": "VerificationAgent",
+      "source_state": "SUCCEEDED",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-01T13:45:00Z",
+      "detail_route": "/admin/omes/orkestrasi-langsung",
+      "summary": "Historical verification completed"
+    }
+  ],
+  "relations": [],
+  "truncated": {
+    "nodes": 0,
+    "relations": 0
+  },
+  "evidence_gaps": [
+    {
+      "source_kind": "omes_server_inventory",
+      "from": "2026-09-28T00:00:00Z",
+      "to": "2026-09-30T23:59:59Z",
+      "reason": "not_retained"
+    },
+    {
+      "source_kind": "omes_job_status",
+      "from": "2026-09-01T00:00:00Z",
+      "to": "2026-09-15T23:59:59Z",
+      "reason": "retention_expired"
+    }
+  ]
+}

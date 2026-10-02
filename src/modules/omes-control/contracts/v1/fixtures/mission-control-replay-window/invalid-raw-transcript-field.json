@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "window": {
+    "from": "2026-10-02T07:00:00Z",
+    "to": "2026-10-02T08:00:00Z"
+  },
+  "events": [],
+  "evidence_gaps": [],
+  "next_cursor": null,
+  "transcript": [
+    {
+      "role": "user",
+      "content": "This is forbidden"
+    }
+  ]
+}

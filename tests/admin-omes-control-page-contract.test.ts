@@ -219,11 +219,14 @@ describe("OMES admin screens gate on triples their endpoints actually enforce", 
     // tests/admin-omes-control-enrollments-page-contract.test.ts — plus AI
     // privacy (#232) — plus live orchestration, Hermes, and Hermes progress
     // (#246 part 2) — plus Arsitektur (#246 part 3, see
-    // tests/admin-omes-control-architecture-page-contract.test.ts).
+    // tests/admin-omes-control-architecture-page-contract.test.ts) — plus
+    // 3D Mission Control (ahliweb/omes#265, see
+    // tests/admin-omes-control-mission-control-page-contract.test.ts), which
+    // reuses `servers.read` and so adds a screen but no permission.
     const nav = listModules().find(
       (module) => module.key === "omes_control"
     )?.navigation;
-    expect(nav?.length).toBe(14);
+    expect(nav?.length).toBe(15);
 
     for (const entry of nav ?? []) {
       expect(entry.requiredPermission).toBeDefined();
