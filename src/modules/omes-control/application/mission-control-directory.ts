@@ -55,6 +55,8 @@
  */
 import { log } from "../../../lib/logging/logger";
 import { sanitizeErrorForLog } from "../../../lib/logging/error-sanitizer";
+import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import { createAuthorizationReadCache } from "../../identity-access/application/authorization-read-cache";
 import type { AccessRequest } from "../../identity-access/domain/access-control";
 import {
   decodeKeysetCursor,
@@ -68,6 +70,7 @@ import {
   composeScene,
   freshnessFromAge,
   sourceFreshnessBudgetSeconds,
+  TERMINAL_JOB_STATES,
   toSceneTimestamp,
   type MissionControlDecisionTarget,
   type MissionControlRecordInput,
@@ -113,15 +116,6 @@ export const MISSION_CONTROL_PENDING_APPROVAL_LIMIT = 100;
 /** Keyset pages read for servers / deployments / backups (100 rows each). */
 const MAX_PAGES = 5;
 
-/** Job states that are final evidence (they never go stale — source map `omes_job_status.freshness.basis`). */
-const TERMINAL_JOB_STATES: ReadonlySet<string> = new Set([
-  "completed",
-  "succeeded",
-  "failed",
-  "expired",
-  "rolled_back",
-  "cancelled"
-]);
 /** Non-terminal states read with an explicit state filter so an old stuck job is never crowded out by newer terminal ones. */
 const NON_TERMINAL_JOB_STATES = ["queued", "leased", "running"] as const;
 
@@ -197,27 +191,91 @@ function repositoryFreshness(
   return freshness === "fresh" ? "live" : freshness;
 }
 
-export async function composeMissionControlSceneForViewer(params: {
+/**
+ * The per-source read check both Mission Control routes (scene and replay) use:
+ * `authorizeInTransaction` over the caller's own session — the same chokepoint
+ * every guarded route uses — so a source the viewer may not read is reported
+ * `unavailable` and never queried. One read cache is shared across the
+ * evaluations of a request (the memo `loadAdminScreen` uses for the same
+ * reason), and `clientIp` is forwarded so a machine credential's IP
+ * restriction is enforced for them too. Historical replay is never more
+ * permissive than the live view: it asks the SAME guards.
+ */
+export function createMissionControlCan(params: {
+  tx: Bun.SQL;
+  tenantId: string;
+  tokenHash: string;
+  now: Date;
+  clientIp?: string;
+}): (guard: AccessRequest) => Promise<boolean> {
+  const options = {
+    clientIp: params.clientIp,
+    readCache: createAuthorizationReadCache()
+  };
+  return async (guard) => {
+    const result = await authorizeInTransaction(
+      params.tx,
+      params.tenantId,
+      params.tokenHash,
+      params.now,
+      guard,
+      options
+    );
+    return result.allowed;
+  };
+}
+
+/**
+ * The mutable accumulator the per-source collectors write into: which sources
+ * were consulted (and whether the viewer could read them) and the projected
+ * records. Shared by the live composition below and by the historical scene
+ * (`mission-control-replay-directory.ts`), which reuses the `current_only`
+ * collectors for its present-day anchors instead of duplicating their reads.
+ */
+export type MissionControlCollector = {
+  tx: Bun.SQL;
+  tenantId: string;
+  now: Date;
+  sources: MissionControlSourceInput[];
+  records: MissionControlRecordInput[];
+  /** Server heartbeat freshness by server id (a non-terminal job inherits it). */
+  serverFreshness: Map<string, MissionControlFreshness>;
+  /** Records the source as consulted and returns whether the viewer may read it. */
+  consult: (
+    sourceKind: MissionControlSourceKind,
+    guard: AccessRequest
+  ) => Promise<boolean>;
+};
+
+export function createMissionControlCollector(params: {
   tx: Bun.SQL;
   tenantId: string;
   now: Date;
   can: (request: AccessRequest) => Promise<boolean>;
-}): Promise<MissionControlSceneView> {
-  const { tx, tenantId, now, can } = params;
+}): MissionControlCollector {
   const sources: MissionControlSourceInput[] = [];
-  const records: MissionControlRecordInput[] = [];
-
-  const consult = async (
-    sourceKind: MissionControlSourceKind,
-    guard: AccessRequest
-  ): Promise<boolean> => {
-    const allowed = await can(guard);
-    sources.push({ sourceKind, available: allowed });
-    return allowed;
+  return {
+    tx: params.tx,
+    tenantId: params.tenantId,
+    now: params.now,
+    sources,
+    records: [],
+    serverFreshness: new Map(),
+    consult: async (sourceKind, guard) => {
+      const allowed = await params.can(guard);
+      sources.push({ sourceKind, available: allowed });
+      return allowed;
+    }
   };
+}
 
+/** Servers (`omes_control.servers.read`). `current_only`. */
+export async function collectServerRecords(
+  c: MissionControlCollector
+): Promise<void> {
+  const { tx, tenantId, now, records, consult } = c;
   // --- Servers (omes_control.servers.read) --------------------------------
-  const serverFreshness = new Map<string, MissionControlFreshness>();
+  const { serverFreshness } = c;
   if (await consult("omes_server_inventory", OMES_GUARDS.servers.read)) {
     const servers = await collectPages(async (cursor) => {
       const page = await fetchServers(tx, tenantId, now, { cursor });
@@ -240,7 +298,13 @@ export async function composeMissionControlSceneForViewer(params: {
       });
     }
   }
+}
 
+/** Deployments (`omes_control.deployments.read`). `current_only`. */
+export async function collectDeploymentRecords(
+  c: MissionControlCollector
+): Promise<void> {
+  const { tx, tenantId, now, records, consult } = c;
   // --- Deployments (omes_control.deployments.read) ------------------------
   if (await consult("omes_deployment_view", OMES_GUARDS.deployments.read)) {
     const deployments = await collectPages(async (cursor) => {
@@ -263,6 +327,134 @@ export async function composeMissionControlSceneForViewer(params: {
       });
     }
   }
+}
+
+/** Architecture planes and capabilities (`omes_control.architecture.read`). `current_only`. */
+export async function collectArchitectureRecords(
+  c: MissionControlCollector
+): Promise<void> {
+  const { sources, records, consult } = c;
+  // --- Architecture snapshot (omes_control.architecture.read) -------------
+  if (
+    await consult(
+      "omes_architecture_capabilities_view",
+      OMES_GUARDS.architecture.read
+    )
+  ) {
+    try {
+      const snapshot = await fetchArchitectureSnapshot();
+      // A pinned RELEASE snapshot, not live host evidence: observed_at is
+      // the real vendoring time (`PIN.json`), never the fixture's
+      // placeholder `generated_at`.
+      const observedAt = snapshot.provenance.vendoredAt;
+      for (const lane of snapshot.lanes) {
+        records.push({
+          kind: "architecture_plane",
+          sourceId: lane.plane.id,
+          label: lane.plane.name,
+          sourceState: lane.plane.executionSemantics,
+          freshness: "live",
+          observedAt
+        });
+        for (const capability of lane.capabilities) {
+          records.push({
+            kind: "capability",
+            sourceId: capability.id,
+            label: capability.name,
+            sourceState: capability.implementationStatus,
+            freshness: "live",
+            observedAt,
+            evidence: { planeId: capability.plane }
+          });
+        }
+      }
+    } catch (error) {
+      // No database involved, so the transaction is unharmed: degrade this
+      // ONE source to `unavailable` rather than fail the whole scene.
+      sources[sources.length - 1] = {
+        sourceKind: "omes_architecture_capabilities_view",
+        available: false
+      };
+      log("error", "omes.mission_control.architecture_unavailable", {
+        error: sanitizeErrorForLog(error) as unknown as Record<string, unknown>
+      });
+    }
+  }
+}
+
+/** Repository milestones (`omes_control.hermes_orchestration.read`). `current_only`. */
+export async function collectRepositoryProgressRecords(
+  c: MissionControlCollector
+): Promise<void> {
+  const { tx, tenantId, now, sources, records, consult } = c;
+  // --- Repository progress (omes_control.hermes_orchestration.read) -------
+  if (
+    await consult(
+      "github_repository_progress_view",
+      OMES_GUARDS.hermesOrchestration.read
+    )
+  ) {
+    const progress = await fetchRepositoryProgress(tx, tenantId, now);
+    if (progress.state === "unconfigured") {
+      // Not configured is not "healthy and empty": report it unavailable.
+      sources[sources.length - 1] = {
+        sourceKind: "github_repository_progress_view",
+        available: false
+      };
+    } else {
+      for (const milestone of progress.milestones) {
+        records.push({
+          kind: "repository_milestone",
+          sourceId: String(milestone.number),
+          label: milestone.title,
+          sourceState: milestone.state,
+          freshness: repositoryFreshness(progress.freshness),
+          observedAt: progress.observedAt
+        });
+      }
+    }
+  }
+}
+
+/** AI privacy posture (`omes_control.ai_privacy.read`). `current_only`. */
+export async function collectAiPrivacyRecords(
+  c: MissionControlCollector
+): Promise<void> {
+  const { tx, tenantId, now, records, consult } = c;
+  // --- AI privacy posture (omes_control.ai_privacy.read) ------------------
+  if (
+    await consult("omes_ai_privacy_posture_view", OMES_GUARDS.aiPrivacy.read)
+  ) {
+    const posture = await fetchAiPrivacyPosture(tx, tenantId, now);
+    for (const row of posture.posture) {
+      records.push({
+        kind: "ai_privacy_posture",
+        sourceId: row.serverId,
+        label: row.serverId,
+        // The EFFECTIVE status (stale/unknown evidence already downgraded
+        // from PASS) — the field the AI Privacy screen itself displays.
+        sourceState: row.effectiveStatus,
+        freshness: repositoryFreshness(row.evidenceFreshness),
+        observedAt: row.lastVerifiedAt,
+        evidence: { serverId: row.serverId }
+      });
+    }
+  }
+}
+
+export async function composeMissionControlSceneForViewer(params: {
+  tx: Bun.SQL;
+  tenantId: string;
+  now: Date;
+  can: (request: AccessRequest) => Promise<boolean>;
+}): Promise<MissionControlSceneView> {
+  const { tx, tenantId, now, can } = params;
+  const collector = createMissionControlCollector({ tx, tenantId, now, can });
+  const { sources, records, serverFreshness, consult } = collector;
+
+  // --- Servers + Deployments (current_only; shared collectors) ------------
+  await collectServerRecords(collector);
+  await collectDeploymentRecords(collector);
 
   // --- Jobs (omes_control.jobs.read) --------------------------------------
   const jobIdByOperationRequest = new Map<string, string>();
@@ -386,100 +578,10 @@ export async function composeMissionControlSceneForViewer(params: {
     }
   }
 
-  // --- Architecture snapshot (omes_control.architecture.read) -------------
-  if (
-    await consult(
-      "omes_architecture_capabilities_view",
-      OMES_GUARDS.architecture.read
-    )
-  ) {
-    try {
-      const snapshot = await fetchArchitectureSnapshot();
-      // A pinned RELEASE snapshot, not live host evidence: observed_at is
-      // the real vendoring time (`PIN.json`), never the fixture's
-      // placeholder `generated_at`.
-      const observedAt = snapshot.provenance.vendoredAt;
-      for (const lane of snapshot.lanes) {
-        records.push({
-          kind: "architecture_plane",
-          sourceId: lane.plane.id,
-          label: lane.plane.name,
-          sourceState: lane.plane.executionSemantics,
-          freshness: "live",
-          observedAt
-        });
-        for (const capability of lane.capabilities) {
-          records.push({
-            kind: "capability",
-            sourceId: capability.id,
-            label: capability.name,
-            sourceState: capability.implementationStatus,
-            freshness: "live",
-            observedAt,
-            evidence: { planeId: capability.plane }
-          });
-        }
-      }
-    } catch (error) {
-      // No database involved, so the transaction is unharmed: degrade this
-      // ONE source to `unavailable` rather than fail the whole scene.
-      sources[sources.length - 1] = {
-        sourceKind: "omes_architecture_capabilities_view",
-        available: false
-      };
-      log("error", "omes.mission_control.architecture_unavailable", {
-        error: sanitizeErrorForLog(error) as unknown as Record<string, unknown>
-      });
-    }
-  }
-
-  // --- Repository progress (omes_control.hermes_orchestration.read) -------
-  if (
-    await consult(
-      "github_repository_progress_view",
-      OMES_GUARDS.hermesOrchestration.read
-    )
-  ) {
-    const progress = await fetchRepositoryProgress(tx, tenantId, now);
-    if (progress.state === "unconfigured") {
-      // Not configured is not "healthy and empty": report it unavailable.
-      sources[sources.length - 1] = {
-        sourceKind: "github_repository_progress_view",
-        available: false
-      };
-    } else {
-      for (const milestone of progress.milestones) {
-        records.push({
-          kind: "repository_milestone",
-          sourceId: String(milestone.number),
-          label: milestone.title,
-          sourceState: milestone.state,
-          freshness: repositoryFreshness(progress.freshness),
-          observedAt: progress.observedAt
-        });
-      }
-    }
-  }
-
-  // --- AI privacy posture (omes_control.ai_privacy.read) ------------------
-  if (
-    await consult("omes_ai_privacy_posture_view", OMES_GUARDS.aiPrivacy.read)
-  ) {
-    const posture = await fetchAiPrivacyPosture(tx, tenantId, now);
-    for (const row of posture.posture) {
-      records.push({
-        kind: "ai_privacy_posture",
-        sourceId: row.serverId,
-        label: row.serverId,
-        // The EFFECTIVE status (stale/unknown evidence already downgraded
-        // from PASS) — the field the AI Privacy screen itself displays.
-        sourceState: row.effectiveStatus,
-        freshness: repositoryFreshness(row.evidenceFreshness),
-        observedAt: row.lastVerifiedAt,
-        evidence: { serverId: row.serverId }
-      });
-    }
-  }
+  // --- Architecture, repository progress, AI privacy (current_only) ------
+  await collectArchitectureRecords(collector);
+  await collectRepositoryProgressRecords(collector);
+  await collectAiPrivacyRecords(collector);
 
   // --- Pending destructive-operation approvals (workflow.approval.read) ---
   if (

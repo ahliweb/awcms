@@ -183,3 +183,5 @@ export const MISSION_CONTROL_MAX_REPLAY_EVENTS = 500;
 export const MISSION_CONTROL_ROUTE = "/admin/omes/mission-control";
 /** The scene API both the SSR page and the browser poll consume. */
 export const MISSION_CONTROL_SCENE_API = "/api/v1/omes/mission-control/scene";
+/** The bounded, keyset-paginated replay API (Issue ahliweb/omes#266). */
+export const MISSION_CONTROL_REPLAY_API = "/api/v1/omes/mission-control/replay";

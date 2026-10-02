@@ -849,8 +849,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 275,629 is the measured value with no added margin.
+ *
+ * **Raised for ahliweb/omes#266** (Mission Control historical replay, same
+ * screen, same epic): the evidence-based History mode — time range,
+ * play/step/scrubber transport, evidence-gap list and the accessible event
+ * list kept in sync with the scene. New feature code again, not duplication:
+ * it reuses #265's renderer, layout and visual-state rule and the shared
+ * `admin-form-client.ts`. `replay.*.js` is a lazy `import()` loaded only when
+ * a viewer enters History mode, so live-mode viewers download none of it.
+ * Measured actual total, on top of #265 above:
+ *
+ * ```
+ * before (275,629 ceiling)   275,629 B
+ * + mission-control page script (mode switch, lazy replay hook)   +1,542 B
+ * + replay.*.js (lazy History-mode client, new)                   +7,764 B
+ * + omes-control-center.css replay controls/banner/event list     +1,480 B
+ *                                                               286,415 B (measured actual total)
+ * ```
+ *
+ * 286,415 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 275_629;
+export const APP_BUDGET_BYTES = 286_415;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -6185,3 +6185,100 @@ msgstr ""
 
 msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
 msgstr ""
+
+#. Mission Control historical replay (ahliweb/omes#266, ADR-0031)
+msgid "Choose a start before the end, no more than 24 hours apart, and not in the future."
+msgstr ""
+
+msgid "Could not load the history for this range."
+msgstr ""
+
+msgid "Could not load the scene for this time. Still showing the scene as of {time}."
+msgstr ""
+
+msgid "Event {n} of {total} — {time}"
+msgstr ""
+
+msgid "Evidence gaps"
+msgstr ""
+
+msgid "Historical view. Showing recorded evidence as of {time}, not live state."
+msgstr ""
+
+msgid "Historical — {time}"
+msgstr ""
+
+msgid "History is unavailable right now. Showing the live view."
+msgstr ""
+
+msgid "History replay"
+msgstr ""
+
+msgid "Late arrival"
+msgstr ""
+
+msgid "Live view resumed. Showing current state."
+msgstr ""
+
+msgid "Load range"
+msgstr ""
+
+msgid "No evidence gaps were reported for this range."
+msgstr ""
+
+msgid "No evidence was retained in this range."
+msgstr ""
+
+msgid "Observed events"
+msgstr ""
+
+msgid "Play"
+msgstr ""
+
+msgid "Replay controls"
+msgstr ""
+
+msgid "Replay range"
+msgstr ""
+
+msgid "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+msgstr ""
+
+msgid "Return to live"
+msgstr ""
+
+msgid "Showing the first {count} events. Narrow the range to see the rest."
+msgstr ""
+
+msgid "Speed"
+msgstr ""
+
+msgid "Step back"
+msgstr ""
+
+msgid "Step forward"
+msgstr ""
+
+msgid "Timeline"
+msgstr ""
+
+msgid "View mode"
+msgstr ""
+
+msgid "Window start"
+msgstr ""
+
+msgid "before the first retained observation"
+msgstr ""
+
+msgid "not retained: only current state exists"
+msgstr ""
+
+msgid "retention expired: older evidence was purged"
+msgstr ""
+
+msgid "source unavailable to you or unreadable"
+msgstr ""
+
+msgid "{source} — {reason} ({from} to {to})"
+msgstr ""

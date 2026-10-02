@@ -13,9 +13,15 @@
  * Labels and summaries are UNTRUSTED text: every DOM write below is
  * `textContent`/`setAttribute`/`dataset` — never `innerHTML`.
  *
- * Read-only: there is no mutating control (actions are ahliweb/omes#267) and
- * no replay (#266). A failed refresh keeps the last scene and says so; an
- * empty or failed response is never treated as healthy.
+ * Read-only: there is no mutating control (actions are ahliweb/omes#267). A
+ * failed refresh keeps the last scene and says so; an empty or failed response
+ * is never treated as healthy.
+ *
+ * History mode (ahliweb/omes#266) lives in `replay.ts`, which is `import()`ed
+ * only when the user first enters it — a live-mode user never downloads it.
+ * Entering it stops live polling, aborts any refresh in flight and puts the
+ * persistent "Historical" banner up; leaving it restores the last live scene,
+ * resumes polling and announces the change.
  */
 import {
   MISSION_CONTROL_SCENE_API,
@@ -26,6 +32,7 @@ import {
 } from "../../../modules/omes-control/domain/mission-control-types";
 import { messageBox } from "../admin-form-client";
 import { layoutScene, type SceneLayout } from "./layout";
+import type { ReplayApi, ReplayHost } from "./replay";
 import type { MissionControlRenderer } from "./scene-gl";
 import {
   KIND_SOURCE,
@@ -49,6 +56,7 @@ type Labels = {
   sourceStates: Dict;
   authority: Dict;
   ui: Dict;
+  replay: Dict;
 };
 type Entry = { index: number; li: HTMLElement; btn: HTMLButtonElement };
 
@@ -123,6 +131,7 @@ export function startMissionControl(): void {
   const listEl = document.getElementById("omes-mc-list");
   if (!root || !listEl) return;
   const list: HTMLElement = listEl;
+  const rootEl: HTMLElement = root;
 
   const rawLabels = parseJson(root.dataset.labels);
   const L = (isObject(rawLabels) ? rawLabels : {}) as Partial<Labels>;
@@ -158,6 +167,11 @@ export function startMissionControl(): void {
   let selectedKey: string | null = null;
   let renderer: MissionControlRenderer | null = null;
   let signature = "";
+  let mode: "live" | "history" = "live";
+  let replay: ReplayApi | null = null;
+  let liveScene: MissionControlSceneView | null = null;
+  let clockSkew = 0;
+  let pollAbort: AbortController | null = null;
 
   function visible(node: MissionControlSceneNode): boolean {
     return (
@@ -480,6 +494,92 @@ export function startMissionControl(): void {
     }
   }
 
+  // ---- live / history mode -------------------------------------------------
+  const modeRadios = rootEl.querySelectorAll<HTMLInputElement>(
+    'input[name="omes-mc-mode"]'
+  );
+  const announceEl = document.getElementById("omes-mc-announce");
+  const bannerEl = document.getElementById("omes-mc-banner");
+  const historyEl = document.getElementById("omes-mc-history");
+  const modeLabel = document.getElementById("omes-mc-mode-label");
+
+  function announce(message: string): void {
+    if (announceEl) announceEl.textContent = message;
+  }
+
+  function syncMode(): void {
+    rootEl.dataset.mode = mode;
+    modeRadios.forEach((radio) => {
+      radio.checked = radio.value === mode;
+    });
+    if (bannerEl) bannerEl.hidden = mode !== "history";
+    if (historyEl) historyEl.hidden = mode !== "history";
+    if (modeLabel) {
+      modeLabel.textContent =
+        (mode === "live" ? ui.liveView : ui.historicalView) ?? "";
+    }
+  }
+
+  const host: ReplayHost = {
+    labels: { ...L, replay: L.replay, ui },
+    showScene(raw) {
+      const next = normalise(raw);
+      if (!next) return false;
+      signature = JSON.stringify([
+        next.sources,
+        next.nodes,
+        next.relations,
+        next.truncated
+      ]);
+      adopt(next, true);
+      return true;
+    },
+    focus(kind, sourceId, animate) {
+      const key = nodeKey(kind, sourceId);
+      select(entries.has(key) ? key : null, { fly: animate });
+    },
+    announce,
+    reducedMotion: () => motion.matches,
+    serverNow: () => Date.now() + clockSkew,
+    onExit: () => void setMode("live")
+  };
+
+  async function setMode(next: "live" | "history"): Promise<void> {
+    if (next === mode) return;
+    if (next === "history") {
+      mode = "history";
+      pollAbort?.abort();
+      syncMode();
+      try {
+        replay ??= (await import("./replay")).startReplay(host);
+        replay.enter();
+      } catch {
+        mode = "live";
+        syncMode();
+        connectivity.show(ui.historyUnavailable ?? "");
+      }
+      return;
+    }
+    mode = "live";
+    replay?.exit();
+    syncMode();
+    if (liveScene) {
+      signature = "";
+      adopt(
+        Date.now() - lastOk > POLL_MS ? ageOutScene(liveScene) : liveScene,
+        true
+      );
+    }
+    announce(ui.liveResumed ?? "");
+    void poll();
+  }
+
+  modeRadios.forEach((radio) =>
+    radio.addEventListener("change", () => {
+      if (radio.checked) void setMode(radio.value as "live" | "history");
+    })
+  );
+
   // ---- events --------------------------------------------------------------
   list.addEventListener("click", (event) => {
     const btn = (event.target as Element | null)?.closest<HTMLButtonElement>(
@@ -585,9 +685,10 @@ export function startMissionControl(): void {
   let lastOk = Date.now();
 
   async function poll(): Promise<void> {
-    if (document.hidden || inflight) return;
+    if (document.hidden || inflight || mode !== "live") return;
     inflight = true;
     const abort = new AbortController();
+    pollAbort = abort;
     const timer = window.setTimeout(() => abort.abort(), 10_000);
     try {
       const response = await fetch(MISSION_CONTROL_SCENE_API, {
@@ -601,6 +702,10 @@ export function startMissionControl(): void {
         isObject(body) && isObject(body.data) ? body.data.scene : null
       );
       if (!next) throw new Error("malformed scene");
+      // A refresh that finished after History mode was entered must not paint
+      // live state under the historical banner.
+      if (mode !== "live") return;
+      liveScene = next;
       lastOk = Date.now();
       connectivity.clear();
       const focused = (
@@ -624,6 +729,7 @@ export function startMissionControl(): void {
         if (focusKey) entries.get(focusKey)?.btn.focus();
       }
     } catch {
+      if (mode !== "live") return;
       // Keep the last scene on screen and SAY the data may be out of date; a
       // failed refresh is never an empty or healthy scene. Once a whole refresh
       // window has been missed, the retained objects are also re-labelled
@@ -653,6 +759,8 @@ export function startMissionControl(): void {
   });
   const initial = normalise(parseJson(root.dataset.scene));
   if (initial) {
+    liveScene = initial;
+    clockSkew = (Date.parse(initial.as_of) || Date.now()) - Date.now();
     signature = JSON.stringify([
       initial.sources,
       initial.nodes,
@@ -662,6 +770,9 @@ export function startMissionControl(): void {
     adopt(initial, false);
     restoreFromUrl();
     void startRenderer();
+    if (new URLSearchParams(window.location.search).get("mode") === "history") {
+      void setMode("history");
+    }
   } else {
     // No usable scene was embedded: keep the server-rendered list, say the 3D
     // view is unavailable, and let the first poll try to populate it.

@@ -597,6 +597,8 @@
 .omes-cc .omes-mc-badges,
 .omes-cc .omes-mc-sources,
 .omes-cc .omes-mc-items,
+.omes-cc .omes-mc-events,
+.omes-cc .omes-mc-gaps,
 .omes-cc .omes-mc-hud-fields {
   display: flex;
   flex-wrap: wrap;
@@ -607,13 +609,22 @@
   list-style: none;
 }
 
-.omes-cc .omes-mc-items {
-  flex-direction: column;
+.omes-cc .omes-mc-items,
+.omes-cc .omes-mc-events,
+.omes-cc .omes-mc-gaps {
+  flex-flow: column nowrap;
   align-items: stretch;
 }
 
+.omes-cc .omes-mc-events {
+  max-height: 24rem;
+  overflow: auto;
+}
+
 .omes-cc .omes-mc-source,
-.omes-cc .omes-mc-item {
+.omes-cc .omes-mc-item,
+.omes-cc .omes-mc-event,
+.omes-cc .omes-mc-gap {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -635,7 +646,8 @@
   color: var(--color-text-muted);
 }
 
-.omes-cc .omes-mc-obj {
+.omes-cc .omes-mc-obj,
+.omes-cc .omes-mc-event-btn {
   display: flex;
   flex: 1 1 14rem;
   flex-wrap: wrap;
@@ -652,11 +664,13 @@
   cursor: pointer;
 }
 
-.omes-cc .omes-mc-obj:hover {
+.omes-cc .omes-mc-obj:hover,
+.omes-cc .omes-mc-event-btn:hover {
   background: var(--color-surface-hover);
 }
 
-.omes-cc .omes-mc-obj:focus-visible {
+.omes-cc .omes-mc-obj:focus-visible,
+.omes-cc .omes-mc-event-btn:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -717,6 +731,76 @@
   height: clamp(260px, 52vh, 520px);
   touch-action: none;
   cursor: grab;
+}
+
+/*
+ * History mode (Issue ahliweb/omes#266). Unmistakable by construction: a
+ * persistent banner with a hatched background and a heavy warning border, a
+ * warning bar down the whole workspace, and the mode named in text — never
+ * colour alone. The current event is a bar + outline + `aria-current="step"`;
+ * a late-arriving event carries a dashed text badge. Class selectors only (the
+ * CSP forbids inline styles); the reduced-motion rule above covers this too.
+ */
+.omes-cc .omes-mc[data-mode="history"] {
+  padding-inline-start: var(--sp-3);
+  border-inline-start: 4px solid var(--color-warning);
+}
+
+.omes-cc .omes-mc-banner-historical {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-surface-2) 0 12px,
+    var(--color-surface-3) 12px 24px
+  );
+  font-weight: var(--fw-semibold);
+}
+
+.omes-cc .omes-mc-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  border: 0;
+}
+
+.omes-cc .omes-mc-mode legend {
+  padding: 0;
+  margin-inline-end: var(--sp-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.omes-cc .omes-mc-range,
+.omes-cc .omes-mc-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+
+.omes-cc .omes-mc-scrub {
+  display: block;
+  width: 100%;
+  margin: var(--sp-1) 0 var(--sp-2);
+}
+
+.omes-cc .omes-mc-event[aria-current="step"] {
+  outline: 2px solid var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.omes-cc .omes-mc-late {
+  padding: 0 var(--sp-1);
+  border: 1px dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
 }
 
 @media (prefers-reduced-motion: reduce) {

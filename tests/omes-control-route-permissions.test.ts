@@ -149,6 +149,15 @@ const SIMPLE_CASES: SimpleCase[] = [
     file: "mission-control/scene.ts",
     method: "GET",
     guard: "OMES_GUARDS.servers.read"
+  },
+  // Issue ahliweb/omes#266 — historical replay adds NO permission either:
+  // the replay route reuses `servers.read` to admit the viewer and the
+  // directory gates each source on the same per-source read guards as the
+  // live scene (historical access is never broader than live access).
+  {
+    file: "mission-control/replay.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
   }
 ];
 
