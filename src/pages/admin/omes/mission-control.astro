@@ -47,7 +47,18 @@
  * is client-driven from `GET .../replay` and `GET .../scene?as_of=`, and its
  * range lives in the URL (`?mode=history&from=&to=&at=`, validated).
  *
- * Read-only in this issue: no action buttons (ahliweb/omes#267).
+ * ## Contextual actions (ahliweb/omes#267)
+ *
+ * Selecting an object in LIVE mode shows its existing-endpoint actions in the
+ * HUD (`data-hud-actions`, rendered empty and hidden here; the buttons are
+ * created by the lazily-loaded `actions.ts`). They are shortcuts to the
+ * EXISTING operation / job / backup endpoints with the same `Idempotency-Key`,
+ * audit and workflow approval; availability comes from the ADVISORY
+ * `GET /api/v1/omes/mission-control/actions`, and approval decisions stay in
+ * `/admin/approvals`. This page carries no form and sends no mutation itself;
+ * History mode shows no actions. The object-list buttons and Open-details
+ * links are marked `data-command-palette-item` so the existing command palette
+ * (Ctrl/Cmd+K) can jump to them — no new dialog, syntax or command language.
  * Unavailable/stale/unknown is never rendered as healthy.
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
@@ -221,6 +232,84 @@ const CLIENT_LABELS = {
     reason_source_unavailable: t("source unavailable to you or unreadable"),
     reason_before_first_observation: t("before the first retained observation"),
     noGaps: t("No evidence gaps were reported for this range.")
+  },
+  actions: {
+    names: {
+      "operation.status": t("Request status check"),
+      "operation.preflight": t("Request preflight check"),
+      "operation.start": t("Request start"),
+      "operation.stop": t("Request stop"),
+      "operation.restart": t("Request restart"),
+      "operation.update": t("Request update"),
+      "operation.backup": t("Request backup"),
+      "operation.rollback": t("Request rollback"),
+      "job.cancel": t("Cancel queued job"),
+      "job.requeue": t("Approve failed job for retry"),
+      "backup.restore": t("Request restore from this backup"),
+      "approval.open_in_inbox": t("Open in approval inbox")
+    },
+    reasons: {
+      permission_denied: t("You do not hold the permission this action needs."),
+      state_not_eligible: t(
+        "The object's current state does not allow this action."
+      ),
+      not_found: t("The object could not be found."),
+      historical_mode: t("Not available in History.")
+    },
+    advisories: {
+      target_stale: t(
+        "The target's last report is stale, so its current state is not confirmed. The request is still allowed."
+      ),
+      target_decommissioned: t(
+        "The target server is decommissioned. The request is still allowed."
+      ),
+      backup_not_verified: t(
+        "This backup is not marked completed or verified. The request is still allowed."
+      )
+    },
+    ui: {
+      loading: t("Checking available actions…"),
+      loadFailed: t(
+        "Actions are unavailable right now. Use the canonical screen instead."
+      ),
+      none: t("No actions for this object."),
+      approvalBadge: t("Approval required"),
+      preflight: t("Review before sending"),
+      operation: t("Operation"),
+      target: t("Target"),
+      permission: t("Permission"),
+      permissionOk: t(
+        "Allowed for you (the server checks again when you send)"
+      ),
+      approval: t("Approval"),
+      approvalYes: t(
+        "Required — nothing runs until a workflow decision is approved in the approval inbox"
+      ),
+      approvalNo: t("Not required"),
+      endpoint: t("Existing endpoint"),
+      key: t("Idempotency-Key"),
+      send: t("Send request"),
+      cancel: t("Cancel"),
+      sending: t("Sending…"),
+      confirm: t(
+        "Send “{action}” for {target}? The server checks permission and approval again, and the outcome is not verified until the next refresh."
+      ),
+      accepted: t("Accepted — pending verification."),
+      approval_required: t(
+        "Approval required — a workflow decision is pending in the approval inbox."
+      ),
+      approval_not_configured: t(
+        "Approval required, but this tenant has no active destructive-operation approval workflow. Nothing was recorded."
+      ),
+      rejected: t(
+        "Rejected by the server (HTTP {status}, {code}). Nothing was changed."
+      ),
+      unknown: t(
+        "Outcome unknown — check Operations (or Jobs, Backups) before retrying. A retry reuses the same Idempotency-Key, so it cannot duplicate a request the server already recorded."
+      ),
+      openRecord: t("Open the record"),
+      openInbox: t("Open approval inbox")
+    }
   }
 };
 
@@ -563,6 +652,8 @@ function observedText(value: string | null): string {
                           data-node-id={node.node_id}
                           data-kind={node.kind}
                           data-source-id={node.source_id}
+                          data-command-palette-item
+                          data-command-palette-label={`${KIND_LABEL[node.kind]}: ${node.label}`}
                           aria-pressed="false"
                         >
                           <span class="omes-mc-kind">
@@ -591,6 +682,11 @@ function observedText(value: string | null): string {
                           <a
                             class="omes-mc-link"
                             href={node.detail_route}
+                            data-command-palette-item
+                            data-command-palette-label={t(
+                              "Open details for {name}",
+                              { name: node.label }
+                            )}
                             aria-label={t("Open details for {name}", {
                               name: node.label
                             })}
@@ -666,6 +762,30 @@ function observedText(value: string | null): string {
                 <a class="btn btn-secondary" data-hud="link" href="/admin/omes">
                   {t("Open details")}
                 </a>
+                <section
+                  class="omes-mc-actions-box"
+                  data-hud-actions
+                  aria-labelledby="omes-mc-actions-title"
+                  hidden
+                >
+                  <h3 class="omes-mc-zone-title" id="omes-mc-actions-title">
+                    {t("Actions")}
+                  </h3>
+                  <p class="cell-muted">
+                    {t(
+                      "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
+                    )}
+                  </p>
+                  <ul class="omes-mc-actions" data-actions-list />
+                  <div
+                    class="omes-mc-hud"
+                    data-actions-panel
+                    role="group"
+                    aria-label={t("Review before sending")}
+                    hidden
+                  />
+                  <p data-actions-result role="status" hidden />
+                </section>
               </div>
             </aside>
 

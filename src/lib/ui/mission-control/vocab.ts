@@ -116,3 +116,26 @@ export function ageOutScene(
     })
   };
 }
+
+/** `<tag class>` with optional `textContent` — shared by the controller, replay and actions chunks. */
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/** Fills `{placeholder}`s of a translated template; values are plain strings. */
+export function fill(
+  template: string | undefined,
+  values: Record<string, string>
+): string {
+  return Object.entries(values).reduce(
+    (text, [k, v]) => text.replace(`{${k}}`, v),
+    template ?? ""
+  );
+}

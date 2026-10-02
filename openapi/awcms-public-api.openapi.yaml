@@ -12867,6 +12867,115 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/omes/mission-control/actions:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the advisory action availability of one Mission Control object (ahliweb/omes#267)
+      description: 'ADVISORY ONLY - this endpoint authorizes nothing. Every action it lists is a shortcut to an EXISTING endpoint (POST /api/v1/omes/operations, POST /api/v1/omes/jobs/{id}/cancel, POST /api/v1/omes/jobs/{id}/approve, POST /api/v1/omes/backups/{id}/restore, or a link to the canonical /admin/approvals inbox), and each of those re-authorizes, rate-limits, applies the destructive-workflow gate, audits and enforces idempotency on its own; a forged direct POST without the permission is still a 403. The answer only tells the UI which buttons to enable and why a disabled one is disabled. Gated by omes_control.servers.read (the workspace gate); the target is read only if the viewer also holds its source''s own read permission. An unknown id, another tenant''s id and an object in a source the viewer may not read are indistinguishable (every action reason "not_found"). Per action: "available" mirrors exactly what the existing endpoint enforces (job cancel only while queued, requeue only while failed, plus the viewer''s permission); "advisories" (target_stale, target_decommissioned, backup_not_verified) are non-blocking warnings the endpoints do not enforce, shown in the preflight summary. "requires_approval" is true for stop, rollback and backup restore (workflow omes_control.destructive_operation). "body" is present for operation.* actions and is exactly what the Operations screen sends. Strict query validation: kind must be a Mission Control kind, id must match ^[A-Za-z0-9_.:-]{1,128}$, and any other parameter (command, shell, target, url, ...) is a 400 VALIDATION_ERROR. No new permission, operation name, table or executor.'
+      operationId: omesReadMissionControlActions
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - server
+              - deployment
+              - job
+              - health_report
+              - backup
+              - hermes_subagent
+              - architecture_plane
+              - capability
+              - repository_milestone
+              - ai_privacy_posture
+              - approval_item
+        - name: id
+          in: query
+          required: true
+          description: The scene node's source_id.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_.:-]{1,128}$
+      responses:
+        "200":
+          description: Advisory availability for exactly the kind's candidate actions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      actions:
+                        type: object
+                        properties:
+                          kind:
+                            type: string
+                          source_id:
+                            type: string
+                          advisory:
+                            type: boolean
+                            enum:
+                              - true
+                          actions:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                action:
+                                  type: string
+                                available:
+                                  type: boolean
+                                reason:
+                                  type: string
+                                  enum:
+                                    - available
+                                    - permission_denied
+                                    - state_not_eligible
+                                    - not_found
+                                    - historical_mode
+                                requires_approval:
+                                  type: boolean
+                                mutating:
+                                  type: boolean
+                                method:
+                                  type: string
+                                  enum:
+                                    - GET
+                                    - POST
+                                path:
+                                  type: string
+                                advisories:
+                                  type: array
+                                  items:
+                                    type: string
+                                    enum:
+                                      - target_stale
+                                      - target_decommissioned
+                                      - backup_not_verified
+                                body:
+                                  type: object
+                                  properties:
+                                    serverId:
+                                      type: string
+                                    operation:
+                                      type: string
+                                    deploymentId:
+                                      type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/omes/mission-control/replay:
     get:
       tags:

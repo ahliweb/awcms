@@ -599,6 +599,7 @@
 .omes-cc .omes-mc-items,
 .omes-cc .omes-mc-events,
 .omes-cc .omes-mc-gaps,
+.omes-cc .omes-mc-actions,
 .omes-cc .omes-mc-hud-fields {
   display: flex;
   flex-wrap: wrap;
@@ -611,7 +612,8 @@
 
 .omes-cc .omes-mc-items,
 .omes-cc .omes-mc-events,
-.omes-cc .omes-mc-gaps {
+.omes-cc .omes-mc-gaps,
+.omes-cc .omes-mc-actions {
   flex-flow: column nowrap;
   align-items: stretch;
 }
@@ -623,6 +625,7 @@
 
 .omes-cc .omes-mc-source,
 .omes-cc .omes-mc-item,
+.omes-cc .omes-mc-action,
 .omes-cc .omes-mc-event,
 .omes-cc .omes-mc-gap {
   display: flex;
@@ -796,11 +799,31 @@
   box-shadow: inset 4px 0 0 var(--color-primary);
 }
 
-.omes-cc .omes-mc-late {
+.omes-cc .omes-mc-late,
+.omes-cc .omes-mc-badge {
   padding: 0 var(--sp-1);
   border: 1px dashed var(--color-warning);
   border-radius: var(--radius-sm);
   font-size: var(--fs-xs);
+}
+
+/*
+ * Contextual actions (Issue ahliweb/omes#267). The action list, badge and
+ * preflight panel REUSE the rules above (`.omes-mc-items`, `.omes-mc-item`,
+ * `.omes-mc-late`, `.omes-mc-hud`, `.omes-mc-transport`); only the warning line
+ * is new. Every state is carried by TEXT (disabled reason, "Approval required",
+ * a "⚠" warning sentence), never by colour alone; disabled buttons use the
+ * shared `.btn:disabled` look.
+ */
+.omes-cc .omes-mc-warning {
+  flex-basis: 100%;
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-inline-start: 3px solid var(--color-warning);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
 }
 
 @media (prefers-reduced-motion: reduce) {
