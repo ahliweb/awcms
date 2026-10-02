@@ -35,8 +35,20 @@
  * `data-state-labels` precedent on `orkestrasi-langsung.astro`, and is not a
  * script for the CSP to reason about.
  *
- * Read-only in this issue: no action buttons (ahliweb/omes#267), no replay
- * (#266). Unavailable/stale/unknown is never rendered as healthy.
+ * ## History mode (ahliweb/omes#266)
+ *
+ * The SAME page carries a Live/History switch, a bounded range (24 h at most),
+ * playback controls, an evidence-gap list and a synchronized, accessible event
+ * list. Every control is rendered here, hidden, and only revealed by the page
+ * script; the replay logic itself is a separate chunk (`replay.ts`) that is
+ * `import()`ed the first time History is entered. A persistent banner reading
+ * "Historical — <as_of>" and a polite live region announce the mode change, and
+ * History exposes no actions. The server always renders the LIVE scene; History
+ * is client-driven from `GET .../replay` and `GET .../scene?as_of=`, and its
+ * range lives in the URL (`?mode=history&from=&to=&at=`, validated).
+ *
+ * Read-only in this issue: no action buttons (ahliweb/omes#267).
+ * Unavailable/stale/unknown is never rendered as healthy.
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
@@ -174,7 +186,41 @@ const CLIENT_LABELS = {
     ),
     fallback: t(
       "The 3D view is unavailable in this browser. The object list below shows the same information."
+    ),
+    liveView: t("Live view"),
+    historicalView: t("Historical view"),
+    liveResumed: t("Live view resumed. Showing current state."),
+    historyUnavailable: t(
+      "History is unavailable right now. Showing the live view."
     )
+  },
+  replay: {
+    banner: t("Historical — {time}"),
+    announceHistory: t(
+      "Historical view. Showing recorded evidence as of {time}, not live state."
+    ),
+    rangeInvalid: t(
+      "Choose a start before the end, no more than 24 hours apart, and not in the future."
+    ),
+    loadFailed: t("Could not load the history for this range."),
+    sceneFailed: t(
+      "Could not load the scene for this time. Still showing the scene as of {time}."
+    ),
+    noEvents: t("No evidence was retained in this range."),
+    windowStart: t("Window start"),
+    position: t("Event {n} of {total} — {time}"),
+    play: t("Play"),
+    pause: t("Pause"),
+    late: t("Late arrival"),
+    more: t(
+      "Showing the first {count} events. Narrow the range to see the rest."
+    ),
+    gapLine: t("{source} — {reason} ({from} to {to})"),
+    reason_not_retained: t("not retained: only current state exists"),
+    reason_retention_expired: t("retention expired: older evidence was purged"),
+    reason_source_unavailable: t("source unavailable to you or unreadable"),
+    reason_before_first_observation: t("before the first retained observation"),
+    noGaps: t("No evidence gaps were reported for this range.")
   }
 };
 
@@ -255,7 +301,31 @@ function observedText(value: string | null): string {
         class="omes-mc"
         data-scene={clientScene}
         data-labels={JSON.stringify(CLIENT_LABELS)}
+        data-mode="live"
       >
+        <p
+          class="omes-mc-banner omes-mc-banner-historical"
+          id="omes-mc-banner"
+          hidden
+        ></p>
+        <p
+          class="visually-hidden"
+          id="omes-mc-announce"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></p>
+        <fieldset class="omes-mc-mode" id="omes-mc-mode" data-js-only hidden>
+          <legend>{t("View mode")}</legend>
+          <label class="omes-mc-mode-option">
+            <input type="radio" name="omes-mc-mode" value="live" checked />
+            {t("Live")}
+          </label>
+          <label class="omes-mc-mode-option">
+            <input type="radio" name="omes-mc-mode" value="history" />
+            {t("History")}
+          </label>
+        </fieldset>
         <section
           class="admin-section fade-in-up"
           aria-labelledby="omes-mc-sources-title"
@@ -268,7 +338,9 @@ function observedText(value: string | null): string {
           <p class="omes-mc-badges">
             <span class="admin-status-pill" data-tone="primary">
               <span class="admin-status-pill-dot" aria-hidden="true" />
-              {scene.mode === "live" ? t("Live view") : t("Historical view")}
+              <span id="omes-mc-mode-label">
+                {scene.mode === "live" ? t("Live view") : t("Historical view")}
+              </span>
             </span>
             <span class="cell-muted" id="omes-mc-asof">
               {t("As of {time}", { time: scene.as_of })}
@@ -316,6 +388,108 @@ function observedText(value: string | null): string {
             role="status"
             hidden
           />
+        </section>
+
+        <section
+          class="admin-section omes-mc-history"
+          id="omes-mc-history"
+          aria-labelledby="omes-mc-history-title"
+          hidden
+        >
+          <h2 class="admin-section-title" id="omes-mc-history-title">
+            {t("History replay")}
+          </h2>
+          <p class="cell-muted">
+            {t(
+              "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+            )}
+          </p>
+          <div
+            class="omes-mc-range"
+            role="group"
+            aria-label={t("Replay range")}
+          >
+            <label for="omes-mc-from">{t("From")}</label>
+            <input type="datetime-local" id="omes-mc-from" step="1" />
+            <label for="omes-mc-to">{t("To")}</label>
+            <input type="datetime-local" id="omes-mc-to" step="1" />
+            <button type="button" class="btn btn-secondary" id="omes-mc-load">
+              {t("Load range")}
+            </button>
+          </div>
+          <p
+            id="omes-mc-history-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          ></p>
+          <div
+            class="omes-mc-transport"
+            role="group"
+            aria-label={t("Replay controls")}
+          >
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-step-back"
+            >
+              {t("Step back")}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-play"
+              aria-pressed="false"
+            >
+              {t("Play")}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-step-forward"
+            >
+              {t("Step forward")}
+            </button>
+            <label for="omes-mc-speed">{t("Speed")}</label>
+            <select id="omes-mc-speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>
+                1×
+              </option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+            <button type="button" class="btn btn-primary" id="omes-mc-live">
+              {t("Return to live")}
+            </button>
+          </div>
+          <label class="omes-mc-scrub-label" for="omes-mc-scrub">
+            {t("Timeline")}
+          </label>
+          <input
+            type="range"
+            id="omes-mc-scrub"
+            class="omes-mc-scrub"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+          />
+          <p class="omes-mc-replay-at" id="omes-mc-replay-at" role="status"></p>
+          <h3 class="omes-mc-zone-title">{t("Evidence gaps")}</h3>
+          <ul class="omes-mc-gaps" id="omes-mc-gaps"></ul>
+          <h3 class="omes-mc-zone-title">{t("Observed events")}</h3>
+          <ol
+            class="omes-mc-events"
+            id="omes-mc-events"
+            aria-label={t("Observed events")}
+          ></ol>
+          <p
+            class="cell-muted"
+            id="omes-mc-events-more"
+            role="status"
+            hidden
+          ></p>
         </section>
 
         <div

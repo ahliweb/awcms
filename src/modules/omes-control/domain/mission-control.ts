@@ -82,6 +82,22 @@ export const MISSION_CONTROL_SCHEMA_VERSION = "1.0.0" as const;
 export const MISSION_CONTROL_LABEL_MAX = 120;
 export const MISSION_CONTROL_SUMMARY_MAX = 280;
 
+/**
+ * Job states that are final evidence — they never go stale (source map
+ * `omes_job_status.freshness.basis`). Shared by the live composition
+ * (`application/mission-control-directory.ts`) and the historical scene
+ * (`mission-control-replay.ts`) so the two cannot disagree on what "terminal"
+ * means.
+ */
+export const TERMINAL_JOB_STATES: ReadonlySet<string> = new Set([
+  "completed",
+  "succeeded",
+  "failed",
+  "expired",
+  "rolled_back",
+  "cancelled"
+]);
+
 /** Mirrors the schema `source_id` pattern — anything else cannot be represented. */
 const SOURCE_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 /** Mirrors the schema `source_state` pattern. */
@@ -92,10 +108,15 @@ const NOT_REPORTED = "not_reported";
 // Source map (typed view of the vendored JSON)
 // ---------------------------------------------------------------------------
 
+export type MissionControlReplayBasis =
+  "event_log" | "snapshot_series" | "terminal_transitions" | "current_only";
+
 export type MissionControlSourceMapKind = {
   zone: string;
   source: MissionControlSourceKind;
   detail_route: string;
+  /** How much history the owning authority retains (source map `replay_bases`; ahliweb/omes#266). */
+  replay_basis: MissionControlReplayBasis;
   state_map: Record<string, MissionControlVisualState>;
   projection_state_values: string[];
 };
@@ -798,6 +819,17 @@ export class MissionControlSceneInvalidError extends Error {
 const ERROR_PATH_RE = /^(\$[A-Za-z0-9_.[\]]*)/;
 
 /**
+ * The JSON paths (never the quoted values) of a contract violation — shared
+ * with the replay window validator (`mission-control-replay.ts`) so both fail
+ * closed with the same value-free diagnostics.
+ */
+export function contractViolationPaths(
+  error: ContractValidationError
+): string[] {
+  return error.errors.map((message) => ERROR_PATH_RE.exec(message)?.[1] ?? "$");
+}
+
+/**
  * Validates `scene` against the vendored `mission-control-scene-view`
  * schema (and the validator's independent raw-secret scan). Throws
  * {@link MissionControlSceneInvalidError} on any violation — the caller
@@ -813,10 +845,7 @@ export async function assertMissionControlSceneValid(
     );
   } catch (error) {
     if (error instanceof ContractValidationError) {
-      const paths = error.errors.map(
-        (message) => ERROR_PATH_RE.exec(message)?.[1] ?? "$"
-      );
-      throw new MissionControlSceneInvalidError(paths);
+      throw new MissionControlSceneInvalidError(contractViolationPaths(error));
     }
     throw error;
   }

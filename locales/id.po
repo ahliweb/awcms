@@ -6173,3 +6173,100 @@ msgstr "Diamati pada"
 
 msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
 msgstr "Seret untuk memutar dan gulir untuk memperbesar tampilan 3D. Papan ketik: tombol panah berpindah di daftar, Enter memilih objek, Escape membatalkan pilihan, 0 mengatur ulang tampilan."
+
+#. Mission Control historical replay (ahliweb/omes#266, ADR-0031)
+msgid "Choose a start before the end, no more than 24 hours apart, and not in the future."
+msgstr "Pilih awal sebelum akhir, selisih paling lama 24 jam, dan tidak di masa depan."
+
+msgid "Could not load the history for this range."
+msgstr "Riwayat untuk rentang ini tidak dapat dimuat."
+
+msgid "Could not load the scene for this time. Still showing the scene as of {time}."
+msgstr "Adegan untuk waktu ini tidak dapat dimuat. Masih menampilkan adegan per {time}."
+
+msgid "Event {n} of {total} — {time}"
+msgstr "Peristiwa {n} dari {total} — {time}"
+
+msgid "Evidence gaps"
+msgstr "Celah bukti"
+
+msgid "Historical view. Showing recorded evidence as of {time}, not live state."
+msgstr "Tampilan historis. Menampilkan bukti tercatat per {time}, bukan keadaan langsung."
+
+msgid "Historical — {time}"
+msgstr "Historis — {time}"
+
+msgid "History is unavailable right now. Showing the live view."
+msgstr "Riwayat tidak tersedia saat ini. Menampilkan tampilan langsung."
+
+msgid "History replay"
+msgstr "Pemutaran ulang riwayat"
+
+msgid "Late arrival"
+msgstr "Datang terlambat"
+
+msgid "Live view resumed. Showing current state."
+msgstr "Tampilan langsung dilanjutkan. Menampilkan keadaan saat ini."
+
+msgid "Load range"
+msgstr "Muat rentang"
+
+msgid "No evidence gaps were reported for this range."
+msgstr "Tidak ada celah bukti yang dilaporkan untuk rentang ini."
+
+msgid "No evidence was retained in this range."
+msgstr "Tidak ada bukti yang tersimpan pada rentang ini."
+
+msgid "Observed events"
+msgstr "Peristiwa teramati"
+
+msgid "Play"
+msgstr "Putar"
+
+msgid "Replay controls"
+msgstr "Kontrol pemutaran ulang"
+
+msgid "Replay range"
+msgstr "Rentang pemutaran ulang"
+
+msgid "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+msgstr "Hanya memutar ulang bukti yang tercatat, paling lama 24 jam sekali putar. Objek yang sumbernya tidak menyimpan riwayat ditampilkan sebagai tidak diketahui, dan celah didaftarkan, bukan diisi. Tidak ada aksi di mode Riwayat."
+
+msgid "Return to live"
+msgstr "Kembali ke langsung"
+
+msgid "Showing the first {count} events. Narrow the range to see the rest."
+msgstr "Menampilkan {count} peristiwa pertama. Persempit rentang untuk melihat sisanya."
+
+msgid "Speed"
+msgstr "Kecepatan"
+
+msgid "Step back"
+msgstr "Mundur satu langkah"
+
+msgid "Step forward"
+msgstr "Maju satu langkah"
+
+msgid "Timeline"
+msgstr "Lini masa"
+
+msgid "View mode"
+msgstr "Mode tampilan"
+
+msgid "Window start"
+msgstr "Awal rentang"
+
+msgid "before the first retained observation"
+msgstr "sebelum pengamatan pertama yang tersimpan"
+
+msgid "not retained: only current state exists"
+msgstr "tidak disimpan: hanya keadaan saat ini yang ada"
+
+msgid "retention expired: older evidence was purged"
+msgstr "retensi habis: bukti yang lebih lama telah dihapus"
+
+msgid "source unavailable to you or unreadable"
+msgstr "sumber tidak tersedia untuk Anda atau tidak dapat dibaca"
+
+msgid "{source} — {reason} ({from} to {to})"
+msgstr "{source} — {reason} ({from} sampai {to})"

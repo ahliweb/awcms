@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 167   |
+| Migrations                          | 168   |
 | `awcms_*` tables                    | 168   |
 | Tables with `FORCE` RLS             | 150   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 557   |
-| Route files                         | 435   |
+| Test files                          | 561   |
+| Route files                         | 436   |
 | ADR                                 | 252   |
 
 ### Modules
@@ -217,6 +217,7 @@
 | 165 | `sql/165_awcms_omes_architecture_permissions.sql`                  |
 | 166 | `sql/166_awcms_omes_repository_progress_schema.sql`                |
 | 167 | `sql/167_awcms_omes_repository_progress_permissions.sql`           |
+| 168 | `sql/168_awcms_omes_mission_control_replay_indexes.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -395,16 +396,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 451        |
+| `(root)`      | 453        |
 | `e2e`         | 20         |
-| `integration` | 85         |
+| `integration` | 87         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 340   |
+| `/api/v1/**`    | 341   |
 | `/admin/**`     | 65    |
 | publik / anonim | 30    |
 
