@@ -24,6 +24,17 @@
  * title finds nothing. That is a real limit and the placeholder says so rather
  * than implying otherwise.
  *
+ * ## Page items (opt-in, Issue ahliweb/omes#267)
+ *
+ * A page may mark elements with `data-command-palette-item` (label = the
+ * optional `data-command-palette-label`, else the element's `textContent`).
+ * When the palette opens it ALSO lists those elements that are in the page at
+ * that moment, and activating one calls `element.click()` — so it can only do
+ * what clicking that element already does (Mission Control marks its object
+ * buttons and Open-details links). This adds no dialog, no query syntax and no
+ * command language, never fetches, and cannot surface anything the page does
+ * not already show. A page with no marked element behaves exactly as before.
+ *
  * ## Why `<dialog>`
  *
  * `showModal()` brings the focus trap, Escape-to-close, inertness of the page
@@ -54,6 +65,14 @@ const EMPTY_ID = "admin-palette-empty";
  */
 const HAYSTACK_ATTRIBUTE = "data-search";
 
+/** Opt-in marker for page elements the palette may activate (see the header). */
+export const PAGE_ITEM_ATTRIBUTE = "data-command-palette-item";
+const PAGE_ITEM_LABEL_ATTRIBUTE = "data-command-palette-label";
+/** Marks the `<li>`s the palette itself added, so a re-open can replace them. */
+const INJECTED_ATTRIBUTE = "data-page-item";
+/** Bounds the DOM added; a Mission Control scene has at most 500 objects x 2. */
+const MAX_PAGE_ITEMS = 1000;
+
 export function initAdminCommandPalette(): void {
   const dialogElement = document.getElementById(DIALOG_ID);
   const inputElement = document.getElementById(INPUT_ID);
@@ -80,9 +99,78 @@ export function initAdminCommandPalette(): void {
   const input: HTMLInputElement = inputElement;
   const empty = document.getElementById(EMPTY_ID);
 
-  const items = Array.from(
+  const results = dialog.querySelector("ul");
+  let items = Array.from(
     dialog.querySelectorAll<HTMLLIElement>("li[data-search]")
   );
+
+  /**
+   * Re-reads the page's marked elements each time the palette opens (a live
+   * page re-renders its list), replacing the `<li>`s added last time. Each is
+   * an `<a href="#">` so the existing styling, Tab order and arrow-key
+   * navigation apply unchanged; activating it closes the palette and clicks
+   * the real element.
+   */
+  function syncPageItems(): void {
+    for (const stale of items.filter((li) =>
+      li.hasAttribute(INJECTED_ATTRIBUTE)
+    )) {
+      stale.remove();
+    }
+    items = items.filter((li) => !li.hasAttribute(INJECTED_ATTRIBUTE));
+    if (results === null) {
+      return;
+    }
+
+    const targets = Array.from(
+      document.querySelectorAll<HTMLElement>(`[${PAGE_ITEM_ATTRIBUTE}]`)
+    )
+      .filter((element) => !dialog.contains(element))
+      .slice(0, MAX_PAGE_ITEMS);
+
+    for (const target of targets) {
+      const label = (
+        target.getAttribute(PAGE_ITEM_LABEL_ATTRIBUTE) ??
+        target.textContent ??
+        ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (label === "") {
+        continue;
+      }
+
+      const item = document.createElement("li");
+      item.setAttribute(INJECTED_ATTRIBUTE, "");
+      item.setAttribute(HAYSTACK_ATTRIBUTE, label.toLowerCase());
+
+      const link = document.createElement("a");
+      link.href = "#";
+      link.setAttribute("role", "button");
+
+      const text = document.createElement("span");
+      text.className = "admin-palette-label";
+      text.textContent = label;
+      link.append(text);
+
+      const activate = (event: Event): void => {
+        event.preventDefault();
+        dialog.close();
+        target.click();
+      };
+
+      link.addEventListener("click", activate);
+      link.addEventListener("keydown", (event) => {
+        if (event.key === " ") {
+          activate(event);
+        }
+      });
+      item.append(link);
+      results.append(item);
+      items.push(item);
+    }
+  }
 
   function applyFilter(): void {
     const query = input.value.trim().toLowerCase();
@@ -114,6 +202,7 @@ export function initAdminCommandPalette(): void {
     }
 
     input.value = "";
+    syncPageItems();
     applyFilter();
     dialog.showModal();
     // After `showModal()`, so focus lands in the field rather than on the

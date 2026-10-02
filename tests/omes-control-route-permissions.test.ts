@@ -158,6 +158,15 @@ const SIMPLE_CASES: SimpleCase[] = [
     file: "mission-control/replay.ts",
     method: "GET",
     guard: "OMES_GUARDS.servers.read"
+  },
+  // Issue ahliweb/omes#267 — contextual actions add NO permission and NO
+  // mutation endpoint: this advisory read reuses `servers.read` to admit the
+  // viewer, gates the target on its source's own read guard, and each action
+  // still goes through the EXISTING mutation endpoint, which re-authorizes.
+  {
+    file: "mission-control/actions.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
   }
 ];
 

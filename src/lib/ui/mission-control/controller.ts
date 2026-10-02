@@ -13,9 +13,10 @@
  * Labels and summaries are UNTRUSTED text: every DOM write below is
  * `textContent`/`setAttribute`/`dataset` — never `innerHTML`.
  *
- * Read-only: there is no mutating control (actions are ahliweb/omes#267). A
- * failed refresh keeps the last scene and says so; an empty or failed response
- * is never treated as healthy.
+ * Selecting an object in LIVE mode lazily loads `actions.ts` (ahliweb/omes#267),
+ * which shows the advisory, existing-endpoint actions for it; the controller
+ * itself still has no mutating request. A failed refresh keeps the last scene
+ * and says so; an empty or failed response is never treated as healthy.
  *
  * History mode (ahliweb/omes#266) lives in `replay.ts`, which is `import()`ed
  * only when the user first enters it — a live-mode user never downloads it.
@@ -32,6 +33,7 @@ import {
 } from "../../../modules/omes-control/domain/mission-control-types";
 import { messageBox } from "../admin-form-client";
 import { layoutScene, type SceneLayout } from "./layout";
+import type { ActionLabels, ActionsApi } from "./actions";
 import type { ReplayApi, ReplayHost } from "./replay";
 import type { MissionControlRenderer } from "./scene-gl";
 import {
@@ -39,6 +41,8 @@ import {
   KIND_ZONE,
   VISUAL_STATE_TONE,
   ageOutScene,
+  el,
+  fill,
   isSafeDetailRoute,
   nodeKey
 } from "./vocab";
@@ -57,6 +61,7 @@ type Labels = {
   authority: Dict;
   ui: Dict;
   replay: Dict;
+  actions: ActionLabels;
 };
 type Entry = { index: number; li: HTMLElement; btn: HTMLButtonElement };
 
@@ -100,17 +105,6 @@ function normalise(raw: unknown): MissionControlSceneView | null {
   return { ...(raw as MissionControlSceneView), nodes };
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
 function pill(tone: string, text: string): HTMLElement {
   const node = el("span", "admin-status-pill");
   node.dataset.tone = tone;
@@ -138,11 +132,6 @@ export function startMissionControl(): void {
   const ui = L.ui ?? {};
   const word = (map: Dict | undefined, key: string): string =>
     map?.[key] ?? key;
-  const fill = (template: string | undefined, values: Dict): string =>
-    Object.entries(values).reduce(
-      (text, [k, v]) => text.replace(`{${k}}`, v),
-      template ?? ""
-    );
 
   const stage = document.getElementById("omes-mc-stage");
   const canvas = document.getElementById(
@@ -236,6 +225,11 @@ export function startMissionControl(): void {
     btn.dataset.kind = node.kind;
     btn.dataset.sourceId = node.source_id;
     btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("data-command-palette-item", "");
+    btn.setAttribute(
+      "data-command-palette-label",
+      `${word(L.kinds, node.kind)}: ${node.label}`
+    );
     btn.append(
       el("span", "omes-mc-kind", word(L.kinds, node.kind)),
       el("span", "omes-mc-label", node.label),
@@ -257,10 +251,10 @@ export function startMissionControl(): void {
     if (isSafeDetailRoute(node.detail_route)) {
       const link = el("a", "omes-mc-link", ui.openDetails);
       link.href = node.detail_route;
-      link.setAttribute(
-        "aria-label",
-        fill(ui.openDetailsFor, { name: node.label })
-      );
+      const linkLabel = fill(ui.openDetailsFor, { name: node.label });
+      link.setAttribute("aria-label", linkLabel);
+      link.setAttribute("data-command-palette-item", "");
+      link.setAttribute("data-command-palette-label", linkLabel);
       li.append(link);
     }
     return { index, li, btn };
@@ -303,9 +297,36 @@ export function startMissionControl(): void {
     if (entries.size !== nodes.length) buildList();
   }
 
-  // ---- HUD (read-only; no action buttons) ----------------------------------
+  // ---- HUD + contextual actions (ahliweb/omes#267) --------------------------
+  // Actions are loaded lazily on the first LIVE selection and never in History
+  // mode (no fetch, no UI); a failed load leaves the HUD and list unchanged.
+  let actions: ActionsApi | null = null;
+  function syncActions(node: MissionControlSceneNode | null): void {
+    const box = hud?.querySelector<HTMLElement>("[data-hud-actions]");
+    if (!box) return;
+    if (mode !== "live" || !node) {
+      actions?.clear();
+      box.hidden = true;
+      return;
+    }
+    const key = nodeKey(node.kind, node.source_id);
+    void (async () => {
+      try {
+        actions ??= (await import("./actions")).startActions({
+          root: box,
+          labels: L.actions ?? {},
+          isLive: () => mode === "live"
+        });
+        if (mode === "live" && selectedKey === key) actions.show(node);
+      } catch {
+        // The accessible list and Open-details links work without actions.
+      }
+    })();
+  }
+
   function fillHud(node: MissionControlSceneNode | null): void {
     if (!hud) return;
+    syncActions(node);
     const body = hud.querySelector<HTMLElement>("[data-hud-body]");
     const empty = hud.querySelector<HTMLElement>("[data-hud-empty]");
     if (body) body.hidden = !node;
@@ -549,6 +570,7 @@ export function startMissionControl(): void {
     if (next === "history") {
       mode = "history";
       pollAbort?.abort();
+      syncActions(null);
       syncMode();
       try {
         replay ??= (await import("./replay")).startReplay(host);

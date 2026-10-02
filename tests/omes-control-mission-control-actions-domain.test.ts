@@ -624,3 +624,96 @@ describe("mapMutationOutcome", () => {
     expect(mapMutationOutcome(302)).toBe("unknown");
   });
 });
+
+describe("endpoint addressing (#267): job and backup requests address the row id, not the scene source_id", () => {
+  const ROW = "0b9b6f64-1e2f-4f0a-8a55-6a1d6f3f2c11";
+
+  test("a record's pathId is used for job cancel / requeue and backup restore, and only for those", () => {
+    const job = evaluateMissionControlActions({
+      kind: "job",
+      sourceId: "job_a_1",
+      record: { state: "queued", freshness: "live", pathId: ROW },
+      permissions: { "job.cancel": true, "job.requeue": true },
+      mode: "live"
+    });
+    expect(job.find((a) => a.action === "job.cancel")?.path).toBe(
+      `/api/v1/omes/jobs/${ROW}/cancel`
+    );
+    expect(job.find((a) => a.action === "job.requeue")?.path).toBe(
+      `/api/v1/omes/jobs/${ROW}/approve`
+    );
+
+    const backup = evaluateMissionControlActions({
+      kind: "backup",
+      sourceId: "bk-1",
+      record: { state: "verified", freshness: "live", pathId: ROW },
+      permissions: { "backup.restore": true },
+      mode: "live"
+    });
+    expect(backup.find((a) => a.action === "backup.restore")?.path).toBe(
+      `/api/v1/omes/backups/${ROW}/restore`
+    );
+
+    // The inbox link still addresses the workflow instance (= source_id).
+    const approval = evaluateMissionControlActions({
+      kind: "approval_item",
+      sourceId: "inst-1",
+      record: { state: "pending", freshness: "live", pathId: ROW },
+      permissions: { "approval.open_in_inbox": true, open_details: true },
+      mode: "live"
+    });
+    expect(
+      approval.find((a) => a.action === "approval.open_in_inbox")?.path
+    ).toBe(
+      `/admin/approvals?workflowKey=${OMES_DESTRUCTIVE_WORKFLOW_KEY}&instance=inst-1`
+    );
+  });
+
+  test("without a pathId the path falls back to the source id (and is URL-encoded)", () => {
+    const job = evaluateMissionControlActions({
+      kind: "job",
+      sourceId: "job:a.1",
+      record: { state: "queued", freshness: "live" },
+      permissions: { "job.cancel": true },
+      mode: "live"
+    });
+    expect(job.find((a) => a.action === "job.cancel")?.path).toBe(
+      "/api/v1/omes/jobs/job%3Aa.1/cancel"
+    );
+  });
+});
+
+describe("the outcome mapper is browser-safe (#267)", () => {
+  test("mission-control-outcome.ts has no imports, so the client bundles nothing else", () => {
+    const source = readFileSync(
+      join(
+        import.meta.dir,
+        "..",
+        "src/modules/omes-control/domain/mission-control-outcome.ts"
+      ),
+      "utf8"
+    );
+    expect(source).not.toMatch(/^\s*import\s/m);
+  });
+
+  test("workflowInstanceIdOf reads only a non-empty string instance id", async () => {
+    const { workflowInstanceIdOf } =
+      await import("../src/modules/omes-control/domain/mission-control-outcome");
+    expect(
+      workflowInstanceIdOf({
+        data: { operationRequest: { workflowInstanceId: "w-1" } }
+      })
+    ).toBe("w-1");
+    for (const body of [
+      null,
+      "x",
+      {},
+      { data: {} },
+      { data: { operationRequest: {} } },
+      { data: { operationRequest: { workflowInstanceId: "" } } },
+      { data: { operationRequest: { workflowInstanceId: 7 } } }
+    ]) {
+      expect(workflowInstanceIdOf(body)).toBeNull();
+    }
+  });
+});

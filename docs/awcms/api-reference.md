@@ -9741,6 +9741,29 @@ Gated by omes_control.jobs.cancel. Only a queued job may be cancelled — a leas
 | 404    | Resource not found.                                                                                                         | [`ApiError`](#standard-error-envelope) |
 | 409    | Job is not queued (JOB_NOT_CANCELLABLE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/omes/mission-control/actions` — Read the advisory action availability of one Mission Control object (ahliweb/omes#267)
+
+- **operationId**: `omesReadMissionControlActions`
+- **Security**: bearerAuth + tenantHeader
+
+ADVISORY ONLY - this endpoint authorizes nothing. Every action it lists is a shortcut to an EXISTING endpoint (POST /api/v1/omes/operations, POST /api/v1/omes/jobs/{id}/cancel, POST /api/v1/omes/jobs/{id}/approve, POST /api/v1/omes/backups/{id}/restore, or a link to the canonical /admin/approvals inbox), and each of those re-authorizes, rate-limits, applies the destructive-workflow gate, audits and enforces idempotency on its own; a forged direct POST without the permission is still a 403. The answer only tells the UI which buttons to enable and why a disabled one is disabled. Gated by omes_control.servers.read (the workspace gate); the target is read only if the viewer also holds its source's own read permission. An unknown id, another tenant's id and an object in a source the viewer may not read are indistinguishable (every action reason "not_found"). Per action: "available" mirrors exactly what the existing endpoint enforces (job cancel only while queued, requeue only while failed, plus the viewer's permission); "advisories" (target_stale, target_decommissioned, backup_not_verified) are non-blocking warnings the endpoints do not enforce, shown in the preflight summary. "requires_approval" is true for stop, rollback and backup restore (workflow omes_control.destructive_operation). "body" is present for operation.* actions and is exactly what the Operations screen sends. Strict query validation: kind must be a Mission Control kind, id must match ^[A-Za-z0-9_.:-]{1,128}$, and any other parameter (command, shell, target, url, ...) is a 400 VALIDATION_ERROR. No new permission, operation name, table or executor.
+
+**Parameters**
+
+| Name   | In    | Required | Type                                                                                                                                                                                 | Description                 |
+| ------ | ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| `kind` | query | yes      | enum(`server`, `deployment`, `job`, `health_report`, `backup`, `hermes_subagent`, `architecture_plane`, `capability`, `repository_milestone`, `ai_privacy_posture`, `approval_item`) |                             |
+| `id`   | query | yes      | string                                                                                                                                                                               | The scene node's source_id. |
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | Advisory availability for exactly the kind's candidate actions. | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                     | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/omes/mission-control/replay` — Read one page of Mission Control replay evidence (ahliweb/omes#266)
 
 - **operationId**: `omesReadMissionControlReplay`

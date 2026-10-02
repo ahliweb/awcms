@@ -154,7 +154,7 @@ describe("mission-control.astro rendering contract", () => {
     expect(markup).toContain("{node.label}");
   });
 
-  test("the HUD is an aria-live region, read-only, with no action buttons", async () => {
+  test("the HUD markup is an aria-live region with no button or form; actions are created by the lazy client module", async () => {
     const markup = template(await readFile(PAGE, "utf8"));
     const hud = markup.match(/<aside[\s\S]*?<\/aside>/)?.[0] ?? "";
 
@@ -195,7 +195,7 @@ describe("mission-control.astro rendering contract", () => {
     expect(markup).toContain("AUTHORITY_LABEL[source.authority]");
   });
 
-  test("the page is read-only: no mutating request, form or action control", async () => {
+  test("the page itself sends no mutation and has no form or submit control (actions live in the lazy client module)", async () => {
     const source = await readFile(PAGE, "utf8");
     expect(source).not.toMatch(/method\s*[:=]\s*["']?(POST|PUT|PATCH|DELETE)/i);
     expect(source).not.toContain("<form");
@@ -235,6 +235,7 @@ describe("Mission Control client modules", () => {
   test("never assign untrusted data through innerHTML, outerHTML, insertAdjacentHTML or document.write", async () => {
     const sources = await clientSources();
     expect(Object.keys(sources).sort()).toEqual([
+      "actions.ts",
       "controller.ts",
       "layout.ts",
       "math.ts",
@@ -554,6 +555,167 @@ describe("History mode (ahliweb/omes#266) — same page, unmistakable, accessibl
     // Only navigation/playback buttons: nothing that names an operation.
     for (const verb of ["restore", "rollback", "cancel", "approve", "apply"]) {
       expect(panel.toLowerCase()).not.toContain(`id="omes-mc-${verb}`);
+    }
+  });
+});
+
+describe("contextual actions (ahliweb/omes#267) — shortcuts to existing endpoints, never a second path", () => {
+  const CSS = "src/styles/omes-control-center.css";
+  type ActionsSourceMap = {
+    kinds: Record<string, { candidate_actions: string[] }>;
+  };
+
+  test("the actions module is lazy-loaded by the controller, never imported statically, and only in live mode", async () => {
+    const { "controller.ts": controller = "" } = await clientSources();
+    const body = code(controller);
+
+    expect(body).toContain('import("./actions")');
+    expect(body).toMatch(/import type \{[^}]*\} from "\.\/actions"/);
+    expect(body).not.toMatch(/^import \{[^}]*\} from "\.\/actions"/m);
+    // History mode (and an empty selection) clears and never fetches actions.
+    expect(body).toMatch(/mode !== "live" \|\| !node/);
+    expect(body).toContain("actions?.clear()");
+    expect(body).toContain("syncActions(null)");
+    expect(body).toMatch(/mode === "live" && selectedKey === key/);
+    // The controller itself still sends no mutation.
+    expect(body).not.toMatch(/method\s*:/);
+  });
+
+  test("actions.ts only calls allowlisted existing mutation paths with an Idempotency-Key and credentials, and has no raw dialog or HTML sink", async () => {
+    const { "actions.ts": actions = "" } = await clientSources();
+    const body = code(actions);
+
+    expect(body).toContain('"Idempotency-Key"');
+    expect(body).toContain("crypto.randomUUID()");
+    expect(body).toContain('credentials: "same-origin"');
+    expect(body).toContain('method: "POST"');
+    expect(body).toContain("MUTATION_PATH");
+    for (const endpoint of [
+      "operations",
+      "jobs\\/[A-Za-z0-9-]{1,64}\\/(cancel|approve)",
+      "backups\\/[A-Za-z0-9-]{1,64}\\/restore"
+    ]) {
+      expect(body, endpoint).toContain(endpoint);
+    }
+    // Destructive requests use the shared ConfirmDialog, never a raw dialog.
+    expect(body).toContain("confirmAction");
+    expect(body).not.toMatch(/\b(window\.)?(confirm|prompt|alert)\s*\(/);
+    // Approval decisions are never made here: no approve/reject call to the inbox.
+    expect(body).not.toMatch(/\/api\/v1\/workflows/);
+    expect(body).not.toMatch(/\.innerHTML|insertAdjacentHTML|document\.write/);
+    // Browser-safe imports only: types, the outcome mapper, the confirm client, shared DOM helpers.
+    const imports = [...actions.matchAll(/from "([^"]+)"/g)].map((m) => m[1]);
+    expect(imports.sort()).toEqual(
+      [
+        "../../../modules/omes-control/domain/mission-control-outcome",
+        "../../../modules/omes-control/domain/mission-control-types",
+        "../confirm-dialog-client",
+        "./vocab"
+      ].sort()
+    );
+  });
+
+  test("actions.ts stays well under the per-file client budget", async () => {
+    const { "actions.ts": actions = "" } = await clientSources();
+    expect(Buffer.byteLength(actions)).toBeLessThan(27_000);
+  });
+
+  test("the HUD carries an empty, hidden actions container, a status region and no button", async () => {
+    const markup = template(await readFile(PAGE, "utf8"));
+    const hud = markup.match(/<aside[\s\S]*?<\/aside>/)?.[0] ?? "";
+
+    expect(hud).toContain("data-hud-actions");
+    expect(hud).toContain("data-actions-list");
+    expect(hud).toContain("data-actions-panel");
+    expect(hud).toMatch(/data-actions-result[\s\S]*?role="status"/);
+    expect(hud).not.toContain("<button");
+    expect(hud).not.toContain("<form");
+  });
+
+  test("every object-list button and Open-details link is a command-palette item, server-rendered and client-built", async () => {
+    const markup = template(await readFile(PAGE, "utf8"));
+    const { "controller.ts": controller = "" } = await clientSources();
+
+    expect(markup.match(/data-command-palette-item/g)?.length).toBe(2);
+    expect(markup.match(/data-command-palette-label=/g)?.length).toBe(2);
+    expect(controller.match(/"data-command-palette-item"/g)?.length).toBe(2);
+    expect(controller.match(/"data-command-palette-label"/g)?.length).toBe(2);
+  });
+
+  test("every label the actions client reads is translated by the page and covers the whole closed vocabulary", async () => {
+    const page = await readFile(PAGE, "utf8");
+    const { "actions.ts": actions = "" } = await clientSources();
+    const map = JSON.parse(
+      await readFile(SOURCE_MAP, "utf8")
+    ) as ActionsSourceMap;
+    const block = page.slice(
+      page.indexOf("  actions: {"),
+      page.indexOf("const screen = await loadAdminScreen")
+    );
+    const uiBlock = block.slice(block.indexOf("    ui: {"));
+    const uiProvided = new Set(
+      [...uiBlock.matchAll(/^\s{6}([A-Za-z_]+):\s*t\(/gm)].map((m) => m[1])
+    );
+    const uiUsed = new Set([
+      ...[...actions.matchAll(/\bui\.([A-Za-z_]+)/g)].map((m) => m[1]),
+      // Outcome sentences + link texts selected by key in `describeOutcome`.
+      "accepted",
+      "approval_required",
+      "approval_not_configured",
+      "rejected",
+      "unknown",
+      "openRecord",
+      "openInbox"
+    ]);
+    for (const key of uiUsed) {
+      expect(uiProvided.has(key as string), `ui.${key}`).toBe(true);
+    }
+
+    const everyAction = new Set(
+      Object.values(map.kinds)
+        .flatMap((kind) => kind.candidate_actions)
+        .filter((action) => action !== "open_details")
+    );
+    for (const action of everyAction) {
+      expect(block, action).toContain(`"${action}": t(`);
+    }
+    for (const reason of [
+      "permission_denied",
+      "state_not_eligible",
+      "not_found",
+      "historical_mode"
+    ]) {
+      expect(block, reason).toMatch(new RegExp(`${reason}: t\\(`));
+    }
+    for (const advisory of [
+      "target_stale",
+      "target_decommissioned",
+      "backup_not_verified"
+    ]) {
+      expect(block, advisory).toMatch(new RegExp(`${advisory}: t\\(`));
+    }
+  });
+
+  test("every class the actions client creates has a rule in omes-control-center.css", async () => {
+    const css = await readFile(CSS, "utf8");
+    const { "actions.ts": actions = "" } = await clientSources();
+    for (const cls of [
+      "omes-mc-action",
+      "omes-mc-actions",
+      "omes-mc-badge",
+      "omes-mc-warning",
+      "omes-mc-hud",
+      "omes-mc-transport"
+    ]) {
+      expect(css, cls).toContain(`.omes-cc .${cls}`);
+    }
+    for (const cls of [
+      "omes-mc-action",
+      "omes-mc-badge",
+      "omes-mc-warning",
+      "omes-mc-transport"
+    ]) {
+      expect(actions, cls).toContain(`"${cls}"`);
     }
   });
 });

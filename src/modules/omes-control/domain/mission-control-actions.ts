@@ -113,6 +113,15 @@ export type MissionControlActionRecord = {
   serverId?: string | null;
   deploymentId?: string | null;
   workflowInstanceId?: string | null;
+  /**
+   * The id the EXISTING endpoint takes in its path, when it differs from the
+   * scene's `source_id`: `POST /jobs/{id}/cancel|approve` and
+   * `POST /backups/{id}/restore` address the row's primary key (what the
+   * canonical screens send as `job.id` / `backup.id`), while the scene's
+   * `source_id` is the owning authority's business id (`job_id` /
+   * `backup_id`). Absent = the path uses `sourceId`.
+   */
+  pathId?: string | null;
 };
 
 export type MissionControlActionsInput = {
@@ -125,6 +134,61 @@ export type MissionControlActionsInput = {
   permissions: Record<string, boolean>;
   mode: MissionControlActionMode;
 };
+
+// ---------------------------------------------------------------------------
+// Query validation (GET .../actions?kind=&id=)
+// ---------------------------------------------------------------------------
+
+/** `^[A-Za-z0-9_.:-]{1,128}$` — the id shape every OMES endpoint accepts. */
+export const MISSION_CONTROL_ACTION_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+export type MissionControlActionsQuery = {
+  kind: MissionControlKind;
+  sourceId: string;
+};
+
+/**
+ * Strict query validation: exactly `kind` and `id`, each once. Anything else
+ * (`command`, `shell`, `target`, `url`, ...) is rejected, never ignored — there
+ * is no free-form field anywhere in this feature.
+ */
+export function parseActionsQuery(
+  params: URLSearchParams
+):
+  | { ok: true; value: MissionControlActionsQuery }
+  | { ok: false; message: string } {
+  const seen = new Set<string>();
+  for (const key of params.keys()) {
+    if (key !== "kind" && key !== "id") {
+      return { ok: false, message: `Unknown query parameter '${key}'.` };
+    }
+    if (seen.has(key)) {
+      return {
+        ok: false,
+        message: `Query parameter '${key}' may appear only once.`
+      };
+    }
+    seen.add(key);
+  }
+  const kind = params.get("kind");
+  if (
+    kind === null ||
+    !(MISSION_CONTROL_KINDS as readonly string[]).includes(kind)
+  ) {
+    return { ok: false, message: "kind must be a known Mission Control kind." };
+  }
+  const id = params.get("id");
+  if (id === null || !MISSION_CONTROL_ACTION_ID_PATTERN.test(id)) {
+    return {
+      ok: false,
+      message: "id is required and must match ^[A-Za-z0-9_.:-]{1,128}$."
+    };
+  }
+  return {
+    ok: true,
+    value: { kind: kind as MissionControlKind, sourceId: id }
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Vendored source map (candidate actions + actions table)
@@ -282,18 +346,20 @@ function requiresApproval(action: string): boolean {
 function concretePath(
   action: string,
   kind: MissionControlKind,
-  sourceId: string
+  sourceId: string,
+  pathId?: string | null
 ): { method: "GET" | "POST"; path: string } {
   const id = encodeURIComponent(sourceId);
+  const rowId = encodeURIComponent(pathId ?? sourceId);
   switch (action) {
     case "open_details":
       return { method: "GET", path: rawKind(kind).detail_route };
     case "job.cancel":
-      return { method: "POST", path: `/api/v1/omes/jobs/${id}/cancel` };
+      return { method: "POST", path: `/api/v1/omes/jobs/${rowId}/cancel` };
     case "job.requeue":
-      return { method: "POST", path: `/api/v1/omes/jobs/${id}/approve` };
+      return { method: "POST", path: `/api/v1/omes/jobs/${rowId}/approve` };
     case "backup.restore":
-      return { method: "POST", path: `/api/v1/omes/backups/${id}/restore` };
+      return { method: "POST", path: `/api/v1/omes/backups/${rowId}/restore` };
     case "approval.open_in_inbox":
       return {
         method: "GET",
@@ -369,7 +435,12 @@ export function evaluateMissionControlActions(
       );
     }
     const mutating = entry.mutating === true;
-    const { method, path } = concretePath(action, input.kind, input.sourceId);
+    const { method, path } = concretePath(
+      action,
+      input.kind,
+      input.sourceId,
+      input.record?.pathId
+    );
 
     let reason: MissionControlActionReason;
     if (input.record === null) {
@@ -400,54 +471,11 @@ export function evaluateMissionControlActions(
 // ---------------------------------------------------------------------------
 // Mutation outcome mapping
 // ---------------------------------------------------------------------------
+// Lives in `mission-control-outcome.ts` (no imports) so the browser can use the
+// SAME mapping without bundling this module's vendored-map and permission code.
 
-export type MissionControlMutationOutcome =
-  "accepted" | "approval_required" | "rejected" | "unknown";
-
-function errorCode(body: unknown): string | null {
-  if (!isRecord(body) || !isRecord(body.error)) return null;
-  return typeof body.error.code === "string" ? body.error.code : null;
-}
-
-/**
- * A 201 from `POST /operations` or `/backups/{id}/restore` carries
- * `data.operationRequest.workflowInstanceId` only when the destructive
- * workflow was started (`application/operation-submission.ts`,
- * `application/backup-restore.ts`).
- */
-function carriesWorkflowInstance(body: unknown): boolean {
-  if (!isRecord(body) || !isRecord(body.data)) return false;
-  const request = body.data.operationRequest;
-  return (
-    isRecord(request) &&
-    typeof request.workflowInstanceId === "string" &&
-    request.workflowInstanceId.length > 0
-  );
-}
-
-/**
- * Maps an existing-endpoint response to a Mission Control result state.
- * 2xx is `accepted` — NEVER "succeeded": accepted means the request was
- * recorded; verification is the job/scene's job, and a timeout or 5xx is
- * `unknown`, never success or failure.
- */
-export function mapMutationOutcome(
-  status: number | "network_error" | "timeout",
-  body?: unknown
-): MissionControlMutationOutcome {
-  if (typeof status !== "number") return "unknown";
-  if (status >= 200 && status < 300) {
-    if (status === 200 || status === 201 || status === 202) {
-      return carriesWorkflowInstance(body) ? "approval_required" : "accepted";
-    }
-    return "unknown";
-  }
-  if (
-    status === 409 &&
-    errorCode(body) === "APPROVAL_WORKFLOW_NOT_CONFIGURED"
-  ) {
-    return "approval_required";
-  }
-  if (status >= 400 && status < 500) return "rejected";
-  return "unknown";
-}
+export {
+  mapMutationOutcome,
+  workflowInstanceIdOf,
+  type MissionControlMutationOutcome
+} from "./mission-control-outcome";

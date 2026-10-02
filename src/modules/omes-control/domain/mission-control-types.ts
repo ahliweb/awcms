@@ -185,3 +185,6 @@ export const MISSION_CONTROL_ROUTE = "/admin/omes/mission-control";
 export const MISSION_CONTROL_SCENE_API = "/api/v1/omes/mission-control/scene";
 /** The bounded, keyset-paginated replay API (Issue ahliweb/omes#266). */
 export const MISSION_CONTROL_REPLAY_API = "/api/v1/omes/mission-control/replay";
+/** The advisory per-object action availability API (Issue ahliweb/omes#267). */
+export const MISSION_CONTROL_ACTIONS_API =
+  "/api/v1/omes/mission-control/actions";

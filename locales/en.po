@@ -6282,3 +6282,127 @@ msgstr ""
 
 msgid "{source} — {reason} ({from} to {to})"
 msgstr ""
+
+#. Mission Control contextual actions and command palette items (ahliweb/omes#267, ADR-0031)
+msgid "Request status check"
+msgstr ""
+
+msgid "Request preflight check"
+msgstr ""
+
+msgid "Request start"
+msgstr ""
+
+msgid "Request stop"
+msgstr ""
+
+msgid "Request restart"
+msgstr ""
+
+msgid "Request update"
+msgstr ""
+
+msgid "Request backup"
+msgstr ""
+
+msgid "Request rollback"
+msgstr ""
+
+msgid "Cancel queued job"
+msgstr ""
+
+msgid "Approve failed job for retry"
+msgstr ""
+
+msgid "Request restore from this backup"
+msgstr ""
+
+msgid "Open in approval inbox"
+msgstr ""
+
+msgid "You do not hold the permission this action needs."
+msgstr ""
+
+msgid "The object's current state does not allow this action."
+msgstr ""
+
+msgid "The object could not be found."
+msgstr ""
+
+msgid "Not available in History."
+msgstr ""
+
+msgid "The target's last report is stale, so its current state is not confirmed. The request is still allowed."
+msgstr ""
+
+msgid "The target server is decommissioned. The request is still allowed."
+msgstr ""
+
+msgid "This backup is not marked completed or verified. The request is still allowed."
+msgstr ""
+
+msgid "Checking available actions…"
+msgstr ""
+
+msgid "Actions are unavailable right now. Use the canonical screen instead."
+msgstr ""
+
+msgid "No actions for this object."
+msgstr ""
+
+msgid "Approval required"
+msgstr ""
+
+msgid "Review before sending"
+msgstr ""
+
+msgid "Permission"
+msgstr ""
+
+msgid "Allowed for you (the server checks again when you send)"
+msgstr ""
+
+msgid "Required — nothing runs until a workflow decision is approved in the approval inbox"
+msgstr ""
+
+msgid "Not required"
+msgstr ""
+
+msgid "Existing endpoint"
+msgstr ""
+
+msgid "Idempotency-Key"
+msgstr ""
+
+msgid "Send request"
+msgstr ""
+
+msgid "Sending…"
+msgstr ""
+
+msgid "Send “{action}” for {target}? The server checks permission and approval again, and the outcome is not verified until the next refresh."
+msgstr ""
+
+msgid "Accepted — pending verification."
+msgstr ""
+
+msgid "Approval required — a workflow decision is pending in the approval inbox."
+msgstr ""
+
+msgid "Approval required, but this tenant has no active destructive-operation approval workflow. Nothing was recorded."
+msgstr ""
+
+msgid "Rejected by the server (HTTP {status}, {code}). Nothing was changed."
+msgstr ""
+
+msgid "Outcome unknown — check Operations (or Jobs, Backups) before retrying. A retry reuses the same Idempotency-Key, so it cannot duplicate a request the server already recorded."
+msgstr ""
+
+msgid "Open the record"
+msgstr ""
+
+msgid "Open approval inbox"
+msgstr ""
+
+msgid "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
+msgstr ""

@@ -868,8 +868,31 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 286,415 is the measured value with no added margin.
+ *
+ * **Raised for ahliweb/omes#267** (Mission Control contextual actions, same
+ * screen, same epic): per-object actions that call ONLY the existing
+ * operations / jobs cancel+approve / backup restore endpoints, with a
+ * preflight summary, the shared ConfirmDialog and outcome states that never
+ * report success on acceptance. `actions.*.js` is a lazy `import()` loaded on
+ * the first live-mode selection. The one cross-screen cost is the opt-in
+ * `data-command-palette-item` hook in `admin-command-palette.ts`, which every
+ * admin page's `AdminLayout` script carries (+867 B): it is generic (any
+ * screen may mark items) and inert on pages that mark none. Measured actual
+ * total, on top of #266 above:
+ *
+ * ```
+ * before (286,415 ceiling)   286,415 B
+ * + actions.*.js (lazy action client, new)                        +6,819 B
+ * + AdminLayout script (opt-in palette page-item hook)              +867 B
+ * + mission-control page script (selection -> actions hook)         +891 B
+ * + omes-control-center.css action/preflight/outcome rules          +353 B
+ * - replay.*.js (shared helpers moved out)                          -101 B
+ *                                                               295,244 B (measured actual total)
+ * ```
+ *
+ * 295,244 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 286_415;
+export const APP_BUDGET_BYTES = 295_244;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

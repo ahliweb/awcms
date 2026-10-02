@@ -29,7 +29,7 @@ import {
   type MissionControlReplayEvent,
   type MissionControlReplayWindow
 } from "../../../modules/omes-control/domain/mission-control-types";
-import { VISUAL_STATE_TONE, isSafeDetailRoute } from "./vocab";
+import { VISUAL_STATE_TONE, el, isSafeDetailRoute } from "./vocab";
 
 type Dict = Record<string, string>;
 
@@ -97,17 +97,6 @@ function parseWire(value: string | null): number | null {
   if (!value || !WIRE_RE.test(value)) return null;
   const ms = Date.parse(value);
   return Number.isNaN(ms) || wire(ms) !== value ? null : ms;
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
