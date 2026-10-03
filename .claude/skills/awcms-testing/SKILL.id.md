@@ -5,7 +5,7 @@ description: Tulis test AWCMS sesuai strategi berlapis (unit, integration, API c
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:18864f99cdfef15dbf9279df5aacb9513edf155b9469409904dda055be4e9159 -->
+<!-- i18n-source-hash: sha256:d8be19eb59a591388ee73286ad8799ddbdaacb6ef3a7d75f300e0195c5a835a0 -->
 
 > **TITIK BUTA YANG WAJIB DIKETAHUI — `.astro` tidak diperiksa tipe sama
 > sekali.** `bun run typecheck` adalah `tsc --noEmit`, dan `tsc` **tidak bisa
@@ -55,7 +55,9 @@ pelanggaran `color-contrast`/`label`/`link-name`. Lapisan puncak piramida itu
 `@axe-core/playwright`, Issue #877) sepenuhnya dimiliki skill
 `awcms-browser-test` dan dijalankan lewat `bun run test:e2e`, tidak pernah
 lewat `bun test` — lihat skill itu sebelum menulis atau mengubah apa pun di
-bawah `tests/e2e/`.
+bawah `tests/e2e/`. Itu mencakup sapuan overflow responsif
+(`responsive-360.e2e.ts`, Issue #884) yang meliputi 360px, 640×360 (zoom 200%
+pada desktop 1280×720), 768px (tablet potret) dan 1024px.
 
 ## Target unit test
 

@@ -1,5 +1,7 @@
 /**
- * Every static admin screen fits a 360px-wide viewport, AND a 1024px-wide one.
+ * Every static admin screen fits a 360px-wide viewport, AND a 640px-wide one
+ * (200% browser zoom on a 1280×720 desktop), AND a 768px-wide one (tablet
+ * portrait), AND a 1024px-wide one.
  *
  * ## The gap this closes
  *
@@ -28,6 +30,34 @@
  * SECOND width in the same sweep — not a new file — because the property
  * under test ("no admin screen scrolls sideways") is identical; only the
  * viewport differs.
+ *
+ * ## 768px and 640px (200% zoom) joined for #884
+ *
+ * Two real-world viewports sat between the widths above and were
+ * never loaded:
+ *
+ * - **768px** is tablet portrait (iPad mini/Air, most Android tablets). It
+ *   lies between 360 and 1024, so it exercises whichever breakpoint rules
+ *   switch the sidebar/topbar layout somewhere in that range — a layout that
+ *   fits at both ends can still overflow in the middle.
+ * - **640×360** is a 1280×720 desktop at **200% browser zoom**: the browser
+ *   halves the CSS-px viewport in both dimensions. WCAG 2.1 SC 1.4.10
+ *   (Reflow) requires content to reflow at 320 CSS px wide without sideways
+ *   scrolling, and measures it in CSS px; 200% zoom of a 1280px window is
+ *   exactly how a low-vision user reaches that, and 640 is its first stop.
+ *   Playwright has no real zoom API, so this is emulated by the equivalent
+ *   CSS-px viewport — the layout engine cannot tell the difference, because
+ *   zoom IS a smaller CSS viewport. Note the HEIGHT matters as well (360, not
+ *   the 640 every other entry uses): a zoomed desktop is short, and
+ *   viewport-height-derived sizing (sticky bars, `100dvh` shells) behaves
+ *   differently there than on a phone-height viewport.
+ *
+ * Each entry in `VIEWPORTS` therefore carries `{ width, height, why }`
+ * instead of a bare width, so the `why` shows up in the test title and a
+ * future reader does not have to rediscover what 640×360 means. They are
+ * added to the SAME sweep with the SAME assertion and tolerance — not a new
+ * file, and no exclusions — because the property under test is identical;
+ * only the viewport differs.
  *
  * ## Why this is a sibling of `admin-screens-render.e2e.ts`, not a change to it
  *
@@ -91,12 +121,31 @@ import { test, expect, type Page } from "./support/e2e-read-wave";
 
 import { discoverAdminRoutes, ADMIN_PAGES_ROOT } from "./support/admin-routes";
 
-// 360 (narrowest real phone width) and 1024 (ahliweb/awcms#843 — the exact
-// width where the topbar's account link overflowed on every admin screen).
-// Each gets its own `test()` below via `page.setViewportSize`, rather than a
-// file-level `test.use({ viewport })`, because that API can only express one
-// fixed viewport for the whole file/describe.
-const VIEWPORT_WIDTHS = [360, 1024] as const;
+// Each viewport gets its own `test()` below via `page.setViewportSize`, rather
+// than a file-level `test.use({ viewport })`, because that API can only
+// express one fixed viewport for the whole file/describe.
+const VIEWPORTS = [
+  {
+    width: 360,
+    height: 640,
+    why: "narrowest real phone width"
+  },
+  {
+    width: 640,
+    height: 360,
+    why: "200% zoom of 1280×720"
+  },
+  {
+    width: 768,
+    height: 640,
+    why: "tablet portrait"
+  },
+  {
+    width: 1024,
+    height: 640,
+    why: "ahliweb/awcms#843 — where the topbar's account link overflowed"
+  }
+] as const;
 const OVERFLOW_TOLERANCE_PX = 1;
 const MAX_REPORTED_OFFENDERS = 5;
 
@@ -171,15 +220,15 @@ test.describe("every static admin screen fits its target viewport", () => {
     ).toBeGreaterThan(40);
   });
 
-  for (const width of VIEWPORT_WIDTHS) {
-    test(`no static admin screen scrolls sideways at ${width}px`, async ({
+  for (const { width, height, why } of VIEWPORTS) {
+    test(`no static admin screen scrolls sideways at ${width}px (${why})`, async ({
       page
     }) => {
       test.setTimeout(180_000);
       // Already authenticated as the owner: the `setup` project logged in
       // once and this project reuses that session. See
       // `tests/e2e/auth.setup.ts`.
-      await page.setViewportSize({ width, height: 640 });
+      await page.setViewportSize({ width, height });
 
       for (const route of routes) {
         const response = await page.goto(route.url);

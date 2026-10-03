@@ -537,8 +537,10 @@ index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
   `APP_BUDGET_BYTES` was lowered from 250,566 to 248,033 and
   `PER_FILE_CSS_BUDGET_BYTES` from 57,300 to 56,800 (both measured actual
   values — see that file's own ledger comments).
-- **Responsive/E2E sweep:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,
-  no sideways scroll) and `tests/e2e/admin-screens-render.e2e.ts` (every
+- **Responsive/E2E sweep:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px
+  at the time of this issue; since #884 it sweeps 360px, 640×360 = 200%
+  browser zoom of a 1280×720 desktop, 768px tablet portrait and 1024px —
+  no sideways scroll at any of them) and `tests/e2e/admin-screens-render.e2e.ts` (every
   admin screen renders) re-run against a fresh Postgres 18.4 + full
   migration + seeded tenant — both green, plus the full `bun run test:e2e`
   suite (33 passed, 8 skipped for env-gated specs unrelated to this issue —

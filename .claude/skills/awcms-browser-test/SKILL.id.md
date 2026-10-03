@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:901c1b7b32506128bd50070d3e1fc90b77fc575870d0fa0d84af233980699afd -->
+<!-- i18n-source-hash: sha256:4e5a03ff9c9d12131fa8a736a5af1f1c52b0c55c8c6746dcabaa780bb381be2f -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -184,6 +184,16 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
      yang dirender, dan komponen Astro yang melempar muncul sebagai 404
      dengan `ReferenceError`-nya hanya di log server. Cek elemennya, dan cek
      `document.documentElement.scrollWidth <= innerWidth` untuk overflow.
+
+   Sapuan overflow (`tests/e2e/responsive-360.e2e.ts`, Issue #884) melakukan
+   persis itu untuk setiap layar admin statis pada empat viewport: **360px**
+   (ponsel tersempit), **640×360** (desktop 1280×720 pada zoom browser 200% —
+   WCAG 2.1 SC 1.4.10 mengukur reflow dalam piksel CSS dan Playwright tak
+   punya API zoom sungguhan, jadi viewport CSS yang setara dipakai; tingginya
+   juga penting), **768px** (tablet potret) dan **1024px**. Tambahkan lebar
+   sebagai entri `{width, height, why}` di tabel `VIEWPORTS`-nya — satu
+   `test()` masing-masing, asersi yang sama, tanpa pengecualian atau toleransi
+   lebih besar.
 
 7. **Setiap spec baru WAJIB diklasifikasikan ke sebuah GELOMBANG, dan
    gelombang baca ditegakkan saat RUNTIME.** Semua spec berbagi SATU tenant
