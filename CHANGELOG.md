@@ -1,5 +1,705 @@
 # awcms
 
+## 10.4.0
+
+### Minor Changes
+
+- 1fac308: feat(admin): add ConfirmDialog, SettingsSaveBar, and ReasonPanel admin v2 primitives
+  
+  Three accessible admin UX primitives, ported from `ahliweb/media-lenterakalteng`'s local build so every consumer of this template gets them (see ADR-0125): `ConfirmDialog` replaces `window.confirm()` with a themed `<dialog role="alertdialog">` rendered once by `AdminLayout` (43 call sites across 26 admin screens converted); `SettingsSaveBar` is a sticky save bar that works without JavaScript, adopted on `/admin/site-profile`, `/admin/blog-settings`, and `/admin/theming`; `ReasonPanel` replaces `window.prompt()` for actions whose endpoint records a reason (module disable, newsletter suppress, media delete, tenant domain delete, business-scope assignment/exception revoke, domain-event consumer pause and delivery replay — 9 sites converted, 12 left and catalogued in the ADR because they do not fit its one-endpoint/one-required-field/reload-on-success shape). No new endpoints, no API/schema changes; server-side authorization and validation are unchanged.
+- bd7f2db: design(cms): admin chrome restyle — dark sidebar rail, topbar polish, shared primitives (awcms-one#170)
+  
+  Extends the ADR-0120 admin redesign with a dedicated, always-dark sidebar surface (`--color-sidebar-*` tokens in `tokens.css`, independent of `data-theme`) carrying a compact brand + tenant header, a `.admin-sidebar-count` badge slot (fed by a new optional `ModuleNavigationEntry.badgeCount`, populated by nothing yet), and a `.admin-sidebar-status` card fed by the same `syncActive` boolean the topbar's `SyncIndicator` already reads — no new data source. Adds eight shared CSS primitives to `admin.css` for future screens to build on: `.admin-stat-card`, `.admin-status-pill[data-tone]`, `.admin-segmented`, `.admin-bulk-bar`, `.admin-two-pane`, `.admin-toggle` (a real `<input type="checkbox">` switch), `.admin-timeline`, and `.admin-media-grid`. `design:token-contrast:check`'s `PAIRS` registry gains the new sidebar foreground/background pairs; no existing admin screen changes.
+- 39510eb: ops(backup): complete production backup assurance with encryption, authenticated manifests, off-site copies, and automated restore drills (#812)
+  
+  `deploy/backup/` gains `manifest.sh`, `offsite-copy.sh` and `restore-drill.sh`, and `backup-postgres.sh`/`restore-postgres.sh` gain opt-in `age` encryption-at-rest plus an HMAC-SHA256-authenticated recovery manifest — closing the three controls the production-preflight docs had correctly said were not implemented since the 27 August correction. Setting `BACKUP_AGE_RECIPIENTS_FILE`/`BACKUP_HMAC_KEY_FILE` together at backup time (and `RESTORE_AGE_IDENTITY_FILE`/`BACKUP_HMAC_KEY_FILE` together at restore time) turns on encryption; setting only one of a pair fails closed. `restore-drill.sh` is a new unattended, cron/CI-capable orchestrator with no code path that can target production. Every existing safe default is unchanged: no credentials printed, no final-looking artifact left on failure, non-destructive restore drill by default, and the plain unencrypted mode (offline/LAN profile) is byte-for-byte unchanged. Decision analysis (age vs GnuPG vs OpenSSL enc; HMAC vs detached signature) recorded in ADR-0123.
+- 0a25581: feat(blog-content,media-library): institution logo — logoMediaId/logoAlt on awcms_blog_institutions, SVG upload safety (Issue #806)
+  
+  `awcms_blog_institutions` gains `logo_media_id uuid`/`logo_alt text` (`sql/153`) so a derived site can render one reusable institutional logo/emblem (a regency's coat of arms) beside every article filed under that institution, instead of retyping it onto each post. `logoMediaId` is shape-validated exactly like `awcms_blog_posts.featured_media_id` (a UUID or null, no FK) and is checked through `MediaLibraryPort.isMediaReferenceSafe` only when managed-media enforcement is active for the tenant (`institution-logo-reference-gate.ts`, the same posture the post/page paths already take). `POST`/`PATCH /api/v1/blog/institutions[/{id}]` accept both fields; `GET /api/v1/blog/institutions` and `GET .../{id}` expose them — a consumer resolves `logoMediaId` to a public URL via `GET /api/v1/media/objects?ids=`.
+  
+  `media_library`'s upload-session finalize flow previously could never actually accept an SVG: `image/svg+xml` was listed as a known, operator-opt-in MIME type (`NEWS_MEDIA_R2_ALLOWED_MIME_TYPES`) since Issue #635, but the magic-byte sniffer never recognized SVG's shape, so every SVG upload hard-rejected as `mime_not_recognized` regardless of the allow-list — a dead end for the very use case this issue needs (an institution logo is very often an SVG). `sniffNewsMediaMimeType` now recognizes the SVG shape (ReDoS-safe linear scan, not backtracking regex — see `media-mime-sniffer.ts`), and a new content-safety scan (`media-svg-safety.ts`) rejects an allow-listed SVG that carries a `<script>` element, an `on*=` event-handler attribute, a `javascript:`/`data:` URI, an external entity/DOCTYPE (XXE), or any `<!ENTITY` declaration at all — a new `svg_unsafe_content` finalize rejection reason, checked after the allow-list/claimed-mime-type checks and before the checksum claim.
+  
+  PR review (#807) reproduced and closed three ways to re-express those same vectors in a form the literal patterns alone missed: a `data:` URI in `href`/`xlink:href`/`src` carrying an entire nested SVG (closed by rejecting any `data:` scheme in those attributes outright); numeric/hex character-reference and TAB/LF/CR obfuscation of a `javascript:`/`data:` scheme (closed by decoding character references and stripping URL-parser-stripped control characters before the URI/handler checks run); and parameter-entity splitting of the `SYSTEM`/`PUBLIC` keyword across multiple `<!ENTITY>` declarations (closed by rejecting any `<!ENTITY` declaration unconditionally). See `media-svg-safety.ts`'s module header for the full reasoning behind each closure.
+- 431a543: feat(knowledge): harden Graphify baseline and add a safe, optional Obsidian knowledge workflow (Issue #805)
+  
+  Pins the tested Graphify CLI baseline (`graphify 0.9.35`, PyPI package `graphifyy`, Python 3.12) so automation never depends on a floating `latest`, and documents which commands (`--update`, `query`, `path`, `explain`, `--code-only`, `export obsidian --dir graphify-out/obsidian-staging`, …) are approved for this repo. `graphify install --project` was evaluated and rejected — it would duplicate `AGENTS.md`/`.claude/skills/` policy with no gate keeping the two in sync, so Graphify continues to run from the contributor's own global skill.
+  
+  Adds a dedicated, optional `knowledge/` Obsidian vault (ADR-0124), never the repository root: `knowledge/curated/` holds small human-authored index notes only (never a copy of canonical ADR/PRD/contract/doc content), and `knowledge/generated/graphify/` is populated exclusively by a new deterministic, fail-closed sync wrapper (`scripts/knowledge-obsidian-sync.ts`, `bun run knowledge:obsidian:export`) that copies an allow-listed subset (`.md`/`.canvas` only) from an isolated staging path (`graphify-out/obsidian-staging/`) — never directly from Graphify. The sync fails closed (non-zero exit, nothing written, `knowledge/curated/` never touched) on path traversal, an unexpected file type, a filename collision with curated content, or an entry whose real path escapes the staging root, and stamps every successful export with a `PROVENANCE.md` naming the pinned tool version, source commit, and export time. `tests/knowledge-obsidian-sync.test.ts` proves each fail-closed path against the real defect shape (an actual symlink, an actual `.obsidian/` byproduct, an actual basename collision), not merely a healthy tree. New `bun run knowledge:graph:update`/`knowledge:graph:check`/`knowledge:obsidian:pull`/`knowledge:obsidian:export`/`knowledge:check` commands; `knowledge:check` is wired into the main `bun run check` chain and needs neither Graphify nor Obsidian installed to run. `graphify-out/obsidian/`, `graphify-out/obsidian-staging/`, `knowledge/generated/`, and `knowledge/.obsidian/` are all git-ignored — no personal Obsidian workspace state and no generated one-file-per-node export ever enters history.
+- a82d8e6: feat(control-center): consume pinned OMES v1 contracts with fail-closed validation (ahliweb/omes#197)
+  
+  Vendors a pinned, byte-identical snapshot of `contracts/control-center/v1/**` from OMES commit `0824f9815bd8429781f70ed529787ce5399585c3` into `src/modules/omes-control/contracts/v1/` (schemas, `*.states.json` state machines, event schemas, and every fixture), with a `PIN.json` manifest recording the source repo/commit/version and a SHA-256 hash per vendored file. No network access is used at runtime or test time.
+  
+  Adds `scripts/sync-omes-contracts.ts` (`bun run contracts:omes:sync` to re-vendor from a local OMES checkout, `bun run contracts:omes:sync:check` for a read-only drift/pin-mismatch gate now wired into `bun run check` right after `api:consumer-contract:check`).
+  
+  Adds a dependency-free, fail-closed TypeScript validator under `src/modules/omes-control/domain/contracts/` (`schema.ts`) that is a line-for-line port of OMES's own `lib/omes/py/jobs/schema.py` supported-keyword subset and independent raw-secret scanner (issue #172) — no `ajv`/`zod`/other JSON Schema dependency was added. A data-driven state-machine transition checker (`state-machine.ts`) loads `subscription.states.json`/`invoice.states.json` as data rather than duplicating the transition rules as TypeScript. Unknown schema names and unsupported contract versions are rejected before any file is read.
+  
+  Exports a small public API from `src/modules/omes-control/domain/contracts/index.ts` for `#198`/`#199` to build on: `validateOmesContract`, `validateOmesContractText`, `assertOmesContract`, `scanForRawSecrets`, `getOmesStateMachine`, `OMES_CONTRACT_PIN`.
+  
+  Documented in ADR-0122's new addendum (and its Indonesian mirror), including the re-sync update procedure.
+- a43f726: feat(control-center): OMES worker enrollment, poll, result, and heartbeat ingestion (ahliweb/omes#199)
+  
+  Adds the AWCMS server-side counterpart the outbound OMES pull worker (ahliweb/omes#192) talks to: `POST /api/v1/omes/worker/{enroll,poll,result,heartbeat}`. These are the highest-risk surface `omes_control` ships — session-UNauthenticated by design (ADR-0027's outbound-pull architecture), authenticated instead by asymmetric Ed25519 worker identity with proof-of-possession enrollment, a canonical-envelope signature over every subsequent request, and a persisted, atomic nonce/replay store.
+  
+  - **Enroll** redeems a single-use, short-lived challenge (#198's `POST .../enrollment-challenges`) via a genuine DB-level compare-and-set (`SELECT ... FOR UPDATE` + same-transaction `UPDATE`), requiring a signature over the raw challenge under the presented public key before the row is touched.
+  - **Poll** promotes an `approved` operation request into a queued job (a bridge #198 left undone), leases it with `FOR UPDATE SKIP LOCKED`, and returns it conforming exactly to the pinned `operation-request` contract.
+  - **Result** ingestion is idempotent by `(tenant_id, server_id, idempotency_key)` — not the wire `job_id`, which turns out to be the worker's own opaque local identifier, not something AWCMS assigned. Every recorded row is stamped `source: "worker_reported"` / `reconciled: false`; a 2xx is never presented as confirmed success anywhere in this module.
+  - **Heartbeat** updates redacted, `omes-host`-attributed telemetry and never resurrects a decommissioned server's status; staleness stays a pure function of heartbeat age computed on read.
+  
+  `verifyWorkerEnvelope` is the single chokepoint poll/result/heartbeat call before any other side-effecting work. Adds `awcms_omes_worker_nonces` and `awcms_omes_worker_results` (sql/159, RLS enabled+forced, `awcms_worker`'s grant narrowed to SELECT+DELETE matching sql/156's existing pattern), an `idempotency_key` column + unique constraint on `awcms_omes_jobs`, and OpenAPI/threat-model/module README documentation (EN+ID).
+  
+  Flags a cross-repository gap rather than working around it silently: the OMES-side reference pull worker (ahliweb/omes#192) does not yet generate real Ed25519 keys or send signature/nonce/timestamp headers — this module does not relax verification to match that stub.
+- 6bb6d49: feat(control-center): admin screens for overview, servers, deployments, operations and jobs (ahliweb/omes#200)
+  
+  Adds the five primary OMES Control Center admin screens under `/admin/omes/*`, consuming the owner/operator API (`ahliweb/omes#198`) and built entirely from existing AWCMS admin-shell primitives — `AdminLayout`, `loadAdminScreen`, `admin-screens.css`, `status-badge`, `stat-grid`, keyset-paginated `data-table`, and `admin-form-client` — with no new UI framework or charting dependency:
+  
+  - **Overview** (`/admin/omes`) — server health distribution, job state summary, backup freshness, and drift summary, aggregated directly from `omes_control` state (never from the `reporting` module's projections). Structured so `ahliweb/omes#201`'s health/backup-recovery/audit screens add sections here without restructuring.
+  - **Servers** (`/admin/omes/servers`) — fleet inventory plus per-server enrollment/trust evidence (worker status and a SHA-256 public-key fingerprint only, never raw key material). No Hermes-baseline section, because the #198 servers API carries none yet — that belongs to `/api/v1/omes/health` and is `#201`'s to render.
+  - **Deployments** (`/admin/omes/deployments`) — read-only; desired and observed state render in separate labelled table columns (never merged), with last-reconciliation time, an explicit staleness badge, and error evidence. Changing a deployment routes through Operations.
+  - **Operations** (`/admin/omes/operations`) — submission limited to the OMES-owned safe-operation allowlist (`status`/`preflight`/`start`/`stop`/`restart`/`update`/`backup`/`rollback`); a destructive option is rendered disabled unless the actor holds its own endpoint permission, and a destructive request's approval decision links into the canonical `/admin/approvals` workflow surface by workflow instance — no second, OMES-specific approval inbox.
+  - **Jobs** (`/admin/omes/jobs`) — worker dispatch queue: state, correlation (`operationRequestId`), lease ownership, retry count, and sanitized evidence, with approve-for-retry (failed only) and cancel (queued only) actions.
+  
+  Every mutation is a `fetch` to an already-guarded `#198` endpoint with a fresh `Idempotency-Key`; no screen executes SQL directly, so server-side authorization (the 13 `omes_control` permissions seeded by `sql/155`) remains the sole enforcement point and these screens' visibility checks are UX only. Registers the five navigation entries the `omes_control` module descriptor was missing (closing the "module without navigation" gap `PROJECT_STATE.md` tracked), each gated on one of the already-seeded permissions — no new permission migration.
+  
+  Cross-tenant scoping decision: none of these five screens' actions cross a tenant boundary — every `omes_control` table carries `tenant_id` under FORCE ROW LEVEL SECURITY (`sql/154`) and every application-layer query scopes on the caller's own `tenantId`. Per ADR-0051 §Keputusan (the ADR-0048 lesson: a permission that is merely seeded to the `owner` role enforces nothing on its own), a platform-scoped gate is required only when an action's *effect* reaches another tenant's data; none here do, so the ordinary tenant-seeded permissions are sufficient and no platform-only permission was added.
+  
+  Adds `tests/admin-omes-control-page-contract.test.ts` (permission/endpoint/seed parity, no-direct-SQL, idempotency-key discipline, stale/offline rendering, safe-operation allowlist enforcement, approval delegation, static tenant-scoping) and updates `tests/omes-control-module.test.ts`'s navigation assertion now that the physical screens exist. Adds the EN/ID locale catalog entries these screens use.
+- 52e8f8b: feat(control-center): health, backup/recovery and audit admin screens (ahliweb/omes#201)
+  
+  Adds the three remaining OMES Control Center admin screens under `/admin/omes/*`, completing the eight-screen module `ahliweb/omes#200` started — same admin-shell primitives, no new UI framework or charting dependency:
+  
+  - **Health** (`/admin/omes/health`) — latest health snapshot per server, plus per-server keyset-paginated history, from `GET /api/v1/omes/health`. Every row is `omes-host`-attributed evidence (the OMES pull worker's own report); an individual `checks` entry's own declared `source` (e.g. `hermes`, an external provider) is rendered as its own badge when present. A newly computed `stale` flag (`health-directory.ts`, threaded via a `now` parameter) renders alongside `overallStatus`, never replacing it with a success variant — a stale snapshot's captured status is still shown exactly as captured.
+  - **Backups** (`/admin/omes/backups`) — artifact metadata: recovery class (from the manifest, when declared), sha256 checksum, size, age/`fresh` flag, and status, with the manifest itself rendered as escaped JSON, never raw backup contents. Restore is the one mutation this screen offers, always destructive, and routed through the SAME canonical `workflow-approval` engine every other destructive OMES action already uses (`POST /api/v1/omes/backups/{id}/restore`, shipped by `#198`) — this screen only submits and links the resulting `workflowInstanceId` into `/admin/approvals`, never a second approval surface. Submitted restore requests are listed by reusing `fetchOperationRequests` (extended with an optional `operation` filter) rather than a new query.
+  - **Audit** (`/admin/omes/audit`) — two separate, source-labelled sections, never merged: canonical control-plane actor/action events (`awcms_audit_events` via `listAuditEvents`, extended with an optional `moduleKey` filter, narrowed to `omes_control`) and the remote OMES execution/reconciliation projection (`awcms_omes_audit_projections` via `fetchAuditProjections`, `#198`). Links out to `/admin/audit-trail` for the full cross-module view.
+  
+  `module.ts` registers the three navigation entries (health reuses `servers.read`, matching its endpoint's own guard) and promotes `omes_control` from `experimental` to `active` now that all eight planned screens exist (ADR-0021 criterion 1; the `push_delivery` precedent shows a single screen is sufficient for the enforced gate, so this promotion reflects the module's actual completed screen surface rather than a gate requirement). `enrollments.manage` remains deliberately without a navigation entry — out of this issue's scope, tracked as a gap for a future enrollment-token-management screen.
+  
+  Cross-tenant scoping decision (this issue's own determination, not inherited from `#200`): `backups.restore`/`backups.rollback` are the most plausible cross-tenant actor in this module, since a restore changes host state. `submitBackupRestore` resolves the target `serverId` from a `SELECT ... WHERE tenant_id = ${tenantId} AND id = ${backupId}` lookup — a `backupId` belonging to another tenant resolves to `RESOURCE_NOT_FOUND`, never a foreign server — and every table touched carries `FORCE ROW LEVEL SECURITY` (`sql/154`). The action's effect therefore never reaches another tenant's data, so per ADR-0051 §Keputusan the ordinary tenant-seeded permissions remain sufficient; no platform-scoped gate is added.
+  
+  Overview gains a `readAudit` any-of gate and three quick-links (Health, Backups & recovery, Audit).
+  
+  Adds `tests/admin-omes-control-health-backup-audit-page-contract.test.ts` (guard/endpoint/seed parity, no-direct-SQL, restore's idempotency-key discipline, explicit stale rendering for both health and backups, restore's approval-gating and exclusion from the safe-operation allowlist, the two audit feeds' separation, static tenant-scoping including `submitBackupRestore`'s own-tenant-only lookup, `set:text`-only evidence) and updates `tests/admin-omes-control-page-contract.test.ts` / `tests/omes-control-module.test.ts` for the eight-screen/active-module shape. Adds the EN/ID locale catalog entries these screens use (id.po fully translated) and documents all eight screens in the module's README/README.id.
+- 37d4d81: feat(control-center): AI privacy posture and egress-approval consumption (ahliweb/omes#232)
+  
+  Adds `/admin/omes/ai-privacy`, the tenth `omes_control` admin screen, consuming the OMES-owned Control Center contracts `ai-privacy-posture-view`/`ai-egress-approval.request`/`.response` (`ahliweb/omes` issue #217, ADR-0029, `docs/control-center-contracts.md` §2.10). AWCMS now displays AI privacy posture evidence per server and governs owner-approval of `approval_required` AI egress decisions — read/approve permissions (`omes_control.ai_privacy.read`/`.approve`), two new tenant-scoped tables (`sql/160`, `sql/161`), and a fourth authenticated worker route.
+  
+  **Ingestion reuses the existing worker transport, never a new listener.** `POST /api/v1/omes/worker/ai-privacy-posture` is authenticated by the SAME `verifyWorkerEnvelope` Ed25519 chokepoint as `poll`/`result`/`heartbeat` (`domain/worker-identity.ts`'s `WorkerRoute` now includes `"ai-privacy-posture"`), and independently cross-checks the envelope's authenticated `tenant_id`/`server_id` against the posture projection's own `tenant_id`/`target.server_id` before persisting anything.
+  
+  **Freshness/status are recomputed at read time, never trusted off storage** (`domain/ai-privacy.ts`'s `projectAiPrivacyPosture`): stale or unknown evidence, or an unrecognized status/destination/classification value, always downgrades to `BLOCKED`, and an empty fleet reports as unhealthy, never healthy-by-default.
+  
+  **RESTRICTED classification resolving to a `cloud_sanitized` destination has no approval path, structurally, at three independent layers**: the pure `authorizeAiEgressApproval` gate refuses it by value before the workflow engine is ever touched; `awcms_omes_ai_egress_approvals`'s own CHECK constraint makes storing that combination impossible even bypassing the application layer; and the admin screen never renders an approve control for that pairing. Every other `approval_required` decision is recorded through the SAME `workflow-approval` engine every other destructive `omes_control` action uses (workflow key `omes_control.ai_egress_approval`) — never a second approval authority. A tenant with no published workflow gets `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` and nothing is persisted as approved.
+  
+  **No raw prompt/transcript/credential field can reach this module, structurally**: the vendored schemas are `additionalProperties: false` throughout, and `findDisallowedEvidenceKeys` is a second, independent runtime scan at ingestion, belt-and-suspenders against a future schema relaxation.
+  
+  Adds `tests/omes-control-ai-privacy-domain.test.ts` (pure freshness/effective-status/authorization-gate/disallowed-key unit tests) and `tests/integration/omes-control-ai-privacy.integration.test.ts` (real PostgreSQL: cross-tenant denial under `awcms_app`/`FORCE ROW LEVEL SECURITY` for both new tables, the RESTRICTED->cloud_sanitized refusal proven at both the application gate and the database CHECK constraint, stale/unknown-evidence rendering, schema-rejection of a disallowed-field payload over the real worker-envelope HTTP route, and idempotent replay of an egress-approval submission). Documents the new screen in the module README/README.id, `docs/awcms/api-reference.md`, and updates the `sql/001`-`sql/161` migration-range claims in `docs/ARCHITECTURE.md`/`.id.md` and `.claude/skills/README.md`/`.id.md`. Adds full EN/ID locale entries for the new screen.
+- eff72e8: feat(control-center): OMES enrollment-token management screen (ahliweb/omes#233)
+  
+  Adds `/admin/omes/enrollments`, the ninth `omes_control` admin screen, gated on the existing `omes_control.enrollments.manage` permission. `ahliweb/omes#201` deliberately shipped without a navigation entry for this — the Servers screen has only ever rendered read-only enrollment/trust evidence; issuing and revoking a worker's one-time enrollment token was reachable only via the API. This closes that gap.
+  
+  No new write path is introduced: the screen's "Issue token" and "Revoke" buttons call the SAME two endpoints `ahliweb/omes#198` already shipped and guards — `POST /api/v1/omes/servers/{id}/enrollment-challenges` and its `/revoke` sibling — unmodified by this change. A new read-only query, `application/enrollment-directory.ts`'s `fetchEnrollments`, lists enrollment tokens across the whole tenant fleet (the existing `fetchServerDetail` only ever looked at one server's enrollments at a time).
+  
+  Security-sensitive token handling:
+  
+  - The issued token is shown exactly once, immediately after issuance, and can never be fetched again — only its SHA-256 hash is ever persisted (`sql/158`'s existing discipline, unchanged).
+  - Rendered via the shared `messageBox` helper's `textContent`-only `show()` (never `innerHTML`/`set:html`), never written to `localStorage`/`sessionStorage`, never logged, and gone the moment the page is left or reloaded. No auto-download and no modal dialog — a plain in-page reveal, matching this repo's own established `machine-credentials.astro` precedent. A copy-to-clipboard button was drafted and then removed after it pushed this one screen's compiled client bundle over the repo's asset-budget gate; see the screen's own header comment for the full modal-vs-clipboard-button-vs-download trade-off analysis.
+  - Every mutation remains permission-gated SERVER-SIDE by the endpoints' own `authorize: OMES_GUARDS.enrollments.manage` (unchanged) — this screen hiding a button is UX only, never the enforcement boundary.
+  - Cross-tenant isolation is proven at runtime against a real PostgreSQL with `FORCE ROW LEVEL SECURITY` (`tests/integration/omes-control.integration.test.ts`'s new "enrollment directory & cross-tenant enrollment isolation" suite): a foreign tenant's `serverRowId` resolves to a fail-closed `not_found`/empty list, never a leaked row or a mutated foreign entry. A separate test reads the raw database row after issuance and asserts the plaintext challenge is not a substring anywhere in it — only its hash is stored.
+  
+  Adds `tests/admin-omes-control-enrollments-page-contract.test.ts` (guard/endpoint parity, no-direct-SQL, Idempotency-Key discipline, output-encoding, never-re-displayable/never-persisted-in-plaintext static checks, tenant scoping) and updates `tests/omes-control-module.test.ts`/`tests/admin-omes-control-page-contract.test.ts` for the nine-screen shape. Adds EN/ID locale entries (id.po fully translated) and documents the new screen in the module's README/README.id and the overview's quick-links.
+- d9e1ef4: feat(control-center): OMES Architecture Control Center screen (ahliweb/omes#246 part 3)
+  
+  Adds `/admin/omes/arsitektur`, the fourteenth and final `omes_control` admin screen for issue ahliweb/omes#246: a read-only projection of the ADR-0017 layered reference architecture, rendered as planes (lanes) of capability cards with an implementation-status badge per card, following the redesign reference's "Arsitektur" view binding.
+  
+  **This is a PINNED RELEASE SNAPSHOT, not live host state.** Unlike every other `/admin/omes/*` screen, this one has no database table and no tenant-scoped query behind it — every tenant sees the identical vendored payload. The data is `contracts/v1/fixtures/architecture-capabilities-view/valid-01-generated.json`, re-vendored byte-for-byte from OMES commit `339f2f371aa20b2e9ec6b839488804160ab4e08a` via `bun run contracts:omes:sync` and pinned by SHA-256 in `contracts/v1/PIN.json`. The screen renders the snapshot's own `omes_version`/`omes_commit`/`generated_at` and states explicitly, in both `id` and `en`, that this is a pinned snapshot rather than a live projection from an enrolled host.
+  
+  **A NEW permission, `architecture.read` (`sql/165`), guards this screen — deliberately not a reuse of `hermes_orchestration.read`.** This screen's subject (the cross-cutting OMES/Hermes/Omarchy/AWCMS/provider layered-architecture registry) has no audience overlap with the Hermes delegated-task/subagent orchestration family the other three #246 screens share one permission for.
+  
+  `application/architecture-directory.ts` loads and validates the vendored fixture against the vendored schema (`assertOmesContract`, the same fail-closed validator every other OMES contract consumer in this module uses) before `domain/architecture.ts`'s pure `projectArchitectureSnapshot` groups capabilities into their declared planes. Adds `tests/admin-omes-control-architecture-page-contract.test.ts` (permission-guard contract, pinned-snapshot wording, and a schema round-trip test proving the projection drops no required field). `APP_BUDGET_BYTES` raised from 234,992 to 236,936 B (measured delta, re-measured after rebasing onto PR #835's orchestration-indent fix) for the new screen's compiled markup/script/style chunk.
+- 2d40f5c: feat(control-center): OMES Control Panel design system for /admin/omes (ahliweb/omes#246, part 1/3)
+  
+  Applies the OMES Control Panel redesign's visual language to the 9 existing `/admin/omes/*` screens (Overview, Servers, Deployments, Operations, Jobs, Health, Backups, Audit, Enrollments): the dark palette, KPI tiles with monospace numbers and status dots, and the Bootstrap → Check → Diff → Apply → Verify → Rollback lifecycle strip on the Overview screen.
+  
+  Purely presentational and scoped to these 9 screens via a `.omes-cc` wrapper class — no behavioural change, no new endpoint, no schema/contract change, and the rest of the AWCMS admin is untouched. Reuses existing admin components (`.stat-card`, `.status-badge`, `.data-table`, `.admin-panel`, `.quick-link`) by overriding the same design tokens they already consume; no new CSS/JS framework. Public Sans and JetBrains Mono are already self-hosted admin-wide (ADR-0120) — this ships no new font.
+  
+  `APP_BUDGET_BYTES` in `scripts/client-asset-budget.ts` rises 226,000 → 229,500 B (measured +3,171 B for the one new stylesheet). Every text/background and accent/background pair introduced is measured against WCAG 2.1 AA; the table is in `src/modules/omes-control/README.md`/`.id.md`.
+  
+  The 4 missing views (Hermes, Orkestrasi langsung, Arsitektur, Progres Hermes) are later PRs (part 2/3 and 3/3 of ahliweb/omes#246).
+- 1dde802: feat(control-center): Hermes orchestration observability screens (ahliweb/omes#246 part 2)
+  
+  Adds the last three redesign-parity `omes_control` admin screens: `/admin/omes/orkestrasi-langsung` (the live Hermes manager → agent → subagent tree with a depth filter and a polling activity stream), `/admin/omes/hermes` (a summary of the tenant's currently active Hermes delegated task), and `/admin/omes/progres-hermes` (an explicit, permission-gated "not implemented yet" empty state). Consumes the OMES-owned `hermes-orchestration-tree`/`hermes-orchestration-event` v1 contracts (OMES issue #183, ADR-0028) — already vendored by `ahliweb/omes#232`'s re-vendor, no re-vendor needed here. ADR-0017 boundary, unchanged: Hermes owns orchestration; this is a READ-ONLY projection of state an enrolled OMES pull worker reports, never a second orchestration engine and never a control action reaching a Hermes agent.
+  
+  **One current tree snapshot per session (upsert), an append-only deduplicated event log.** Two new tenant-scoped tables (`sql/163`, both `FORCE ROW LEVEL SECURITY`): `awcms_omes_hermes_orchestration_trees` keeps one row per `(tenant_id, server_id, session_id)`, and `awcms_omes_hermes_orchestration_events` is deduplicated on `(tenant_id, server_id, session_id, subagent_id, event_type, step_number)` so a redelivered event from the pull worker's at-least-once outbox is a no-op. A single new permission, `hermes_orchestration.read` (`sql/164`), guards all three screens and both new `GET` routes — none of the three accepts a write/control action.
+  
+  **Ingestion reuses the existing worker transport.** `POST /api/v1/omes/worker/hermes-orchestration-{tree,event}` are authenticated by the SAME `verifyWorkerEnvelope` Ed25519 chokepoint as `poll`/`result`/`heartbeat`/`ai-privacy-posture` (`domain/worker-identity.ts`'s `WorkerRoute` now includes both), and independently cross-check the envelope's authenticated `tenant_id`/`server_id` against the projection's own fields before persisting anything.
+  
+  **Freshness and node-state rollups are recomputed at read time, never trusted off storage** (`domain/hermes-orchestration.ts`'s `projectOrchestrationTree`, mirroring `domain/ai-privacy.ts`'s established discipline): a snapshot older than a 120-second liveness window is always stale, and `activeCount`/`completedCount`/`failedCount`/node depth are recomputed from the actual node states, never the stored counts a producer sent — a stalled connection or missing terminal event reconciles to stale, never invented completion.
+  
+  **Two contract-boundary decisions made explicit rather than silently worked around** (recorded on ahliweb/omes#246 before this PR): the Hermes screen renders `planner`/step-`budget` as an explicit "not reported" state because neither field exists in either vendored v1 contract; the Progres Hermes screen ships neither a GitHub integration nor a static milestone/issue list, because the redesign's `progress` view is a GitHub-repository tracker (unimplemented staged backlog, OMES issues #98-#102), not a Hermes/OMES runtime projection — it links the tracking issue, `ahliweb/omes#249`, in `id`/`en` instead.
+  
+  **No raw prompt/transcript/tool-argument field can reach this module, structurally**: both vendored schemas are `additionalProperties: false` throughout, and `findDisallowedEvidenceKeys` (reused as-is from `domain/ai-privacy.ts`) is a second, independent runtime scan at ingestion.
+  
+  Adds `tests/omes-control-hermes-orchestration-domain.test.ts` (pure freshness/rollup/depth/disallowed-key unit tests), `tests/integration/omes-control-hermes-orchestration.integration.test.ts` (real PostgreSQL: cross-tenant denial under `awcms_app`/`FORCE ROW LEVEL SECURITY` for both new tables, stale-snapshot rendering, upsert-not-append semantics, idempotent event replay at both the application and database-index layers, disallowed-key rejection, and schema/envelope-binding rejection over the real worker HTTP routes), and `tests/admin-omes-control-hermes-orchestration-page-contract.test.ts` (permission-guard contract for all three screens and both read routes). Documents the new tables/routes/screens in the module README/README.id, `docs/awcms/api-reference.md`, and updates the `sql/001`-`sql/164` migration-range claims across `docs/ARCHITECTURE.md`/`.id.md` and `.claude/skills/README.md`/`.id.md`. Adds full EN/ID locale entries for all three new screens.
+- 953414f: feat(omes-control): 3D Mission Control workspace at /admin/omes/mission-control (ahliweb/omes#265)
+  
+  New read-only 3D Mission Control screen at `/admin/omes/mission-control` renders the fleet's live state as a decorative WebGL2 scene, backed by an accessible, JavaScript-free object list (the canonical view). Every object is a reference linking back to its existing canonical screen — it is a derived projection, not a new authority. Guarded by `omes_control.servers.read` (no new permission); each source is included only when the viewer can read it. The scene polls every 15 seconds while visible; stale/unknown objects are never rendered as healthy. This change itself is read-only; historical replay is added by ahliweb/omes#266 and contextual actions by ahliweb/omes#267, each in its own change.
+- 3c239ca: feat(omes-control): evidence-based historical replay for Mission Control at /admin/omes/mission-control (ahliweb/omes#266)
+  
+  The Mission Control workspace gains a Live / History switch on the same page. History replays only evidence that existing tables already retain (Hermes orchestration events, health and backup snapshots, job and worker-result records, workflow decisions) — no new event store, table, permission or retention. New read-only `GET /api/v1/omes/mission-control/replay?from=&to=&cursor=` returns one keyset page (at most 500 events, window at most 24 hours, unknown query parameters rejected with 400) of de-duplicated, deterministically ordered events, with out-of-order evidence labelled `late_arrival`; `GET /api/v1/omes/mission-control/scene?as_of=` returns the historical scene that instant's evidence proves. Objects whose source keeps only current state (servers, deployments, architecture, repository progress, AI privacy) are never back-dated: they appear as unknown with an explicit `not_retained` gap, and purged or never-observed intervals are explicit gaps, never interpolated. Access is never broader than the live view: each source is gated by its own read permission and tenant-scoped under RLS. The page shows a persistent "Historical" banner with an `aria-live` announcement, a bounded range, play/pause/speed/scrubber/step controls, an evidence-gap list and a synchronized accessible event list; the range is URL-addressable (`?mode=history&from=&to=&at=`). The replay code is a separate chunk loaded only when History is first entered. Adds index-only migration `sql/168`.
+- 27e62b3: feat(omes-control): contextual actions and command-palette entries for Mission Control, over existing endpoints only (ahliweb/omes#267)
+  
+  Selecting an object in the Live Mission Control view now shows its actions in the HUD. Every action is a shortcut to an endpoint that already exists — `POST /api/v1/omes/operations`, `POST /api/v1/omes/jobs/{id}/cancel`, `POST /api/v1/omes/jobs/{id}/approve`, `POST /api/v1/omes/backups/{id}/restore`, or a link to the `/admin/approvals` inbox — sent with the exact body and a fresh `Idempotency-Key` the canonical screens use, so permission, rate limiting, the destructive-operation workflow, audit and idempotency are all still enforced by those endpoints. No new executor, scheduler, approval authority, command language, operation name, permission or migration. New read-only `GET /api/v1/omes/mission-control/actions?kind=&id=` reports, per object, which of the kind's existing actions are available and why an unavailable one is not (`permission_denied`, `state_not_eligible`, `not_found`); it is advisory only (a forged direct POST is still refused by the real endpoint), mirrors exactly what those endpoints enforce, shows stale target / decommissioned target / unverified backup as non-blocking warnings, treats an unknown id, another tenant's id and an unreadable source identically, and rejects any query parameter other than `kind` and `id` with a 400. A preflight panel shows the operation, target, permission result, approval requirement, advisories and the idempotency key before sending; destructive actions also use the shared confirm dialog; results are shown as accepted (pending verification), approval required (linking to the approval inbox), rejected, or outcome unknown (never success), and the scene is only updated by the next poll. History mode shows no actions and never fetches them. The Ctrl/Cmd+K command palette gains one opt-in hook (`data-command-palette-item`) so Mission Control's objects and Open-details links can be reached from it, with no new syntax; pages without marked elements are unchanged. The module README (en/id) carries the source-action matrix.
+- 64506d6: feat(control-center): owner/operator API for OMES projections and safe operations (ahliweb/omes#198)
+  
+  Implements the authenticated owner/operator REST API the OMES Control Center uses against the `omes_control` module (ADR-0122, schema/permissions from ahliweb/omes#196): tenant-wide fleet overview; server registration/decommission; enrollment-challenge issuance/revocation (one-time raw challenge, only its sha256 hash persisted — `sql/158`); desired-vs-observed deployment views (rendered as separate fields, never merged); allowlisted safe-operation submission (`status`/`preflight`/`start`/`stop`/`restart`/`update`/`backup`/`rollback`, copied byte-for-byte from the OMES contract's `operation-request.schema.json` enum); worker job listing, cancel, and retry-approval; and health/backup/audit projections.
+  
+  Every endpoint reuses the existing `defineTenantRoute` (`withTenant` + `authorizeInTransaction` + canonical response envelope) chokepoint and default-deny RBAC against the permissions sql/155 already seeded. Destructive operations (`stop`, `rollback`, and the new `POST /api/v1/omes/backups/{id}/restore`) route through the existing `workflow-approval` engine (module key `workflow`, workflow key `omes_control.destructive_operation`) rather than a second approval authority — refused with `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` and nothing persisted when no active definition is published. Mutations require `Idempotency-Key` and replay the shared `awcms_idempotency_keys` store; registration, enrollment-challenge issuance, operation submission, and backup restore are additionally rate-limited per actor. Every jsonb evidence field is redacted defense-in-depth; every mutation and authorization decision is recorded to `awcms_audit_events`.
+  
+  AWCMS never executes anything on a host — every mutating endpoint only records intent as an `awcms_omes_operation_requests` row; OMES's own pull worker (`ahliweb/omes#199`) is the only future reader that turns an approved row into real host work.
+  
+  `identity-access`'s `AccessAction` union grows three literals (`register`, `operate`, `rollback`) that the new `omes_control` guards needed, added to `HIGH_RISK_ACTIONS`.
+  
+  Contract-shape validation against the vendored OMES contracts (`ahliweb/omes#197`, run in parallel) is intentionally not duplicated here — see `src/modules/omes-control/README.md`'s "omes#197 integration seam" section for exactly where its validator plugs in.
+- 8de1782: feat(omes-control): add GitHub repository-progress projection for Progres Hermes (ahliweb/omes#249)
+  
+  Replaces `/admin/omes/progres-hermes`'s former "not implemented yet" empty state with a
+  real, polled GitHub milestone/issue progress projection, per ADR-0030 in `ahliweb/omes`
+  (re-vendored at commit `7ce1e40937dae990f59a35f0e2a00401f1a19a71`: the new
+  `repository-progress-view` v1 contract, plus the regenerated `architecture-capabilities-view`
+  fixture).
+  
+  - Per-tenant configuration (owner/name of the GitHub repository to observe, plus an
+    OPTIONAL token opt-in) via a new admin form on the Progres Hermes screen and
+    `GET/PUT/DELETE /api/v1/omes/repository-progress/config`, gated by a NEW permission,
+    `omes_control.repository_progress.configure` (sql/167). A `secret_ref` never holds a
+    raw token — the only supported v1 shape resolves to one fixed env var,
+    `OMES_REPOSITORY_PROGRESS_GITHUB_TOKEN`.
+  - A scheduled poller (`bun run omes:repository-progress:poll`, every 15 minutes by
+    default) polls the GitHub REST API (milestones + issues, excluding pull requests),
+    using conditional requests (ETag), respects GitHub's rate-limit headers, validates
+    every assembled payload against the vendored contract (fail closed), and upserts a
+    tenant-scoped, `FORCE ROW LEVEL SECURITY` projection (sql/166) — never discarding the
+    last successful observation on a later poll failure.
+  - `GET /api/v1/omes/repository-progress` (reusing `omes_control.hermes_orchestration.read`)
+    serves the projection to the screen, which renders four explicit states — unconfigured,
+    awaiting-first-poll, fresh, and stale/error — with accessible milestone progress bars
+    and an issues table linking out to GitHub.
+  - No issue body, comments, or assignee/author PII is ever stored — only number, title,
+    state, label names, a derived `kind`, `html_url`, and `updated_at`.
+
+### Patch Changes
+
+- 9ca28de: fix(control-center): Progres Hermes UX polish — danger button, milestone titles, checkbox sizing (ahliweb/omes#249)
+  
+  Three fixes to `/admin/omes/progres-hermes`, shipped as read-side/markup/CSS-only changes with no contract change: "Clear configuration" now renders with the existing `.btn-danger` outlined vocabulary instead of the same filled style as "Save" (an `.admin-create-form button.btn-danger` override at matching specificity, since `.admin-create-form button` otherwise wins over the plain `.btn-danger` class), and it already required a `window.confirm` before sending the `DELETE`, unchanged. The issues table's Milestone column now resolves the stored `milestoneNumber` to that milestone's current title (linked to its `htmlUrl` when available) from the same poll's milestones list, falling back to `#<n>` when the number isn't in that list, instead of showing the bare number. "Use a GitHub token" no longer renders as an oversized grey square — `.admin-create-form input`'s blanket text-input box model is reset for `input[type="checkbox"]` to a normal 18px checkbox with its own focus ring and `accent-color`, inline with its label text.
+  
+  Also fixes a latent bug in `repository-progress-poller.ts`'s `classifyHttpFailure` found while verifying this change: it computed a rate-limit `retryAfterSeconds` from the real wall clock (`Date.now()`) instead of the poller's own injected `now`, unlike every other timestamp in this module — harmless until real time passed the fixture's assumed baseline, at which point `tests/omes-control-repository-progress-poller.test.ts`'s rate-limit test starts failing non-deterministically. `now` is now threaded through `fetchAllPages` the same way the rest of the module already receives it.
+- 1688863: fix(docker): apply Debian security upgrades in the `base` stage of `Dockerfile.production`
+  
+  `oven/bun:1.4.2`'s Debian (trixie) base shipped `perl-base 5.40.1-6`, carrying three
+  CRITICAL, fixed-upstream CVEs (CVE-2026-13221, CVE-2026-42496, CVE-2026-8376 — fixed in
+  `5.40.1-6+deb13u1`). As of 2026-09-27 there is no newer `oven/bun` tag whose base already
+  carries the fix — `1.4.2`/`1`/`1.4`/`latest` share one digest published 2026-09-05, before
+  the fix existed, and `1.4.2-slim` carries the same three CVEs. `base` now runs
+  `apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*` before any other
+  layer, so every derived stage (`deps`, `build`, `prod-deps`, `jobs`, `runtime`) inherits
+  the fix, and any future fixable Debian CVE on this base is closed on the next rebuild
+  without waiting for `oven/bun` to republish the tag.
+  
+  Release-pipeline / deployment-image concern only (`Dockerfile.production`, ADR-0001) — no
+  application code, API, or contract changed.
+- f47a88c: design(admin): migrate dashboard/reporting/analytics/omes stat cards onto `.admin-stat-card` (#860)
+  
+  Extends `.admin-stat-card` (`src/styles/admin.css`, PR #813) with three optional modifiers — `.admin-stat-card-grid` (folded into the existing `.kpi-grid`/`.dashboard-grid` responsive breakpoint), `.admin-stat-card-value--mono`, and an icon-head/signed-delta pair (`.admin-stat-card-head` + `.admin-stat-card-delta[data-tone="positive"|"negative"]`, ported from the legacy `.stat-head`/`.stat-delta`) — then migrates `/admin`, `/admin/analytics`, `/admin/reporting` (stat-card section only) and `/admin/omes` off the legacy `.stat-card`/`.stat-grid` family (`src/styles/admin-screens.css`, left in place for the ~14 screens not yet migrated). `src/styles/omes-control-center.css` gained a selector-list extension covering `.admin-stat-card` alongside its existing `.stat-card` rules, so the other 8 OMES screens keep their styling untouched. The delta modifier ships colour only; its own doc comment requires the consumer to write the leading sign character into the value text and pair a visually-hidden word, so the sign is never conveyed by colour alone. Real data only — no screen fabricates a trend or icon it does not already compute. `build:asset-budget:check`'s `APP_BUDGET_BYTES` raised from 239,956 to 240,975 (measured actual total, ledger comment in `scripts/client-asset-budget.ts`). No API/schema/event change.
+- 5b8d2a3: fix(admin): translate closed-enum/status labels and stacked-table `data-label` across `src/pages/admin/**` (item 4 of #854)
+  
+  Closed-enum/status values (`request.status`, `post.visibility`, GitHub issue
+  `state`, and roughly 60 other columns across ~40 admin screens) were
+  rendered as raw untranslated text — a fallback that never reads in Indonesian
+  because the stored value (e.g. `pending_approval`) is not English prose `t()`
+  can translate. Every such render now goes through a translated
+  `Record<Enum, string>` label map — a small set of shared helpers under
+  `src/lib/i18n/labels/` (`blog-content.ts`, `audit-severity.ts`,
+  `omes-enrollment.ts`, `omes-operation.ts`) where the same enum is rendered on
+  2+ screens, otherwise a local map at the render site — with the raw value
+  kept in a new `data-*` attribute so tests/CSS/JS keep a stable, locale-independent
+  hook. An unrecognised value falls back to the raw string rather than
+  crashing or rendering blank.
+  
+  Separately, `admin.css`'s stacked-table mechanism
+  (`.data-table--stack td::before { content: attr(data-label); }`, which shows
+  column names on phones) had ~500 literal English `data-label="…"` attributes
+  across 49 admin screens; all now read `data-label={t("…")}`, reusing the
+  exact msgid of that column's `<th>`.
+  
+  81 new msgids added to `locales/en.po`/`locales/id.po` with real Indonesian
+  translations; `bun run i18n:compile` regenerated the catalogs.
+  `tests/admin-i18n-labels.test.ts` is a new regression gate: it fails on any
+  literal `data-label="…"` on a `<td`/`<th` in `src/pages/admin/**`, and pins
+  the shared label helpers' exhaustiveness over their known enum values.
+  
+  Read-side/markup/i18n-catalog changes only — no API/schema/permission
+  contract changed. See ADR-0125.
+- bbab875: design(admin): adopt `.admin-timeline`/`.admin-status-pill` on the detail/history admin screens (#863)
+  
+  Consumes `.admin-timeline` (`src/styles/admin.css`, PR #813) for the first time: approvals'
+  instance history, business-scope's conflict history, data-lifecycle's legal-hold history and
+  run history, OMES health's per-server snapshot history (`?serverId=…` mode — the tenant-wide
+  "latest per server" table stays a `.data-table`, it is one row per server, not a history), and
+  reporting's projection rebuild history now render as a real `<ol class="admin-timeline">` of
+  `<li class="admin-timeline-item">`, each with a genuine `<time datetime>` (never colour/position
+  alone). `admin.css` gains a small `.admin-timeline { list-style: none; margin: 0; padding: 0; }`
+  reset for the `<ol>` wrapper itself — the existing primitive only styled `-item`/`-label`/`-meta`.
+  
+  Every status this issue touched on these five screens (task/delegation status, business-scope
+  assignment/exception status, SoD conflict flag, legal-hold/run status, OMES overall/stale/
+  check-source status, rebuild status) moves from the legacy `.status-badge` onto
+  `.admin-status-pill`, keeping each cell's raw-value `data-*` hook. `reporting.astro`'s other
+  sections (email queue health, projection freshness, scheduled-export runs) are untouched — out
+  of this issue's file-ownership scope. `approvals.astro` keeps its query-param drill-in for
+  instance history (`?instance=<id>`) — no `.admin-two-pane` routing change, per the issue's own
+  decision (`docs/awcms/admin-ui-parity-matrix.md` §6.4/§7 wave 4).
+  
+  `build:asset-budget:check`'s `APP_BUDGET_BYTES` raised from 248,045 to 248,096 (measured actual
+  total, ledger comment in `scripts/client-asset-budget.ts`). Real data only — no screen fabricates
+  a history entry it does not already compute. No API/schema/event change.
+- e22758b: design(admin): migrate the 12 remaining OMES admin screens onto `.admin-status-pill`/`.admin-stat-card` (#865)
+  
+  Migrates `src/pages/admin/omes/{ai-privacy,arsitektur,audit,backups,deployments,enrollments,hermes,jobs,operations,orkestrasi-langsung,progres-hermes,servers}.astro` off the legacy `.status-badge`/`.status-dot` (`data-variant`) markup onto the shared `.admin-status-pill`/`.admin-status-pill-dot` primitive (`data-tone`), and the five of those screens with a KPI tile (`backups`, `deployments`, `jobs`, `servers`, plus the already-shared `.stat-hint` -> `.admin-stat-card-caption`) onto `.admin-stat-card`/`.admin-stat-card-grid`. `orkestrasi-langsung.astro`'s polling client script (activity-stream re-render) is migrated in lockstep so its client-rendered badge markup matches the SSR rows byte-for-byte, preserving the translated `data-state-labels` lookup and the never-render-stale-as-healthy behaviour. `omes/health.astro` (wave 4, not in scope) and `omes/index.astro` (wave 2, already done) are untouched.
+  
+  Fixes a latent styling bug along the way: `.status-badge` only ever defined `data-variant="success"|"neutral"|"warning"`, so every OMES site that passed `"danger"`/`"info"` (AI-privacy posture/egress decisions, backup/deployment staleness, repository-progress freshness, Hermes orchestration/session state) silently fell back to the undifferentiated default fill. `.admin-status-pill` defines all five tones, so these now render with the tone they always asked for — no markup logic changed, only the class/attribute names.
+  
+  `src/styles/omes-control-center.css` needed no new CSS: it already carried the dual `.stat-card`/`.admin-stat-card` selector list from #860 (wave 2) and never redeclared `.status-badge`/`.admin-status-pill` itself — both classes consume the same `--color-*-soft`/`-on-soft` custom properties the file already overrides for the OMES dark palette, so the tone/token cascade carried over automatically. Its docblock and the `.stat-card` dual-selector comment are updated to reflect that only `omes/health.astro` still needs the legacy half now.
+  
+  `build:asset-budget:check`'s `APP_BUDGET_BYTES` raised from 248,045 to 248,058 (measured actual total, ledger comment in `scripts/client-asset-budget.ts`) — the only growth is `orkestrasi-langsung.astro`'s client script template literal, whose class names got longer.
+  
+  Two page-contract tests (`tests/admin-omes-control-page-contract.test.ts`, `tests/admin-omes-control-health-backup-audit-page-contract.test.ts`) updated their `data-variant="warning"` assertions to `data-tone="warning"` for `servers.astro`/`deployments.astro`/`backups.astro`; the `omes/health.astro` assertion in the latter file is untouched since that screen is out of scope. No API/schema/event/permission change.
+- 49183c4: test(a11y): add an `@axe-core/playwright` accessibility smoke to the E2E harness, fix the real WCAG violations it found (ahliweb/awcms#877, epic #858)
+  
+  `@axe-core/playwright` is a new devDependency (`bun add -d`, no runtime/client bundle impact — verified by `bun run build:asset-budget:check`, which measures only shipped client assets). A new READ_WAVE spec, `tests/e2e/a11y-axe.e2e.ts`, runs `AxeBuilder` (WCAG 2.0/2.1 A+AA tags) against eight representative admin routes changed by epic #858 (`/admin`, `/admin/comments`, `/admin/users`, `/admin/approvals`, `/admin/media`, `/admin/omes`, `/admin/omes/jobs`, `/admin/site-profile`), in light AND dark theme (the app's real `localStorage["awcms_theme"]` mechanism), at 360px and desktop, plus the ADR-0125 `ConfirmDialog`/`ReasonPanel` opened then cancelled. It fails on any `critical`/`serious` violation and runs in CI's `e2e-smoke` job alongside the existing suite (no workflow change needed — `playwright.config.ts` already picks up every `*.e2e.ts`).
+  
+  Run for real against a fresh Postgres 18.4 + full migration + seeded tenant, it found and this PR fixes five shipped `critical`/`serious` violations that `design:token-contrast:check` (a pure-CSS registry, necessary but not sufficient) could not see:
+  
+  - `.admin-brand`'s wordmark losing its accessible name below 768px (`display: none` removes an element from accessible-name computation, not only layout) — fixed with `aria-label="AWCMS"` on the link.
+  - `ReasonPanel`'s reason label being a bare `<span>` with no programmatic association to its textarea (`label`, critical) — fixed with a real `<label for>`.
+  - `.reason-panel { display: flex }` applying unconditionally instead of scoped to `[open]` — author-origin CSS overrides the user-agent's `dialog:not([open]) { display: none }` regardless of `!important`, so a cancelled `ReasonPanel` stayed visually on-screen after `.close()`.
+  - `.admin-logout` using the theme-aware `--color-text-muted` on the always-dark sidebar background instead of `--color-sidebar-text` (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor).
+  - The dashboard's `.dd-alert` (`/admin`, deny-count and sync-health alerts) using `--color-danger-strong` as TEXT on `--color-surface` (`color-contrast`, serious, dark theme only: 3.81:1 against 4.5:1). `-strong` is the solid-fill-under-white-text role; text on a plain surface is the job of plain `--color-danger` (5.81:1 dark; light unchanged at 4.83:1 since both tokens are `#dc2626` there). Fixed by the token swap, and `design-token-contrast-check.ts`'s existing `color-danger`/`color-surface` pair now lists `.dd-alert` as a consumer.
+  
+  `APP_BUDGET_BYTES` raised 295,244 -> 295,259 (measured actual after merging `main`, ledgered in `scripts/client-asset-budget.ts`) for the CSS/markup these fixes added. `design-token-contrast-check.ts`'s sidebar registry entry gained `.admin-logout` as a second consumer. The spec runs under `reducedMotion: "reduce"` — `.fade-in-up`'s 240ms entrance animation genuinely lowers rendered contrast mid-transition (axe samples pixel colour, not computed style), which is not this smoke's subject.
+  
+  Docs: doc 07 and doc 14 (+ .id mirrors) now describe the automated a11y check; `docs/awcms/admin-ui-parity-matrix.md` (+ .id) marks the axe acceptance criterion closed; the `awcms-browser-test` and `awcms-testing` skills (+ .id) are corrected — `awcms-browser-test` previously stated `@axe-core/playwright` was not a dependency of this repo, which was true when written and is no longer true.
+- e7a73b6: test(responsive): cover tablet portrait (768px) and 200% desktop zoom (640×360) in the admin overflow sweep (#884)
+  
+  `tests/e2e/responsive-360.e2e.ts` now asserts that no static admin screen
+  scrolls sideways at 360, 640×360 (a 1280×720 desktop at 200% browser zoom —
+  WCAG 2.1 SC 1.4.10 measures reflow in CSS pixels), 768 (tablet portrait) and
+  1024px, closing epic #858's "phone, tablet, desktop and 200% zoom" criterion.
+  All 63 static admin routes already fit at the two new widths, so no product
+  CSS changed; the change is verification coverage only.
+- c88d310: design(admin): adopt admin-stat-card/admin-status-pill on media, account and access-policies (#864)
+  
+  Wave 5 of the AWCMS ↔ awcms-one admin UI/UX parity work (epic #858, `docs/awcms/admin-ui-parity-matrix.md` §7): `/admin/media`'s three summary counters and two status columns (object status, rights-verification status) move from the legacy `.stat-card`/`.status-badge` family onto `.admin-stat-card`/`.admin-status-pill`; `/admin/account` gains status pills for the SSO-connected badge, the current-session badge and a new two-factor-authentication state pill; `/admin/access-policies` moves its DSL simulator's Allow/Deny verdict from plain text to a toned status pill, built client-side (the verdict script now reads translated `data-verdict-allow`/`-deny`/`-no-policy` attributes rather than shipping hardcoded English). No API, permission, auth, or data-model change — a markup/class swap only, preserving every screen's read path, mutation endpoints, keyboard operation and accessible names. The legacy `.stat-card`/`.status-badge` CSS stays defined (retired separately by #866).
+  
+  `media.astro` does **not** adopt `.admin-media-grid`: its object table deliberately renders no `<img>` (a documented security decision — a row can be `pending_upload`/`failed`, and re-showing a policy-violating image to the person removing it is the wrong outcome), so there is no thumbnail-grid markup in this screen to convert. The one real `.admin-media-grid`-shaped markup in the repo is the shared media picker (`src/lib/ui/media-picker-client.ts`), consumed by four other screens outside this issue's file ownership; migrating it is a follow-up scoped to that script and its consumers together. Documents the decision in doc 14's new `MediaGrid` row and marks Wave 5 done in the parity matrix.
+  
+  `APP_BUDGET_BYTES` raised from 248,045 to 248,333 (measured, no added margin) for the access-policies verdict-pill script; `media.astro`/`account.astro` add no bytes since both classes already existed in `admin.css`.
+- dc21c7a: fix(admin): contain long unbreakable text in the main column instead of letting it widen the page (#831)
+  
+  `.cell-muted` (admin.css) is now a bare, universal `overflow-wrap: anywhere` rule, mirroring the `word-break: break-all` its sibling `.cell-code` already had — previously `.cell-muted`'s only wrap protection was scoped to `.data-table td`, which does nothing for a screen that uses it outside a table. The Hermes orchestration tree/activity list (`/admin/omes/orkestrasi-langsung`, ahliweb/omes#246 part 2) renders Hermes-supplied free text (`goal`/`summary`) in `.cell-muted` spans inside a `display: flex; flex-wrap: wrap` list, not a table, so a long, space-free value had nothing stopping it from overflowing `.admin-main` and widening the whole document past the viewport. `/admin/omes/hermes`'s task summary had the identical defect through a different markup path (a plain `<dd>` with no `.cell-muted` class inside a `display: grid` row) and gets the same `overflow-wrap: anywhere` fix directly.
+  
+  `.admin-sidebar` (`flex-shrink: 0`) and `.admin-main` (`min-width: 0`) already kept their own flex-track widths fixed while this happened, but the resulting page-wide horizontal overflow is what produced the "sidebar rendered ~143px wide, labels clipped" appearance reported on ahliweb/awcms#831 — a full-page screenshot captures the actual (wider-than-viewport) scrollable canvas, so the fixed-width sidebar occupies a shrunken sliver of the image even though its own box never moved.
+- b224fa5: design(admin): comments moderation adopts segmented filter + bulk bar, 31 list screens migrate to `.admin-status-pill` (wave 3 of #858)
+  
+  `docs/awcms/admin-ui-parity-matrix.md` §7 wave 3, per ADR-0125's admin v2 primitive rollout:
+  
+  - `src/pages/admin/comments.astro` (flagship): the `.filter-bar` status-tab nav becomes
+    `.admin-segmented`/`.admin-segmented-option` — still plain `<a href>` links, so the
+    filter works with no JavaScript and the `?status=` query semantics are unchanged. Rows
+    gain a `.admin-status-pill` status column, and row checkboxes wire an
+    `.admin-bulk-bar` (select-all, live `aria-live` count, Approve/Reject/Spam) to the
+    EXISTING `bulk-moderate` endpoint — no new endpoint added. Bulk logic is factored into
+    a pure, unit-tested module, `src/lib/ui/admin-bulk-bar-client.ts`.
+  - 31 other list-management screens migrate their `.status-badge`/`.status-dot` markup to
+    `.admin-status-pill`/`.admin-status-pill-dot` (`data-variant` -> `data-tone`), which also
+    fixes several sites whose `data-variant="danger"`/`status-badge--${variant}` values had
+    no matching CSS rule under the legacy class. Translated status labels and `data-*`
+    raw-value hooks are preserved throughout.
+  - The legacy `.status-badge`/`.status-dot` declarations stay defined in `src/styles/admin.css`
+    for the screens waves 4/6 have not migrated yet.
+  - `email-suppression.astro`, `registrations.astro` and `user-groups.astro` were read and
+    confirmed to have no per-row lifecycle status concept — left unchanged rather than
+    forcing a primitive that does not fit.
+- b94b830: fix(admin): contain topbar and legal-hold-form overflow on every admin screen (#843)
+  
+  Two independent horizontal-overflow defects, both pre-existing and unrelated to `.cell-muted`/`.admin-sidebar` (ahliweb/awcms#831/#842):
+  
+  1. **`.admin-account-link` overflowed the topbar by ~55–66px at exactly 1024px, on every admin screen.** `.admin-user-menu` had `min-width: 0`, which let the outer topbar's flex-shrink algorithm squeeze it far below `.admin-account-link`'s real content width (avatar + truncated name); the link then rendered at its natural size regardless and spilled out of its own shrunken parent. Fixed with `.admin-user-menu { flex: none; }` (it never drops, per ADR-0120's own stated intent) plus widening the `@media (max-width: 1023.98px)` breakpoint that hides `.admin-palette-open`/`.admin-tenant-switch` to `1024px`, so they also step aside at the exact width where the topbar previously ran out of room simultaneously with `.admin-brand-cluster` widening to line up with the sidebar.
+  2. **`/admin/data-lifecycle` overflowed at 360px** — not from `<th>` content (the `.data-table--stack` responsive pattern already visually hides and correctly self-clips headers below 768px) but from the "Place a legal hold" form's `<select id="hold-descriptor-key">`: its wrapping `<label>` is a nested column-direction flex container with no `min-width` of its own, so it inherited the select's full intrinsic content width as its own automatic minimum instead of respecting the flex layout's available space. Fixed with `.admin-create-form label { min-width: 0; }` — the same class of bug the existing `/admin/seo` select fix (`.admin-create-form select { min-width: 0; max-width: 100%; }`) addressed one level down.
+  
+  `responsive-360.e2e.ts` now sweeps every static admin screen at 1024px too (previously only 360px), and its doc comments/`APP_BUDGET_BYTES` record the root causes and measurements.
+- 1ce119c: chore(deps): bump astro to 7.3.2, with the family manifest and its doc table moved in step
+  
+  `astro@7.3.2` is a patch release. Its four fixes were each checked against what this
+  repo actually uses, and none of them reach it:
+  
+  - **MDX `<script>`/`<style>` dynamic children are now escaped** unless explicitly
+    opted back in with `set:html`. This is the only security-relevant change in the
+    release, and it does not apply here: the repo ships no `.mdx` files and does not
+    install `@astrojs/mdx`, so there is no MDX rendering path to harden. The escaping
+    posture of this repo's own `.astro` templates is unchanged by the bump.
+  - **i18n fallback routing no longer replaces the first substring match** instead of
+    the real locale segment. This repo does not use Astro's native `i18n` routing at
+    all — locale resolution runs through middleware over the gettext `.po` catalogues
+    (ADR-0095), and `astro.config.mjs` declares no `i18n` block — so the mangled-path
+    bug was never reachable here.
+  - **Dev-toolbar 504 "Outdated Optimize Dep"** on workspace-linked packages, and
+    **sessions breaking in dev mode with the Cloudflare adapter**. Both are dev-mode
+    paths; this repo builds `output: "server"` on `@astrojs/node`, not Cloudflare.
+  
+  No code change was needed beyond the bump itself and the manifest/doc housekeeping
+  below.
+  
+  `awcms-family-compatibility.yaml` pins `stack.astro.declared` as a SOURCE CONSTANT
+  that must equal `package.json` exactly, so `family:conformance:check` goes red on any
+  bump until the manifest moves with it (`[FAIL] stack: Astro (declared ^7.3.1 vs
+  actual ^7.3.2)`, which is exactly how this PR's CI caught it). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the manifest
+  by `tests/family-compatibility-doc-parity.test.ts`, so they move too.
+- 82de7eb: chore(deps): bump astro to 7.3.5, with the family manifest and its doc table moved in step
+  
+  `astro@7.3.5` covers three patch releases (7.3.3–7.3.5). Each fix was checked against
+  what this repo actually uses, and none of them reach it:
+  
+  - **7.3.5** adds an opt-in `?container` import for `experimental_AstroContainer`. This
+    repo does not use the experimental container API.
+  - **7.3.4** fixes an incremental-build re-render bug, a `TypeScript 7` `astro check`
+    message, double-escaped `&` in Markdown image `alt`/`title` (a bugfix, not a
+    behaviour this repo's own escaping relies on), three dev-overlay error names,
+    a Vite dev-server re-evaluation loop that only affects adapters running requests
+    outside Vite's module runner (this repo uses `@astrojs/node`, not
+    `@astrojs/cloudflare`), domain-based i18n routing respecting
+    `security.allowedDomains` (this repo does not use Astro's native `i18n` routing —
+    locale resolution runs through middleware over gettext `.po` catalogues, ADR-0095),
+    an `object-position` CSS bug in `image.responsiveStyles` (not used here), and
+    AI-agent process-backgrounding behaviour on `astro dev`/`astro preview` (dev-only,
+    Windows-specific).
+  - **7.3.3** refactors an internal version-handling dependency, fixes 400/404 image
+    endpoint responses for invalid/missing local images, a locale-casing bug in
+    `Astro.preferredLocaleList` (native i18n again, not used here), an agent-detection
+    regression in `--ignore-lock`, and `getImage()` TypeScript autocompletion.
+  
+  No code change was needed beyond the bump itself and the manifest/doc housekeeping
+  below.
+  
+  `awcms-family-compatibility.yaml` pins `stack.astro.declared` as a source constant
+  that must equal `package.json` exactly, so `family:conformance:check` goes red on any
+  bump until the manifest moves with it (`[FAIL] stack: Astro (declared ^7.3.2 vs
+  actual ^7.3.5)`, which is exactly how this PR's CI caught it — same shape as the
+  astro 7.3.2 bump, `.changeset/astro-7-3-2.md`). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the manifest
+  by `tests/family-compatibility-doc-parity.test.ts`, so they move too.
+- 06e45bd: chore(deps): bump @astrojs/node to 11.1.6, with the family manifest and its doc table moved in step
+  
+  The Node/Bun standalone-server adapter this repo builds against
+  (`output: "server"`, `standalone-entry.ts`). `11.1.6` is a patch release with no
+  breaking changes to the adapter's public config or the request-handler entry point
+  this repo wires up in `astro.config.mjs`.
+  
+  `awcms-family-compatibility.yaml` pins `stack.astroNode.declared` as a SOURCE
+  CONSTANT that must equal `package.json` exactly, so `family:conformance:check` goes
+  red on any bump until the manifest moves with it (`[FAIL] stack: @astrojs/node
+  (declared ^11.1.5 vs actual ^11.1.6)`, which is exactly how this PR's CI caught it —
+  same shape as the astro 7.3.2 bump, `.changeset/astro-7-3-2.md`). The stack table in
+  `docs/awcms/family-compatibility.md` and its Indonesian twin are held to the manifest
+  by `tests/family-compatibility-doc-parity.test.ts`, so they move too.
+- 7857332: chore(deps-dev): bump @changesets/cli from 3.0.1 to 3.0.3
+  
+  Dev-only tooling: this is the CLI behind `bun run changeset` and the release-time
+  `changeset version` step. It does not ship in the built application.
+  
+  Worth stating because it is the one dev dependency that can bite the release process
+  rather than the build: `changeset version` consumes every `.changeset/*.md` and bumps
+  `package.json`, and the changeset policy gate only lets that through a narrow
+  carve-out where the version-only `package.json` edit is the sole non-exempt file. A
+  release PR must therefore stay pure.
+- 6bbf553: chore(actions): bump github/codeql-action to v4.38.1 in ONE change, because its two halves cannot land separately
+  
+  `.github/workflows/codeql.yml` pins `github/codeql-action/init` and
+  `github/codeql-action/analyze` to the same commit SHA. Dependabot treats those as two
+  independent dependencies and opened two PRs for them (#811 for `init`, #809 for
+  `analyze`), each moving one line.
+  
+  Either one merged ALONE breaks CodeQL on `main`, and does so in a way that is easy to
+  misread as a flaky scanner rather than a half-applied bump:
+  
+  ```
+  ##[error]Loaded a configuration file for version '4.38.1', but running version '4.37.9'
+  ##[error]analyze post-action step failed: Loaded a configuration file for version '4.38.1', but running version '4.37.9'
+  ```
+  
+  `init` writes a config file stamped with its own version and `analyze` refuses a config
+  from a version it is not. They are two halves of one atomic change, so this changeset
+  moves both lines to `1c5b675653bb5c22dbe9b12b556ec555138e09fd` (v4.38.1) together, and
+  #811/#809 are closed in favour of it.
+  
+  The rule this leaves behind: any future `codeql-action` bump must move BOTH pinned
+  SHAs in the same commit. A dependabot PR that touches only one of them is not
+  independently mergeable no matter how green the rest of its checks look — the CodeQL
+  jobs are `skipping` on the PR itself and only turn red after the merge lands on `main`.
+- 8f2675e: chore(actions): bump github/codeql-action to v4.38.2 in ONE change, because its two halves cannot land separately
+  
+  `.github/workflows/codeql.yml` pins `github/codeql-action/init` and
+  `github/codeql-action/analyze` to the same commit SHA. Dependabot treats those as two
+  independent dependencies and opened two PRs for them (#852 for `init`, #853 for
+  `analyze`), each moving one line.
+  
+  Either one merged ALONE breaks CodeQL on `main` (`init` writes a config file stamped
+  with its own version and `analyze` refuses a config from a version it is not — see
+  the precedent in `.changeset/codeql-action-4-38-1.md` / #817), so this changeset moves
+  both lines to `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` (v4.38.2) together, and
+  #852/#853 are closed in favour of it.
+  
+  v4.38.2 only updates the default CodeQL bundle version (2.27.1); no workflow-level
+  behaviour change beyond that.
+- fb9790e: fix(deps): close three high-severity transitive advisories flagged by `bun run deps:audit:check`
+  
+  Bumped `overrides` (package.json) — pre-existing drift unrelated to any feature in this release, caught only because `bun run check`'s `deps:audit:check` gate is run on every PR:
+  
+  - `js-yaml` `^4.3.1` → `^4.3.2` — [GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh) (`maxTotalMergeKeys` does not limit CPU use for empty merge sources).
+  - `smol-toml` (new override) `^1.7.1` — [GHSA-7w5x-hrqm-74c2](https://github.com/advisories/GHSA-7w5x-hrqm-74c2) (denial of service via malformed TOML documents, `<=1.7.0`).
+  - `svgo` (new override) `^4.1.0` — [GHSA-w27v-7q3p-w38r](https://github.com/advisories/GHSA-w27v-7q3p-w38r) (`removeScripts` allows executable links through namespace and control-character bypasses, `>=4.0.0 <4.1.0`).
+  
+  The `svgo` bump pulls `css-select` (`5.2.2` → `6.0.0`) and `css-what` (`6.2.2` → `7.0.0`) transitively across a MAJOR version each — both are build-time-only dependencies of `astro`'s asset pipeline, not runtime dependencies of this application, and `bun run build` passed unchanged after the bump (verified locally and in CI on this PR).
+- c525749: fix(deps): override transitive devalue (5.9.4) and undici (^8.10.2) to clear high-severity advisories
+  
+  `deps:audit:check` started failing on `main` without any dependency change once
+  new high-severity advisories were published against the locked transitive
+  versions: `devalue@5.8.1` (via `astro`, GHSA-j22f-vq7h-c4qm, GHSA-mcm9-63f2-9j32,
+  GHSA-x5rw-q4pp-hg5g, fixed after 5.9.2) and `undici@8.10.0` (via `unifont`,
+  GHSA-rfgv-xxqx-mfg5, GHSA-w293-vg96-wgc3, GHSA-vp8m-p9jh-q5pm, fixed in 8.10.2).
+  Both are closed through `overrides`, as the audit gate prescribes, staying
+  inside the ranges their dependents already declare (`astro` wants
+  `devalue@^5.8.1`, `unifont` wants `undici@^8.0.0`), so no major version moves.
+- 412524a: fix(deps): accept http-cache-semantics GHSA-ch52-4w7c-c8xp with a time-boxed audit exception (no patched release)
+  
+  `deps:audit:check` started failing on `main` without any dependency change once
+  GHSA-ch52-4w7c-c8xp (high, `http-cache-semantics` <=4.2.0, `max-stale` handling
+  can disclose cross-user cached responses) was published. Unlike #879 it cannot
+  be closed through `overrides`: the advisory lists no patched version, the
+  registry's latest release is still 4.2.0, and `astro@7.3.5` (latest) and
+  `astro@7.4.0-beta.1` both declare `^4.2.0`.
+  
+  It is accepted as the single entry in `scripts/dependency-audit-exceptions.ts`
+  (owner: ahliweb/awcms maintainers, review by 2026-11-03) because it is not
+  reachable here: Astro is the only consumer and only calls `CachePolicy`'s
+  `storable()`/`timeToLive()` at build time on a request it synthesises itself —
+  never `evaluateRequest()`/`satisfiesWithoutRevalidation()`, which is where the
+  client `max-stale` header is evaluated — and this repo has no remote images and
+  no shared cache keyed by the package. `tests/dependency-audit-check.test.ts` now
+  pins the exact exception set instead of requiring it to be empty, so a second
+  entry still cannot be added without a visible test edit. When upstream ships a
+  fix, the entry is replaced by an `overrides` pin (the gate fails on a stale
+  entry, so it cannot linger).
+- b8ad23f: chore(actions): bump docker/build-push-action to v7.4.0
+  
+  Release-pipeline only: `.github/workflows/release.yml` uses this action to build and
+  publish the container images. It is not on any path that runs for a pull request, so
+  the bump cannot affect application behaviour.
+  
+  The action is pinned in TWO places in that workflow (the app image and the
+  `awcms-jobs` image). Dependabot moved both to
+  `c3c9e263c25d99ce0380d002d59b67737d91b0dc` in one commit, which is what makes this
+  bump independently mergeable — unlike a `codeql-action` bump, where dependabot splits
+  the two pinned SHAs across separate PRs and neither half is safe alone (see #817).
+- 1cf7da6: chore(actions): bump docker/setup-buildx-action to v4.4.1
+  
+  Release-pipeline only: `.github/workflows/release.yml` uses this action to prepare the
+  buildx builder before the image build steps. It has a single pinned usage, moved to
+  `f87e5991a6d7451dcb8d9637bfbc97413f497069`, and does not run on pull-request paths, so
+  it cannot affect application behaviour.
+- a9abb94: design(admin): shared media picker adopts admin-media-grid (#872)
+  
+  Follow-up to wave 5 of the AWCMS ↔ awcms-one admin UI/UX parity work (epic #858): the shared media picker (`src/lib/ui/media-picker-client.ts`), consumed by `/admin/blog`, `/admin/blog-ads` and `/admin/site-profile`, moves its thumbnail grid from bespoke `.media-picker-panel`/`.media-option` CSS onto the shared `.admin-media-grid`/`.admin-media-grid-tile` primitive — the one real consumer that primitive has, since `/admin/media` itself deliberately does not render thumbnails. `/admin/blog-homepage` was named as a fourth consumer in the issue but has no picker markup to migrate (verified by grep): it references the picker only in a doc comment explaining why its ordered `gallery_block` field does not use it.
+  
+  The picker's public contract, keyboard operability and accessible names are unchanged. Because the tile's `<img>` now fills it edge-to-edge (the primitive's own contract), the picker's per-thumbnail label moves from a below-image line to a `.media-option-caption` overlay, which doubles as the tile button's accessible name. Each tile's selected state is now exposed to assistive technology via `aria-pressed`/`data-selected` — never by tile colour/outline alone — marking the option matching the field's current value when the panel reopens; this is additive, not a change to any previously existing selection behaviour. `src/styles/admin-screens.css`'s duplicate grid/box CSS the picker used to carry (`display: grid`/`grid-template-columns` on `.media-picker-panel`, the border/background/radius `.media-option` repeated) is removed now that the primitive supplies it, leaving only the panel's own bordered/scrollable chrome and the new caption overlay there.
+  
+  `APP_BUDGET_BYTES` raised from 250,423 to 250,480 (measured actual total, no added margin — see `scripts/client-asset-budget.ts`'s own ledger comment) since the new caption overlay and selection tracking outweigh the CSS removed.
+- 0941ebd: fix(control-center): show real vendoring provenance on the OMES Architecture screen, not the fixture's placeholder commit/timestamp
+  
+  `/admin/omes/arsitektur` (ahliweb/omes#246 part 3) was rendering the vendored `architecture-capabilities-view` fixture's own `omes_commit` (`0000000000000000000000000000000000000000`) and `generated_at` (`2026-01-01T00:00:00Z`) as if they were real provenance. Those are DELIBERATE deterministic placeholders OMES's generator (`scripts/generate-architecture-capabilities-view.py`) writes so the checked-in fixture reproduces byte-for-byte — never a record of when or from which commit this snapshot was actually vendored.
+  
+  The screen now shows the real answer instead: the OMES version (`snapshot.omesVersion`, taken from the fixture's `omes_version`, which IS real), the source commit (`contracts/v1/PIN.json`'s `sourceCommit` — a short prefix inline, with the full 40-character SHA in a title/tooltip), and vendored-at (`PIN.json`'s `syncedAt`). The "pinned release snapshot, not live host state" banner is unchanged.
+  
+  `domain/architecture.ts` renames the fixture's own fields to `fixtureOmesCommit`/`fixtureGeneratedAt` and documents them as internal-only (used solely to round-trip the projection back through schema validation in tests) — never to be rendered. `application/architecture-directory.ts` now attaches a `provenance` object (`sourceCommit`/`sourceCommitShort`/`vendoredAt`) sourced from the already-exported `OMES_CONTRACT_PIN`. `tests/admin-omes-control-architecture-page-contract.test.ts` asserts the page renders `snapshot.provenance.*`, never `snapshot.omesCommit`/`generatedAt`/`fixtureOmesCommit`/`fixtureGeneratedAt`, and that the displayed commit is never the all-zero placeholder. New `id`/`en` labels "Source commit" / "Vendored at" replace "OMES commit" / "Generated at".
+  
+  Refs ahliweb/omes#246.
+- 6d3bf18: fix(control-center): polish the OMES design system — forms, multi-value tiles, lifecycle strip, panel edges (ahliweb/omes#246, part 1b)
+  
+  Fixes 5 defects a screenshot review of part 1 (`ahliweb/omes#246` part 1/3, PR #829) found across the same 9 `/admin/omes/*` screens:
+  
+  1. **Multi-value tiles** (server health distribution, job state summary, backup freshness, deployment drift on the overview screen) rendered every part through the 32px mono `.stat-value` style meant for a single number, wrapping onto 2-3 lines at 1440px and worse below it. They now render as `.omes-stat-breakdown`, a compact wrapping list of value+label chips.
+  2. **Form controls** on all 8 filter/create forms used a bare `.admin-toolbar` with unstyled sibling `<label>`/`<input>` markup — flat grey inputs, the native light `<select>` popup, labels detached from their controls. They now use `.admin-create-form`, the same vocabulary ~18 other admin list screens already use, which already consumes the tokens `.omes-cc` overrides — no new color pairing.
+  3. **Lifecycle strip** `→` separators orphaned at the start of a wrapped line below 1440px. Each pill + its trailing arrow is now one atomic flex item, so the pair always wraps together.
+  4. **Panel edge/gutter at 1440px** — a `clamp()` sign error and a percentage-height/padding miscalculation in `.omes-cc`'s negative-margin bleed left a light-canvas strip on the panel's right edge and bottom on wide/short screens. Both fixed.
+  5. **Sidebar clipping at 1440px**, raised by the same review, is architecturally unrelated to `.omes-cc` (a sibling subtree; CSS custom properties don't cascade to it) and could not be reproduced through normal interaction against either this branch or the commit before part 1 — filed as its own `ahliweb/awcms` issue rather than fixed or guessed at here.
+  
+  `APP_BUDGET_BYTES` rises 229,500 → 230,400 B (measured +1,109 B after trimming). New contrast pairs: none — every color used is already in the table in `src/modules/omes-control/README.md`/`.id.md`, which now also documents this fix.
+- 221cf59: fix(control-center): CSP-safe depth indentation for the live orchestration tree (ahliweb/omes#246)
+  
+  Post-merge visual verification of `/admin/omes/orkestrasi-langsung` (ahliweb/omes#246 part 2, PR #834) — logging in as a seeded owner and looking at a populated screen for the first time — found the tree's depth indentation never rendered in any real browser: it was expressed as a per-node inline `style="padding-left: ${depth * 20}px"`, and this repo's CSP (`default-src 'self'`, no `style-src`, no `'unsafe-inline'`; `lib/security/security-headers.ts`) silently drops a dynamic inline `style` attribute. Every manager/agent/subagent row rendered at the same left edge regardless of depth, and the browser console logged a CSP violation per node.
+  
+  The fix drops the inline style entirely and expresses indentation as a bounded `data-indent-level` attribute (the real depth clamped to 6) plus seven fixed attribute-selector rules in `omes-control-center.css` — CSP-safe by construction, since nothing depends on an inline `style=""` value. The depth *filter* is unaffected: it still reads the unclamped `data-depth` attribute exactly as before.
+  
+  Verified by seeding a realistic depth-3 manager → 2 agents → 4 subagents → 2 leaves tree (mixed `RUNNING`/`SUCCEEDED`/`FAILED`/`PENDING`/`INTERRUPTED` states) plus a second, deliberately stale session, through the real `ingestOrchestrationTree`/`ingestOrchestrationEvent` functions against a real PostgreSQL, and screenshotting both `/admin/omes/orkestrasi-langsung` and `/admin/omes/hermes` at 1440px and 390px as the seeded owner. No other defect was found in either screen: no horizontal overflow at 390px, the stale session never renders as live, the depth filter correctly hides/shows rows at every tested level, and the Hermes screen's `planner`/step-budget fields render as the documented "not reported" state.
+  
+  Raises `APP_BUDGET_BYTES` (`scripts/client-asset-budget.ts`) from 234,443 to 234,992 — the measured cost of the fix itself (seven small CSS rules cost slightly more than the removed dynamic inline expression), not headroom for unrelated growth.
+- e48bd84: fix(control-center): vendor the OMES contracts and health-check directories into the production runtime image
+  
+  `Dockerfile.production`'s `runtime` stage copied only `node_modules`, `dist`, and
+  `package.json`, but `src/modules/omes-control/domain/contracts/loader.ts` reads the
+  vendored OMES contract snapshot (`PIN.json`, schemas, state tables, fixtures) from
+  disk at request time via `path.resolve(process.cwd(), VENDORED_CONTRACTS_DIR)` —
+  never bundled into `dist/`. Every production container built from this Dockerfile
+  therefore ENOENT'd on that read: `/admin/omes/arsitektur` rendered but its data never
+  loaded, and every worker route that validates against a vendored schema
+  (enroll/poll/result/heartbeat/ai-privacy-posture/hermes-orchestration-*) would have
+  rejected every real request — unnoticed only because no worker was enrolled yet on
+  `omes-cms.ahlikoding.com`.
+  
+  The `runtime` stage now also copies `src/modules/omes-control/contracts` (the fix),
+  plus `sql`, `openapi`, and `asyncapi` — the same class of defect in
+  `src/modules/module-management/application/health-registry.ts`, whose
+  `migrations_applied`, `openapi_documented`, and `asyncapi_documented` module health
+  signals (`/api/v1/modules/[moduleKey]/health`) read those directories the same way.
+  Those reads are try/caught rather than throwing, so the symptom there is every
+  module's health check silently reporting `fail` in production rather than an ENOENT.
+  
+  Adds `tests/dockerfile-runtime-disk-reads.test.ts`, which asserts every directory the
+  runtime code reads from disk is copied into the `runtime` stage — deriving the
+  contracts path from the loader's own exported `VENDORED_CONTRACTS_DIR` constant so a
+  path change there can't silently desync the Dockerfile again.
+  
+  Refs ahliweb/omes#246.
+- bf6f5fc: fix(security): narrow `awcms_worker`'s grant on the eight `omes_control` tables to what it actually executes
+  
+  `sql/154` granted `awcms_worker` the same `SELECT, INSERT, UPDATE, DELETE` it gave
+  `awcms_app` on all eight `omes_control` tables. `omes_control` registers no scheduled
+  worker entrypoint at all — the control API's mutations run as `awcms_app`,
+  per-request. The only worker-run code that touches these tables is the generic
+  `data-lifecycle:archive-purge` engine, driven by each table's `dataLifecycle`
+  descriptor: every one of the eight is `mode: "hard_delete"`, `executionMode:
+  "generic"`, which is a bounded cursor `SELECT` plus an aged-row `DELETE`.
+  
+  `INSERT` and `UPDATE` were therefore never used by any worker-run statement, and
+  holding them was a live least-privilege breach from the moment `sql/154` landed.
+  `security:readiness worker/setup grant check` (Issue #163) caught it correctly and
+  went red on `main` — the check fails in BOTH directions, and this was the
+  over-grant direction, not a missing matrix entry.
+  
+  The fix removes the privileges rather than widening the matrix to accommodate them.
+  A readiness gate that is made green by relaxing what it measures is worse than no
+  gate, so `WORKER_ROLE_GRANTS` now claims exactly `["SELECT", "DELETE"]` for each of
+  the eight tables and the database is brought into line with it.
+  
+  Two implementation notes worth keeping:
+  
+  - This is a new migration, not an edit to `sql/154`. An applied migration is
+    immutable here — editing one in place blocks `bun run db:migrate` on every
+    deployment that has already run it — so the correction is additive: revoke
+    exactly the two excess verbs.
+  - The `REVOKE`s are written one role per statement, paired with a no-op
+    single-role `GRANT SELECT, DELETE`. `sql/154`'s combined-role
+    `GRANT ... TO awcms_app, awcms_worker` form is not recognised by the replay
+    parser in `tests/db-role-separation-worker-setup-migration.test.ts`, which reads
+    only one-role-per-statement lines. The paired grant is redundant against a real
+    database and exists so the static replay's picture of the final grant matches
+    what `checkWorkerSetupRoleGrants` observes on a live Postgres.
+  
+  `awcms_app` is untouched — the control API needs full CRUD there.
+- 2d29a44: chore(deps-dev): bump @playwright/test from 1.62.1 to 1.63.0
+  
+  Dev/CI-only: the runner behind the E2E smoke job and the browser tests. It does not
+  ship in the built application.
+  
+  The E2E smoke job passing on this PR is the meaningful signal here — it exercises the
+  bumped runner against the real suite, including the 360px viewport gate, rather than
+  merely proving the package installs.
+- 74916c2: chore(deps-dev): bump prettier from 3.9.6 to 3.9.9
+  
+  Dev-only formatter behind `bun run lint`'s `prettier --check` gate and
+  `prettier-plugin-astro`. Verified locally with `bun install --frozen-lockfile && bun
+  run check`: `prettier --check` on the full `**/*.md`, `**/*.{json,yml,yaml}`, and
+  `**/*.{ts,mjs,astro}` glob stays clean, so `3.9.9` reformats nothing this repo already
+  has checked in.
+- ae71bc7: chore(deps-dev): bump prettier-plugin-astro from 0.14.1 to 1.1.0, with a full deliberate reformat
+  
+  Dev-only formatter plugin behind `bun run lint`/`bun run format`'s `.astro` handling. `1.0.0`
+  is a full rewrite of the plugin on top of Astro 7's Rust compiler (new whitespace-handling
+  engine, `astroCompressHTML`/`astroAllowShorthand` options added); this repo sets neither
+  option, so attributes are left exactly as written and no shorthand rewriting occurred.
+  
+  This PR was left open deliberately (see the earlier close-out of #850) until the reformat
+  could be reviewed rather than blindly accepted, because a formatter rewrite CAN change
+  rendered HTML (trailing/leading whitespace around inline elements, `set:html`/script/style
+  block handling). The review method used here is the strongest available: build the SSR
+  server bundle before and after running `bun run format` with the new plugin, from the exact
+  same working directory, and diff the compiled output.
+  
+  Of 743 compiled server chunks, exactly 5 changed content (out of 76 reformatted `.astro`
+  source files) — every other page/component compiled to byte-identical output despite its
+  source being reformatted, and `dist/client` was untouched. The 5 real differences:
+  
+  - 4 pages (`blog-pages`, `blog-presentation`, `form-drafts`, `reporting`) gained a trailing
+    `"\n  "` text node inside a `<Fragment slot="page-description">`, immediately before the
+    slot's closing tag, because the old plugin split the closing tag itself across the line
+    break (`</a>.</Fragment\n  >`, invisible to the parser) while the new plugin puts the
+    closing tag on its own line (`</a>.\n  </Fragment>`, a real trailing text node). Verified
+    safe: every `page-description` slot is consumed by `AdminLayout.astro` inside
+    `<p class="admin-page-description">`, whose CSS (`admin.css`) uses default
+    `white-space: normal` — trailing whitespace at the end of inline content in a block box is
+    collapsed away by the browser, so nothing renders differently.
+  - 1 page (`src/pages/index.astro`, the public homepage) replaced a literal space character
+    that survived an old-style tag-splitting line break (`tersedia dari <a\n  href=...`) with
+    an explicit `{" "}` expression (`tersedia dari{" "}\n<a href=...`) — both render as exactly
+    one space between "dari" and the link text; confirmed byte-for-byte identical rendered
+    spacing.
+  
+  No `prettier-ignore` or plugin-option override was needed: neither difference changes
+  rendered output, so the reformat is accepted as-is. See PR body for the full diff evidence.
+- 76f5ded: design(admin): retire the legacy .stat-card/.status-badge classes (#866)
+  
+  Final wave (7) of the AWCMS ↔ awcms-one admin UI/UX parity work (epic #858): migrates the last consumers of the legacy `.stat-card`/`.stat-grid`/`.stat-label`/`.stat-value`/`.stat-hint`/`.stat-head`/`.stat-delta` family and the legacy `.status-badge`/`.status-dot` pair — `data-lifecycle.astro`, `site-search.astro`, `idn-regions.astro`, `tenants.astro`, `sync.astro`, `push-notifications.astro`, `domain-events.astro`, `omes/health.astro` (all onto `.admin-stat-card`), and the four remaining sections of `reporting.astro` (onto `.admin-status-pill`) — onto the shared `admin.css` primitives every other admin screen already uses.
+  
+  With zero consumers left, the legacy rule blocks are deleted from `src/styles/admin.css` and `src/styles/admin-screens.css`, and the `.stat-card` half of the dual selector lists in `src/styles/omes-control-center.css` (kept there since wave 2 to serve both class families at once) is dropped. A new repo-wide regression test, `tests/admin-legacy-classes-retired.test.ts`, walks every `.astro`/`.ts`/`.tsx`/`.css` file under `src/` and fails the build if any of the nine retired class tokens reappears as a real consumer (comments are stripped first, so historical/provenance prose is never mistaken for one).
+  
+  This is the first wave of the epic to shrink the client asset budget rather than grow it: `APP_BUDGET_BYTES` (`scripts/client-asset-budget.ts`) is lowered from 250,566 to 248,033 and `PER_FILE_CSS_BUDGET_BYTES` from 57,300 to 56,800 (both measured actual values, no added margin).
+  
+  `docs/awcms/admin-ui-parity-matrix.md` (+ `.id.md`) now describes every wave (2–7) as DONE and reclassifies `media.astro` as partially-adopt with a pointer to the shared media picker's own adoption (#872). `docs/awcms/14_ui_ux_design_system.md` (+ `.id.md`) and the `awcms-ui-screen` skill (+ `.id`) state `.admin-status-pill`/`.admin-stat-card` as the only classes for these two shapes, rather than describing the legacy pair as still defined.
+- 8e9bce0: fix(auth): stop misclassifying 304 Not Modified as a broken redirect in ssrfSafeFetch (ahliweb/omes#249)
+  
+  `ssrfSafeFetch`'s manual redirect-following loop in `src/lib/auth/ssrf-guard.ts` treated every response with a status in `[300, 400)` as a redirect that required a `Location` header, failing with `request_failed` when one was missing. `304 Not Modified` legitimately has no `Location` — it is not a redirect at all — so a conditional GET (`If-None-Match`) answered with `304` was always misclassified as a broken redirect.
+  
+  In production this hit `src/modules/omes-control/application/repository-progress-poller.ts`, which sends `If-None-Match` on its second-and-later poll of GitHub's milestones/issues endpoints: every unchanged-repository poll failed with `network_error` instead of the intended `not_modified` outcome, permanently marking the projection's `pollStatus` as `error` even though nothing was wrong.
+  
+  Only `301`, `302`, `303`, `307`, and `308` are now treated as followable redirects requiring re-validated `Location` handling (unchanged SSRF re-validation logic for those). Every other 3xx status — `304`, plus `300`/`305`/`306` for completeness — is now returned to the caller as an ordinary completed response, without requiring or looking for `Location`.
+  
+  `src/modules/omes-control/application/repository-progress-poller.ts` already had correct `not_modified` handling for a real `304`; no change was needed there once the guard was fixed.
+- 4a7416a: fix(control-center): stale Hermes orchestration sessions never render node/event state as live (ahliweb/omes#246 part 2 follow-up)
+  
+  `/admin/omes/orkestrasi-langsung` already showed a `stale`/`unknown` badge on a session header, but the nodes and activity-stream rows inside it kept their last-reported state's live color (e.g. a green `● RUNNING`), which reads as currently running even though the whole snapshot has gone stale. `domain/hermes-orchestration.ts`'s `projectOrchestrationTree`/`projectOrchestrationEvent` now stamp every node and event with a recomputed `isHistorical` flag (`freshness !== "live"` for nodes; the OWN session's current tree freshness, recomputed via a new `sessionFreshness` parameter, for events — `application/hermes-orchestration-directory.ts` joins each event to its session's current snapshot rather than trusting a stored flag, defaulting fail-closed to `"unknown"`/historical when no snapshot exists at all). Both `orkestrasi-langsung.astro` and `hermes.astro` render a historical node/event with a neutral status-badge variant, a new "last reported: {state}" ("terakhir dilaporkan: {state}") label instead of the bare state, and a muted row (`data-historical="true"`, styled in `omes-control-center.css`) — never the live success/danger color. The activity stream's client-side poll refresh applies the same treatment on every periodic re-render, not just the initial SSR paint.
+- 4fd59f2: chore(deps-dev): bump @types/bun from 1.4.0 to 1.4.2
+  
+  Type definitions only — dev-time, erased at build, nothing shipped. The bump lines the
+  types up with the Bun version the CI pins (`1.4.2`), which is where a drift between the
+  two would otherwise show up as typecheck errors against APIs the running Bun already
+  has.
+- 3aee1a4: chore(deps-dev): bump yaml from 2.9.0 to 2.9.1
+  
+  Patch release of the YAML parser/stringifier used by `scripts/family-conformance-check.ts`,
+  the OpenAPI/AsyncAPI bundling and contract-check scripts, and
+  `src/modules/module-management/application/health-registry.ts`. `2.9.1` is a bugfix-only
+  release with no breaking changes to the parse/stringify API this repo calls, so no source
+  change is needed beyond the bump.
+
 ## 10.3.0
 
 ### Minor Changes

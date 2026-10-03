@@ -1,7 +1,0 @@
----
-"awcms": patch
----
-
-design(admin): migrate dashboard/reporting/analytics/omes stat cards onto `.admin-stat-card` (#860)
-
-Extends `.admin-stat-card` (`src/styles/admin.css`, PR #813) with three optional modifiers — `.admin-stat-card-grid` (folded into the existing `.kpi-grid`/`.dashboard-grid` responsive breakpoint), `.admin-stat-card-value--mono`, and an icon-head/signed-delta pair (`.admin-stat-card-head` + `.admin-stat-card-delta[data-tone="positive"|"negative"]`, ported from the legacy `.stat-head`/`.stat-delta`) — then migrates `/admin`, `/admin/analytics`, `/admin/reporting` (stat-card section only) and `/admin/omes` off the legacy `.stat-card`/`.stat-grid` family (`src/styles/admin-screens.css`, left in place for the ~14 screens not yet migrated). `src/styles/omes-control-center.css` gained a selector-list extension covering `.admin-stat-card` alongside its existing `.stat-card` rules, so the other 8 OMES screens keep their styling untouched. The delta modifier ships colour only; its own doc comment requires the consumer to write the leading sign character into the value text and pair a visually-hidden word, so the sign is never conveyed by colour alone. Real data only — no screen fabricates a trend or icon it does not already compute. `build:asset-budget:check`'s `APP_BUDGET_BYTES` raised from 239,956 to 240,975 (measured actual total, ledger comment in `scripts/client-asset-budget.ts`). No API/schema/event change.
