@@ -217,7 +217,7 @@ const PAIRS: readonly Pair[] = [
     bg: "color-surface",
     min: AA_NORMAL,
     renderedBy:
-      "admin.css .btn-danger (outlined), .admin-error, .admin-stat-card-delta[data-tone='negative']"
+      "admin.css .btn-danger (outlined), .admin-error, .admin-stat-card-delta[data-tone='negative'], admin/index.astro .dd-alert"
   },
   {
     fg: "color-success",
