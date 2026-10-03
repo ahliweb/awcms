@@ -184,6 +184,7 @@
     "docs:i18n:stamp:check": "bun scripts/docs-i18n-stamp.mjs --check"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@changesets/cli": "^3.0.3",
     "@playwright/test": "^1.63.0",
     "@types/bun": "^1.4.2",

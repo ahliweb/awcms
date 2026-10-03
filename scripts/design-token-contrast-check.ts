@@ -217,7 +217,7 @@ const PAIRS: readonly Pair[] = [
     bg: "color-surface",
     min: AA_NORMAL,
     renderedBy:
-      "admin.css .btn-danger (outlined), .admin-error, .admin-stat-card-delta[data-tone='negative']"
+      "admin.css .btn-danger (outlined), .admin-error, .admin-stat-card-delta[data-tone='negative'], admin/index.astro .dd-alert"
   },
   {
     fg: "color-success",
@@ -274,7 +274,12 @@ const PAIRS: readonly Pair[] = [
     fg: "color-sidebar-text",
     bg: "color-sidebar-bg",
     min: AA_NORMAL,
-    renderedBy: "admin.css .admin-sidebar a, .admin-sidebar-count"
+    // ahliweb/awcms#877 — `.admin-logout` joined this rendering group: it
+    // used to be `--color-text-muted` (a theme-aware token, wrong family for
+    // an always-dark surface), which axe caught at 3.07:1 in the light theme
+    // (`--color-text-muted` there is tuned for a pale card, not this rail).
+    renderedBy:
+      "admin.css .admin-sidebar a, .admin-sidebar-count, .admin-logout"
   },
   {
     fg: "color-sidebar-text",

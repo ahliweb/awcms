@@ -603,8 +603,11 @@ const ICON_MODULES =
     font-variant-numeric: tabular-nums;
   }
 
+  /* Danger as TEXT on --color-surface: the plain token, not `-strong`.
+     `-strong` is the solid-fill-under-white-text role (tokens.css); as text it
+     measured 3.81:1 on the dark card (axe color-contrast, #877). */
   .dashboard-card dd.dd-alert {
-    color: var(--color-danger-strong);
+    color: var(--color-danger);
   }
 
   /* ── Badges ───────────────────────────────────────────────────────────*/

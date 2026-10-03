@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 129.**
+**Jumlah memory saat snapshot terakhir: 130.**
 
 ## Sengaja TIDAK disertakan
 
@@ -115,7 +115,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Artefak ter-generate DRIFT setelah dua squash-merge](awcms-generated-artifact-merge-drift.md) — regenerasi, jangan tangan
 - [Berkas untracked IKUT `git checkout`](awcms-untracked-file-follows-checkout.md) — `check:docs` cuma lihat berkas ter-track → `git add -A` DULU
 - [Full check sebelum PR](awcms-full-check-before-pr.md) — `bun run check` PENUH; paritas CI = `DATABASE_URL="" bun run test` + `build`
-- [Bun lokal > Bun CI = artefak "STALE" PALSU](awcms-local-bun-newer-than-ci-fakes-stale-artifacts.md) — 1.4.0 vs 1.3.14; JANGAN commit bundle regenerasi, itu justru memerahkan CI
+- [Bundle STALE: dulu palsu, KINI nyata](awcms-local-bun-newer-than-ci-fakes-stale-artifacts.md) — lokal=CI=Bun 1.4.2 sejak Sep 2026; ubah `admin-form-client.ts` = regenerasi overlay bundle; build 2× untuk bukti
 - [Security readiness gate](awcms-security-readiness-notes.md) — cek harus dibuktikan GAGAL pada kondisi seharusnya; role-check sengaja warning
 - [PR stacked = NOL CI](awcms-stacked-pr-no-ci.md) — workflow hanya trigger `branches: [main]`; GitGuardian tetap `pass` sehingga tampak hijau
 - [False-positive scanner keamanan](awcms-security-scanner-falsepos.md) — GitGuardian scan SEMUA commit PR; ia GitHub App, tak bisa ditutup dari env ini
@@ -168,6 +168,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Kebijakan artefak graphify-out SUDAH settled](awcms-graphify-out-artefact-policy.md) — rebuild graf bebas changeset; JANGAN kecualikan `.changeset/`
 - [graphify butuh extra yang install polos hilangkan](graphify-svg-export-needs-matplotlib.md) — tanpa `[sql]` file `.sql` nol node; svg butuh matplotlib DAN scipy
 - [Ref remote basi melahirkan temuan audit PALSU](git-stale-remote-refs-fake-audit-finding.md) — tanya `gh api .../branches`
+- [`pkill -f` di Bash tool membunuh shell-nya sendiri](pkill-f-kills-own-shell.md) — exit 144, langkah berikutnya diam-diam tak jalan; pakai `pgrep -x` + cmdline
 `````
 
 <!-- memory-file: awcms-abac-evaluator-mini-build.md -->
@@ -4205,11 +4206,11 @@ Lihat [[awcms-outbox-retention-two-blockers]] (superseded), [[awcms-gate-design-
 `````markdown
 ---
 name: awcms-local-bun-newer-than-ci-fakes-stale-artifacts
-description: "Bun lokal 1.4.0 vs CI 1.3.14 membuat gerbang artefak ter-bundle MERAH PALSU; JANGAN regenerasi — commit-nya akan memerahkan CI"
+description: "HISTORIS (1.4.0 vs 1.3.14); sejak Sep 2026 lokal=CI=1.4.2 → STALE bundle kini NYATA, regenerasi bila sumbernya (mis. admin-form-client.ts) berubah"
 metadata: 
   node_type: memory
   type: project
-  modified: 2026-08-27T02:11:28.445Z
+  modified: 2026-09-29T03:58:08.404Z
 ---
 
 `bun run check` lokal bisa GAGAL di gerbang yang membandingkan bundle ter-commit
@@ -4238,6 +4239,14 @@ karena "memperbaiki" merah palsu. Kembalikan dengan
 
 Perbaikan benar bila ingin run lokal setia: pasang Bun 1.3.14. Selain itu,
 percayakan gerbang bundle ke CI dan jalankan sisa rantainya lokal.
+
+**KOREKSI 29 Sep 2026 — mismatch versi itu SUDAH TIDAK ADA:** lokal dan CI
+kini sama-sama Bun 1.4.2. STALE di gerbang ini sekarang hampir pasti NYATA:
+sumbernya berubah (bundle mengimpor `src/lib/ui/admin-form-client.ts`, jadi
+mengubah berkas itu mewajibkan regenerasi). PR #868: subagent menolak STALE
+sebagai "minifier non-deterministik" → CI merah. Uji dulu: `bun --version`
+vs `bun-version` di ci.yml; build DUA kali — byte-identik = deterministik →
+regenerasi dan commit. Beri tahu subagent hal ini di prompt.
 
 Terkait: [[awcms-generated-artifact-merge-drift]] (di sana regenerasi MEMANG
 jawabannya — bedanya di sana sumbernya yang bergerak, di sini toolchain-nya).
@@ -7771,6 +7780,26 @@ lockfile Dependabot, jangan hanya baris versinya.
 
 Terkait: [[awcms-gate-design-lessons]] (gate hijau sambil jawabannya salah;
 uji gate dengan mengembalikan cacat ASLI — itu yang dipakai di sini).
+`````
+
+<!-- memory-file: pkill-f-kills-own-shell.md -->
+
+`````markdown
+---
+name: pkill-f-kills-own-shell
+description: "`pkill -f`/`pgrep -f <pattern>` inside a Bash tool call matches the tool's own `bash -c` wrapper and kills it (exit 144) — hit twice in a row on #877"
+metadata:
+  node_type: memory
+  type: feedback
+  modified: 2026-09-29T09:04:22.355Z
+---
+
+The Bash tool runs each command as `bash -c '<whole command string>'`, so the pattern passed to `pkill -f` / `kill $(pgrep -f ...)` is ALSO in that shell's own cmdline. The shell kills itself mid-command (exit 144) and every later step in the same call silently never runs. It happened twice in a row while stopping `bun ./dist/standalone-entry.mjs` on 2026-09-29.
+
+**Why:** a half-run compound command leaves the working tree in an in-between state (e.g. fixes reverted but not re-applied) with no error output.
+
+**How to apply:** match on the exact executable and inspect the cmdline instead:
+`for p in $(pgrep -x bun); do tr '\0' ' ' </proc/$p/cmdline | grep -q standalone-entry && kill $p; done` — or record `$!` when starting the server. Keep destructive/restoring steps in separate tool calls from any kill.
 `````
 
 <!-- memory-file: postgres-now-is-transaction-start.md -->

@@ -5,7 +5,7 @@ description: Tulis test AWCMS sesuai strategi berlapis (unit, integration, API c
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:ed6a213c7efb920106836b7c28f9ce597336600331f72dd4e4f8cdccbd16a4d3 -->
+<!-- i18n-source-hash: sha256:18864f99cdfef15dbf9279df5aacb9513edf155b9469409904dda055be4e9159 -->
 
 > **TITIK BUTA YANG WAJIB DIKETAHUI — `.astro` tidak diperiksa tipe sama
 > sekali.** `bun run typecheck` adalah `tsc --noEmit`, dan `tsc` **tidak bisa
@@ -45,6 +45,17 @@ Ikuti `docs/awcms/07_sprint_testing_production_readiness.md`. Jalankan dengan `b
 flowchart TB
   E[Security & Performance] --> D[API contract - OpenAPI/AsyncAPI] --> C[Integration - migration/posting/transfer] --> B[Unit - logic murni]
 ```
+
+Tak satu pun lapisan di sini adalah browser sungguhan, dan tak satu pun bisa
+— proses `bun test` tidak punya DOM, tidak punya cascade CSS, tidak punya
+top layer `<dialog>`, dan tidak punya `prefers-reduced-motion`/render piksel
+ter-anti-alias — persis permukaan yang dibutuhkan axe untuk menangkap
+pelanggaran `color-contrast`/`label`/`link-name`. Lapisan puncak piramida itu
+(E2E browser sungguhan, termasuk smoke aksesibilitas otomatis
+`@axe-core/playwright`, Issue #877) sepenuhnya dimiliki skill
+`awcms-browser-test` dan dijalankan lewat `bun run test:e2e`, tidak pernah
+lewat `bun test` — lihat skill itu sebelum menulis atau mengubah apa pun di
+bawah `tests/e2e/`.
 
 ## Target unit test
 

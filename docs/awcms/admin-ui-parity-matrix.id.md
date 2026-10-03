@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:382bf7f5b48ab74ea1a09e0c7005d718ddc10c5b93c6cb8fc6b56e82dd8325e8 -->
+<!-- i18n-source-hash: sha256:8de2b5d7230140dc17fd2fa4f9ecc71aca35515f8a25ae8878cfafa1d93ff4ee -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -571,7 +571,38 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   ini tidak punya harness `@axe-core/playwright` di bawah `tests/e2e/` pada
   saat issue ini — kriteria akseptansi smoke aksesibilitasnya adalah
   `responsive-360`/`admin-screens-render` plus aturan komposisi manual di
-  doc 14, bukan spec axe khusus.
+  doc 14, bukan spec axe khusus. **Ditutup oleh [Issue
+  #877](https://github.com/ahliweb/awcms/issues/877):** `tests/e2e/a11y-axe.e2e.ts`
+  kini menjalankan `@axe-core/playwright` (tag WCAG 2.0/2.1 A+AA) terhadap
+  delapan rute representatif yang diubah epik ini — `/admin`,
+  `/admin/comments`, `/admin/users`, `/admin/approvals`, `/admin/media`,
+  `/admin/omes`, `/admin/omes/jobs`, `/admin/site-profile` — dalam tema
+  terang MAUPUN gelap, pada 360px dan desktop, plus `ConfirmDialog`/
+  `ReasonPanel` ADR-0125 dibuka (lalu dibatalkan). Dijalankan sungguhan
+  terhadap Postgres 18.4 segar + migrasi penuh + tenant ter-seed saat
+  mengerjakan issue ini, ia menemukan dan repo ini memperbaiki lima
+  pelanggaran `critical`/`serious` nyata yang sudah terlanjur dikirim
+  gelombang-gelombang epik ini: wordmark `.admin-brand` kehilangan nama
+  aksesibelnya di bawah 768px (`display: none` menghapus elemen dari
+  komputasi nama aksesibel, bukan cuma dari tata letak — `link-name`,
+  serious), `<label>` alasan `ReasonPanel` yang tidak pernah menjadi `<label
+for>` sungguhan (`label`, critical), `.reason-panel { display: flex }`
+  yang berlaku tanpa syarat alih-alih di-scope ke `[open]` (CSS asal-penulis
+  mengalahkan `dialog:not([open]) { display: none }` bawaan user-agent
+  terlepas dari `!important`, sehingga panel yang dibatalkan tetap bertata
+  letak dan tampil di layar setelah `.close()`), `.admin-logout` memakai
+  `--color-text-muted` yang theme-aware pada latar sidebar yang selalu gelap
+  alih-alih `--color-sidebar-text` (`color-contrast`, serious, terukur
+  3,07:1 terhadap ambang 4,5:1), dan dashboard `.dd-alert` menggunakan
+  `--color-danger-strong` sebagai teks pada `--color-surface` (`color-contrast`,
+  serious, tema gelap saja: 3,81:1 terhadap ambang 4,5:1), diperbaiki dengan
+  bertukar ke `--color-danger` (5,81:1 gelap; terang tidak berubah di 4,83:1
+  karena kedua token adalah `#dc2626` di sana). Lihat komentar header
+  `tests/e2e/a11y-axe.e2e.ts` sendiri untuk alasan sapuan ini juga berjalan
+  di bawah `reducedMotion: "reduce"` — animasi masuk 240ms `.fade-in-up`
+  benar-benar menurunkan kontras terender di tengah transisi, yang disampel
+  axe sebagai warna piksel alih-alih mempercayai computed style, dan
+  penurunan sesaat itu bukan subjek kriteria ini.
 - **Docs:** dokumen ini (semua gelombang ditandai SELESAI, §6.6 dikoreksi
   di bawah), `docs/awcms/14_ui_ux_design_system.md`, dan skill
   `awcms-ui-screen` — semuanya dimutakhirkan untuk menyatakan aturan

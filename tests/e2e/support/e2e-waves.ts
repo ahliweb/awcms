@@ -67,6 +67,12 @@
  * because those are the ones that change what another spec's screen renders.
  */
 export const READ_WAVE: readonly string[] = [
+  // ahliweb/awcms#877 — `@axe-core/playwright` smoke over representative
+  // routes changed by epic #858, plus the ADR-0125 ConfirmDialog/ReasonPanel
+  // opened-then-cancelled. Every mutation it might otherwise attempt is
+  // cancelled before any request is sent, so it belongs here rather than in
+  // WRITE_WAVE.
+  "a11y-axe.e2e.ts",
   "admin-deny-path.e2e.ts",
   // ahliweb/awcms#831 — injects a synthetic `.cell-muted` element via
   // `page.evaluate` (a client-side DOM mutation only) to assert the CSS

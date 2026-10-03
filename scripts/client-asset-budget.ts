@@ -891,8 +891,29 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 295,244 is the measured value with no added margin.
+ *
+ * **Raised for Issue #877** (the axe-core a11y smoke and the five real
+ * violations it found): `.reason-panel { display: flex }` scoped to
+ * `.reason-panel[open]` (one added selector token) plus the doc comment
+ * explaining why, a `<label for>` replacing a bare `<span>` around the
+ * reason textarea's label text, an `aria-label="AWCMS"` + a second
+ * `aria-hidden="true"` on `AdminLayout.astro`'s brand link/wordmark span,
+ * `.admin-logout` moving from `--color-text-muted` to
+ * `--color-sidebar-text`, and the dashboard's `.dd-alert` moving from
+ * `--color-danger-strong` to `--color-danger` (a one-token swap that
+ * shrinks the CSS slightly rather than adding to it). None of it is
+ * decoration this repo could trim back out — each line fixes a violation axe reported as `critical`/`serious`.
+ * Measured actual total, on top of ahliweb/omes#267 above (re-measured after
+ * merging `main`, since the base moved under this branch):
+ *
+ * ```
+ * before (295,244 ceiling)   295,244 B
+ * + a11y fixes (see above)   295,259 B (measured actual total, +15 B)
+ * ```
+ *
+ * 295,259 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 295_244;
+export const APP_BUDGET_BYTES = 295_259;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
