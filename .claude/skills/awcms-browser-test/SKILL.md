@@ -180,6 +180,15 @@ Ordering inside the run is not `fullyParallel` alone — see convention 7.
      only in the server log. Check for the element, and check
      `document.documentElement.scrollWidth <= innerWidth` for overflow.
 
+   The overflow sweep (`tests/e2e/responsive-360.e2e.ts`, Issue #884) does
+   exactly that for every static admin screen at four viewports: **360px**
+   (narrowest phone), **640×360** (a 1280×720 desktop at 200% browser zoom —
+   WCAG 2.1 SC 1.4.10 measures reflow in CSS px and Playwright has no real
+   zoom API, so the equivalent CSS viewport stands in; the HEIGHT matters
+   too), **768px** (tablet portrait) and **1024px**. Add a width as a
+   `{width, height, why}` entry in its `VIEWPORTS` table — one `test()` each,
+   same assertion, never an exemption or a larger tolerance.
+
 7. **Every new spec must be classified into a WAVE, and the read wave is
    enforced at run time.** All specs share ONE seeded tenant, so a spec that
    writes changes what a spec that reads observes. `playwright.config.ts` runs

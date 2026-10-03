@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:8de2b5d7230140dc17fd2fa4f9ecc71aca35515f8a25ae8878cfafa1d93ff4ee -->
+<!-- i18n-source-hash: sha256:8d9f31dfec351d95fe252e2e4caad16aeb2a8f93965c1828d86f4288906ed73a -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -561,8 +561,10 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   diturunkan dari 250.566 menjadi 248.033 dan `PER_FILE_CSS_BUDGET_BYTES`
   dari 57.300 menjadi 56.800 (keduanya nilai aktual terukur — lihat komentar
   ledger berkas itu sendiri).
-- **Sapuan responsive/E2E:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px,
-  tanpa scroll menyamping) dan `tests/e2e/admin-screens-render.e2e.ts`
+- **Sapuan responsive/E2E:** `tests/e2e/responsive-360.e2e.ts` (360px/1024px
+  pada saat issue ini; sejak #884 ia menyapu 360px, 640×360 = zoom browser
+  200% pada desktop 1280×720, 768px tablet potret, dan 1024px — tanpa scroll
+  menyamping di semuanya) dan `tests/e2e/admin-screens-render.e2e.ts`
   (setiap layar admin merender) dijalankan ulang terhadap Postgres 18.4
   segar + migrasi penuh + tenant yang di-seed — keduanya hijau, plus suite
   penuh `bun run test:e2e` (33 lulus, 8 dilewati untuk spec yang digerbangi

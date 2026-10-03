@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:e1f4b82e8ccd41d1f7123c532961d3c61df6a3adacf70d11a60e19c6a7b7c0ab -->
+<!-- i18n-source-hash: sha256:b92bbb62fff35d20342b911957133372d8a5ac4b592111e92a8152f1ed9fa34c -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -323,6 +323,8 @@ Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
 **Pelipatan di desktop**: pada ≥1024px checkbox `#admin-nav-toggle` yang sama yang menggerakkan drawer mobile justru melipat sidebar ke lebar nol, sehingga tabel padat bisa memakai seluruh viewport. Satu kontrol, dua perilaku, tanpa script.
 
 **Responsif**: di bawah `--bp-md` (768px), sidebar berubah jadi off-canvas drawer — **CSS-only**, digerakkan checkbox yang tersembunyi secara visual tetapi tetap bisa difokus keyboard (`#admin-nav-toggle`) yang `<label>`-nya adalah hamburger topbar; `<label>` kedua adalah scrim yang menutupnya saat disentuh. Tak ada yang bisa diblokir CSP, dan tak ada yang gagal bila sebuah bundle tidak termuat. Drawer tertutup memakai `visibility: hidden`, dan itulah yang mengeluarkan tautannya dari urutan tab — `transform` saja akan meninggalkannya tetap bisa difokus di balik halaman.
+
+**Lebar yang diverifikasi (Issue #884)**: `tests/e2e/responsive-360.e2e.ts` memuat setiap layar `/admin/*` statis pada **360px** (lebar ponsel tersempit), **640×360** (desktop 1280×720 pada zoom browser 200% — WCAG 2.1 SC 1.4.10 mengukur reflow dalam piksel CSS, dan Playwright tak punya API zoom sungguhan, jadi viewport CSS yang setara dipakai sebagai gantinya), **768px** (tablet potret), dan **1024px** (tempat kontrol topbar saling tumpang), lalu menegaskan dokumen tak pernah bisa digulir menyamping di semuanya.
 
 Ongkos memilih CSS dinyatakan terus terang: drawer ini **tidak punya `Esc`-untuk-menutup dan tidak punya focus trap**, karena keduanya butuh script. Itu dapat diterima untuk drawer navigasi yang semua tautannya tetap terjangkau dan scrim-nya target sentuh besar; ia tidak akan dapat diterima untuk modal penerima input — itulah sebabnya command palette memakai `<dialog>` sungguhan. Skip-link (`.skip-link`) dan `aria-current="page"` pada link aktif konsisten di kedua breakpoint. Di `--bp-md` ke atas sidebar bersifat statis, dan toggle yang sama mengambil makna pelipatan-desktop pada ≥1024px.
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:e00718dca816c9e312b45ee1a75a93f6f31f9eeb48e3f6cf47b9f0d5d066675a -->
+<!-- i18n-source-hash: sha256:4c3d5409593be4abfda5f4e44acb4947ec626be77c6866553b183f457c772304 -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -233,6 +233,16 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > header spec itu sendiri untuk alasan ia berjalan di bawah `reducedMotion:
 "reduce"` — animasi masuk `.fade-in-up` benar-benar menurunkan kontras
 > terender di tengah transisi, yang bukan yang ingin diukur smoke ini.
+
+> **Sapuan overflow responsif (Issue #884).** `tests/e2e/responsive-360.e2e.ts`
+> memuat setiap layar `/admin/*` statis dan menegaskan
+> `document.documentElement.scrollWidth <= innerWidth` (+1px) pada empat
+> viewport: **360px** (ponsel tersempit), **640×360** (desktop 1280×720 pada
+> zoom browser 200% — WCAG 2.1 SC 1.4.10 mengukur reflow dalam piksel CSS dan
+> Playwright tak punya API zoom, jadi viewport CSS yang setara dipakai),
+> **768px** (tablet potret) dan **1024px** (tumpang-tindih topbar #843). Tiap
+> viewport adalah satu `test()` di berkas yang sama dengan asersi yang sama;
+> tak ada layar atau lebar yang dikecualikan.
 
 > **Runner test.** Runner = **`bun test`** (`bun:test`), berkas di
 > `tests/`. Daftar target di bawah bersifat **target rencana modul ERP**,

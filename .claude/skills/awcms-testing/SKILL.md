@@ -52,7 +52,9 @@ top-of-pyramid layer (real browser E2E, including the automated
 `@axe-core/playwright` accessibility smoke, Issue #877) is owned entirely by
 the `awcms-browser-test` skill and run via `bun run test:e2e`, never via
 `bun test` — see that skill before writing or changing anything under
-`tests/e2e/`.
+`tests/e2e/`. That includes the responsive overflow sweep
+(`responsive-360.e2e.ts`, Issue #884), which covers 360px, 640×360 (200%
+zoom of a 1280×720 desktop), 768px (tablet portrait) and 1024px.
 
 ## Unit test targets
 

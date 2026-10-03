@@ -231,6 +231,16 @@ playwright test`, Bun-only), separate from `bun test`
 > `.fade-in-up`'s entrance animation genuinely lowers rendered contrast
 > mid-transition, which is not what this smoke means to measure.
 
+> **Responsive overflow sweep (Issue #884).** `tests/e2e/responsive-360.e2e.ts`
+> loads every static `/admin/*` screen and asserts
+> `document.documentElement.scrollWidth <= innerWidth` (+1px) at four
+> viewports: **360px** (narrowest phone), **640×360** (a 1280×720 desktop at
+> 200% browser zoom — WCAG 2.1 SC 1.4.10 measures reflow in CSS px and
+> Playwright has no zoom API, so the equivalent CSS viewport is used),
+> **768px** (tablet portrait) and **1024px** (the #843 topbar overlap). Each
+> viewport is one `test()` in the same file with the same assertion; no
+> screen or width is exempted.
+
 > **Test runner.** The runner is **`bun test`** (`bun:test`), with files in
 > `tests/`. The list of targets below is a **planning target for the ERP modules**,
 > not today's implementation status — not a single ERP module
