@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/control-center/v1/mission-control-replay-window.schema.json",
+  "title": "mission-control-replay-window",
+  "description": "One bounded, keyset-paginated page of ALREADY-RETAINED evidence used by the 3D Mission Control historical replay mode (issue #266, epic #263, ADR-0031). It is a read projection over existing stores (AWCMS OMES audit projections, job and worker-result records, Hermes orchestration events, health/backup snapshots, workflow decisions) - never a new universal event store or audit authority. Each event references the evidence row that proves it (evidence_kind + opaque evidence_id); duplicates are removed by that key, order is deterministic by (at, evidence_kind, evidence_id), and late-arriving evidence is labelled rather than silently rewriting history. Gaps are reported explicitly and are never interpolated into a state. No raw log, prompt, transcript, tool argument/result, or provider payload is carried; additionalProperties=false at every object level.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_map_version",
+    "tenant_id",
+    "generated_at",
+    "window",
+    "events",
+    "evidence_gaps",
+    "next_cursor"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "source_map_version": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "window": {
+      "type": "object",
+      "description": "The bounded time range this page belongs to. The composing API caps the range (AWCMS documents the cap) so the browser never loads unbounded history.",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "Observed transitions in deterministic order (at, evidence_kind, evidence_id).",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "evidence_kind",
+          "evidence_id",
+          "kind",
+          "source_id",
+          "source_state",
+          "visual_state",
+          "provenance"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "When the source says the transition happened (e.g. Hermes event_timestamp, snapshot captured_at, job completed_at).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "evidence_kind": {
+            "type": "string",
+            "enum": [
+              "hermes_event",
+              "health_snapshot",
+              "backup_snapshot",
+              "job_record",
+              "worker_result",
+              "audit_projection",
+              "workflow_decision"
+            ]
+          },
+          "evidence_id": {
+            "type": "string",
+            "description": "Opaque identifier of the retained evidence row. Together with evidence_kind it is the dedupe key.",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "kind": {
+            "type": "string",
+            "description": "The scene node kind (mission-control-source-map.json 'kinds') this evidence describes.",
+            "enum": [
+              "server",
+              "deployment",
+              "job",
+              "health_report",
+              "backup",
+              "hermes_subagent",
+              "architecture_plane",
+              "capability",
+              "repository_milestone",
+              "ai_privacy_posture",
+              "approval_item"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "parent_source_id": {
+            "type": ["string", "null"],
+            "description": "hermes_subagent only: the parent_subagent_id the evidence itself carries. Never derived by parsing identifiers.",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "source_state": {
+            "type": "string",
+            "pattern": "^[A-Za-z_]{1,32}$"
+          },
+          "visual_state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "in_progress",
+              "pending",
+              "warning",
+              "failed",
+              "cancelled",
+              "informational",
+              "stale",
+              "unknown"
+            ]
+          },
+          "provenance": {
+            "type": "string",
+            "description": "observed = recorded in time order; late_arrival = received after a later event for the same source was already recorded (it revises the projection, with this label, rather than silently).",
+            "enum": ["observed", "late_arrival"]
+          },
+          "correlation_id": {
+            "type": ["string", "null"],
+            "description": "The existing correlation identifier the evidence row carries, when it has one.",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          }
+        }
+      }
+    },
+    "evidence_gaps": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["source_kind", "from", "to", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "source_kind": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,64}$"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "not_retained",
+              "retention_expired",
+              "source_unavailable",
+              "before_first_observation"
+            ]
+          }
+        }
+      }
+    },
+    "next_cursor": {
+      "type": ["string", "null"],
+      "description": "Opaque keyset cursor for the next page inside the same window, or null when the window is exhausted. Contains no secret or raw data.",
+      "pattern": "^[A-Za-z0-9_-]{1,256}$"
+    }
+  }
+}

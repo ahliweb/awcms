@@ -141,7 +141,33 @@ const SIMPLE_CASES: SimpleCase[] = [
     method: "POST",
     guard: "OMES_GUARDS.backups.restore"
   },
-  { file: "audit/index.ts", method: "GET", guard: "OMES_GUARDS.audit.read" }
+  { file: "audit/index.ts", method: "GET", guard: "OMES_GUARDS.audit.read" },
+  // Issue ahliweb/omes#265 / ADR-0031 — Mission Control adds NO permission:
+  // the scene route reuses the Overview's `servers.read`, and the composer
+  // gates each source on its own read permission on top of it.
+  {
+    file: "mission-control/scene.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
+  },
+  // Issue ahliweb/omes#266 — historical replay adds NO permission either:
+  // the replay route reuses `servers.read` to admit the viewer and the
+  // directory gates each source on the same per-source read guards as the
+  // live scene (historical access is never broader than live access).
+  {
+    file: "mission-control/replay.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
+  },
+  // Issue ahliweb/omes#267 — contextual actions add NO permission and NO
+  // mutation endpoint: this advisory read reuses `servers.read` to admit the
+  // viewer, gates the target on its source's own read guard, and each action
+  // still goes through the EXISTING mutation endpoint, which re-authorizes.
+  {
+    file: "mission-control/actions.ts",
+    method: "GET",
+    guard: "OMES_GUARDS.servers.read"
+  }
 ];
 
 describe("OMES Control Center route -> permission binding (static)", () => {

@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "mode": "live",
+  "as_of": "2026-10-02T08:00:00Z",
+  "sources": [
+    {
+      "source_kind": "omes_server_inventory",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:55:00Z"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "n1",
+      "kind": "mission",
+      "source_id": "mission-demo-01",
+      "label": "test-mission",
+      "source_state": "active",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:55:00Z",
+      "detail_route": "/admin/omes/missions"
+    }
+  ],
+  "relations": [],
+  "truncated": {
+    "nodes": 0,
+    "relations": 0
+  }
+}

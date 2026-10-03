@@ -36,6 +36,272 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/mission-control/scene:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the 3D Mission Control scene (ahliweb/omes#265)
+      description: >-
+        Gated by omes_control.servers.read, which only admits the viewer to
+        the workspace; each source is then included only if the viewer also
+        holds that source's own read permission (omes_control.deployments.read,
+        jobs.read, backups.read, hermes_orchestration.read, architecture.read,
+        ai_privacy.read, workflow.approval.read). A source the viewer may not
+        read is reported with status "unavailable" and contributes no nodes.
+        Returns the vendored mission-control-scene-view v1 shape (ADR-0031): a
+        read-only, tenant-scoped, bounded (at most 500 nodes and 1000
+        relations; omitted counts are reported in "truncated") composition of
+        references to records that existing screens own. It is a derived
+        projection with no new permission, table, or action. An invalid
+        composition fails closed with 500 MISSION_CONTROL_SCENE_INVALID.
+      operationId: omesReadMissionControlScene
+      parameters:
+        - name: as_of
+          in: query
+          required: false
+          description: >-
+            ahliweb/omes#266. A UTC instant (2026-10-02T08:00:00Z). Absent =
+            the live scene. Present = the HISTORICAL scene that instant's
+            retained evidence proves (mode "historical", with evidence_gaps):
+            each event-backed object is in the state of its latest evidence at
+            or before as_of (evidence is read from the 24 hours before as_of
+            for Hermes and health, and newest-first for backups, jobs and
+            approvals), an object with no such evidence is absent, and
+            current-only objects (servers, deployments, architecture,
+            repository progress, AI privacy) are shown with freshness
+            "unknown" and are never back-dated. Must not be in the future nor
+            older than the retention horizon (the longest data-lifecycle
+            retention of the replay sources, 90 days). It is the ONLY query
+            parameter accepted; any other is a 400 VALIDATION_ERROR.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      responses:
+        "200":
+          description: The tenant's scene (live, or historical when as_of is given).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      scene:
+                        type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/mission-control/replay:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read one page of Mission Control replay evidence (ahliweb/omes#266)
+      description: >-
+        Gated by omes_control.servers.read, which only admits the viewer to the
+        workspace; each source is then read only if the viewer also holds that
+        source's own read permission (the same guards as the live scene). A
+        source the viewer may not read contributes no events and is reported as
+        a source_unavailable evidence gap. Returns one bounded, keyset-paginated
+        page (at most 500 events) of the vendored mission-control-replay-window
+        v1 shape (ADR-0031): a read projection over evidence existing tables
+        already retain (Hermes orchestration events, health and backup
+        snapshots, job and worker-result records, workflow decisions) - never a
+        new event store or audit authority. Events are de-duplicated by
+        (evidence_kind, evidence_id), ordered deterministically by (at,
+        evidence_kind, evidence_id), and evidence recorded out of order is
+        labelled late_arrival. Gaps are explicit (not_retained,
+        retention_expired, source_unavailable, before_first_observation) and
+        never interpolated. No raw payload, log, prompt or provider response is
+        carried. The window may span at most 24 hours; from and to are required
+        UTC instants with from earlier than to and to not in the future; cursor
+        is the opaque next_cursor of the previous page; any other query
+        parameter is a 400 VALIDATION_ERROR. An invalid page fails closed with
+        500 MISSION_CONTROL_REPLAY_INVALID.
+      operationId: omesReadMissionControlReplay
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Window start, a UTC instant (2026-10-02T07:00:00Z).
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+        - name: to
+          in: query
+          required: true
+          description: >-
+            Window end (inclusive), a UTC instant; at most 24 hours after from,
+            and not in the future.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+        - name: cursor
+          in: query
+          required: false
+          description: The opaque next_cursor of the previous page of the same window.
+          schema:
+            type: string
+            maxLength: 256
+            pattern: "^[A-Za-z0-9_-]+$"
+      responses:
+        "200":
+          description: One replay page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/omes/mission-control/actions:
+    get:
+      tags:
+        - OMES Control Center
+      summary: Read the advisory action availability of one Mission Control object (ahliweb/omes#267)
+      description: >-
+        ADVISORY ONLY - this endpoint authorizes nothing. Every action it lists
+        is a shortcut to an EXISTING endpoint (POST /api/v1/omes/operations,
+        POST /api/v1/omes/jobs/{id}/cancel, POST /api/v1/omes/jobs/{id}/approve,
+        POST /api/v1/omes/backups/{id}/restore, or a link to the canonical
+        /admin/approvals inbox), and each of those re-authorizes, rate-limits,
+        applies the destructive-workflow gate, audits and enforces
+        idempotency on its own; a forged direct POST without the permission is
+        still a 403. The answer only tells the UI which buttons to enable and
+        why a disabled one is disabled. Gated by omes_control.servers.read
+        (the workspace gate); the target is read only if the viewer also holds
+        its source's own read permission. An unknown id, another tenant's id
+        and an object in a source the viewer may not read are indistinguishable
+        (every action reason "not_found"). Per action: "available" mirrors
+        exactly what the existing endpoint enforces (job cancel only while
+        queued, requeue only while failed, plus the viewer's permission);
+        "advisories" (target_stale, target_decommissioned,
+        backup_not_verified) are non-blocking warnings the endpoints do not
+        enforce, shown in the preflight summary. "requires_approval" is true
+        for stop, rollback and backup restore (workflow
+        omes_control.destructive_operation). "body" is present for operation.*
+        actions and is exactly what the Operations screen sends. Strict query
+        validation: kind must be a Mission Control kind, id must match
+        ^[A-Za-z0-9_.:-]{1,128}$, and any other parameter (command, shell,
+        target, url, ...) is a 400 VALIDATION_ERROR. No new permission,
+        operation name, table or executor.
+      operationId: omesReadMissionControlActions
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - server
+              - deployment
+              - job
+              - health_report
+              - backup
+              - hermes_subagent
+              - architecture_plane
+              - capability
+              - repository_milestone
+              - ai_privacy_posture
+              - approval_item
+        - name: id
+          in: query
+          required: true
+          description: The scene node's source_id.
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_.:-]{1,128}$"
+      responses:
+        "200":
+          description: Advisory availability for exactly the kind's candidate actions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      actions:
+                        type: object
+                        properties:
+                          kind:
+                            type: string
+                          source_id:
+                            type: string
+                          advisory:
+                            type: boolean
+                            enum: [true]
+                          actions:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                action:
+                                  type: string
+                                available:
+                                  type: boolean
+                                reason:
+                                  type: string
+                                  enum:
+                                    - available
+                                    - permission_denied
+                                    - state_not_eligible
+                                    - not_found
+                                    - historical_mode
+                                requires_approval:
+                                  type: boolean
+                                mutating:
+                                  type: boolean
+                                method:
+                                  type: string
+                                  enum: [GET, POST]
+                                path:
+                                  type: string
+                                advisories:
+                                  type: array
+                                  items:
+                                    type: string
+                                    enum:
+                                      - target_stale
+                                      - target_decommissioned
+                                      - backup_not_verified
+                                body:
+                                  type: object
+                                  properties:
+                                    serverId:
+                                      type: string
+                                    operation:
+                                      type: string
+                                    deploymentId:
+                                      type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/omes/servers:
     get:
       tags:

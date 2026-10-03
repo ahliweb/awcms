@@ -394,7 +394,7 @@
       "authority": "provider",
       "execution_semantics": "external_authority",
       "id": "provider.github.repository_progress",
-      "implementation_status": "staged",
+      "implementation_status": "delegated_upstream",
       "name": "GitHub Repository Milestone and Issue Progress Projection (Progres Hermes view)",
       "omes_module": null,
       "plane": "business_control",
@@ -413,7 +413,7 @@
   ],
   "generated_at": "2026-01-01T00:00:00Z",
   "omes_commit": "0000000000000000000000000000000000000000",
-  "omes_version": "0.5.0",
+  "omes_version": "0.6.0",
   "planes": [
     {
       "execution_semantics": "external_authority",

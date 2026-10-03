@@ -5989,3 +5989,408 @@ msgstr "Kode alasan diperlukan untuk menolak atau menandai spam."
 msgid "Anonymous"
 msgstr "Anonim"
 
+
+#. Mission Control 3D workspace (ahliweb/omes#265, ADR-0031)
+msgid "OMES Mission Control"
+msgstr "Mission Control OMES"
+
+msgid "Health report"
+msgstr "Laporan kesehatan"
+
+msgid "Hermes subagent"
+msgstr "Subagent Hermes"
+
+msgid "Architecture plane"
+msgstr "Bidang arsitektur"
+
+msgid "Capability"
+msgstr "Kapabilitas"
+
+msgid "Repository milestone"
+msgstr "Milestone repositori"
+
+msgid "Approval item"
+msgstr "Item persetujuan"
+
+msgid "Agents"
+msgstr "Agen"
+
+msgid "Infrastructure"
+msgstr "Infrastruktur"
+
+msgid "Governance"
+msgstr "Tata kelola"
+
+msgid "AI privacy"
+msgstr "Privasi AI"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Informational"
+msgstr "Informasional"
+
+msgid "Live"
+msgstr "Langsung"
+
+msgid "Server inventory"
+msgstr "Inventaris server"
+
+msgid "Deployment view"
+msgstr "Tampilan deployment"
+
+msgid "Job status"
+msgstr "Status job"
+
+msgid "Health readiness"
+msgstr "Kesiapan kesehatan"
+
+msgid "Backup status"
+msgstr "Status backup"
+
+msgid "Hermes orchestration"
+msgstr "Orkestrasi Hermes"
+
+msgid "Architecture view"
+msgstr "Tampilan arsitektur"
+
+msgid "Repository progress"
+msgstr "Progres repositori"
+
+msgid "Workflow approvals"
+msgstr "Persetujuan alur kerja"
+
+msgid "Available"
+msgstr "Tersedia"
+
+msgid "Unavailable"
+msgstr "Tidak tersedia"
+
+msgid "OMES"
+msgstr "OMES"
+
+msgid "AWCMS"
+msgstr "AWCMS"
+
+msgid "Open details"
+msgstr "Buka detail"
+
+msgid "Open details for {name}"
+msgstr "Buka detail untuk {name}"
+
+msgid "Observed {time}"
+msgstr "Diamati {time}"
+
+msgid "Not observed"
+msgstr "Belum diamati"
+
+msgid "As of {time}"
+msgstr "Per {time}"
+
+msgid "{shown} of {total} objects shown"
+msgstr "{shown} dari {total} objek ditampilkan"
+
+msgid "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list."
+msgstr "{count} objek tidak ditampilkan agar tampilan ini tetap terbatas. Gunakan layar kanonis untuk daftar lengkapnya."
+
+msgid "Could not refresh the scene — showing the last known state, which may be out of date."
+msgstr "Tidak dapat menyegarkan adegan — menampilkan keadaan terakhir yang diketahui, yang mungkin sudah usang."
+
+msgid "The 3D view is unavailable in this browser. The object list below shows the same information."
+msgstr "Tampilan 3D tidak tersedia di peramban ini. Daftar objek di bawah menampilkan informasi yang sama."
+
+msgid "Mission Control"
+msgstr "Mission Control"
+
+msgid "A read-only 3D view of OMES, Hermes and approval state, composed from the existing screens. The object list is the full, accessible equivalent."
+msgstr "Tampilan 3D baca saja untuk status OMES, Hermes, dan persetujuan, disusun dari layar yang sudah ada. Daftar objek adalah padanan lengkap yang dapat diakses."
+
+msgid "You do not have permission to view Mission Control."
+msgstr "Anda tidak memiliki izin untuk melihat Mission Control."
+
+msgid "Mission Control could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr "Mission Control tidak dapat dimuat saat ini. Ini adalah masalah membacanya, bukan keheningan yang sehat — silakan coba lagi nanti."
+
+msgid "Additional workspace — the canonical details stay on the existing OMES screens. Every object links back to its screen."
+msgstr "Ruang kerja tambahan — detail kanonis tetap berada di layar OMES yang sudah ada. Setiap objek tertaut kembali ke layarnya."
+
+msgid "Live view"
+msgstr "Tampilan langsung"
+
+msgid "Historical view"
+msgstr "Tampilan historis"
+
+msgid "Sources"
+msgstr "Sumber"
+
+msgid "Mission Control filters"
+msgstr "Filter Mission Control"
+
+msgid "Zone"
+msgstr "Zona"
+
+msgid "All zones"
+msgstr "Semua zona"
+
+msgid "All states"
+msgstr "Semua status"
+
+msgid "Reset view"
+msgstr "Atur ulang tampilan"
+
+msgid "Objects by zone"
+msgstr "Objek menurut zona"
+
+msgid "No objects to show"
+msgstr "Tidak ada objek untuk ditampilkan"
+
+msgid "An empty scene is not a healthy scene — check the source status above. Sources you cannot read are omitted."
+msgstr "Adegan kosong bukan berarti adegan yang sehat — periksa status sumber di atas. Sumber yang tidak dapat Anda baca dihilangkan."
+
+msgid "Selected object"
+msgstr "Objek terpilih"
+
+msgid "Select an object from the list or the scene to see its details."
+msgstr "Pilih objek dari daftar atau adegan untuk melihat detailnya."
+
+msgid "Source status"
+msgstr "Status sumber"
+
+msgid "Source id"
+msgstr "ID sumber"
+
+msgid "Source state"
+msgstr "Keadaan sumber"
+
+msgid "Visual state"
+msgstr "Status visual"
+
+msgid "Freshness"
+msgstr "Kesegaran"
+
+msgid "Observed at"
+msgstr "Diamati pada"
+
+msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
+msgstr "Seret untuk memutar dan gulir untuk memperbesar tampilan 3D. Papan ketik: tombol panah berpindah di daftar, Enter memilih objek, Escape membatalkan pilihan, 0 mengatur ulang tampilan."
+
+#. Mission Control historical replay (ahliweb/omes#266, ADR-0031)
+msgid "Choose a start before the end, no more than 24 hours apart, and not in the future."
+msgstr "Pilih awal sebelum akhir, selisih paling lama 24 jam, dan tidak di masa depan."
+
+msgid "Could not load the history for this range."
+msgstr "Riwayat untuk rentang ini tidak dapat dimuat."
+
+msgid "Could not load the scene for this time. Still showing the scene as of {time}."
+msgstr "Adegan untuk waktu ini tidak dapat dimuat. Masih menampilkan adegan per {time}."
+
+msgid "Event {n} of {total} — {time}"
+msgstr "Peristiwa {n} dari {total} — {time}"
+
+msgid "Evidence gaps"
+msgstr "Celah bukti"
+
+msgid "Historical view. Showing recorded evidence as of {time}, not live state."
+msgstr "Tampilan historis. Menampilkan bukti tercatat per {time}, bukan keadaan langsung."
+
+msgid "Historical — {time}"
+msgstr "Historis — {time}"
+
+msgid "History is unavailable right now. Showing the live view."
+msgstr "Riwayat tidak tersedia saat ini. Menampilkan tampilan langsung."
+
+msgid "History replay"
+msgstr "Pemutaran ulang riwayat"
+
+msgid "Late arrival"
+msgstr "Datang terlambat"
+
+msgid "Live view resumed. Showing current state."
+msgstr "Tampilan langsung dilanjutkan. Menampilkan keadaan saat ini."
+
+msgid "Load range"
+msgstr "Muat rentang"
+
+msgid "No evidence gaps were reported for this range."
+msgstr "Tidak ada celah bukti yang dilaporkan untuk rentang ini."
+
+msgid "No evidence was retained in this range."
+msgstr "Tidak ada bukti yang tersimpan pada rentang ini."
+
+msgid "Observed events"
+msgstr "Peristiwa teramati"
+
+msgid "Play"
+msgstr "Putar"
+
+msgid "Replay controls"
+msgstr "Kontrol pemutaran ulang"
+
+msgid "Replay range"
+msgstr "Rentang pemutaran ulang"
+
+msgid "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+msgstr "Hanya memutar ulang bukti yang tercatat, paling lama 24 jam sekali putar. Objek yang sumbernya tidak menyimpan riwayat ditampilkan sebagai tidak diketahui, dan celah didaftarkan, bukan diisi. Tidak ada aksi di mode Riwayat."
+
+msgid "Return to live"
+msgstr "Kembali ke langsung"
+
+msgid "Showing the first {count} events. Narrow the range to see the rest."
+msgstr "Menampilkan {count} peristiwa pertama. Persempit rentang untuk melihat sisanya."
+
+msgid "Speed"
+msgstr "Kecepatan"
+
+msgid "Step back"
+msgstr "Mundur satu langkah"
+
+msgid "Step forward"
+msgstr "Maju satu langkah"
+
+msgid "Timeline"
+msgstr "Lini masa"
+
+msgid "View mode"
+msgstr "Mode tampilan"
+
+msgid "Window start"
+msgstr "Awal rentang"
+
+msgid "before the first retained observation"
+msgstr "sebelum pengamatan pertama yang tersimpan"
+
+msgid "not retained: only current state exists"
+msgstr "tidak disimpan: hanya keadaan saat ini yang ada"
+
+msgid "retention expired: older evidence was purged"
+msgstr "retensi habis: bukti yang lebih lama telah dihapus"
+
+msgid "source unavailable to you or unreadable"
+msgstr "sumber tidak tersedia untuk Anda atau tidak dapat dibaca"
+
+msgid "{source} — {reason} ({from} to {to})"
+msgstr "{source} — {reason} ({from} sampai {to})"
+
+#. Mission Control contextual actions and command palette items (ahliweb/omes#267, ADR-0031)
+msgid "Request status check"
+msgstr "Minta pemeriksaan status"
+
+msgid "Request preflight check"
+msgstr "Minta pemeriksaan preflight"
+
+msgid "Request start"
+msgstr "Minta mulai"
+
+msgid "Request stop"
+msgstr "Minta hentikan"
+
+msgid "Request restart"
+msgstr "Minta mulai ulang"
+
+msgid "Request update"
+msgstr "Minta pembaruan"
+
+msgid "Request backup"
+msgstr "Minta pencadangan"
+
+msgid "Request rollback"
+msgstr "Minta rollback"
+
+msgid "Cancel queued job"
+msgstr "Batalkan job dalam antrean"
+
+msgid "Approve failed job for retry"
+msgstr "Setujui job gagal untuk dicoba ulang"
+
+msgid "Request restore from this backup"
+msgstr "Minta pemulihan dari cadangan ini"
+
+msgid "Open in approval inbox"
+msgstr "Buka di kotak masuk persetujuan"
+
+msgid "You do not hold the permission this action needs."
+msgstr "Anda tidak memiliki izin yang dibutuhkan aksi ini."
+
+msgid "The object's current state does not allow this action."
+msgstr "Status objek saat ini tidak mengizinkan aksi ini."
+
+msgid "The object could not be found."
+msgstr "Objek tidak ditemukan."
+
+msgid "Not available in History."
+msgstr "Tidak tersedia di Riwayat."
+
+msgid "The target's last report is stale, so its current state is not confirmed. The request is still allowed."
+msgstr "Laporan terakhir target sudah basi, sehingga status saat ini belum terkonfirmasi. Permintaan tetap diizinkan."
+
+msgid "The target server is decommissioned. The request is still allowed."
+msgstr "Server target sudah dinonaktifkan. Permintaan tetap diizinkan."
+
+msgid "This backup is not marked completed or verified. The request is still allowed."
+msgstr "Cadangan ini belum ditandai selesai atau terverifikasi. Permintaan tetap diizinkan."
+
+msgid "Checking available actions…"
+msgstr "Memeriksa aksi yang tersedia…"
+
+msgid "Actions are unavailable right now. Use the canonical screen instead."
+msgstr "Aksi tidak tersedia saat ini. Gunakan layar kanonis sebagai gantinya."
+
+msgid "No actions for this object."
+msgstr "Tidak ada aksi untuk objek ini."
+
+msgid "Approval required"
+msgstr "Perlu persetujuan"
+
+msgid "Review before sending"
+msgstr "Tinjau sebelum mengirim"
+
+msgid "Permission"
+msgstr "Izin"
+
+msgid "Allowed for you (the server checks again when you send)"
+msgstr "Diizinkan untuk Anda (server memeriksa lagi saat Anda mengirim)"
+
+msgid "Required — nothing runs until a workflow decision is approved in the approval inbox"
+msgstr "Wajib — tidak ada yang berjalan sampai keputusan alur kerja disetujui di kotak masuk persetujuan"
+
+msgid "Not required"
+msgstr "Tidak diperlukan"
+
+msgid "Existing endpoint"
+msgstr "Endpoint yang sudah ada"
+
+msgid "Idempotency-Key"
+msgstr "Idempotency-Key"
+
+msgid "Send request"
+msgstr "Kirim permintaan"
+
+msgid "Sending…"
+msgstr "Mengirim…"
+
+msgid "Send “{action}” for {target}? The server checks permission and approval again, and the outcome is not verified until the next refresh."
+msgstr "Kirim “{action}” untuk {target}? Server memeriksa izin dan persetujuan lagi, dan hasilnya belum terverifikasi sampai penyegaran berikutnya."
+
+msgid "Accepted — pending verification."
+msgstr "Diterima — menunggu verifikasi."
+
+msgid "Approval required — a workflow decision is pending in the approval inbox."
+msgstr "Perlu persetujuan — keputusan alur kerja menunggu di kotak masuk persetujuan."
+
+msgid "Approval required, but this tenant has no active destructive-operation approval workflow. Nothing was recorded."
+msgstr "Perlu persetujuan, tetapi tenant ini tidak memiliki alur kerja persetujuan operasi destruktif yang aktif. Tidak ada yang dicatat."
+
+msgid "Rejected by the server (HTTP {status}, {code}). Nothing was changed."
+msgstr "Ditolak oleh server (HTTP {status}, {code}). Tidak ada yang diubah."
+
+msgid "Outcome unknown — check Operations (or Jobs, Backups) before retrying. A retry reuses the same Idempotency-Key, so it cannot duplicate a request the server already recorded."
+msgstr "Hasil tidak diketahui — periksa Operasi (atau Job, Cadangan) sebelum mencoba lagi. Percobaan ulang memakai Idempotency-Key yang sama, sehingga tidak dapat menggandakan permintaan yang sudah dicatat server."
+
+msgid "Open the record"
+msgstr "Buka rekaman"
+
+msgid "Open approval inbox"
+msgstr "Buka kotak masuk persetujuan"
+
+msgid "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
+msgstr "Ketersediaan bersifat saran: endpoint yang sudah ada memeriksa izin, persetujuan, dan status lagi saat Anda mengirim. Keputusan persetujuan hanya dibuat di kotak masuk persetujuan."

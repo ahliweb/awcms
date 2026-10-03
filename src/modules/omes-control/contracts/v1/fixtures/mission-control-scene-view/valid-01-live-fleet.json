@@ -1,0 +1,305 @@
+{
+  "schema_version": "1.0.0",
+  "source_map_version": "1.0.0",
+  "tenant_id": "tenant-demo-01",
+  "generated_at": "2026-10-02T08:00:00Z",
+  "mode": "live",
+  "as_of": "2026-10-02T08:00:00Z",
+  "sources": [
+    {
+      "source_kind": "omes_server_inventory",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:55:00Z"
+    },
+    {
+      "source_kind": "omes_deployment_view",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:50:00Z"
+    },
+    {
+      "source_kind": "omes_job_status",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:58:00Z"
+    },
+    {
+      "source_kind": "omes_health_readiness",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T06:30:00Z"
+    },
+    {
+      "source_kind": "omes_backup_status",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T06:00:00Z"
+    },
+    {
+      "source_kind": "hermes_orchestration_tree",
+      "authority": "hermes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:59:00Z"
+    },
+    {
+      "source_kind": "omes_architecture_capabilities_view",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T00:00:00Z"
+    },
+    {
+      "source_kind": "github_repository_progress_view",
+      "authority": "provider",
+      "status": "stale",
+      "observed_at": "2026-10-01T20:00:00Z"
+    },
+    {
+      "source_kind": "omes_ai_privacy_posture_view",
+      "authority": "omes",
+      "status": "available",
+      "observed_at": "2026-10-02T07:45:00Z"
+    },
+    {
+      "source_kind": "awcms_workflow_approval",
+      "authority": "awcms",
+      "status": "available",
+      "observed_at": "2026-10-02T07:30:00Z"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "n1",
+      "kind": "server",
+      "source_id": "srv-demo-01",
+      "label": "prod-primary",
+      "source_state": "online",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:55:00Z",
+      "detail_route": "/admin/omes/servers"
+    },
+    {
+      "node_id": "n2",
+      "kind": "server",
+      "source_id": "srv-demo-02",
+      "label": "prod-secondary",
+      "source_state": "degraded",
+      "visual_state": "warning",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:55:00Z",
+      "detail_route": "/admin/omes/servers"
+    },
+    {
+      "node_id": "n3",
+      "kind": "deployment",
+      "source_id": "deploy-demo-01",
+      "label": "deploy-demo-01",
+      "source_state": "converged",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:50:00Z",
+      "detail_route": "/admin/omes/deployments"
+    },
+    {
+      "node_id": "n4",
+      "kind": "job",
+      "source_id": "job-demo-01",
+      "label": "operation.status",
+      "source_state": "running",
+      "visual_state": "in_progress",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:58:00Z",
+      "detail_route": "/admin/omes/jobs"
+    },
+    {
+      "node_id": "n5",
+      "kind": "job",
+      "source_id": "job-demo-02",
+      "label": "operation.update",
+      "source_state": "failed",
+      "visual_state": "failed",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:58:00Z",
+      "detail_route": "/admin/omes/jobs"
+    },
+    {
+      "node_id": "n6",
+      "kind": "health_report",
+      "source_id": "srv-demo-01",
+      "label": "srv-demo-01",
+      "source_state": "healthy",
+      "visual_state": "stale",
+      "freshness": "stale",
+      "observed_at": "2026-10-02T06:30:00Z",
+      "detail_route": "/admin/omes/health"
+    },
+    {
+      "node_id": "n7",
+      "kind": "backup",
+      "source_id": "backup-demo-01",
+      "label": "backup-demo-01",
+      "source_state": "verified",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-02T06:00:00Z",
+      "detail_route": "/admin/omes/backups"
+    },
+    {
+      "node_id": "n8",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-root-01",
+      "label": "RootAgent",
+      "source_state": "RUNNING",
+      "visual_state": "in_progress",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:59:00Z",
+      "detail_route": "/admin/omes/orkestrasi-langsung",
+      "summary": "Root agent orchestrating deployment workflow"
+    },
+    {
+      "node_id": "n9",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-child-01",
+      "label": "DeploymentWorker",
+      "source_state": "SUCCEEDED",
+      "visual_state": "ok",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:59:00Z",
+      "detail_route": "/admin/omes/orkestrasi-langsung",
+      "summary": "Deployment verification completed successfully"
+    },
+    {
+      "node_id": "n10",
+      "kind": "hermes_subagent",
+      "source_id": "subagent-child-02",
+      "label": "HealthChecker",
+      "source_state": "UNKNOWN",
+      "visual_state": "unknown",
+      "freshness": "live",
+      "observed_at": null,
+      "detail_route": "/admin/omes/orkestrasi-langsung"
+    },
+    {
+      "node_id": "n11",
+      "kind": "architecture_plane",
+      "source_id": "plane-host-control",
+      "label": "Host Control",
+      "source_state": "deterministic",
+      "visual_state": "informational",
+      "freshness": "live",
+      "observed_at": "2026-10-02T00:00:00Z",
+      "detail_route": "/admin/omes/arsitektur"
+    },
+    {
+      "node_id": "n12",
+      "kind": "capability",
+      "source_id": "cap-preflight",
+      "label": "Preflight Validation",
+      "source_state": "implemented",
+      "visual_state": "informational",
+      "freshness": "live",
+      "observed_at": "2026-10-02T00:00:00Z",
+      "detail_route": "/admin/omes/arsitektur"
+    },
+    {
+      "node_id": "n13",
+      "kind": "repository_milestone",
+      "source_id": "5",
+      "label": "Control Center and Entitlements",
+      "source_state": "open",
+      "visual_state": "stale",
+      "freshness": "stale",
+      "observed_at": "2026-10-01T20:00:00Z",
+      "detail_route": "/admin/omes/progres-hermes"
+    },
+    {
+      "node_id": "n14",
+      "kind": "ai_privacy_posture",
+      "source_id": "srv-demo-02",
+      "label": "srv-demo-02",
+      "source_state": "WARN",
+      "visual_state": "warning",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:45:00Z",
+      "detail_route": "/admin/omes/ai-privacy"
+    },
+    {
+      "node_id": "n15",
+      "kind": "approval_item",
+      "source_id": "workflow-inst-001",
+      "label": "operation.stop",
+      "source_state": "pending",
+      "visual_state": "pending",
+      "freshness": "live",
+      "observed_at": "2026-10-02T07:30:00Z",
+      "detail_route": "/admin/approvals"
+    }
+  ],
+  "relations": [
+    {
+      "from": "n1",
+      "to": "n3",
+      "relation": "hosts"
+    },
+    {
+      "from": "n4",
+      "to": "n1",
+      "relation": "targets"
+    },
+    {
+      "from": "n4",
+      "to": "n3",
+      "relation": "targets"
+    },
+    {
+      "from": "n5",
+      "to": "n2",
+      "relation": "targets"
+    },
+    {
+      "from": "n6",
+      "to": "n1",
+      "relation": "describes"
+    },
+    {
+      "from": "n7",
+      "to": "n1",
+      "relation": "protects"
+    },
+    {
+      "from": "n8",
+      "to": "n9",
+      "relation": "delegates_to"
+    },
+    {
+      "from": "n8",
+      "to": "n10",
+      "relation": "delegates_to"
+    },
+    {
+      "from": "n8",
+      "to": "n1",
+      "relation": "observed_on"
+    },
+    {
+      "from": "n14",
+      "to": "n2",
+      "relation": "observed_on"
+    },
+    {
+      "from": "n12",
+      "to": "n11",
+      "relation": "member_of"
+    },
+    {
+      "from": "n15",
+      "to": "n3",
+      "relation": "awaits_decision_for"
+    }
+  ],
+  "truncated": {
+    "nodes": 0,
+    "relations": 0
+  }
+}

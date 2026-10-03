@@ -6001,3 +6001,408 @@ msgstr ""
 msgid "Anonymous"
 msgstr ""
 
+
+#. Mission Control 3D workspace (ahliweb/omes#265, ADR-0031)
+msgid "OMES Mission Control"
+msgstr ""
+
+msgid "Health report"
+msgstr ""
+
+msgid "Hermes subagent"
+msgstr ""
+
+msgid "Architecture plane"
+msgstr ""
+
+msgid "Capability"
+msgstr ""
+
+msgid "Repository milestone"
+msgstr ""
+
+msgid "Approval item"
+msgstr ""
+
+msgid "Agents"
+msgstr ""
+
+msgid "Infrastructure"
+msgstr ""
+
+msgid "Governance"
+msgstr ""
+
+msgid "AI privacy"
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Informational"
+msgstr ""
+
+msgid "Live"
+msgstr ""
+
+msgid "Server inventory"
+msgstr ""
+
+msgid "Deployment view"
+msgstr ""
+
+msgid "Job status"
+msgstr ""
+
+msgid "Health readiness"
+msgstr ""
+
+msgid "Backup status"
+msgstr ""
+
+msgid "Hermes orchestration"
+msgstr ""
+
+msgid "Architecture view"
+msgstr ""
+
+msgid "Repository progress"
+msgstr ""
+
+msgid "Workflow approvals"
+msgstr ""
+
+msgid "Available"
+msgstr ""
+
+msgid "Unavailable"
+msgstr ""
+
+msgid "OMES"
+msgstr ""
+
+msgid "AWCMS"
+msgstr ""
+
+msgid "Open details"
+msgstr ""
+
+msgid "Open details for {name}"
+msgstr ""
+
+msgid "Observed {time}"
+msgstr ""
+
+msgid "Not observed"
+msgstr ""
+
+msgid "As of {time}"
+msgstr ""
+
+msgid "{shown} of {total} objects shown"
+msgstr ""
+
+msgid "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list."
+msgstr ""
+
+msgid "Could not refresh the scene — showing the last known state, which may be out of date."
+msgstr ""
+
+msgid "The 3D view is unavailable in this browser. The object list below shows the same information."
+msgstr ""
+
+msgid "Mission Control"
+msgstr ""
+
+msgid "A read-only 3D view of OMES, Hermes and approval state, composed from the existing screens. The object list is the full, accessible equivalent."
+msgstr ""
+
+msgid "You do not have permission to view Mission Control."
+msgstr ""
+
+msgid "Mission Control could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+msgstr ""
+
+msgid "Additional workspace — the canonical details stay on the existing OMES screens. Every object links back to its screen."
+msgstr ""
+
+msgid "Live view"
+msgstr ""
+
+msgid "Historical view"
+msgstr ""
+
+msgid "Sources"
+msgstr ""
+
+msgid "Mission Control filters"
+msgstr ""
+
+msgid "Zone"
+msgstr ""
+
+msgid "All zones"
+msgstr ""
+
+msgid "All states"
+msgstr ""
+
+msgid "Reset view"
+msgstr ""
+
+msgid "Objects by zone"
+msgstr ""
+
+msgid "No objects to show"
+msgstr ""
+
+msgid "An empty scene is not a healthy scene — check the source status above. Sources you cannot read are omitted."
+msgstr ""
+
+msgid "Selected object"
+msgstr ""
+
+msgid "Select an object from the list or the scene to see its details."
+msgstr ""
+
+msgid "Source status"
+msgstr ""
+
+msgid "Source id"
+msgstr ""
+
+msgid "Source state"
+msgstr ""
+
+msgid "Visual state"
+msgstr ""
+
+msgid "Freshness"
+msgstr ""
+
+msgid "Observed at"
+msgstr ""
+
+msgid "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
+msgstr ""
+
+#. Mission Control historical replay (ahliweb/omes#266, ADR-0031)
+msgid "Choose a start before the end, no more than 24 hours apart, and not in the future."
+msgstr ""
+
+msgid "Could not load the history for this range."
+msgstr ""
+
+msgid "Could not load the scene for this time. Still showing the scene as of {time}."
+msgstr ""
+
+msgid "Event {n} of {total} — {time}"
+msgstr ""
+
+msgid "Evidence gaps"
+msgstr ""
+
+msgid "Historical view. Showing recorded evidence as of {time}, not live state."
+msgstr ""
+
+msgid "Historical — {time}"
+msgstr ""
+
+msgid "History is unavailable right now. Showing the live view."
+msgstr ""
+
+msgid "History replay"
+msgstr ""
+
+msgid "Late arrival"
+msgstr ""
+
+msgid "Live view resumed. Showing current state."
+msgstr ""
+
+msgid "Load range"
+msgstr ""
+
+msgid "No evidence gaps were reported for this range."
+msgstr ""
+
+msgid "No evidence was retained in this range."
+msgstr ""
+
+msgid "Observed events"
+msgstr ""
+
+msgid "Play"
+msgstr ""
+
+msgid "Replay controls"
+msgstr ""
+
+msgid "Replay range"
+msgstr ""
+
+msgid "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+msgstr ""
+
+msgid "Return to live"
+msgstr ""
+
+msgid "Showing the first {count} events. Narrow the range to see the rest."
+msgstr ""
+
+msgid "Speed"
+msgstr ""
+
+msgid "Step back"
+msgstr ""
+
+msgid "Step forward"
+msgstr ""
+
+msgid "Timeline"
+msgstr ""
+
+msgid "View mode"
+msgstr ""
+
+msgid "Window start"
+msgstr ""
+
+msgid "before the first retained observation"
+msgstr ""
+
+msgid "not retained: only current state exists"
+msgstr ""
+
+msgid "retention expired: older evidence was purged"
+msgstr ""
+
+msgid "source unavailable to you or unreadable"
+msgstr ""
+
+msgid "{source} — {reason} ({from} to {to})"
+msgstr ""
+
+#. Mission Control contextual actions and command palette items (ahliweb/omes#267, ADR-0031)
+msgid "Request status check"
+msgstr ""
+
+msgid "Request preflight check"
+msgstr ""
+
+msgid "Request start"
+msgstr ""
+
+msgid "Request stop"
+msgstr ""
+
+msgid "Request restart"
+msgstr ""
+
+msgid "Request update"
+msgstr ""
+
+msgid "Request backup"
+msgstr ""
+
+msgid "Request rollback"
+msgstr ""
+
+msgid "Cancel queued job"
+msgstr ""
+
+msgid "Approve failed job for retry"
+msgstr ""
+
+msgid "Request restore from this backup"
+msgstr ""
+
+msgid "Open in approval inbox"
+msgstr ""
+
+msgid "You do not hold the permission this action needs."
+msgstr ""
+
+msgid "The object's current state does not allow this action."
+msgstr ""
+
+msgid "The object could not be found."
+msgstr ""
+
+msgid "Not available in History."
+msgstr ""
+
+msgid "The target's last report is stale, so its current state is not confirmed. The request is still allowed."
+msgstr ""
+
+msgid "The target server is decommissioned. The request is still allowed."
+msgstr ""
+
+msgid "This backup is not marked completed or verified. The request is still allowed."
+msgstr ""
+
+msgid "Checking available actions…"
+msgstr ""
+
+msgid "Actions are unavailable right now. Use the canonical screen instead."
+msgstr ""
+
+msgid "No actions for this object."
+msgstr ""
+
+msgid "Approval required"
+msgstr ""
+
+msgid "Review before sending"
+msgstr ""
+
+msgid "Permission"
+msgstr ""
+
+msgid "Allowed for you (the server checks again when you send)"
+msgstr ""
+
+msgid "Required — nothing runs until a workflow decision is approved in the approval inbox"
+msgstr ""
+
+msgid "Not required"
+msgstr ""
+
+msgid "Existing endpoint"
+msgstr ""
+
+msgid "Idempotency-Key"
+msgstr ""
+
+msgid "Send request"
+msgstr ""
+
+msgid "Sending…"
+msgstr ""
+
+msgid "Send “{action}” for {target}? The server checks permission and approval again, and the outcome is not verified until the next refresh."
+msgstr ""
+
+msgid "Accepted — pending verification."
+msgstr ""
+
+msgid "Approval required — a workflow decision is pending in the approval inbox."
+msgstr ""
+
+msgid "Approval required, but this tenant has no active destructive-operation approval workflow. Nothing was recorded."
+msgstr ""
+
+msgid "Rejected by the server (HTTP {status}, {code}). Nothing was changed."
+msgstr ""
+
+msgid "Outcome unknown — check Operations (or Jobs, Backups) before retrying. A retry reuses the same Idempotency-Key, so it cannot duplicate a request the server already recorded."
+msgstr ""
+
+msgid "Open the record"
+msgstr ""
+
+msgid "Open approval inbox"
+msgstr ""
+
+msgid "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
+msgstr ""

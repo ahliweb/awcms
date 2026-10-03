@@ -1,0 +1,826 @@
+---
+/**
+ * OMES Control Center — "Mission Control" 3D workspace, Issue
+ * ahliweb/omes#265 (epic ahliweb/omes#263; contract ahliweb/omes#264,
+ * ADR-0031).
+ *
+ * ONE additional integrated workspace — it replaces none of the existing
+ * OMES screens. Every object is a reference (`kind` + the owning authority's
+ * own opaque id) to a record an existing screen already owns, and links back
+ * to that screen's canonical route. Nothing here is an authority, a mission,
+ * or a new lifecycle: the scene is composed per request from the existing
+ * directories (`application/mission-control-directory.ts`) and validated
+ * against the vendored scene-view schema.
+ *
+ * ## Guarded by `omes_control.servers.read` — the Overview's permission
+ *
+ * No new permission. Each SOURCE is additionally included only when the viewer
+ * can read it; an unreadable source is reported `unavailable` and its objects
+ * are omitted, never shown empty-and-healthy.
+ *
+ * ## The accessible object list is the canonical view
+ *
+ * The 3D canvas is a decorative mirror (`aria-hidden`) of the server-rendered
+ * list below it, which works with JavaScript disabled and with no WebGL.
+ * Labels and summaries are UNTRUSTED text: Astro escapes them here, and the
+ * client writes them with `textContent` only.
+ *
+ * ## Why the scene travels in a data ATTRIBUTE, not a JSON data island
+ *
+ * A `<script type="application/json">` island would need `set:html` (Astro does
+ * not evaluate `{}` inside `<script>`), and this repo bans `set:html` on
+ * anything carrying data. `build:inline-scripts:check` only inspects hoisted
+ * scripts, so the island would pass it — but a `data-scene` attribute needs no
+ * exception at all, is escaped by Astro like every other attribute, follows the
+ * `data-state-labels` precedent on `orkestrasi-langsung.astro`, and is not a
+ * script for the CSP to reason about.
+ *
+ * ## History mode (ahliweb/omes#266)
+ *
+ * The SAME page carries a Live/History switch, a bounded range (24 h at most),
+ * playback controls, an evidence-gap list and a synchronized, accessible event
+ * list. Every control is rendered here, hidden, and only revealed by the page
+ * script; the replay logic itself is a separate chunk (`replay.ts`) that is
+ * `import()`ed the first time History is entered. A persistent banner reading
+ * "Historical — <as_of>" and a polite live region announce the mode change, and
+ * History exposes no actions. The server always renders the LIVE scene; History
+ * is client-driven from `GET .../replay` and `GET .../scene?as_of=`, and its
+ * range lives in the URL (`?mode=history&from=&to=&at=`, validated).
+ *
+ * ## Contextual actions (ahliweb/omes#267)
+ *
+ * Selecting an object in LIVE mode shows its existing-endpoint actions in the
+ * HUD (`data-hud-actions`, rendered empty and hidden here; the buttons are
+ * created by the lazily-loaded `actions.ts`). They are shortcuts to the
+ * EXISTING operation / job / backup endpoints with the same `Idempotency-Key`,
+ * audit and workflow approval; availability comes from the ADVISORY
+ * `GET /api/v1/omes/mission-control/actions`, and approval decisions stay in
+ * `/admin/approvals`. This page carries no form and sends no mutation itself;
+ * History mode shows no actions. The object-list buttons and Open-details
+ * links are marked `data-command-palette-item` so the existing command palette
+ * (Ctrl/Cmd+K) can jump to them — no new dialog, syntax or command language.
+ * Unavailable/stale/unknown is never rendered as healthy.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import "../../../styles/omes-control-center.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { composeMissionControlSceneForViewer } from "../../../modules/omes-control/application/mission-control-directory";
+import {
+  MISSION_CONTROL_VISUAL_STATES,
+  MISSION_CONTROL_ZONES,
+  type MissionControlKind,
+  type MissionControlSourceKind,
+  type MissionControlVisualState,
+  type MissionControlZone
+} from "../../../modules/omes-control/domain/mission-control-types";
+import {
+  KIND_ZONE,
+  VISUAL_STATE_TONE,
+  isSafeDetailRoute
+} from "../../../lib/ui/mission-control/vocab";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+// Inlined as a literal `AccessRequest` object shape (matching
+// `OMES_GUARDS.servers.read` byte-for-byte) rather than the `OMES_GUARDS`
+// reference itself — see `ai-privacy.astro`'s comment on why
+// `scripts/admin-screen-coverage-check.ts` requires this literal pattern.
+const SERVERS_READ_GUARD = {
+  moduleKey: "omes_control",
+  activityCode: "servers",
+  action: "read"
+} as const;
+
+const KIND_LABEL: Record<MissionControlKind, string> = {
+  server: t("Server"),
+  deployment: t("Deployment"),
+  job: t("Job"),
+  health_report: t("Health report"),
+  backup: t("Backup"),
+  hermes_subagent: t("Hermes subagent"),
+  architecture_plane: t("Architecture plane"),
+  capability: t("Capability"),
+  repository_milestone: t("Repository milestone"),
+  ai_privacy_posture: t("AI privacy posture"),
+  approval_item: t("Approval item")
+};
+
+const ZONE_LABEL: Record<MissionControlZone, string> = {
+  agents: t("Agents"),
+  infrastructure: t("Infrastructure"),
+  operations: t("Operations"),
+  governance: t("Governance"),
+  architecture: t("Architecture"),
+  repository: t("Repository"),
+  ai_privacy: t("AI privacy")
+};
+
+/** The text that carries a visual state — colour is never the only signal. */
+const STATE_LABEL: Record<MissionControlVisualState, string> = {
+  ok: t("OK"),
+  in_progress: t("In progress"),
+  pending: t("Pending"),
+  warning: t("Warning"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled"),
+  informational: t("Informational"),
+  stale: t("Stale"),
+  unknown: t("Unknown")
+};
+
+const FRESHNESS_LABEL: Record<string, string> = {
+  live: t("Live"),
+  stale: t("Stale"),
+  unknown: t("Unknown")
+};
+
+const SOURCE_LABEL: Record<MissionControlSourceKind, string> = {
+  omes_server_inventory: t("Server inventory"),
+  omes_deployment_view: t("Deployment view"),
+  omes_job_status: t("Job status"),
+  omes_health_readiness: t("Health readiness"),
+  omes_backup_status: t("Backup status"),
+  hermes_orchestration_tree: t("Hermes orchestration"),
+  omes_architecture_capabilities_view: t("Architecture view"),
+  github_repository_progress_view: t("Repository progress"),
+  omes_ai_privacy_posture_view: t("AI privacy posture"),
+  awcms_workflow_approval: t("Workflow approvals")
+};
+
+const SOURCE_STATE_LABEL: Record<string, string> = {
+  available: t("Available"),
+  stale: t("Stale"),
+  unavailable: t("Unavailable")
+};
+
+const SOURCE_STATE_TONE: Record<string, string> = {
+  available: "success",
+  stale: "warning",
+  unavailable: "danger"
+};
+
+const AUTHORITY_LABEL: Record<string, string> = {
+  omes: t("OMES"),
+  hermes: t("Hermes"),
+  awcms: t("AWCMS"),
+  provider: t("Provider")
+};
+
+/**
+ * Every string the client renders, translated here — the browser module
+ * carries no English of its own. `{placeholders}` are filled client-side.
+ */
+const CLIENT_LABELS = {
+  kinds: KIND_LABEL,
+  zones: ZONE_LABEL,
+  states: STATE_LABEL,
+  freshness: FRESHNESS_LABEL,
+  sources: SOURCE_LABEL,
+  sourceStates: SOURCE_STATE_LABEL,
+  authority: AUTHORITY_LABEL,
+  ui: {
+    openDetails: t("Open details"),
+    openDetailsFor: t("Open details for {name}"),
+    observed: t("Observed {time}"),
+    notObserved: t("Not observed"),
+    asOf: t("As of {time}"),
+    shown: t("{shown} of {total} objects shown"),
+    truncated: t(
+      "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list."
+    ),
+    connectivity: t(
+      "Could not refresh the scene — showing the last known state, which may be out of date."
+    ),
+    fallback: t(
+      "The 3D view is unavailable in this browser. The object list below shows the same information."
+    ),
+    liveView: t("Live view"),
+    historicalView: t("Historical view"),
+    liveResumed: t("Live view resumed. Showing current state."),
+    historyUnavailable: t(
+      "History is unavailable right now. Showing the live view."
+    )
+  },
+  replay: {
+    banner: t("Historical — {time}"),
+    announceHistory: t(
+      "Historical view. Showing recorded evidence as of {time}, not live state."
+    ),
+    rangeInvalid: t(
+      "Choose a start before the end, no more than 24 hours apart, and not in the future."
+    ),
+    loadFailed: t("Could not load the history for this range."),
+    sceneFailed: t(
+      "Could not load the scene for this time. Still showing the scene as of {time}."
+    ),
+    noEvents: t("No evidence was retained in this range."),
+    windowStart: t("Window start"),
+    position: t("Event {n} of {total} — {time}"),
+    play: t("Play"),
+    pause: t("Pause"),
+    late: t("Late arrival"),
+    more: t(
+      "Showing the first {count} events. Narrow the range to see the rest."
+    ),
+    gapLine: t("{source} — {reason} ({from} to {to})"),
+    reason_not_retained: t("not retained: only current state exists"),
+    reason_retention_expired: t("retention expired: older evidence was purged"),
+    reason_source_unavailable: t("source unavailable to you or unreadable"),
+    reason_before_first_observation: t("before the first retained observation"),
+    noGaps: t("No evidence gaps were reported for this range.")
+  },
+  actions: {
+    names: {
+      "operation.status": t("Request status check"),
+      "operation.preflight": t("Request preflight check"),
+      "operation.start": t("Request start"),
+      "operation.stop": t("Request stop"),
+      "operation.restart": t("Request restart"),
+      "operation.update": t("Request update"),
+      "operation.backup": t("Request backup"),
+      "operation.rollback": t("Request rollback"),
+      "job.cancel": t("Cancel queued job"),
+      "job.requeue": t("Approve failed job for retry"),
+      "backup.restore": t("Request restore from this backup"),
+      "approval.open_in_inbox": t("Open in approval inbox")
+    },
+    reasons: {
+      permission_denied: t("You do not hold the permission this action needs."),
+      state_not_eligible: t(
+        "The object's current state does not allow this action."
+      ),
+      not_found: t("The object could not be found."),
+      historical_mode: t("Not available in History.")
+    },
+    advisories: {
+      target_stale: t(
+        "The target's last report is stale, so its current state is not confirmed. The request is still allowed."
+      ),
+      target_decommissioned: t(
+        "The target server is decommissioned. The request is still allowed."
+      ),
+      backup_not_verified: t(
+        "This backup is not marked completed or verified. The request is still allowed."
+      )
+    },
+    ui: {
+      loading: t("Checking available actions…"),
+      loadFailed: t(
+        "Actions are unavailable right now. Use the canonical screen instead."
+      ),
+      none: t("No actions for this object."),
+      approvalBadge: t("Approval required"),
+      preflight: t("Review before sending"),
+      operation: t("Operation"),
+      target: t("Target"),
+      permission: t("Permission"),
+      permissionOk: t(
+        "Allowed for you (the server checks again when you send)"
+      ),
+      approval: t("Approval"),
+      approvalYes: t(
+        "Required — nothing runs until a workflow decision is approved in the approval inbox"
+      ),
+      approvalNo: t("Not required"),
+      endpoint: t("Existing endpoint"),
+      key: t("Idempotency-Key"),
+      send: t("Send request"),
+      cancel: t("Cancel"),
+      sending: t("Sending…"),
+      confirm: t(
+        "Send “{action}” for {target}? The server checks permission and approval again, and the outcome is not verified until the next refresh."
+      ),
+      accepted: t("Accepted — pending verification."),
+      approval_required: t(
+        "Approval required — a workflow decision is pending in the approval inbox."
+      ),
+      approval_not_configured: t(
+        "Approval required, but this tenant has no active destructive-operation approval workflow. Nothing was recorded."
+      ),
+      rejected: t(
+        "Rejected by the server (HTTP {status}, {code}). Nothing was changed."
+      ),
+      unknown: t(
+        "Outcome unknown — check Operations (or Jobs, Backups) before retrying. A retry reuses the same Idempotency-Key, so it cannot duplicate a request the server already recorded."
+      ),
+      openRecord: t("Open the record"),
+      openInbox: t("Open approval inbox")
+    }
+  }
+};
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: SERVERS_READ_GUARD,
+  load: async ({ tx, can }) =>
+    composeMissionControlSceneForViewer({
+      tx,
+      tenantId: ssr.tenantId,
+      now: new Date(),
+      can
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/omes/mission-control.astro: failed to compose the Mission Control scene",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const scene = screen.state === "allowed" ? screen.data : null;
+
+// Unknown kinds are dropped (fail closed) — the client does the same.
+const nodes = (scene?.nodes ?? []).filter((node) =>
+  Object.hasOwn(KIND_ZONE, node.kind)
+);
+const zones = MISSION_CONTROL_ZONES.map((zone) => ({
+  zone,
+  nodes: nodes.filter((node) => KIND_ZONE[node.kind] === zone)
+})).filter((group) => group.nodes.length > 0);
+
+/** Only what the browser needs; the tenant id stays server-side. */
+const clientScene = scene
+  ? JSON.stringify({
+      mode: scene.mode,
+      as_of: scene.as_of,
+      sources: scene.sources,
+      nodes,
+      relations: scene.relations,
+      truncated: scene.truncated
+    })
+  : "";
+
+function observedText(value: string | null): string {
+  return value ? t("Observed {time}", { time: value }) : t("Not observed");
+}
+---
+
+<AdminLayout
+  title={t("Mission Control")}
+  description={t(
+    "A read-only 3D view of OMES, Hermes and approval state, composed from the existing screens. The object list is the full, accessible equivalent."
+  )}
+>
+  <div class="omes-cc">
+    {!canSeeAnything && (
+      <p class="state-notice fade-in-up" id="omes-mc-denied">
+        {t("You do not have permission to view Mission Control.")}
+      </p>
+    )}
+
+    {canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="omes-mc-error">
+        {t(
+          "Mission Control could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
+        )}
+      </p>
+    )}
+
+    {scene && (
+      <div
+        id="omes-mission-control"
+        class="omes-mc"
+        data-scene={clientScene}
+        data-labels={JSON.stringify(CLIENT_LABELS)}
+        data-mode="live"
+      >
+        <p
+          class="omes-mc-banner omes-mc-banner-historical"
+          id="omes-mc-banner"
+          hidden
+        ></p>
+        <p
+          class="visually-hidden"
+          id="omes-mc-announce"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></p>
+        <fieldset class="omes-mc-mode" id="omes-mc-mode" data-js-only hidden>
+          <legend>{t("View mode")}</legend>
+          <label class="omes-mc-mode-option">
+            <input type="radio" name="omes-mc-mode" value="live" checked />
+            {t("Live")}
+          </label>
+          <label class="omes-mc-mode-option">
+            <input type="radio" name="omes-mc-mode" value="history" />
+            {t("History")}
+          </label>
+        </fieldset>
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="omes-mc-sources-title"
+        >
+          <p class="page-description">
+            {t(
+              "Additional workspace — the canonical details stay on the existing OMES screens. Every object links back to its screen."
+            )}
+          </p>
+          <p class="omes-mc-badges">
+            <span class="admin-status-pill" data-tone="primary">
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              <span id="omes-mc-mode-label">
+                {scene.mode === "live" ? t("Live view") : t("Historical view")}
+              </span>
+            </span>
+            <span class="cell-muted" id="omes-mc-asof">
+              {t("As of {time}", { time: scene.as_of })}
+            </span>
+          </p>
+          <h2 class="admin-section-title" id="omes-mc-sources-title">
+            {t("Sources")}
+          </h2>
+          <ul class="omes-mc-sources" id="omes-mc-sources">
+            {scene.sources.map((source) => (
+              <li class="omes-mc-source">
+                <span class="omes-mc-source-name">
+                  {SOURCE_LABEL[source.source_kind] ?? source.source_kind}
+                </span>
+                <span class="cell-muted">
+                  {AUTHORITY_LABEL[source.authority] ?? source.authority}
+                </span>
+                <span
+                  class="admin-status-pill"
+                  data-tone={SOURCE_STATE_TONE[source.status] ?? "neutral"}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {SOURCE_STATE_LABEL[source.status] ?? source.status}
+                </span>
+                <span class="cell-muted">
+                  {observedText(source.observed_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p
+            class="state-notice"
+            id="omes-mc-truncated"
+            role="status"
+            hidden={scene.truncated.nodes <= 0}
+          >
+            {t(
+              "{count} objects were left out to keep this view bounded. Use the canonical screens for the full list.",
+              { count: scene.truncated.nodes }
+            )}
+          </p>
+          <p
+            id="omes-mc-connectivity"
+            class="admin-create-error"
+            role="status"
+            hidden
+          />
+        </section>
+
+        <section
+          class="admin-section omes-mc-history"
+          id="omes-mc-history"
+          aria-labelledby="omes-mc-history-title"
+          hidden
+        >
+          <h2 class="admin-section-title" id="omes-mc-history-title">
+            {t("History replay")}
+          </h2>
+          <p class="cell-muted">
+            {t(
+              "Replays recorded evidence only, at most 24 hours at a time. Objects whose source kept no history are shown as unknown, and gaps are listed rather than filled in. No actions are available in History."
+            )}
+          </p>
+          <div
+            class="omes-mc-range"
+            role="group"
+            aria-label={t("Replay range")}
+          >
+            <label for="omes-mc-from">{t("From")}</label>
+            <input type="datetime-local" id="omes-mc-from" step="1" />
+            <label for="omes-mc-to">{t("To")}</label>
+            <input type="datetime-local" id="omes-mc-to" step="1" />
+            <button type="button" class="btn btn-secondary" id="omes-mc-load">
+              {t("Load range")}
+            </button>
+          </div>
+          <p
+            id="omes-mc-history-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          ></p>
+          <div
+            class="omes-mc-transport"
+            role="group"
+            aria-label={t("Replay controls")}
+          >
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-step-back"
+            >
+              {t("Step back")}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-play"
+              aria-pressed="false"
+            >
+              {t("Play")}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="omes-mc-step-forward"
+            >
+              {t("Step forward")}
+            </button>
+            <label for="omes-mc-speed">{t("Speed")}</label>
+            <select id="omes-mc-speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>
+                1×
+              </option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+            <button type="button" class="btn btn-primary" id="omes-mc-live">
+              {t("Return to live")}
+            </button>
+          </div>
+          <label class="omes-mc-scrub-label" for="omes-mc-scrub">
+            {t("Timeline")}
+          </label>
+          <input
+            type="range"
+            id="omes-mc-scrub"
+            class="omes-mc-scrub"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+          />
+          <p class="omes-mc-replay-at" id="omes-mc-replay-at" role="status"></p>
+          <h3 class="omes-mc-zone-title">{t("Evidence gaps")}</h3>
+          <ul class="omes-mc-gaps" id="omes-mc-gaps"></ul>
+          <h3 class="omes-mc-zone-title">{t("Observed events")}</h3>
+          <ol
+            class="omes-mc-events"
+            id="omes-mc-events"
+            aria-label={t("Observed events")}
+          ></ol>
+          <p
+            class="cell-muted"
+            id="omes-mc-events-more"
+            role="status"
+            hidden
+          ></p>
+        </section>
+
+        <div
+          class="admin-filter-bar omes-mc-filters"
+          role="group"
+          aria-label={t("Mission Control filters")}
+          data-js-only
+          hidden
+        >
+          <label for="omes-mc-filter-zone">{t("Zone")}</label>
+          <select id="omes-mc-filter-zone">
+            <option value="">{t("All zones")}</option>
+            {MISSION_CONTROL_ZONES.map((zone) => (
+              <option value={zone}>{ZONE_LABEL[zone]}</option>
+            ))}
+          </select>
+          <label for="omes-mc-filter-state">{t("State")}</label>
+          <select id="omes-mc-filter-state">
+            <option value="">{t("All states")}</option>
+            {MISSION_CONTROL_VISUAL_STATES.map((state) => (
+              <option value={state}>{STATE_LABEL[state]}</option>
+            ))}
+          </select>
+          <button type="button" class="btn btn-secondary" id="omes-mc-reset">
+            {t("Reset view")}
+          </button>
+        </div>
+
+        <div class="omes-mc-layout">
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="omes-mc-list-title"
+          >
+            <h2 class="admin-section-title" id="omes-mc-list-title">
+              {t("Objects by zone")}
+              <span class="count-pill">{nodes.length}</span>
+            </h2>
+            <p class="cell-muted" id="omes-mc-count" role="status" />
+            <div
+              class="empty-state"
+              id="omes-mc-empty"
+              hidden={nodes.length > 0}
+            >
+              <span class="empty-state-title">{t("No objects to show")}</span>
+              <span class="empty-state-text">
+                {t(
+                  "An empty scene is not a healthy scene — check the source status above. Sources you cannot read are omitted."
+                )}
+              </span>
+            </div>
+            <div id="omes-mc-list" class="omes-mc-list">
+              {zones.map(({ zone, nodes: members }) => (
+                <section
+                  class="omes-mc-zone"
+                  data-zone={zone}
+                  aria-labelledby={`omes-mc-zone-${zone}`}
+                >
+                  <h3 class="omes-mc-zone-title" id={`omes-mc-zone-${zone}`}>
+                    {ZONE_LABEL[zone]}
+                  </h3>
+                  <ul class="omes-mc-items">
+                    {members.map((node) => (
+                      <li
+                        class="omes-mc-item"
+                        data-zone={zone}
+                        data-state={node.visual_state}
+                      >
+                        <button
+                          type="button"
+                          class="omes-mc-obj"
+                          data-node-id={node.node_id}
+                          data-kind={node.kind}
+                          data-source-id={node.source_id}
+                          data-command-palette-item
+                          data-command-palette-label={`${KIND_LABEL[node.kind]}: ${node.label}`}
+                          aria-pressed="false"
+                        >
+                          <span class="omes-mc-kind">
+                            {KIND_LABEL[node.kind]}
+                          </span>
+                          <span class="omes-mc-label">{node.label}</span>
+                          <span
+                            class="admin-status-pill"
+                            data-tone={
+                              VISUAL_STATE_TONE[node.visual_state] ?? "neutral"
+                            }
+                          >
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {STATE_LABEL[node.visual_state]}
+                          </span>
+                          <span class="cell-muted">
+                            {FRESHNESS_LABEL[node.freshness] ?? node.freshness}
+                            {" · "}
+                            {observedText(node.observed_at)}
+                          </span>
+                        </button>
+                        {isSafeDetailRoute(node.detail_route) && (
+                          <a
+                            class="omes-mc-link"
+                            href={node.detail_route}
+                            data-command-palette-item
+                            data-command-palette-label={t(
+                              "Open details for {name}",
+                              { name: node.label }
+                            )}
+                            aria-label={t("Open details for {name}", {
+                              name: node.label
+                            })}
+                          >
+                            {t("Open details")}
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </section>
+
+          <div class="omes-mc-side">
+            <aside
+              class="omes-mc-hud"
+              id="omes-mc-hud"
+              aria-live="polite"
+              aria-labelledby="omes-mc-hud-title"
+              data-js-only
+              hidden
+            >
+              <h2 class="admin-section-title" id="omes-mc-hud-title">
+                {t("Selected object")}
+              </h2>
+              <p class="cell-muted" data-hud-empty>
+                {t(
+                  "Select an object from the list or the scene to see its details."
+                )}
+              </p>
+              <div data-hud-body hidden>
+                <p class="omes-mc-hud-label" data-hud="label" />
+                <dl class="omes-mc-hud-fields">
+                  <div>
+                    <dt>{t("Kind")}</dt>
+                    <dd data-hud="kind" />
+                  </div>
+                  <div>
+                    <dt>{t("Authority")}</dt>
+                    <dd data-hud="authority" />
+                  </div>
+                  <div>
+                    <dt>{t("Source status")}</dt>
+                    <dd data-hud="sourceStatus" />
+                  </div>
+                  <div>
+                    <dt>{t("Source id")}</dt>
+                    <dd data-hud="sourceId" class="cell-code" />
+                  </div>
+                  <div>
+                    <dt>{t("Source state")}</dt>
+                    <dd data-hud="sourceState" />
+                  </div>
+                  <div>
+                    <dt>{t("Visual state")}</dt>
+                    <dd data-hud="state" />
+                  </div>
+                  <div>
+                    <dt>{t("Freshness")}</dt>
+                    <dd data-hud="freshness" />
+                  </div>
+                  <div>
+                    <dt>{t("Observed at")}</dt>
+                    <dd data-hud="observed" />
+                  </div>
+                  <div data-hud-row="summary" hidden>
+                    <dt>{t("Summary")}</dt>
+                    <dd data-hud="summary" />
+                  </div>
+                </dl>
+                <a class="btn btn-secondary" data-hud="link" href="/admin/omes">
+                  {t("Open details")}
+                </a>
+                <section
+                  class="omes-mc-actions-box"
+                  data-hud-actions
+                  aria-labelledby="omes-mc-actions-title"
+                  hidden
+                >
+                  <h3 class="omes-mc-zone-title" id="omes-mc-actions-title">
+                    {t("Actions")}
+                  </h3>
+                  <p class="cell-muted">
+                    {t(
+                      "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
+                    )}
+                  </p>
+                  <ul class="omes-mc-actions" data-actions-list />
+                  <div
+                    class="omes-mc-hud"
+                    data-actions-panel
+                    role="group"
+                    aria-label={t("Review before sending")}
+                    hidden
+                  />
+                  <p data-actions-result role="status" hidden />
+                </section>
+              </div>
+            </aside>
+
+            <div
+              class="omes-mc-stage"
+              id="omes-mc-stage"
+              aria-hidden="true"
+              hidden
+            >
+              <canvas class="omes-mc-canvas" id="omes-mc-canvas"></canvas>
+            </div>
+            <p
+              class="state-notice"
+              id="omes-mc-fallback"
+              role="status"
+              hidden
+            />
+            <p class="cell-muted omes-mc-hint" data-js-only hidden>
+              {t(
+                "Drag to orbit and scroll to zoom the 3D view. Keyboard: arrow keys move through the list, Enter selects an object, Escape clears the selection, 0 resets the view."
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+</AdminLayout>
+
+<script>
+  // Imported (not inlined) so Astro emits an EXTERNAL module: the CSP allows
+  // no inline script. `controller` pulls in `admin-form-client`, a chunk shared
+  // with other screens, which is what guarantees the cross-chunk import
+  // `build:inline-scripts:check` demands.
+  import { startMissionControl } from "../../../lib/ui/mission-control/controller";
+
+  startMissionControl();
+</script>

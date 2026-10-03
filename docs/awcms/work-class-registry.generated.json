@@ -902,6 +902,21 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/omes/mission-control/actions.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omes/mission-control/replay.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/omes/mission-control/scene.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/omes/operations/[id].ts",
       "workClass": "interactive",
       "source": "factory"

@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 25    |
-| Migrations                          | 167   |
+| Migrations                          | 168   |
 | `awcms_*` tables                    | 168   |
 | Tables with `FORCE` RLS             | 150   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 552   |
-| Route files                         | 433   |
+| Test files                          | 567   |
+| Route files                         | 437   |
 | ADR                                 | 252   |
 
 ### Modules
@@ -217,6 +217,7 @@
 | 165 | `sql/165_awcms_omes_architecture_permissions.sql`                  |
 | 166 | `sql/166_awcms_omes_repository_progress_schema.sql`                |
 | 167 | `sql/167_awcms_omes_repository_progress_permissions.sql`           |
+| 168 | `sql/168_awcms_omes_mission_control_replay_indexes.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -395,17 +396,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 446        |
+| `(root)`      | 457        |
 | `e2e`         | 21         |
-| `integration` | 84         |
+| `integration` | 88         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 339   |
-| `/admin/**`     | 64    |
+| `/api/v1/**`    | 342   |
+| `/admin/**`     | 65    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

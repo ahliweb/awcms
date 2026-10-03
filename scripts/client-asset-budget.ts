@@ -826,26 +826,94 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * 248,033 is the measured value with no added margin.
  *
- * **Raised for Issue #877** (the axe-core a11y smoke and the four real
+ * **Raised for ahliweb/omes#265** (3D Mission Control, epic ahliweb/omes#263,
+ * OMES ADR-0031): one new screen, `/admin/omes/mission-control`, whose
+ * spatial view needs a WebGL2 renderer. This is new feature code, not the
+ * Issue #552 shape — it reuses `admin-form-client.ts` (`messageBox`) and the
+ * existing colour tokens rather than copying either, and nothing is
+ * duplicated per screen. The renderer is deliberately hand-written instead
+ * of adopting three.js: a three.js build is hundreds of KB minified, which
+ * would break `PER_FILE_BUDGET_BYTES` outright and need a raise roughly
+ * twenty times this one (OMES ADR-0031 records the comparison). Both new JS
+ * chunks are route-split — only this screen downloads them — and
+ * `scene-gl.*.js` is additionally a lazy `import()`, so the accessible object
+ * list works even when that chunk or WebGL2 is unavailable. Measured actual
+ * total, on top of #866 above:
+ *
+ * ```
+ * before (248,033 ceiling)   248,033 B
+ * + mission-control page script (controller, layout, vocab)   15,488 B
+ * + scene-gl.*.js (lazy WebGL2 renderer + math)                9,651 B
+ * + omes-control-center.css Mission Control rules              2,457 B
+ *                                                            275,629 B (measured actual total)
+ * ```
+ *
+ * 275,629 is the measured value with no added margin.
+ *
+ * **Raised for ahliweb/omes#266** (Mission Control historical replay, same
+ * screen, same epic): the evidence-based History mode — time range,
+ * play/step/scrubber transport, evidence-gap list and the accessible event
+ * list kept in sync with the scene. New feature code again, not duplication:
+ * it reuses #265's renderer, layout and visual-state rule and the shared
+ * `admin-form-client.ts`. `replay.*.js` is a lazy `import()` loaded only when
+ * a viewer enters History mode, so live-mode viewers download none of it.
+ * Measured actual total, on top of #265 above:
+ *
+ * ```
+ * before (275,629 ceiling)   275,629 B
+ * + mission-control page script (mode switch, lazy replay hook)   +1,542 B
+ * + replay.*.js (lazy History-mode client, new)                   +7,764 B
+ * + omes-control-center.css replay controls/banner/event list     +1,480 B
+ *                                                               286,415 B (measured actual total)
+ * ```
+ *
+ * 286,415 is the measured value with no added margin.
+ *
+ * **Raised for ahliweb/omes#267** (Mission Control contextual actions, same
+ * screen, same epic): per-object actions that call ONLY the existing
+ * operations / jobs cancel+approve / backup restore endpoints, with a
+ * preflight summary, the shared ConfirmDialog and outcome states that never
+ * report success on acceptance. `actions.*.js` is a lazy `import()` loaded on
+ * the first live-mode selection. The one cross-screen cost is the opt-in
+ * `data-command-palette-item` hook in `admin-command-palette.ts`, which every
+ * admin page's `AdminLayout` script carries (+867 B): it is generic (any
+ * screen may mark items) and inert on pages that mark none. Measured actual
+ * total, on top of #266 above:
+ *
+ * ```
+ * before (286,415 ceiling)   286,415 B
+ * + actions.*.js (lazy action client, new)                        +6,819 B
+ * + AdminLayout script (opt-in palette page-item hook)              +867 B
+ * + mission-control page script (selection -> actions hook)         +891 B
+ * + omes-control-center.css action/preflight/outcome rules          +353 B
+ * - replay.*.js (shared helpers moved out)                          -101 B
+ *                                                               295,244 B (measured actual total)
+ * ```
+ *
+ * 295,244 is the measured value with no added margin.
+ *
+ * **Raised for Issue #877** (the axe-core a11y smoke and the five real
  * violations it found): `.reason-panel { display: flex }` scoped to
  * `.reason-panel[open]` (one added selector token) plus the doc comment
  * explaining why, a `<label for>` replacing a bare `<span>` around the
  * reason textarea's label text, an `aria-label="AWCMS"` + a second
  * `aria-hidden="true"` on `AdminLayout.astro`'s brand link/wordmark span,
- * and `.admin-logout` moving from `--color-text-muted` to
- * `--color-sidebar-text`. None of it is decoration this repo could trim back
- * out — each line fixes a violation axe reported as `critical`/`serious`.
- * Measured actual total:
+ * `.admin-logout` moving from `--color-text-muted` to
+ * `--color-sidebar-text`, and the dashboard's `.dd-alert` moving from
+ * `--color-danger-strong` to `--color-danger` (a one-token swap that
+ * shrinks the CSS slightly rather than adding to it). None of it is
+ * decoration this repo could trim back out — each line fixes a violation axe reported as `critical`/`serious`.
+ * Measured actual total, on top of ahliweb/omes#267 above (re-measured after
+ * merging `main`, since the base moved under this branch):
  *
  * ```
- * before (248,033 ceiling)   248,033 B
- * + .reason-panel[open] scoping + label element + admin-brand aria-label   248,053 B (measured actual total)
- * + .admin-logout: --color-text-muted -> --color-sidebar-text   248,055 B (measured actual total)
+ * before (295,244 ceiling)   295,244 B
+ * + a11y fixes (see above)   295,259 B (measured actual total, +15 B)
  * ```
  *
- * 248,055 is the measured value with no added margin.
+ * 295,259 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 248_055;
+export const APP_BUDGET_BYTES = 295_259;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

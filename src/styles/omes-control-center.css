@@ -564,6 +564,268 @@
   opacity: 0.72;
 }
 
+/*
+ * 3D Mission Control (Issue ahliweb/omes#265). The server-rendered object list
+ * is canonical; the canvas is a decorative mirror. Narrow screens stack the
+ * list FIRST, then the HUD and canvas; it still works at 200% zoom because the
+ * two-column grid only starts at a wide viewport. No inline styles anywhere —
+ * the CSP has no `style-src 'unsafe-inline'`. The reduced-motion rule below
+ * already covers this screen; the renderer itself reads the same media query
+ * and stops pulsing / flies instantly.
+ */
+.omes-cc .omes-mc-layout {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .omes-cc .omes-mc-layout {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+  .omes-cc .omes-mc-side {
+    position: sticky;
+    top: var(--sp-4);
+  }
+}
+
+.omes-cc .omes-mc-filters {
+  flex-wrap: wrap;
+}
+
+.omes-cc .omes-mc-badges,
+.omes-cc .omes-mc-sources,
+.omes-cc .omes-mc-items,
+.omes-cc .omes-mc-events,
+.omes-cc .omes-mc-gaps,
+.omes-cc .omes-mc-actions,
+.omes-cc .omes-mc-hud-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.omes-cc .omes-mc-items,
+.omes-cc .omes-mc-events,
+.omes-cc .omes-mc-gaps,
+.omes-cc .omes-mc-actions {
+  flex-flow: column nowrap;
+  align-items: stretch;
+}
+
+.omes-cc .omes-mc-events {
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.omes-cc .omes-mc-source,
+.omes-cc .omes-mc-item,
+.omes-cc .omes-mc-action,
+.omes-cc .omes-mc-event,
+.omes-cc .omes-mc-gap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-size: var(--fs-sm);
+}
+
+/* `[hidden]` must beat the `display` rules above and in `.admin-filter-bar`. */
+.omes-cc .omes-mc [hidden] {
+  display: none;
+}
+
+.omes-cc .omes-mc-zone-title {
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.omes-cc .omes-mc-obj,
+.omes-cc .omes-mc-event-btn {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 36px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.omes-cc .omes-mc-obj:hover,
+.omes-cc .omes-mc-event-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.omes-cc .omes-mc-obj:focus-visible,
+.omes-cc .omes-mc-event-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Selected is a bar + border + `aria-pressed`, not colour alone. */
+.omes-cc .omes-mc-obj[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.omes-cc .omes-mc .cell-muted,
+.omes-cc .omes-mc-kind,
+.omes-cc .omes-mc-hud-fields dt {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.omes-cc .omes-mc-label {
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-hud {
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.omes-cc .omes-mc-hud-label {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-hud-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: start;
+}
+
+.omes-cc .omes-mc-hud-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.omes-cc .omes-mc-stage {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+
+.omes-cc .omes-mc-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(260px, 52vh, 520px);
+  touch-action: none;
+  cursor: grab;
+}
+
+/*
+ * History mode (Issue ahliweb/omes#266). Unmistakable by construction: a
+ * persistent banner with a hatched background and a heavy warning border, a
+ * warning bar down the whole workspace, and the mode named in text — never
+ * colour alone. The current event is a bar + outline + `aria-current="step"`;
+ * a late-arriving event carries a dashed text badge. Class selectors only (the
+ * CSP forbids inline styles); the reduced-motion rule above covers this too.
+ */
+.omes-cc .omes-mc[data-mode="history"] {
+  padding-inline-start: var(--sp-3);
+  border-inline-start: 4px solid var(--color-warning);
+}
+
+.omes-cc .omes-mc-banner-historical {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-surface-2) 0 12px,
+    var(--color-surface-3) 12px 24px
+  );
+  font-weight: var(--fw-semibold);
+}
+
+.omes-cc .omes-mc-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  border: 0;
+}
+
+.omes-cc .omes-mc-mode legend {
+  padding: 0;
+  margin-inline-end: var(--sp-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.omes-cc .omes-mc-range,
+.omes-cc .omes-mc-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+
+.omes-cc .omes-mc-scrub {
+  display: block;
+  width: 100%;
+  margin: var(--sp-1) 0 var(--sp-2);
+}
+
+.omes-cc .omes-mc-event[aria-current="step"] {
+  outline: 2px solid var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.omes-cc .omes-mc-late,
+.omes-cc .omes-mc-badge {
+  padding: 0 var(--sp-1);
+  border: 1px dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+}
+
+/*
+ * Contextual actions (Issue ahliweb/omes#267). The action list, badge and
+ * preflight panel REUSE the rules above (`.omes-mc-items`, `.omes-mc-item`,
+ * `.omes-mc-late`, `.omes-mc-hud`, `.omes-mc-transport`); only the warning line
+ * is new. Every state is carried by TEXT (disabled reason, "Approval required",
+ * a "⚠" warning sentence), never by colour alone; disabled buttons use the
+ * shared `.btn:disabled` look.
+ */
+.omes-cc .omes-mc-warning {
+  flex-basis: 100%;
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-inline-start: 3px solid var(--color-warning);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-on-soft);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .omes-cc * {
     animation-duration: 0.001ms !important;

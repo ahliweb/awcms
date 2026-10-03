@@ -12,6 +12,7 @@
  * vendored contracts directory; every other consumer goes through
  * `../contracts/index.ts`'s public API.
  */
+import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -107,6 +108,43 @@ export async function loadSchema(
   const schema = JSON.parse(raw) as JsonSchema;
   schemaCache.set(cacheKey, schema);
   return schema;
+}
+
+const jsonFileCache = new Map<string, unknown>();
+
+/**
+ * Synchronously loads a vendored top-level JSON file that is NOT a
+ * `*.schema.json` / `*.states.json` contract — currently only
+ * `mission-control-source-map.json` (Issue ahliweb/omes#265, ADR-0031).
+ *
+ * Synchronous on purpose: the source map is a small, immutable, build-time
+ * artifact that the pure `domain/mission-control.ts` functions
+ * (`deriveVisualState`, `composeScene`) consult on every call, and making
+ * them `async` for a cached file read would infect every caller with no
+ * benefit. `fileName` must be a bare `*.json` file name (no path
+ * separators) so a caller can never address anything outside the vendored
+ * directory. Callers own shape validation of the returned value.
+ */
+export function loadVendoredJsonFileSync(
+  fileName: string,
+  version: string = OMES_CONTRACT_VERSION
+): unknown {
+  if (!/^[a-z0-9][a-z0-9.-]*\.json$/.test(fileName)) {
+    throw new UnknownOmesContractError("schema", fileName);
+  }
+  const cacheKey = `${version}:${fileName}`;
+  if (jsonFileCache.has(cacheKey)) return jsonFileCache.get(cacheKey);
+
+  const root = contractsRoot(version);
+  let raw: string;
+  try {
+    raw = readFileSync(path.join(root, fileName), "utf8");
+  } catch {
+    throw new UnknownOmesContractError("schema", fileName);
+  }
+  const parsed: unknown = JSON.parse(raw);
+  jsonFileCache.set(cacheKey, parsed);
+  return parsed;
 }
 
 const stateTableCache = new Map<string, StateTable>();
