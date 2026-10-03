@@ -224,7 +224,7 @@ playwright test`, Bun-only), separate from `bun test`
 > then cancelled. It fails on any `critical`/`serious` violation and is
 > classified READ_WAVE (`tests/e2e/support/e2e-waves.ts`) — every dialog it
 > opens is cancelled, never submitted, so it mutates nothing through the app.
-> Run for real while adding it, it found and this repo fixed four shipped
+> Run for real while adding it, it found and this repo fixed five shipped
 > defects (see the `awcms-browser-test` skill and
 > `docs/awcms/admin-ui-parity-matrix.md` §7 for the list). See that spec's
 > own header comment for why it runs under `reducedMotion: "reduce"` —

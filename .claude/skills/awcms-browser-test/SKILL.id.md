@@ -5,7 +5,7 @@ description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:64fba587d44fe9bb2de1d2315ff72cc00d101bdeac5be09a99e19bbc71575753 -->
+<!-- i18n-source-hash: sha256:901c1b7b32506128bd50070d3e1fc90b77fc575870d0fa0d84af233980699afd -->
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
@@ -246,11 +246,11 @@ alih-alih `waitForTimeout` ad hoc — setiap pemindaian berjalan terhadap
 keadaan mapan yang sama yang selalu dilihat pengguna reduced-motion, dan
 larinya tetap cepat serta deterministik terlepas dari kecepatan mesin.
 
-**Dijalankan sungguhan saat spec ini ditulis**, ia menemukan empat cacat
+**Dijalankan sungguhan saat spec ini ditulis**, ia menemukan lima cacat
 `critical`/`serious` yang sudah terlanjur dikirim dan tidak terlihat oleh
 `bun run design:token-contrast:check` (pemeriksaan registry CSS murni, perlu
 tapi tak cukup — lihat header skrip itu sendiri), karena tak satu pun dari
-keempatnya adalah NILAI token yang salah:
+kelimanya adalah NILAI token yang salah:
 
 1. Wordmark `.admin-brand` kehilangan nama aksesibelnya di bawah 768px —
    `admin.css` menyembunyikan `.admin-brand-text` dengan `display: none`
@@ -277,6 +277,15 @@ keempatnya adalah NILAI token yang salah:
    teks berukuran normal — `--color-text-muted` disetel untuk permukaan kartu
    admin terang/gelap, bukan keluarga permukaan sidebar yang selalu gelap
    sendiri).
+5. Dashboard `.dd-alert` (peringatan deny-count dan sync-health di `/admin`)
+   menggunakan `--color-danger-strong` sebagai TEKS pada `--color-surface`
+   (`color-contrast`, serious, tema gelap saja: 3,81:1 terhadap ambang 4,5:1).
+   `-strong` adalah peran solid-fill-under-white-text; teks pada permukaan
+   polos adalah pekerjaan plain `--color-danger` (5,81:1 gelap; terang tidak
+   berubah di 4,83:1 karena kedua token adalah `#dc2626` di sana). Diperbaiki
+   dengan tukar token, dan pasangan `color-danger`/`color-surface` yang ada
+   di `design-token-contrast-check.ts` kini mencantumkan `.dd-alert` sebagai
+   konsumen.
 
 Lihat `docs/awcms/admin-ui-parity-matrix.md` §7 dan komentar ledger
 `scripts/client-asset-budget.ts` sendiri (`APP_BUDGET_BYTES` dinaikkan

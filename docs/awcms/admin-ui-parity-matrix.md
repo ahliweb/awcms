@@ -555,7 +555,7 @@ index.astro`'s one remaining `.stat-value` hit was a stale doc-comment
   in light AND dark theme, at 360px and desktop, plus the ADR-0125
   `ConfirmDialog`/`ReasonPanel` opened (then cancelled). Run for real against
   a fresh Postgres 18.4 + full migration + seeded tenant while fixing this
-  issue, it found and this repo fixed four real `critical`/`serious`
+  issue, it found and this repo fixed five real `critical`/`serious`
   violations this epic's own waves had shipped: `.admin-brand`'s wordmark
   losing its accessible name below 768px (`display: none` removes an element
   from the accessible-name computation, not just the layout — `link-name`,
@@ -564,9 +564,13 @@ for>` (`label`, critical), `.reason-panel { display: flex }` applying
   unconditionally instead of scoped to `[open]` (author-origin CSS beats the
   user-agent's `dialog:not([open]) { display: none }` regardless of
   `!important`, so a cancelled panel stayed laid out and on-screen after
-  `.close()`), and `.admin-logout` using the theme-aware `--color-text-muted`
+  `.close()`), `.admin-logout` using the theme-aware `--color-text-muted`
   on the always-dark sidebar background instead of `--color-sidebar-text`
-  (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor). See
+  (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor), and
+  the dashboard's `.dd-alert` using `--color-danger-strong` as text on
+  `--color-surface` (`color-contrast`, serious, dark theme only: 3.81:1 against
+  4.5:1), fixed by swapping to `--color-danger` (5.81:1 dark; light unchanged at
+  4.83:1 since both tokens are `#dc2626` there). See
   `tests/e2e/a11y-axe.e2e.ts`'s own header comment for why the sweep also
   runs under `reducedMotion: "reduce"` — `.fade-in-up`'s 240ms entrance
   animation genuinely lowers rendered contrast mid-transition, which axe

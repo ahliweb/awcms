@@ -237,7 +237,7 @@ WCAG 2.3.3 mode rather than an ad hoc `waitForTimeout` — every scan runs
 against the same settled state a reduced-motion user always sees, and the run
 stays fast and deterministic regardless of machine speed.
 
-**Run for real while this spec was written**, it found four shipped
+**Run for real while this spec was written**, it found five shipped
 `critical`/`serious` defects `bun run design:token-contrast:check` (a
 pure-CSS registry check, necessary but not sufficient — see that script's own
 header) could not see, because none of them was a wrong token VALUE:
@@ -265,6 +265,14 @@ header) could not see, because none of them was a wrong token VALUE:
    (`color-contrast`, serious, 3.07:1 measured against the 4.5:1 floor for
    normal-size text — `--color-text-muted` is tuned for the light/dark admin
    card surfaces, not the sidebar's own always-dark surface family).
+5. The dashboard's `.dd-alert` (deny-count and sync-health alerts on `/admin`)
+   using `--color-danger-strong` as TEXT on `--color-surface` (`color-contrast`,
+   serious, dark theme only: 3.81:1 against the 4.5:1 floor). `-strong` is the
+   solid-fill-under-white-text role; text on a plain surface is the job of
+   plain `--color-danger` (5.81:1 dark; light unchanged at 4.83:1 since both
+   tokens are `#dc2626` there). Fixed by the token swap, and
+   `design-token-contrast-check.ts`'s existing `color-danger`/`color-surface`
+   pair now lists `.dd-alert` as a consumer.
 
 See `docs/awcms/admin-ui-parity-matrix.md` §7 and
 `scripts/client-asset-budget.ts`'s own ledger comment (`APP_BUDGET_BYTES`

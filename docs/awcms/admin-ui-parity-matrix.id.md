@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](admin-ui-parity-matrix.md)
 
-<!-- i18n-source-hash: sha256:28ff37244807b8d888c0677eba5977fdf344d0693a27657cd9c7ef44d8e85cb3 -->
+<!-- i18n-source-hash: sha256:8de2b5d7230140dc17fd2fa4f9ecc71aca35515f8a25ae8878cfafa1d93ff4ee -->
 
 # Matriks paritas UI/UX admin AWCMS ↔ awcms-one
 
@@ -580,7 +580,7 @@ list-style: none; margin: 0; padding: 0; }` untuk wrapper `<ol>`-nya sendiri
   terang MAUPUN gelap, pada 360px dan desktop, plus `ConfirmDialog`/
   `ReasonPanel` ADR-0125 dibuka (lalu dibatalkan). Dijalankan sungguhan
   terhadap Postgres 18.4 segar + migrasi penuh + tenant ter-seed saat
-  mengerjakan issue ini, ia menemukan dan repo ini memperbaiki empat
+  mengerjakan issue ini, ia menemukan dan repo ini memperbaiki lima
   pelanggaran `critical`/`serious` nyata yang sudah terlanjur dikirim
   gelombang-gelombang epik ini: wordmark `.admin-brand` kehilangan nama
   aksesibelnya di bawah 768px (`display: none` menghapus elemen dari
@@ -590,10 +590,14 @@ for>` sungguhan (`label`, critical), `.reason-panel { display: flex }`
   yang berlaku tanpa syarat alih-alih di-scope ke `[open]` (CSS asal-penulis
   mengalahkan `dialog:not([open]) { display: none }` bawaan user-agent
   terlepas dari `!important`, sehingga panel yang dibatalkan tetap bertata
-  letak dan tampil di layar setelah `.close()`), dan `.admin-logout` memakai
+  letak dan tampil di layar setelah `.close()`), `.admin-logout` memakai
   `--color-text-muted` yang theme-aware pada latar sidebar yang selalu gelap
   alih-alih `--color-sidebar-text` (`color-contrast`, serious, terukur
-  3,07:1 terhadap ambang 4,5:1). Lihat komentar header
+  3,07:1 terhadap ambang 4,5:1), dan dashboard `.dd-alert` menggunakan
+  `--color-danger-strong` sebagai teks pada `--color-surface` (`color-contrast`,
+  serious, tema gelap saja: 3,81:1 terhadap ambang 4,5:1), diperbaiki dengan
+  bertukar ke `--color-danger` (5,81:1 gelap; terang tidak berubah di 4,83:1
+  karena kedua token adalah `#dc2626` di sana). Lihat komentar header
   `tests/e2e/a11y-axe.e2e.ts` sendiri untuk alasan sapuan ini juga berjalan
   di bawah `reducedMotion: "reduce"` — animasi masuk 240ms `.fade-in-up`
   benar-benar menurunkan kontras terender di tengah transisi, yang disampel

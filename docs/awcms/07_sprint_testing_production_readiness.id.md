@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:10c84506e03916f0e8dada178d0904786e6beaea95f512736152571f7f09b81f -->
+<!-- i18n-source-hash: sha256:e00718dca816c9e312b45ee1a75a93f6f31f9eeb48e3f6cf47b9f0d5d066675a -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -227,7 +227,7 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > pun dan diklasifikasikan READ_WAVE (`tests/e2e/support/e2e-waves.ts`) —
 > setiap dialog yang dibukanya dibatalkan, tidak pernah dikirim, sehingga
 > tidak memutasi apa pun lewat aplikasi. Dijalankan sungguhan saat
-> menambahkannya, ia menemukan dan repo ini memperbaiki empat cacat yang
+> menambahkannya, ia menemukan dan repo ini memperbaiki lima cacat yang
 > sudah terlanjur dikirim (lihat skill `awcms-browser-test` dan
 > `docs/awcms/admin-ui-parity-matrix.md` §7 untuk daftarnya). Lihat komentar
 > header spec itu sendiri untuk alasan ia berjalan di bawah `reducedMotion:
