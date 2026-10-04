@@ -5,8 +5,8 @@
  *
  * All e2e specs share ONE seeded tenant. Two of them change it tenant-wide —
  * `admin-roles.e2e.ts` adds a role that the `/admin/users` assign picker lists,
- * `admin-modules-toggle.e2e.ts` switches off `reporting`, which `/admin`
- * authorizes on. Under `fullyParallel: true` a reader could observe either
+ * `admin-modules-toggle.e2e.ts` switches a module off (it once targeted
+ * `reporting`, which `/admin` authorizes on). Under `fullyParallel: true` a reader could observe either
  * change mid-flight and fail describing a tenant nobody set up. That cost three
  * diagnoses, two of them wrong, and it kept a working read-only sweep off
  * `main`.
