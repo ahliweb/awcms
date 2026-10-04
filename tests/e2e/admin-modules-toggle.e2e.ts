@@ -13,11 +13,16 @@
  * owner holds `module_management.tenant_modules.{enable,disable}`, so the
  * toggle buttons render.
  *
- * Targets `reporting` deliberately: it is a non-core LEAF module (declares no
- * dependencies and nothing depends on it), so a disable is never rejected by
- * the endpoint's dependency guard — unlike `logging`, which other modules
- * depend on and cannot be disabled. Every module defaults to
- * `tenantEnabled: true` on a fresh seed, so `reporting` starts with a Disable
+ * Targets `form_drafts` deliberately: it is non-core and NOTHING depends on
+ * it, so a disable is never rejected by the endpoint's reverse-dependency guard
+ * (`MODULE_REVERSE_DEPENDENCY_ACTIVE`) — unlike `logging`, which other modules
+ * depend on. It used to target `reporting`, until the `tax` and `inventory`
+ * modules registered projections on the reporting engine and declared it a
+ * dependency: the disable was then refused and the row never flipped. That
+ * premise is now enforced where it is cheap — `tests/e2e-modules-toggle-target.test.ts`
+ * fails in `quality` the moment any module starts depending on this target,
+ * instead of here, on a seeded tenant, minutes later. Every module defaults to
+ * `tenantEnabled: true` on a fresh seed, so the target starts with a Disable
  * button rendered.
  *
  * Disable goes through `ReasonPanel` (Issue #854 part 3), not
@@ -40,7 +45,7 @@ const seeded = Boolean(tenantId && loginIdentifier && password);
 
 // A non-core leaf module (no dependencies, no dependents) so disable is never
 // dependency-blocked, and it round-trips cleanly.
-const moduleKey = "reporting";
+const moduleKey = "form_drafts";
 
 test.describe("admin modules toggle (authenticated)", () => {
   test.skip(
@@ -69,7 +74,7 @@ test.describe("admin modules toggle (authenticated)", () => {
       `button[data-reason-action="/api/v1/tenant/modules/${moduleKey}/disable"]`
     );
 
-    // Fresh seed → `reporting` is enabled, so its Disable button is present.
+    // Fresh seed → the target is enabled, so its Disable button is present.
     await expect(disableButton).toBeVisible();
 
     // Disable via the reason panel: open it, fill the required reason, submit.
