@@ -168,7 +168,16 @@ export type AccessAction =
   // merely reading or applying forward.
   | "register"
   | "operate"
-  | "rollback";
+  | "rollback"
+  // Inventory (`inventory`, ADR-0126, Issue #887): `adjust` posts a stock
+  // adjustment or reverses one — the only change to stock with no business
+  // document behind it (a count correction, shrinkage), hence separately
+  // grantable from `movements.create`. `transfer` moves stock between two
+  // locations, changing two balances at once. Both are classified high-risk
+  // below. (`read`/`create`/`update`/`configure`/`reconcile`/`rebuild` for
+  // inventory reuse existing union members.)
+  | "adjust"
+  | "transfer";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -317,7 +326,14 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   // of the three.
   "register",
   "operate",
-  "rollback"
+  "rollback",
+  // Inventory (ADR-0126): a stock adjustment has no business document behind
+  // it, and a transfer changes two balances at once — both are named high-risk
+  // actions in AGENTS.md ("stock adjustment", "warehouse transfer"). Marking
+  // them makes the action-time SoD check available the moment a tenant authors a
+  // rule (e.g. "whoever posts adjustments may not also run balance rebuilds").
+  "adjust",
+  "transfer"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

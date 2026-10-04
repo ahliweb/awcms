@@ -393,6 +393,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "Domain Event Runtime",
       "Form Drafts",
       "Indonesia Regions",
+      // "Inventory" (inventory, ADR-0126, Issue #887) — genuinely new surface:
+      // the multi-location stock ledger (locations, movements, adjustments,
+      // transfers, balances, reconciliation). Nothing here is anonymous.
+      "Inventory",
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",

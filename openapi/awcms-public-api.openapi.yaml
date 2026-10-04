@@ -77,6 +77,8 @@ tags:
     description: "Transactional outbox for device push notifications (push_delivery module, ADR-0074) — the caller's own device registration/revocation plus the operator's queue diagnostics, message cancel, and end-to-end delivery probe. It is a SECOND outbox on purpose: domain-event-runtime calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Two transports, neither of which costs a client byte or a CSP origin: Web Push (RFC 8030/8291/8292, VAPID) to browsers — chosen over the FCM Web SDK, which is 2.1x the per-file asset budget and demands three third-party origins the CSP does not have — and FCM HTTP v1 server-to-Google for native clients. Managing one's own device is self-service (the subject is the caller and no recipient is accepted); everything that touches another person's rows or makes the deployment emit traffic goes through the ABAC chokepoint. Endpoints are credential-grade and are stored hashed/masked, projected raw by exactly one function immediately before a provider call."
   - name: OMES Control Center
     description: Owner/operator API for OMES projections and safe operations (omes_control module, ADR-0122, Issue ahliweb/omes#198) — tenant-scoped fleet overview, server registration/decommission, enrollment-challenge issuance/revocation, desired-vs-observed deployment views, allowlisted safe-operation submission (with destructive operations routed through the canonical workflow-approval engine), worker job listing/cancel/retry-approval, health/backup/audit projections. AWCMS only ever records intent against OMES-owned capability evidence stored server-side — it never executes arbitrary shell/SSH, reads host files directly, or reads Hermes private state. Host/deployment execution is exclusively OMES's own pull worker (ahliweb/omes#199, out of scope here).
+  - name: Inventory
+    description: "A generic, auditable multi-location STOCK LEDGER (inventory module, Issue #887, ADR-0126) that any domain module — commerce, POS, storefront — adopts as its inventory authority instead of keeping its own stock counter. Stock locations; IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger and by privileges and corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; low-stock thresholds with a projection on the reporting engine. Item references are an OPAQUE (itemType, itemRef) supplied by the consumer — never a foreign key to any catalogue. Every posting carries an idempotent source identity (type, id, line) and an Idempotency-Key; replaying either returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction. A client can NEVER assert a balance: no operation accepts one, and a body that names onHand/balanceAfter is a 400. adjust, transfer and rebuild are high-risk, separately grantable, and audited."
 paths:
   /api/v1/abac/policies:
     get:
@@ -10052,6 +10054,957 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/inventory/adjustments:
+    post:
+      operationId: inventoryAdjustmentPost
+      tags:
+        - Inventory
+      summary: Post a stock adjustment
+      description: Gated by `inventory.movements.adjust` (HIGH-RISK). The one movement type that carries its own sign (`quantityDelta`) and the only way to change stock without a business document behind it, so `reasonCode` is REQUIRED — the reason is the audit trail. Requires an Idempotency-Key; audited at warning severity. Undo it with the reversal endpoint, never by editing a row (the ledger is append-only).
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentInput"
+      responses:
+        "200":
+          description: Replay of an adjustment already posted under this source identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "201":
+          description: The adjustment was posted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Stock location not found (LOCATION_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH or LOCATION_INACTIVE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/adjustments/{id}/reversal:
+    post:
+      operationId: inventoryAdjustmentReverse
+      tags:
+        - Inventory
+      summary: Reverse a stock adjustment with a compensating one
+      description: "Gated by `inventory.movements.adjust` (HIGH-RISK). Posts an equal and opposite adjustment linked by `reversesMovementId`; the original row is never touched. Only an ADJUSTMENT is reversible (`409 NOT_REVERSIBLE` otherwise, and a reversal cannot itself be reversed) — every other type already has its natural counterpart. The source identity is derived from the target, so a retry is a `200 replayed: true`, and one adjustment can be reversed at most once. The reversal can itself be refused with `INSUFFICIENT_STOCK` when the stock the adjustment added has since been sold. Requires an Idempotency-Key; audited at warning severity."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reasonCode
+              additionalProperties: false
+              properties:
+                reasonCode:
+                  type: string
+                  maxLength: 64
+                note:
+                  type: string
+                  nullable: true
+                  maxLength: 500
+      responses:
+        "200":
+          description: Replay of the reversal already posted for this adjustment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "201":
+          description: The reversal was posted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, NOT_REVERSIBLE, INSUFFICIENT_STOCK or LOCATION_INACTIVE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/balances:
+    get:
+      operationId: inventoryBalancesList
+      tags:
+        - Inventory
+      summary: List stock balances (and the live low-stock list)
+      description: "Gated by `inventory.balances.read`. Keyset paginated by `(location, item)`. `lowStockOnly=true` is the live, authoritative low-stock list — the detail behind the `inventory.low_stock` reporting projection. Read-only by construction: there is no write verb on this resource, because a balance is derived from movements."
+      parameters:
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: itemType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: itemRef
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: lowStockOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of balances.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      balances:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InventoryBalance"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/inventory/balances/rebuild:
+    post:
+      operationId: inventoryBalancesRebuild
+      tags:
+        - Inventory
+      summary: Repair drifted balances from the ledger
+      description: "Gated by `inventory.balances.rebuild` (HIGH-RISK). Recomputes each drifted balance FROM the movement ledger — the request carries no quantity, so this cannot be used to assert a balance, and a body naming anything but `locationId` is a 400. Idempotent: a second call finds nothing to repair. Bounded per call (`truncated: true` means call again). Requires an Idempotency-Key; audited at CRITICAL severity with the before/after of every repaired key."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                locationId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: The rebuild report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryRebuildReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/balances/reconciliation:
+    get:
+      operationId: inventoryBalancesReconcile
+      tags:
+        - Inventory
+      summary: Prove every balance equals the sum of its movements
+      description: "Gated by `inventory.balances.reconcile`. Read-only. `consistent: true` is the invariant the whole module rests on; `drift` lists every (location, item) where the balance disagrees with the ledger, including a key that has movements but no balance row. `negativeUnderForbid` counts balances that are negative although their location's policy forbids it — ledger and balance can agree perfectly and still describe a state the policy rules out. Bounded per call (`truncated`)."
+      parameters:
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The reconciliation report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryReconciliation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/inventory/balances/threshold:
+    put:
+      operationId: inventoryThresholdSet
+      tags:
+        - Inventory
+      summary: Set or clear a low-stock threshold
+      description: Gated by `inventory.policy.configure`. Touches `lowStockThreshold` and NOTHING else — the on-hand quantity is not a field of this request and a body that names one is a 400. A threshold change can move a balance across the low-stock line; that transition is recorded in the same transaction and a downward crossing is published as `awcms.inventory.stock.low`. Requires an Idempotency-Key; audited.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryThresholdInput"
+      responses:
+        "200":
+          description: The balance with its new threshold.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryBalance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Stock location not found (LOCATION_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or UNIT_MISMATCH.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/locations:
+    get:
+      operationId: inventoryLocationsList
+      tags:
+        - Inventory
+      summary: List stock locations
+      description: Gated by `inventory.locations.read`. By code, keyset paginated (`after` = the last code of the previous page). Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - inactive
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of stock locations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InventoryLocation"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: inventoryLocationCreate
+      tags:
+        - Inventory
+      summary: Register a stock location
+      description: "Gated by `inventory.locations.create`. No Idempotency-Key, deliberately: the `(tenant, code)` unique key already turns a retried create into `409 LOCATION_CODE_CONFLICT`. `officeId` must name an office of this tenant (`422 OFFICE_NOT_FOUND` otherwise). Audited. A location is never deleted — its movements are ledger rows that must keep a place to point at; it is deactivated instead."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryLocationCreateInput"
+      responses:
+        "201":
+          description: The created location.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryLocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A location with this code already exists (LOCATION_CODE_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: officeId does not name an office in this tenant (OFFICE_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/locations/{id}:
+    get:
+      operationId: inventoryLocationRead
+      tags:
+        - Inventory
+      summary: Read one stock location
+      description: Gated by `inventory.locations.read`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The location.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryLocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: inventoryLocationUpdate
+      tags:
+        - Inventory
+      summary: Rename, re-attach or (de)activate a stock location
+      description: Gated by `inventory.locations.update`. An INACTIVE location refuses new postings (`409 LOCATION_INACTIVE`) and keeps its history readable. `negativeStockPolicy` is NOT accepted here — it is a different power with its own endpoint and permission, and naming it is a 400. Audited; a status change is audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryLocationUpdateInput"
+      responses:
+        "200":
+          description: The updated location.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryLocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: officeId does not name an office in this tenant (OFFICE_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/locations/{id}/negative-stock-policy:
+    put:
+      operationId: inventoryLocationPolicySet
+      tags:
+        - Inventory
+      summary: Set a location's negative-stock policy override
+      description: Gated by `inventory.policy.configure` — it decides whether `movements.create` may take a balance below zero, so granting "rename a location" must not grant it. `null` removes the override (inherit the tenant default). Requires an Idempotency-Key; audited at warning severity with the before/after value.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - negativeStockPolicy
+              additionalProperties: false
+              properties:
+                negativeStockPolicy:
+                  type: string
+                  nullable: true
+                  enum:
+                    - forbid
+                    - allow
+      responses:
+        "200":
+          description: The location with its new override.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryLocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/movements:
+    get:
+      operationId: inventoryMovementsList
+      tags:
+        - Inventory
+      summary: List the stock movement ledger
+      description: Gated by `inventory.movements.read`. Newest first, keyset paginated on `(createdAt, id)` with an opaque `cursor`.
+      parameters:
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: itemType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: itemRef
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: movementType
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/InventoryMovementType"
+        - name: sourceType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sourceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: transferId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of movements.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      movements:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InventoryMovement"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: inventoryMovementPost
+      tags:
+        - Inventory
+      summary: Post one caller-attested stock movement
+      description: |-
+        Gated by `inventory.movements.create`. Types accepted here: `receive`, `sale`, `sale_return`, `supplier_return` — the request carries a POSITIVE quantity and the type decides direction. Openings, adjustments and transfers have their own endpoints and permissions (an opening states a starting quantity with no document behind it, so it needs `movements.adjust`).
+
+        The ledger TRUSTS the `source` identity the caller supplies: it can prove a document was not posted twice, never that the document exists. Verifying the source is the consumer's duty. `source.type` `reversal` is reserved for the server.
+
+        `occurredAt` may not be in the future (beyond a few minutes of clock skew) nor older than the backdating window (`INVENTORY_BACKDATE_WINDOW_DAYS`, default 7) unless the caller also holds `movements.adjust` (`403 BACKDATE_REQUIRES_ADJUST`).
+
+        Two independent guards, both required: the `Idempotency-Key` header deduplicates a retried HTTP request, and the `source` identity `(type, id, line)` deduplicates the BUSINESS document — posting the same identity again under a different key returns the ORIGINAL movement with `replayed: true` (200), while the same identity with a different payload is `409 SOURCE_CONFLICT`.
+
+        Refusals write nothing: `409 INSUFFICIENT_STOCK` (the negative-stock policy forbids going below zero), `409 UNIT_MISMATCH` (the ledger never converts units), `409 LOCATION_INACTIVE`, `404 LOCATION_NOT_FOUND`, `422 QUANTITY_OUT_OF_RANGE` (the balance would exceed numeric(20,6)). `INSUFFICIENT_STOCK` carries the requested quantity but NOT the on-hand balance, and no response carries a running balance: that is `balances.read`. Two concurrent attempts on the last unit cannot both succeed. There is no field by which a client can state a balance.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryMovementPostInput"
+      responses:
+        "200":
+          description: "The source identity was already posted with this payload; these are the ORIGINAL movements (`replayed: true`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "201":
+          description: The movement was posted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Stock location not found (LOCATION_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH, OPENING_NOT_FIRST or LOCATION_INACTIVE — `error.code` says which.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/movements/{id}:
+    get:
+      operationId: inventoryMovementRead
+      tags:
+        - Inventory
+      summary: Read one ledger row
+      description: Gated by `inventory.movements.read`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The movement.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryMovement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/inventory/openings:
+    post:
+      operationId: inventoryOpeningPost
+      tags:
+        - Inventory
+      summary: Post an opening balance
+      description: Gated by `inventory.movements.adjust` (HIGH-RISK) — NOT `create`. An opening states the STARTING quantity of an item at a location out of a stated number, with no business document to cross-check, which is the same kind of power as an adjustment. Once per (location, item) and only as its first movement (`409 OPENING_NOT_FIRST`). The body is a movement WITHOUT `movementType`; naming one is a 400. Requires an Idempotency-Key and a `source` identity; audited at warning severity.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryOpeningInput"
+      responses:
+        "200":
+          description: Replay of an opening already posted under this source identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "201":
+          description: The opening was posted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Stock location not found (LOCATION_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, OPENING_NOT_FIRST, UNIT_MISMATCH or LOCATION_INACTIVE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: QUANTITY_OUT_OF_RANGE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/policy:
+    get:
+      operationId: inventoryPolicyRead
+      tags:
+        - Inventory
+      summary: Read the tenant default negative-stock policy
+      description: Gated by `inventory.policy.read`. `isImplicitDefault` is true when the tenant never stored a value and the safe default (`forbid`) applies. The effective policy of a location is its own override, else this default.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant default.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: inventoryPolicySet
+      tags:
+        - Inventory
+      summary: Set the tenant default negative-stock policy
+      description: Gated by `inventory.policy.configure`. Requires an Idempotency-Key; audited at warning severity with the before/after value.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - defaultNegativeStockPolicy
+              additionalProperties: false
+              properties:
+                defaultNegativeStockPolicy:
+                  type: string
+                  enum:
+                    - forbid
+                    - allow
+      responses:
+        "200":
+          description: The stored default.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InventoryPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/inventory/transfers:
+    post:
+      operationId: inventoryTransferPost
+      tags:
+        - Inventory
+      summary: Transfer stock between two locations
+      description: Gated by `inventory.movements.transfer` (HIGH-RISK). Posts a BALANCED out/in pair in ONE transaction (out leg first in the response), both legs validated against locked state before either is written, so a refused transfer leaves nothing behind. A deferred constraint trigger in the database independently refuses to commit anything that is not exactly one out leg and one in leg netting to zero. Replaying the same source identity returns the ORIGINAL pair. Requires an Idempotency-Key; audited at warning severity.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Deduplicates a retried HTTP request; at most 255 characters.
+          schema:
+            type: string
+            maxLength: 255
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryTransferInput"
+      responses:
+        "200":
+          description: Replay of a transfer already posted under this source identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "201":
+          description: The transfer pair was posted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryPostResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: A stock location was not found (LOCATION_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH or LOCATION_INACTIVE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/invitations:
     get:
       operationId: listInvitations
@@ -23722,6 +24675,462 @@ components:
         officialReferenceCaveat:
           type: string
           description: Must be surfaced wherever this dataset is shown to an operator — this is a community packaging of the decree, not an official Kemendagri API or export.
+    InventoryAdjustmentInput:
+      allOf:
+        - $ref: "#/components/schemas/InventoryItemRef"
+        - type: object
+          required:
+            - locationId
+            - quantityDelta
+            - reasonCode
+            - source
+          additionalProperties: false
+          properties:
+            itemType: {}
+            itemRef: {}
+            unitCode: {}
+            locationId:
+              type: string
+              format: uuid
+            quantityDelta:
+              description: Signed and non-zero — the one type that carries its own sign.
+              $ref: "#/components/schemas/InventoryQuantity"
+            reasonCode:
+              description: Required — an adjustment has no business document, so its reason IS the audit trail.
+              type: string
+              maxLength: 64
+            source:
+              $ref: "#/components/schemas/InventorySource"
+            occurredAt:
+              type: string
+              format: date-time
+            note:
+              type: string
+              maxLength: 500
+    InventoryBalance:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        itemType:
+          type: string
+        itemRef:
+          type: string
+        unitCode:
+          type: string
+        onHand:
+          $ref: "#/components/schemas/InventoryQuantity"
+        lowStockThreshold:
+          allOf:
+            - $ref: "#/components/schemas/InventoryQuantity"
+          nullable: true
+        isLow:
+          type: boolean
+        movementCount:
+          type: integer
+        lastMovementId:
+          type: string
+          format: uuid
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+    InventoryBalanceDrift:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        itemType:
+          type: string
+        itemRef:
+          type: string
+        ledgerOnHand:
+          description: SUM(quantity_delta) over the ledger — the truth.
+          $ref: "#/components/schemas/InventoryQuantity"
+        ledgerMovementCount:
+          type: integer
+        balanceOnHand:
+          description: What the balance row says; null when the key has no balance row.
+          type: string
+          nullable: true
+        balanceMovementCount:
+          type: integer
+          nullable: true
+    InventoryItemRef:
+      type: object
+      required:
+        - itemType
+        - itemRef
+      properties:
+        itemType:
+          description: The consumer's namespace for the item, e.g. `commerce.variant`. Lower case. Deliberately opaque — there is no foreign key to any catalogue.
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,63}$
+        itemRef:
+          description: Opaque, stable reference chosen by the consumer. `A-Za-z0-9_.:-` only (no `/`, `+`, `=`), at most 200 characters, and never credential-shaped (a JWT-looking value is a 400).
+          type: string
+          maxLength: 200
+        unitCode:
+          description: The item's single stock unit at a location. The ledger refuses a different unit rather than converting. Defaults to `unit`.
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,31}$
+    InventoryLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+        negativeStockPolicy:
+          description: Null inherits the tenant default.
+          type: string
+          nullable: true
+          enum:
+            - forbid
+            - allow
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    InventoryLocationCreateInput:
+      type: object
+      required:
+        - code
+        - name
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+    InventoryLocationUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+    InventoryMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        itemType:
+          type: string
+        itemRef:
+          type: string
+        unitCode:
+          type: string
+        movementType:
+          $ref: "#/components/schemas/InventoryMovementType"
+        operation:
+          description: Server-derived half of the source identity; `reversal` for a reversal.
+          type: string
+        quantityDelta:
+          $ref: "#/components/schemas/InventoryQuantity"
+        source:
+          type: object
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+            line:
+              type: string
+        transferId:
+          type: string
+          format: uuid
+          nullable: true
+        reversesMovementId:
+          type: string
+          format: uuid
+          nullable: true
+        reasonCode:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        actorTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+    InventoryMovementPostInput:
+      allOf:
+        - $ref: "#/components/schemas/InventoryItemRef"
+        - type: object
+          required:
+            - locationId
+            - movementType
+            - quantity
+            - source
+          additionalProperties: false
+          properties:
+            itemType: {}
+            itemRef: {}
+            unitCode: {}
+            locationId:
+              type: string
+              format: uuid
+            movementType:
+              type: string
+              enum:
+                - receive
+                - sale
+                - sale_return
+                - supplier_return
+            quantity:
+              description: Strictly positive; the movement type decides direction.
+              $ref: "#/components/schemas/InventoryQuantity"
+            source:
+              $ref: "#/components/schemas/InventorySource"
+            occurredAt:
+              description: Business time as the source states it; not in the future.
+              type: string
+              format: date-time
+            reasonCode:
+              type: string
+              maxLength: 64
+            note:
+              type: string
+              maxLength: 500
+    InventoryMovementType:
+      type: string
+      enum:
+        - opening
+        - receive
+        - sale
+        - sale_return
+        - supplier_return
+        - transfer_out
+        - transfer_in
+        - adjustment
+    InventoryOpeningInput:
+      allOf:
+        - $ref: "#/components/schemas/InventoryItemRef"
+        - type: object
+          required:
+            - locationId
+            - quantity
+            - source
+          additionalProperties: false
+          properties:
+            itemType: {}
+            itemRef: {}
+            unitCode: {}
+            locationId:
+              type: string
+              format: uuid
+            quantity:
+              description: Strictly positive starting quantity.
+              $ref: "#/components/schemas/InventoryQuantity"
+            source:
+              $ref: "#/components/schemas/InventorySource"
+            occurredAt:
+              type: string
+              format: date-time
+            reasonCode:
+              type: string
+              maxLength: 64
+            note:
+              type: string
+              maxLength: 500
+    InventoryPolicy:
+      type: object
+      properties:
+        defaultNegativeStockPolicy:
+          type: string
+          enum:
+            - forbid
+            - allow
+        isImplicitDefault:
+          type: boolean
+    InventoryPostResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          type: object
+          properties:
+            replayed:
+              type: boolean
+            movements:
+              description: One movement, or the out/in pair (out first) for a transfer.
+              type: array
+              items:
+                $ref: "#/components/schemas/InventoryMovement"
+    InventoryQuantity:
+      description: "An exact decimal as TEXT, never a float: `numeric(20,6)` in the database, at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; every response carries the canonical string (no trailing zeros)."
+      type: string
+      pattern: ^-?\d{1,14}(\.\d{1,6})?$
+      example: "12.5"
+    InventoryRebuildReport:
+      type: object
+      properties:
+        repaired:
+          type: array
+          items:
+            type: object
+            properties:
+              locationId:
+                type: string
+                format: uuid
+              itemType:
+                type: string
+              itemRef:
+                type: string
+              before:
+                type: object
+                properties:
+                  onHand:
+                    type: string
+                    nullable: true
+                  movementCount:
+                    type: integer
+                    nullable: true
+              after:
+                type: object
+                properties:
+                  onHand:
+                    $ref: "#/components/schemas/InventoryQuantity"
+                  movementCount:
+                    type: integer
+        truncated:
+          type: boolean
+    InventoryReconciliation:
+      type: object
+      properties:
+        consistent:
+          type: boolean
+        checkedKeys:
+          type: integer
+        drift:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryBalanceDrift"
+        truncated:
+          type: boolean
+        negativeUnderForbid:
+          type: integer
+    InventorySource:
+      description: "Idempotent source identity: the business document behind a movement. Posting the same identity twice returns the ORIGINAL result."
+      type: object
+      required:
+        - type
+        - id
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,63}$
+        id:
+          type: string
+          maxLength: 200
+        line:
+          type: string
+          maxLength: 64
+    InventoryThresholdInput:
+      allOf:
+        - $ref: "#/components/schemas/InventoryItemRef"
+        - type: object
+          required:
+            - locationId
+            - lowStockThreshold
+          additionalProperties: false
+          properties:
+            itemType: {}
+            itemRef: {}
+            unitCode: {}
+            locationId:
+              type: string
+              format: uuid
+            lowStockThreshold:
+              description: Non-negative, or null to remove the threshold.
+              type: string
+              nullable: true
+    InventoryTransferInput:
+      allOf:
+        - $ref: "#/components/schemas/InventoryItemRef"
+        - type: object
+          required:
+            - fromLocationId
+            - toLocationId
+            - quantity
+            - source
+          additionalProperties: false
+          properties:
+            itemType: {}
+            itemRef: {}
+            unitCode: {}
+            fromLocationId:
+              type: string
+              format: uuid
+            toLocationId:
+              type: string
+              format: uuid
+            quantity:
+              $ref: "#/components/schemas/InventoryQuantity"
+            source:
+              $ref: "#/components/schemas/InventorySource"
+            occurredAt:
+              type: string
+              format: date-time
+            reasonCode:
+              type: string
+              maxLength: 64
+            note:
+              type: string
+              maxLength: 500
     InvitationCreated:
       type: object
       required:

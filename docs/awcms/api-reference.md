@@ -10245,6 +10245,494 @@ Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
 | 200    | recorded, duplicate_ignored, or rejected. | unknown                                |
 | 429    | Rate-limited per (tenant, worker).        | [`ApiError`](#standard-error-envelope) |
 
+## Inventory
+
+A generic, auditable multi-location STOCK LEDGER (inventory module, Issue #887, ADR-0126) that any domain module — commerce, POS, storefront — adopts as its inventory authority instead of keeping its own stock counter. Stock locations; IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger and by privileges and corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; low-stock thresholds with a projection on the reporting engine. Item references are an OPAQUE (itemType, itemRef) supplied by the consumer — never a foreign key to any catalogue. Every posting carries an idempotent source identity (type, id, line) and an Idempotency-Key; replaying either returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction. A client can NEVER assert a balance: no operation accepts one, and a body that names onHand/balanceAfter is a 400. adjust, transfer and rebuild are high-risk, separately grantable, and audited.
+
+### `POST /api/v1/inventory/adjustments` — Post a stock adjustment
+
+- **operationId**: `inventoryAdjustmentPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.adjust` (HIGH-RISK). The one movement type that carries its own sign (`quantityDelta`) and the only way to change stock without a business document behind it, so `reasonCode` is REQUIRED — the reason is the audit trail. Requires an Idempotency-Key; audited at warning severity. Undo it with the reversal endpoint, never by editing a row (the ledger is append-only).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): [`InventoryAdjustmentInput`](#schema-inventoryadjustmentinput)
+
+**Responses**
+
+| Status | Description                                                                                    | Schema                                                   |
+| ------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 200    | Replay of an adjustment already posted under this source identity.                             | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 201    | The adjustment was posted.                                                                     | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 400    | Validation error.                                                                              | [`ApiError`](#standard-error-envelope)                   |
+| 401    | Missing or invalid session.                                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 403    | Access denied by RBAC/ABAC.                                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 404    | Stock location not found (LOCATION_NOT_FOUND).                                                 | [`ApiError`](#standard-error-envelope)                   |
+| 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH or LOCATION_INACTIVE. | [`ApiError`](#standard-error-envelope)                   |
+
+### `POST /api/v1/inventory/adjustments/{id}/reversal` — Reverse a stock adjustment with a compensating one
+
+- **operationId**: `inventoryAdjustmentReverse`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.adjust` (HIGH-RISK). Posts an equal and opposite adjustment linked by `reversesMovementId`; the original row is never touched. Only an ADJUSTMENT is reversible (`409 NOT_REVERSIBLE` otherwise, and a reversal cannot itself be reversed) — every other type already has its natural counterpart. The source identity is derived from the target, so a retry is a `200 replayed: true`, and one adjustment can be reversed at most once. The reversal can itself be refused with `INSUFFICIENT_STOCK` when the stock the adjustment added has since been sold. Requires an Idempotency-Key; audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                  |
+| ------------------ | ------ | -------- | ------------- | ------------------------------------------------------------ |
+| `id`               | path   | yes      | string (uuid) |                                                              |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string        |                                                              |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                    | Schema                                                   |
+| ------ | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| 200    | Replay of the reversal already posted for this adjustment.                     | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 201    | The reversal was posted.                                                       | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 400    | Validation error.                                                              | [`ApiError`](#standard-error-envelope)                   |
+| 401    | Missing or invalid session.                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 403    | Access denied by RBAC/ABAC.                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 404    | Resource not found.                                                            | [`ApiError`](#standard-error-envelope)                   |
+| 409    | IDEMPOTENCY_CONFLICT, NOT_REVERSIBLE, INSUFFICIENT_STOCK or LOCATION_INACTIVE. | [`ApiError`](#standard-error-envelope)                   |
+
+### `GET /api/v1/inventory/balances` — List stock balances (and the live low-stock list)
+
+- **operationId**: `inventoryBalancesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.balances.read`. Keyset paginated by `(location, item)`. `lowStockOnly=true` is the live, authoritative low-stock list — the detail behind the `inventory.low_stock` reporting projection. Read-only by construction: there is no write verb on this resource, because a balance is derived from movements.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `locationId`       | query  | no       | string (uuid) |             |
+| `itemType`         | query  | no       | string        |             |
+| `itemRef`          | query  | no       | string        |             |
+| `lowStockOnly`     | query  | no       | boolean       |             |
+| `cursor`           | query  | no       | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of balances.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/inventory/balances/rebuild` — Repair drifted balances from the ledger
+
+- **operationId**: `inventoryBalancesRebuild`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.balances.rebuild` (HIGH-RISK). Recomputes each drifted balance FROM the movement ledger — the request carries no quantity, so this cannot be used to assert a balance, and a body naming anything but `locationId` is a 400. Idempotent: a second call finds nothing to repair. Bounded per call (`truncated: true` means call again). Requires an Idempotency-Key; audited at CRITICAL severity with the before/after of every repaired key.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | The rebuild report.                                        | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/inventory/balances/reconciliation` — Prove every balance equals the sum of its movements
+
+- **operationId**: `inventoryBalancesReconcile`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.balances.reconcile`. Read-only. `consistent: true` is the invariant the whole module rests on; `drift` lists every (location, item) where the balance disagrees with the ledger, including a key that has movements but no balance row. `negativeUnderForbid` counts balances that are negative although their location's policy forbids it — ledger and balance can agree perfectly and still describe a state the policy rules out. Bounded per call (`truncated`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `locationId`       | query  | no       | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The reconciliation report.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/inventory/balances/threshold` — Set or clear a low-stock threshold
+
+- **operationId**: `inventoryThresholdSet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.policy.configure`. Touches `lowStockThreshold` and NOTHING else — the on-hand quantity is not a field of this request and a body that names one is a 400. A threshold change can move a balance across the low-stock line; that transition is recorded in the same transaction and a downward crossing is published as `awcms.inventory.stock.low`. Requires an Idempotency-Key; audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): [`InventoryThresholdInput`](#schema-inventorythresholdinput)
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The balance with its new threshold.            | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Stock location not found (LOCATION_NOT_FOUND). | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or UNIT_MISMATCH.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/inventory/locations` — List stock locations
+
+- **operationId**: `inventoryLocationsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.locations.read`. By code, keyset paginated (`after` = the last code of the previous page). Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description |
+| ------------------ | ------ | -------- | -------------------------- | ----------- |
+| `status`           | query  | no       | enum(`active`, `inactive`) |             |
+| `after`            | query  | no       | string                     |             |
+| `limit`            | query  | no       | integer                    |             |
+| `X-Correlation-ID` | header | no       | string                     |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of stock locations.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/inventory/locations` — Register a stock location
+
+- **operationId**: `inventoryLocationCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.locations.create`. No Idempotency-Key, deliberately: the `(tenant, code)` unique key already turns a retried create into `409 LOCATION_CODE_CONFLICT`. `officeId` must name an office of this tenant (`422 OFFICE_NOT_FOUND` otherwise). Audited. A location is never deleted — its movements are ledger rows that must keep a place to point at; it is deactivated instead.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`InventoryLocationCreateInput`](#schema-inventorylocationcreateinput)
+
+**Responses**
+
+| Status | Description                                                         | Schema                                 |
+| ------ | ------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The created location.                                               | object                                 |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope) |
+| 409    | A location with this code already exists (LOCATION_CODE_CONFLICT).  | [`ApiError`](#standard-error-envelope) |
+| 422    | officeId does not name an office in this tenant (OFFICE_NOT_FOUND). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/inventory/locations/{id}` — Read one stock location
+
+- **operationId**: `inventoryLocationRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.locations.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The location.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/inventory/locations/{id}` — Rename, re-attach or (de)activate a stock location
+
+- **operationId**: `inventoryLocationUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.locations.update`. An INACTIVE location refuses new postings (`409 LOCATION_INACTIVE`) and keeps its history readable. `negativeStockPolicy` is NOT accepted here — it is a different power with its own endpoint and permission, and naming it is a 400. Audited; a status change is audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`InventoryLocationUpdateInput`](#schema-inventorylocationupdateinput)
+
+**Responses**
+
+| Status | Description                                                         | Schema                                 |
+| ------ | ------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated location.                                               | object                                 |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                 | [`ApiError`](#standard-error-envelope) |
+| 422    | officeId does not name an office in this tenant (OFFICE_NOT_FOUND). | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/inventory/locations/{id}/negative-stock-policy` — Set a location's negative-stock policy override
+
+- **operationId**: `inventoryLocationPolicySet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.policy.configure` — it decides whether `movements.create` may take a balance below zero, so granting "rename a location" must not grant it. `null` removes the override (inherit the tenant default). Requires an Idempotency-Key; audited at warning severity with the before/after value.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                  |
+| ------------------ | ------ | -------- | ------------- | ------------------------------------------------------------ |
+| `id`               | path   | yes      | string (uuid) |                                                              |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string        |                                                              |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | The location with its new override.                        | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/inventory/movements` — List the stock movement ledger
+
+- **operationId**: `inventoryMovementsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.read`. Newest first, keyset paginated on `(createdAt, id)` with an opaque `cursor`.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                     | Description |
+| ------------------ | ------ | -------- | -------------------------------------------------------- | ----------- |
+| `locationId`       | query  | no       | string (uuid)                                            |             |
+| `itemType`         | query  | no       | string                                                   |             |
+| `itemRef`          | query  | no       | string                                                   |             |
+| `movementType`     | query  | no       | [`InventoryMovementType`](#schema-inventorymovementtype) |             |
+| `sourceType`       | query  | no       | string                                                   |             |
+| `sourceId`         | query  | no       | string                                                   |             |
+| `transferId`       | query  | no       | string (uuid)                                            |             |
+| `cursor`           | query  | no       | string                                                   |             |
+| `X-Correlation-ID` | header | no       | string                                                   |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of movements.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/inventory/movements` — Post one caller-attested stock movement
+
+- **operationId**: `inventoryMovementPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.create`. Types accepted here: `receive`, `sale`, `sale_return`, `supplier_return` — the request carries a POSITIVE quantity and the type decides direction. Openings, adjustments and transfers have their own endpoints and permissions (an opening states a starting quantity with no document behind it, so it needs `movements.adjust`).
+
+The ledger TRUSTS the `source` identity the caller supplies: it can prove a document was not posted twice, never that the document exists. Verifying the source is the consumer's duty. `source.type` `reversal` is reserved for the server.
+
+`occurredAt` may not be in the future (beyond a few minutes of clock skew) nor older than the backdating window (`INVENTORY_BACKDATE_WINDOW_DAYS`, default 7) unless the caller also holds `movements.adjust` (`403 BACKDATE_REQUIRES_ADJUST`).
+
+Two independent guards, both required: the `Idempotency-Key` header deduplicates a retried HTTP request, and the `source` identity `(type, id, line)` deduplicates the BUSINESS document — posting the same identity again under a different key returns the ORIGINAL movement with `replayed: true` (200), while the same identity with a different payload is `409 SOURCE_CONFLICT`.
+
+Refusals write nothing: `409 INSUFFICIENT_STOCK` (the negative-stock policy forbids going below zero), `409 UNIT_MISMATCH` (the ledger never converts units), `409 LOCATION_INACTIVE`, `404 LOCATION_NOT_FOUND`, `422 QUANTITY_OUT_OF_RANGE` (the balance would exceed numeric(20,6)). `INSUFFICIENT_STOCK` carries the requested quantity but NOT the on-hand balance, and no response carries a running balance: that is `balances.read`. Two concurrent attempts on the last unit cannot both succeed. There is no field by which a client can state a balance.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): [`InventoryMovementPostInput`](#schema-inventorymovementpostinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                 | Schema                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 200    | The source identity was already posted with this payload; these are the ORIGINAL movements (`replayed: true`).                              | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 201    | The movement was posted.                                                                                                                    | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 400    | Validation error.                                                                                                                           | [`ApiError`](#standard-error-envelope)                   |
+| 401    | Missing or invalid session.                                                                                                                 | [`ApiError`](#standard-error-envelope)                   |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                 | [`ApiError`](#standard-error-envelope)                   |
+| 404    | Stock location not found (LOCATION_NOT_FOUND).                                                                                              | [`ApiError`](#standard-error-envelope)                   |
+| 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH, OPENING_NOT_FIRST or LOCATION_INACTIVE — `error.code` says which. | [`ApiError`](#standard-error-envelope)                   |
+
+### `GET /api/v1/inventory/movements/{id}` — Read one ledger row
+
+- **operationId**: `inventoryMovementRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The movement.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/inventory/openings` — Post an opening balance
+
+- **operationId**: `inventoryOpeningPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.adjust` (HIGH-RISK) — NOT `create`. An opening states the STARTING quantity of an item at a location out of a stated number, with no business document to cross-check, which is the same kind of power as an adjustment. Once per (location, item) and only as its first movement (`409 OPENING_NOT_FIRST`). The body is a movement WITHOUT `movementType`; naming one is a 400. Requires an Idempotency-Key and a `source` identity; audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): [`InventoryOpeningInput`](#schema-inventoryopeninginput)
+
+**Responses**
+
+| Status | Description                                                                                   | Schema                                                   |
+| ------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 200    | Replay of an opening already posted under this source identity.                               | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 201    | The opening was posted.                                                                       | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 400    | Validation error.                                                                             | [`ApiError`](#standard-error-envelope)                   |
+| 401    | Missing or invalid session.                                                                   | [`ApiError`](#standard-error-envelope)                   |
+| 403    | Access denied by RBAC/ABAC.                                                                   | [`ApiError`](#standard-error-envelope)                   |
+| 404    | Stock location not found (LOCATION_NOT_FOUND).                                                | [`ApiError`](#standard-error-envelope)                   |
+| 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, OPENING_NOT_FIRST, UNIT_MISMATCH or LOCATION_INACTIVE. | [`ApiError`](#standard-error-envelope)                   |
+| 422    | QUANTITY_OUT_OF_RANGE.                                                                        | [`ApiError`](#standard-error-envelope)                   |
+
+### `GET /api/v1/inventory/policy` — Read the tenant default negative-stock policy
+
+- **operationId**: `inventoryPolicyRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.policy.read`. `isImplicitDefault` is true when the tenant never stored a value and the safe default (`forbid`) applies. The effective policy of a location is its own override, else this default.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant default.         | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/inventory/policy` — Set the tenant default negative-stock policy
+
+- **operationId**: `inventoryPolicySet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.policy.configure`. Requires an Idempotency-Key; audited at warning severity with the before/after value.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | The stored default.                                        | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/inventory/transfers` — Transfer stock between two locations
+
+- **operationId**: `inventoryTransferPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `inventory.movements.transfer` (HIGH-RISK). Posts a BALANCED out/in pair in ONE transaction (out leg first in the response), both legs validated against locked state before either is written, so a refused transfer leaves nothing behind. A deferred constraint trigger in the database independently refuses to commit anything that is not exactly one out leg and one in leg netting to zero. Replaying the same source identity returns the ORIGINAL pair. Requires an Idempotency-Key; audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                  |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
+| `X-Correlation-ID` | header | no       | string |                                                              |
+
+**Request body** (required): [`InventoryTransferInput`](#schema-inventorytransferinput)
+
+**Responses**
+
+| Status | Description                                                                                    | Schema                                                   |
+| ------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 200    | Replay of a transfer already posted under this source identity.                                | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 201    | The transfer pair was posted.                                                                  | [`InventoryPostResponse`](#schema-inventorypostresponse) |
+| 400    | Validation error.                                                                              | [`ApiError`](#standard-error-envelope)                   |
+| 401    | Missing or invalid session.                                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 403    | Access denied by RBAC/ABAC.                                                                    | [`ApiError`](#standard-error-envelope)                   |
+| 404    | A stock location was not found (LOCATION_NOT_FOUND).                                           | [`ApiError`](#standard-error-envelope)                   |
+| 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH or LOCATION_INACTIVE. | [`ApiError`](#standard-error-envelope)                   |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -11055,6 +11543,309 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 }
 ```
 
+### Schema: InventoryAdjustmentInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "itemType": null,
+  "itemRef": null,
+  "unitCode": null,
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "quantityDelta": "12.5",
+  "reasonCode": "string",
+  "source": {
+    "type": "string",
+    "id": "string",
+    "line": "string"
+  },
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "note": "string"
+}
+```
+
+### Schema: InventoryItemRef
+
+| Field      | Type   | Required | Nullable | Description                                                                                                                                                                   |
+| ---------- | ------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `itemType` | string | yes      | no       | The consumer's namespace for the item, e.g. `commerce.variant`. Lower case. Deliberately opaque — there is no foreign key to any catalogue.                                   |
+| `itemRef`  | string | yes      | no       | Opaque, stable reference chosen by the consumer. `A-Za-z0-9_.:-` only (no `/`, `+`, `=`), at most 200 characters, and never credential-shaped (a JWT-looking value is a 400). |
+| `unitCode` | string | no       | no       | The item's single stock unit at a location. The ledger refuses a different unit rather than converting. Defaults to `unit`.                                                   |
+
+**Example**
+
+```json
+{
+  "itemType": "string",
+  "itemRef": "string",
+  "unitCode": "string"
+}
+```
+
+### Schema: InventoryLocationCreateInput
+
+| Field      | Type          | Required | Nullable | Description |
+| ---------- | ------------- | -------- | -------- | ----------- |
+| `code`     | string        | yes      | no       |             |
+| `name`     | string        | yes      | no       |             |
+| `officeId` | string (uuid) | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "officeId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: InventoryLocationUpdateInput
+
+| Field      | Type                       | Required | Nullable | Description |
+| ---------- | -------------------------- | -------- | -------- | ----------- |
+| `name`     | string                     | no       | no       |             |
+| `officeId` | string (uuid)              | no       | yes      |             |
+| `status`   | enum(`active`, `inactive`) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "officeId": "00000000-0000-0000-0000-000000000000",
+  "status": "active"
+}
+```
+
+### Schema: InventoryMovement
+
+| Field                | Type                                                     | Required | Nullable | Description                                                            |
+| -------------------- | -------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `id`                 | string (uuid)                                            | no       | no       |                                                                        |
+| `locationId`         | string (uuid)                                            | no       | no       |                                                                        |
+| `itemType`           | string                                                   | no       | no       |                                                                        |
+| `itemRef`            | string                                                   | no       | no       |                                                                        |
+| `unitCode`           | string                                                   | no       | no       |                                                                        |
+| `movementType`       | [`InventoryMovementType`](#schema-inventorymovementtype) | no       | no       |                                                                        |
+| `operation`          | string                                                   | no       | no       | Server-derived half of the source identity; `reversal` for a reversal. |
+| `quantityDelta`      | [`InventoryQuantity`](#schema-inventoryquantity)         | no       | no       |                                                                        |
+| `source`             | object                                                   | no       | no       |                                                                        |
+| `transferId`         | string (uuid)                                            | no       | yes      |                                                                        |
+| `reversesMovementId` | string (uuid)                                            | no       | yes      |                                                                        |
+| `reasonCode`         | string                                                   | no       | yes      |                                                                        |
+| `note`               | string                                                   | no       | yes      |                                                                        |
+| `occurredAt`         | string (date-time)                                       | no       | no       |                                                                        |
+| `createdAt`          | string (date-time)                                       | no       | no       |                                                                        |
+| `actorTenantUserId`  | string (uuid)                                            | no       | yes      |                                                                        |
+| `correlationId`      | string                                                   | no       | yes      |                                                                        |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "itemType": "string",
+  "itemRef": "string",
+  "unitCode": "string",
+  "movementType": "opening",
+  "operation": "string",
+  "quantityDelta": "12.5",
+  "source": {
+    "type": "string",
+    "id": "string",
+    "line": "string"
+  },
+  "transferId": "00000000-0000-0000-0000-000000000000",
+  "reversesMovementId": "00000000-0000-0000-0000-000000000000",
+  "reasonCode": "string",
+  "note": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "actorTenantUserId": "00000000-0000-0000-0000-000000000000",
+  "correlationId": "string"
+}
+```
+
+### Schema: InventoryMovementPostInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "itemType": null,
+  "itemRef": null,
+  "unitCode": null,
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "movementType": "receive",
+  "quantity": "12.5",
+  "source": {
+    "type": "string",
+    "id": "string",
+    "line": "string"
+  },
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "reasonCode": "string",
+  "note": "string"
+}
+```
+
+### Schema: InventoryMovementType
+
+Enum values: `opening`, `receive`, `sale`, `sale_return`, `supplier_return`, `transfer_out`, `transfer_in`, `adjustment`.
+
+**Example**
+
+```json
+"opening"
+```
+
+### Schema: InventoryOpeningInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "itemType": null,
+  "itemRef": null,
+  "unitCode": null,
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "quantity": "12.5",
+  "source": {
+    "type": "string",
+    "id": "string",
+    "line": "string"
+  },
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "reasonCode": "string",
+  "note": "string"
+}
+```
+
+### Schema: InventoryPostResponse
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "replayed": false,
+    "movements": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "locationId": "00000000-0000-0000-0000-000000000000",
+        "itemType": "string",
+        "itemRef": "string",
+        "unitCode": "string",
+        "movementType": "opening",
+        "operation": "string",
+        "quantityDelta": "12.5",
+        "source": {
+          "type": "string",
+          "id": "string",
+          "line": "string"
+        },
+        "transferId": "00000000-0000-0000-0000-000000000000",
+        "reversesMovementId": "00000000-0000-0000-0000-000000000000",
+        "reasonCode": "string",
+        "note": "string",
+        "occurredAt": "2026-01-01T00:00:00.000Z",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "actorTenantUserId": "00000000-0000-0000-0000-000000000000",
+        "correlationId": "string"
+      }
+    ]
+  }
+}
+```
+
+### Schema: InventoryQuantity
+
+An exact decimal as TEXT, never a float: `numeric(20,6)` in the database, at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; every response carries the canonical string (no trailing zeros).
+
+An exact decimal as TEXT, never a float: `numeric(20,6)` in the database, at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; every response carries the canonical string (no trailing zeros).
+
+**Example**
+
+```json
+"12.5"
+```
+
+### Schema: InventorySource
+
+Idempotent source identity: the business document behind a movement. Posting the same identity twice returns the ORIGINAL result.
+
+| Field  | Type   | Required | Nullable | Description |
+| ------ | ------ | -------- | -------- | ----------- |
+| `type` | string | yes      | no       |             |
+| `id`   | string | yes      | no       |             |
+| `line` | string | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "type": "string",
+  "id": "string",
+  "line": "string"
+}
+```
+
+### Schema: InventoryThresholdInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "itemType": null,
+  "itemRef": null,
+  "unitCode": null,
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "lowStockThreshold": "string"
+}
+```
+
+### Schema: InventoryTransferInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "itemType": null,
+  "itemRef": null,
+  "unitCode": null,
+  "fromLocationId": "00000000-0000-0000-0000-000000000000",
+  "toLocationId": "00000000-0000-0000-0000-000000000000",
+  "quantity": "12.5",
+  "source": {
+    "type": "string",
+    "id": "string",
+    "line": "string"
+  },
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "reasonCode": "string",
+  "note": "string"
+}
+```
+
 ### Schema: IssueMachineCredentialRequest
 
 | Field                   | Type                              | Required | Nullable | Description                                                                                                                                                                        |
@@ -11821,7 +12612,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (44)
+### Channels (46)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -11859,6 +12650,8 @@ consumer/subscriber contract in this file).
 - `awcms.email.message.queued` — An email message was enqueued into `awcms_email_messages`. Documented contract only, same convention as `database.pool.saturated` — the concrete producer is the structured JSON logger, invoked from `email/application/announcement-directory.ts`'s `enqueueAnnouncement` (`email.message.queued` log line).
 - `awcms.email.message.sent` — The email dispatcher (`bun run email:dispatch`) delivered a message through the configured provider. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.sent` log line).
 - `awcms.email.message.suppressed` — The email dispatcher found a claimed message's recipient newly present on `awcms_email_suppression_list` (added after enqueue, before dispatch) and skipped the provider call entirely. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.suppressed` log line).
+- `awcms.inventory.movement.posted` — A stock movement was posted to the append-only inventory ledger and its balance updated, in ONE transaction (ADR-0126, Issue #887). Producer: `inventory/application/inventory-ledger.ts`'s posting core, shared by `postMovement`, `postAdjustment`, `reverseAdjustment` and `postTransfer` (a transfer publishes one event per leg). Published in the same commit as the movement, so a rolled-back posting publishes nothing; a REPLAY of an already-posted source identity publishes nothing either. Ordered per balance (`order_key` = location + item). The payload carries opaque item and source references and decimal-string quantities only — `movementId`, `locationId`, `itemType`, `itemRef`, `unitCode`, `movementType`, `operation`, `quantityDelta`, `balanceAfter`, `sourceType`, `sourceId`, `sourceLine`, `transferId`, `reversesMovementId`. Never the free-text note and never anything identifying a person.
+- `awcms.inventory.stock.low` — A stock balance crossed to or below its low-stock threshold (ADR-0126, Issue #887) — by a movement or by a threshold change. Producer: `inventory/application/inventory-ledger.ts`'s `recordLowStockTransition`. Published ONCE per downward crossing, not on every movement while the balance stays low, and never for the recovery (that is recorded in the signals table the reporting projection reads). Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`, `movementId` (null when a threshold change caused it).
 - `awcms.workflow.delegation.created` — A workflow delegation/substitute assignment was created. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `createWorkflowDelegation`.
 - `awcms.workflow.delegation.revoked` — A workflow delegation/substitute assignment was revoked. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `revokeWorkflowDelegation`.
 - `awcms.workflow.instance.advanced` — A workflow instance's active task was decided (or force-decided) and the instance advanced to its next node(s), without yet reaching a terminal outcome. Producer: `workflow-approval/application/workflow-instance-decision.ts`'s `completeApprovalTaskAndAdvance`.

@@ -129,6 +129,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // ADR-0122 (ahliweb/omes#196). Placed even though the module declares NO navigation yet:
   // this map must cover every registered module so its first screen lands in operations.
   omes_control: "operations",
+  // ADR-0126 (Issue #887). Placed even though the module declares NO navigation
+  // yet (API-first; admin screens are a recorded follow-up): this map must cover
+  // every registered module so its first screen lands in the commerce section
+  // rather than silently in `general`.
+  inventory: "commerce",
   // Master reference data. This module DOES declare navigation now
   // (`/admin/idn-regions`, landed with ADR-0053/PR #332). The comment that used
   // to sit here said its operator screen lived in awcms-astro per ADR-0047 —

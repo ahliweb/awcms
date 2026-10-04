@@ -702,7 +702,17 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // whole schema, so the migration's `GRANT SELECT, INSERT, UPDATE` withholds
   // nothing on its own — a distinction found by querying a real database, not
   // by reading the migration.
-  awcms_subject_requests: ["SELECT", "INSERT", "UPDATE"]
+  awcms_subject_requests: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
+  // low-stock signals. A finalised movement is corrected by a compensating
+  // movement, never edited, so the runtime keeps exactly the two verbs posting
+  // needs; a row trigger refuses UPDATE/DELETE as the second layer.
+  awcms_inventory_movements: ["SELECT", "INSERT"],
+  awcms_inventory_low_stock_signals: ["SELECT", "INSERT"],
+  // Balances are UPDATEd by every posting and by rebuild, but never DELETEd: a
+  // balance row is the lock target for "the last unit", and deleting one under
+  // a waiting poster would let two rows for the same key exist.
+  awcms_inventory_balances: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {
@@ -1552,7 +1562,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // on the config table too, for the generic data-lifecycle retention purge
   // (sql/166's own header comment on why a hard_delete descriptor needs it).
   awcms_omes_repository_progress_config: ["SELECT", "DELETE"],
-  awcms_omes_repository_progress: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+  awcms_omes_repository_progress: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  // Issue #887 (sql/169). SELECT only: the reporting engine's incremental
+  // projection worker reads the low-stock transition log as `awcms_worker`
+  // (`bun run reporting:projections:refresh`) and writes exclusively to its own
+  // `awcms_reporting_projection_*` tables. No purge exists for this append-only
+  // table, so no DELETE (ADR-0126 §7).
+  awcms_inventory_low_stock_signals: ["SELECT"]
 };
 
 /**

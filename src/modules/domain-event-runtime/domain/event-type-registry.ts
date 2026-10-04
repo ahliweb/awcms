@@ -70,6 +70,17 @@ export const COMMENT_SUBMITTED_EVENT_TYPE = "awcms.comments.comment.submitted";
 export const COMMENT_APPROVED_EVENT_TYPE = "awcms.comments.comment.approved";
 export const COMMENT_REPLY_CREATED_EVENT_TYPE = "awcms.comments.reply.created";
 
+/**
+ * `inventory` (ADR-0126). Declared here — not imported from
+ * `inventory/domain/inventory-events.ts` — for the same reason as `comments`
+ * above: this foundation module must not depend on a domain module. The
+ * literals are kept identical by the AsyncAPI parity gate.
+ */
+export const INVENTORY_EVENT_VERSION = "1.0";
+export const INVENTORY_MOVEMENT_POSTED_EVENT_TYPE =
+  "awcms.inventory.movement.posted";
+export const INVENTORY_STOCK_LOW_EVENT_TYPE = "awcms.inventory.stock.low";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
     {
@@ -141,6 +152,18 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventVersion: COMMENTS_EVENT_VERSION,
       description:
         "A submitted comment was a reply to an existing comment. Published alongside comment.submitted so a consumer can distinguish thread replies without re-reading the row; the recipient address is resolved from encrypted storage by the dispatcher at send time, never carried here."
+    },
+    {
+      eventType: INVENTORY_MOVEMENT_POSTED_EVENT_TYPE,
+      eventVersion: INVENTORY_EVENT_VERSION,
+      description:
+        "A stock movement was posted to the append-only inventory ledger and its balance updated, in one transaction. Carries opaque item and source references and decimal-string quantities only — never a note or anything identifying a person. Ordered per balance (location + item)."
+    },
+    {
+      eventType: INVENTORY_STOCK_LOW_EVENT_TYPE,
+      eventVersion: INVENTORY_EVENT_VERSION,
+      description:
+        "A stock balance crossed to or below its low-stock threshold — by a movement or by a threshold change. Published once per downward crossing, not on every movement while the balance stays low."
     }
   ];
 

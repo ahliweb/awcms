@@ -122,5 +122,22 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "omes_control.jobs.cancel",
   "omes_control.jobs.read",
   "omes_control.servers.delete",
-  "omes_control.servers.register"
+  "omes_control.servers.register",
+
+  // inventory (12) — ADR-0126 / Issue #887. The stock ledger ships API-first;
+  // "admin screens for inventory" (locations, balances + low-stock list,
+  // movement history, adjustments/transfers, reconciliation) is a recorded
+  // follow-up, so each permission is listed here until a screen claims it.
+  "inventory.balances.rebuild",
+  "inventory.balances.read",
+  "inventory.balances.reconcile",
+  "inventory.locations.create",
+  "inventory.locations.read",
+  "inventory.locations.update",
+  "inventory.movements.adjust",
+  "inventory.movements.create",
+  "inventory.movements.read",
+  "inventory.movements.transfer",
+  "inventory.policy.configure",
+  "inventory.policy.read"
 ];

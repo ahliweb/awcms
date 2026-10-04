@@ -218,6 +218,8 @@ describe("validateProjectionRegistry (Issue #753)", () => {
     const result = validateProjectionRegistry(listModules());
     expect(result.valid).toBe(true);
     expect(result.issues).toEqual([]);
-    expect(result.descriptors.length).toBe(3);
+    // Three from `reporting` itself, plus `inventory.low_stock` (ADR-0126) — the
+    // first projection a DOMAIN module contributes to the engine.
+    expect(result.descriptors.length).toBe(4);
   });
 });
