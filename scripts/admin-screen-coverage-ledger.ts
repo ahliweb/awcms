@@ -124,13 +124,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "omes_control.servers.delete",
   "omes_control.servers.register",
 
-  // inventory (2) — ADR-0126 / Issue #887. `/admin/inventory` (Issue #894)
-  // claimed the other ten. What remains is not a form an operator should drive by
-  // hand: `balances.rebuild` rewrites balances from the ledger at critical
-  // severity (a runbook step), and `movements.create` posts caller-attested
-  // sale/receive/return movements, where "verifying the document is the consumer
-  // duty". Neither is a decision yet, so both stay on the shrink-only list.
-  "inventory.balances.rebuild",
+  // inventory (1) — ADR-0126 / Issue #887. `/admin/inventory` (Issue #894)
+  // claimed ten, and Issue #901 the eleventh: `balances.rebuild` is now a
+  // guarded, confirmed screen action (it rewrites balances FROM the ledger and
+  // carries no quantity, so it cannot assert one). What remains is
+  // `movements.create`, which posts caller-attested sale/receive/return
+  // movements, where "verifying the document is the consumer duty". Not a
+  // decision yet, so it stays on the shrink-only list.
   "inventory.movements.create",
 
   // tax (4) — ADR-0127 / Issue #889. `/admin/tax` (Issue #894) claimed the rule,

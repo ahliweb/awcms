@@ -69,8 +69,8 @@ movement.
 
 ## What is NOT here
 
-Screens for `inventory.balances.rebuild` and `inventory.movements.create` (a
-runbook step and a consumer action respectively); reservations/holds; unit conversion;
+A screen for `inventory.movements.create` (a consumer action; `balances.rebuild`
+has a guarded screen action since Issue #901); reservations/holds; unit conversion;
 costing/valuation; multi-line atomic posting; archive-then-purge and
 partitioning (nothing purges the ledger, and the descriptors say so —
 ADR-0126 §7).
