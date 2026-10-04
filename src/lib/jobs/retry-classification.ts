@@ -48,7 +48,7 @@ const RETRYABLE_SQLSTATE_CLASSES = ["08", "53", "57"];
  * coupling than exporting an internal implementation detail across an
  * unrelated module boundary for it.
  */
-const NOT_RETRYABLE_SQLSTATE_CLASSES = ["22", "23"];
+const NOT_RETRYABLE_SQLSTATE_CLASSES = ["22", "23", "54"];
 
 /** Transient network error message fragments — for provider HTTP calls (ADR-0006: always outside the DB transaction) that reject with a plain `Error`/`TypeError`, not a `Bun.SQL.PostgresError`. */
 const RETRYABLE_NETWORK_ERROR_PATTERN =

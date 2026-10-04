@@ -5,7 +5,7 @@ description: Terapkan idempotency pada mutation high-risk AWCMS agar aman dari d
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c25e071c8a016db58b66bc5f0a6e67117426b3c624ba1c24c79080647b95ff89 -->
+<!-- i18n-source-hash: sha256:e2aea72078ccd6a39e63a119b2c160b4617b5370e3511b78f2d0deb9a2c6ad12 -->
 
 # AWCMS — Idempotent High-Risk Mutation
 
@@ -25,6 +25,7 @@ flowchart TD
 ## Aturan
 
 1. Header `Idempotency-Key` **wajib**; jika kosong → `400 IDEMPOTENCY_REQUIRED`.
+   Header dibatasi sekali di `src/middleware.ts` (`src/lib/security/idempotency-key-bound.ts`) untuk setiap request `/api/**`, sebelum autentikasi dan routing: 1 sampai 255 karakter ASCII yang terlihat (`^[\x21-\x7E]{1,255}$`), selain itu `400 IDEMPOTENCY_KEY_INVALID`. Route TIDAK boleh mengimplementasikan ulang pengecekan ini; buat key sebagai UUID. Jangan pakai key lebih dari 255 karakter (mis. gabungan id resource dan payload) — hash dulu.
 2. Request hash stabil dari body ternormalisasi (urutan field konsisten).
 3. Key sama + hash sama → replay response tersimpan (aman).
 4. Key sama + hash beda → `409 IDEMPOTENCY_CONFLICT`.
