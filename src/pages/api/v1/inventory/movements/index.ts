@@ -31,15 +31,9 @@ type ListPrepared = { filters: MovementListFilters; cursor?: KeysetCursor };
  * `GET /api/v1/inventory/movements` — the ledger, newest first, keyset
  * paginated. Filters: `locationId`, `itemType`, `itemRef`, `movementType`,
  * `sourceType`, `sourceId`, `transferId`.
- *
- * Same work class as the `POST` below, deliberately: a file whose methods use
- * DIFFERENT classes makes `db:work-class:generate` emit a multi-line array
- * that `prettier --check` then collapses, so `lint` and `db:work-class:check`
- * could never both pass. The read is indexed and capped at 100 rows, so
- * sharing the pool class costs a sale nothing measurable.
  */
 export const GET = defineTenantRoute<ListPrepared>({
-  workClass: "critical_transaction",
+  workClass: "interactive",
   prepare: ({ url }) => {
     const filters: MovementListFilters = {};
     const locationId = url.searchParams.get("locationId");

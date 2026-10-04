@@ -723,7 +723,7 @@
     },
     {
       "path": "src/pages/api/v1/inventory/movements/index.ts",
-      "workClass": "critical_transaction",
+      "workClass": ["critical_transaction", "interactive"],
       "source": "factory"
     },
     {
