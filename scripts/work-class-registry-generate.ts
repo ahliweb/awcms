@@ -42,6 +42,7 @@
  */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { format, resolveConfig } from "prettier";
 
 import { JOB_WORK_CLASS_REGISTRY } from "../src/lib/database/work-class-registry";
 import type { WorkClass } from "../src/lib/database/work-class";
@@ -367,8 +368,13 @@ export async function buildSnapshot(): Promise<WorkClassRegistrySnapshot> {
 }
 
 /** Deterministic: sorted, timestamp-free, trailing newline — safe to diff. */
-export function serialize(snapshot: WorkClassRegistrySnapshot): string {
-  return `${JSON.stringify(snapshot, null, 2)}\n`;
+export async function serialize(
+  snapshot: WorkClassRegistrySnapshot
+): Promise<string> {
+  const json = JSON.stringify(snapshot, null, 2);
+  const config = await resolveConfig(REGISTRY_PATH, { editorconfig: true });
+
+  return format(json, { ...config, parser: "json" });
 }
 
 async function main(): Promise<void> {
@@ -382,7 +388,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await Bun.write(REGISTRY_PATH, serialize(snapshot));
+  const serialized = await serialize(snapshot);
+  await Bun.write(REGISTRY_PATH, serialized);
 
   const defaults = snapshot.routes.filter((r) => r.source === "default").length;
 

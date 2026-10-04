@@ -147,8 +147,8 @@ describe("job registry vs ground truth", () => {
 });
 
 describe("serialization is diffable", () => {
-  test("stable key order, two-space indent, trailing newline", () => {
-    const text = serialize({
+  test("stable key order, two-space indent, trailing newline", async () => {
+    const text = await serialize({
       _note: "n",
       routes: [{ path: P, workClass: "interactive", source: "default" }],
       jobs: []
@@ -159,5 +159,27 @@ describe("serialization is diffable", () => {
     // No timestamp anywhere: a snapshot that changes on every run cannot be a
     // freshness gate.
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("multi-class arrays are formatted on a single line (prettier-stable)", async () => {
+    const text = await serialize({
+      _note: "n",
+      routes: [
+        {
+          path: P,
+          workClass: ["critical_transaction", "interactive"],
+          source: "factory"
+        }
+      ],
+      jobs: []
+    });
+
+    // The workClass array should be on a single line, not multi-line.
+    // This ensures the output is stable under prettier formatting.
+    expect(text).toContain(
+      '"workClass": ["critical_transaction", "interactive"]'
+    );
+    // Must end with trailing newline
+    expect(text.endsWith("\n")).toBe(true);
   });
 });

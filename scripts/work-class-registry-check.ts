@@ -20,7 +20,7 @@ import {
 } from "./work-class-registry-generate";
 
 async function main(): Promise<void> {
-  const expected = serialize(await buildSnapshot());
+  const expected = await serialize(await buildSnapshot());
   const file = Bun.file(REGISTRY_PATH);
 
   if (!(await file.exists())) {
