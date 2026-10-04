@@ -836,7 +836,8 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                       {data.canAdjust && (
                         <td data-label={t("Actions")}>
                           {movement.operation === "adjustment" &&
-                            movement.reversesMovementId === null && (
+                            movement.reversesMovementId === null &&
+                            movement.reversedByMovementId === null && (
                               <>
                                 <form
                                   id={`reverse-form-${movement.id}`}
@@ -1351,6 +1352,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
   import {
+    blankToNull,
     field,
     messageBox,
     onAction,
@@ -1400,11 +1402,6 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
     }
   }
 
-  function blank(value: string): string | null {
-    const trimmed = value.trim();
-    return trimmed === "" ? null : trimmed;
-  }
-
   initReasonPanel();
 
   // --- Locations ------------------------------------------------------------
@@ -1428,10 +1425,10 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
     if (!id || (status !== "active" && status !== "inactive")) return;
 
     if (status === "inactive") {
-      const confirmed = await confirmAction(
-        button.dataset.confirm ?? "Deactivate this location?"
-      );
-      if (!confirmed) return;
+      // The server-rendered, translated `data-confirm` is always present; with
+      // no text there is nothing translated to ask, so do not act (Issue #900).
+      const message = button.dataset.confirm;
+      if (!message || !(await confirmAction(message))) return;
     }
 
     await mutateAndReload(
@@ -1455,7 +1452,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
     const select = document.getElementById(`policy-${id}`);
     if (!(select instanceof HTMLSelectElement)) return;
 
-    const body = { negativeStockPolicy: blank(select.value) };
+    const body = { negativeStockPolicy: blankToNull(select.value) };
 
     await mutateAndReload(
       button,
@@ -1495,7 +1492,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
       itemType: field(data, "itemType").trim(),
       itemRef: field(data, "itemRef").trim(),
       unitCode: field(data, "unitCode").trim(),
-      lowStockThreshold: blank(field(data, "lowStockThreshold"))
+      lowStockThreshold: blankToNull(field(data, "lowStockThreshold"))
     };
 
     await mutateAndReload(
@@ -1522,7 +1519,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
       unitCode: field(data, "unitCode").trim(),
       quantityDelta: field(data, "quantityDelta").trim(),
       reasonCode: field(data, "reasonCode"),
-      note: blank(field(data, "note"))
+      note: blankToNull(field(data, "note"))
     };
     const key = nextKey({ adjust: shape });
     const body = {
@@ -1549,7 +1546,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
       itemRef: field(data, "itemRef").trim(),
       unitCode: field(data, "unitCode").trim(),
       quantity: field(data, "quantity").trim(),
-      note: blank(field(data, "note"))
+      note: blankToNull(field(data, "note"))
     };
     const key = nextKey({ transfer: shape });
     const body = {
@@ -1576,7 +1573,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
     if (!id) return;
     const body = {
       reasonCode: field(data, "reasonCode"),
-      note: blank(field(data, "note"))
+      note: blankToNull(field(data, "note"))
     };
 
     await mutateAndReload(

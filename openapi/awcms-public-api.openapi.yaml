@@ -24947,6 +24947,11 @@ components:
           type: string
           format: uuid
           nullable: true
+        reversedByMovementId:
+          description: The reversal that compensated this adjustment, or null when it has not been reversed. Populated by the movement listing and detail reads; a movement returned by a posting response carries null.
+          type: string
+          format: uuid
+          nullable: true
         reasonCode:
           type: string
           nullable: true

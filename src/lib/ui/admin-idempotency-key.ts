@@ -20,6 +20,19 @@
  * returns the key it had last time; any other body draws a new one. The page
  * reloads on success, which discards the memory, so the next genuine request
  * never inherits the key of a finished one.
+ *
+ * ## Known limitations (deliberate: the memory is per page load, not persisted)
+ *
+ * 1. Only the LAST body is remembered. Alternating A -> B -> A draws a fresh key
+ *    for the second A, so A's first key is forgotten; if A's first request had
+ *    in fact succeeded server-side, the second A is a new request to the server.
+ * 2. A lost success response followed by a MANUAL page reload discards the
+ *    memory, so the re-submit draws a fresh key. For inventory adjustments and
+ *    transfers the key doubles as the source id, so that re-submit can post
+ *    twice. Pressing the button again WITHOUT reloading is the safe retry.
+ *
+ * Closing (2) would need a server-visible pending marker or a key persisted
+ * across reloads; neither exists yet (Issue #900 follow-up, not built here).
  */
 export type IdempotencyKeySource = (payload: unknown) => string;
 

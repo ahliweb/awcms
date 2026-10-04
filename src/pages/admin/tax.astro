@@ -1349,6 +1349,7 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
   import {
+    blankToNull,
     field,
     messageBox,
     mutateAndReload,
@@ -1392,11 +1393,6 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
     }
   }
 
-  function blank(value: string): string | null {
-    const trimmed = value.trim();
-    return trimmed === "" ? null : trimmed;
-  }
-
   onSubmit("rule-version-form", async ({ data, submit }) => {
     let definition: unknown;
 
@@ -1411,15 +1407,15 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
       profileCode: field(data, "profileCode").trim(),
       name: field(data, "name").trim(),
       jurisdictionCode: field(data, "jurisdictionCode").trim(),
-      countryCode: blank(field(data, "countryCode")),
-      regionCode: blank(field(data, "regionCode")),
+      countryCode: blankToNull(field(data, "countryCode")),
+      regionCode: blankToNull(field(data, "regionCode")),
       currencyCode: field(data, "currencyCode").trim(),
       pricingMode: field(data, "pricingMode"),
       roundingMode: field(data, "roundingMode"),
       roundingScale: Number(field(data, "roundingScale")),
       roundingLevel: field(data, "roundingLevel"),
       effectiveFrom: field(data, "effectiveFrom"),
-      notes: blank(field(data, "notes")),
+      notes: blankToNull(field(data, "notes")),
       definition
     };
 
@@ -1438,10 +1434,10 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
     const id = button.dataset.versionId;
     if (!id) return;
 
-    const confirmed = await confirmAction(
-      button.dataset.confirm ?? "Publish this version?"
-    );
-    if (!confirmed) return;
+    // The server-rendered, translated `data-confirm` is always present; with no
+    // text there is nothing translated to ask, so do not act (Issue #900).
+    const message = button.dataset.confirm;
+    if (!message || !(await confirmAction(message))) return;
 
     await mutateAndReload(
       button,

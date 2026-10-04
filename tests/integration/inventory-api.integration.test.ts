@@ -730,6 +730,15 @@ suite("inventory HTTP surface (Issue #887)", () => {
     );
     expect(await onHandOf(locationId)).toBe(10);
 
+    // The listing now reports the adjustment as reversed (Issue #900).
+    const afterReversal = await call<{
+      movements: { id: string; reversedByMovementId: string | null }[];
+    }>(listMovements, { path: "/api/v1/inventory/movements" });
+    expect(
+      afterReversal.body.data!.movements.find((m) => m.id === adjustmentId)!
+        .reversedByMovementId
+    ).toBe(reversal.body.data!.movements[0]!.id);
+
     const again = await call<{ replayed: boolean }>(postReversal, {
       method: "POST",
       path: `/api/v1/inventory/adjustments/${adjustmentId}/reversal`,
